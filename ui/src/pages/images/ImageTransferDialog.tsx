@@ -12,33 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-export interface ImageTransferTarget {
-  id: string;
-  label: string;
-  target: Daemon | null;
-}
-
-const localTarget: ImageTransferTarget = {
-  id: "",
-  label: "This daemon (local)",
-  target: null,
-};
-
-export function eligibleImageTransferTargets(source: Daemon | null, daemons: Daemon[]): ImageTransferTarget[] {
-  return [
-    ...(source === null ? [] : [localTarget]),
-    ...daemons
-      .filter((host) => host.id !== "" && host.state === "ready" && (source === null || host.id !== source.id))
-      .map((host) => ({ id: host.id, label: host.label, target: host })),
-  ];
-}
+import { eligibleImageTransferTargets, type ImageTransferTarget } from "./imageTransferTargets";
 
 interface ImageTransferDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   source: Daemon | null;
-  ref: string;
+  imageRef: string;
   daemons: Daemon[];
   onComplete: () => void;
 }
@@ -58,17 +38,24 @@ const completedRows = (rows: Record<string, TransferRow>) => Object.values(rows)
 
 export function ImageTransferDialog({
   open,
+  ...props
+}: ImageTransferDialogProps) {
+  if (!open) return null;
+  return <ImageTransferDialogSession {...props} />;
+}
+
+function ImageTransferDialogSession({
   onOpenChange,
   source,
-  ref,
+  imageRef,
   daemons,
   onComplete,
-}: ImageTransferDialogProps) {
+}: Omit<ImageTransferDialogProps, "open">) {
   const discoveredTargets = useMemo(
     () => eligibleImageTransferTargets(source, daemons),
     [source, daemons],
   );
-  const [openTargets, setOpenTargets] = useState<ImageTransferTarget[]>(discoveredTargets);
+  const [openTargets] = useState<ImageTransferTarget[]>(discoveredTargets);
   const [runTargets, setRunTargets] = useState<ImageTransferTarget[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [rows, setRows] = useState<Record<string, TransferRow>>({});
@@ -77,7 +64,6 @@ export function ImageTransferDialog({
   const cancelRequested = useRef(false);
   const mounted = useRef(true);
   const transfer = useRef(0);
-  const previouslyOpen = useRef(false);
   const targets = runTargets ?? openTargets;
   const exporting = phase === "exporting";
   const transferring = phase === "transferring";
@@ -94,24 +80,14 @@ export function ImageTransferDialog({
     };
   }, []);
 
-  useEffect(() => {
-    if (open) {
-      if (!previouslyOpen.current) setOpenTargets(discoveredTargets);
-      previouslyOpen.current = true;
-      return;
-    }
-    previouslyOpen.current = false;
-    cancelRequested.current = true;
-    transfer.current += 1;
-    archive.current = null;
-    setRows({});
-    setSelected(new Set());
-    setRunTargets(null);
-    setPhase("idle");
-  }, [discoveredTargets, open]);
-
   const setRow = (id: string, row: TransferRow, run: number) => {
     if (mounted.current && transfer.current === run) setRows((current) => ({ ...current, [id]: row }));
+  };
+
+  const uploadRetainedArchive = async (target: Daemon | null) => {
+    const retainedArchive = archive.current;
+    if (!retainedArchive) throw new Error("transfer archive is no longer available");
+    return uploadImageArchiveOn(target, retainedArchive);
   };
 
   const cancel = () => {
@@ -151,11 +127,9 @@ export function ImageTransferDialog({
     setRunTargets(targets);
     setPhase("exporting");
     setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, { status: "exporting" }])));
-    let exportedArchive: Blob;
     try {
-      exportedArchive = await downloadImageArchiveOn(source, ref);
+      archive.current = await downloadImageArchiveOn(source, imageRef);
       if (!mounted.current || transfer.current !== run) return;
-      archive.current = exportedArchive;
     } catch (error) {
       const failure = { status: "failed" as const, error: errorMessage(error) };
       if (mounted.current && transfer.current === run) setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, failure])));
@@ -177,16 +151,16 @@ export function ImageTransferDialog({
       }
       try {
         setRow(target.id, { status: "previewing" }, run);
-        const preview = await uploadImageArchiveOn(target.target, exportedArchive);
+        const preview = await uploadRetainedArchive(target.target);
         if (transfer.current !== run) return;
         setRow(target.id, { status: "importing", importID: preview.import_id }, run);
-        const result = await applyImageArchiveOn(target.target, preview.import_id, ref) as { reused?: boolean };
+        const result = await applyImageArchiveOn(target.target, preview.import_id, imageRef) as { reused?: boolean };
         setRow(target.id, { status: result?.reused ? "already-present" : "completed" }, run);
       } catch (error) {
         setRow(target.id, {
           status: "failed",
           error: errorMessage(error),
-          ...(isConflict(error) ? { retryRef: ref } : {}),
+          ...(isConflict(error) ? { retryRef: imageRef } : {}),
         }, run);
       }
     }
@@ -199,16 +173,16 @@ export function ImageTransferDialog({
   const retry = async (targetID: string) => {
     const target = runTargets?.find((candidate) => candidate.id === targetID);
     const retryRef = rows[targetID]?.retryRef;
-    const exportedArchive = archive.current;
-    if (!target || !retryRef || !exportedArchive) return;
+    const normalizedRetryRef = retryRef?.trim() ?? "";
+    if (!target || !retryRef || !normalizedRetryRef || !archive.current) return;
     const run = ++transfer.current;
     setPhase("transferring");
     try {
       setRow(targetID, { status: "previewing" }, run);
-      const preview = await uploadImageArchiveOn(target.target, exportedArchive);
+      const preview = await uploadRetainedArchive(target.target);
       if (transfer.current !== run) return;
       setRow(targetID, { status: "importing", importID: preview.import_id }, run);
-      const result = await applyImageArchiveOn(target.target, preview.import_id, retryRef) as { reused?: boolean };
+      const result = await applyImageArchiveOn(target.target, preview.import_id, normalizedRetryRef) as { reused?: boolean };
       setRow(targetID, { status: result?.reused ? "already-present" : "completed" }, run);
       if (mounted.current && transfer.current === run) onComplete();
     } catch (error) {
@@ -223,7 +197,7 @@ export function ImageTransferDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => {
+    <Dialog open onOpenChange={(nextOpen) => {
       if (!nextOpen) {
         if (!exporting) close();
         return;
@@ -236,7 +210,7 @@ export function ImageTransferDialog({
         onPointerDownOutside={(event) => { if (exporting) event.preventDefault(); }}
       >
         <DialogHeader>
-          <DialogTitle>Transfer image {ref}</DialogTitle>
+          <DialogTitle>Transfer image {imageRef}</DialogTitle>
           <DialogDescription>
             Select the ready servers that should receive this runnable image.
           </DialogDescription>

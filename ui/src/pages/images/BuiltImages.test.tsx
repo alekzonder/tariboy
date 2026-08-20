@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { useLayoutEffect, useState } from "react";
-import { addDaemon, type DaemonMeta } from "@/lib/daemons";
+import { addDaemon, updateDaemon, type Daemon, type DaemonMeta } from "@/lib/daemons";
+import * as daemonsApi from "@/lib/daemons";
 import { setActiveDaemon } from "@/lib/api";
 import * as imageTransferApi from "@/lib/teamApi";
 import BuiltImages from "./BuiltImages";
@@ -26,6 +27,7 @@ it("starts transfer from the route source instead of the active daemon", async (
   const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
   const target = await addDaemon({ label: "Target", baseURL: "https://target", token: "target-token" });
   daemonContext.daemons = [{ ...source, state: "ready" }, { ...target, state: "ready" }];
+  await updateDaemon(target.id, { label: "Target", baseURL: "https://target-reconnected" });
   const activeTarget = { id: "active", label: "Active", baseURL: "https://active", token: "active-token" };
   setActiveDaemon(activeTarget);
   const download = vi.spyOn(imageTransferApi, "downloadImageArchiveOn").mockResolvedValue(new Blob(["archive"]));
@@ -54,6 +56,32 @@ it("starts transfer from the route source instead of the active daemon", async (
     "built:v1",
   ));
   expect(download).not.toHaveBeenCalledWith(activeTarget, "built:v1");
+  await waitFor(() => expect(imageTransferApi.uploadImageArchiveOn).toHaveBeenCalledWith(
+    expect.objectContaining({ id: target.id, baseURL: "https://target-reconnected" }),
+    expect.any(Blob),
+  ));
+});
+
+it("waits for the current destination generation before opening a transfer", async () => {
+  const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
+  const target = await addDaemon({ label: "Target", baseURL: "https://target", token: "target-token" });
+  daemonContext.daemons = [{ ...source, state: "ready" }, { ...target, state: "ready" }];
+  const resolvedSource = await daemonsApi.resolveDaemon(source.id);
+  const resolvedTarget = await daemonsApi.resolveDaemon(target.id);
+  let finishTarget: (target: Daemon | null) => void = () => undefined;
+  const pendingTarget = new Promise<Daemon | null>((resolve) => { finishTarget = resolve; });
+  const resolveDaemon = vi.spyOn(daemonsApi, "resolveDaemon");
+  resolveDaemon.mockImplementation((id) => id === target.id ? pendingTarget : Promise.resolve(id === source.id ? resolvedSource : null));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, result: { images: [
+    { name: "built", tag: "v1", bare: false, exportable: true },
+  ] } }), { status: 200 })));
+
+  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
+
+  const action = await screen.findByRole("button", { name: "Upload to servers built:v1" });
+  expect(action).toBeDisabled();
+  finishTarget(resolvedTarget);
+  await waitFor(() => expect(action).toBeEnabled());
 });
 
 it("does not invoke an upload action bound to the previous route host", async () => {

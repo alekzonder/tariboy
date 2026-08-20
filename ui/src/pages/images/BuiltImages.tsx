@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ApiError, getActiveDaemon, listImagesOn, removeImage, type ImageRow } from "@/lib/api";
@@ -29,10 +29,18 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   const [images, setImages] = useState<ImageRow[]>([]);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [sourceTarget, setSourceTarget] = useState<Daemon | null>(null);
-  const [sourceHostId, setSourceHostId] = useState<string | null>(null);
-  const [sourceResolved, setSourceResolved] = useState(false);
-  const [transferDaemons, setTransferDaemons] = useState<Daemon[]>([]);
+  const [source, setSource] = useState<{ hostId: string; target: Daemon | null } | null>(null);
+  const registryDaemons = useMemo(() => daemonContext?.daemons ?? [], [daemonContext?.daemons]);
+  const registryGeneration = useMemo(() => JSON.stringify(registryDaemons.map((daemon) => ({
+    id: daemon.id,
+    label: daemon.label,
+    baseURL: daemon.baseURL,
+    state: daemon.state,
+  }))), [registryDaemons]);
+  const [resolvedTransferDaemons, setResolvedTransferDaemons] = useState<{
+    generation: string;
+    daemons: Daemon[];
+  }>({ generation: "", daemons: [] });
   const [transfer, setTransfer] = useState<{ ref: string; sourceTarget: Daemon | null; hostId: string } | null>(null);
   const [imageImport, setImageImport] = useState<{ id: string; ref: string; name: string; tag: string; target: ReturnType<typeof getActiveDaemon> } | null>(null);
   const mounted = useRef(true);
@@ -44,7 +52,6 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
 
   useEffect(() => {
     let alive = true;
-    setSourceResolved(false);
     void resolveDaemon(hostId)
       .then((target) => {
         if (!alive) return;
@@ -52,9 +59,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
           setError(`host ${hostId} is not available`);
           return;
         }
-        setSourceTarget(target);
-        setSourceHostId(hostId);
-        setSourceResolved(true);
+        setSource({ hostId, target });
       })
       .catch((err) => {
         if (alive) setError(message(err));
@@ -64,14 +69,17 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
 
   useEffect(() => {
     let alive = true;
-    void Promise.all((daemonContext?.daemons ?? []).map(async (daemon) => {
-      const resolved = await resolveDaemon(daemon.id);
-      return resolved ? { ...resolved, ...daemon } : null;
-    })).then((daemons) => {
-      if (alive) setTransferDaemons(daemons.filter((daemon): daemon is Daemon => daemon !== null));
+    void Promise.allSettled(registryDaemons.map((daemon) => resolveDaemon(daemon.id))).then((results) => {
+      if (!alive) return;
+      setResolvedTransferDaemons({
+        generation: registryGeneration,
+        daemons: results.flatMap((result, index) => result.status === "fulfilled" && result.value
+          ? [{ ...registryDaemons[index], ...result.value }]
+          : []),
+      });
     });
     return () => { alive = false; };
-  }, [daemonContext?.daemons]);
+  }, [registryDaemons, registryGeneration]);
 
   useEffect(() => {
     const refresh = () => setRevision((value) => value + 1);
@@ -80,9 +88,9 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   }, []);
 
   useEffect(() => {
-    if (!sourceResolved) return;
+    if (source?.hostId !== hostId) return;
     let alive = true;
-    void listImagesOn(sourceTarget)
+    void listImagesOn(source.target)
       .then((result) => {
         if (alive) {
           setImages(result.images ?? []);
@@ -93,9 +101,10 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
         if (alive) setError(message(err));
       });
     return () => { alive = false; };
-  }, [revision, sourceResolved, sourceTarget]);
+  }, [hostId, revision, source]);
 
-  const sourceReady = sourceResolved && sourceHostId === hostId;
+  const sourceReady = source?.hostId === hostId;
+  const transferDaemonsReady = resolvedTransferDaemons.generation === registryGeneration;
 
   const remove = async (ref: string) => {
     try {
@@ -204,7 +213,11 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                     )}
                     {!image.bare && image.exportable && sourceReady && (
                       <Button size="sm" variant="outline" aria-label={`Upload to servers ${ref}`}
-                        onClick={() => setTransfer({ ref, sourceTarget, hostId })}>Upload to servers</Button>
+                        disabled={!transferDaemonsReady}
+                        title={transferDaemonsReady ? undefined : "Loading transfer servers"}
+                        onClick={() => {
+                          if (transferDaemonsReady) setTransfer({ ref, sourceTarget: source.target, hostId });
+                        }}>Upload to servers</Button>
                     )}
                     {!image.bare && (
                       <AlertDialog>
@@ -256,8 +269,8 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
           open
           onOpenChange={(open) => { if (!open) setTransfer(null); }}
           source={transfer.sourceTarget}
-          ref={transfer.ref}
-          daemons={transferDaemons}
+          imageRef={transfer.ref}
+          daemons={resolvedTransferDaemons.daemons}
           onComplete={() => { if (mounted.current) setRevision((value) => value + 1); }}
         />
       )}

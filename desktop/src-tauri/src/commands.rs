@@ -825,6 +825,101 @@ pub fn hosts_list(state: State<AppState>) -> Result<Vec<hosts::HostView>, String
     list_host_views(&state.hosts, &state.host_runtime)
 }
 
+#[cfg(debug_assertions)]
+fn register_image_transfer_test_target(
+    paths: &paths::Paths,
+    registry: &hosts::Registry,
+    runtime: &hosts::RuntimeHosts,
+    daemon: &DaemonView,
+    opted_in: bool,
+) -> Result<hosts::HostView, String> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    if !opted_in {
+        return Err("desktop image transfer test target is disabled".into());
+    }
+    let root = paths
+        .base
+        .parent()
+        .ok_or_else(|| "desktop image transfer test paths have no root".to_string())?;
+    if paths.runtime.parent() != Some(root)
+        || paths.app_data.parent() != Some(root)
+        || !root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("tariboy-desktop-e2e-"))
+    {
+        return Err("desktop image transfer test requires one isolated E2E root".into());
+    }
+    let expected_uid = unsafe { libc::geteuid() };
+    for path in [root, paths.base.as_path(), paths.runtime.as_path(), paths.app_data.as_path()] {
+        let metadata = std::fs::symlink_metadata(path)
+            .map_err(|error| format!("inspect isolated Desktop E2E path {}: {error}", path.display()))?;
+        if !metadata.file_type().is_dir()
+            || metadata.uid() != expected_uid
+            || metadata.permissions().mode() & 0o777 != 0o700
+        {
+            return Err("desktop image transfer test requires owner-only real directories".into());
+        }
+    }
+    if daemon.state != Phase::Ready {
+        return Err("desktop image transfer test requires the isolated daemon to be ready".into());
+    }
+    let endpoint = url::Url::parse(&daemon.base_url)
+        .map_err(|_| "desktop image transfer test daemon endpoint is invalid".to_string())?;
+    if endpoint.scheme() != "http"
+        || !endpoint
+            .host()
+            .and_then(|host| match host {
+                url::Host::Ipv4(address) => Some(address.is_loopback()),
+                url::Host::Ipv6(address) => Some(address.is_loopback()),
+                url::Host::Domain(_) => None,
+            })
+            .unwrap_or(false)
+    {
+        return Err("desktop image transfer test daemon must use loopback HTTP".into());
+    }
+
+    const TARGET_ID: &str = "desktop-image-transfer-e2e";
+    let record = hosts::HostRecord {
+        id: TARGET_ID.into(),
+        label: "Desktop transfer target".into(),
+        kind: hosts::HostKind::Ssh,
+        ssh_alias: "desktop-image-transfer-e2e".into(),
+        remote_install_dir: String::new(),
+        remote_port: 9990,
+        https_base_url: String::new(),
+        last_daemon_version: daemon.daemon_version.clone(),
+    };
+    registry.restore(record.clone())?;
+    runtime.set_image_transfer_test_target(TARGET_ID, &daemon.base_url, &daemon.daemon_version);
+    Ok(runtime.view(record))
+}
+
+#[tauri::command]
+pub fn image_transfer_target_test(
+    app: AppHandle,
+    state: State<AppState>,
+) -> Result<hosts::HostView, String> {
+    #[cfg(debug_assertions)]
+    {
+        let target = register_image_transfer_test_target(
+            &state.paths,
+            &state.hosts,
+            &state.host_runtime,
+            &state.view(),
+            std::env::var("TARIBOY_DESKTOP_IMAGE_TRANSFER_TEST").as_deref() == Ok("1"),
+        )?;
+        emit_host_state(&app, &target.id);
+        Ok(target)
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = (app, state);
+        Err("desktop image transfer test target is unavailable".into())
+    }
+}
+
 #[tauri::command]
 pub fn host_save_ssh(
     state: State<AppState>,
@@ -2103,5 +2198,49 @@ printf '%s\n' '{json}'"#,
         assert_eq!(active[0].agent, "worker");
         assert_eq!(active[0].running_iterations, ["it-1"]);
         server.join().unwrap();
+    }
+
+    #[test]
+    fn image_transfer_test_target_requires_opt_in_and_isolated_desktop_paths() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::Builder::new()
+            .prefix("tariboy-desktop-e2e-")
+            .tempdir()
+            .unwrap();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let base = root.path().join("base");
+        let runtime_dir = root.path().join("runtime");
+        let app_data = root.path().join("app-data");
+        for directory in [&base, &runtime_dir, &app_data] {
+            std::fs::create_dir(directory).unwrap();
+            std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let paths = paths::Paths { base, runtime: runtime_dir, app_data: app_data.clone() };
+        let registry = hosts::Registry::new(app_data.join("hosts.json"));
+        let runtime = hosts::RuntimeHosts::default();
+        let daemon = DaemonView {
+            state: Phase::Ready,
+            base_url: "http://127.0.0.1:18444".into(),
+            daemon_version: "0.39.1".into(),
+            app_version: "0.39.1".into(),
+            base_dir: paths.base.display().to_string(),
+            pid: 123,
+            adopted: false,
+            message: String::new(),
+        };
+
+        assert!(register_image_transfer_test_target(&paths, &registry, &runtime, &daemon, false).is_err());
+        let target = register_image_transfer_test_target(&paths, &registry, &runtime, &daemon, true).unwrap();
+        assert_eq!(target.id, "desktop-image-transfer-e2e");
+        assert_eq!(target.state, hosts::HostState::Ready);
+        assert_eq!(target.base_url, daemon.base_url);
+
+        let unsafe_paths = paths::Paths {
+            base: root.path().join("outside-base"),
+            runtime: paths.runtime.clone(),
+            app_data: paths.app_data.clone(),
+        };
+        assert!(register_image_transfer_test_target(&unsafe_paths, &registry, &runtime, &daemon, true).is_err());
     }
 }

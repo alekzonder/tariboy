@@ -73,6 +73,7 @@ fn main() {
             commands::support_bundle_export,
             commands::install_cli,
             commands::hosts_list,
+            commands::image_transfer_target_test,
             commands::host_save_ssh,
             commands::host_save_https,
             commands::host_session_credentials,
