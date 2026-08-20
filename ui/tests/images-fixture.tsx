@@ -18,8 +18,11 @@ declare global {
     __imageApplyRef?: string;
     __imageBuild?: unknown;
     __imageTransferRequests?: Array<{ method: string; url: string }>;
+    __finishImageTransfer?: () => void;
   }
 }
+
+const fixtureMode = new URLSearchParams(window.location.search).get("mode") ?? "built";
 
 const envelope = (result: unknown) => new Response(JSON.stringify({ ok: true, result }), {
   status: 200,
@@ -41,6 +44,15 @@ const transferHosts = [
   { id: "present", label: "Already present target", baseURL: "https://present.tariboy.test", state: "ready" },
   { id: "unavailable", label: "Unavailable target", baseURL: "https://unavailable.tariboy.test", state: "error" },
 ];
+
+const cancellationTransferHosts = [
+  { id: "source", label: "Source server", baseURL: "https://source.tariboy.test", state: "ready" },
+  { id: "in-flight", label: "In-flight target", baseURL: "https://in-flight.tariboy.test", state: "ready" },
+  { id: "cancelled-a", label: "Cancelled target A", baseURL: "https://cancelled-a.tariboy.test", state: "ready" },
+  { id: "cancelled-b", label: "Cancelled target B", baseURL: "https://cancelled-b.tariboy.test", state: "ready" },
+];
+
+const fixtureTransferHosts = fixtureMode === "transfer-cancel" ? cancellationTransferHosts : transferHosts;
 
 let pendingRef = "";
 let activated = false;
@@ -95,6 +107,14 @@ window.fetch = async (input, init) => {
     return new Response(new Blob(["portable-image"]), { status: 200, headers: { "content-type": "application/gzip" } });
   }
   if (path === "/api/image-imports" && method === "POST") {
+    if ((fixtureMode === "transfer" || fixtureMode === "transfer-cancel") && requestURL.origin === window.location.origin) {
+      recordTransferRequest();
+      return envelope({ import_id: "local-import", ref: "reviewer:v3", digest: "local-digest" });
+    }
+    if (requestURL.origin === "https://in-flight.tariboy.test") {
+      recordTransferRequest();
+      return envelope({ import_id: "in-flight-import", ref: "reviewer:v3", digest: "in-flight-digest" });
+    }
     if (requestURL.origin === "https://ready.tariboy.test") {
       recordTransferRequest();
       return envelope({ import_id: "ready-import", ref: "reviewer:v3", digest: "ready-digest" });
@@ -112,6 +132,16 @@ window.fetch = async (input, init) => {
   if (path === "/api/image-imports/ready-import/apply" && method === "POST") {
     recordTransferRequest();
     return envelope({ ref: "reviewer:v3" });
+  }
+  if (path === "/api/image-imports/local-import/apply" && method === "POST") {
+    recordTransferRequest();
+    return envelope({ ref: "reviewer:v3" });
+  }
+  if (path === "/api/image-imports/in-flight-import/apply" && method === "POST") {
+    recordTransferRequest();
+    return new Promise<Response>((resolve) => {
+      window.__finishImageTransfer = () => resolve(envelope({ ref: "reviewer:v3" }));
+    });
   }
   if (path === "/api/image-imports/present-import/apply" && method === "POST") {
     recordTransferRequest();
@@ -152,17 +182,17 @@ export function AgentFixture() {
   </AgentNameContext.Provider>;
 }
 
-const mode = new URLSearchParams(window.location.search).get("mode") ?? "built";
-if (mode === "transfer") {
-  localStorage.setItem("tariboy_daemons", JSON.stringify(transferHosts));
+const mode = fixtureMode;
+if (mode === "transfer" || mode === "transfer-cancel") {
+  localStorage.setItem("tariboy_daemons", JSON.stringify(fixtureTransferHosts));
   localStorage.setItem("tariboy_active_daemon", "source");
-  for (const host of transferHosts) sessionStorage.setItem(`tariboy_daemon_token_${host.id}`, `${host.id}-token`);
+  for (const host of fixtureTransferHosts) sessionStorage.setItem(`tariboy_daemon_token_${host.id}`, `${host.id}-token`);
 }
 let content = <BuiltImages hostId="" basePath="/servers/local/images" />;
 if (mode === "build") content = <DaemonProvider><ImagesPage hostId="" basePath="/servers/local/images" /></DaemonProvider>;
 if (mode === "detail") content = <Routes><Route path="/servers/local/images/:name/:tag" element={<ImageLayout hostId="" basePath="/servers/local/images" />}><Route index element={<ImageOverview />} /><Route path="template" element={<ImageTemplate />} /></Route></Routes>;
 if (mode === "agent") content = <AgentFixture />;
-if (mode === "transfer") content = <DaemonProvider><BuiltImages hostId="source" basePath="/servers/source/images" /></DaemonProvider>;
+if (mode === "transfer" || mode === "transfer-cancel") content = <DaemonProvider><BuiltImages hostId="source" basePath="/servers/source/images" /></DaemonProvider>;
 createRoot(document.getElementById("root")!).render(
   <MemoryRouter initialEntries={mode === "detail" ? ["/servers/local/images/reviewer/v3"] : ["/"]}>
     <main className={mode === "build" ? "h-screen overflow-hidden" : "p-4"}>{content}</main>

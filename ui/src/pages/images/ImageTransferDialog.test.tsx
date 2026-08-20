@@ -31,11 +31,16 @@ if (false) {
 }
 
 it("keeps ready configured hosts eligible when the source is local", () => {
-  expect(eligibleImageTransferTargets(null, [ready, offline])).toEqual([ready]);
+  expect(eligibleImageTransferTargets(null, [ready, offline])).toEqual([
+    { id: ready.id, label: ready.label, target: ready },
+  ]);
 });
 
-it("excludes the explicit source and unready hosts", () => {
-  expect(eligibleImageTransferTargets(source, [source, ready, offline])).toEqual([ready]);
+it("includes the implicit local target once for a remote source", () => {
+  expect(eligibleImageTransferTargets(source, [source, ready, offline])).toEqual([
+    { id: "", label: "This daemon (local)", target: null },
+    { id: ready.id, label: ready.label, target: ready },
+  ]);
 });
 
 it("selects every eligible target and permits individual deselection", () => {
@@ -56,6 +61,7 @@ it("selects every eligible target and permits individual deselection", () => {
 
   fireEvent.click(selectAll);
   expect(screen.getByRole("button", { name: "Clear all servers" })).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: "Transfer to This daemon (local)" })).toBeChecked();
   expect(readyTarget).toBeChecked();
   expect(screen.queryByRole("checkbox", { name: "Transfer to Offline" })).not.toBeInTheDocument();
   expect(screen.queryByRole("checkbox", { name: "Transfer to Source" })).not.toBeInTheDocument();
@@ -70,9 +76,9 @@ it("disables transfer when no target is eligible", () => {
     <ImageTransferDialog
       open
       onOpenChange={() => undefined}
-      source={source}
+      source={null}
       ref="reviewer:v1"
-      daemons={[source, offline]}
+      daemons={[offline]}
       onComplete={() => undefined}
     />,
   );
@@ -98,9 +104,9 @@ it("exports once, continues after a failed target, and reports an idempotent tar
     <ImageTransferDialog
       open
       onOpenChange={() => undefined}
-      source={source}
+      source={null}
       ref="reviewer:v3"
-      daemons={[source, targetA, targetB]}
+      daemons={[targetA, targetB]}
       onComplete={() => undefined}
     />,
   );
@@ -110,7 +116,7 @@ it("exports once, continues after a failed target, and reports an idempotent tar
 
   await waitFor(() => expect(downloadImageArchiveOn).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(applyImageArchiveOn).toHaveBeenCalledTimes(2));
-  expect(downloadImageArchiveOn).toHaveBeenCalledWith(source, "reviewer:v3");
+  expect(downloadImageArchiveOn).toHaveBeenCalledWith(null, "reviewer:v3");
   expect(uploadImageArchiveOn).toHaveBeenNthCalledWith(1, targetA, archive);
   expect(uploadImageArchiveOn).toHaveBeenNthCalledWith(2, targetB, archive);
   expect(applyImageArchiveOn).toHaveBeenNthCalledWith(2, targetB, "import-b", "reviewer:v3");
@@ -128,7 +134,7 @@ it("cancels before starting the next selected target", async () => {
   applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirstApply = resolve; }));
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} source={source} ref="reviewer:v3" daemons={[source, targetA, targetB]} onComplete={() => undefined} />);
+  render(<ImageTransferDialog open onOpenChange={() => undefined} source={null} ref="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />);
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
   await waitFor(() => expect(applyImageArchiveOn).toHaveBeenCalledTimes(1));
@@ -153,7 +159,7 @@ it("retags and retries only the conflicted target without another export", async
     .mockResolvedValueOnce({ reused: false });
   const user = userEvent.setup();
 
-  render(<ImageTransferDialog open onOpenChange={() => undefined} source={source} ref="reviewer:v3" daemons={[source, target]} onComplete={() => undefined} />);
+  render(<ImageTransferDialog open onOpenChange={() => undefined} source={null} ref="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
   await user.click(screen.getByRole("button", { name: "All servers" }));
   await user.click(screen.getByRole("button", { name: "Start transfer" }));
   const retryRef = await screen.findByRole("textbox", { name: "Retag and retry for Target A" });
@@ -179,7 +185,7 @@ it("clears staged retry state when the dialog closes", async () => {
   const user = userEvent.setup();
   const Harness = () => {
     const [open, setOpen] = useState(true);
-    return <><button onClick={() => setOpen(true)}>Reopen</button><ImageTransferDialog open={open} onOpenChange={setOpen} source={source} ref="reviewer:v3" daemons={[source, target]} onComplete={() => undefined} /></>;
+    return <><button onClick={() => setOpen(true)}>Reopen</button><ImageTransferDialog open={open} onOpenChange={setOpen} source={null} ref="reviewer:v3" daemons={[target]} onComplete={() => undefined} /></>;
   };
 
   render(<Harness />);
@@ -208,7 +214,7 @@ it("cancels an in-flight transfer when its parent closes the dialog", async () =
     return <>
       <button data-testid="parent-close" onClick={() => setOpen(false)}>Parent close</button>
       <button data-testid="parent-reopen" onClick={() => setOpen(true)}>Parent reopen</button>
-      <ImageTransferDialog open={open} onOpenChange={setOpen} source={source} ref="reviewer:v3" daemons={[source, targetA, targetB]} onComplete={() => undefined} />
+      <ImageTransferDialog open={open} onOpenChange={setOpen} source={null} ref="reviewer:v3" daemons={[targetA, targetB]} onComplete={() => undefined} />
     </>;
   };
 

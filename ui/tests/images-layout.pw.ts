@@ -81,6 +81,7 @@ test("transfers one source archive to ready non-source servers with target-bound
   await page.getByRole("button", { name: "Upload to servers reviewer:v3" }).click();
 
   await page.getByRole("button", { name: "All servers" }).click();
+  await expect(page.getByLabel("Transfer to This daemon (local)")).toBeChecked();
   await expect(page.getByLabel("Transfer to Ready target")).toBeChecked();
   await expect(page.getByLabel("Transfer to Already present target")).toBeChecked();
   await expect(page.getByLabel("Transfer to Conflict target")).toBeChecked();
@@ -97,6 +98,8 @@ test("transfers one source archive to ready non-source servers with target-bound
     __imageTransferRequests?: Array<{ method: string; url: string }>;
   }).__imageTransferRequests ?? [])).toEqual([
     { method: "GET", url: "https://source.tariboy.test/api/images/reviewer%3Av3/export" },
+    { method: "POST", url: `${new URL(page.url()).origin}/api/image-imports` },
+    { method: "POST", url: `${new URL(page.url()).origin}/api/image-imports/local-import/apply` },
     { method: "POST", url: "https://conflict.tariboy.test/api/image-imports" },
     { method: "POST", url: "https://conflict.tariboy.test/api/image-imports/conflict-import/apply" },
     { method: "POST", url: "https://ready.tariboy.test/api/image-imports" },
@@ -104,4 +107,31 @@ test("transfers one source archive to ready non-source servers with target-bound
     { method: "POST", url: "https://present.tariboy.test/api/image-imports" },
     { method: "POST", url: "https://present.tariboy.test/api/image-imports/present-import/apply" },
   ]);
+});
+
+test("cancels every unstarted selected destination without requesting it", async ({ page }) => {
+  await page.goto("/tests/images-fixture.html?mode=transfer-cancel");
+  await page.getByRole("button", { name: "Upload to servers reviewer:v3" }).click();
+  await page.getByRole("button", { name: "All servers" }).click();
+  await expect(page.getByLabel("Transfer to In-flight target")).toBeChecked();
+  await expect(page.getByLabel("Transfer to Cancelled target A")).toBeChecked();
+  await expect(page.getByLabel("Transfer to Cancelled target B")).toBeChecked();
+
+  await page.getByRole("button", { name: "Start transfer" }).click();
+  await expect(page.getByText("In-flight target: Importing")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel transfer" }).click();
+  await page.evaluate(() => (window as Window & { __finishImageTransfer?: () => void }).__finishImageTransfer?.());
+
+  await expect(page.getByText("Cancelled target A: Cancelled")).toBeVisible();
+  await expect(page.getByText("Cancelled target B: Cancelled")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as Window & {
+    __imageTransferRequests?: Array<{ method: string; url: string }>;
+  }).__imageTransferRequests ?? [])).not.toContainEqual(
+    expect.objectContaining({ url: expect.stringContaining("cancelled-a.tariboy.test") }),
+  );
+  await expect.poll(() => page.evaluate(() => (window as Window & {
+    __imageTransferRequests?: Array<{ method: string; url: string }>;
+  }).__imageTransferRequests ?? [])).not.toContainEqual(
+    expect.objectContaining({ url: expect.stringContaining("cancelled-b.tariboy.test") }),
+  );
 });

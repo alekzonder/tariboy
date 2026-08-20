@@ -13,8 +13,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export function eligibleImageTransferTargets(source: Daemon | null, daemons: Daemon[]): Daemon[] {
-  return daemons.filter((host) => host.state === "ready" && (source === null || host.id !== source.id));
+export interface ImageTransferTarget {
+  id: string;
+  label: string;
+  target: Daemon | null;
+}
+
+const localTarget: ImageTransferTarget = {
+  id: "",
+  label: "This daemon (local)",
+  target: null,
+};
+
+export function eligibleImageTransferTargets(source: Daemon | null, daemons: Daemon[]): ImageTransferTarget[] {
+  return [
+    ...(source === null ? [] : [localTarget]),
+    ...daemons
+      .filter((host) => host.id !== "" && host.state === "ready" && (source === null || host.id !== source.id))
+      .map((host) => ({ id: host.id, label: host.label, target: host })),
+  ];
 }
 
 interface ImageTransferDialogProps {
@@ -135,10 +152,10 @@ export function ImageTransferDialog({
       }
       try {
         setRow(target.id, { status: "previewing" }, run);
-        const preview = await uploadImageArchiveOn(target, exportedArchive);
+        const preview = await uploadImageArchiveOn(target.target, exportedArchive);
         if (transfer.current !== run) return;
         setRow(target.id, { status: "importing", importID: preview.import_id }, run);
-        const result = await applyImageArchiveOn(target, preview.import_id, ref) as { reused?: boolean };
+        const result = await applyImageArchiveOn(target.target, preview.import_id, ref) as { reused?: boolean };
         setRow(target.id, { status: result?.reused ? "already-present" : "completed" }, run);
       } catch (error) {
         setRow(target.id, {
@@ -163,10 +180,10 @@ export function ImageTransferDialog({
     setTransferring(true);
     try {
       setRow(targetID, { status: "previewing" }, run);
-      const preview = await uploadImageArchiveOn(target, exportedArchive);
+      const preview = await uploadImageArchiveOn(target.target, exportedArchive);
       if (transfer.current !== run) return;
       setRow(targetID, { status: "importing", importID: preview.import_id }, run);
-      const result = await applyImageArchiveOn(target, preview.import_id, retryRef) as { reused?: boolean };
+      const result = await applyImageArchiveOn(target.target, preview.import_id, retryRef) as { reused?: boolean };
       setRow(targetID, { status: result?.reused ? "already-present" : "completed" }, run);
       if (mounted.current && transfer.current === run) onComplete();
     } catch (error) {

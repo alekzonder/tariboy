@@ -102,9 +102,10 @@ artifact ref for an idempotent import or choose a different target when that ref
 already contains another digest; the source archive remains runnable-only.
 For an exportable non-reserved built image, **Upload to servers** captures the
 source target and offers all ready non-source hosts, with individual selection
-or **All servers**. The UI exports one runnable archive into the open dialog's
-browser memory, then previews and applies it against each explicit destination
-target. It continues after destination failures; same-digest results are
+or **All servers**. A remote source includes **This daemon (local)** exactly
+once; a local source excludes itself. The UI exports one runnable archive into
+the open dialog's browser memory, then previews and applies it against each
+explicit destination target. It continues after destination failures; same-digest results are
 **Already present**, and a conflicting destination can be retagged and retried
 without another export. Closing the dialog drops the archive and progress. This
 operation never switches the active host or the selected source route, and the
