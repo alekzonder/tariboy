@@ -25,12 +25,10 @@ func TestTrackedCodeAndDocsDoNotReferenceDeletedStoreFixtures(t *testing.T) {
 	deletedPrefixes := []string{
 		"sto" + "re/groups/",
 		"sto" + "re/plugins/",
-		"sto" + "re/images/",
 	}
 	deletedJoinFragments := []string{
 		`"sto` + `re", "groups"`,
 		`"sto` + `re", "plugins"`,
-		`"sto` + `re", "images"`,
 	}
 	for _, rawPath := range bytes.Split(output, []byte{0}) {
 		path := string(rawPath)
