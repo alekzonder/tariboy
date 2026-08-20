@@ -401,6 +401,7 @@ export const test = base.extend<DesktopFixtures>({
       TARIBOY_DESKTOP_APP_DATA_DIR: appDataDir,
       TARIBOY_DESKTOP_EXTERNAL_OPEN_LOG: externalOpenLog,
       TARIBOY_DESKTOP_NOTIFICATION_TEST: "1",
+      TARIBOY_DESKTOP_IMAGE_TRANSFER_TEST: "1",
       // Never let a Desktop E2E process discover or contact the host's real
       // notification service. Tests that need activation use the guarded
       // Tauri command instead.

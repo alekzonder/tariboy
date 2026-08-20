@@ -41,6 +41,29 @@ test("builds a transparent image from its original directory and assigns it to a
 
   await desktop.execute(`window.location.hash = "#/servers/local/images?tab=built";`);
   await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");
+  const sourceImagesRoute = await desktop.execute<string>("return window.location.hash;");
+  await desktop.execute(`window.__desktopTransferTarget = "pending";
+    window.__TAURI_INTERNALS__.invoke("image_transfer_target_test")
+      .then(() => { window.__desktopTransferTarget = "ready"; })
+      .catch((error) => { window.__desktopTransferTarget = "failed: " + String(error); });`);
+  await expect.poll(() => desktop.execute<string>("return window.__desktopTransferTarget || '';"))
+    .toBe("ready");
+  await desktop.execute(`window.location.hash = "#/servers/local/settings/hosts";`);
+  await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target");
+  await desktop.execute(`window.location.hash = ${JSON.stringify(sourceImagesRoute)};`);
+  await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");
+  await expect.poll(() => desktop.execute<boolean>(`const button = document.querySelector('button[aria-label="Upload to servers transparent-e2e:latest"]');
+    return button instanceof HTMLButtonElement && !button.disabled;`)).toBe(true);
+  await desktop.elementClick(await desktop.findElement("css selector", 'button[aria-label="Upload to servers transparent-e2e:latest"]'));
+  await desktop.elementClick(await desktop.findElement("css selector", 'input[aria-label="Transfer to Desktop transfer target"]'));
+  await expect.poll(() => desktop.execute<boolean>(`const button = [...document.querySelectorAll("button")]
+    .find((candidate) => candidate.textContent?.trim() === "Start transfer");
+    return button instanceof HTMLButtonElement && !button.disabled;`)).toBe(true);
+  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Start transfer']"));
+  await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target: Already present");
+  await expect.poll(() => desktop.execute<string>("return window.location.hash;")).toBe(sourceImagesRoute);
+  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Cancel']"));
+
   const exportStarted = await desktop.execute<boolean>(`window.__desktopImageArchive = null;
     window.__desktopImageDownloadName = "";
     const originalCreateObjectURL = URL.createObjectURL.bind(URL);

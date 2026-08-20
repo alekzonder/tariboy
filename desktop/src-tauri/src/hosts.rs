@@ -269,6 +269,29 @@ impl RuntimeHosts {
     pub fn remove(&self, id: &str) {
         self.hosts.lock().unwrap().remove(id);
     }
+
+    #[cfg(debug_assertions)]
+    pub(crate) fn set_image_transfer_test_target(
+        &self,
+        id: &str,
+        base_url: &str,
+        daemon_version: &str,
+    ) {
+        self.hosts.lock().unwrap().insert(
+            id.to_string(),
+            HostRuntime {
+                state: HostState::Ready,
+                base_url: base_url.to_string(),
+                local_port: 0,
+                phase: "desktop-e2e".into(),
+                platform: "linux".into(),
+                arch: "x86_64".into(),
+                prerequisites: Vec::new(),
+                message: String::new(),
+                daemon_version: daemon_version.to_string(),
+            },
+        );
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
