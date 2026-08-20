@@ -21,9 +21,14 @@ const applyImageArchiveOn = vi.mocked(imageTransferApi.applyImageArchiveOn);
 
 afterEach(() => vi.resetAllMocks());
 
-const ready = { id: "ready", label: "Ready", baseURL: "https://ready", state: "ready" } as const;
-const offline = { id: "offline", label: "Offline", baseURL: "https://offline", state: "failed" } as const;
+const ready = { id: "ready", label: "Ready", baseURL: "https://ready", state: "ready", token: "ready-token" } as const;
+const offline = { id: "offline", label: "Offline", baseURL: "https://offline", state: "failed", token: "offline-token" } as const;
 const source = { id: "source", label: "Source", baseURL: "https://source", state: "ready", token: "source-token" } as const;
+
+if (false) {
+  // @ts-expect-error Image transfer must never fall back to the active daemon.
+  eligibleImageTransferTargets(undefined, [ready]);
+}
 
 it("keeps ready configured hosts eligible when the source is local", () => {
   expect(eligibleImageTransferTargets(null, [ready, offline])).toEqual([ready]);
@@ -186,4 +191,38 @@ it("clears staged retry state when the dialog closes", async () => {
   await user.click(screen.getByRole("button", { name: "Reopen" }));
 
   expect(screen.queryByRole("textbox", { name: "Retag and retry for Target A" })).not.toBeInTheDocument();
+});
+
+it("cancels an in-flight transfer when its parent closes the dialog", async () => {
+  const targetA = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  const targetB = { id: "target-b", label: "Target B", baseURL: "https://b", state: "ready", token: "b-token" } as const;
+  let finishFirstApply: () => void = () => undefined;
+  downloadImageArchiveOn.mockResolvedValue(new Blob(["archive"]));
+  uploadImageArchiveOn
+    .mockResolvedValueOnce({ import_id: "import-a", ref: "reviewer:v3", digest: "a" })
+    .mockResolvedValueOnce({ import_id: "import-b", ref: "reviewer:v3", digest: "b" });
+  applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirstApply = resolve; }));
+  const user = userEvent.setup();
+  const Harness = () => {
+    const [open, setOpen] = useState(true);
+    return <>
+      <button data-testid="parent-close" onClick={() => setOpen(false)}>Parent close</button>
+      <button data-testid="parent-reopen" onClick={() => setOpen(true)}>Parent reopen</button>
+      <ImageTransferDialog open={open} onOpenChange={setOpen} source={source} ref="reviewer:v3" daemons={[source, targetA, targetB]} onComplete={() => undefined} />
+    </>;
+  };
+
+  render(<Harness />);
+  await user.click(screen.getByRole("button", { name: "All servers" }));
+  await user.click(screen.getByRole("button", { name: "Start transfer" }));
+  await waitFor(() => expect(applyImageArchiveOn).toHaveBeenCalledTimes(1));
+
+  fireEvent.click(screen.getByTestId("parent-close"));
+  finishFirstApply();
+  await waitFor(() => expect(uploadImageArchiveOn).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByTestId("parent-reopen"));
+
+  expect(screen.queryByText("Target A: Completed")).not.toBeInTheDocument();
+  expect(screen.queryByText("Target B: Queued")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Start transfer" })).toBeDisabled();
 });

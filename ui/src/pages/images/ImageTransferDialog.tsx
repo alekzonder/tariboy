@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, type ApiTarget } from "@/lib/api";
-import type { DaemonMeta } from "@/lib/daemons";
+import { ApiError } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
 import { applyImageArchiveOn, downloadImageArchiveOn, uploadImageArchiveOn } from "@/lib/teamApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,16 +13,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export function eligibleImageTransferTargets(source: ApiTarget, daemons: DaemonMeta[]): DaemonMeta[] {
-  return daemons.filter((host) => host.state === "ready" && (source === null || source === undefined || host.id !== source.id));
+export function eligibleImageTransferTargets(source: Daemon | null, daemons: Daemon[]): Daemon[] {
+  return daemons.filter((host) => host.state === "ready" && (source === null || host.id !== source.id));
 }
 
 interface ImageTransferDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  source: ApiTarget;
+  source: Daemon | null;
   ref: string;
-  daemons: DaemonMeta[];
+  daemons: Daemon[];
   onComplete: () => void;
 }
 
@@ -66,6 +66,16 @@ export function ImageTransferDialog({
     cancelRequested.current = true;
     archive.current = null;
   }, []);
+
+  useEffect(() => {
+    if (open) return;
+    cancelRequested.current = true;
+    transfer.current += 1;
+    archive.current = null;
+    setRows({});
+    setSelected(new Set());
+    setTransferring(false);
+  }, [open]);
 
   const setRow = (id: string, row: TransferRow, run: number) => {
     if (mounted.current && transfer.current === run) setRows((current) => ({ ...current, [id]: row }));
