@@ -75,3 +75,33 @@ test("portable image export, source states, and import retag work in a real brow
   await expect(page.getByText("Current:").locator("..")).toContainText("browser-built:latest");
   await expect(page.getByText("Pending:")).toHaveCount(0);
 });
+
+test("transfers one source archive to ready non-source servers with target-bound requests", async ({ page }) => {
+  await page.goto("/tests/images-fixture.html?mode=transfer");
+  await page.getByRole("button", { name: "Upload to servers reviewer:v3" }).click();
+
+  await page.getByRole("button", { name: "All servers" }).click();
+  await expect(page.getByLabel("Transfer to Ready target")).toBeChecked();
+  await expect(page.getByLabel("Transfer to Already present target")).toBeChecked();
+  await expect(page.getByLabel("Transfer to Conflict target")).toBeChecked();
+  await expect(page.getByLabel("Transfer to Source server")).toHaveCount(0);
+  await expect(page.getByLabel("Transfer to Unavailable target")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Start transfer" }).click();
+  await expect(page.getByText("Ready target: Completed")).toBeVisible();
+  await expect(page.getByText("Already present target: Already present")).toBeVisible();
+  await expect(page.getByText("Conflict target: Failed — target ref conflicts")).toBeVisible();
+  await expect(page.getByLabel("Retag and retry for Conflict target")).toHaveValue("reviewer:v3");
+
+  await expect.poll(() => page.evaluate(() => (window as Window & {
+    __imageTransferRequests?: Array<{ method: string; url: string }>;
+  }).__imageTransferRequests ?? [])).toEqual([
+    { method: "GET", url: "https://source.tariboy.test/api/images/reviewer%3Av3/export" },
+    { method: "POST", url: "https://conflict.tariboy.test/api/image-imports" },
+    { method: "POST", url: "https://conflict.tariboy.test/api/image-imports/conflict-import/apply" },
+    { method: "POST", url: "https://ready.tariboy.test/api/image-imports" },
+    { method: "POST", url: "https://ready.tariboy.test/api/image-imports/ready-import/apply" },
+    { method: "POST", url: "https://present.tariboy.test/api/image-imports" },
+    { method: "POST", url: "https://present.tariboy.test/api/image-imports/present-import/apply" },
+  ]);
+});

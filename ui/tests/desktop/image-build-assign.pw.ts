@@ -41,6 +41,7 @@ test("builds a transparent image from its original directory and assigns it to a
 
   await desktop.execute(`window.location.hash = "#/servers/local/images?tab=built";`);
   await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");
+  const sourceImagesRoute = await desktop.execute<string>("return window.location.hash;");
   const exportStarted = await desktop.execute<boolean>(`window.__desktopImageArchive = null;
     window.__desktopImageDownloadName = "";
     const originalCreateObjectURL = URL.createObjectURL.bind(URL);
@@ -69,6 +70,7 @@ test("builds a transparent image from its original directory and assigns it to a
   await expect.poll(() => bodyText(desktop)).toContain("Import image");
   await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Import image']"));
   await expect.poll(() => bodyText(desktop)).toContain("image imported");
+  await expect.poll(() => desktop.execute<string>("return window.location.hash;")).toBe(sourceImagesRoute);
 
   await desktop.execute(`window.location.hash = "#/servers/local/images/transparent-e2e/latest/template";`);
   await expect.poll(() => bodyText(desktop)).toContain("Template");

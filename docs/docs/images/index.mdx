@@ -188,6 +188,26 @@ receives a newly rewritten manifest and digest.
 Keep the original directory and paths when future rebuilds are required. An
 exported image is portable for use, not an editable source backup.
 
+## Transfer a runnable image to servers
+
+For an exportable, non-reserved built image, choose **Upload to servers** to
+send its runnable artifact to other configured hosts. The dialog lists every
+currently ready host except the captured source host; **All servers** selects
+that all-ready, non-source set, and individual targets can be deselected.
+
+Tariboy exports one runnable archive from the captured source and keeps it only
+in the browser memory of the open dialog. It previews and applies that same
+archive separately on each selected destination. A failure on one destination
+does not prevent later destinations from continuing. A same-ref/same-digest
+destination is shown as **Already present**; a ref conflict can be retagged and
+retried for only that destination without exporting again. Closing the dialog
+discards the archive and its transfer progress.
+
+The source and every destination are explicit request targets throughout the
+transfer. Starting, continuing, or retrying a transfer never changes the active
+host or the selected source route. The in-memory archive is a runnable artifact
+for this operation, not source backup or persistent state.
+
 ## Built-in images and compatibility
 
 - `bare:latest` is a schema-v2 image with no plugins and an empty prompt. Its
