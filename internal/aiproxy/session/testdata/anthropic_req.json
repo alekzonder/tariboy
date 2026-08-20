@@ -1,0 +1,14 @@
+{
+  "model": "claude-opus-4",
+  "system": "You are a careful engineer. Follow the instructions exactly.",
+  "messages": [
+    { "role": "user", "content": "run the tests" },
+    { "role": "assistant", "content": [
+      { "type": "text", "text": "Running them now." },
+      { "type": "tool_use", "id": "tu_1", "name": "Bash", "input": { "command": "make test" } }
+    ] },
+    { "role": "user", "content": [
+      { "type": "tool_result", "tool_use_id": "tu_1", "content": "ok", "is_error": false }
+    ] }
+  ]
+}

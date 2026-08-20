@@ -1,0 +1,17 @@
+# Files that carry the canonical version literal and are rewritten by
+# scripts/set-version.sh. Keep this list explicit: a repository-wide rewrite
+# would corrupt unrelated dependency versions.
+internal/version/version.go
+desktop/src-tauri/Cargo.toml
+desktop/src-tauri/tauri.conf.json
+README.md
+docs/internal-alpha-release-runbook.md
+docs/docs/quickstart.mdx
+docs/docs/security-controls.mdx
+docs/docs/support.mdx
+
+# Never add docs/package-lock.json: its esbuild version is third-party data.
+# Never add desktop/src-tauri/Cargo.lock: cargo regenerates it; nix currently
+# has the same version as this project, so text substitution would corrupt it.
+# Never add scripts/release-version.txt: it is written whole by
+# `scripts/set-version.sh` rather than substituted in place.

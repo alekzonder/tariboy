@@ -1,0 +1,11 @@
+data: {"choices":[{"delta":{"role":"assistant","content":""}}]}
+
+data: {"choices":[{"delta":{"reasoning_content":"Check the config first."}}]}
+
+data: {"choices":[{"delta":{"content":"Reading the Makefile."}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_9","function":{"name":"Read","arguments":"{\"file_path\":\"Makefile\"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}
+
+data: [DONE]

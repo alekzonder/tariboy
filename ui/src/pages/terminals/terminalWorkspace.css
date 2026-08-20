@@ -1,0 +1,57 @@
+@import "flexlayout-react/style/light.css";
+
+.terminal-workspace .flexlayout__layout {
+  --color-text: var(--foreground);
+  --color-background: var(--background);
+  --color-base: var(--background);
+  --color-1: color-mix(in oklab, var(--muted) 72%, var(--background));
+  --color-2: var(--muted);
+  --color-3: var(--accent);
+  --color-4: var(--border);
+  --color-5: var(--border);
+  --color-6: var(--muted-foreground);
+  --color-drag1: var(--primary);
+  --color-drag2: var(--primary);
+  --color-drag1-background: color-mix(in oklab, var(--primary) 16%, transparent);
+  --color-drag2-background: color-mix(in oklab, var(--primary) 12%, transparent);
+  --color-focus: var(--ring);
+  --font-family: var(--font-sans);
+  --font-size: 12px;
+  --splitter-size: 6px;
+  --splitter-active-size: 10px;
+}
+
+.terminal-workspace .flexlayout__tabset {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.terminal-workspace .flexlayout__tabset_tabbar_outer {
+  min-height: 30px;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-workspace .flexlayout__tab_button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.terminal-workspace .flexlayout__tab_button_content {
+  min-width: 0;
+}
+
+.terminal-workspace .flexlayout__tab {
+  padding: 0;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.terminal-workspace .flexlayout__splitter {
+  background: var(--border);
+}
+
+.terminal-workspace .flexlayout__splitter:hover,
+.terminal-workspace .flexlayout__splitter_drag {
+  background: var(--primary);
+}

@@ -1,0 +1,206 @@
+---
+title: Images
+description: Build immutable plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
+sidebar:
+  label: Overview
+  icon: layers
+---
+
+An image defines the plugins available to an agent, optional packaged Agent
+Skills, and the exact prompt template rendered for each iteration. Harness,
+model, effort, interactive mode, environment, policy, secrets, and evals are
+runtime or compose configuration. They are not schema-v2 image fields.
+
+## Build from an original directory
+
+Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
+required name and an optional tag, then select **Validate** or **Build**. The
+default tag is `latest`. Tariboy records the canonical source CWD as local
+provenance, but does not copy or retain an editable source snapshot. Rebuilding
+therefore always reads the original directory and its current paths.
+
+**Validate** is read-only. Before a build it shows the schema version, explicit
+plugin names, packaged skill metadata, template hash, and every prompt entry in
+declared order. Static entries include their original source string, resolved
+category, byte size, and full SHA-256; runtime entries remain named
+placeholders. Errors block the build.
+Warnings call out omissions such as identity or finishing instructions,
+host-bound absolute paths, unusually large prompts, missing obvious plugin
+instructions, and a static external-plugin version that differs from the active
+runtime version. Validation never repairs or reorders the template.
+
+Use **Open in VS Code** on an image detail page when the source CWD still exists
+on the selected local or SSH host. Imported images have no source CWD.
+
+The equivalent operator command is:
+
+```bash
+tariboy image validate --path ./reviewer-image --name reviewer --tag v3
+tariboy image build --path ./reviewer-image --name reviewer --tag v3
+tariboy image ls
+```
+
+For CLI calls, a relative `--path` is resolved against the shell's current
+working directory before the request is sent to the daemon.
+
+Image refs are immutable. Change the tag when changed source content must be
+published as another image.
+
+## Schema version 2
+
+Schema v2 is strict and accepts only `schema_version`, `plugins`, `skills`, and
+`prompts`:
+
+```yaml
+schema_version: 2
+plugins:
+  - name: whoami
+  - name: messages
+  - name: context
+  - name: workdir
+  - name: jira
+skills:
+  - dir: ./skills/code-review
+  - dir: $PLUGINS/jira/2.5.0/skills/triage
+prompts:
+  - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
+  - runtime: identity
+  - file: $CURRENT_VERSION_STORE/skills/messages/prompt.md
+  - runtime: messages
+  - file: $PLUGINS/jira/2.5.0/prompts/reviewer.md
+  - runtime: context
+  - file: $CURRENT_VERSION_STORE/skills/workdir/prompt.md
+  - runtime: workdir
+  - file: ./task.md
+  - runtime: user-prompt
+  - runtime: one-shot
+  - file: /srv/tariboy/prompts/finish.md
+```
+
+The `prompts` sequence is the render sequence. Tariboy does not sort it, add
+core fragments, prepend an identity header, or append a finishing tail. An
+empty list produces an empty prompt template.
+
+Each static `file` is resolved and embedded at build time. Supported forms are:
+
+| Form | Resolves from |
+| --- | --- |
+| `$STORE/...` | The common Store root, including all installed product versions |
+| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
+| `$PLUGINS/...` | The common external-plugin root |
+| `./...` | The original directory containing `Tariboyfile.yaml` |
+| `/absolute/path/...` | An operator-supplied absolute filesystem path |
+
+The builder expands only those literal variables; it never performs shell or
+environment expansion. Traversal, symlinks, missing files, non-regular files,
+and oversized prompt files are rejected.
+
+## Packaged Agent Skills
+
+Each `skills` entry explicitly packages one Agent Skill directory into the
+immutable image. The skill travels with runnable export/import. At iteration
+launch Claude Code and OpenCode receive it through native skill configuration;
+Codex receives a compact prompt catalog with its absolute `SKILL.md` path and
+reads the file on demand. This is separate from image plugins and prompt
+entries; none implies another.
+
+See [Agent Skills in images](/docs/images/agent-skills) for the directory and
+frontmatter contract, source paths, validation limits, manifest fields,
+portability, harness adapters, discovery precedence, and activation failures.
+
+## Runtime placeholders
+
+Runtime entries remain visible placeholders inside the immutable image. Before
+every iteration, the runner replaces them with current values at their declared
+positions:
+
+| Placeholder | Value at iteration start |
+| --- | --- |
+| `identity` | Current agent name, active image ref and digest, CWD, and iteration identity |
+| `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD |
+| `context` | Durable agent context |
+| `messages` | Messages delivered to this iteration |
+| `awaiting-replies` | Outstanding request state |
+| `user-prompt` | The agent's standing prompt |
+| `one-shot` | A prompt supplied for this single execution |
+
+Each singleton placeholder may appear at most once. Empty runtime values add no
+text. The **Template** tab shows static paths, categories, sizes, hashes, and
+runtime markers in their exact order without draining messages.
+
+## Store and external plugins
+
+Built-in static prompt assets are installed under:
+
+```text
+$STORE/versions/<tariboy-version>/skills/...
+```
+
+`$CURRENT_VERSION_STORE` points at that version directory. `$STORE` stays
+version-independent so a source may intentionally reference a built-in prompt
+from another installed version.
+
+External plugins are separate:
+
+```text
+$PLUGINS/<plugin-name>/<plugin-version>/...
+```
+
+Versions can exist side by side, while one version per plugin name is active
+and supervised. Images select plugin names, not plugin versions. Adding a
+plugin never adds its prompt implicitly; include every required static prompt
+path in `prompts`.
+
+## Assign an image to an existing agent
+
+Build the image in **Images**, then open the agent's **Configuration** tab and
+select it under **Agent image**. The choice is persisted as pending. Tariboy
+does not interrupt a running iteration: it validates and activates the image
+through the next iteration's launch gate, then snapshots the image ref, digest,
+and prompt-template hash for that iteration.
+
+Activation changes only image bytes, plugin capabilities, and image-owned
+shims. It preserves harness, model, effort, environment, interactive and loop
+settings, CWD, context, workdir, messages, history, audit, group, and
+subscriptions. A validation or staging failure leaves the current image active
+and exposes a retryable pending error. The pending selection can be replaced or
+cancelled before activation.
+
+The built-image list shows agent names separately under **Current** and
+**Pending**, so an operator can see both active use and assignments waiting for
+their next launch gate. An image in either list cannot be removed.
+
+## Import and export
+
+**Export** downloads a runnable image artifact named
+`<name>-<tag>.tariboy-image.tar.gz`. It includes the immutable image
+archive, including packaged skills, and its digest, but never original source
+files or source CWD. After the browser download starts, Tariboy confirms the
+saved image ref and portable filename in a toast. **Import runnable image** verifies both the portable wrapper and the inner runnable
+archive before installation. Validation rejects unmanifested content, unsafe or
+special-file members, duplicate paths, malformed schema-v2 metadata, prompt
+layer/hash mismatches, and compressed or expanded limit violations. Import does
+not rebuild the image. The import preview exposes editable **Import name** and
+**Import tag** fields. The same ref and digest are idempotent; when the ref
+already names different bytes, choose another name or tag. That explicit retag
+receives a newly rewritten manifest and digest.
+
+Keep the original directory and paths when future rebuilds are required. An
+exported image is portable for use, not an editable source backup.
+
+## Built-in images and compatibility
+
+- `bare:latest` is a schema-v2 image with no plugins and an empty prompt. Its
+  terminal-only behavior is runtime policy.
+- `basic:latest` explicitly declares every plugin, static Store prompt, and
+  runtime placeholder it uses, including the instruction-only `workdir`
+  plugin, its Store prompt, and `runtime: workdir`. New agents receive the
+  current managed generation. A daemon upgrade may advance this managed ref,
+  while active agents and pending assignments continue resolving their pinned
+  pre-upgrade digest until the operator selects another image.
+- Existing schema-v1 sources and images retain their historical behavior.
+  Compatibility is selected by `schema_version`; new sources should use v2.
+
+Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and the
+corresponding Store prompt path when an image should expose its agent command
+and instructions.

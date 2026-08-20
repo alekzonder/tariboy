@@ -1,0 +1,559 @@
+package commands
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tasks"
+)
+
+type taskEnvelope struct {
+	OK     bool            `json:"ok"`
+	Result json.RawMessage `json:"result"`
+	Error  *struct {
+		Code    string         `json:"code"`
+		Message string         `json:"message"`
+		Details map[string]any `json:"details"`
+	} `json:"error"`
+}
+
+func taskRequest(t *testing.T, client *http.Client, method, url string, body any) (int, taskEnvelope) {
+	t.Helper()
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(method, url, reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var env taskEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, env
+}
+
+func TestWorkflowOperatorHTTPPublishesTypedRoutesAndKeepsCustomerIdentityServerSide(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	svc := tasks.NewService(st.DB, "customer", time.Now)
+	server := api.NewServer(BuildRegistry(), &registry.Ctx{
+		Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Tasks: svc,
+	})
+	httpServer := httptest.NewServer(server.Handler())
+	t.Cleanup(httpServer.Close)
+
+	resp, err := httpServer.Client().Get(httpServer.URL + "/api/openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var openapi struct {
+		Result struct {
+			Paths      map[string]map[string]any `json:"paths"`
+			Components struct {
+				Schemas map[string]map[string]any `json:"schemas"`
+			} `json:"components"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&openapi); err != nil {
+		t.Fatal(err)
+	}
+	wantRoutes := map[string]string{
+		"/api/workflows":                                    "post",
+		"/api/workflows/{name}/versions":                    "get",
+		"/api/workflows/{name}/versions/{version}":          "get",
+		"/api/workflows/{name}/versions/{version}/validate": "post",
+		"/api/workflows/{name}/versions/{version}/publish":  "post",
+		"/api/task-queues/{queue}/workflow":                 "put",
+		"/api/task-queues/{queue}/pools/{pool}":             "patch",
+		"/api/tasks/{key}/workflow":                         "get",
+		"/api/tasks/{key}/work-packets":                     "get",
+		"/api/tasks/{key}/assignments":                      "get",
+		"/api/tasks/{key}/artifacts":                        "get",
+		"/api/tasks/{key}/questions":                        "get",
+		"/api/tasks/{key}/workflow-events":                  "get",
+		"/api/task-queues/{queue}/workflow-triggers":        "post",
+		"/api/task-queues/{queue}/pools":                    "get",
+		"/api/tasks/{key}/subscriptions":                    "get",
+	}
+	for path, method := range wantRoutes {
+		if _, ok := openapi.Result.Paths[path][method]; !ok {
+			t.Errorf("OpenAPI missing %s %s", method, path)
+		}
+	}
+	workflowPut := openapi.Result.Paths["/api/task-queues/{queue}/workflow"]["put"].(map[string]any)
+	if workflowPut["requestBody"] == nil || workflowPut["responses"] == nil || workflowPut["parameters"] == nil {
+		t.Fatalf("typed workflow binding OpenAPI operation = %#v", workflowPut)
+	}
+	existingTaskGet := openapi.Result.Paths["/api/tasks/{key}"]["get"].(map[string]any)
+	params := existingTaskGet["parameters"].([]any)
+	if len(params) != 1 || params[0].(map[string]any)["name"] != "key" || params[0].(map[string]any)["schema"].(map[string]any)["type"] != "string" || existingTaskGet["responses"] == nil {
+		t.Fatalf("existing task OpenAPI contract regressed: %#v", existingTaskGet)
+	}
+	createOperation := openapi.Result.Paths["/api/workflows"]["post"].(map[string]any)
+	createSchema := createOperation["requestBody"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	definitionSchema := createSchema["properties"].(map[string]any)["definition"].(map[string]any)
+	if definitionSchema["$ref"] != "#/components/schemas/WorkflowDefinition" {
+		t.Fatalf("workflow create definition schema = %#v", definitionSchema)
+	}
+	workflowDefinition := openapi.Result.Components.Schemas["WorkflowDefinition"]
+	if !openAPIRequired(workflowDefinition, "statuses") {
+		t.Fatalf("workflow definition does not require statuses: %#v", workflowDefinition)
+	}
+	statuses := workflowDefinition["properties"].(map[string]any)["statuses"].(map[string]any)
+	if statuses["type"] != "array" || statuses["items"].(map[string]any)["$ref"] != "#/components/schemas/WorkflowStatus" {
+		t.Fatalf("workflow statuses schema = %#v", statuses)
+	}
+	workflowStatusSchema := openapi.Result.Components.Schemas["WorkflowStatus"]
+	if !openAPIRequired(workflowStatusSchema, "requirements") || !openAPIRequired(workflowStatusSchema, "transitions") {
+		t.Fatalf("workflow status collections are not required: %#v", workflowStatusSchema)
+	}
+	executionSchema := openapi.Result.Components.Schemas["WorkflowExecutionView"]
+	executionProperties := executionSchema["properties"].(map[string]any)
+	if executionProperties["requirement_executions"].(map[string]any)["items"].(map[string]any)["$ref"] != "#/components/schemas/RequirementExecution" {
+		t.Fatalf("workflow execution schema = %#v", executionSchema)
+	}
+	requirement := openapi.Result.Components.Schemas["RequirementExecution"]
+	if requirement["properties"].(map[string]any)["pool_snapshot"].(map[string]any)["type"] != "array" {
+		t.Fatalf("requirement execution schema = %#v", requirement)
+	}
+	workflowResultEnvelope := openapi.Result.Paths["/api/tasks/{key}/workflow"]["get"].(map[string]any)["responses"].(map[string]any)["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	workflowResult := workflowResultEnvelope["properties"].(map[string]any)["result"].(map[string]any)
+	if workflowResult["$ref"] != "#/components/schemas/WorkflowExecutionView" {
+		t.Fatalf("workflow result schema = %#v", workflowResult)
+	}
+	assignmentList := openapi.Result.Paths["/api/tasks/{key}/assignments"]["get"].(map[string]any)["responses"].(map[string]any)["200"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)["properties"].(map[string]any)["result"].(map[string]any)
+	if assignmentList["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["$ref"] != "#/components/schemas/Assignment" {
+		t.Fatalf("assignment list result schema = %#v", assignmentList)
+	}
+
+	definition := tasks.WorkflowDefinition{
+		Name: "api-flow", Version: 1, InitialStatus: "implement",
+		Statuses: []tasks.WorkflowStatus{
+			{ID: "implement", Requirements: []tasks.WorkflowRequirement{{
+				ID: "code", Pool: "developers", Dispatch: tasks.DispatchClaimOne,
+				Produces: []string{"implementation"}, Outcomes: []string{"done"},
+			}}, Transitions: []tasks.WorkflowTransition{{When: "code.done", To: "done"}}},
+			{ID: "done", Terminal: true},
+		},
+	}
+	status, env := taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/workflows", map[string]any{
+			"definition": definition, "actor": "agent:attacker", "customer": "mallory",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create workflow = %d/%+v", status, env)
+	}
+	var draft tasks.WorkflowVersion
+	if err := json.Unmarshal(env.Result, &draft); err != nil {
+		t.Fatal(err)
+	}
+	if draft.State != "draft" || draft.Name != definition.Name {
+		t.Fatalf("draft = %#v", draft)
+	}
+	if bytes.Contains(env.Result, []byte(`"requirements":null`)) || bytes.Contains(env.Result, []byte(`"transitions":null`)) {
+		t.Fatalf("workflow API returned null required collections: %s", env.Result)
+	}
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/workflows/api-flow/versions/1/publish", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("publish workflow = %d/%+v", status, env)
+	}
+	var published tasks.WorkflowVersion
+	if err := json.Unmarshal(env.Result, &published); err != nil {
+		t.Fatal(err)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/workflows", map[string]any{"definition": definition})
+	if status != http.StatusConflict || env.Error == nil || env.Error.Code != "workflow_immutable" {
+		t.Fatalf("mutate published workflow = %d/%+v", status, env)
+	}
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet,
+		httpServer.URL+"/api/workflows/api-flow/versions", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("list versions = %d/%+v", status, env)
+	}
+	var versions struct {
+		Items []tasks.WorkflowVersion `json:"items"`
+		Count int                     `json:"count"`
+	}
+	if err := json.Unmarshal(env.Result, &versions); err != nil {
+		t.Fatal(err)
+	}
+	if versions.Count != 1 || len(versions.Items) != 1 {
+		t.Fatalf("versions envelope = %#v", versions)
+	}
+	legacyJSON := `{"name":"legacy-api","version":1,"initial_status":"work","statuses":[{"id":"work","requirements":[{"id":"do","pool":"developers","dispatch":"claim_one","inputs":null,"produces":null,"outcomes":["done"]}],"transitions":[{"when":"do.done","to":"done"}]},{"id":"done","requirements":null,"transitions":null,"terminal":true}]}`
+	if _, err := st.DB.Exec(`INSERT INTO task_workflow_versions(name,version,definition,state,created_at,updated_at,published_at) VALUES('legacy-api',1,?,'published','t','t','t')`, legacyJSON); err != nil {
+		t.Fatal(err)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet, httpServer.URL+"/api/workflows/legacy-api/versions/1", nil)
+	if status != http.StatusOK || !env.OK || bytes.Contains(env.Result, []byte(`"requirements":null`)) || bytes.Contains(env.Result, []byte(`"inputs":null`)) {
+		t.Fatalf("legacy operator response=%d/%s", status, env.Result)
+	}
+	var storedLegacy string
+	if err := st.DB.QueryRow(`SELECT definition FROM task_workflow_versions WHERE name='legacy-api'`).Scan(&storedLegacy); err != nil || storedLegacy != legacyJSON {
+		t.Fatalf("legacy stored JSON changed: %q err=%v", storedLegacy, err)
+	}
+
+	if _, err := st.DB.Exec(`INSERT INTO agents(name, image_ref, image_digest) VALUES ('dev-a', 'basic:latest', 'digest')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateQueue(t.Context(), tasks.CustomerActor("customer"), tasks.CreateQueueInput{Prefix: "FLOW", Name: "Flow"}); err != nil {
+		t.Fatal(err)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPatch,
+		httpServer.URL+"/api/task-queues/FLOW/pools/developers", map[string]any{
+			"agents": []string{"dev-a"}, "revision": 0, "idempotency_key": "pool-http",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("bind pool = %d/%+v", status, env)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPatch,
+		httpServer.URL+"/api/task-queues/FLOW/pools/developers", map[string]any{
+			"agents": []string{"dev-a"}, "revision": 99, "idempotency_key": "pool-stale",
+		})
+	if status != http.StatusConflict || env.Error == nil || env.Error.Code != "revision_conflict" || env.Error.Details["current"] == nil {
+		t.Fatalf("stale pool bind = %d/%+v", status, env)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPut,
+		httpServer.URL+"/api/task-queues/FLOW/workflow", map[string]any{
+			"workflow_version_id": published.ID, "revision": 0, "idempotency_key": "activate-http",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("activate workflow = %d/%+v", status, env)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks", map[string]any{"queue": "FLOW", "title": "managed"})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create managed task = %d/%+v", status, env)
+	}
+	var managed tasks.Task
+	if err := json.Unmarshal(env.Result, &managed); err != nil {
+		t.Fatal(err)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPatch,
+		httpServer.URL+"/api/tasks/"+managed.Key, map[string]any{"status": "done", "revision": managed.Revision})
+	if status != http.StatusConflict || env.Error == nil || env.Error.Code != "workflow_managed" {
+		t.Fatalf("managed legacy mutation = %d/%+v", status, env)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet,
+		httpServer.URL+"/api/tasks/"+managed.Key+"/assignments", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("list assignments = %d/%+v", status, env)
+	}
+	var assignments struct {
+		Items []tasks.Assignment `json:"items"`
+		Count int                `json:"count"`
+	}
+	if err := json.Unmarshal(env.Result, &assignments); err != nil {
+		t.Fatal(err)
+	}
+	if assignments.Count != 1 || len(assignments.Items) != 1 {
+		t.Fatalf("assignments envelope = %#v", assignments)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet,
+		httpServer.URL+"/api/tasks/"+managed.Key+"/workflow", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("workflow execution = %d/%+v", status, env)
+	}
+	var execution tasks.WorkflowExecutionView
+	if err := json.Unmarshal(env.Result, &execution); err != nil {
+		t.Fatal(err)
+	}
+	if execution.Workflow.ID != published.ID || len(execution.Statuses) != 1 || len(execution.Requirements) != 1 || len(execution.Assignments) != 1 {
+		t.Fatalf("workflow execution projection = %#v", execution)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/task-queues/FLOW/workflow-triggers", map[string]any{"pattern": "incident:*", "action": "create_task"})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create trigger = %d/%+v", status, env)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet,
+		httpServer.URL+"/api/task-queues/FLOW/workflow-triggers", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("list triggers = %d/%+v", status, env)
+	}
+}
+
+func openAPIRequired(schema map[string]any, name string) bool {
+	values, _ := schema["required"].([]any)
+	for _, value := range values {
+		if value == name {
+			return true
+		}
+	}
+	return false
+}
+
+func TestTasksHTTPDerivesCustomerScopesListsAndRejectsStaleRevision(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	taskService := tasks.NewService(st.DB, "customer", func() time.Time {
+		return time.Date(2026, 7, 31, 14, 0, 0, 0, time.UTC)
+	})
+	server := api.NewServer(BuildRegistry(), &registry.Ctx{
+		Store: st,
+		Log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Tasks: taskService,
+	})
+	httpServer := httptest.NewServer(server.Handler())
+	t.Cleanup(httpServer.Close)
+
+	status, env := taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/task-queues", map[string]any{
+			"prefix": "API", "name": "API",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create queue status/env = %d/%+v", status, env)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks", map[string]any{
+			"queue": "API", "title": "Alice task", "assignee": "alice",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create task status/env = %d/%+v", status, env)
+	}
+	var created tasks.Task
+	if err := json.Unmarshal(env.Result, &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Author != "user:customer" || created.Key != "API-1" {
+		t.Fatalf("created = %#v", created)
+	}
+	_, _ = taskService.CreateTask(t.Context(), tasks.CustomerActor("customer"),
+		tasks.CreateTaskInput{Queue: "API", Title: "Hidden from Alice"})
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet,
+		httpServer.URL+"/api/tasks?scope_agent=alice", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("list status/env = %d/%+v", status, env)
+	}
+	var page tasks.TaskPage
+	if err := json.Unmarshal(env.Result, &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Tasks) != 1 || page.Tasks[0].Key != created.Key {
+		t.Fatalf("agent-scoped page = %#v", page)
+	}
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPatch,
+		httpServer.URL+"/api/tasks/"+created.Key, map[string]any{
+			"title": "stale overwrite", "revision": 999,
+		})
+	if status != http.StatusConflict || env.Error == nil ||
+		env.Error.Code != "revision_conflict" {
+		t.Fatalf("stale update status/env = %d/%+v", status, env)
+	}
+	if env.Error.Details["current_revision"] != float64(created.Revision) {
+		t.Fatalf("conflict details = %#v; want current revision %d",
+			env.Error.Details, created.Revision)
+	}
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks", map[string]any{
+			"queue": "API", "title": "Relation target",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create target status/env = %d/%+v", status, env)
+	}
+	var target tasks.Task
+	if err := json.Unmarshal(env.Result, &target); err != nil {
+		t.Fatal(err)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks/"+created.Key+"/relations", map[string]any{
+			"target_key": target.Key, "type": "related", "revision": created.Revision,
+			"idempotency_key": "http-rel-1",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("add relation status/env = %d/%+v", status, env)
+	}
+	var relation tasks.Relation
+	if err := json.Unmarshal(env.Result, &relation); err != nil {
+		t.Fatal(err)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodDelete,
+		httpServer.URL+"/api/tasks/"+created.Key+"/relations?relation_id="+
+			strconv.FormatInt(relation.ID, 10)+"&revision="+
+			strconv.FormatInt(created.Revision+1, 10)+"&idempotency_key=http-del-1", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("delete relation status/env = %d/%+v", status, env)
+	}
+}
+
+func TestTasksHTTPFiltersStatusViewsBeforeBuildingTheResponse(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	svc := tasks.NewService(st.DB, "customer", time.Now)
+	server := api.NewServer(BuildRegistry(), &registry.Ctx{
+		Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Tasks: svc,
+	})
+	httpServer := httptest.NewServer(server.Handler())
+	t.Cleanup(httpServer.Close)
+	customer := tasks.CustomerActor("customer")
+	if _, err := svc.CreateQueue(t.Context(), customer, tasks.CreateQueueInput{Prefix: "VIEW", Name: "Views"}); err != nil {
+		t.Fatal(err)
+	}
+	open, _ := svc.CreateTask(t.Context(), customer, tasks.CreateTaskInput{Queue: "VIEW", Title: "open"})
+	inProgress, _ := svc.CreateTask(t.Context(), customer, tasks.CreateTaskInput{Queue: "VIEW", Title: "in progress"})
+	done, _ := svc.CreateTask(t.Context(), customer, tasks.CreateTaskInput{Queue: "VIEW", Title: "done"})
+	cancelled, _ := svc.CreateTask(t.Context(), customer, tasks.CreateTaskInput{Queue: "VIEW", Title: "cancelled"})
+	for _, update := range []struct {
+		task   tasks.Task
+		status string
+	}{{inProgress, "in_progress"}, {done, "done"}, {cancelled, "cancelled"}} {
+		status := update.status
+		if _, err := svc.UpdateTask(t.Context(), customer, update.task.Key, tasks.UpdateTaskInput{Status: &status, Revision: update.task.Revision}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assertView := func(path string, want ...string) int {
+		t.Helper()
+		status, env := taskRequest(t, httpServer.Client(), http.MethodGet, httpServer.URL+path, nil)
+		if status != http.StatusOK || !env.OK {
+			t.Fatalf("GET %s = %d/%+v", path, status, env)
+		}
+		var page tasks.TaskPage
+		if err := json.Unmarshal(env.Result, &page); err != nil {
+			t.Fatal(err)
+		}
+		got := make([]string, 0, len(page.Tasks))
+		for _, task := range page.Tasks {
+			got = append(got, task.Status)
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("GET %s statuses = %v, want %v", path, got, want)
+		}
+		return len(env.Result)
+	}
+	activeBytes := assertView("/api/tasks?queue=VIEW", "open", "in_progress")
+	assertView("/api/tasks?queue=VIEW&status_view=closed", "done")
+	allBytes := assertView("/api/tasks?queue=VIEW&status_view=all", "open", "in_progress", "done", "cancelled")
+	if activeBytes >= allBytes {
+		t.Fatalf("active response is %d bytes, all response is %d bytes; excluded rows must not be shipped", activeBytes, allBytes)
+	}
+	status, env := taskRequest(t, httpServer.Client(), http.MethodGet, httpServer.URL+"/api/tasks?status_view=everything", nil)
+	if status != http.StatusBadRequest || env.Error == nil || env.Error.Code != "invalid_status_view" {
+		t.Fatalf("invalid status view = %d/%+v", status, env)
+	}
+	_ = open
+}
+
+func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	taskService := tasks.NewService(st.DB, "customer", time.Now)
+	server := api.NewServer(BuildRegistry(), &registry.Ctx{
+		Store: st,
+		Log:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Tasks: taskService,
+	})
+	httpServer := httptest.NewServer(server.Handler())
+	t.Cleanup(httpServer.Close)
+
+	status, env := taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/task-queues", map[string]any{"prefix": "PRI", "name": "Priority"})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create queue status/env = %d/%+v", status, env)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks", map[string]any{
+			"queue": "PRI", "title": "urgent", "priority": "P1",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create task status/env = %d/%+v", status, env)
+	}
+	var created tasks.Task
+	if err := json.Unmarshal(env.Result, &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Priority != tasks.PriorityP1 {
+		t.Fatalf("created priority = %q, want P1", created.Priority)
+	}
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPatch,
+		httpServer.URL+"/api/tasks/"+created.Key, map[string]any{
+			"priority": "P0", "revision": created.Revision,
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("update task status/env = %d/%+v", status, env)
+	}
+	var updated tasks.Task
+	if err := json.Unmarshal(env.Result, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Priority != tasks.PriorityP0 {
+		t.Fatalf("updated priority = %q, want P0", updated.Priority)
+	}
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet,
+		httpServer.URL+"/api/tasks", nil)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("list tasks status/env = %d/%+v", status, env)
+	}
+	var page tasks.TaskPage
+	if err := json.Unmarshal(env.Result, &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Tasks) != 1 || page.Tasks[0].Priority != tasks.PriorityP0 {
+		t.Fatalf("listed tasks = %#v", page.Tasks)
+	}
+
+	events, err := taskService.ListEvents(t.Context(), tasks.CustomerActor("customer"), created.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) < 2 || events[len(events)-1].Payload["priority"] != "P0" {
+		t.Fatalf("events = %#v, want updated priority payload", events)
+	}
+
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks", map[string]any{
+			"queue": "PRI", "title": "invalid", "priority": "urgent",
+		})
+	if status != http.StatusBadRequest || env.Error == nil || env.Error.Code != "invalid_priority" {
+		t.Fatalf("invalid create status/env = %d/%+v", status, env)
+	}
+}

@@ -1,0 +1,166 @@
+---
+title: Remote hosts
+description: Connect, provision, update, and remove Linux hosts through system OpenSSH.
+sidebar:
+  label: Remote hosts
+  icon: server
+---
+
+Tariboy manages a remote daemon through the SSH configuration already used
+by the operator. The desktop does not implement a second SSH stack.
+
+## Compatibility
+
+| Component | Alpha support |
+| --- | --- |
+| Desktop | macOS 12+, Apple Silicon |
+| Automatic remote install | Linux x86_64 |
+| SSH | system `ssh` and `scp` |
+| Remote install root | `~/.local/lib/tariboy` |
+| Remote CLI links | `~/.local/bin` |
+| Daemon HTTP | remote loopback only |
+| Tunnel | local loopback forwarding over SSH |
+
+Automatic installation requires a writable `~/.local` and `flock`. Preflight
+also reports `tmux`, Claude, Codex, and OpenCode so you can see which workflows
+are available. At least one chosen harness must be installed on the remote host.
+
+## Account PATH and harness launch
+
+A Desktop-managed local daemon is started **inside** the account's login shell,
+so it inherits the whole environment a new terminal gets — `PATH` and every other
+variable your shell startup files export. Desktop reads the login shell from the
+operating-system account record, so this works even when Finder supplied no
+useful `SHELL`. A daemon launched through SSH or an ordinary terminal already
+inherits that environment from its launcher.
+
+When no usable account shell exists, the daemon is started directly with a
+bootstrap `PATH`: whatever the launcher had, plus `~/.local/bin` and the standard
+system and package-manager locations. Such a daemon then resolves the account
+`PATH` itself, once, from a bounded interactive-login-shell probe. If that probe
+fails the daemon stays available with the inherited `PATH` and logs one stable
+warning naming only the class of failure — never the path or shell startup
+output.
+Before each iteration, Tariboy checks the selected harness executable using
+the final agent environment. An agent's explicit `PATH` overrides the daemon
+baseline; non-bare images then prepend their agent bin directory, while bare
+images do not.
+
+## Add and provision
+
+1. Confirm the alias works in Terminal: `ssh build-box`.
+2. Add the same alias under **Settings → Hosts**.
+3. Run preflight and review its output.
+4. Answer first-seen host-key or 2FA prompts in the desktop when requested.
+5. Install the matching version and wait for tunnel health to become Ready.
+
+System OpenSSH honors `~/.ssh/config`, ProxyJump, ssh-agent, hardware-backed
+keys, `known_hosts`, and organization authentication. Tariboy never adds
+`StrictHostKeyChecking=no`, copies private keys, or stores prompt replies.
+
+## Install and update behavior
+
+Desktop uploads the four Linux binaries, a version marker, checksums, and a
+fixed installer script to a staging directory. The remote installer:
+
+- validates checksums;
+- serializes installs with `flock`;
+- publishes a versioned release directory;
+- atomically switches managed CLI symlinks;
+- verifies the daemon reports the requested version;
+- rolls back the previous release on activation failure.
+
+An update refuses to replace unrelated regular files in `~/.local/bin`.
+Choosing **Update Tariboy** authorizes the version switch and daemon restart;
+connect, upload, activation, restart, and reconnect remain one operation with
+one operation ID. Daemon `0.10.1` and newer preserves running shims across that
+restart, so active agents do not require a second confirmation. A legacy daemon
+older than `0.10.1` instead fails closed before activation when active work
+exists or cannot be checked.
+
+The host dialog presents provisioning and updates as one vertical sequence:
+
+1. Connect to host.
+2. Check server.
+3. Upload release.
+4. Install release.
+5. Start or restart Tariboy.
+6. Connect or reconnect to Tariboy.
+
+Only one step is current, and a failure remains attached to the step that
+failed even when rollback successfully reconnects the previous daemon. Process
+stdout and stderr are diagnostic streams; stderr by itself does not mean that
+the command failed. The main flow shows only the actionable result. Checksums,
+raw JSON, and command output are available under the closed **Technical
+details** disclosure and cannot expand the dialog horizontally.
+
+The dialog offers one primary action for its current state: add, save and
+reconnect, update, or retry. If update
+reports that a path such as `~/.local/bin/tariboyd` is an existing
+non-symlink, move that file out of the way yourself and retry. Desktop does not
+delete or overwrite it automatically.
+
+Host and agent lists show their compact **Update** action only when tunnel
+health has reported a non-empty remote daemon version that differs from the
+current Desktop bundle version. Matching or unknown versions do not show the
+indicator. The manual **Edit host → Update Tariboy** action remains
+available when an operator deliberately wants to reinstall the current
+release.
+
+Inside an SSH agent workspace, **Open in VS Code** opens the displayed effective
+working directory through VS Code Remote SSH using the same saved SSH config
+alias. Local agents open as ordinary local folders. HTTPS hosts do not show the
+action because they have no SSH identity.
+
+Missing harnesses and `tmux` are reported separately as agent workflow
+prerequisites. They do not make an otherwise successful Tariboy update
+appear failed. Platform, architecture, writable install root, and `flock`
+remain installation requirements.
+
+## Connection lifecycle
+
+The remote daemon binds `127.0.0.1`. The desktop starts an SSH local-forwarding
+tunnel, probes health through it, retries bounded transient failures, and treats
+authentication or host-key mismatch as terminal until the operator acts.
+
+Quitting the app stops local tunnels but leaves remote daemons running. The next
+launch reconnects saved hosts.
+
+## Removing and uninstalling
+
+Removing a host from Settings stops its tunnel and deletes local host metadata
+and any Keychain token. It intentionally does not stop the remote daemon or
+delete remote data.
+
+To uninstall remotely after confirming no work is active:
+
+```bash
+ssh build-box 'set -eu
+managed_cli=
+for name in tariboy tariboyd tariboy-shim tariboy-tools; do
+  link=$HOME/.local/bin/$name
+  if test -L "$link"; then
+    target=$(readlink "$link")
+    case "$target" in
+      "$HOME"/.local/lib/tariboy/*/"$name")
+        test "$name" != tariboy || managed_cli=$target
+        ;;
+      *) echo "refusing to remove unrelated link: $link -> $target" >&2; exit 1 ;;
+    esac
+  elif test -e "$link"; then
+    echo "refusing to remove non-link: $link" >&2
+    exit 1
+  fi
+done
+test -n "$managed_cli"
+"$managed_cli" daemon stop || true
+for name in tariboy tariboyd tariboy-shim tariboy-tools; do
+  link=$HOME/.local/bin/$name
+  test ! -L "$link" || rm -- "$link"
+done
+rm -rf -- "$HOME/.local/lib/tariboy"'
+```
+
+Deleting `~/.tariboy` removes remote agents, images, audit, and database
+state. Back it up first and perform that separate destructive step only when
+data removal is intended.

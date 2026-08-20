@@ -1,0 +1,3 @@
+ALTER TABLE iterations ADD COLUMN image_ref TEXT NOT NULL DEFAULT '';
+ALTER TABLE iterations ADD COLUMN image_digest TEXT NOT NULL DEFAULT '';
+ALTER TABLE iterations ADD COLUMN prompt_template_sha256 TEXT NOT NULL DEFAULT '';

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write Project Docs"
+  short_description: "Write structured Blume project documentation"
+  default_prompt: "Use $write-docs to plan and write structured English documentation for this project."

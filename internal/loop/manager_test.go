@@ -1,0 +1,2699 @@
+package loop
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/audit"
+	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/client"
+	"github.com/alekzonder/tariboy/internal/groups"
+	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/plugincaps"
+	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/schedule"
+	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/scriptnotify"
+	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/store"
+)
+
+func startScriptTestSupervisor(t *testing.T, m *Manager) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	m.ctx, m.stop = ctx, cancel
+	m.startScriptSupervisor(ctx)
+	t.Cleanup(m.Shutdown)
+}
+
+func awaitScriptRun(t *testing.T, st *script.Store, agentName, id string, want func(script.Run) bool) script.Run {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		r, err := st.GetRun(agentName, id)
+		if err == nil && want(r) {
+			return r
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	r, err := st.GetRun(agentName, id)
+	t.Fatalf("script %s did not reach expected state: %#v %v", id, r, err)
+	return script.Run{}
+}
+
+func TestScriptSupervisorKeepsOutputInLogAndPublishesPath(t *testing.T) {
+	m, as, agentsDir, raw := newManager(t, &fakeRunner{})
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relativeAgentsDir, err := filepath.Rel(cwd, agentsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.cfg.AgentsDir = relativeAgentsDir
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	workdir := t.TempDir()
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: workdir}); err != nil {
+		t.Fatal(err)
+	}
+	startScriptTestSupervisor(t, m)
+	_, r, err := m.RunOnce("worker", script.CreateOnce{
+		Name: "ok", Description: "test",
+		Command: `awk 'BEGIN { for (i = 0; i < 70000; i++) printf "o" }'; awk 'BEGIN { for (i = 0; i < 70000; i++) printf "e" }' >&2`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = awaitScriptRun(t, st, "worker", r.ID, func(r script.Run) bool { return r.Status == script.RunSucceeded })
+	got, err := os.ReadFile(r.LogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 140000 || got[0] != 'o' || got[len(got)-1] != 'e' {
+		t.Fatalf("log size=%d first=%q last=%q", len(got), got[0], got[len(got)-1])
+	}
+	publisher := scriptnotify.New(raw.DB, m.cfg.Bus, time.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := publisher.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	if err != nil || len(messages) != 1 || messages[0].Type != "script.result" {
+		t.Fatalf("messages=%#v err=%v", messages, err)
+	}
+	msg := messages[0]
+	if len(msg.Text) >= 1024 || !strings.Contains(msg.Text, r.LogPath) {
+		t.Fatalf("message text does not contain a concise log reference: len=%d contains_path=%t", len(msg.Text), strings.Contains(msg.Text, r.LogPath))
+	}
+	if _, ok := msg.Data["output"]; ok {
+		t.Fatalf("message embeds script output: data keys=%v", msg.Data)
+	}
+	if msg.Data["log_path"] != r.LogPath {
+		t.Fatalf("message log_path=%v, want %q", msg.Data["log_path"], r.LogPath)
+	}
+	if len(msg.Data) != 7 || msg.Data["run_id"] != r.ID || msg.Data["name"] != "ok" || msg.Data["exit_code"] != float64(0) {
+		t.Fatalf("message data=%#v, want script/run/name/status/mode/exit_code/log_path", msg.Data)
+	}
+	if !filepath.IsAbs(r.LogPath) {
+		t.Fatalf("log_path=%q, want absolute path", r.LogPath)
+	}
+	if !strings.HasPrefix(r.LogPath, filepath.Join(agentsDir, "worker", "scripts")) {
+		t.Fatalf("log path %q is outside agent record directory", r.LogPath)
+	}
+}
+
+func TestScriptSupervisorExplicitQuietExitTwoSchedulesWithoutResult(t *testing.T) {
+	m, as, _, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	startScriptTestSupervisor(t, m)
+	quietExit := 2
+	definition, r, err := m.ScheduleScript("worker", script.CreateSchedule{Name: "quiet", Description: "test", Command: "exit 2", IntervalSeconds: 60, QuietExit: &quietExit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = awaitScriptRun(t, st, "worker", r.ID, func(r script.Run) bool { return r.Status == script.RunFailed })
+	definition, err = st.GetDefinition("worker", definition.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if definition.NextRunAt == "" {
+		t.Fatal("recurring exit 2 did not schedule a next run")
+	}
+	var outboxCount int
+	if err := raw.DB.QueryRow(`SELECT COUNT(*) FROM script_result_outbox WHERE run_id=?`, r.ID).Scan(&outboxCount); err != nil || outboxCount != 0 {
+		t.Fatalf("quiet outbox count=%d err=%v", outboxCount, err)
+	}
+	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	if err != nil || len(messages) != 0 {
+		t.Fatalf("quiet result messages=%#v err=%v", messages, err)
+	}
+}
+
+func TestScriptSupervisorMakeExitTwoCreatesFailureResult(t *testing.T) {
+	m, as, _, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	workdir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workdir, "Makefile"), []byte("all:\n\t@exit 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: workdir}); err != nil {
+		t.Fatal(err)
+	}
+	startScriptTestSupervisor(t, m)
+	_, run, err := m.RunOnce("worker", script.CreateOnce{Name: "make-check", Description: "regression", Command: "make"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = awaitScriptRun(t, st, "worker", run.ID, func(run script.Run) bool { return run.Status == script.RunFailed })
+	if run.ExitCode == nil || *run.ExitCode != 2 {
+		t.Fatalf("run=%#v, want failed exit 2", run)
+	}
+	publisher := scriptnotify.New(raw.DB, m.cfg.Bus, time.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := publisher.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	if err != nil || len(messages) != 1 || messages[0].Type != "script.result" || messages[0].Data["exit_code"] != float64(2) {
+		t.Fatalf("messages=%#v err=%v", messages, err)
+	}
+}
+
+func TestFinishScriptDoesNotPublishResultWithoutLogPath(t *testing.T) {
+	m, as, _, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	_, r, err := st.CreateOnce("worker", script.CreateOnce{Name: "broken", Description: "test", Command: "true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m.finishScript(r.ID, r, -1, errors.New("log path unavailable"), "")
+
+	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("published result without log path: %#v", messages)
+	}
+}
+
+func TestScriptSupervisorRecoveryAndCancel(t *testing.T) {
+	m, as, _, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts = st
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	staleDefinition, stale, err := st.CreateSchedule("worker", script.CreateSchedule{Name: "stale", Description: "test", Command: "true", IntervalSeconds: 60})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := st.ClaimRun("worker", stale.ID, time.Now().UTC().Format(time.RFC3339), "/tmp/stale.log"); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	if set, err := st.SetRunPID("worker", stale.ID, 1234); err != nil || !set {
+		t.Fatalf("pid set=%v err=%v", set, err)
+	}
+	if err := st.RecoverRunning(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.GetRun("worker", stale.ID); got.Status != script.RunInterrupted {
+		t.Fatalf("recovered run=%#v", got)
+	}
+	if got, _ := st.GetDefinition("worker", staleDefinition.ID); got.State != script.StateActive || got.NextRunAt == "" {
+		t.Fatalf("recovered definition=%#v", got)
+	}
+	startScriptTestSupervisor(t, m)
+	_, r, err := m.RunOnce("worker", script.CreateOnce{Name: "long", Description: "test", Command: "sleep 30 & wait"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = awaitScriptRun(t, st, "worker", r.ID, func(r script.Run) bool { return r.Status == script.RunRunning && r.PID != nil })
+	if err := m.CancelScriptTarget("worker", r.ID); err != nil {
+		t.Fatal(err)
+	}
+	r = awaitScriptRun(t, st, "worker", r.ID, func(r script.Run) bool { return r.Status == script.RunCancelled })
+	if r.LogPath == "" {
+		t.Fatal("cancelled run lost its log path")
+	}
+}
+
+func TestCancelRecurringRunWaitsForProcessExitBeforeSchedulingNext(t *testing.T) {
+	oldGrace := scriptCancelGrace
+	scriptCancelGrace = 200 * time.Millisecond
+	t.Cleanup(func() { scriptCancelGrace = oldGrace })
+
+	m, as, _, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts = st
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	startScriptTestSupervisor(t, m)
+	definition, run, err := m.ScheduleScript("worker", script.CreateSchedule{
+		Name: "stubborn", Description: "ignore term",
+		Command: "trap '' TERM; echo started; while :; do sleep 1; done", IntervalSeconds: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = awaitScriptRun(t, st, "worker", run.ID, func(run script.Run) bool {
+		return run.Status == script.RunRunning && run.PID != nil
+	})
+	if err := m.CancelScriptTarget("worker", run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.CancelScriptTarget("worker", run.ID); err != nil {
+		t.Fatalf("repeated running cancellation: %v", err)
+	}
+	current, err := st.GetRun("worker", run.ID)
+	if err != nil || current.Status != script.RunRunning {
+		t.Fatalf("run became terminal before process exit: %#v err=%v", current, err)
+	}
+	currentDefinition, err := st.GetDefinition("worker", definition.ID)
+	if err != nil || currentDefinition.NextRunAt != "" {
+		t.Fatalf("successor scheduled before process exit: %#v err=%v", currentDefinition, err)
+	}
+	awaitScriptRun(t, st, "worker", run.ID, func(run script.Run) bool { return run.Status == script.RunCancelled })
+	currentDefinition, err = st.GetDefinition("worker", definition.ID)
+	if err != nil || currentDefinition.NextRunAt == "" {
+		t.Fatalf("successor was not scheduled after process exit: %#v err=%v", currentDefinition, err)
+	}
+}
+
+func TestScriptLogRejectsSymlink(t *testing.T) {
+	m, as, agentsDir, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts = st
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	_, run, err := st.CreateOnce("worker", script.CreateOnce{Name: "done", Description: "done", Command: "true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(agentdir.New(agentsDir, "worker").Root, "scripts")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(outside, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(root, run.ID+".log")
+	if err := os.Symlink(outside, logPath); err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := st.ClaimRun("worker", run.ID, time.Now().UTC().Format(time.RFC3339), logPath); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	exit := 0
+	if _, err := st.CompleteRun("worker", run.ID, script.Completion{Status: script.RunSucceeded, ExitCode: &exit, FinishedAt: time.Now().UTC().Format(time.RFC3339), LogPath: logPath}); err != nil {
+		t.Fatal(err)
+	}
+	if log, err := m.LogScriptRun("worker", run.ID); err == nil {
+		t.Fatalf("symlink log was followed: %q", log)
+	}
+}
+
+func TestRemoveScriptRejectsActiveRecordsAndRemovesTerminalRecords(t *testing.T) {
+	m, as, _, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts = st
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	active, _, err := st.CreateOnce("worker", script.CreateOnce{Name: "active", Description: "test", Command: "sleep 30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RemoveScript("worker", active.ID); !errors.Is(err, script.ErrActive) {
+		t.Fatalf("RemoveScript(active) error = %v, want ErrActive", err)
+	}
+	if _, err := st.GetDefinition("worker", active.ID); err != nil {
+		t.Fatalf("active record was removed: %v", err)
+	}
+
+	terminal, terminalRun, err := st.CreateOnce("worker", script.CreateOnce{Name: "terminal", Description: "test", Command: "true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(agentdir.New(m.cfg.AgentsDir, "worker").Root, "scripts", terminalRun.ID+".log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, []byte("finished"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := st.ClaimRun("worker", terminalRun.ID, time.Now().UTC().Format(time.RFC3339), logPath); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	exit := 0
+	if _, err := st.CompleteRun("worker", terminalRun.ID, script.Completion{Status: script.RunSucceeded, ExitCode: &exit, FinishedAt: time.Now().UTC().Format(time.RFC3339), LogPath: logPath}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RemoveScript("worker", terminal.ID); err != nil {
+		t.Fatalf("RemoveScript(terminal): %v", err)
+	}
+	if _, err := st.GetDefinition("worker", terminal.ID); !errors.Is(err, script.ErrNotFound) {
+		t.Fatalf("terminal record still exists: %v", err)
+	}
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("terminal log was not removed: %v", err)
+	}
+}
+
+func TestStartScriptDoesNotLaunchCanceledPendingRecord(t *testing.T) {
+	m, as, _, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts = st
+	workdir := t.TempDir()
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: workdir}); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(workdir, "started")
+	_, r, err := st.CreateOnce("worker", script.CreateOnce{Name: "race", Description: "test", Command: "touch " + marker})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CancelRun("worker", r.ID, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	m.startScript(context.Background(), agent.Agent{Name: "worker", Cwd: workdir}, r)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("canceled pending record started command: stat err=%v", err)
+	}
+	got, err := st.GetRun("worker", r.ID)
+	if err != nil || got.Status != script.RunCancelled {
+		t.Fatalf("record after canceled start attempt = %#v, %v", got, err)
+	}
+}
+
+func buildBasic(t *testing.T, st *image.Store) {
+	t.Helper()
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "task.md"), []byte("BODY"), 0o600)
+	im := &imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "context"}},
+		Prompts: []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}}, Dir: src}
+	if _, err := image.Build(im, image.Ref{Name: "basic", Tag: "latest"}, st, time.Now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func pinBasicImage(t *testing.T, m *Manager, ag *agent.Agent) {
+	t.Helper()
+	manifest, err := m.cfg.ImgStore.Inspect(image.Ref{Name: "basic", Tag: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.ImageDigest = manifest.Digest
+}
+
+// TestStartFailsLoudlyWhenToolsSocketUnbindable locks in the Defect B fix: a
+// per-agent tools-socket bind failure must fail the start with a real error and
+// leave the agent in "error", not silently launch the loop without a control
+// plane (which previously made every iteration end in no_i_am_done forever).
+func TestStartFailsLoudlyWhenToolsSocketUnbindable(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, _, _ := newManager(t, r)
+	// Sockets would land in a directory that does not exist, so net.Listen fails.
+	m.cfg.RuntimeDir = filepath.Join(t.TempDir(), "does", "not", "exist")
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
+		Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+		t.Fatalf("run: unexpected error creating disabled agent: %v", err)
+	}
+	// Run() creates the agent disabled (Task 4); the master switch (LiveState
+	// gate, Task 2) wins over a stale error_reason, so enable it here to
+	// exercise the "error" LiveState this test locks in (flipping Enabled on
+	// Start is Task 5's job, not this test's concern).
+	got, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.Enabled = true
+	if err := as.Update(got); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start("smoke"); err == nil {
+		t.Fatal("expected a loud error when the tools socket cannot bind")
+	}
+	if got, _ := as.Get("smoke"); got.ErrorReason == "" {
+		t.Fatalf("agent error_reason = %q, want non-empty", got.ErrorReason)
+	}
+	if st, _ := m.LiveState("smoke"); st != "error" {
+		t.Fatalf("LiveState = %q, want error", st)
+	}
+}
+
+func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string, *store.Store) {
+	t.Helper()
+	base := t.TempDir()
+	s, err := store.Open(filepath.Join(base, "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	as := agent.NewStore(s)
+	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
+	buildBasic(t, imgStore)
+	// A real file: Manager.refreshShims skips the whole pass when ToolsBin does
+	// not exist, so a placeholder path would silently disable shim writing for
+	// every test built on this helper.
+	toolsBin := filepath.Join(base, "tariboy-tools")
+	if err := os.WriteFile(toolsBin, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(ManagerConfig{
+		AgentsDir: filepath.Join(base, "agents"), ToolsBin: toolsBin,
+		ShimBin: "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
+		Bus:           bus.New(s, time.Now),
+		RunnerFactory: func(agent.Agent) IterationRunner { return r },
+	})
+	return m, as, filepath.Join(base, "agents"), s
+}
+
+// Removing the own-inbox subscription from Manager.Run must make this fail:
+// a standalone agent would persist successfully but task publication would
+// create no delivery for it.
+func TestRunSubscribesStandaloneAgentToOwnInbox(t *testing.T) {
+	m, _, _, raw := newManager(t, &fakeRunner{})
+	bs := bus.New(raw, time.Now)
+	m.cfg.Bus = bs
+
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo", Loop: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bs.Publish(bus.Message{
+		Channel: bus.InboxChannel(name), Type: "task.assigned", Text: "wake",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := bs.Pending(name, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Type != "task.assigned" {
+		t.Fatalf("pending = %+v, want one task.assigned delivery", got)
+	}
+}
+
+func TestRunDoesNotInjectRetiredCapabilityEnvironment(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo", Loop: false}); err != nil {
+		t.Fatal(err)
+	}
+	ag, err := as.Get("solo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ag.Env["BE"+"ADS_DIR"]; ok {
+		t.Fatalf("retired environment variable was injected: %v", ag.Env)
+	}
+}
+
+type killBlockingRunner struct {
+	started chan string
+	// release, when non-nil, holds the runner inside Run after its context is
+	// cancelled until the test closes it. That keeps the cancelled iteration
+	// open, so a test can exercise the stale-kill recovery path without racing
+	// the engine goroutine that unwinds it. Most users of this runner leave it
+	// unset, and receiving from a nil channel blocks forever, so Run must skip
+	// the receive entirely when it is nil.
+	release chan struct{}
+}
+
+func (r *killBlockingRunner) Run(ctx context.Context, _ agent.Agent, _ string, id string, _ string) (Outcome, error) {
+	r.started <- id
+	<-ctx.Done()
+	if r.release != nil {
+		<-r.release
+	}
+	return Outcome{}, ctx.Err()
+}
+
+func awaitCurrentIteration(t *testing.T, m *Manager, name string) string {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		rt := m.runs[name]
+		m.mu.Unlock()
+		if rt != nil {
+			if id := rt.engine.CurrentIterationID(); id != "" {
+				return id
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("agent %q did not start an iteration", name)
+	return ""
+}
+
+type killRecordingShim struct{ killed chan struct{} }
+
+func (s killRecordingShim) Status() shim.StatusResult          { return shim.StatusResult{Running: true} }
+func (s killRecordingShim) Kill() error                        { close(s.killed); return nil }
+func (s killRecordingShim) Screen() (string, error)            { return "", nil }
+func (s killRecordingShim) SendKeys(shim.SendKeysParams) error { return nil }
+func (s killRecordingShim) Report() shim.ReportResult          { return shim.ReportResult{} }
+
+func TestManagerKillForwardsToLiveShim(t *testing.T) {
+	r := &killBlockingRunner{started: make(chan string, 1)}
+	m, _, agentsDir, _ := newManager(t, r)
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	if _, err := m.Exec("smoke", ""); err != nil {
+		t.Fatal(err)
+	}
+	awaitCurrentIteration(t, m, "smoke")
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	ln, err := net.Listen("unix", l.ShimSock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	killed := make(chan struct{})
+	go func() { _ = shim.Serve(ln, killRecordingShim{killed: killed}) }()
+	if err := m.Kill("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-killed:
+	case <-time.After(time.Second):
+		t.Fatal("live shim did not receive kill RPC")
+	}
+}
+
+// attachRecordingShim is a fake shim that supports the StreamHandler
+// extension (Attach/Resize) alongside the base Handler methods, so
+// Manager.Attach/Manager.Resize can be exercised end-to-end over a real
+// unix socket.
+type attachRecordingShim struct {
+	resized chan shim.ResizeParams
+	killed  chan struct{}
+	sent    chan string
+}
+
+func (s attachRecordingShim) Status() shim.StatusResult { return shim.StatusResult{Running: true} }
+func (s attachRecordingShim) Screen() (string, error)   { return "", nil }
+func (s attachRecordingShim) SendKeys(p shim.SendKeysParams) error {
+	if s.sent != nil {
+		select {
+		case s.sent <- p.Keys:
+		default:
+		}
+	}
+	return nil
+}
+func (s attachRecordingShim) Report() shim.ReportResult { return shim.ReportResult{} }
+
+func (s attachRecordingShim) Kill() error {
+	if s.killed != nil {
+		select {
+		case s.killed <- struct{}{}:
+		default:
+		}
+	}
+	return nil
+}
+
+func (s attachRecordingShim) Attach(conn net.Conn, _ shim.AttachParams) error {
+	defer conn.Close()
+	buf := make([]byte, 1)
+	if _, err := conn.Read(buf); err != nil {
+		return err
+	}
+	_, err := conn.Write(buf)
+	return err
+}
+
+func (s attachRecordingShim) Resize(p shim.ResizeParams) error {
+	s.resized <- p
+	return nil
+}
+
+func startPendingAdoption(
+	t *testing.T,
+	m *Manager,
+	as *agent.Store,
+	agentsDir string,
+	handler attachRecordingShim,
+) string {
+	t.Helper()
+	ag := agent.Agent{
+		Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub",
+		Enabled: true, LoopEnabled: true, Interactive: true,
+		Plugins: []string{"context"},
+	}
+	pinBasicImage(t, m, &ag)
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
+	id := "smoke-20260731100000-1"
+	if err := l.EnsureIteration(id); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", l.ShimSock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() { _ = shim.Serve(ln, handler) }()
+	if err := as.CreateIteration(agent.Iteration{
+		ID: id, Agent: ag.Name, Trigger: "manual", Status: "running",
+		StartedAt: time.Now().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.StartAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	return id
+}
+
+func TestManagerAttachForwardsToAdoptedShim(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
+	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
+
+	conn, err := m.Attach("smoke", 80, 24)
+	if err != nil {
+		t.Fatalf("Attach adopted shim: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("x")); err != nil {
+		t.Fatalf("write adopted shim: %v", err)
+	}
+	buf := make([]byte, 1)
+	if _, err := conn.Read(buf); err != nil {
+		t.Fatalf("read adopted shim: %v", err)
+	}
+	if string(buf) != "x" {
+		t.Fatalf("adopted attach round-trip = %q, want x", buf)
+	}
+}
+
+func TestManagerKillForwardsToAdoptedShim(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
+	killed := make(chan struct{}, 1)
+	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{killed: killed})
+
+	if err := m.Kill("smoke"); err != nil {
+		t.Fatalf("Kill adopted shim: %v", err)
+	}
+	select {
+	case <-killed:
+	case <-time.After(time.Second):
+		t.Fatal("adopted shim did not receive Kill")
+	}
+}
+
+func TestManagerStartDuringAdoptionDoesNotLaunchDuplicate(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
+	m, as, agentsDir, _ := newManager(t, r)
+	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
+
+	if err := m.Start("smoke"); err != nil {
+		t.Fatalf("Start adopted agent: %v", err)
+	}
+	m.mu.Lock()
+	_, started := m.runs["smoke"]
+	m.mu.Unlock()
+	if started {
+		t.Fatal("Start created a normal runtime while adoption was pending")
+	}
+	iterations, err := as.ListIterations("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(iterations) != 1 {
+		t.Fatalf("iterations after Start during adoption = %d, want original only", len(iterations))
+	}
+}
+
+func TestManagerExecRejectsDuringAdoption(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
+	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
+
+	if _, err := m.Exec("smoke", "duplicate"); err == nil || !strings.Contains(err.Error(), "adopted running iteration") {
+		t.Fatalf("Exec during adoption error = %v, want adopted running iteration", err)
+	}
+	m.mu.Lock()
+	_, started := m.runs["smoke"]
+	m.mu.Unlock()
+	if started {
+		t.Fatal("Exec created a normal runtime while adoption was pending")
+	}
+}
+
+func TestManagerStopDuringAdoptionDoesNotRestartEngine(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
+	killed := make(chan struct{}, 1)
+	id := startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{killed: killed})
+
+	if err := m.Stop("smoke"); err != nil {
+		t.Fatalf("Stop adopted agent: %v", err)
+	}
+	select {
+	case <-killed:
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not kill the adopted shim")
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	if err := os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reconciled := make(chan struct{})
+	go func() {
+		m.wg.Wait()
+		close(reconciled)
+	}()
+	select {
+	case <-reconciled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("post-adoption reconciliation did not finish")
+	}
+	m.mu.Lock()
+	_, started := m.runs["smoke"]
+	m.mu.Unlock()
+	if started {
+		t.Fatal("post-adoption reconciliation restarted a stopped agent")
+	}
+	ag, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ag.Enabled {
+		t.Fatal("Stop did not persist Enabled=false")
+	}
+}
+
+func TestManagerRestartDuringAdoptionLaunchesInteractiveIteration(t *testing.T) {
+	r := &killBlockingRunner{started: make(chan string, 1)}
+	m, as, agentsDir, _ := newManager(t, r)
+	killed := make(chan struct{}, 1)
+	id := startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{killed: killed})
+	ag, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.LoopEnabled = false
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.Restart("smoke"); err != nil {
+		t.Fatalf("Restart adopted agent: %v", err)
+	}
+	select {
+	case <-killed:
+	case <-time.After(time.Second):
+		t.Fatal("Restart did not kill the adopted shim")
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	if err := os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-r.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Restart did not launch a replacement interactive iteration after adoption")
+	}
+}
+
+func TestManagerStopCancelsConsumedAdoptionRestart(t *testing.T) {
+	r := &killBlockingRunner{started: make(chan string, 1)}
+	m, as, agentsDir, _ := newManager(t, r)
+	killed := make(chan struct{}, 1)
+	id := startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{killed: killed})
+	ag, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.LoopEnabled = false
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	launching := make(chan struct{})
+	proceed := make(chan struct{})
+	m.cfg.BeforeRestartLaunch = func() {
+		close(launching)
+		<-proceed
+	}
+
+	if err := m.Restart("smoke"); err != nil {
+		t.Fatalf("Restart adopted agent: %v", err)
+	}
+	select {
+	case <-killed:
+	case <-time.After(time.Second):
+		t.Fatal("Restart did not kill the adopted shim")
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	if err := os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-launching:
+	case <-time.After(2 * time.Second):
+		t.Fatal("post-adoption Restart did not reach the launch gate")
+	}
+	if err := m.Stop("smoke"); err != nil {
+		t.Fatalf("Stop after consumed Restart: %v", err)
+	}
+	close(proceed)
+	select {
+	case started := <-r.started:
+		t.Fatalf("replacement iteration %q started after Stop completed", started)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func TestManagerAdoptedControlCannotCrossSocketReuse(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
+	id := startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
+	connecting := make(chan struct{})
+	proceed := make(chan struct{})
+	m.cfg.ConnectShim = func(sock string) (*shim.Client, error) {
+		close(connecting)
+		<-proceed
+		return shim.Connect(sock)
+	}
+
+	sendDone := make(chan error, 1)
+	go func() { sendDone <- m.SendKeys("smoke", "race") }()
+	select {
+	case <-connecting:
+	case <-time.After(time.Second):
+		t.Fatal("SendKeys did not reach shim connection")
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	if err := os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(l.ShimSock()); os.IsNotExist(err) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("adoption did not remove the old shim socket")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	handoffUnlocked := m.mu.TryLock()
+	if handoffUnlocked {
+		m.mu.Unlock()
+	}
+	close(proceed)
+	sendErr := <-sendDone
+
+	replacementKeys := make(chan string, 1)
+	replacementListener, err := net.Listen("unix", l.ShimSock())
+	if err != nil {
+		t.Fatalf("bind replacement shim: %v", err)
+	}
+	defer replacementListener.Close()
+	go func() {
+		_ = shim.Serve(replacementListener, attachRecordingShim{sent: replacementKeys})
+	}()
+	if handoffUnlocked {
+		t.Fatal("handoff lock was released before adopted control finished connecting")
+	}
+	if sendErr == nil {
+		t.Fatal("SendKeys unexpectedly reached a replacement shim")
+	}
+	select {
+	case keys := <-replacementKeys:
+		t.Fatalf("replacement shim received keys %q", keys)
+	default:
+	}
+}
+
+func TestManagerAttachAndResizeForwardToLiveShim(t *testing.T) {
+	r := &killBlockingRunner{started: make(chan string, 1)}
+	m, _, agentsDir, _ := newManager(t, r)
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	if _, err := m.Exec("smoke", ""); err != nil {
+		t.Fatal(err)
+	}
+	awaitCurrentIteration(t, m, "smoke")
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	ln, err := net.Listen("unix", l.ShimSock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	fake := attachRecordingShim{resized: make(chan shim.ResizeParams, 1)}
+	go func() { _ = shim.Serve(ln, fake) }()
+
+	conn, err := m.Attach("smoke", 80, 24)
+	if err != nil {
+		t.Fatalf("Attach: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("x")); err != nil {
+		t.Fatalf("write to attach conn: %v", err)
+	}
+	buf := make([]byte, 1)
+	if _, err := conn.Read(buf); err != nil {
+		t.Fatalf("read from attach conn: %v", err)
+	}
+	if buf[0] != 'x' {
+		t.Fatalf("attach conn round-trip = %q, want %q", buf, "x")
+	}
+
+	if err := m.Resize("smoke", 100, 40); err != nil {
+		t.Fatalf("Resize: %v", err)
+	}
+	select {
+	case p := <-fake.resized:
+		if p.Cols != 100 || p.Rows != 40 {
+			t.Fatalf("Resize params = %+v, want {100 40}", p)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("live shim did not receive resize RPC")
+	}
+}
+
+func TestManagerKillRecoversMissingShim(t *testing.T) {
+	r := &killBlockingRunner{started: make(chan string, 2), release: make(chan struct{})}
+	var releaseOnce sync.Once
+	releaseRunner := func() { releaseOnce.Do(func() { close(r.release) }) }
+	m, as, agentsDir, _ := newManager(t, r)
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+	// Registered after m.Shutdown so it runs before it: t.Cleanup is LIFO. A
+	// t.Fatal between the two Kill calls below would otherwise leave the runner
+	// parked and make Shutdown burn its full wait before giving up.
+	t.Cleanup(releaseRunner)
+	if err := as.Create(agent.Agent{Name: "other", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.CreateIteration(agent.Iteration{ID: "other-live", Agent: "other", Status: "running", StartedAt: time.Now().Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Exec("smoke", ""); err != nil {
+		t.Fatal(err)
+	}
+	id := awaitCurrentIteration(t, m, "smoke")
+	select {
+	case got := <-r.started:
+		if got != id {
+			t.Fatalf("runner started %q, want %q", got, id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("initial iteration did not reach runner")
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	if err := os.WriteFile(l.ShimSock(), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Kill("smoke"); err != nil {
+		t.Fatalf("recover stale kill: %v", err)
+	}
+	if err := m.Kill("smoke"); err != nil {
+		t.Fatalf("repeated stale kill: %v", err)
+	}
+	// Both Kill calls above have observed the recovery path; let the cancelled
+	// iteration finish unwinding so the polls below can see it close.
+	releaseRunner()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		it, _ := as.GetIteration("smoke", id)
+		if it.Status != "running" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	it, _ := as.GetIteration("smoke", id)
+	if it.Status != "harness_error" || it.ExitCode == nil || *it.ExitCode != -1 {
+		t.Fatalf("recovered iteration = %+v, want terminal harness_error with exit -1", it)
+	}
+	// The repeated Kill above is idempotent while the recovered iteration is
+	// unwinding. Once it has closed, the stale-kill marker must no longer mask
+	// the normal no-running-iteration error.
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		rt := m.runs["smoke"]
+		current := ""
+		if rt != nil {
+			current = rt.engine.CurrentIterationID()
+		}
+		marker := m.staleKills["smoke"]
+		m.mu.Unlock()
+		// Both conditions are needed. The engine clears its current iteration
+		// inside the run body, but drops the stale-kill marker from a deferred
+		// close hook that only fires when that body returns - with a log write
+		// and a store read in between. Waiting on the current iteration alone
+		// releases this poll exactly as that window opens, and the Kill below
+		// would then be masked by the still-live marker.
+		if current == "" && marker == "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := m.Kill("smoke"); err == nil || !strings.Contains(err.Error(), "has no running iteration") {
+		t.Fatalf("Kill after recovered iteration unwound = %v, want no-running-iteration error", err)
+	}
+	if err := m.Stop("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Kill("smoke"); err == nil || !strings.Contains(err.Error(), "has no running iteration") {
+		t.Fatalf("Kill after stop = %v, want no-running-iteration error", err)
+	}
+	if _, err := os.Stat(l.ShimSock()); !os.IsNotExist(err) {
+		t.Fatalf("stale shim socket was not removed: %v", err)
+	}
+	if other, _ := as.GetIteration("other", "other-live"); other.Status != "running" {
+		t.Fatalf("unrelated iteration changed: %+v", other)
+	}
+	if _, err := m.Exec("smoke", "next"); err != nil {
+		t.Fatalf("subsequent iteration did not launch: %v", err)
+	}
+	select {
+	case next := <-r.started:
+		if next == id {
+			t.Fatal("expected a new iteration after recovery")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("subsequent iteration did not reach runner")
+	}
+}
+
+func TestManagerRunProvisionsAndStops(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, _ := newManager(t, r)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
+		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+	if err != nil || name != "smoke" {
+		t.Fatalf("run: name=%q err=%v", name, err)
+	}
+	_ = ctx
+	// dir provisioned
+	if _, err := os.Stat(filepath.Join(agentsDir, "smoke", "image", "PROMPT.md")); err != nil {
+		t.Fatalf("agent dir not provisioned: %v", err)
+	}
+	got, _ := as.Get("smoke")
+	if !got.LoopEnabled {
+		t.Fatalf("loop intent not recorded: %+v", got)
+	}
+	if got.Enabled {
+		t.Fatalf("freshly created agent should be disabled: %+v", got)
+	}
+	if st, _ := m.LiveState("smoke"); st != "stopped" {
+		t.Fatalf("after run LiveState = %q, want stopped (created disabled)", st)
+	}
+	if err := m.Stop("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = as.Get("smoke")
+	if got.Enabled {
+		t.Fatalf("after stop enabled still true: %+v", got)
+	}
+	if st, _ := m.LiveState("smoke"); st != "stopped" {
+		t.Fatalf("after stop LiveState = %q, want stopped", st)
+	}
+	if err := m.Remove("smoke", false, true); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := as.Exists("smoke"); ok {
+		t.Fatal("agent not removed")
+	}
+	m.Shutdown()
+}
+
+func TestRunV2UsesEnabledExternalPluginResolver(t *testing.T) {
+	m, _, _, _ := newManager(t, &fakeRunner{})
+	pluginDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins", "widget")
+	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"widget","version":"1.0.0","protocol_version":1,"types":["tool"],"exec":"run.sh","channels":{"publish":[],"subscribe":[]}}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "run.sh"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ref := image.Ref{Name: "external-v2", Tag: "latest"}
+	_, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2,
+		Plugins:       []imagefile.V2Plugin{{Name: "widget"}},
+	}, imagefile.ResolveRoots{}, ref, m.cfg.ImgStore, time.Now, func(string) (plugincaps.ResolvedPlugin, error) {
+		return plugincaps.ResolvedPlugin{Installed: true}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.cfg.ExternalPlugins = func(string) (plugincaps.ResolvedPlugin, error) {
+		return plugincaps.ResolvedPlugin{}, nil // installed on disk, but disabled/inactive
+	}
+
+	if _, err := m.Run(registry.RunSpec{ImageRef: ref.String(), Name: "worker"}); err == nil || !strings.Contains(err.Error(), `unknown plugin "widget"`) {
+		t.Fatalf("Run accepted disabled external plugin: %v", err)
+	}
+}
+
+func TestRunV2DoesNotReadLegacyExternalPluginPrompt(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	pluginDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins", "widget")
+	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"widget","version":"1.0.0","protocol_version":1,"types":["tool"],"exec":"run.sh","prompt":"missing.md","channels":{"publish":[],"subscribe":[]}}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "run.sh"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ref := image.Ref{Name: "metadata-v2", Tag: "latest"}
+	_, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2,
+		Plugins:       []imagefile.V2Plugin{{Name: "widget"}},
+	}, imagefile.ResolveRoots{}, ref, m.cfg.ImgStore, time.Now, func(string) (plugincaps.ResolvedPlugin, error) {
+		return plugincaps.ResolvedPlugin{Installed: true}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Run(registry.RunSpec{ImageRef: ref.String(), Name: "worker"}); err != nil {
+		t.Fatalf("Run read schema-v1 plugin prompt metadata: %v", err)
+	}
+	if got, err := as.Get("worker"); err != nil || len(got.Plugins) != 1 || got.Plugins[0] != "widget" {
+		t.Fatalf("created agent plugins=%v err=%v", got.Plugins, err)
+	}
+}
+
+func TestStartEnablesStopDisables(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, _, _ := newManager(t, r)
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
+		Harness: "stub", Plugins: []string{"context"}, Loop: false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := as.Get("smoke")
+	if !got.Enabled {
+		t.Fatalf("after Start Enabled=false, want true")
+	}
+	if got.LoopEnabled {
+		t.Fatalf("after direct Start LoopEnabled=true, want unchanged false")
+	}
+	if st, _ := m.LiveState("smoke"); st == "stopped" {
+		t.Fatalf("after Start state=stopped, want idle/running")
+	}
+	if err := m.SetLoopEnabled("smoke", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Stop("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = as.Get("smoke")
+	if got.Enabled {
+		t.Fatalf("after Stop Enabled=true, want false")
+	}
+	if !got.LoopEnabled {
+		t.Fatalf("after direct Stop LoopEnabled=false, want unchanged true")
+	}
+	if st, _ := m.LiveState("smoke"); st != "stopped" {
+		t.Fatalf("after Stop state=%q, want stopped", st)
+	}
+	m.Shutdown()
+}
+
+func TestToolsLoopControlPersistsBothFlagsAndReturnsStoredState(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, _ := newManager(t, r)
+	defer m.Shutdown()
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "self",
+		Harness: "stub", Plugins: []string{"context"}, Loop: false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start("self"); err != nil {
+		t.Fatal(err)
+	}
+	c := client.New(agentdir.New(agentsDir, "self").WithRuntime(m.cfg.RuntimeDir).Sock())
+
+	raw, err := c.Call("POST", "/tools/loop/control", map[string]any{"action": "start"})
+	if err != nil {
+		t.Fatalf("tools loop start: %v", err)
+	}
+	var start map[string]any
+	if err := json.Unmarshal(raw, &start); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := as.Get("self"); !got.Enabled || !got.LoopEnabled {
+		t.Fatalf("after tools loop start = %+v, want both flags true", got)
+	}
+	if start["enabled"] != true || start["loop_enabled"] != true {
+		t.Fatalf("tools loop start payload = %v, want persisted flags true", start)
+	}
+
+	raw, err = c.Call("POST", "/tools/loop/control", map[string]any{"action": "stop"})
+	if err != nil {
+		t.Fatalf("tools loop stop: %v", err)
+	}
+	var stop map[string]any
+	if err := json.Unmarshal(raw, &stop); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := as.Get("self"); got.Enabled || got.LoopEnabled {
+		t.Fatalf("after tools loop stop = %+v, want both flags false", got)
+	}
+	if stop["enabled"] != false || stop["loop_enabled"] != false {
+		t.Fatalf("tools loop stop payload = %v, want persisted flags false", stop)
+	}
+}
+
+func TestSetLoopEnabledWakesParkedRuntime(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, _, _ := newManager(t, r)
+	t.Cleanup(m.Shutdown)
+	if _, err := m.Run(registry.RunSpec{
+		ImageRef: "basic:latest",
+		Name:     "smoke",
+		Harness:  "stub",
+		Plugins:  []string{"context"},
+		Loop:     false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ag, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.IntervalS = 1
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetLoopEnabled("smoke", true); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if iterations, _ := as.ListIterations("smoke"); len(iterations) > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("enabling Autopilot did not wake the parked runtime")
+}
+
+func TestRunRejectsTraversalName(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, _ := newManager(t, r)
+	defer m.Shutdown()
+
+	// A traversing --name must be refused before any dir is provisioned or the
+	// agent is persisted.
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "../../evil"}); err == nil {
+		t.Fatal("Run with traversing name succeeded, want error")
+	}
+	// No directory escaped AgentsDir: the join target sits outside agentsDir.
+	escape := filepath.Join(agentsDir, "../../evil")
+	if _, err := os.Stat(escape); !os.IsNotExist(err) {
+		t.Fatalf("escape dir %q exists (stat err=%v)", escape, err)
+	}
+	// AgentsDir's parent is untouched and nothing was persisted.
+	if list, err := as.List(); err != nil || len(list) != 0 {
+		t.Fatalf("after rejected Run: list=%v err=%v, want empty", list, err)
+	}
+
+	// Other malformed names are all rejected. (An empty --name is not here: Run
+	// treats it as "auto-generate", which the ValidName table covers instead.)
+	for _, bad := range []string{"..", "a/b", "/etc", "UP"} {
+		if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: bad}); err == nil {
+			t.Fatalf("Run(name=%q) succeeded, want error", bad)
+		}
+	}
+	if list, _ := as.List(); len(list) != 0 {
+		t.Fatalf("agents persisted despite rejected names: %v", list)
+	}
+
+	// A valid explicit name works.
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "my-agent"})
+	if err != nil || name != "my-agent" {
+		t.Fatalf("Run(my-agent): name=%q err=%v", name, err)
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "my-agent", "image", "PROMPT.md")); err != nil {
+		t.Fatalf("valid agent not provisioned: %v", err)
+	}
+	// A generated name (empty --name) also works.
+	gen, err := m.Run(registry.RunSpec{ImageRef: "basic:latest"})
+	if err != nil || !agent.ValidName(gen) {
+		t.Fatalf("Run(generated): name=%q err=%v", gen, err)
+	}
+}
+
+func TestReattachAdoptsLiveIteration(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
+	m, as, agentsDir, _ := newManager(t, r)
+	// Persist a running agent with a running iteration and a result.json waiting.
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: false, Plugins: []string{"context"}}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	id := "smoke-20260706100000-1"
+	l.EnsureIteration(id)
+	os.WriteFile(l.ShimSock(), []byte{}, 0o600)
+	as.CreateIteration(agent.Iteration{ID: id, Agent: "smoke", Trigger: "interval",
+		Status: "running", StartedAt: time.Now().Format(time.RFC3339)})
+	os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0,"ended_at":"t","cpu_ms":3,"mem_peak_kb":4}`), 0o600)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Wait for the adopt-poller to record the outcome.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if it, err := as.GetIteration("smoke", id); err == nil && it.Status != "running" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	it, _ := as.GetIteration("smoke", id)
+	if it.Status == "running" {
+		t.Fatalf("live iteration not adopted: %+v", it)
+	}
+	m.Shutdown()
+}
+
+// TestReattachOnlyStartsEnabledAgents proves the boot reconcile gate keys on
+// the master Enabled flag, not LoopEnabled: an agent with LoopEnabled=true but
+// Enabled=false must NOT come up on daemon boot.
+func TestReattachOnlyStartsEnabledAgents(t *testing.T) {
+	r := &fakeRunner{}
+	m, as, _, _ := newManager(t, r)
+	if err := as.Create(agent.Agent{Name: "on", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: true, Enabled: true, IntervalS: 0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.Create(agent.Agent{Name: "off", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: true, Enabled: false, IntervalS: 0}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := m.LiveState("off"); st != "stopped" {
+		t.Fatalf("disabled agent came up on boot: state=%q", st)
+	}
+	m.mu.Lock()
+	_, started := m.runs["off"]
+	m.mu.Unlock()
+	if started {
+		t.Fatalf("disabled agent's engine was started on boot")
+	}
+	m.Shutdown()
+}
+
+func TestRecordAdoptedPreservesPersistedTimeoutAndHardWatchdogReason(t *testing.T) {
+	r := &fakeRunner{}
+	m, as, agentsDir, _ := newManager(t, r)
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"context"}}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	id := "smoke-adopted-hard"
+	if err := as.CreateIteration(agent.Iteration{ID: id, Agent: ag.Name, Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.InitializeIterationTimeout(id, 30, 90, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
+	if err := l.EnsureIteration(id); err != nil {
+		t.Fatal(err)
+	}
+	m.recordAdopted(l, agentdir.LiveIteration{Agent: ag.Name, ID: id}, shim.IterationResult{ExitCode: 143, TerminationReason: "hard_timeout"})
+	it, err := as.GetIteration(ag.Name, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Status != "timeout" || it.TimeoutDeadline == nil || it.TimeoutExtensions != 0 {
+		t.Fatalf("adopted hard timeout lost persisted state: %+v", it)
+	}
+}
+
+type adoptionProxy struct {
+	revokedIterations []string
+}
+
+func (*adoptionProxy) ProxyBaseURL() string { return "http://127.0.0.1:1" }
+func (*adoptionProxy) MintToken(string, string, string, string, string) (string, error) {
+	return "token", nil
+}
+func (*adoptionProxy) RevokeToken(string) {}
+func (p *adoptionProxy) RevokeIteration(iteration string) {
+	p.revokedIterations = append(p.revokedIterations, iteration)
+}
+func (*adoptionProxy) UpdateTask(string, string, string) int { return 0 }
+
+func TestAdoptionRevokesIterationProxyLease(t *testing.T) {
+	for _, stale := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stale=%v", stale), func(t *testing.T) {
+			m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+			proxy := &adoptionProxy{}
+			m.cfg.Proxy = proxy
+			ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub"}
+			if err := as.Create(ag); err != nil {
+				t.Fatal(err)
+			}
+			id := "smoke-adopted"
+			if err := as.CreateIteration(agent.Iteration{
+				ID: id, Agent: ag.Name, Trigger: "manual", Status: "running",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
+			if err := l.EnsureIteration(id); err != nil {
+				t.Fatal(err)
+			}
+			live := agentdir.LiveIteration{Agent: ag.Name, ID: id}
+			if stale {
+				m.recordStaleAdoption(l, live)
+			} else {
+				m.recordAdopted(l, live, shim.IterationResult{ExitCode: 0})
+			}
+			if len(proxy.revokedIterations) != 1 || proxy.revokedIterations[0] != id {
+				t.Fatalf("revoked iterations = %v, want [%s]", proxy.revokedIterations, id)
+			}
+		})
+	}
+}
+
+// stubShim is a live shim RPC server used by reattach tests so Status probes
+// succeed and the adoption never times out as stale.
+type stubShim struct{}
+
+func (stubShim) Status() shim.StatusResult          { return shim.StatusResult{Running: true, PID: 1} }
+func (stubShim) Kill() error                        { return nil }
+func (stubShim) Screen() (string, error)            { return "", nil }
+func (stubShim) SendKeys(shim.SendKeysParams) error { return nil }
+func (stubShim) Report() shim.ReportResult          { return shim.ReportResult{} }
+
+type timeoutAdoptionShim struct {
+	kills    atomic.Int32
+	statuses atomic.Int32
+	onKill   func()
+}
+
+func (s *timeoutAdoptionShim) Status() shim.StatusResult {
+	s.statuses.Add(1)
+	return shim.StatusResult{Running: true, PID: 1}
+}
+func (s *timeoutAdoptionShim) Kill() error {
+	if s.kills.Add(1) == 1 && s.onKill != nil {
+		s.onKill()
+	}
+	return nil
+}
+func (*timeoutAdoptionShim) Screen() (string, error)            { return "", nil }
+func (*timeoutAdoptionShim) SendKeys(shim.SendKeysParams) error { return nil }
+func (*timeoutAdoptionShim) Report() shim.ReportResult          { return shim.ReportResult{} }
+func (*timeoutAdoptionShim) SetHardDeadline(string) error       { return nil }
+
+func TestAdoptionEnforcesExtendedPersistedSoftDeadlineOnce(t *testing.T) {
+	defer swapAdoptTiming(5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)()
+
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	base := time.Now().UTC()
+	var clockNanos atomic.Int64
+	clockNanos.Store(base.Add(29 * time.Second).UnixNano())
+	m.cfg.Clock = func() time.Time { return time.Unix(0, clockNanos.Load()).UTC() }
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub"}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	id := "smoke-adopted-soft-timeout"
+	if err := as.CreateIteration(agent.Iteration{ID: id, Agent: ag.Name, Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.InitializeIterationTimeout(id, 30, 90, base); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
+	if err := l.EnsureIteration(id); err != nil {
+		t.Fatal(err)
+	}
+	handler := &timeoutAdoptionShim{onKill: func() {
+		_ = os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":143}`), 0o600)
+	}}
+	ln, err := net.Listen("unix", l.ShimSock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = shim.Serve(ln, handler) }()
+	t.Cleanup(func() { _ = ln.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer m.Shutdown()
+
+	if _, err := m.ExtendIterationTimeout(ag.Name, id); err != nil {
+		t.Fatalf("extend adopted timeout: %v", err)
+	}
+	clockNanos.Store(base.Add(31 * time.Second).UnixNano())
+	probeDeadline := time.Now().Add(time.Second)
+	for time.Now().Before(probeDeadline) && handler.statuses.Load() < 2 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := handler.statuses.Load(); got < 2 {
+		t.Fatalf("adoption did not probe live shim after extension: statuses=%d", got)
+	}
+	if got := handler.kills.Load(); got != 0 {
+		t.Fatalf("adoption enforced superseded deadline: kills=%d", got)
+	}
+
+	clockNanos.Store(base.Add(61 * time.Second).UnixNano())
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		it, _ := as.GetIteration(ag.Name, id)
+		if it.Status == "timeout" {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	it, err := as.GetIteration(ag.Name, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Status != "timeout" || it.TimeoutTriggeredAt == nil {
+		t.Fatalf("adopted soft deadline not durably enforced: %+v", it)
+	}
+	if got := handler.kills.Load(); got != 1 {
+		t.Fatalf("soft timeout kills=%d, want exactly 1", got)
+	}
+}
+
+func serveStubShim(t *testing.T, sock string) {
+	t.Helper()
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("listen shim sock: %v", err)
+	}
+	go func() { _ = shim.Serve(l, stubShim{}) }()
+	t.Cleanup(func() {
+		_ = l.Close()
+		_ = os.Remove(sock)
+	})
+}
+
+// Finding 1: Start after Stop must restore state=running even though the engine
+// runtime already exists, and a fresh manager's StartAll must then pick it up.
+func TestStartAfterStopRestoresRunningState(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "no_i_am_done"}}}
+	m, as, agentsDir, _ := newManager(t, r)
+
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
+		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+	if err != nil || name != "smoke" {
+		t.Fatalf("run: name=%q err=%v", name, err)
+	}
+	if err := m.Stop("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := m.LiveState("smoke"); st != "stopped" {
+		t.Fatalf("after stop LiveState = %q, want stopped", st)
+	}
+	// Runtime still exists (Stop does not tear it down); Start must re-enable.
+	if err := m.Start("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := as.Get("smoke")
+	if !got.Enabled {
+		t.Fatalf("after restart not enabled: %+v", got)
+	}
+	if st, _ := m.LiveState("smoke"); st != "idle" {
+		t.Fatalf("after restart LiveState = %q, want idle", st)
+	}
+	m.Shutdown()
+
+	// A fresh manager over the same store/dir reattaches the running agent.
+	m2 := NewManager(ManagerConfig{
+		AgentsDir: agentsDir, ToolsBin: "/opt/tariboy-tools", ShimBin: "/opt/tariboy-shim",
+		Store: as, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
+		RunnerFactory: func(agent.Agent) IterationRunner { return r },
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m2.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := as.ListIterations("smoke")
+	if _, err := m2.Exec("smoke", ""); err != nil {
+		t.Fatalf("exec on reattached agent: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if its, _ := as.ListIterations("smoke"); len(its) > len(before) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if its, _ := as.ListIterations("smoke"); len(its) <= len(before) {
+		t.Fatal("fresh manager did not pick up the running agent (no iteration ran)")
+	}
+	m2.Shutdown()
+}
+
+// Finding 2: with a live adopted iteration, the engine must not launch a second
+// iteration until the adoption finishes (result.json appears and is classified).
+func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, _ := newManager(t, r)
+
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, LoopEnabled: true, IntervalS: 60,
+		OnTimeout: "restart", OnError: "restart", Plugins: []string{"context"}}
+	pinBasicImage(t, m, &ag)
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	id := "smoke-20260706100000-1"
+	l.EnsureIteration(id)
+	serveStubShim(t, l.ShimSock()) // live shim: probes succeed, no stale timeout
+	as.CreateIteration(agent.Iteration{ID: id, Agent: "smoke", Trigger: "interval",
+		Status: "running", StartedAt: time.Now().Format(time.RFC3339)})
+	// Deliberately no result.json yet.
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// While the adoption is pending, the engine must NOT run: only the adopted
+	// iteration row exists and it stays running.
+	time.Sleep(400 * time.Millisecond)
+	if its, _ := as.ListIterations("smoke"); len(its) != 1 {
+		t.Fatalf("engine started before adoption finished: %d iterations", len(its))
+	}
+	if it, _ := as.GetIteration("smoke", id); it.Status != "running" {
+		t.Fatalf("adopted iteration prematurely classified: %+v", it)
+	}
+
+	// Now the shim finishes: result.json lands, adoption classifies it, and the
+	// engine is allowed to start and run a fresh iteration.
+	os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0,"cpu_ms":1,"mem_peak_kb":2}`), 0o600)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		its, _ := as.ListIterations("smoke")
+		adopted, _ := as.GetIteration("smoke", id)
+		if adopted.Status != "running" && len(its) >= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	adopted, _ := as.GetIteration("smoke", id)
+	if adopted.Status == "running" {
+		t.Fatalf("adopted iteration never classified: %+v", adopted)
+	}
+	if its, _ := as.ListIterations("smoke"); len(its) < 2 {
+		t.Fatalf("engine did not start after adoption: %d iterations", len(its))
+	}
+	m.Shutdown()
+}
+
+// Finding 3: a stale shim.sock (SIGKILLed shim, no result.json) must not spin
+// forever; adoption classifies it terminally as harness_error and removes the
+// dead socket.
+func TestReattachStaleShimClassifiesHarnessError(t *testing.T) {
+	// Shorten probe cadence so the dead socket is declared stale quickly.
+	defer swapAdoptTiming(10*time.Millisecond, 20*time.Millisecond, 50*time.Millisecond)()
+
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
+	m, as, agentsDir, _ := newManager(t, r)
+
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: false, Plugins: []string{"context"}}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, "smoke").WithRuntime(m.cfg.RuntimeDir)
+	id := "smoke-20260706100000-1"
+	l.EnsureIteration(id)
+	// A regular file at shim.sock: Dial/Status fails (not a live socket).
+	os.WriteFile(l.ShimSock(), []byte{}, 0o600)
+	as.CreateIteration(agent.Iteration{ID: id, Agent: "smoke", Trigger: "interval",
+		Status: "running", StartedAt: time.Now().Format(time.RFC3339)})
+	// No result.json will ever appear.
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if it, _ := as.GetIteration("smoke", id); it.Status != "running" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	it, _ := as.GetIteration("smoke", id)
+	if it.Status != "harness_error" {
+		t.Fatalf("stale shim not classified: status=%q", it.Status)
+	}
+	if it.ExitCode == nil || *it.ExitCode != -1 {
+		t.Fatalf("stale shim exit_code = %v, want -1", it.ExitCode)
+	}
+	if _, err := os.Stat(l.ShimSock()); !os.IsNotExist(err) {
+		t.Fatalf("stale shim.sock not removed: %v", err)
+	}
+	m.Shutdown()
+}
+
+func TestManagerWakesOnPublish(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, _, st := newManager(t, r)
+	// Attach a bus and wire the hook exactly as the daemon does.
+	bs := bus.New(st, time.Now)
+	m.cfg.Bus = bs
+	bs.SetPublishHook(func(_ bus.Message, agents []string) { m.WakeAgents(agents, WakeMessage) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
+		Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+		t.Fatal(err)
+	}
+	// Run() creates the agent disabled (Task 4); enable it in the store so
+	// Start() launches an engine that actually reacts to wakes (Enabled
+	// flip on Start is Task 5's job, not this test's concern).
+	got, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.Enabled = true
+	if err := as.Update(got); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	// smoke subscribes to its own inbox and receives a message -> a message
+	// iteration must fire.
+	if _, err := bs.Subscribe("smoke", bus.InboxChannel("smoke"), bus.Matcher{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	before := iterationCount(t, as, "smoke")
+	if _, err := bs.Publish(bus.Message{Channel: bus.InboxChannel("smoke"), Type: "ping", Text: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if iterationCount(t, as, "smoke") > before {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if iterationCount(t, as, "smoke") <= before {
+		t.Fatal("publish did not wake the agent")
+	}
+	m.Shutdown()
+}
+
+func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
+	r := newCollisionRunner()
+	m, as, agentsDir, st := newManager(t, r)
+	bs := bus.New(st, time.Now)
+	m.cfg.Bus = bs
+	bs.SetPublishHook(func(_ bus.Message, agents []string) {
+		m.WakeAgents(agents, WakeMessage)
+	})
+
+	ag := agent.Agent{
+		Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub",
+		Enabled: true, LoopEnabled: true, Interactive: true, IntervalS: 0,
+		OnTimeout: "restart", OnError: "restart", Plugins: []string{"context"},
+	}
+	pinBasicImage(t, m, &ag)
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	if err := agentdir.New(agentsDir, "smoke").EnsureIteration("bootstrap"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bs.Subscribe("smoke", bus.InboxChannel("smoke"), bus.Matcher{}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.Shutdown)
+
+	if _, err := bs.Publish(bus.Message{
+		Channel: bus.InboxChannel("smoke"), Type: "ping", Text: "hi",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-r.checked:
+	case <-time.After(2 * time.Second):
+		t.Fatal("engine never observed the live interactive owner")
+	}
+	if its, _ := as.ListIterations("smoke"); len(its) != 0 {
+		t.Fatalf("live interactive owner created iteration rows: %+v", its)
+	}
+
+	r.blocked.Store(false)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if iterationCount(t, as, "smoke") == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	its, _ := as.ListIterations("smoke")
+	if len(its) != 1 || its[0].Trigger != "message" {
+		t.Fatalf("post-collision iterations = %+v, want one message iteration", its)
+	}
+}
+
+func TestManagerWiresGroupTools(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, st := newManager(t, r)
+	bs := bus.New(st, time.Now)
+	prov := groups.NewProvisioner(groups.ProvisionerConfig{
+		Groups: groups.NewStore(st, time.Now), Agents: as, Bus: bs,
+		GroupsDir: filepath.Join(filepath.Dir(agentsDir), "groups"), Clock: time.Now,
+	})
+	m.cfg.Bus = bs
+	m.cfg.Groups = prov
+	// Wire the request-deadline seam to a schedule store exactly as the daemon
+	// does, so a group request with --deadline arms a one-shot timeout and a
+	// reply cancels it (spec §4.2).
+	schedStore := schedule.NewStore(st, time.Now)
+	bs.SetDeadlineHooks(
+		func(agentName, correlationID, deadline string) error {
+			dur, err := time.ParseDuration(deadline)
+			if err != nil {
+				return err
+			}
+			_, err = schedStore.Add(schedule.Schedule{
+				Agent: agentName, Kind: "oneshot",
+				Spec:            time.Now().UTC().Add(dur).Format(time.RFC3339),
+				Channel:         bus.InboxChannel(agentName),
+				MessageTemplate: `{"type":"timeout"}`,
+				CorrelationID:   correlationID,
+			})
+			return err
+		},
+		func(correlationID string) error { return schedStore.CancelByCorrelation(correlationID) },
+	)
+	m.cfg.AuditFor = func(a string) Recorder { return audit.Open(agentdir.New(agentsDir, a).AuditLog(), time.Now) }
+	if err := prov.EnsureGroup("dev-team", "manager"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "manager",
+		Harness: "stub", Plugins: []string{"status"}, Loop: false, Group: "dev-team"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "worker",
+		Harness: "stub", Plugins: []string{"status"}, Loop: false, Group: "dev-team"}); err != nil {
+		t.Fatal(err)
+	}
+	// Run() no longer auto-starts (Task 4); this test only needs the tools
+	// socket/apiServer up, not an active loop, so a plain Start suffices.
+	if err := m.Start("manager"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start("worker"); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.SetStatus("worker", "waiting for issue", "2026-07-10T10:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	audit.Open(agentdir.New(agentsDir, "worker").AuditLog(), time.Now).
+		Record("status", "agent", "", map[string]any{"message": "waiting for issue"})
+
+	c := client.New(agentdir.New(agentsDir, "manager").WithRuntime(m.cfg.RuntimeDir).Sock())
+	raw, err := c.Call("GET", "/tools/group/info", nil)
+	if err != nil {
+		t.Fatalf("group info: %v", err)
+	}
+	var info map[string]any
+	if err := json.Unmarshal(raw, &info); err != nil {
+		t.Fatal(err)
+	}
+	if info["group"] != "dev-team" || info["lead"] != "manager" || info["role"] != "lead" {
+		t.Fatalf("group info = %v", info)
+	}
+
+	raw, err = c.Call("GET", "/tools/group/status/worker", nil)
+	if err != nil {
+		t.Fatalf("group status worker: %v", err)
+	}
+	var status map[string]any
+	if err := json.Unmarshal(raw, &status); err != nil {
+		t.Fatal(err)
+	}
+	member := status["member"].(map[string]any)
+	if member["name"] != "worker" || member["status_message"] != "waiting for issue" {
+		t.Fatalf("member status = %v", member)
+	}
+
+	raw, err = c.Call("POST", "/tools/group/request", map[string]any{"member": "worker", "text": "what is blocking you?", "deadline": "5m"})
+	if err != nil {
+		t.Fatalf("group request: %v", err)
+	}
+	var reqRes map[string]any
+	if err := json.Unmarshal(raw, &reqRes); err != nil {
+		t.Fatal(err)
+	}
+	// The request rides the Request primitive: kind=request onto the member's
+	// group direct channel, correlation id echoed back (spec §4.2).
+	if reqRes["kind"] != "request" || reqRes["channel"] != bus.GroupDirect("dev-team", "worker") {
+		t.Fatalf("group request result = %v", reqRes)
+	}
+	corr, _ := reqRes["correlation_id"].(string)
+	if corr == "" {
+		t.Fatalf("group request has no correlation id: %v", reqRes)
+	}
+	// The member sees the request pending, threaded as a kind=request with
+	// reply_to pointing back at the manager's inbox.
+	msgs, err := bs.Pending("worker", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || msgs[0].Kind != "request" || msgs[0].Text != "what is blocking you?" ||
+		msgs[0].ReplyTo != bus.InboxChannel("manager") {
+		t.Fatalf("worker pending = %+v", msgs)
+	}
+	// The manager's request is outstanding (# Awaiting replies) and its deadline
+	// armed a one-shot timeout schedule tagged with the correlation id.
+	if pend, _ := bs.PendingRequests("manager"); len(pend) != 1 || pend[0].CorrelationID != corr {
+		t.Fatalf("manager pending requests = %+v", pend)
+	}
+	if scheds, _ := schedStore.List("manager"); len(scheds) != 1 {
+		t.Fatalf("expected one armed deadline schedule, got %+v", scheds)
+	}
+	// A reply from the member retires the pending request and cancels the timeout.
+	if _, err := bs.Reply("worker", msgs[0].ID, "still setting up", nil, ""); err != nil {
+		t.Fatalf("worker reply: %v", err)
+	}
+	if pend, _ := bs.PendingRequests("manager"); len(pend) != 0 {
+		t.Fatalf("reply should retire pending: %+v", pend)
+	}
+	if scheds, _ := schedStore.List("manager"); len(scheds) != 0 {
+		t.Fatalf("reply should cancel the timeout schedule: %+v", scheds)
+	}
+
+	raw, err = c.Call("GET", "/tools/group/observe/worker?tail=1", nil)
+	if err != nil {
+		t.Fatalf("group observe: %v", err)
+	}
+	var observed map[string]any
+	if err := json.Unmarshal(raw, &observed); err != nil {
+		t.Fatal(err)
+	}
+	if observed["count"].(float64) != 1 {
+		t.Fatalf("observed = %v", observed)
+	}
+
+	raw, err = c.Call("POST", "/tools/group/loop", map[string]any{"member": "worker", "action": "start"})
+	if err != nil {
+		t.Fatalf("group loop start: %v", err)
+	}
+	var groupStart map[string]any
+	if err := json.Unmarshal(raw, &groupStart); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := as.Get("worker"); !got.Enabled || !got.LoopEnabled {
+		t.Fatalf("worker after group start = %+v, want both flags true", got)
+	}
+	if groupStart["enabled"] != true || groupStart["loop_enabled"] != true {
+		t.Fatalf("group loop start payload = %v, want persisted flags true", groupStart)
+	}
+	raw, err = c.Call("POST", "/tools/group/loop", map[string]any{"member": "worker", "action": "stop"})
+	if err != nil {
+		t.Fatalf("group loop stop: %v", err)
+	}
+	var groupStop map[string]any
+	if err := json.Unmarshal(raw, &groupStop); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := as.Get("worker"); got.Enabled || got.LoopEnabled {
+		t.Fatalf("worker after group stop = %+v, want both flags false", got)
+	}
+	if groupStop["enabled"] != false || groupStop["loop_enabled"] != false {
+		t.Fatalf("group loop stop payload = %v, want persisted flags false", groupStop)
+	}
+	if _, err := c.Call("POST", "/tools/group/loop", map[string]any{"member": "outsider", "action": "start"}); err == nil {
+		t.Fatal("group loop allowed outsider")
+	}
+
+	m.Shutdown()
+}
+
+// TestReattachWakesEventOnlyAgentWithPending guards against the M4 review
+// finding: start() launched an engine but never sent WakeMessage, so an
+// event-only agent (IntervalS<=0, message-triggered) that already has an
+// unacked pending delivery at reattach time just blocks in select forever —
+// stranded on a quiet channel until some unrelated future publish wakes it.
+func TestReattachWakesEventOnlyAgentWithPending(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, st := newManager(t, r)
+	bs := bus.New(st, time.Now)
+	m.cfg.Bus = bs
+
+	// Event-only agent: no interval timer, message-triggered only. Persisted as
+	// already running (as it would be across a daemon restart), but its engine
+	// has not started yet.
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, LoopEnabled: true, IntervalS: 0,
+		OnTimeout: "restart", OnError: "restart", Plugins: []string{"context"}}
+	pinBasicImage(t, m, &ag)
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, "smoke")
+	if err := l.EnsureIteration("bootstrap"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Subscribe and publish BEFORE the engine starts, so a pending delivery
+	// already exists at reattach time.
+	if _, err := bs.Subscribe("smoke", bus.InboxChannel("smoke"), bus.Matcher{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bs.Publish(bus.Message{Channel: bus.InboxChannel("smoke"), Type: "ping", Text: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err := bs.HasPending("smoke"); err != nil || !pending {
+		t.Fatalf("setup: expected pending delivery, pending=%v err=%v", pending, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.StartAll(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without any further publish, the reattached engine must wake itself and
+	// drain the pending delivery via a message-triggered iteration.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if iterationCount(t, as, "smoke") > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	its, _ := as.ListIterations("smoke")
+	if len(its) == 0 {
+		t.Fatal("event-only agent with pending delivery never ran after reattach")
+	}
+	if its[0].Trigger != "message" {
+		t.Fatalf("iteration trigger = %q, want %q", its[0].Trigger, "message")
+	}
+	m.Shutdown()
+}
+
+func iterationCount(t *testing.T, as *agent.Store, name string) int {
+	t.Helper()
+	its, _ := as.ListIterations(name)
+	return len(its)
+}
+
+// swapAdoptTiming shortens the reattach probe cadence for a test and returns a
+// restore func.
+func swapAdoptTiming(poll, probe, timeout time.Duration) func() {
+	op, opr, ot := adoptPollInterval, adoptProbeInterval, adoptProbeTimeout
+	adoptPollInterval, adoptProbeInterval, adoptProbeTimeout = poll, probe, timeout
+	return func() { adoptPollInterval, adoptProbeInterval, adoptProbeTimeout = op, opr, ot }
+}
+
+func TestBuildImageForAgentConfinesPath(t *testing.T) {
+	base := t.TempDir()
+	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
+	workdir := filepath.Join(base, "workdir")
+
+	// A valid Tariboyfile inside the workdir builds.
+	authored := filepath.Join(workdir, "authored")
+	if err := os.MkdirAll(authored, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sf := "schema_version: 1\nplugins:\n  - { name: context }\n"
+	if err := os.WriteFile(filepath.Join(authored, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := buildImageForAgent(imgStore, workdir, "authored", "latest", "authored")
+	if err != nil {
+		t.Fatalf("build inside workdir: %v", err)
+	}
+	if res["name"] != "authored" {
+		t.Fatalf("res = %v", res)
+	}
+	if !imgStore.Exists(image.Ref{Name: "authored", Tag: "latest"}) {
+		t.Fatal("authored image not stored")
+	}
+
+	// A path escaping the workdir is rejected BEFORE any parse/build.
+	if _, err := buildImageForAgent(imgStore, workdir, "evil", "latest", "../../etc"); err == nil {
+		t.Fatal("expected an error for a path escaping the workdir, got nil")
+	}
+	if _, err := buildImageForAgent(imgStore, workdir, "evil", "latest", "/etc"); err == nil {
+		t.Fatal("expected an error for an absolute path, got nil")
+	}
+
+	// A symlink INSIDE the workdir whose real target is outside is rejected.
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(workdir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildImageForAgent(imgStore, workdir, "evil", "latest", "link"); err == nil {
+		t.Fatal("expected an error for a symlink escaping the workdir, got nil")
+	}
+	if imgStore.Exists(image.Ref{Name: "evil", Tag: "latest"}) {
+		t.Fatal("evil image must not have been built")
+	}
+
+	// A bad ref is rejected.
+	if _, err := buildImageForAgent(imgStore, workdir, "Bad Ref", "latest", "authored"); err == nil {
+		t.Fatal("expected an error for a bad ref, got nil")
+	}
+}
+
+// TestBuildImageForAgentConfinesReferencedPaths locks in the M15 Critical fix:
+// confineToWorkdir clamps only the Tariboyfile's OWN dir, but the file paths
+// REFERENCED inside it (skills:/prompts:/evals:) must also be confined to the
+// agent workdir. Otherwise a semi-trusted image-creator authors a Tariboyfile
+// pointing skills: at an absolute host dir (/etc) or a relative-escape
+// (../../outside), and the daemon packs those host files' CONTENTS into a
+// runnable image. This probe mirrors the review's: absolute-outside AND
+// relative-escape references are both REJECTED, no image is built, and no
+// outside content is packed; a legitimate in-workdir skill still builds.
+func TestBuildImageForAgentConfinesReferencedPaths(t *testing.T) {
+	base := t.TempDir()
+	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
+	workdir := filepath.Join(base, "workdir")
+
+	// A skill dir inside the workdir + a secret host dir outside it, holding a
+	// file whose contents an escape would leak into the built image.
+	inSkill := filepath.Join(workdir, "authored", "myskill")
+	if err := os.MkdirAll(inSkill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inSkill, "SKILL.md"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(base, "secret")
+	if err := os.MkdirAll(secret, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(secret, "id_rsa"), []byte("TOP-SECRET"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	authored := filepath.Join(workdir, "authored")
+
+	writeSF := func(skill string) {
+		sf := "schema_version: 1\nplugins:\n  - { name: context }\nskills:\n  - " + skill + "\n"
+		if err := os.WriteFile(filepath.Join(authored, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// (1a) Absolute-outside skill reference (/etc): rejected, nothing built.
+	writeSF("/etc")
+	if _, err := buildImageForAgent(imgStore, workdir, "leak-etc", "latest", "authored"); err == nil {
+		t.Fatal("expected rejection of an absolute-outside skill reference (/etc), got nil")
+	}
+	if imgStore.Exists(image.Ref{Name: "leak-etc", Tag: "latest"}) {
+		t.Fatal("leak-etc image must NOT have been built from an out-of-workdir skill")
+	}
+
+	// (1b) Absolute-outside skill reference into the readable secret host dir:
+	//      demonstrably packs TOP-SECRET without the fix, so it must be rejected
+	//      and no image built (no outside content packed).
+	writeSF(secret)
+	if _, err := buildImageForAgent(imgStore, workdir, "leak-abs", "latest", "authored"); err == nil {
+		t.Fatal("expected rejection of an absolute-outside skill reference (secret dir), got nil")
+	}
+	if imgStore.Exists(image.Ref{Name: "leak-abs", Tag: "latest"}) {
+		t.Fatal("leak-abs image must NOT have been built from an out-of-workdir skill")
+	}
+
+	// (2) Relative-escape skill reference into the secret host dir: rejected,
+	//     nothing built, no secret content packed.
+	writeSF("../../secret")
+	if _, err := buildImageForAgent(imgStore, workdir, "leak-rel", "latest", "authored"); err == nil {
+		t.Fatal("expected rejection of a relative-escape skill reference, got nil")
+	}
+	if imgStore.Exists(image.Ref{Name: "leak-rel", Tag: "latest"}) {
+		t.Fatal("leak-rel image must NOT have been built from an out-of-workdir skill")
+	}
+
+	// (3) A legitimate in-workdir skill reference still builds.
+	writeSF("myskill")
+	if _, err := buildImageForAgent(imgStore, workdir, "good", "latest", "authored"); err != nil {
+		t.Fatalf("legitimate in-workdir skill build must succeed: %v", err)
+	}
+	if !imgStore.Exists(image.Ref{Name: "good", Tag: "latest"}) {
+		t.Fatal("good image with in-workdir skill was not stored")
+	}
+}
+
+// TestBuildImageForAgentRejectsEscapingInnerSymlink locks in the M15 Critical
+// RESIDUAL fix. The prior fix confines the skill DIR PATH to the workdir, but
+// image.Build's writeArchive WALKS that dir and os.ReadFile's every entry,
+// which DEREFERENCES symlinks. So a legitimately-in-workdir skill dir that
+// CONTAINS an inner symlink pointing OUTSIDE (e.g.
+// <workdir>/authored/skills/myskill/leak -> <secret>/id_rsa) makes the daemon
+// read that outside file's content and pack it as skills/myskill/leak — the
+// same arbitrary-host-file-read exfiltration, one level deeper. This probe
+// mirrors the re-review's: an in-workdir skill dir + an outside-pointing inner
+// symlink is REJECTED, no image is built/stored, and the outside content is
+// NOT packed; a legitimate skill dir with no escaping symlink still builds.
+func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
+	base := t.TempDir()
+	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
+	workdir := filepath.Join(base, "workdir")
+	authored := filepath.Join(workdir, "authored")
+
+	// A secret host file OUTSIDE the workdir whose content an escape would leak.
+	secret := filepath.Join(base, "secret")
+	if err := os.MkdirAll(secret, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(secret, "id_rsa"), []byte("TOP-SECRET-KEY"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// A skill dir that IS inside the workdir (passes the per-dir confinement)
+	// but CONTAINS an inner symlink pointing at the outside secret file.
+	inSkill := filepath.Join(authored, "myskill")
+	if err := os.MkdirAll(inSkill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inSkill, "SKILL.md"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(secret, "id_rsa"), filepath.Join(inSkill, "leak")); err != nil {
+		t.Fatal(err)
+	}
+
+	writeSF := func(skill string) {
+		sf := "schema_version: 1\nplugins:\n  - { name: context }\nskills:\n  - " + skill + "\n"
+		if err := os.WriteFile(filepath.Join(authored, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The in-workdir skill dir with an outside-pointing inner symlink is
+	// REJECTED before image.Build reads/packs anything.
+	writeSF("myskill")
+	if _, err := buildImageForAgent(imgStore, workdir, "leak-inner", "latest", "authored"); err == nil {
+		t.Fatal("expected rejection of an in-workdir skill dir containing an outside-pointing inner symlink, got nil")
+	}
+	if imgStore.Exists(image.Ref{Name: "leak-inner", Tag: "latest"}) {
+		t.Fatal("leak-inner image must NOT have been built from a skill dir with an escaping inner symlink")
+	}
+
+	// Sanity: the outside secret content is NOT packed anywhere in the store.
+	if data, err := os.ReadFile(filepath.Join(imgStore.Dir, "leak-inner", "latest.tar.gz")); err == nil {
+		if strings.Contains(string(data), "TOP-SECRET-KEY") {
+			t.Fatal("outside secret content was packed into the built image")
+		}
+	}
+
+	// A legitimate skill dir (no escaping symlink) still builds: drop the leak.
+	if err := os.Remove(filepath.Join(inSkill, "leak")); err != nil {
+		t.Fatal(err)
+	}
+	writeSF("myskill")
+	if _, err := buildImageForAgent(imgStore, workdir, "good-inner", "latest", "authored"); err != nil {
+		t.Fatalf("legitimate in-workdir skill (no escaping symlink) must still build: %v", err)
+	}
+	if !imgStore.Exists(image.Ref{Name: "good-inner", Tag: "latest"}) {
+		t.Fatal("good-inner image with a clean in-workdir skill was not stored")
+	}
+}
+
+func TestReapOrphanSessions(t *testing.T) {
+	base := t.TempDir()
+	s, err := store.Open(filepath.Join(base, "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	as := agent.NewStore(s)
+	// live orphan session (no running iteration) -> reaped.
+	_ = as.Create(agent.Agent{Name: "orphan", ImageRef: "basic:latest", Interactive: true})
+	// iteration still running -> NOT reaped.
+	_ = as.Create(agent.Agent{Name: "busy", ImageRef: "basic:latest", Interactive: true})
+	_ = as.CreateIteration(agent.Iteration{ID: "busy-1", Agent: "busy", Status: "running", StartedAt: "t"})
+	// a session for a currently-non-interactive agent is still an orphan (the flag
+	// may have flipped since the session was created) -> reaped, flag-independent.
+	_ = as.Create(agent.Agent{Name: "plain", ImageRef: "basic:latest", Interactive: false})
+
+	var killed []string
+	m := NewManager(ManagerConfig{
+		AgentsDir: filepath.Join(base, "agents"), Store: as,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
+		HasTmuxSession:  func(string) bool { return true },
+		KillTmuxSession: func(sess string) error { killed = append(killed, sess); return nil },
+	})
+	agents, _ := as.List()
+	m.reapOrphanSessions(agents, map[string][]<-chan struct{}{})
+
+	if len(killed) != 2 || killed[0] != "orphan" || killed[1] != "plain" {
+		t.Fatalf("killed = %v, want [orphan plain]", killed)
+	}
+}
+
+func TestLiveState(t *testing.T) {
+	r := &fakeRunner{}
+	m, as, _, _ := newManager(t, r)
+	a := agent.Agent{Name: "ls", ImageRef: "basic:latest", Enabled: true, LoopEnabled: true,
+		HarnessType: "stub", Plugins: []string{"context"}}
+	if err := as.Create(a); err != nil {
+		t.Fatal(err)
+	}
+
+	assertLiveState(t, m, "ls", "idle") // loop_enabled, no engine
+
+	a2, _ := as.Get("ls")
+	a2.LoopEnabled = false
+	if err := as.Update(a2); err != nil {
+		t.Fatal(err)
+	}
+	// Master switch (Enabled) is still true; loop_enabled off alone reports
+	// idle, not stopped — that's what TestLiveStateGatesOnEnabled locks in.
+	assertLiveState(t, m, "ls", "idle") // loop off, master still enabled
+
+	if err := as.SetError("ls", "boom"); err != nil {
+		t.Fatal(err)
+	}
+	assertLiveState(t, m, "ls", "error") // error_reason wins
+}
+
+func assertLiveState(t *testing.T, m *Manager, name, want string) {
+	t.Helper()
+	got, err := m.LiveState(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("LiveState(%s)=%q, want %q", name, got, want)
+	}
+}
+
+func TestLiveStateGatesOnEnabled(t *testing.T) {
+	r := &fakeRunner{}
+	m, as, _, _ := newManager(t, r)
+	// Enabled=false with loop_enabled=true must still be "stopped".
+	if err := as.Create(agent.Agent{Name: "a", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: true, Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := m.LiveState("a"); st != "stopped" {
+		t.Fatalf("disabled agent LiveState = %q, want stopped", st)
+	}
+	// Enabled=true, no live iteration → idle (even with loop off).
+	if err := as.Create(agent.Agent{Name: "b", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: false, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := m.LiveState("b"); st != "idle" {
+		t.Fatalf("enabled idle agent LiveState = %q, want idle", st)
+	}
+}
+
+func TestReapOrphanSessionIgnoresInteractiveFlag(t *testing.T) {
+	r := &fakeRunner{}
+	m, as, _, _ := newManager(t, r)
+	killed := map[string]bool{}
+	m.cfg.HasTmuxSession = func(s string) bool { return s == "manager" }
+	m.cfg.KillTmuxSession = func(s string) error { killed[s] = true; return nil }
+	if err := as.Create(agent.Agent{Name: "manager", ImageRef: "basic:latest", Interactive: false,
+		HarnessType: "stub", Plugins: []string{"context"}}); err != nil {
+		t.Fatal(err)
+	}
+	m.reapOrphanSessions([]agent.Agent{{Name: "manager", Interactive: false}}, map[string][]<-chan struct{}{})
+	if !killed["manager"] {
+		t.Fatal("orphan session for a non-interactive-flagged agent was not reaped")
+	}
+}
+
+// mustWrite writes content to path, creating parent dirs, failing the test on error.
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedLeakedRows inserts one row per agent-keyed side table PurgeAgentData must
+// clean — the rows a plain Store.Delete leaks today. deliveries hangs off the
+// subscription so we can prove the dependent rows go too.
+func seedLeakedRows(t *testing.T, s *store.Store, name string) {
+	t.Helper()
+	exec := func(q string, args ...any) {
+		if _, err := s.DB.Exec(q, args...); err != nil {
+			t.Fatalf("seed %q: %v", q, err)
+		}
+	}
+	exec(`INSERT INTO subscriptions(id, agent, channel) VALUES(?,?,?)`, "sub-1", name, "ch")
+	exec(`INSERT INTO deliveries(subscription_id, message_id) VALUES(?,?)`, "sub-1", "msg-1")
+	exec(`INSERT INTO schedules(id, agent, kind, spec, channel, next_fire_at) VALUES(?,?,?,?,?,?)`,
+		"sch-1", name, "oneshot", "2026-07-13T00:00:00Z", "ch", "2026-07-13T00:00:00Z")
+	exec(`INSERT INTO scripts(id, agent, name, description, command, mode, state, created_at) VALUES(?,?,?,?,?,?,?,?)`,
+		"scr-1", name, "s", "test", "echo hi", "once", "completed", "2026-07-13T00:00:00Z")
+	exec(`INSERT INTO script_result_outbox(idempotency_key,script_id,run_id,agent,payload,next_attempt_at) VALUES(?,?,?,?,?,?)`,
+		"script-result:srun-1", "scr-1", "srun-1", name, `{"script_id":"scr-1","run_id":"srun-1"}`, "2026-07-13T00:00:00Z")
+	exec(`INSERT INTO ai_requests(id, ts, agent) VALUES(?,?,?)`, "air-1", "2026-07-13T00:00:00Z", name)
+	exec(`INSERT INTO budgets(scope) VALUES(?)`, "agent:"+name)
+	exec(`INSERT INTO retention_policies(agent) VALUES(?)`, name)
+	// eval_results carries a direct agent column, so purge keys on agent (not on
+	// the iteration subquery) and this row survives regardless of delete order.
+	exec(`INSERT INTO eval_results(id, iteration, agent) VALUES(?,?,?)`, "evr-1", "iter-1", name)
+	exec(`INSERT INTO proxy_rules(id, scope) VALUES(?,?)`, "pr-1", "agent:"+name)
+}
+
+// leakedRowCount totals the seeded side-table rows still attributed to the agent.
+func leakedRowCount(t *testing.T, s *store.Store, name string) int {
+	t.Helper()
+	total := 0
+	count := func(q string, arg any) {
+		var n int
+		if err := s.DB.QueryRow(q, arg).Scan(&n); err != nil {
+			t.Fatalf("count %q: %v", q, err)
+		}
+		total += n
+	}
+	count(`SELECT COUNT(*) FROM subscriptions WHERE agent=?`, name)
+	count(`SELECT COUNT(*) FROM deliveries WHERE subscription_id IN (SELECT id FROM subscriptions WHERE agent=?)`, name)
+	count(`SELECT COUNT(*) FROM schedules WHERE agent=?`, name)
+	count(`SELECT COUNT(*) FROM scripts WHERE agent=?`, name)
+	count(`SELECT COUNT(*) FROM script_result_outbox WHERE agent=?`, name)
+	count(`SELECT COUNT(*) FROM ai_requests WHERE agent=?`, name)
+	count(`SELECT COUNT(*) FROM budgets WHERE scope=?`, "agent:"+name)
+	count(`SELECT COUNT(*) FROM retention_policies WHERE agent=?`, name)
+	count(`SELECT COUNT(*) FROM eval_results WHERE agent=?`, name)
+	count(`SELECT COUNT(*) FROM proxy_rules WHERE scope=?`, "agent:"+name)
+	return total
+}
+
+// TestRemovePreserveThenPurge locks in option B: a preserving Remove keeps the
+// agent row (stopped) and every durable artifact while dropping only the
+// rebuildable tree; a purging Remove hard-deletes everything AND the leaked
+// agent-keyed side-table rows.
+func TestRemovePreserveThenPurge(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, s := newManager(t, r)
+	defer m.Shutdown()
+
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "keep",
+		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, name)
+
+	// Durable artifacts an agent accrues over its life, plus a DB iteration row.
+	mustWrite(t, l.ContextPath(), "remember me")
+	mustWrite(t, l.AuditLog(), "{\"type\":\"status\"}\n")
+	if err := os.MkdirAll(l.IterationDir("iter-1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.CreateIteration(agent.Iteration{ID: "iter-1", Agent: name,
+		Trigger: "manual", Status: "done", StartedAt: "2026-07-13T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	seedLeakedRows(t, s, name)
+	wantPreservedRows := leakedRowCount(t, s, name)
+
+	// --- Preserve (plain down): keep data, drop only the rebuildable tree. ---
+	if err := m.Remove(name, true, false); err != nil {
+		t.Fatalf("preserve remove: %v", err)
+	}
+	if ok, _ := as.Exists(name); !ok {
+		t.Fatal("preserve remove dropped the agents row")
+	}
+	if got, _ := as.Get(name); got.LoopEnabled {
+		t.Fatal("preserve remove left loop enabled; want stopped")
+	}
+	if st, _ := m.LiveState(name); st != "stopped" {
+		t.Fatalf("after preserve remove LiveState = %q, want stopped", st)
+	}
+	for _, p := range []string{l.ContextPath(), l.AuditLog(), l.IterationDir("iter-1")} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("preserve remove dropped %s: %v", p, err)
+		}
+	}
+	if its, _ := as.ListIterations(name); len(its) != 1 {
+		t.Fatalf("preserve remove dropped iteration rows: got %d, want 1", len(its))
+	}
+	if n := leakedRowCount(t, s, name); n != wantPreservedRows {
+		t.Fatalf("preserve remove must keep side-table rows: got %d, want %d", n, wantPreservedRows)
+	}
+	for _, d := range []string{l.ImageDir(), l.BinDir(), l.Workdir()} {
+		if _, err := os.Stat(d); !os.IsNotExist(err) {
+			t.Fatalf("preserve remove kept rebuildable dir %s (err=%v)", d, err)
+		}
+	}
+
+	// --- Purge (down --volumes): hard-delete everything + leaked rows. ---
+	if err := m.Remove(name, true, true); err != nil {
+		t.Fatalf("purge remove: %v", err)
+	}
+	if ok, _ := as.Exists(name); ok {
+		t.Fatal("purge remove kept the agents row")
+	}
+	if its, _ := as.ListIterations(name); len(its) != 0 {
+		t.Fatalf("purge remove kept iteration rows: %d", len(its))
+	}
+	if _, err := os.Stat(l.Root); !os.IsNotExist(err) {
+		t.Fatalf("purge remove kept the durable tree (err=%v)", err)
+	}
+	if n := leakedRowCount(t, s, name); n != 0 {
+		t.Fatalf("purge remove left %d leaked side-table rows", n)
+	}
+}
+
+// TestReprovisionKeepsDataAndSwapsImage proves the up-side counterpart: after a
+// preserving down, Reprovision re-unpacks the (new) image over the retained
+// CONTEXT.md / iterations / audit and restarts the loop.
+func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, agentsDir, _ := newManager(t, r)
+	defer m.Shutdown()
+
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "keep",
+		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Run() creates the agent disabled (Task 4); enable it in the store so the
+	// preserving Remove + Reprovision round trip below brings a running loop
+	// back up (Enabled is not itself touched by Remove/Reprovision — that is
+	// Task 6's job, not this test's concern).
+	got0, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got0.Enabled = true
+	if err := as.Update(got0); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, name)
+	mustWrite(t, l.ContextPath(), "remember me")
+	mustWrite(t, l.AuditLog(), "{\"type\":\"status\"}\n")
+
+	// A second image version to swap onto.
+	buildBasic2(t, m.cfg.ImgStore)
+
+	if err := m.Remove(name, true, false); err != nil {
+		t.Fatalf("preserve remove: %v", err)
+	}
+	if _, err := os.Stat(l.ImageDir()); !os.IsNotExist(err) {
+		t.Fatalf("preserve remove kept the image tree (err=%v)", err)
+	}
+
+	if err := m.Reprovision(name, "basic2:latest"); err != nil {
+		t.Fatalf("reprovision: %v", err)
+	}
+	// Tree re-unpacked, shims rewritten.
+	if _, err := os.Stat(filepath.Join(l.ImageDir(), "PROMPT.md")); err != nil {
+		t.Fatalf("reprovision did not re-unpack the image: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); err != nil {
+		t.Fatalf("reprovision did not rewrite bin shims: %v", err)
+	}
+	// New image recorded on the row.
+	got, _ := as.Get(name)
+	if got.ImageRef != "basic2:latest" {
+		t.Fatalf("reprovision image_ref = %q, want basic2:latest", got.ImageRef)
+	}
+	// History kept.
+	if data, err := os.ReadFile(l.ContextPath()); err != nil || string(data) != "remember me" {
+		t.Fatalf("reprovision clobbered CONTEXT.md: %q err=%v", data, err)
+	}
+	if _, err := os.Stat(l.AuditLog()); err != nil {
+		t.Fatalf("reprovision dropped audit.jsonl: %v", err)
+	}
+	// Loop back up.
+	if st, _ := m.LiveState(name); st != "idle" {
+		t.Fatalf("after reprovision LiveState = %q, want idle (loop re-enabled)", st)
+	}
+}
+
+// buildBasic2 builds a second image "basic2:latest" for image-swap tests.
+func buildBasic2(t *testing.T, st *image.Store) {
+	t.Helper()
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "task.md"), []byte("BODY2"), 0o600)
+	im := &imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "context"}},
+		Prompts: []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}}, Dir: src}
+	if _, err := image.Build(im, image.Ref{Name: "basic2", Tag: "latest"}, st, time.Now); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -1,0 +1,11 @@
+{
+  "model": "gpt-x",
+  "messages": [
+    { "role": "system", "content": "You are a careful engineer." },
+    { "role": "user", "content": "run the tests" },
+    { "role": "assistant", "content": "Running them.", "tool_calls": [
+      { "id": "call_1", "type": "function", "function": { "name": "Bash", "arguments": "{\"command\":\"make test\"}" } }
+    ] },
+    { "role": "tool", "tool_call_id": "call_1", "content": "ok" }
+  ]
+}
