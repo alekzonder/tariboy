@@ -240,4 +240,3 @@ git branch -d tari-11-image-transfer
 ```
 
 Expected: main passes its post-merge verification and the task worktree/branch are removed.
-

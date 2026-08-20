@@ -42,35 +42,58 @@ test("builds a transparent image from its original directory and assigns it to a
   await desktop.execute(`window.location.hash = "#/servers/local/images?tab=built";`);
   await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");
   const sourceImagesRoute = await desktop.execute<string>("return window.location.hash;");
-  const exportStarted = await desktop.execute<boolean>(`window.__desktopImageArchive = null;
-    window.__desktopImageDownloadName = "";
-    const originalCreateObjectURL = URL.createObjectURL.bind(URL);
-    URL.createObjectURL = (blob) => { window.__desktopImageArchive = blob; return originalCreateObjectURL(blob); };
-    HTMLAnchorElement.prototype.click = function () { window.__desktopImageDownloadName = this.download; };
-    const button = document.querySelector('button[aria-label="Export transparent-e2e:latest"]');
-    if (!(button instanceof HTMLButtonElement)) return false;
-    button.click();
-    return true;`);
-  expect(exportStarted).toBe(true);
-  await expect.poll(() => desktop.execute<number>("return window.__desktopImageArchive ? window.__desktopImageArchive.size : 0;"))
-    .toBeGreaterThan(0);
-  await expect.poll(() => desktop.execute<string>("return window.__desktopImageDownloadName || '';"))
-    .toBe("transparent-e2e-latest.tariboy-image.tar.gz");
-  await expect.poll(() => bodyText(desktop)).toContain(
-    "image transparent-e2e:latest saved to file transparent-e2e-latest.tariboy-image.tar.gz",
-  );
-  const uploadStarted = await desktop.execute<boolean>(`const input = document.querySelector('input[aria-label="Import image archive"]');
-    if (!(input instanceof HTMLInputElement) || !window.__desktopImageArchive) return false;
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([window.__desktopImageArchive], "transparent-e2e-latest.tariboy-image.tar.gz", { type: "application/gzip" }));
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    return true;`);
-  expect(uploadStarted).toBe(true);
-  await expect.poll(() => bodyText(desktop)).toContain("Import image");
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Import image']"));
-  await expect.poll(() => bodyText(desktop)).toContain("image imported");
+  await desktop.execute(`window.__desktopTransferFixture = "pending";
+    window.__TAURI_INTERNALS__.invoke("daemon_status").then((status) => {
+      const nativeInvoke = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__);
+      const target = {
+        id: "desktop-transfer-target", label: "Desktop transfer target", kind: "https",
+        ssh_alias: "", remote_install_dir: "", remote_port: 0,
+        https_base_url: "https://desktop-transfer.invalid", last_daemon_version: "",
+        state: "ready", base_url: status.base_url, local_port: 0, phase: "fixture",
+        platform: "linux", arch: "x86_64", prerequisites: [], message: "",
+      };
+      window.__TAURI_INTERNALS__.invoke = (command, args) => {
+        if (command === "hosts_list") return Promise.resolve([target]);
+        if (command === "host_session_credentials" && args?.id === target.id) {
+          return Promise.resolve({ base_url: status.base_url, token: "desktop-transfer-token" });
+        }
+        return nativeInvoke(command, args);
+      };
+      window.__desktopImageTransferRequests = [];
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(typeof input === "string" ? input : input.url, window.location.href);
+        const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+        if (url.pathname.endsWith("/export") || url.pathname.startsWith("/api/image-imports")) {
+          window.__desktopImageTransferRequests.push({
+            method: init?.method ?? (input instanceof Request ? input.method : "GET"),
+            url: url.toString(), authorization: headers.get("authorization") ?? "",
+          });
+        }
+        return nativeFetch(input, init);
+      };
+      window.__desktopTransferFixture = "ready";
+    }).catch((error) => { window.__desktopTransferFixture = "failed: " + String(error); });`);
+  await expect.poll(() => desktop.execute<string>("return window.__desktopTransferFixture || '';"), { timeout: 60_000 }).toBe("ready");
+
+  // TerminalsPage refreshes the provider after the fixture adds its isolated,
+  // ready host state; returning to Images keeps the local source route explicit.
+  await desktop.execute(`window.location.hash = "#/";`);
+  await expect.poll(() => bodyText(desktop)).toContain("New agent");
+  await desktop.execute(`window.location.hash = ${JSON.stringify(sourceImagesRoute)};`);
+  await expect.poll(() => bodyText(desktop)).toContain("transparent-e2e:latest");
+  await desktop.elementClick(await desktop.findElement("css selector", 'button[aria-label="Upload to servers transparent-e2e:latest"]'));
+  await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target");
+  const targetCheckbox = await desktop.findElement("css selector", 'input[aria-label="Transfer to Desktop transfer target"]');
+  await desktop.elementClick(targetCheckbox);
+  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Start transfer']"));
+  await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target: Completed");
   await expect.poll(() => desktop.execute<string>("return window.location.hash;")).toBe(sourceImagesRoute);
+  expect(await desktop.execute<Array<{ method: string; url: string; authorization: string }>>("return window.__desktopImageTransferRequests;")).toEqual([
+    { method: "GET", url: expect.stringMatching(/\/api\/images\/transparent-e2e%3Alatest\/export$/), authorization: "" },
+    { method: "POST", url: expect.stringMatching(/\/api\/image-imports$/), authorization: "Bearer desktop-transfer-token" },
+    { method: "POST", url: expect.stringMatching(/\/api\/image-imports\/.+\/apply$/), authorization: "Bearer desktop-transfer-token" },
+  ]);
 
   await desktop.execute(`window.location.hash = "#/servers/local/images/transparent-e2e/latest/template";`);
   await expect.poll(() => bodyText(desktop)).toContain("Template");

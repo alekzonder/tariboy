@@ -205,6 +205,13 @@ destination is shown as **Already present**; a ref conflict can be retagged and
 retried for only that destination without exporting again. Closing the dialog
 discards the archive and its transfer progress.
 
+The dialog snapshots the eligible hosts and the chosen destinations when it
+opens and starts the operation, so a later registry refresh cannot hide the
+result for a requested host. It first shows **Exporting** while downloading the
+single source archive; controls and cancellation remain unavailable until that
+download completes. Afterwards, cancellation prevents only destinations that
+have not started.
+
 The source and every destination are explicit request targets throughout the
 transfer. Starting, continuing, or retrying a transfer never changes the active
 host or the selected source route. The in-memory archive is a runnable artifact

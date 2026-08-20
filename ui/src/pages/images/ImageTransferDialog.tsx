@@ -43,7 +43,7 @@ interface ImageTransferDialogProps {
   onComplete: () => void;
 }
 
-type TransferStatus = "queued" | "previewing" | "importing" | "completed" | "already-present" | "failed" | "cancelled";
+type TransferStatus = "queued" | "exporting" | "previewing" | "importing" | "completed" | "already-present" | "failed" | "cancelled";
 interface TransferRow {
   status: TransferStatus;
   importID?: string;
@@ -64,41 +64,58 @@ export function ImageTransferDialog({
   daemons,
   onComplete,
 }: ImageTransferDialogProps) {
-  const targets = useMemo(
+  const discoveredTargets = useMemo(
     () => eligibleImageTransferTargets(source, daemons),
     [source, daemons],
   );
+  const [openTargets, setOpenTargets] = useState<ImageTransferTarget[]>(discoveredTargets);
+  const [runTargets, setRunTargets] = useState<ImageTransferTarget[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [rows, setRows] = useState<Record<string, TransferRow>>({});
-  const [transferring, setTransferring] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "exporting" | "transferring">("idle");
   const archive = useRef<Blob | null>(null);
   const cancelRequested = useRef(false);
   const mounted = useRef(true);
   const transfer = useRef(0);
+  const previouslyOpen = useRef(false);
+  const targets = runTargets ?? openTargets;
+  const exporting = phase === "exporting";
+  const transferring = phase === "transferring";
+  const controlsDisabled = phase !== "idle";
   const selectedCount = targets.filter((target) => selected.has(target.id)).length;
   const allSelected = targets.length > 0 && selectedCount === targets.length;
 
-  useEffect(() => () => {
-    mounted.current = false;
-    cancelRequested.current = true;
-    archive.current = null;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      cancelRequested.current = true;
+      archive.current = null;
+    };
   }, []);
 
   useEffect(() => {
-    if (open) return;
+    if (open) {
+      if (!previouslyOpen.current) setOpenTargets(discoveredTargets);
+      previouslyOpen.current = true;
+      return;
+    }
+    previouslyOpen.current = false;
     cancelRequested.current = true;
     transfer.current += 1;
     archive.current = null;
     setRows({});
     setSelected(new Set());
-    setTransferring(false);
-  }, [open]);
+    setRunTargets(null);
+    setPhase("idle");
+  }, [discoveredTargets, open]);
 
   const setRow = (id: string, row: TransferRow, run: number) => {
     if (mounted.current && transfer.current === run) setRows((current) => ({ ...current, [id]: row }));
   };
 
   const cancel = () => {
+    if (exporting) return;
     cancelRequested.current = true;
   };
 
@@ -108,7 +125,8 @@ export function ImageTransferDialog({
     archive.current = null;
     setRows({});
     setSelected(new Set());
-    setTransferring(false);
+    setRunTargets(null);
+    setPhase("idle");
     onOpenChange(false);
   };
 
@@ -130,17 +148,24 @@ export function ImageTransferDialog({
     if (selectedTargets.length === 0) return;
     const run = ++transfer.current;
     cancelRequested.current = false;
-    setTransferring(true);
-    setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, { status: "queued" }])));
+    setRunTargets(targets);
+    setPhase("exporting");
+    setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, { status: "exporting" }])));
     let exportedArchive: Blob;
     try {
       exportedArchive = await downloadImageArchiveOn(source, ref);
+      if (!mounted.current || transfer.current !== run) return;
       archive.current = exportedArchive;
     } catch (error) {
       const failure = { status: "failed" as const, error: errorMessage(error) };
       if (mounted.current && transfer.current === run) setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, failure])));
-      if (mounted.current && transfer.current === run) setTransferring(false);
+      if (mounted.current && transfer.current === run) setPhase("idle");
       return;
+    }
+
+    if (mounted.current && transfer.current === run) {
+      setRows(Object.fromEntries(selectedTargets.map((target) => [target.id, { status: "queued" }])));
+      setPhase("transferring");
     }
 
     for (let index = 0; index < selectedTargets.length; index += 1) {
@@ -166,18 +191,18 @@ export function ImageTransferDialog({
       }
     }
     if (mounted.current && transfer.current === run) {
-      setTransferring(false);
+      setPhase("idle");
       if (!cancelRequested.current) onComplete();
     }
   };
 
   const retry = async (targetID: string) => {
-    const target = targets.find((candidate) => candidate.id === targetID);
+    const target = runTargets?.find((candidate) => candidate.id === targetID);
     const retryRef = rows[targetID]?.retryRef;
     const exportedArchive = archive.current;
     if (!target || !retryRef || !exportedArchive) return;
     const run = ++transfer.current;
-    setTransferring(true);
+    setPhase("transferring");
     try {
       setRow(targetID, { status: "previewing" }, run);
       const preview = await uploadImageArchiveOn(target.target, exportedArchive);
@@ -193,16 +218,23 @@ export function ImageTransferDialog({
         ...(isConflict(error) ? { retryRef } : {}),
       }, run);
     } finally {
-      if (mounted.current && transfer.current === run) setTransferring(false);
+      if (mounted.current && transfer.current === run) setPhase("idle");
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!nextOpen) close();
-      else onOpenChange(true);
+      if (!nextOpen) {
+        if (!exporting) close();
+        return;
+      }
+      onOpenChange(true);
     }}>
-      <DialogContent>
+      <DialogContent
+        showCloseButton={!exporting}
+        onEscapeKeyDown={(event) => { if (exporting) event.preventDefault(); }}
+        onPointerDownOutside={(event) => { if (exporting) event.preventDefault(); }}
+      >
         <DialogHeader>
           <DialogTitle>Transfer image {ref}</DialogTitle>
           <DialogDescription>
@@ -214,7 +246,7 @@ export function ImageTransferDialog({
             <p className="text-sm text-muted-foreground">No ready servers are available for transfer.</p>
           ) : (
             <>
-              <Button variant="outline" size="sm" onClick={toggleAll} disabled={transferring}>
+              <Button variant="outline" size="sm" onClick={toggleAll} disabled={controlsDisabled}>
                 {allSelected ? "Clear all servers" : "All servers"}
               </Button>
               <ul className="space-y-2" aria-label="Eligible transfer targets">
@@ -226,7 +258,7 @@ export function ImageTransferDialog({
                         aria-label={`Transfer to ${target.label}`}
                         checked={selected.has(target.id)}
                         onChange={() => toggleTarget(target.id)}
-                        disabled={transferring}
+                        disabled={controlsDisabled}
                       />
                       {target.label}
                     </label>
@@ -240,9 +272,9 @@ export function ImageTransferDialog({
                   return <li key={target.id} className="text-sm">
                     <p>{target.label}: {label}{row.error ? ` — ${row.error}` : ""}</p>
                     {row.retryRef !== undefined && <div className="mt-1 flex gap-2">
-                      <Input aria-label={`Retag and retry for ${target.label}`} value={row.retryRef} disabled={transferring}
+                      <Input aria-label={`Retag and retry for ${target.label}`} value={row.retryRef} disabled={controlsDisabled}
                         onChange={(event) => setRows((current) => ({ ...current, [target.id]: { ...current[target.id], retryRef: event.target.value } }))} />
-                      <Button size="sm" onClick={() => void retry(target.id)} disabled={transferring || !row.retryRef.trim()}>
+                      <Button size="sm" onClick={() => void retry(target.id)} disabled={controlsDisabled || !row.retryRef.trim()}>
                         Retag and retry {target.label}
                       </Button>
                     </div>}
@@ -252,12 +284,12 @@ export function ImageTransferDialog({
             </>
           )}
           <p aria-live="polite" className="text-sm text-muted-foreground">
-            {transferring ? `Transferring image: ${completedRows(rows)} target${completedRows(rows) === 1 ? "" : "s"} completed.` : targets.length === 0 ? "No transfer targets selected." : `${selectedCount} transfer target${selectedCount === 1 ? "" : "s"} selected.`}
+            {exporting ? "Exporting source archive." : transferring ? `Transferring image: ${completedRows(rows)} target${completedRows(rows) === 1 ? "" : "s"} completed.` : targets.length === 0 ? "No transfer targets selected." : `${selectedCount} transfer target${selectedCount === 1 ? "" : "s"} selected.`}
           </p>
         </div>
         <DialogFooter>
-          {transferring ? <Button variant="outline" onClick={cancel}>Cancel transfer</Button> : <Button variant="outline" onClick={close}>Cancel</Button>}
-          <Button disabled={selectedCount === 0 || transferring} onClick={() => void start()}>Start transfer</Button>
+          {phase !== "idle" ? <Button variant="outline" onClick={cancel} disabled={exporting}>Cancel transfer</Button> : <Button variant="outline" onClick={close}>Cancel</Button>}
+          <Button disabled={selectedCount === 0 || controlsDisabled} onClick={() => void start()}>Start transfer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

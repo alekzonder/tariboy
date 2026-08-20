@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as imageTransferApi from "@/lib/teamApi";
 import { ApiError } from "@/lib/api";
-import { useState } from "react";
+import { StrictMode, useState } from "react";
 import {
   eligibleImageTransferTargets,
   ImageTransferDialog,
@@ -231,4 +231,71 @@ it("cancels an in-flight transfer when its parent closes the dialog", async () =
   expect(screen.queryByText("Target A: Completed")).not.toBeInTheDocument();
   expect(screen.queryByText("Target B: Queued")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Start transfer" })).toBeDisabled();
+});
+
+it("completes a transfer when React StrictMode replays its mount effect", async () => {
+  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  const onComplete = vi.fn();
+  downloadImageArchiveOn.mockResolvedValue(new Blob(["archive"]));
+  uploadImageArchiveOn.mockResolvedValue({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
+  applyImageArchiveOn.mockResolvedValue({ reused: false });
+  const user = userEvent.setup();
+
+  render(<StrictMode><ImageTransferDialog open onOpenChange={() => undefined} source={null} ref="reviewer:v3" daemons={[target]} onComplete={onComplete} /></StrictMode>);
+  await user.click(screen.getByRole("button", { name: "All servers" }));
+  await user.click(screen.getByRole("button", { name: "Start transfer" }));
+
+  await expect(screen.findByText("Target A: Completed")).resolves.toBeInTheDocument();
+  expect(onComplete).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the selected target snapshot when the registry changes during export", async () => {
+  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  let finishExport: (archive: Blob) => void = () => undefined;
+  downloadImageArchiveOn.mockImplementationOnce(() => new Promise<Blob>((resolve) => { finishExport = resolve; }));
+  uploadImageArchiveOn.mockResolvedValue({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
+  applyImageArchiveOn.mockRejectedValue(new Error("target disappeared after selection"));
+  const user = userEvent.setup();
+  const Harness = () => {
+    const [daemons, setDaemons] = useState([target]);
+    return <>
+      <button onClick={() => setDaemons([])}>Remove target</button>
+      <ImageTransferDialog open onOpenChange={() => undefined} source={null} ref="reviewer:v3" daemons={daemons} onComplete={() => undefined} />
+    </>;
+  };
+
+  render(<Harness />);
+  await user.click(screen.getByRole("button", { name: "All servers" }));
+  await user.click(screen.getByRole("button", { name: "Start transfer" }));
+  await waitFor(() => expect(downloadImageArchiveOn).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Remove target", hidden: true }));
+  finishExport(new Blob(["archive"]));
+
+  await waitFor(() => expect(uploadImageArchiveOn).toHaveBeenCalledWith(target, expect.any(Blob)));
+  expect(await screen.findByText("Target A: Failed — target disappeared after selection")).toBeInTheDocument();
+});
+
+it("reports exporting and blocks cancellation until the source archive is ready", async () => {
+  const target = { id: "target-a", label: "Target A", baseURL: "https://a", state: "ready", token: "a-token" } as const;
+  let finishExport: (archive: Blob) => void = () => undefined;
+  downloadImageArchiveOn.mockImplementationOnce(() => new Promise<Blob>((resolve) => { finishExport = resolve; }));
+  uploadImageArchiveOn.mockResolvedValue({ import_id: "import-a", ref: "reviewer:v3", digest: "a" });
+  applyImageArchiveOn.mockImplementationOnce(() => new Promise<void>(() => undefined));
+  const user = userEvent.setup();
+
+  render(<ImageTransferDialog open onOpenChange={() => undefined} source={null} ref="reviewer:v3" daemons={[target]} onComplete={() => undefined} />);
+  await user.click(screen.getByRole("button", { name: "All servers" }));
+  await user.click(screen.getByRole("button", { name: "Start transfer" }));
+
+  expect(await screen.findByText("Target A: Exporting")).toBeInTheDocument();
+  expect(screen.getByText("Exporting source archive.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Clear all servers" })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: "Transfer to Target A" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Start transfer" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Cancel transfer" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+
+  finishExport(new Blob(["archive"]));
+  await waitFor(() => expect(screen.getByText("Target A: Importing")).toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "Cancel transfer" })).toBeEnabled();
 });
