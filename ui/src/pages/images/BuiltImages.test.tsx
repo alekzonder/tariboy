@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
+import { useLayoutEffect, useState } from "react";
 import { addDaemon, type DaemonMeta } from "@/lib/daemons";
 import { setActiveDaemon } from "@/lib/api";
 import * as imageTransferApi from "@/lib/teamApi";
@@ -23,8 +24,8 @@ afterEach(() => {
 
 it("starts transfer from the route source instead of the active daemon", async () => {
   const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
-  const target = { id: "target", label: "Target", baseURL: "https://target", state: "ready" } as const;
-  daemonContext.daemons = [{ ...source, state: "ready" }, target];
+  const target = await addDaemon({ label: "Target", baseURL: "https://target", token: "target-token" });
+  daemonContext.daemons = [{ ...source, state: "ready" }, { ...target, state: "ready" }];
   const activeTarget = { id: "active", label: "Active", baseURL: "https://active", token: "active-token" };
   setActiveDaemon(activeTarget);
   const download = vi.spyOn(imageTransferApi, "downloadImageArchiveOn").mockResolvedValue(new Blob(["archive"]));
@@ -45,7 +46,7 @@ it("starts transfer from the route source instead of the active daemon", async (
   await screen.findByRole("button", { name: "Upload to servers built:v1" });
   expect(screen.queryByRole("button", { name: /Upload to servers basic:latest/ })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Upload to servers built:v1" }));
-  fireEvent.click(screen.getByRole("button", { name: "All servers" }));
+  fireEvent.click(await screen.findByRole("button", { name: "All servers" }));
   fireEvent.click(screen.getByRole("button", { name: "Start transfer" }));
 
   await waitFor(() => expect(download).toHaveBeenCalledWith(
@@ -55,6 +56,48 @@ it("starts transfer from the route source instead of the active daemon", async (
   expect(download).not.toHaveBeenCalledWith(activeTarget, "built:v1");
 });
 
+it("does not invoke an upload action bound to the previous route host", async () => {
+  const sourceA = await addDaemon({ label: "Source A", baseURL: "https://source-a", token: "source-a-token" });
+  const sourceB = await addDaemon({ label: "Source B", baseURL: "https://source-b", token: "source-b-token" });
+  daemonContext.daemons = [
+    { ...sourceA, state: "ready" },
+    { ...sourceB, state: "ready" },
+    { id: "target", label: "Target", baseURL: "https://target", state: "ready" },
+  ];
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    if (String(input) === "https://source-a/api/images") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
+        { name: "built", tag: "v1", bare: false, exportable: true },
+      ] } }), { status: 200 }));
+    }
+    if (String(input) === "https://source-b/api/images") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [] } }), { status: 200 }));
+    }
+    return Promise.reject(new Error(`unexpected request ${String(input)}`));
+  }));
+
+  const RouteTransition = () => {
+    const [hostId, setHostId] = useState(sourceA.id);
+    useLayoutEffect(() => {
+      if (hostId === sourceB.id) {
+        const staleAction = screen.queryByRole("button", { name: "Upload to servers built:v1" });
+        if (staleAction) fireEvent.click(staleAction);
+      }
+    }, [hostId]);
+    return <>
+      <button onClick={() => setHostId(sourceB.id)}>Switch route</button>
+      <BuiltImages hostId={hostId} />
+    </>;
+  };
+
+  render(<MemoryRouter><RouteTransition /></MemoryRouter>);
+  await screen.findByRole("button", { name: "Upload to servers built:v1" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Switch route" }));
+
+  expect(screen.queryByRole("dialog", { name: "Transfer image built:v1" })).toBeNull();
+});
+
 it("exports runnable images and distinguishes original builds from imports", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: true, status: 200,
@@ -62,6 +105,7 @@ it("exports runnable images and distinguishes original builds from imports", asy
       { name: "built", tag: "v1", bare: false, exportable: true, source_cwd: "/srv/images/built" },
       { name: "imported", tag: "v1", bare: false, exportable: true, current_agents: ["reviewer"], pending_agents: ["worker"] },
       { name: "missing", tag: "v1", bare: false, exportable: true, source_cwd: "/srv/images/missing", source_available: false },
+      { name: "bare", tag: "latest", bare: true, exportable: true, source_cwd: "/srv/images/bare" },
     ] } }),
   } as Response));
   render(
@@ -81,6 +125,7 @@ it("exports runnable images and distinguishes original builds from imports", asy
   expect(screen.getByLabelText("Import image archive")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "built:v1" }))
     .toHaveAttribute("href", "/servers/local/images/built/v1");
+  expect(screen.queryByRole("button", { name: "Upload to servers bare:latest" })).toBeNull();
 });
 
 it("downloads the runnable bundle and confirms the saved portable filename", async () => {

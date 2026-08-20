@@ -30,8 +30,10 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [sourceTarget, setSourceTarget] = useState<Daemon | null>(null);
+  const [sourceHostId, setSourceHostId] = useState<string | null>(null);
   const [sourceResolved, setSourceResolved] = useState(false);
-  const [transfer, setTransfer] = useState<{ ref: string; sourceTarget: Daemon | null } | null>(null);
+  const [transferDaemons, setTransferDaemons] = useState<Daemon[]>([]);
+  const [transfer, setTransfer] = useState<{ ref: string; sourceTarget: Daemon | null; hostId: string } | null>(null);
   const [imageImport, setImageImport] = useState<{ id: string; ref: string; name: string; tag: string; target: ReturnType<typeof getActiveDaemon> } | null>(null);
   const mounted = useRef(true);
 
@@ -51,6 +53,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
           return;
         }
         setSourceTarget(target);
+        setSourceHostId(hostId);
         setSourceResolved(true);
       })
       .catch((err) => {
@@ -58,6 +61,17 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
       });
     return () => { alive = false; };
   }, [hostId]);
+
+  useEffect(() => {
+    let alive = true;
+    void Promise.all((daemonContext?.daemons ?? []).map(async (daemon) => {
+      const resolved = await resolveDaemon(daemon.id);
+      return resolved ? { ...resolved, ...daemon } : null;
+    })).then((daemons) => {
+      if (alive) setTransferDaemons(daemons.filter((daemon): daemon is Daemon => daemon !== null));
+    });
+    return () => { alive = false; };
+  }, [daemonContext?.daemons]);
 
   useEffect(() => {
     const refresh = () => setRevision((value) => value + 1);
@@ -80,6 +94,8 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
       });
     return () => { alive = false; };
   }, [revision, sourceResolved, sourceTarget]);
+
+  const sourceReady = sourceResolved && sourceHostId === hostId;
 
   const remove = async (ref: string) => {
     try {
@@ -186,9 +202,9 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                           aria-label={`Export ${ref}`} onClick={() => void saveArchive(ref)}>Export</Button>
                       </span>
                     )}
-                    {!image.bare && image.exportable && sourceResolved && (
+                    {!image.bare && image.exportable && sourceReady && (
                       <Button size="sm" variant="outline" aria-label={`Upload to servers ${ref}`}
-                        onClick={() => setTransfer({ ref, sourceTarget })}>Upload to servers</Button>
+                        onClick={() => setTransfer({ ref, sourceTarget, hostId })}>Upload to servers</Button>
                     )}
                     {!image.bare && (
                       <AlertDialog>
@@ -235,13 +251,13 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
         </tbody>
       </table>
       </div>
-      {transfer && (
+      {transfer && transfer.hostId === hostId && (
         <ImageTransferDialog
           open
           onOpenChange={(open) => { if (!open) setTransfer(null); }}
           source={transfer.sourceTarget}
           ref={transfer.ref}
-          daemons={daemonContext?.daemons ?? []}
+          daemons={transferDaemons}
           onComplete={() => { if (mounted.current) setRevision((value) => value + 1); }}
         />
       )}
