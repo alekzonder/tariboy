@@ -56,6 +56,9 @@ test("builds a transparent image from its original directory and assigns it to a
     return button instanceof HTMLButtonElement && !button.disabled;`)).toBe(true);
   await desktop.elementClick(await desktop.findElement("css selector", 'button[aria-label="Upload to servers transparent-e2e:latest"]'));
   await desktop.elementClick(await desktop.findElement("css selector", 'input[aria-label="Transfer to Desktop transfer target"]'));
+  await expect.poll(() => desktop.execute<boolean>(`const button = [...document.querySelectorAll("button")]
+    .find((candidate) => candidate.textContent?.trim() === "Start transfer");
+    return button instanceof HTMLButtonElement && !button.disabled;`)).toBe(true);
   await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Start transfer']"));
   await expect.poll(() => bodyText(desktop)).toContain("Desktop transfer target: Already present");
   await expect.poll(() => desktop.execute<string>("return window.location.hash;")).toBe(sourceImagesRoute);
