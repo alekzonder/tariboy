@@ -1,0 +1,159 @@
+---
+title: State model — the DB is the source of truth
+description: The SQLite DB is the single source of configuration; live state is computed, not stored, which is why test daemons must be isolated.
+sidebar:
+  label: State model
+  icon: database
+---
+
+The **SQLite DB is the single source of configuration.** There is no
+`config.json` per agent and no stored `state` column; an agent's **live state**
+(`running` / `idle` / `stopped` / `error`) is **computed** from the DB config
+plus what is actually running, not persisted.
+
+Reconciliation and reaping are therefore flag-independent: the daemon derives
+what *should* be running from the DB and converges to it.
+
+## Pricing and Usage snapshots
+
+Model-price state has three layers with distinct ownership. Operator-managed
+and LiteLLM-managed rows live in `ai_pricing`; built-in prices are runtime
+fallbacks rather than persisted manual overrides. The resolved in-memory map is
+derived with `manual` rows first, then `litellm` rows, then the built-in
+fallback. `model-prices-litellm.json` is a rebuildable cache of the external
+source, not a second editable configuration store. A valid cache is reconciled
+into the managed database rows during startup before its complete generation is
+published to the proxy.
+
+Each `ai_requests` row is historical evidence, not a projection of current
+configuration. The proxy calculates `cost_usd` once from one complete price
+generation and persists that value with mutually exclusive input, output,
+cache-write, and cache-read token buckets. Later price refreshes do not
+recalculate Usage or budget history.
+
+The same row stores nullable request-time `group_id` and `group_name` snapshots.
+Moving an agent, renaming or deleting a group, or changing current membership
+does not rewrite those columns. Rows created before snapshots existed remain
+null and appear as Ungrouped; reindexing an old transcript does not guess a
+group from current state. See [AI proxy and audit](/docs/architecture/ai-proxy#group-snapshots-and-usage)
+for the recording and filtering flow and [Images and groups](/docs/images-and-groups#historical-group-usage)
+for the operator-visible consequences.
+
+## Recorded halt reasons
+
+The loop can be turned off automatically as well as by hand: a stop policy
+(`on_error` or `on_timeout` set to `stop`) halts it after a failed or timed-out
+iteration, and the idle limit halts it after enough consecutive self-declared
+idle iterations. The reason is already persisted in two existing columns — a
+policy halt in `error_reason`, an idle stop as a `status_message` carrying the
+shared `idle_limit` prefix — so no new column and no migration stand behind it.
+A derived accessor computes a halt kind and reason from those two fields,
+because both can be populated at once; an error halt wins over an idle stop,
+being the more urgent explanation. All three agent read surfaces — `agent
+inspect`, the `agent ps` rows, and the agent status endpoint — report it as
+`halt_kind` (`error` or `idle_limit`) and `halt_reason`, and only when there is
+a reason: with none, both keys are omitted entirely rather than emitted empty.
+An agent-authored status line is never reported as a halt reason, since only
+the idle prefix qualifies.
+
+## Native task state
+
+Task queues, the unlimited parent tree, comments, waits, relations, events,
+notification outbox, customer notification state, and mutation idempotency
+records are normalized tables in the same `tariboyd.db`. Task keys include
+their queue prefix (`TEST-1`) and never change when a task moves. Recursive
+CTEs derive descendants, inherited access, blocking cycles, and active
+descendants without a configured depth limit.
+
+Priority is persisted as a constrained `P0` through `P3` value and defaults to
+`P2`. Every root or nested sibling set has canonical order `(priority,
+position, task key)`. Manual positions are normalized within a priority bucket,
+so reparenting preserves priority without disturbing other buckets.
+
+Every task mutation, its event, and any notification intent commit in one
+SQLite transaction. The channel publisher runs afterward from the durable
+outbox with a stable message idempotency key. The WebSocket is only a delivery
+optimization: `task_events.sequence` is the resume authority and HTTP queries
+remain authoritative. See [Native Tasks](/docs/tasks).
+
+Managed queues add normalized workflow definitions/bindings/pools, immutable
+status and requirement executions, assignment attempts and leases, artifacts,
+questions/holds, subscriptions/observations, idempotency rows, and a workflow
+outbox. A task snapshots the active published version at creation; later queue
+activation or pool rebinding cannot rewrite its history. Startup reconciles
+expired leases, question deadlines, pending workflow outbox rows, and the
+persisted bus-ingress cursor. See [Configurable task workflows](/docs/task-workflows).
+
+## Image assignment state
+
+Each agent row owns an active image ref/digest and a separate pending
+ref/digest/error. Selecting another image changes only the pending fields. The
+iteration launch gate validates and stages that artifact, reconciles image
+capabilities, and promotes active plus pending state in one guarded transaction.
+Every new iteration snapshots its image ref, digest, and prompt-template hash,
+so later switches cannot rewrite historical execution identity.
+
+The agent row remains authoritative during crash recovery. An incomplete local
+image swap is either rolled back to the DB-active backup or completed when the
+already-promoted image digest matches the row. Each unpacked image carries a
+daemon-owned digest marker, so two generations of a managed ref such as
+`basic:latest` cannot be confused. Managed archive generations are retained by
+digest so active and pending assignments survive a daemon upgrade. Harness,
+model, effort, environment,
+CWD, context, workdir, messages, history, group, and subscriptions are not image
+assignment fields.
+
+## Restart handoff
+
+A running iteration is owned by `tariboy-shim`, not by the lifetime of the
+daemon process. During a graceful daemon restart, cancellation detaches the old
+engine observer without changing the durable iteration row from `running`.
+Before any of that, the replacement daemon repoints every stored agent's bin
+shims at its own `tariboy-tools` (see
+[Agent bin shims](/docs/architecture#agent-bin-shims)), so an adopted or
+newly-started agent never calls the client of the release that provisioned it.
+The replacement daemon enumerates live shim sockets before starting loop
+engines, adopts each matching iteration, and finalizes the existing row when
+`result.json` appears. It never launches a duplicate shim while adoption is in
+progress.
+
+Pending adoptions are also registered as current live iterations inside the
+replacement manager. Terminal attach, resize, input, screen, and Kill RPCs
+therefore continue to reach the original shim before the normal loop engine is
+created. Start remains idempotent during this window, direct Exec cannot bypass
+the adoption barrier, and post-adoption startup reloads the current persisted
+Enabled value instead of using a pre-restart snapshot. Restart records one
+replacement interactive-run intent until handoff completes, even when
+Autopilot is disabled; the engine consumes that intent through a launch gate
+shared with Stop, so a later Stop can cancel work that has not started. The gate
+is acquired after external tmux checks and covers the durable launch or
+manual-collision outcome. If Stop then races detached process creation, the
+runner uses bounded cooperative shim Kill so the shim stops its owned harness
+process group or tmux session. An unreachable interactive shim receives an
+explicit tmux kill. The final managed fallback signals the spawned shim to
+force-kill its separately owned non-interactive harness group, then escalates
+against the outer shim group after a short bound. This cleanup is skipped when
+the row is still `running` for daemon handoff. Shim connections are acquired
+under the handoff lock with a finite dial timeout, preventing a pending control
+operation from crossing into a replacement iteration when the stable socket
+pathname is reused without allowing a wedged listener to block lifecycle
+operations indefinitely.
+
+The durable completion flag follows the same lifecycle on both sides of a
+restart. Once an adopted iteration calls `i-am-done`, the replacement manager
+allows the harness a two-second grace period to exit naturally, then sends the
+shim exactly one cooperative Kill request if no `result.json` has appeared.
+The shim writes the result and adoption finalizes the original row, preserving
+the productive or `--idle` declaration recorded with the completion flag.
+
+The AI-proxy endpoint and active per-iteration leases are carried through the
+same restart, so harness retries reconnect after the short listener outage.
+If the old shim is no longer reachable, adoption is the component that
+terminally classifies the stale row as `harness_error`.
+
+:::danger[This is why test daemons must be isolated]
+Two daemons pointed at the same base dir share the same DB and loop managers and
+will double-run each other's agents — double-executed iterations and reaped
+sessions. Always isolate a test daemon with its own base dir, runtime dir, and
+the web UI disabled. See [Development → Isolation](/docs/development#isolation).
+:::

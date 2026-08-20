@@ -1,0 +1,157 @@
+---
+title: Agents & the iteration loop
+description: An agent runs a series of supervised iterations, driven by a timer or by messages, on top of a whoami / loop / channels core.
+sidebar:
+  label: Iteration loop
+  icon: repeat
+---
+
+An **agent** is a configured, named instance of an image with its own working
+directory and its own loop. It does not run continuously — it runs a series of
+**iterations**. On each iteration the daemon:
+
+1. prepares a prompt — schema v2 renders static image layers and current runtime
+   placeholders in their declared order; schema v1 keeps its historical
+   assembly behavior;
+2. launches the harness (e.g. Claude) under the [shim](/docs/architecture/shim)
+   for exactly one pass;
+3. records the outcome, iteration logs, AI usage, and audit timeline.
+
+## What drives the loop
+
+The loop is driven two ways, both requiring the loop to be **enabled**:
+
+- **Timer** — `interval_s`: wake every N seconds.
+- **Message** — a publish that matches one of the agent's subscriptions nudges
+  the loop to start an iteration now (only if pending deliveries exist).
+
+For a workflow assignment, the wake is only scheduling. The running iteration
+must atomically claim work with `tasks work next`; the returned lease-bound work
+packet is the execution authority. Assignment completion or an allowed
+observation reaction advances durable workflow state, not receipt of the wake.
+
+Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
+`on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
+completion, exits, or reaches an enforced deadline.
+
+## Harness environment and preflight
+
+The daemon's own environment is the baseline every iteration starts from, so
+agents see what the account sees. Desktop starts the daemon inside the account's
+login shell, which supplies that environment directly; a daemon started without a
+usable shell instead resolves the account's `PATH` once, before loop startup,
+from a bounded interactive-login-shell probe. Per-iteration construction begins
+with that daemon environment, applies harness-required values, then explicit
+agent environment and secrets. An explicit agent `PATH` is therefore an
+intentional override. Non-bare images prepend the agent bin directory after the
+override; bare images omit that prefix and otherwise keep the daemon baseline.
+
+Before starting the shim, the runner checks the adapter's actual executable
+against this final environment. A missing or non-executable harness fails
+preparation through the normal `harness_error` path with the executable name,
+without including environment values, prompts, secrets, working directories,
+or user files. This preflight improves the diagnosis but cannot remove the
+normal race in which an executable disappears before process launch.
+
+For a schema-v2 image with skills, the launch gate prepares
+`agents/<agent>/image-bridges/<image-digest>/<adapter-contract>/<harness>` before
+an image is promoted or an iteration row is created. The bridge contains copied
+skill bytes and generated adapter metadata; it never links back to the image or
+source tree. Publication is owner-only and atomic. The current adapter contract
+version is `2`. A complete bridge is reused across iterations and daemon
+restarts, while an incomplete or modified cache is rebuilt. A preparation or
+harness-support failure leaves the previous image active and records the
+pending-image error.
+
+The adapters attach the bridge additively:
+
+| Harness | Projection |
+| --- | --- |
+| Claude Code | `--plugin-dir <absolute bridge>` |
+| Codex CLI | At-most-8,000-character prompt catalog with absolute bridge `SKILL.md` paths |
+| OpenCode | `OPENCODE_CONFIG_DIR=<absolute bridge>` with an absolute `skills.paths` entry |
+
+Claude Code requires version `2.1.227` or newer. OpenCode is capability-probed
+with `opencode debug config`; its effective configuration must report the
+generated absolute skill path. Codex needs no image-skill version probe and no
+plugin installation: Tariboy prepends escaped name, description, and path
+metadata to the shared prompt file, and Codex reads the selected skill on
+demand. Tariboy does not change CWD, `HOME`, or `CODEX_HOME`, and it does not
+disable normal global or CWD discovery. Schema-v1 images retain their legacy
+CWD-relative skill materialization.
+
+Harness adapters select their native execution mode from the persisted
+`interactive` setting. Batch Codex iterations use `codex exec --json` with
+stdin disconnected so the loop receives machine-readable output and cannot
+wait for terminal input. Interactive Codex iterations instead launch the
+top-level Codex TUI with the assembled prompt and an open terminal. Both modes
+consume the same catalog-prefixed prompt; Codex image skills do not appear in
+native `/skills`, `$` completion, or plugin inventory. Claude
+similarly omits its print-mode flags. Model, effective environment, working
+directory, and AI-proxy routing still apply in both modes.
+
+While a timed iteration is running, Agent Overview shows its deadline and can
+extend it by one configured soft-timeout period. Each extension is persisted
+before the watchdog is updated, so a daemon restart can adopt the running
+iteration with the same deadline and extension count. Extensions are unavailable
+after the timeout starts firing or for agents with no soft timeout.
+
+Agents signal completion with `tools loop done` (surfaced as `i-am-done`).
+
+When a schema-v2 template declares `runtime: workdir`, preparation resolves the
+agent's managed `agents/<agent>/workdir` to an absolute path and renders it
+separately from the effective CWD in `runtime: identity`. The two paths are the
+same for a default-CWD agent and differ when the operator configured an
+external repository CWD. Rendering the path grants no new filesystem access;
+the harness already runs with the daemon account's permissions.
+
+:::note
+Loop policy is set with the `tariboy loop …` subcommands — `enable`,
+`disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error`. See
+[the command reference](/docs/reference/commands#operator-commands).
+:::
+
+## Image capabilities
+
+Schema-v2 agents receive exactly the plugins declared by their image, including
+an empty list. No core union is implicit. The familiar built-in capabilities
+are:
+
+- **whoami** — identity: which agent, image, cwd, and current iteration.
+- **loop** — iteration control: signal done, start/stop the loop.
+- **messages** — publish to and receive from channels.
+
+During a managed workflow iteration, the active work packet narrows this core:
+direct send/reply/group coordination and raw channel management are denied by
+default. Workflow-defined tools may be allowed explicitly; dynamic observation
+subscriptions use `tasks observe` and must match the packet's channel policy.
+
+On top of the core, an image opts into **optional capabilities**:
+
+- `context` — durable working memory,
+- `status` — a one-line "what I'm doing",
+- `schedule`, `scripts`, `current-task`, `tasks`,
+- `image-creator`, `llm-as-judge`, and any validated, explicitly
+  installed external plugin capability.
+
+The built-in `workdir` plugin is instruction-only rather than a capability. It
+adds no tool or shim; a schema-v2 image explicitly composes its Store prompt and
+`runtime: workdir` marker. See [workdir](/docs/plugins/built-in/workdir).
+
+See [Built-in plugins](/docs/plugins/built-in) for the complete capability,
+command, prompt, and persistence reference.
+
+Capabilities gate tools and shims, but do not contribute prompt text
+automatically. Every static instruction is an explicit `prompts` file entry.
+Schema-v1 images retain the historical core union and fragment behavior.
+
+Before each iteration's prompt or message preparation, the launch gate checks
+for a pending image assignment. It stages and validates the new artifact,
+prepares and verifies any native skill bridge, reconciles image-owned shims,
+atomically promotes the DB assignment, and records
+the iteration's image ref, digest, and template hash. A running iteration is
+never interrupted. Backup and staging markers make an interrupted swap
+recoverable without changing durable agent state.
+Recovery compares the pinned digest, not only the ref. For daemon-managed refs,
+both inspection and staging resolve the exact retained digest recorded on the
+agent, including assignments that were pending when the daemon was upgraded.

@@ -1,0 +1,20 @@
+{
+  "artifacts": {
+    "markdown": {
+      "contentNegotiation": "text/markdown",
+      "pattern": "https://alekzonder.github.io/tariboy/{route}.md"
+    },
+    "llmsFullTxt": "https://alekzonder.github.io/tariboy/llms-full.txt",
+    "llmsTxt": "https://alekzonder.github.io/tariboy/llms.txt",
+    "sitemap": "https://alekzonder.github.io/tariboy/sitemap.xml"
+  },
+  "description": "The control plane for autonomous coding agents — desktop workflows, operations, architecture, and reference.",
+  "generator": "blume@1.0.4",
+  "name": "Tariboy",
+  "site": "https://alekzonder.github.io",
+  "contentUsage": {
+    "search": true,
+    "ai-input": true,
+    "ai-train": true
+  }
+}

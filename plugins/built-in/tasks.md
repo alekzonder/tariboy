@@ -1,0 +1,103 @@
+---
+title: tasks
+description: Use identity-bound Native Tasks and leased workflow assignments through the bare tasks command.
+sidebar:
+  label: tasks
+  icon: list-tree
+---
+
+`tasks` exposes Tariboy's daemon-owned Native Tasks service to an agent. It is
+optional and is included in `basic:latest`. Native Tasks live in Tariboy's
+SQLite database.
+
+## Command and identity boundary
+
+When the capability is active, provisioning writes a bare `tasks` shim into the
+agent's bin directory. It invokes the version-pinned `tariboy-tools tasks`
+client over the per-agent socket. Removing the capability removes the shim.
+
+Every mutation derives its author or actor from that socket. Request fields
+that could forge an author, customer, principal identity, or iteration are
+discarded before the task action is dispatched.
+
+## Flexible Native Tasks
+
+Agents can inspect, create, organize, delegate, discuss, and complete visible
+work:
+
+```bash
+tasks mine
+tasks ready --queue OPS --claim
+tasks show OPS-12
+tasks create --parent OPS-12 --title "Add regression coverage"
+tasks assign OPS-12 worker
+tasks comment OPS-12 "The failing boundary is confirmed"
+tasks ask OPS-12 user:login "Which behavior should win?"
+tasks update OPS-12 --status in_progress --priority P1
+tasks done OPS-12
+```
+
+The same surface includes same-queue move/reorder operations, directed blocking
+relations, symmetric related links, and explicit completion despite active
+descendants. Access follows task assignment, authorship rules, queue ownership,
+group membership, ancestry, and scoped answer requests.
+
+## Workflow-managed Tasks
+
+When a queue has a published workflow, agents do not use the flexible
+ready/claim path. They claim leased assignments and operate on least-context
+work packets:
+
+```bash
+tasks work next --queue OPS --idempotency-key claim-ops
+tasks work show <assignment-id>
+tasks artifacts add <assignment-id> --name report --type text --content "..."
+tasks ask <assignment-id> \
+  --question "Which region?" \
+  --context "Required to continue" \
+  --blocking-scope assignment
+tasks observe subscribe <assignment-id> 'deploy:*' --reaction wake_current
+tasks work complete <assignment-id> --outcome approved
+```
+
+The packet declares allowed actions, tools, outcomes, artifacts, and channel
+patterns. Mutations require the current revisions and stable idempotency keys.
+Direct channel subscriptions are replaced by `tasks observe`, and undeclared
+message or group tools are denied.
+
+## Durable state and notifications
+
+Queues, nested tasks, comments, priorities, dependencies, answer waits,
+workflow versions, executions, assignments, leases, artifacts, questions,
+holds, observations, and subscriptions are durable daemon state. Assignment,
+question, answer, and triage events use a transactional outbox and the normal
+messages bus, so notifications survive restarts and can wake enabled agents.
+
+## Prompt integration
+
+```yaml Tariboyfile.yaml
+plugins:
+  - name: tasks
+prompts:
+  - file: $CURRENT_VERSION_STORE/skills/tasks/prompt.md
+```
+
+The Store prompt teaches both flexible and workflow-managed operation. There is
+no general Tasks runtime marker: ordinary work is queried through `tasks`, and
+a managed assignment supplies its work packet through the workflow launch
+path.
+
+## Failure behavior
+
+The capability gate returns `plugin_disabled` when inactive. Domain validation
+then distinguishes inaccessible tasks, revision conflicts, invalid transitions,
+dependency cycles, active descendants, expired leases, undeclared outcomes,
+and workflow policy violations. Unknown client flags fail locally with exit `2`
+before any request reaches the daemon.
+
+## Related reference
+
+- [Native Tasks](/docs/tasks)
+- [Configurable task workflows](/docs/task-workflows)
+- [Command reference: Native Tasks](/docs/reference/commands#native-tasks-tasks-)
+- [Agent tools](/docs/binaries/agent-tools)

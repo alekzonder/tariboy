@@ -1,0 +1,96 @@
+---
+title: tariboy-tools (agent-facing)
+description: Run inside an agent, surfaced as `tools …` — identity, status, loop control, context, messaging, schedules, and durable scripts.
+sidebar:
+  label: Agent tools
+  icon: wrench
+---
+
+Run **inside** an agent (`cmd/tariboy-tools`, `internal/toolscli`); talks to
+the per-agent socket `$TARIBOY_TOOLS_SOCKET`, surfaced to agents as `tools …`.
+
+| Tool | Purpose |
+| --- | --- |
+| `tools whoami` | agent, cwd, current iteration |
+| `tools status [set …]` | read / set the one-line status |
+| `tools loop done` | finish this iteration (`i-am-done`) |
+| `tools context get` / `set <text>` | read / overwrite durable working memory |
+| `tools task current KEY` / `--clear` | attribute AI usage to a native task and its top-level root |
+| `tools message send --channel C …` | publish to a channel |
+| `tools message ls` / `processed` / `reply` | inbox handling |
+| `tools channel subscribe`/`unsubscribe`/`ls`, `tools sources` | manage subscriptions |
+| `tools schedule add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
+| `tools script run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
+| `tools group info`/`status`/`send`/`request`/`loop` | group coordination |
+
+Agents whose image contains `plugins: [{name: tasks}]` also get the bare
+`tasks` command. It reaches native `tariboyd.db` Tasks through a
+capability-gated, identity-bound socket adapter; task/comment authorship is
+always the current agent. See [Native Tasks](/docs/tasks) for the command flow.
+
+In a workflow-managed queue, `tasks work next` returns a leased work packet;
+`tasks artifacts`, workflow-form `tasks ask`/`answer`, `tasks observe`, and
+`tasks work complete` are the only execution path. The active packet also makes
+ordinary direct messaging/group/channel tools deny-by-default, except for tools
+explicitly declared by the pinned workflow. See
+[Configurable task workflows](/docs/task-workflows#agent-tools-and-security-boundary).
+
+Task priority is one of `P0` (Critical), `P1` (High), `P2` (Normal), or `P3`
+(Low). New tasks default to `P2`; set or change it explicitly with:
+
+```bash
+tasks create --queue OPS --title "Restore service" --priority P0
+tasks update OPS-12 --priority P1
+```
+
+`tasks show`, list commands, and `--json` output include `priority`. Roots and
+nested siblings are returned in priority order (`P0` through `P3`), then by
+their manual position within the same priority bucket.
+
+`tools task current KEY` validates `KEY` through that identity-bound Native
+Tasks service. It records the selected key as `task_id` and follows `parent_key`
+to record the top-level root as `epic_id`; for a root task both values are the
+same. Unknown or inaccessible keys fail without changing existing attribution.
+
+## Unknown flags are rejected
+
+A flag that no command branch reads is a hard error: the CLI prints
+`unknown flag … (tariboy-tools X does not know it)` and exits `2`. The check
+runs after the request is built but before it is sent, so nothing reaches the
+daemon. Older builds dropped an unread flag silently and exited `0`, which is how
+`tasks update --priority` could look like it worked while changing nothing.
+
+`tools script run` and `tools script schedule` have a `--` separator: flags are parsed up to it, and
+everything after it is taken verbatim for the local command — that is why
+`-- curl --silent URL` hands `--silent` to `curl`. No other command has one, so
+elsewhere an argument that starts with `--` cannot be passed through: it is
+always read as a flag, and the token after it as its value. Use the
+`--flag=--value` form there, which keeps the value inside a single token.
+
+## Durable scripts
+
+Scripts run shell commands in the agent's workdir without blocking its current
+iteration. Queue one run, or create a fixed-delay recurring definition:
+
+```bash
+tools script run health --description "Check service health" -- curl -fsS http://localhost:8080/health
+tools script schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
+tools script ls
+tools script runs scr-agent-...
+tools script logs srun-agent-...
+tools script rerun scr-agent-...
+tools script cancel scr-agent-...       # definition, including its active run
+tools script cancel srun-agent-...      # this run only
+tools script rm scr-agent-...
+```
+
+Each run's combined stdout and stderr is kept in its own agent scripts log. Exit
+`0` records success; every nonzero exit, including `2`, records failure. Both
+deliver `script.result` by default so the next iteration can act. The message
+carries script/run IDs, name, mode, status, optional exit code, and the absolute
+`log_path`, without embedding stdout or stderr. Read that file when the result
+details are needed.
+
+Only an explicit recurring `--quiet-exit CODE` suppresses a matching result.
+The run and log remain visible. Recurring runs start once immediately, wait the
+configured delay after completion, and never overlap.

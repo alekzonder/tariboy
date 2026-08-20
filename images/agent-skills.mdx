@@ -1,0 +1,255 @@
+---
+title: Agent Skills in images
+description: Package validated Agent Skills in schema-v2 images and expose them through Claude Code, Codex, or OpenCode.
+sidebar:
+  label: Agent Skills
+  icon: package-check
+---
+
+Schema-v2 images can carry Agent Skills as immutable, portable directories.
+Tariboy validates each declared directory at build time, records its metadata
+and content hash in the image, and exposes it through a harness-specific bridge
+when an iteration starts. Claude Code and OpenCode use native discovery;
+Codex uses progressive disclosure from a compact prompt catalog.
+
+## Scope
+
+Packaged Agent Skills are independent from both plugins and prompt entries:
+
+| Image declaration | Purpose |
+| --- | --- |
+| `skills: [{dir: ...}]` | Package a native Agent Skill directory |
+| `plugins: [{name: ...}]` | Enable a built-in or installed plugin name |
+| `prompts: [{file: ...}, {runtime: ...}]` | Define the exact iteration prompt order |
+
+One declaration never implies another. In particular, a directory under an
+external plugin's `skills` tree is packaged only when the image lists that
+directory explicitly under `skills`.
+
+## Declare skills
+
+Each entry is an object with one `dir` field. String entries and additional
+fields are invalid.
+
+```yaml Tariboyfile.yaml
+schema_version: 2
+plugins: []
+skills:
+  - dir: ./skills/code-review
+  - dir: $PLUGINS/jira/2.5.0/skills/triage
+prompts: []
+```
+
+A source-relative skill can use this layout:
+
+```text
+reviewer-image/
+├── Tariboyfile.yaml
+└── skills/
+    └── code-review/
+        ├── SKILL.md
+        ├── references/
+        │   └── checklist.md
+        └── scripts/
+            └── check.sh
+```
+
+Validate before building:
+
+```bash
+tariboy image validate --path ./reviewer-image --name reviewer --tag v1
+tariboy image build --path ./reviewer-image --name reviewer --tag v1
+```
+
+Validation is read-only. The result and the built image's **Skills** tab show
+the packaged skill metadata.
+
+## Source paths
+
+Skill directories use the same five explicit source forms as static prompt
+files:
+
+| Form | Resolves from |
+| --- | --- |
+| `$STORE/...` | The common Store root across installed Tariboy versions |
+| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
+| `$PLUGINS/...` | The common external-plugin root |
+| `./...` | The directory containing `Tariboyfile.yaml` |
+| `/absolute/path/...` | An operator-supplied absolute Unix path |
+
+Only the literal variables in this table are expanded. Tariboy does not apply
+shell or general environment-variable expansion. Validation warns that an
+absolute source makes the original build host-bound. Agent-authored image
+builds further confine source and absolute references to that agent's managed
+workdir.
+
+## `SKILL.md` contract
+
+The skill root must contain a regular `SKILL.md` that starts with one YAML
+frontmatter document:
+
+```markdown SKILL.md
+---
+name: code-review
+description: Review changes safely when asked for code review.
+license: Apache-2.0
+compatibility: Requires git.
+metadata:
+  author: example-org
+  version: "1.0"
+allowed-tools: Bash(git:*) Read
+---
+
+# Code review
+
+Inspect the complete diff and report findings by severity.
+```
+
+`name` and `description` are required. `license`, `compatibility`,
+`allowed-tools`, and string-to-string `metadata` are optional. Unknown fields,
+YAML anchors or aliases, and multiple YAML documents are rejected.
+
+The name must:
+
+- match the skill directory basename;
+- contain at most 64 characters;
+- use lowercase letters and digits separated by single hyphens;
+- be unique within the image.
+
+The description must contain 1–1,024 characters. When present,
+`compatibility` must contain 1–500 characters.
+
+## Build validation
+
+Tariboy opens the skill tree without following links and verifies that it does
+not change while being read. Only directories and regular files are accepted.
+Symlinks, hardlinks, sockets, devices, FIFOs, and other special members are
+rejected.
+
+| Limit | Maximum |
+| --- | ---: |
+| Skills per image | 128 |
+| Files per skill | 1,024 |
+| One file | 8 MiB |
+| One complete skill | 32 MiB |
+| All skills in one image | 128 MiB |
+
+Files are archived in deterministic path order under `skills/<name>/...`.
+Non-executable files are normalized to mode `0600`; files whose source owner
+execute bit is set are normalized to `0700`. Directories use `0700`.
+
+## Manifest and portability
+
+The image manifest and **Skills** tab expose these fields in declaration order:
+
+| Field | Meaning |
+| --- | --- |
+| `name`, `description` | Validated `SKILL.md` identity |
+| `source`, `category` | Original declaration and resolved source class |
+| `archive_root` | Canonical `skills/<name>` location in the image |
+| `file_count`, `size` | Validated aggregate contents |
+| `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |
+
+Skill paths, normalized modes, bytes, hashes, metadata, and manifest records
+contribute to the immutable image digest. Runnable image export includes the
+canonical skill trees and import revalidates their members and metadata before
+installation.
+
+An exported runnable image is not an editable source backup. Keep the original
+directory and its referenced paths when the image must be rebuilt.
+
+## Runtime delivery
+
+For a schema-v2 image with packaged skills, iteration activation follows this
+flow:
+
+```text
+immutable image skill tree
+        ↓
+digest-keyed per-agent bridge
+        ↓
+harness-specific launch metadata
+        ↓
+skill discovery during the iteration
+```
+
+The bridge is rebuildable runtime data keyed by image digest, adapter contract,
+and harness. A valid published bridge is reused across iterations and daemon
+restart rather than rewritten.
+
+### Harness behavior
+
+| Harness | How the image skills are exposed | Support check |
+| --- | --- | --- |
+| Claude Code | Generated local plugin passed with `--plugin-dir` | Version `2.1.227` or newer |
+| Codex | Bounded prompt catalog containing each name, description, and absolute bridge `SKILL.md` path | No skill-specific version probe |
+| OpenCode | Isolated config overlay whose `skills.paths` names the bridge | `opencode debug config` must expose that path |
+
+The generated integration is additive. It does not disable normal global or
+CWD skill discovery, and it does not change the agent's effective CWD.
+
+### Codex catalog limits
+
+Tariboy prepends the same catalog to the prompt used by batch `codex exec` and
+the interactive Codex TUI. The catalog is launch metadata rather than an image
+prompt layer, so it does not change the immutable prompt-template hash. The
+iteration prompt hash covers the final rendered catalog and prompt.
+
+The catalog contains no `SKILL.md` body, reference, asset, or script bytes.
+Metadata is escaped so a line break or Markdown delimiter cannot create another
+catalog entry. The result is capped at 8,000 Unicode characters. Tariboy first
+shortens descriptions while retaining every skill name and path. If the fixed
+names and paths still do not fit, it retains entries in image declaration order
+and reports the exact number omitted.
+
+Codex image skills do not appear in native `/skills`, `$` completion, or plugin
+inventory. Tariboy does not install a plugin or write Codex profile state.
+Codex reads the exact absolute `SKILL.md` path from the catalog only when a
+request matches its description.
+
+## Discovery and duplicate names
+
+An image may package a skill whose name is also discoverable through a
+harness's global or CWD scope. Validation emits a warning when it can detect a
+duplicate in those scopes, but the build remains valid. At runtime, the
+harness's native precedence rules decide which same-named skill wins for
+Claude Code and OpenCode. Codex retains its native precedence for native
+scopes, while the image catalog identifies its copy by exact absolute path.
+
+Use unique names when the image must provide an unambiguous implementation.
+Tariboy guarantees uniqueness only among the skills explicitly packaged in one
+image.
+
+## Activation failures and recovery
+
+Before activating an assigned schema-v2 image, Tariboy builds or validates its
+bridge and performs any adapter-required support probe. An unsupported Claude
+Code version, an unsupported OpenCode capability, invalid bridge metadata, or a
+bridge publication failure blocks activation. Codex needs no skill-specific
+probe; the normal iteration preflight still reports a missing Codex executable
+before launch.
+
+For a pending image assignment, failure leaves the current image and its bytes
+active. Tariboy records a retryable pending error; the operator can correct the
+harness or image and retry, replace the pending selection, or cancel it. A
+running iteration is never interrupted to activate a pending image.
+
+## Security boundaries
+
+Schema-v2 skill delivery does not copy generated `.claude`, `.agents`,
+`.codex`, or `.opencode` trees into the configured CWD. The bridge is confined
+to the managed agent tree, rejects linked or unexpected members, and validates
+every published file against its manifest.
+
+The bridge may add only adapter-owned launch arguments, environment entries, or
+the bounded Codex prompt prefix. It cannot override `HOME`, `CODEX_HOME`, or
+`XDG_CONFIG_HOME`, and packaging a skill grants no new filesystem permission.
+
+## Related reference
+
+- [Images](/docs/images) — complete schema, prompt ordering, assignment, and
+  import/export behavior.
+- [Plugins](/docs/plugins) — built-in and external plugin behavior and its
+  separation from Agent Skills.
+- [Images & groups](/docs/images-and-groups) — image and team portability at a
+  glance.

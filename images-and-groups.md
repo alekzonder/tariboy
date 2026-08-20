@@ -1,0 +1,95 @@
+---
+title: Images & groups
+description: Reproducible agent images, custom groups, and portable team transfers.
+sidebar:
+  label: Images & groups
+  icon: boxes
+---
+
+## Images
+
+An **image** is an immutable plugin list, optional packaged Agent Skills, and
+an exactly ordered prompt template, built from an original directory containing
+`Tariboyfile.yaml`.
+Schema v2 does not contain runtime defaults or inherit another image. Static
+prompt files are embedded during build; dynamic values remain ordered runtime
+placeholders. Packaged skills travel with runnable image export/import and are
+projected through harness-specific integration at iteration launch: native
+configuration for Claude Code and OpenCode, and a compact prompt catalog of
+absolute `SKILL.md` paths for Codex.
+See [Images](/docs/images) for the complete schema and path roots.
+
+The daemon provides two reserved images:
+
+- **basic** — the daemon-provided general-purpose default (context, status,
+  managed-workdir instructions, scripts, current-task, and native Tasks). It
+  deliberately excludes all external provider integrations. Every
+  packaged daemon installs or refreshes `basic:latest` when its version is
+  activated.
+- **bare** — an empty schema-v2 plugin/prompt artifact whose terminal-only
+  behavior is runtime policy.
+
+## Groups
+
+A **group** ties agents together with a designated **lead**. Groups
+auto-provision channels and subscriptions: every member subscribes to
+`group:<g>:broadcast` and to its own `agent:<member>:inbox`; the lead also
+subscribes to `group:<g>:inbox`. Group members can share a working directory.
+Native Tasks stays daemon-owned and applies live group membership when checking
+task visibility.
+
+## Historical group Usage
+
+Group membership for AI Usage is intentionally historical rather than live.
+Every new proxied request stores the agent's group identifier and display name
+at request time. Moving an agent to another group, renaming a group, or deleting
+it does not relabel earlier costs. Requests recorded without a snapshot,
+including older rows, appear as **Ungrouped** instead of inheriting current
+membership.
+
+Open a server's **Settings → Advanced → Usage** screen to filter all Usage
+projections by **All groups**, **Ungrouped**, or a current group. The selection
+applies together to summary totals, daily series, aggregate rows, and recent
+requests. Saved names for deleted groups remain visible in historical rows,
+but deleted groups are not added back to the selector. Agent-level Usage stays
+available on the ordinary agent workspace and has no group selector. See [AI
+proxy and audit](/docs/architecture/ai-proxy#group-snapshots-and-usage) for the
+snapshot and query model.
+
+## Team lifecycle and portability
+
+Desktop presents grouped agents under **Teams** separately from **Individual
+agents**. Each member is still an ordinary agent and has the same lifecycle,
+terminal, configuration, and task controls. A custom team may contain any
+number of differently configured images; members can be assigned or removed at
+any time without deleting the underlying agent. Teams can be renamed and their
+lead changed in **Advanced → Groups**.
+
+The creation wizard creates custom teams directly. Each member independently
+selects its name, image, harness, model, effort, cwd, interactive mode,
+Autopilot setting, environment, and external plugins.
+
+**Copy YAML** emits `tariboy-compose.yaml` for text-only transfer. **Import
+YAML** recreates the group and agents when referenced images already exist.
+The portable team archive is likewise compose-only: it contains team/runtime
+compose configuration, no `images:` build contexts, source trees, or runnable
+image bytes. Transfer each runnable image separately through **Images →
+Export/Import**. Keep original image directories and their paths when the
+destination must rebuild rather than import an already built artifact. Team
+import progress remains persisted per agent and stays pinned to the host on
+which preview began.
+
+For automation, the operator CLI can create the same archive without a running
+daemon:
+
+```bash
+tariboy compose archive -f ./tariboy-compose.yaml --output ./team.tar.gz
+```
+
+The compose file must declare one group. Archive creation strips its `images:`
+build section and serializes only the compose configuration needed to recreate
+the team and agents. Import through a running daemon with `tariboy compose
+import --archive ./team.tar.gz`; it prints the preview and asks for
+confirmation. Use `--yes` in non-interactive automation only after reviewing
+the archive, ensuring every referenced runnable image exists on the destination,
+and checking the destination settings.

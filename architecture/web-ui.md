@@ -1,0 +1,359 @@
+---
+title: Desktop web UI
+description: React and xterm.js provide the Desktop control surface while host-local daemons remain API and WebSocket services.
+sidebar:
+  label: Web UI
+  icon: monitor
+---
+
+The main UI is a React single-page application under `ui/src`, loaded by the
+Tauri host in `desktop/src-tauri`. It talks to a selected local or remote
+`tariboyd` over HTTP and WebSocket. Daemons expose API/WS only and do not
+embed or serve the Desktop UI.
+
+`npm run build:desktop` writes the SPA to ignored `desktop/dist`. `make desktop`
+always rebuilds it before Tauri packaging, so this output must never be staged.
+The separate store UI builds from `ui/store` into committed
+`internal/storeui/dist` and is served only by
+[`tariboy-store`](/docs/binaries/store).
+
+Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
+small W3C WebDriver client through `tauri-driver` to a real debug Tauri/WebKit
+executable. The harness uses fresh owner-only daemon and Desktop state, rejects
+the live listener, and owns all driver/display cleanup. This complements the
+fast browser fixtures; it does not replace them and does not build Linux package
+artifacts.
+
+Tauri creates one visible main window and opens the SPA directly. Daemon
+adoption/start and saved-host reconnect continue independently in the
+background, so their existing status banners may be visible during startup.
+Dock reopen and the menu-bar Open action raise the same main window.
+
+The primary **New agent** dialog keeps host, image, harness, model, effort, cwd,
+and launch controls in the main flow. Harness is selected from the supported
+Tariboy harnesses. Model and effort are editable preset fields: they start
+from explicit runtime defaults for schema-v2 images, accept arbitrary
+overrides, and include conservative built-in suggestions instead of querying
+harness or provider catalogs. Schema-v1 image defaults remain readable for
+compatibility.
+Successful custom overrides are remembered in the Desktop WebView by harness
+and offered on later creates. These local suggestions are an operator
+convenience, not a capability check for the selected host; failed creates do
+not add values. Advanced overrides contains only the raw environment field.
+
+The Agents sidebar partitions each host into expandable **Teams** and
+**Individual agents** without changing agent navigation or terminal drag
+identity. Server headings are selectable and open an explicit
+`/servers/:hostId/tasks` route. The persistent right-pane server row keeps
+**Tasks**, **Images**, and **Settings** scoped to that host even while an agent
+is selected. The Groups workspace owns team creation and editing: arbitrary custom
+members, per-member runtime fields, rename/lead and membership controls,
+compose clipboard transfer, and portable archive
+import/export. All requests retain the active explicit host, including raw
+archive uploads and downloads.
+
+## Server Usage
+
+The host-scoped **Settings → Advanced → Usage** screen loads current groups
+from the route-selected daemon. Its selector offers **All groups**,
+**Ungrouped**, and each current group. Choosing a value immediately reloads the
+summary cards, daily series, group-aware aggregate table, and recent-request
+table from one `/api/usage` response with the same filter; an older polling
+response cannot replace a newer selection.
+
+Aggregate and recent-request rows display the group name saved with each AI
+request, using **Ungrouped** for a null snapshot. A deleted historical group
+can therefore remain visible by its saved name in the all-groups view without
+being reintroduced into the selector. Group renames, deletions, and agent moves
+do not relabel older rows. Agent-level Usage remains a separate historical view
+without the server group selector. See [AI proxy and audit](/docs/architecture/ai-proxy#group-snapshots-and-usage)
+for the persisted snapshot and shared-filter contract.
+
+Selecting a team opens a host-scoped Team workspace with its current members;
+each member opens the unchanged ordinary Agent workspace. Portable imports are
+two-phase: upload renders compose and editable image-ref resolution, while a
+separate confirmation starts the durable operation and displays persisted
+per-item progress. The target daemon descriptor is captured at upload and
+reused for confirmation, status, and retry even if the global host switcher
+changes.
+
+Every Agent workspace header shows the agent's complete effective working
+directory. A following **Open in VS Code** action opens local paths as local
+folders and SSH-host paths through VS Code Remote SSH. The native Desktop host
+resolves the saved SSH alias and constructs the editor URI; the WebView never
+supplies an alias. HTTPS hosts do not render this action.
+
+The **Images** workspace owns validation, directory builds, runnable artifact
+import/export, and transparent template inspection. It shows the original
+source CWD when provenance exists and reuses the same native VS Code folder
+action for local and SSH paths. Validation previews the exact ordered resolved
+template, plugin names, hashes, warnings, and errors without creating an
+artifact. The workspace owns vertical scrolling within the height-constrained
+server shell, so validation output and built images remain reachable at small
+window heights. **Close** dismisses the in-memory validation preview, warnings,
+and diagnostics without changing build inputs or any built artifact. The
+built-image list identifies agents using each ref now and agents
+with that ref pending. Agent **Configuration** only selects an already built
+image, shows current and pending refs, and links back to image detail.
+Selection does not mutate runtime form state and becomes active at the next
+iteration boundary.
+Runnable import previews expose the target name and tag. Operators can keep the
+artifact ref for an idempotent import or choose a different target when that ref
+already contains another digest; the source archive remains runnable-only.
+
+The persistent server context places **Tasks** beside **Images** and **Settings**.
+Tasks uses one reusable three-region workspace at `/servers/:hostId/tasks` and
+inside each Agent tab. The server route shows every task visible on that host;
+an Agent tab sends
+`scope_agent=<name>` to render only that agent's inherited view. The center is
+an expandable tree ordered at every depth by priority, manual position, and
+task key, with inline creation and same-queue drag reparenting. Before/after
+drag reordering stays within the task's P0-P3 priority bucket, while dropping
+inside a task reparents it without changing priority. Compact priority markers
+appear in the tree and the right panel edits priority alongside the other task
+fields, comments, mentions, and answer waits.
+On desktop-width layouts, keyboard- and pointer-accessible separators resize
+the left task navigation and right task-detail panels. Arrow keys move a
+separator, Shift increases the step, Home and double-click restore its default,
+and both clamped widths persist together in the versioned WebView localStorage
+record `tasks:workspace:v1`. Route changes and app reloads restore that record.
+An active resize also reserves the center tree's minimum usable width and the
+other panel before accepting a new side-panel width.
+At the existing responsive breakpoints, the fixed navigation, overlay detail,
+and hidden mobile navigation behavior still takes precedence; inactive
+separators are hidden without discarding the stored desktop widths.
+Notifications and customer-only queue administration live in the same
+workspace. A small red indicator on a task row identifies an unread,
+non-dismissed `task.question` notification for that task; it updates from the
+same notification state used by the inbox. A route-independent coordinator
+also watches every configured host and projects agent-authored questions into
+host-and-agent-scoped dots in the common agent list. It derives the requesting
+agent from the notification's event actor projection, not from display text;
+customer-authored questions never produce an agent dot.
+
+Each host watcher treats typed HTTP task and notification responses as
+authoritative. The resumable task WebSocket supplies refresh hints and sequence
+progress only; a hint triggers an HTTP refetch and never mutates attention by
+itself. Initial host discovery and recovery both establish a silent baseline:
+current unread questions populate the in-app dots, but do not replay native
+notifications. Observed notification IDs and per-host snapshots exist only in
+React memory for the current Desktop session. They are not written to Web
+Storage or persisted by the daemon, and current-session ID tracking deduplicates
+repeated hints and snapshots.
+
+For a newly observed agent question after the baseline, the coordinator asks
+the native bridge to show one notification with only `host_id`,
+`notification_id`, and `task_key` in its activation payload. Native permission
+denial, unsupported notification delivery, and send failures are fallbacks:
+they do not alter the authoritative HTTP snapshot or remove in-app attention.
+Activation uses the original explicit host, marks the exact notification read,
+refreshes that host, and navigates to
+`/servers/:hostId/tasks?task=<key>` (the packaged hash route is
+`#/servers/:hostId/tasks?task=<key>`), where the task detail is selected. A
+failed read does not block that navigation, and an unresolved remote host is
+never replaced with local authority.
+
+Task changes arrive over the resumable `/api/tasks/ws?after=<sequence>` socket.
+Hints trigger typed HTTP refetches; they never replace authoritative task
+responses. Remote targets map HTTP(S) to WS(S) and put the existing bearer
+token in the WebSocket query because browser sockets cannot set an
+Authorization header.
+
+Queue settings expose the active immutable workflow version and explicit pool
+membership. Managed task detail renders workflow status, requirements,
+assignments, outcomes, holds, artifacts, questions, and observations from typed
+HTTP projections; the UI does not infer phases from title prefixes or assignee.
+Operator history remains available after completion. See
+[Configurable task workflows](/docs/task-workflows).
+
+The navigation hierarchy is **Workspace → Server → Agent**. **Workspace** is a
+global titlebar destination at `/workspace`; it is not scoped to the currently
+selected server. A selected server owns Tasks, Images, and Settings, and its
+context row remains visible above the selected agent's Console, Autopilot,
+Activity, Tasks, Configuration, and Advanced tabs. Server-owned routes include
+the explicit host id and fail closed rather than silently falling back to local.
+
+When a known explicit server route temporarily loses its tunnel or its
+authoritative aggregate refresh fails, the Desktop retains its last successful
+server and agent snapshot in React memory rather than flashing the whole pane
+to an error. The live host badge and a local status message identify the
+unavailable/reconnecting state; that host's agent controls and cached sidebar
+agent rows are read-only until a successful refresh for the same host replaces
+the snapshot atomically. Cached data is never persisted or used as an API
+target, other server navigation remains available, and a missing host still
+fails closed rather than falling back to local authority.
+
+Workspace is one global tmux-like canvas whose split tree may contain
+several interactive agent terminals from different hosts. An agent can be
+dragged from the shared left list to a tile edge, added with the keyboard
+action, moved by its tile header, and resized with splitters. Tariboy owns
+this pointer gesture rather than relying on WebView HTML5 `DataTransfer`.
+Crossing the drag threshold reveals a half-pane left/right/top/bottom preview;
+edge distance is normalized to the current leaf dimensions so wide and tall
+panes dock consistently. Dropping relative to any leaf creates arbitrarily
+nested horizontal and vertical splits without center tab stacks. Pointer
+capture keeps the gesture alive outside its source; focus loss, capture loss,
+tab hiding, Escape, and unmount all cancel it without changing the layout.
+Adding the same `{hostId, agentName}` again focuses its existing tile.
+
+For a stopped agent, Configuration offers a working-directory editor backed by
+the selected host's directory autocomplete. Saving changes the CWD used by the
+next launch; it does not move files or start, stop, or restart the agent. Active
+agents show the current CWD read-only until they are stopped. Remote agent
+reads, directory suggestions, and saves all use the host identified by the
+agent route rather than whichever daemon was previously active.
+Refreshing live agent or host status does not replace an unsaved CWD draft;
+the field is synchronized from the daemon only when its agent or effective host
+descriptor actually changes, or after a successful save.
+
+Configuration commits its remaining editable fields per section rather than per
+control. The Loop section's scheduling fields and the Runtime section's model
+and effort save as one batch each, while the working directory, secrets,
+retention, the Loop enable and disable actions, the harness, and Interactive
+keep their own separate immediate operations. A section is dirty when a
+normalized draft differs from the value it last loaded or saved, and only a
+dirty section shows its footer with an unsaved-changes status, a discard
+action, and a single save button. Saving submits just the changed fields,
+serially in a stable order, and stops at the first failure without sending the
+fields after it: acknowledged fields adopt the daemon's canonical values, while
+the failed field and the ones never attempted stay dirty drafts. The agent view
+is reloaded to reconcile those canonical values without overwriting any draft
+that is still unsaved. Harness and Interactive remain separate immediate
+operations: each selection is persisted without confirmation or an automatic
+restart, takes effect the next time the agent starts, and leaves the timing of
+any restart under the operator's control.
+
+When the daemon reports a halt reason for the agent, the Autopilot card shows
+it under the Running/Stopped line, toned as an error for an `error`
+halt and neutrally for an `idle_limit` one. The line is deliberately not gated
+on whether Autopilot is currently enabled, because a stop-policy or idle-limit
+reason matters exactly when the loop is off. When there is no reason, nothing
+extra is rendered at all — no empty element and no placeholder.
+
+The common agent list can be hidden and restored throughout the hierarchy. On macOS the
+main Tauri window retains native traffic lights under an overlay titlebar, and
+the sidebar icon is immediately after their reserved area in the global
+toolbar. The only other titlebar controls are the global **Workspace** link and
+theme icon. Empty toolbar space is draggable, while daemon status banners remain
+below the titlebar so they never cover the native controls. The shared
+persisted sidebar state drives both that control and the server/agent shell. Workspace
+xterm content is square and flush inside the single FlexLayout pane border; the
+standalone Agent Console keeps its rounded chrome.
+
+Each Workspace tile resolves its own explicit daemon target and owns an
+independent terminal WebSocket; it never relies on the globally active daemon.
+Closing or rearranging a tile detaches only that browser terminal client and
+never stops, kills, deletes, or otherwise mutates the agent or tmux session.
+Stopped tiles offer Start. Unavailable identities remain in the split tree with
+Retry, Replace, and Close, while non-interactive identities point to
+Configuration.
+
+The versioned WebView localStorage value `terminals:workspace:v1` persists the
+FlexLayout split tree, active terminal identity, and sidebar width/hidden state.
+Terminal nodes contain only `hostId` and `agentName`. The UI validates schema,
+size, weights, node shape, and duplicate identities before loading. It never
+persists terminal bytes or scrollback, prompts, transcripts, messages, output,
+environment values, tokens, secrets, cwd/workdir paths, or user files.
+Malformed state resets only the Workspace canvas.
+
+The terminal compose draft is also non-persistent in Workspace: typed text and
+uploaded server paths remain in the mounted tile's memory and are discarded
+when the tile or Workspace unmounts. This differs intentionally from the
+single-Agent Console's retained draft.
+
+The agent Console mounts xterm.js and opens
+`GET /api/agents/{name}/terminal`. Binary WebSocket frames carry PTY bytes;
+text frames carry resize messages. A host or agent route change tears down the
+old socket and dials the newly selected target without stopping the tmux
+session. Leaving Workspace similarly unmounts its terminal clients; returning
+reattaches to the live tmux sessions without restoring xterm scrollback.
+
+Console and Workspace share one terminal implementation, so the web-link gesture
+behaves identically in both. Explicit `http://` and `https://` text in terminal
+output opens in the operator's default browser on **Command-click** (the `Meta`
+modifier); this is a Desktop capability and does nothing in a plain browser. An
+ordinary click never opens anything and keeps xterm's own focus, selection and
+mouse behaviour untouched. Nothing else is actionable: file paths, `file://`,
+`javascript:`, `data:`, custom schemes, protocol-relative and bare-host text are
+not even rendered as links, and the URL is parsed and its scheme re-checked
+natively before anything is launched — the terminal matcher and the WebView are
+not the authorization boundary. A link that cannot be opened reports a fixed
+message that never contains the terminal line.
+
+The shared terminal toolbar exposes **Scrollback** on both the Console and every
+Workspace tile. It sends tmux's own copy-mode entry sequence (prefix `C-b`, then
+`[`) over the existing byte socket, and the toolbar then shows a persistent
+**Viewing scrollback** status, **Page back** / **Page forward** controls, and an
+**Exit scrollback** button. Live keystrokes are paused while tmux is in
+copy-mode; press `q` in the focused terminal or use **Exit scrollback** to
+return to live output. Every control is a labelled button reachable by keyboard.
+Because the browser has no authoritative tmux mode event, the status describes
+the state Tariboy *requested*, not a verified tmux mode, and it is cleared
+whenever `q` is typed in the terminal, **Exit scrollback** is used, the socket
+closes, the terminal identity changes, the session becomes absent, or the tile
+unmounts — leaving copy-mode any other way still strands the status, notably via
+`Escape`, which cancels under tmux's default emacs table (including from the
+toolbar's own **Esc** hotkey) but only clears the selection under `copy-mode-vi`,
+so the browser cannot infer it. Entering and leaving scrollback are both
+announced through a status region that stays in the DOM either way — a live
+region that unmounts announces nothing — and leaving via **Exit scrollback**
+returns keyboard focus to the **Scrollback** control, while leaving with `q`
+keeps focus in the terminal. tmux mouse reporting stays off, so wheel and drag input continue to
+belong to the inner harness TUI.
+
+What Scrollback browses is the tmux **pane history**, not xterm scrollback, and
+it is bounded: the shim sets each managed session's `history-limit` to 10,000
+lines (tmux's own default is 2,000), so older output is discarded by tmux and
+cannot be recovered from the browser. Nothing about the history is persisted by
+the UI.
+
+The Console action row also exposes manual Exec for interactive and
+non-interactive agents. Its optional, memory-only one-shot text is sent to the
+route-selected host and affects only the newly requested iteration. Exec does
+not enable Autopilot or persist the draft. A successful interactive request
+reconnects terminal startup handling; a rejected request retains the draft for
+retry.
+
+Permanent agent deletion requires confirmation in an in-app dialog that names
+the agent and warns that its durable data is also removed. Confirm sends the
+existing `force=true` and `purge=true` request. While that request is pending,
+the dialog cannot be dismissed or submitted again. The Console returns home
+only after success; on failure it keeps the dialog open, restores its controls,
+and reports the error so the operator can retry. **Kill session** remains a
+separate action with its existing browser confirmation and does not delete the
+agent or its durable data.
+
+The in-app retention prune is guarded by a confirmation dialog that names
+the operation as permanently destructive and bounds it to the current
+retention policy. Confirming dismisses the dialog and issues the real,
+non-dry-run prune; while it is in flight the destructive action is disabled
+and cannot be issued twice. A failure is reported beside that action inside
+the bounded destructive section, not in the dialog, so the operator can
+read it and retry. Previewing what the policy would remove stays a
+separate, unconfirmed action.
+
+Terminal connection outcomes are intentionally distinct:
+
+- `4404` is retried for a five-second startup grace because the agent engine and
+  shim socket can become ready shortly after Start returns;
+- `1000/eof` means the attached PTY ended and stops immediately;
+- abnormal transport closes retry with capped exponential delay while the view
+  remains mounted.
+
+The Desktop SSH host dialog also keeps transport connectivity separate from
+the result of the current provision or update operation. It maps native phases
+into six ordered user-facing steps and retains a failed update result even if
+rollback restores a healthy old tunnel. Native stdout and stderr events are
+bounded diagnostic output, not lifecycle results; only an explicit error event
+or a failed host runtime state terminates the operation. Raw process output is
+collapsed under **Technical details**, while the main flow renders one
+actionable error and one primary next action.
+
+`DaemonProvider` also exposes `daemon_status.app_version` to both host-list
+surfaces. Their compact Update action is derived only from a confirmed mismatch
+between that bundle version and the non-empty persisted/runtime remote daemon
+version. Unknown versions fail closed without an update indicator; the host
+editor retains its explicit manual update action.
+
+See [Development](/docs/development#react-ui) for source and generated-artifact
+verification.

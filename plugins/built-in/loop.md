@@ -1,0 +1,73 @@
+---
+title: loop
+description: Complete an iteration and control the current agent's autonomous loop through identity-bound tools.
+sidebar:
+  label: loop
+  icon: repeat
+---
+
+`loop` gives an agent the completion and self-control operations for its
+iteration loop. It is a historical core capability and is included in
+`basic:latest`; schema-v2 images must declare it explicitly.
+
+## Capability surface
+
+| Command | Effect |
+| --- | --- |
+| `i-am-done` | Mark the current iteration complete and productive. |
+| `i-am-done --idle` | Mark it complete and idle. |
+| `tools loop done` | Socket-facing spelling used by the shim. |
+| `tools loop start` | Enable and start this agent's loop. |
+| `tools loop stop` | Disable this agent's loop without impersonating another agent. |
+
+Provisioning writes `i-am-done` as an executable shim only when `loop` is
+enabled. The shim calls the version-pinned `tariboy-tools loop done` client.
+Image activation adds or removes it to match the next active plugin set.
+
+## Completion semantics
+
+Completion applies only to the iteration currently bound to the agent. Calling
+it when no iteration is running returns `409 no_iteration`; a stale completion
+cannot mark a later iteration done. Calling completion more than once for the
+same live iteration is safe.
+
+A plain completion records the iteration as productive. `--idle` records that
+the iteration woke and found no useful work. Consecutive idle reports feed the
+agent's maximum-idle policy; productive work resets that streak. Completing an
+iteration does not disable the recurring loop.
+
+An iteration that exits without the completion signal is recorded as
+`no_i_am_done`. Timeout, error, and restart policy remain operator-owned loop
+configuration.
+
+## Prompt integration
+
+The canonical finishing instructions are a tail prompt so they remain at the
+end of a schema-v1 assembled prompt. Schema v2 must place the file explicitly:
+
+```yaml Tariboyfile.yaml
+plugins:
+  - name: loop
+prompts:
+  - runtime: user-prompt
+  - file: $CURRENT_VERSION_STORE/skills/loop/finish.md
+```
+
+The prompt tells agents to wait for dispatched subagents and terminal-tool jobs,
+inspect their final results, and resolve failures before completing the iteration.
+Manager-owned durable `tools script run` and `tools script schedule` jobs remain non-blocking because their
+results are intentionally delivered in a later iteration. The prompt also
+explains when the idle form is appropriate.
+
+## State and safety
+
+Iteration completion is persisted on the current iteration record. Loop
+start/stop changes the authenticated agent only; it does not broaden the
+capability to other agents. Killing a running iteration is a separate operator
+action and is not part of this built-in.
+
+## Related reference
+
+- [Iteration loop](/docs/architecture/iteration-loop)
+- [Shim](/docs/architecture/shim)
+- [Autopilot](/docs/autopilot)

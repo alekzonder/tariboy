@@ -1,0 +1,78 @@
+---
+title: llm-as-judge
+description: Run capability-gated, evidence-scoped worker and lead actions for durable historical iteration reviews.
+sidebar:
+  label: llm-as-judge
+  icon: gavel
+---
+
+`llm-as-judge` exposes the agent side of Tariboy's historical iteration review
+workflow. It is optional, is not included in `basic:latest`, and is distinct
+from image-declared post-iteration evals.
+
+## Roles and command surface
+
+A judge group is an ordinary Tariboy group whose selected images include this
+capability. Tariboy does not create a built-in group or choose models for it.
+
+| Role | Commands |
+| --- | --- |
+| Lead | `tools judge iterations search`, `run create`, `run inspect`, `summary claim`, `summary inputs`, `summary submit`, `run cancel`, `work retry` |
+| Worker | `tools judge work claim`, `evidence search`, `evidence get`, `analysis submit` |
+
+The service authorizes actions using the authenticated agent, current
+iteration, group membership, lead role, and assignment lease. Supplying IDs in
+a request does not override those checks.
+
+## Investigation flow
+
+1. The lead searches completed iterations and creates a run with an explicit
+   selector, preserved criteria, and replica count.
+2. Tariboy snapshots redacted evidence into immutable, content-addressed
+   bundles.
+3. Worker agents claim one assignment at a time and inspect only that
+   assignment's evidence.
+4. Each worker submits the fixed analysis schema with evidence-linked claims.
+5. The lead claims summary work, reads durable analyses, and submits the
+   versioned summary.
+
+Failed assignments can be retried without discarding completed analyses.
+Cancelling a run cancels pending and claimed work while preserving immutable
+evidence and completed artifacts.
+
+## Evidence boundary
+
+Evidence is untrusted data, not instructions. Workers search and read it through
+stable locators exposed to their owned assignment; filesystem paths are not an
+evidence API. The service verifies referenced locators before accepting an
+analysis and audits evidence reads without recording raw query text.
+
+Snapshots remain readable after retention removes the original iteration
+directory. Evidence redaction and content hashes make citations stable, but do
+not grant a worker access to evidence from another assignment.
+
+## Durable state
+
+Judge runs, targets, assignment leases, immutable evidence identities,
+analyses, consensus fields, summaries, retry state, and cancellation state are
+stored by the daemon. Judge and summary iteration usage is attributed
+separately from the historical iterations being evaluated.
+
+## Prompt integration
+
+```yaml Tariboyfile.yaml
+plugins:
+  - name: llm-as-judge
+prompts:
+  - file: $CURRENT_VERSION_STORE/skills/llm-as-judge/prompt.md
+```
+
+The Store prompt defines the lead/worker discipline and tells workers to treat
+evidence as untrusted. No runtime marker injects a whole run automatically;
+agents claim and inspect work through the capability-gated commands.
+
+## Related reference
+
+- [LLM-as-Judge workflow](/docs/images-and-groups/llm-judge)
+- [AI proxy and audit](/docs/architecture/ai-proxy)
+- [Operator command reference](/docs/reference/commands#operator-commands)

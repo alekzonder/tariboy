@@ -1,0 +1,68 @@
+# Tariboy
+
+> The control plane for autonomous coding agents — desktop workflows, operations, architecture, and reference.
+
+## Docs
+
+- [Tariboy](https://alekzonder.github.io/tariboy): One desktop control plane for coding agents across hosts and harnesses.
+- [Ten-minute quickstart](https://alekzonder.github.io/tariboy/quickstart): Install Tariboy, connect a host, build an image, and run one agent interactively and on Autopilot.
+- [Remote hosts](https://alekzonder.github.io/tariboy/remote-hosts): Connect, provision, update, and remove Linux hosts through system OpenSSH.
+- [Autopilot](https://alekzonder.github.io/tariboy/autopilot): Run bounded, observable iterations on timers and durable message triggers.
+- [Configurable task workflows](https://alekzonder.github.io/tariboy/task-workflows): Versioned queue workflows, explicit agent pools, assignment-scoped work packets, questions, artifacts, and external observations.
+- [Security and controls](https://alekzonder.github.io/tariboy/security-controls): Trust boundaries, credential handling, budgets, audit, and operator stop controls.
+- [Support](https://alekzonder.github.io/tariboy/support): Diagnose alpha issues, export safe diagnostics, roll back, and uninstall.
+- [Building, testing & development](https://alekzonder.github.io/tariboy/development): Canonical contributor guide for the Go control plane, React UI, Rust desktop host, documentation, and isolated end-to-end tests.
+- [Native Tasks](https://alekzonder.github.io/tariboy/tasks): Queue-owned, infinitely nested work shared by customers and agents, with comments, dependencies, answer tracking, and realtime Desktop updates.
+
+## Images
+
+- [Images](https://alekzonder.github.io/tariboy/images): Build immutable plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
+- [Agent Skills in images](https://alekzonder.github.io/tariboy/images/agent-skills): Package validated Agent Skills in schema-v2 images and expose them through Claude Code, Codex, or OpenCode.
+
+## Architecture
+
+- [Daemon architecture](https://alekzonder.github.io/tariboy/architecture): How tariboyd owns durable state, agent execution, APIs, plugins, policy, and recovery.
+- [Agents & the iteration loop](https://alekzonder.github.io/tariboy/architecture/iteration-loop): An agent runs a series of supervised iterations, driven by a timer or by messages, on top of a whoami / loop / channels core.
+- [The channel bus & messaging](https://alekzonder.github.io/tariboy/architecture/messaging): Messages move over a store-backed fan-out bus — four tables, per-agent delivery queues, and durable ack with redelivery.
+- [The shim](https://alekzonder.github.io/tariboy/architecture/shim): tariboy-shim runs a single harness iteration under a watchdog, so a runaway iteration can be killed without touching the daemon.
+- [State model — the DB is the source of truth](https://alekzonder.github.io/tariboy/architecture/state-model): The SQLite DB is the single source of configuration; live state is computed, not stored, which is why test daemons must be isolated.
+- [The AI proxy & the audit log](https://alekzonder.github.io/tariboy/architecture/ai-proxy): Every LLM call routes through the in-process AI proxy, which enforces policy and budgets and writes a per-iteration audit transcript.
+- [Desktop web UI](https://alekzonder.github.io/tariboy/architecture/web-ui): React and xterm.js provide the Desktop control surface while host-local daemons remain API and WebSocket services.
+
+## Binaries & commands
+
+- [Binaries & commands](https://alekzonder.github.io/tariboy/binaries): The five core binaries built by make build.
+- [tariboy (operator CLI)](https://alekzonder.github.io/tariboy/binaries/operator-cli): The human/CI client that talks to the daemon over its socket, grouped by noun.
+- [tariboy-tools (agent-facing)](https://alekzonder.github.io/tariboy/binaries/agent-tools): Run inside an agent, surfaced as `tools …` — identity, status, loop control, context, messaging, schedules, and durable scripts.
+- [The compose workflow](https://alekzonder.github.io/tariboy/binaries/compose): Bring up a whole set of images, groups, and agents declaratively from a tariboy-compose.yaml.
+- [tariboy-store](https://alekzonder.github.io/tariboy/binaries/store): A standalone image registry server that stores agent-image blobs and serves a token-authenticated push/pull API.
+
+## Plugins
+
+- [Plugins](https://alekzonder.github.io/tariboy/plugins): Understand Tariboy's built-in capabilities and instructions and its separately installed external plugin processes.
+
+### Built-in plugins
+
+- [Built-in plugins](https://alekzonder.github.io/tariboy/plugins/built-in): Reference for daemon-owned capabilities and instruction plugins shipped with Tariboy.
+- [whoami](https://alekzonder.github.io/tariboy/plugins/built-in/whoami): Inspect the authenticated agent identity, working directory, active iteration, and client/daemon versions.
+- [loop](https://alekzonder.github.io/tariboy/plugins/built-in/loop): Complete an iteration and control the current agent's autonomous loop through identity-bound tools.
+- [messages](https://alekzonder.github.io/tariboy/plugins/built-in/messages): Publish, receive, acknowledge, reply to, and subscribe to durable channel messages.
+- [context](https://alekzonder.github.io/tariboy/plugins/built-in/context): Read and atomically replace the durable working memory carried between agent iterations.
+- [status](https://alekzonder.github.io/tariboy/plugins/built-in/status): Publish an operator-visible progress message intended to stay on one line without completing the current iteration.
+- [workdir](https://alekzonder.github.io/tariboy/plugins/built-in/workdir): Expose an agent's absolute managed workdir as an explicit schema-v2 prompt instruction.
+- [schedule](https://alekzonder.github.io/tariboy/plugins/built-in/schedule): Create agent-owned one-shot or cron schedules that wake the agent or publish to a channel.
+- [scripts](https://alekzonder.github.io/tariboy/plugins/built-in/scripts): Run asynchronous one-shot or fixed-interval local commands with durable per-run logs.
+- [image-creator](https://alekzonder.github.io/tariboy/plugins/built-in/image-creator): Build a runnable Tariboy image from source confined to the authenticated agent's working directory.
+- [current-task](https://alekzonder.github.io/tariboy/plugins/built-in/current-task): Attribute AI usage in the current iteration to a Native Task and its top-level root.
+- [llm-as-judge](https://alekzonder.github.io/tariboy/plugins/built-in/llm-as-judge): Run capability-gated, evidence-scoped worker and lead actions for durable historical iteration reviews.
+- [tasks](https://alekzonder.github.io/tariboy/plugins/built-in/tasks): Use identity-bound Native Tasks and leased workflow assignments through the bare tasks command.
+
+## Images & groups
+
+- [Images & groups](https://alekzonder.github.io/tariboy/images-and-groups): Reproducible agent images, custom groups, and portable team transfers.
+- [LLM-as-Judge](https://alekzonder.github.io/tariboy/images-and-groups/llm-judge): An operator-visible investigation of completed historical iterations, distinct from image-declared evals.
+
+## Reference
+
+- [Command reference](https://alekzonder.github.io/tariboy/reference/commands): The full command reference — operator commands and agent tools, generated from the binary registry.
+- [Channel bus reference](https://alekzonder.github.io/tariboy/reference/channels): How messages move through channels, how agents receive them, how deliveries are acknowledged, and which agent settings affect message handling.

@@ -1,0 +1,61 @@
+---
+title: current-task
+description: Attribute AI usage in the current iteration to a Native Task and its top-level root.
+sidebar:
+  label: current-task
+  icon: tag
+---
+
+`current-task` tags subsequent AI usage in a running iteration with the Native
+Task being worked on. It is optional and is included in `basic:latest`.
+
+## Capability surface
+
+```bash
+tools task current OPS-12
+tools task current --clear
+```
+
+Setting a key validates it through the identity-bound Native Tasks service. The
+daemon follows `parent_key` to the top-level root and updates attribution with
+both values:
+
+- `task_id` is the selected task;
+- `epic_id` is its top-level root, or the same key when the task is a root.
+
+Only AI usage recorded after the change receives the new attribution. When the
+agent switches tasks in one iteration, it should update the tag immediately.
+
+## Validation and authorization
+
+The command works only while an iteration is running. An empty key, unknown
+key, or task the authenticated agent cannot access is rejected without changing
+the existing attribution. The caller cannot supply another agent, customer, or
+iteration identity.
+
+`current-task` gates usage attribution only. It does not provide the bare
+`tasks` command; add the separate [`tasks`](/docs/plugins/built-in/tasks)
+capability when the agent must inspect or mutate Native Tasks.
+
+## Prompt integration
+
+```yaml Tariboyfile.yaml
+plugins:
+  - name: current-task
+prompts:
+  - file: $CURRENT_VERSION_STORE/skills/current-task/prompt.md
+```
+
+The Store prompt teaches the Native Tasks contract. There is no runtime marker
+for the current tag; the usage proxy holds the live attribution for the current
+iteration.
+
+## Native Tasks
+
+The key is resolved through Tariboy's SQLite-backed Native Tasks service.
+
+## Related reference
+
+- [Native Tasks](/docs/tasks)
+- [Agent tools](/docs/binaries/agent-tools)
+- [AI proxy and audit](/docs/architecture/ai-proxy)

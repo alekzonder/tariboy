@@ -1,0 +1,162 @@
+---
+title: Security and controls
+description: Trust boundaries, credential handling, budgets, audit, and operator stop controls.
+sidebar:
+  label: Security
+  icon: shield
+---
+
+The alpha is designed for named internal partners and trusted hosts. It has no
+built-in product analytics. OTLP export is disabled by default and activates
+only when an operator explicitly sets `OTEL_EXPORTER_OTLP_ENDPOINT` or the
+persisted `otlp_endpoint` daemon setting.
+
+## Network boundaries
+
+- Local and remote daemon HTTP listeners bind loopback.
+- Remote access uses an SSH local-forwarding tunnel.
+- System OpenSSH owns host-key verification, agent use, ProxyJump, and 2FA.
+- Tariboy never disables strict host-key checking.
+- Non-loopback daemon TCP requires a bearer token file.
+
+## Credentials
+
+SSH private keys remain with OpenSSH and are never copied. Interactive prompt
+replies live in memory only and are redacted from events. Manual HTTPS host
+tokens live in macOS Keychain under service
+`app.tariboy.desktop.host`, keyed by host ID. Host registry JSON contains no
+tokens.
+
+The AI proxy gives scoped short-lived tokens to harnesses/plugins and scrubs
+upstream provider keys from plugin environments. Audit transcripts contain
+model traffic and are sensitive operator data even though support bundles
+exclude them.
+
+Active iteration tokens and the stable loopback proxy address are carried across
+a daemon restart in `~/.tariboy/aiproxy-handoff.json`. The base directory is
+owner-only and the handoff file plus atomic temporary files use mode `0600`.
+Tokens are never logged, audited, stored in SQLite, or included in support
+bundles. Startup prunes leases that no longer map to a `running` iteration;
+adoption revokes the remaining lease when its shim finishes.
+
+## Runtime controls
+
+- Interactive enablement and Autopilot enablement are independent.
+- Disabling Autopilot prevents new iterations.
+- Kill terminates current work without stopping unrelated agents.
+- Soft and hard timeouts bound an iteration.
+- Rate/model policy rules constrain calls.
+- Budgets constrain spend.
+- Usage and per-iteration audit make outcomes reviewable.
+
+Removing a host is local cleanup, not remote deletion. Quitting the app leaves
+daemons running. Treat both behaviors as continuity features, not stop controls.
+
+## Local and remote files
+
+Local data defaults to `~/.tariboy`; runtime files default to
+`~/.tariboyd`. Remote binaries live in versioned directories under
+`~/.local/lib/tariboy`; managed symlinks live in `~/.local/bin`. The local
+Desktop installer preflights all four command paths before changing any of them
+and refuses regular files, directories, or symlinks not owned by the verified
+Tariboy app bundle.
+
+Image builds resolve only literal `$STORE`, `$CURRENT_VERSION_STORE`, and
+`$PLUGINS` roots, source-relative paths, or explicit operator absolute paths.
+They reject traversal, symlinks, missing or non-regular files, and oversized
+prompt files. Agent-authored builds additionally confine source and absolute
+references to that agent's workdir.
+Native host metadata and exported support archives use owner-only permissions.
+
+## Pricing catalog boundary
+
+The daemon downloads model prices only from LiteLLM's fixed production HTTPS
+URL; proxy input, model names, and operator configuration cannot redirect that
+request. The client has a ten-second timeout, does not follow redirects, reads
+at most eight MiB, and validates the complete catalog before publication.
+
+The validated source document is cached as
+`$TARIBOY_BASE_DIR/model-prices-litellm.json` (normally
+`~/.tariboy/model-prices-litellm.json`). It is written through an owner-only
+`0600` temporary file and atomically renamed. Catalog payloads and provider
+credentials never enter catalog diagnostics; the corresponding logs/events
+contain only a bounded source, generation time, accepted model count, and
+stable error class.
+
+The pricing cache is not part of the support-bundle allowlist and is never
+collected, even when sensitive agent data is enabled. This feature does not
+change loopback listener restrictions, remote bearer tokens, SSH host
+verification, Keychain handling, prompt redaction, AI transcript handling, or
+any other support-bundle exclusion. See [AI proxy and
+audit](/docs/architecture/ai-proxy#pricing-catalog-and-request-costs) for its
+runtime lifecycle.
+
+Desktop's Terminal Workspace stores only a validated split layout, active
+`{hostId, agentName}` identity, and sidebar width/hidden state in WebView
+localStorage. It never stores terminal bytes or scrollback, prompts,
+transcripts, messages, model output, environment values, credentials, secrets,
+cwd/workdir paths, or user files. Closing a tile is UI detach only and cannot
+invoke agent Stop, Kill, or Delete. Workspace also disables the shared
+terminal's persistent compose draft, so typed operator text and uploaded server
+paths are discarded when their tile unmounts. Pointer coordinates, drop
+previews, and drag ghost labels are transient React state and are never written
+to localStorage.
+
+## Alpha signing and Gatekeeper
+
+`0.39.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
+named `/Applications/Tariboy.app`, choose **Open**, and confirm.
+If Control-click Open is unavailable, use **System Settings → Privacy &
+Security → Open Anyway** for that exact app. This is a temporary scoped
+exception for named alpha partners.
+
+Do not disable Gatekeeper globally, change system-wide `spctl` policy, or remove
+quarantine recursively from Applications. Developer ID signing, notarization,
+and signed updater artifacts are later release work.
+
+The internal alpha deliberately enables Tauri WebView developer tools in its
+release build for local diagnosis. DevTools exposes the current WebView state
+to the person operating the local Desktop session; it does not relax daemon
+loopback binding, bearer-token requirements, CORS, or SSH trust boundaries.
+The main Desktop WebView has the narrow Tauri window-drag permission needed by
+the overlay titlebar; it does not receive resize-dragging or unrestricted
+window mutation permissions.
+
+## Support-bundle boundary
+
+Every export selects exactly one host. The default bundle includes its raw ID
+and label plus bounded platform/version/health/prerequisite state and
+allowlisted lifecycle/error lines. Other host records are not exported.
+
+An explicit, unchecked sensitive-data option adds the complete redacted allowed
+files for the newest 10 iterations of each agent on that host. It reads only
+`result.json`, `logs/shim.log`, `logs/harness.stdout.log`, and
+`logs/harness.stderr.log`; it never recursively walks an agent directory.
+
+The collector never includes credentials or environment values (including
+`PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
+workdirs, configured cwd contents, image/plugin state, provisioning replies, or
+user files. It does not open agent environment configuration. Harness output can
+nevertheless contain arbitrary private natural language, so inspect the ZIP
+before sending it under your organization's support data policy. Export does
+not upload anything automatically.
+
+Activity audit export is a separate, explicit operator action and is not a
+support bundle. It can export one iteration or all retained iterations and may
+contain prompts, reasoning, commands, tool arguments and results, model
+responses, and user data. The Desktop warns before downloading the ZIP; the
+export remains a local download and is never uploaded automatically. This does
+not change the support-bundle exclusions above.
+
+Portable image and team archives use a versioned manifest and bounded streaming
+validation. Import rejects absolute or parent paths, NULs, duplicate/colliding
+paths, symlinks, hardlinks, devices, FIFOs, excessive compressed/expanded size,
+file count and path length, unmanifested content, and digest mismatches before
+adopting staged data. Runnable image archives contain only the immutable image
+artifact and its digest: never original source files or source CWD. Team
+archives are compose-only and contain no image build contexts, source trees, or
+runnable image bytes. They also never contain agent workspaces/data,
+credentials, environment values outside the explicit compose contract,
+external cwd contents, or plugin state. Raw archive routes use the same
+loopback, CORS, and remote bearer-token boundary as JSON API routes.
