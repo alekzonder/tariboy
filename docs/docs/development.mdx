@@ -438,16 +438,31 @@ cd docs
 npm ci
 ```
 
-The `docs` step of `make check` then runs `npm run doctor` and `npm run build`
-on every pass, so documentation is validated whenever navigation, MDX, links, or
-contributor instructions change. Run the two commands directly under `docs/`
-when iterating on a docs-only change:
+The `docs` step of `make check` then runs `npm run doctor`, `npm run build`, and
+the GitHub Pages URL contract on every pass, so documentation is validated
+whenever navigation, MDX, links, or contributor instructions change. Run the
+build commands and contract directly when iterating on a docs-only change:
 
 ```bash
 cd docs
 npm run doctor
 npm run build
+../scripts/docs-build-contract-test.sh
 ```
+
+Publish the production build to GitHub Pages with:
+
+```bash
+make docs
+```
+
+The target runs `doctor` and `build`, replaces the generated site in the root
+of the orphan `docs` branch, commits it when the output changed, and pushes the
+branch to `origin`. It uses a temporary Git worktree, so the source branch and
+working tree stay selected and untouched. On the first publication, configure
+the repository under **Settings → Pages** to use **Deploy from a branch**, then
+select the `docs` branch and `/ (root)` folder. GitHub Pages serves this project
+site at `https://alekzonder.github.io/tariboy/`.
 
 ### End-to-end suites
 

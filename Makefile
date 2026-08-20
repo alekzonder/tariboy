@@ -21,7 +21,7 @@ DESKTOP_INSTALL_UI_DEPS ?= 1
 
 export CGO_ENABLED=0
 
-.PHONY: build build-basic-image install uninstall setup check full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e
+.PHONY: build build-basic-image install uninstall setup check full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e
 
 build-basic-image:
 	$(GO) run ./internal/builtinimages/generate -source internal/builtinimages/source -output internal/builtinimages/generated -version $(VERSION)
@@ -59,6 +59,7 @@ smoke-contract-test:
 	./scripts/tariboy-smoke-contract-test.sh
 	./scripts/tariboy-branding-contract-test.sh
 	./scripts/make-clean-contract-test.sh
+	./scripts/publish-docs-contract-test.sh
 
 smoke-image-skills-contract: build
 	./scripts/image-skills-harness-smoke-contract-test.sh
@@ -144,6 +145,9 @@ ui:
 
 store-ui:
 	cd ui && npm ci && npm run build:store
+
+docs:
+	./scripts/publish-docs.sh
 
 clean:
 	git clean -dfx
@@ -473,7 +477,7 @@ check:
 	run_step "ui-lint"      'need_node_modules ui && cd ui && npm run lint'; \
 	run_step "ui-test"      'need_node_modules ui && cd ui && npm test'; \
 	run_step "ui-branding"  'need_node_modules ui && cd ui && npm run branding:check'; \
-	run_step "docs"         'need_node_modules docs && cd docs && npm run doctor && npm run build'; \
+	run_step "docs"         'need_node_modules docs && cd docs && npm run doctor && npm run build && ../scripts/docs-build-contract-test.sh'; \
 	summarize check
 
 # The desktop tail of `full-check` is one step per host, not two, and that is
