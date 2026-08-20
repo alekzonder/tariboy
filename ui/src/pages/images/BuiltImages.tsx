@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ApiError, getActiveDaemon, listImagesOn, removeImage, type ImageRow } from "@/lib/api";
+import { ApiError, listImagesOn, removeImage, type ImageRow } from "@/lib/api";
 import { useOptionalDaemons } from "@/components/DaemonProvider";
 import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +42,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
     daemons: Daemon[];
   }>({ generation: "", daemons: [] });
   const [transfer, setTransfer] = useState<{ ref: string; sourceTarget: Daemon | null; hostId: string } | null>(null);
-  const [imageImport, setImageImport] = useState<{ id: string; ref: string; name: string; tag: string; target: ReturnType<typeof getActiveDaemon> } | null>(null);
+  const [imageImport, setImageImport] = useState<{ id: string; ref: string; name: string; tag: string; target: Daemon | null; hostId: string } | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -107,8 +107,9 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   const transferDaemonsReady = resolvedTransferDaemons.generation === registryGeneration;
 
   const remove = async (ref: string) => {
+    if (source?.hostId !== hostId) return;
     try {
-      await removeImage(ref);
+      await removeImage(ref, source.target);
       setImages((current) => current.filter((image) => `${image.name}:${image.tag}` !== ref));
       toast.success(`image ${ref} removed`);
     } catch (error) {
@@ -117,8 +118,9 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   };
 
   const saveArchive = async (ref: string) => {
+    if (source?.hostId !== hostId) return;
     try {
-      const blob = await downloadImageArchiveOn(undefined, ref);
+      const blob = await downloadImageArchiveOn(source.target, ref);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const separator = ref.lastIndexOf(":");
@@ -137,8 +139,9 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
       <div className="rounded border p-3">
         <label htmlFor="image-archive" className="text-sm font-medium">Import runnable image</label>
         <Input id="image-archive" aria-label="Import image archive" type="file" accept=".gz,.tgz,application/gzip" className="mt-1"
-          onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const target = getActiveDaemon(); void uploadImageArchiveOn(target, file).then((preview) => { const separator = preview.ref.lastIndexOf(":"); setImageImport({ id: preview.import_id, ref: preview.ref, name: preview.ref.slice(0, separator), tag: preview.ref.slice(separator + 1), target }); }).catch((error) => toast.error(`import failed: ${message(error)}`)); }} />
-        {imageImport && <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+          disabled={!sourceReady}
+          onChange={(event) => { const file = event.target.files?.[0]; if (!file || source?.hostId !== hostId) return; const target = source.target; void uploadImageArchiveOn(target, file).then((preview) => { const separator = preview.ref.lastIndexOf(":"); setImageImport({ id: preview.import_id, ref: preview.ref, name: preview.ref.slice(0, separator), tag: preview.ref.slice(separator + 1), target, hostId }); }).catch((error) => toast.error(`import failed: ${message(error)}`)); }} />
+        {imageImport?.hostId === hostId && <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
           <label className="text-xs">Import name
             <Input aria-label="Import name" value={imageImport.name} onChange={(event) => setImageImport({ ...imageImport, name: event.target.value })} />
           </label>
@@ -207,7 +210,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                     </Button>
                     {!image.bare && (
                       <span title="Export runnable image artifact (original sources are not included)">
-                        <Button size="sm" variant="outline" disabled={!image.exportable}
+                        <Button size="sm" variant="outline" disabled={!image.exportable || !sourceReady}
                           aria-label={`Export ${ref}`} onClick={() => void saveArchive(ref)}>Export</Button>
                       </span>
                     )}
@@ -226,6 +229,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                             size="sm"
                             variant="destructive"
                             aria-label={`Remove ${ref}`}
+                            disabled={!sourceReady}
                           >
                             Remove
                           </Button>
