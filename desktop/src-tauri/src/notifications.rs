@@ -202,20 +202,20 @@ pub fn init(app: &AppHandle) {
 }
 
 pub async fn show(
-    app: AppHandle,
+    _app: AppHandle,
     input: TaskNotificationInput,
 ) -> Result<TaskNotificationResult, String> {
     let prepared = prepare_notification(input)?;
 
     #[cfg(target_os = "linux")]
-    return linux::show(app, prepared).await;
+    return linux::show(_app, prepared).await;
 
     #[cfg(target_os = "macos")]
     return macos::show(prepared).await;
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        let _ = (app, prepared);
+        let _ = (_app, prepared);
         Ok(TaskNotificationResult::unavailable())
     }
 }
