@@ -2,9 +2,58 @@ import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
+import { addDaemon, type DaemonMeta } from "@/lib/daemons";
+import { setActiveDaemon } from "@/lib/api";
+import * as imageTransferApi from "@/lib/teamApi";
 import BuiltImages from "./BuiltImages";
 
-afterEach(() => vi.restoreAllMocks());
+const daemonContext = vi.hoisted(() => ({ daemons: [] as DaemonMeta[] }));
+
+vi.mock("@/components/DaemonProvider", () => ({
+  useOptionalDaemons: () => ({ daemons: daemonContext.daemons }),
+}));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+  sessionStorage.clear();
+  daemonContext.daemons = [];
+  setActiveDaemon(null);
+});
+
+it("starts transfer from the route source instead of the active daemon", async () => {
+  const source = await addDaemon({ label: "Source", baseURL: "https://source", token: "source-token" });
+  const target = { id: "target", label: "Target", baseURL: "https://target", state: "ready" } as const;
+  daemonContext.daemons = [{ ...source, state: "ready" }, target];
+  const activeTarget = { id: "active", label: "Active", baseURL: "https://active", token: "active-token" };
+  setActiveDaemon(activeTarget);
+  const download = vi.spyOn(imageTransferApi, "downloadImageArchiveOn").mockResolvedValue(new Blob(["archive"]));
+  vi.spyOn(imageTransferApi, "uploadImageArchiveOn").mockResolvedValue({ import_id: "import-1", ref: "built:v1", digest: "digest" });
+  vi.spyOn(imageTransferApi, "applyImageArchiveOn").mockResolvedValue({});
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    if (String(input) === "https://source/api/images") {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true, result: { images: [
+        { name: "built", tag: "v1", bare: false, exportable: true },
+        { name: "basic", tag: "latest", bare: false, exportable: false },
+      ] } }), { status: 200 }));
+    }
+    return Promise.reject(new Error(`unexpected request ${String(input)}`));
+  }));
+
+  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
+
+  await screen.findByRole("button", { name: "Upload to servers built:v1" });
+  expect(screen.queryByRole("button", { name: /Upload to servers basic:latest/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Upload to servers built:v1" }));
+  fireEvent.click(screen.getByRole("button", { name: "All servers" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start transfer" }));
+
+  await waitFor(() => expect(download).toHaveBeenCalledWith(
+    expect.objectContaining({ id: source.id, baseURL: "https://source" }),
+    "built:v1",
+  ));
+  expect(download).not.toHaveBeenCalledWith(activeTarget, "built:v1");
+});
 
 it("exports runnable images and distinguishes original builds from imports", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({

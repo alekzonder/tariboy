@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ApiError, getActiveDaemon, listImages, removeImage, type ImageRow } from "@/lib/api";
+import { ApiError, getActiveDaemon, listImagesOn, removeImage, type ImageRow } from "@/lib/api";
+import { useOptionalDaemons } from "@/components/DaemonProvider";
+import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { ImageTransferDialog } from "./ImageTransferDialog";
 
 function message(error: unknown): string {
   return error instanceof ApiError ? error.message : String(error);
@@ -22,10 +25,39 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   hostId: string;
   basePath?: string;
 }) {
+  const daemonContext = useOptionalDaemons();
   const [images, setImages] = useState<ImageRow[]>([]);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [sourceTarget, setSourceTarget] = useState<Daemon | null>(null);
+  const [sourceResolved, setSourceResolved] = useState(false);
+  const [transfer, setTransfer] = useState<{ ref: string; sourceTarget: Daemon | null } | null>(null);
   const [imageImport, setImageImport] = useState<{ id: string; ref: string; name: string; tag: string; target: ReturnType<typeof getActiveDaemon> } | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    setSourceResolved(false);
+    void resolveDaemon(hostId)
+      .then((target) => {
+        if (!alive) return;
+        if (hostId && !target) {
+          setError(`host ${hostId} is not available`);
+          return;
+        }
+        setSourceTarget(target);
+        setSourceResolved(true);
+      })
+      .catch((err) => {
+        if (alive) setError(message(err));
+      });
+    return () => { alive = false; };
+  }, [hostId]);
 
   useEffect(() => {
     const refresh = () => setRevision((value) => value + 1);
@@ -34,8 +66,9 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   }, []);
 
   useEffect(() => {
+    if (!sourceResolved) return;
     let alive = true;
-    void listImages()
+    void listImagesOn(sourceTarget)
       .then((result) => {
         if (alive) {
           setImages(result.images ?? []);
@@ -46,7 +79,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
         if (alive) setError(message(err));
       });
     return () => { alive = false; };
-  }, [hostId, revision]);
+  }, [revision, sourceResolved, sourceTarget]);
 
   const remove = async (ref: string) => {
     try {
@@ -153,6 +186,10 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                           aria-label={`Export ${ref}`} onClick={() => void saveArchive(ref)}>Export</Button>
                       </span>
                     )}
+                    {!image.bare && image.exportable && sourceResolved && (
+                      <Button size="sm" variant="outline" aria-label={`Upload to servers ${ref}`}
+                        onClick={() => setTransfer({ ref, sourceTarget })}>Upload to servers</Button>
+                    )}
                     {!image.bare && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -198,6 +235,16 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
         </tbody>
       </table>
       </div>
+      {transfer && (
+        <ImageTransferDialog
+          open
+          onOpenChange={(open) => { if (!open) setTransfer(null); }}
+          source={transfer.sourceTarget}
+          ref={transfer.ref}
+          daemons={daemonContext?.daemons ?? []}
+          onComplete={() => { if (mounted.current) setRevision((value) => value + 1); }}
+        />
+      )}
     </div>
   );
 }
