@@ -24,6 +24,7 @@ skills:
   - dir: ./.agents/skills/verification-before-completion
   - dir: ./.agents/skills/writing-plans
   - dir: ./.agents/skills/writing-skills
+  - dir: ./skills/github-pr-workflow
 
 prompts:
   - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
