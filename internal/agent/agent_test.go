@@ -211,6 +211,24 @@ func sampleAgent() Agent {
 	}
 }
 
+// Catches the single-row create insert omitting the idle-stop threshold while
+// later update/read paths continue to support it.
+func TestCreatePersistsMaximumIdleIterations(t *testing.T) {
+	st := openStore(t)
+	agent := sampleAgent()
+	agent.MaxIdleIterations = 9
+	if err := st.Create(agent); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Get(agent.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MaxIdleIterations != 9 {
+		t.Fatalf("MaxIdleIterations = %d, want 9", got.MaxIdleIterations)
+	}
+}
+
 func TestMigrationAddsEnabledDefaultingToLoopEnabled(t *testing.T) {
 	st := openStore(t)
 	// One agent with loop on, one with loop off.

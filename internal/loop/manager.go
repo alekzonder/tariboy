@@ -783,14 +783,27 @@ func (m *Manager) Run(spec registry.RunSpec) (string, error) {
 	if env == nil {
 		env = map[string]string{}
 	}
+	onTimeout := pick(spec.OnTimeout, "restart")
+	onError := pick(spec.OnError, "restart")
+	messagesBatch := spec.MessagesBatch
+	if messagesBatch == 0 {
+		messagesBatch = 10
+	}
+	messagesMaxQueue := spec.MessagesMaxQueue
+	if messagesMaxQueue == 0 {
+		messagesMaxQueue = 1000
+	}
 	ag := agent.Agent{
 		Name: name, ImageRef: ref.String(), ImageDigest: man.Digest,
 		Cwd: spec.Cwd, HarnessType: harnessType,
 		Model: model, Effort: effort,
 		Interactive: spec.Interactive, LoopEnabled: spec.Loop, Enabled: false,
-		TimeoutS:  spec.TimeoutS,
-		OnTimeout: "restart", OnError: "restart",
-		Env: env, Plugins: resolvedPlugins,
+		IntervalS: spec.IntervalS, TimeoutS: spec.TimeoutS, HardTimeoutS: spec.HardTimeoutS,
+		OnTimeout: onTimeout, OnError: onError, MaxIdleIterations: spec.MaxIdleIterations,
+		UserPrompt: spec.UserPrompt,
+		Env:        env, Plugins: resolvedPlugins,
+		MessagesBatch: messagesBatch, MessagesMaxQueue: messagesMaxQueue,
+		Alias: spec.Alias, Notes: spec.Notes, Color: spec.Color,
 	}
 	if ref == image.BareRef {
 		ag.Interactive = true

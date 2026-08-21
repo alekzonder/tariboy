@@ -2,7 +2,10 @@ package commands
 
 import (
 	"fmt"
+	"math"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,10 +20,12 @@ func agentStore(c *registry.Ctx) *agent.Store { return agent.NewStore(c.Store) }
 func agentView(a agent.Agent, state string) map[string]any {
 	v := map[string]any{
 		"name": a.Name, "image": a.ImageRef, "digest": a.ImageDigest, "state": state,
-		"cwd": a.Cwd, "harness": a.HarnessType, "model": a.Model, "effort": a.Effort,
+		"cwd": a.Cwd, "configured_cwd": a.Cwd,
+		"harness": a.HarnessType, "model": a.Model, "effort": a.Effort,
 		"interactive": a.Interactive, "loop_enabled": a.LoopEnabled, "enabled": a.Enabled, "interval_s": a.IntervalS,
 		"timeout_s": a.TimeoutS, "hard_timeout_s": a.HardTimeoutS, "on_timeout": a.OnTimeout,
 		"on_error": a.OnError, "user_prompt": a.UserPrompt, "env": a.Env, "plugins": a.Plugins,
+		"messages_batch": a.MessagesBatch, "messages_max_queue": a.MessagesMaxQueue,
 		"group": a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
 		"max_idle_iterations": a.MaxIdleIterations,
 	}
@@ -113,6 +118,81 @@ func parseList(list string) []string {
 	return out
 }
 
+func parseAgentEnv(value any) (map[string]string, error) {
+	switch value := value.(type) {
+	case nil:
+		return map[string]string{}, nil
+	case string:
+		return parseKV(value), nil
+	case map[string]string:
+		return value, nil
+	case map[string]any:
+		out := make(map[string]string, len(value))
+		for key, raw := range value {
+			text, ok := raw.(string)
+			if !ok {
+				return nil, fmt.Errorf("env value for %q must be a string", key)
+			}
+			out[key] = text
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("env must be a K=V string or string-valued object")
+	}
+}
+
+func parseAgentPlugins(value any) ([]string, error) {
+	if text, ok := value.(string); ok {
+		return parseList(text), nil
+	}
+	plugins, ok := stringSlice(value)
+	if !ok {
+		return nil, fmt.Errorf("plugins must be a comma list or string array")
+	}
+	return plugins, nil
+}
+
+func parseAgentIntParam(p registry.Params, key string) (int, bool, error) {
+	raw, present := p[key]
+	if !present {
+		return 0, false, nil
+	}
+	switch value := raw.(type) {
+	case int:
+		return value, true, nil
+	case float64:
+		if math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value {
+			return 0, true, fmt.Errorf("%s must be a whole number", key)
+		}
+		parsed, err := strconv.ParseInt(strconv.FormatFloat(value, 'f', -1, 64), 10, 0)
+		if err != nil {
+			return 0, true, fmt.Errorf("%s is outside the supported integer range", key)
+		}
+		return int(parsed), true, nil
+	case string:
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return 0, true, fmt.Errorf("%s must be a whole number", key)
+		}
+		return parsed, true, nil
+	default:
+		return 0, true, fmt.Errorf("%s must be a whole number", key)
+	}
+}
+
+func agentIntParam(p registry.Params, key, code string, minimum int) (int, error) {
+	value, present, err := parseAgentIntParam(p, key)
+	if err != nil || present && value < minimum {
+		if err == nil {
+			err = fmt.Errorf("%s must be at least %d", key, minimum)
+		}
+		return 0, api.UserError{Code: code, Msg: err.Error()}
+	}
+	return value, nil
+}
+
+var agentColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
 func parseAgentTimeout(value string) (int, error) {
 	if strings.TrimSpace(value) == "" {
 		return 0, nil
@@ -136,11 +216,29 @@ func agentRun() registry.Command {
 			{Name: "model", Flag: "model", Short: "m", Type: registry.String, Help: "model"},
 			{Name: "effort", Flag: "effort", Short: "e", Type: registry.String, Help: "effort"},
 			{Name: "interactive", Flag: "interactive", Short: "i", Type: registry.Bool, Help: "interactive (tmux) mode"},
-			{Name: "env", Flag: "env", Type: registry.String, Help: "comma-separated K=V env pairs"},
-			{Name: "plugins", Flag: "plugins", Type: registry.String, Help: "comma-separated plugin override"},
+			{Name: "env", Flag: "env", Type: registry.String, Help: "comma-separated K=V env pairs", Schema: map[string]any{"oneOf": []any{
+				map[string]any{"type": "string"},
+				map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+			}}},
+			{Name: "plugins", Flag: "plugins", Type: registry.String, Help: "comma-separated plugin override", Schema: map[string]any{"oneOf": []any{
+				map[string]any{"type": "string"},
+				map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			}}},
 			{Name: "group", Flag: "group", Short: "g", Type: registry.String, Help: "join this group"},
 			{Name: "loop", Flag: "loop", Type: registry.Bool, Default: true, Help: "set loop intent (nested; agent still starts stopped — default true)"},
 			{Name: "timeout", Flag: "timeout", Type: registry.String, Help: "soft iteration timeout duration (for example 60m or 2h)"},
+			{Name: "interval_s", Type: registry.Int, Help: "loop interval in whole seconds"},
+			{Name: "timeout_s", Type: registry.Int, Help: "soft iteration timeout in whole seconds"},
+			{Name: "hard_timeout_s", Type: registry.Int, Help: "hard iteration timeout in whole seconds"},
+			{Name: "on_timeout", Type: registry.String, Help: "timeout policy: restart or stop"},
+			{Name: "on_error", Type: registry.String, Help: "error policy: restart or stop"},
+			{Name: "max_idle_iterations", Type: registry.Int, Help: "maximum consecutive idle iterations; 0 disables"},
+			{Name: "user_prompt", Type: registry.String, Help: "standing user prompt"},
+			{Name: "messages_batch", Type: registry.Int, Help: "maximum messages delivered per iteration"},
+			{Name: "messages_max_queue", Type: registry.Int, Help: "maximum queued messages"},
+			{Name: "alias", Type: registry.String, Help: "display alias"},
+			{Name: "notes", Type: registry.String, Help: "operator notes"},
+			{Name: "color", Type: registry.String, Help: "agent accent color as #rrggbb"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -149,15 +247,73 @@ func agentRun() registry.Command {
 				loop = v
 			}
 			interactive, _ := p["interactive"].(bool)
+			if _, oldTimeout := p["timeout"]; oldTimeout {
+				if _, exactTimeout := p["timeout_s"]; exactTimeout {
+					return nil, api.UserError{Code: "ambiguous_timeout", Msg: "timeout and timeout_s cannot be supplied together"}
+				}
+			}
+			env, envErr := parseAgentEnv(p["env"])
+			if envErr != nil {
+				return nil, api.UserError{Code: "bad_env", Msg: envErr.Error()}
+			}
+			pluginList, pluginsErr := parseAgentPlugins(p["plugins"])
+			if pluginsErr != nil {
+				return nil, api.UserError{Code: "bad_plugins", Msg: pluginsErr.Error()}
+			}
 			timeoutS, timeoutErr := parseAgentTimeout(str(p, "timeout"))
 			if timeoutErr != nil {
 				return nil, api.UserError{Code: "bad_timeout", Msg: timeoutErr.Error()}
 			}
+			intervalS, err := agentIntParam(p, "interval_s", "bad_interval", 0)
+			if err != nil {
+				return nil, err
+			}
+			if _, present := p["timeout_s"]; present {
+				timeoutS, err = agentIntParam(p, "timeout_s", "bad_timeout", 0)
+				if err != nil {
+					return nil, err
+				}
+			}
+			hardTimeoutS, err := agentIntParam(p, "hard_timeout_s", "bad_hard_timeout", 0)
+			if err != nil {
+				return nil, err
+			}
+			maxIdleIterations, err := agentIntParam(p, "max_idle_iterations", "bad_max_idle", 0)
+			if err != nil {
+				return nil, err
+			}
+			messagesBatch, err := agentIntParam(p, "messages_batch", "bad_messages_batch", 1)
+			if err != nil {
+				return nil, err
+			}
+			messagesMaxQueue, err := agentIntParam(p, "messages_max_queue", "bad_messages_max_queue", 1)
+			if err != nil {
+				return nil, err
+			}
+			onTimeout := str(p, "on_timeout")
+			if _, present := p["on_timeout"]; present && onTimeout != "restart" && onTimeout != "stop" {
+				return nil, api.UserError{Code: "bad_on_timeout", Msg: "on_timeout must be restart or stop"}
+			}
+			onError := str(p, "on_error")
+			if _, present := p["on_error"]; present && onError != "restart" && onError != "stop" {
+				return nil, api.UserError{Code: "bad_on_error", Msg: "on_error must be restart or stop"}
+			}
+			color := str(p, "color")
+			if color != "" && !agentColorPattern.MatchString(color) {
+				return nil, api.UserError{Code: "bad_color", Msg: "color must be empty or a six-digit #rrggbb value"}
+			}
 			spec := registry.RunSpec{
 				ImageRef: str(p, "image"), Name: str(p, "name"), Cwd: str(p, "cwd"),
 				Harness: str(p, "harness"), Model: str(p, "model"), Effort: str(p, "effort"),
-				Interactive: interactive, Env: parseKV(str(p, "env")),
-				Plugins: parseList(str(p, "plugins")), Loop: loop, TimeoutS: timeoutS, Group: str(p, "group"),
+				Interactive: interactive, Env: env, Plugins: pluginList, Loop: loop,
+				IntervalS: intervalS, TimeoutS: timeoutS, HardTimeoutS: hardTimeoutS,
+				OnTimeout: onTimeout, OnError: onError,
+				MaxIdleIterations: maxIdleIterations,
+				UserPrompt:        str(p, "user_prompt"),
+				MessagesBatch:     messagesBatch,
+				MessagesMaxQueue:  messagesMaxQueue,
+				Group:             str(p, "group"), Alias: str(p, "alias"), Notes: str(p, "notes"),
+				Color: strings.ToLower(color),
 			}
 			if spec.ImageRef == "" {
 				return nil, api.UserError{Code: "missing_image", Msg: "image ref is required"}

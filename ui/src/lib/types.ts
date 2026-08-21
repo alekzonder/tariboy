@@ -35,6 +35,7 @@ export interface AgentView {
   digest: string;
   state: string;
   cwd: string;
+  configured_cwd?: string;
   harness: string;
   model: string;
   effort: string;
@@ -50,6 +51,8 @@ export interface AgentView {
   user_prompt: string;
   env: Record<string, string>;
   plugins: string[];
+  messages_batch?: number;
+  messages_max_queue?: number;
   group: string | null;
   alias: string;
   notes: string;

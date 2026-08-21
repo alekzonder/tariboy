@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import type { HostAgents } from "@/lib/aggregate";
 import type { DaemonMeta } from "@/lib/daemons";
@@ -13,7 +16,7 @@ import {
   DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH,
 } from "./useSidebarWidth";
 
-export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, workspaceMode, onBeginWorkspaceDrag, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
+export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, workspaceMode, onBeginWorkspaceDrag, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
   hosts: HostAgents[];
   selectedHostId?: string;
   selected?: { hostId: string; agent: string };
@@ -25,6 +28,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
     identity: TerminalIdentity,
     event: React.PointerEvent<HTMLButtonElement>,
   ) => void;
+  onClone: (hostId: string, agentName: string) => void;
   onCreate: (hostId: string) => void;
   onAddServer: () => void;
   onEditServer: (hostId: string) => void;
@@ -121,48 +125,55 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
             const renderAgent = (a: (typeof h.agents)[number]) => {
             const interactive = a.interactive !== false;
             return (
-            <div
-              key={a.name}
-              className={cn(
-                "flex w-full items-center rounded text-sm hover:bg-accent",
-                selected && selected.hostId === h.host.id && selected.agent === a.name && "bg-accent",
-              )}
-            >
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center justify-between px-2 py-1 text-left"
-                aria-label={`Open ${a.name}`}
-                aria-current={selected?.hostId === h.host.id && selected.agent === a.name ? "page" : undefined}
-                disabled={Boolean(h.error)}
-                onPointerDown={(event) => {
-                  if (h.error) return;
-                  if (!workspaceMode || !interactive) return;
-                  onBeginWorkspaceDrag(
-                    { hostId: h.host.id, agentName: a.name },
-                    event,
-                  );
-                }}
-                onClick={() => { if (!h.error) onSelect(h.host.id, a.name); }}
-              >
-                <span className="flex min-w-0 items-center gap-1">
-                  <span className="truncate">{a.name}</span>
-                  {attention.has(JSON.stringify([h.host.id, a.name])) && (
-                    <span
-                      role="img"
-                      aria-label={`Unread customer question for ${a.name} on ${h.host.label}`}
-                      title={`Unread customer question for ${a.name} on ${h.host.label}`}
-                      className="h-2 w-2 shrink-0 rounded-full bg-red-500"
-                    />
-                  )}
-                  {!interactive && (
-                    <span className="shrink-0 text-xs text-muted-foreground" title="not interactive (no tty)">
-                      non-tty
-                    </span>
-                  )}
-                </span>
-                <Badge variant={a.state === "running" ? "default" : "secondary"}>{a.state}</Badge>
-              </button>
-            </div>
+              <ContextMenu key={a.name}>
+                <ContextMenuTrigger asChild>
+                  <div
+                    className={cn(
+                      "flex w-full items-center rounded text-sm hover:bg-accent",
+                      selected && selected.hostId === h.host.id && selected.agent === a.name && "bg-accent",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center justify-between px-2 py-1 text-left"
+                      aria-label={`Open ${a.name}`}
+                      aria-current={selected?.hostId === h.host.id && selected.agent === a.name ? "page" : undefined}
+                      disabled={Boolean(h.error)}
+                      onPointerDown={(event) => {
+                        if (event.button !== 0 || h.error || !workspaceMode || !interactive) return;
+                        onBeginWorkspaceDrag(
+                          { hostId: h.host.id, agentName: a.name },
+                          event,
+                        );
+                      }}
+                      onClick={() => { if (!h.error) onSelect(h.host.id, a.name); }}
+                    >
+                      <span className="flex min-w-0 items-center gap-1">
+                        <span className="truncate">{a.name}</span>
+                        {attention.has(JSON.stringify([h.host.id, a.name])) && (
+                          <span
+                            role="img"
+                            aria-label={`Unread customer question for ${a.name} on ${h.host.label}`}
+                            title={`Unread customer question for ${a.name} on ${h.host.label}`}
+                            className="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                          />
+                        )}
+                        {!interactive && (
+                          <span className="shrink-0 text-xs text-muted-foreground" title="not interactive (no tty)">
+                            non-tty
+                          </span>
+                        )}
+                      </span>
+                      <Badge variant={a.state === "running" ? "default" : "secondary"}>{a.state}</Badge>
+                    </button>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem disabled={Boolean(h.error)} onSelect={() => onClone(h.host.id, a.name)}>
+                    Clone
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
             };
             const teams = new Map<string, typeof h.agents>();

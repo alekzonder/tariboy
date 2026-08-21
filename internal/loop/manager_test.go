@@ -518,6 +518,40 @@ func TestRunDoesNotInjectRetiredCapabilityEnvironment(t *testing.T) {
 	}
 }
 
+// Catches Manager.Run accepting a complete create request but silently
+// rebuilding a mostly-default Agent before the one-row persistence boundary.
+func TestRunPersistsCompleteConfiguration(t *testing.T) {
+	m, store, _, _ := newManager(t, &fakeRunner{})
+	cwd := t.TempDir()
+	_, err := m.Run(registry.RunSpec{
+		ImageRef: "basic:latest", Name: "clone", Cwd: cwd,
+		Harness: "codex", Model: "gpt-5", Effort: "high",
+		Interactive: true, Loop: false,
+		IntervalS: 12, TimeoutS: 34, HardTimeoutS: 56,
+		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7,
+		UserPrompt: "standing prompt", Env: map[string]string{"CSV": "a,b"},
+		Plugins: []string{"context"}, MessagesBatch: 8, MessagesMaxQueue: 900,
+		Alias: "Clone", Notes: "all fields", Color: "#123abc",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Get("clone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Cwd != cwd || got.HarnessType != "codex" || got.Model != "gpt-5" ||
+		got.Effort != "high" || !got.Interactive || got.LoopEnabled || got.Enabled ||
+		got.IntervalS != 12 || got.TimeoutS != 34 || got.HardTimeoutS != 56 ||
+		got.OnTimeout != "stop" || got.OnError != "restart" || got.MaxIdleIterations != 7 ||
+		got.UserPrompt != "standing prompt" || got.Env["CSV"] != "a,b" ||
+		strings.Join(got.Plugins, ",") != "whoami,loop,messages,context" ||
+		got.MessagesBatch != 8 || got.MessagesMaxQueue != 900 ||
+		got.Alias != "Clone" || got.Notes != "all fields" || got.Color != "#123abc" {
+		t.Fatalf("persisted agent = %#v", got)
+	}
+}
+
 type killBlockingRunner struct {
 	started chan string
 	// release, when non-nil, holds the runner inside Run after its context is

@@ -255,12 +255,13 @@ func (s *Store) Create(a Agent) error {
 	_, err = s.db.Exec(`INSERT INTO agents
 		(name, image_ref, image_digest, error_reason, cwd, harness_type, model, effort,
 		 interactive, loop_enabled, enabled, interval_s, timeout_s, hard_timeout_s,
-		 on_timeout, on_error, user_prompt, env, plugins, messages_batch, messages_max_queue, "group", alias, notes, color)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 on_timeout, on_error, user_prompt, env, plugins, messages_batch, messages_max_queue, "group", alias, notes, color,
+		 max_idle_iterations)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.Name, a.ImageRef, a.ImageDigest, a.ErrorReason, a.Cwd, a.HarnessType, a.Model, a.Effort,
 		b2i(a.Interactive), b2i(a.LoopEnabled), b2i(a.Enabled), a.IntervalS, a.TimeoutS, a.HardTimeoutS,
 		a.OnTimeout, a.OnError, a.UserPrompt, string(env), string(plugins),
-		a.MessagesBatch, a.MessagesMaxQueue, a.Group, a.Alias, a.Notes, a.Color)
+		a.MessagesBatch, a.MessagesMaxQueue, a.Group, a.Alias, a.Notes, a.Color, a.MaxIdleIterations)
 	return err
 }
 

@@ -57,6 +57,7 @@ export function Fixture() {
           onBeginWorkspaceDrag={(identity, event) => {
             workspaceRef.current?.beginExternalPointerDrag(identity, event.nativeEvent);
           }}
+          onClone={() => {}}
           onCreate={() => {}}
           onAddServer={() => {}}
           onEditServer={() => {}}

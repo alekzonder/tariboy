@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -133,6 +134,114 @@ func TestAgentRunAndPs(t *testing.T) {
 	}
 }
 
+// Catches the create handler dropping a clone field or lossy reparsing of
+// structured HTTP environment/plugin values before they reach the manager.
+func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
+	c, _, fc := ctxWithStore(t)
+	cwd := t.TempDir()
+	_, err := h(t, "agent.run")(c, registry.Params{
+		"image": "basic:latest", "name": "clone", "cwd": cwd,
+		"harness": "codex", "model": "gpt-5", "effort": "high",
+		"interactive": true, "loop": false,
+		"interval_s": float64(12), "timeout_s": float64(34), "hard_timeout_s": float64(56),
+		"on_timeout": "stop", "on_error": "restart", "max_idle_iterations": float64(7),
+		"user_prompt":    "keep commas, equals=a=b, and\nnewlines",
+		"env":            map[string]any{"CSV": "a,b", "EQ": "a=b", "LINES": "one\ntwo"},
+		"plugins":        []any{"context", "custom"},
+		"messages_batch": float64(8), "messages_max_queue": float64(900),
+		"group": "reviewers", "alias": "Clone", "notes": "all fields", "color": "#123ABC",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := registry.RunSpec{
+		ImageRef: "basic:latest", Name: "clone", Cwd: cwd,
+		Harness: "codex", Model: "gpt-5", Effort: "high", Interactive: true,
+		Env:     map[string]string{"CSV": "a,b", "EQ": "a=b", "LINES": "one\ntwo"},
+		Plugins: []string{"context", "custom"}, Loop: false,
+		IntervalS: 12, TimeoutS: 34, HardTimeoutS: 56,
+		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7,
+		UserPrompt:    "keep commas, equals=a=b, and\nnewlines",
+		MessagesBatch: 8, MessagesMaxQueue: 900,
+		Group: "reviewers", Alias: "Clone", Notes: "all fields", Color: "#123abc",
+	}
+	if !reflect.DeepEqual(fc.ran, want) {
+		t.Fatalf("RunSpec mismatch:\nwant: %#v\n got: %#v", want, fc.ran)
+	}
+}
+
+// Each case catches a malformed clone request reaching provisioning or
+// persistence instead of failing at the agent.run boundary with a stable code.
+func TestAgentRunRejectsInvalidCompleteConfiguration(t *testing.T) {
+	cases := []struct {
+		name  string
+		key   string
+		value any
+		extra registry.Params
+		code  string
+	}{
+		{name: "negative interval", key: "interval_s", value: float64(-1), code: "bad_interval"},
+		{name: "fractional interval", key: "interval_s", value: 1.5, code: "bad_interval"},
+		{name: "negative timeout", key: "timeout_s", value: float64(-1), code: "bad_timeout"},
+		{name: "negative hard timeout", key: "hard_timeout_s", value: float64(-1), code: "bad_hard_timeout"},
+		{name: "negative idle limit", key: "max_idle_iterations", value: float64(-1), code: "bad_max_idle"},
+		{name: "zero message batch", key: "messages_batch", value: float64(0), code: "bad_messages_batch"},
+		{name: "zero message queue", key: "messages_max_queue", value: float64(0), code: "bad_messages_max_queue"},
+		{name: "timeout policy", key: "on_timeout", value: "continue", code: "bad_on_timeout"},
+		{name: "error policy", key: "on_error", value: "continue", code: "bad_on_error"},
+		{name: "color", key: "color", value: "#12345g", code: "bad_color"},
+		{name: "environment value", key: "env", value: map[string]any{"COUNT": float64(3)}, code: "bad_env"},
+		{name: "plugin value", key: "plugins", value: []any{"context", float64(3)}, code: "bad_plugins"},
+		{name: "ambiguous timeout", key: "timeout", value: "1m", extra: registry.Params{"timeout_s": float64(60)}, code: "ambiguous_timeout"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _, fc := ctxWithStore(t)
+			params := registry.Params{"image": "basic:latest", tc.key: tc.value}
+			for key, value := range tc.extra {
+				params[key] = value
+			}
+			_, err := h(t, "agent.run")(c, params)
+			var userErr api.UserError
+			if !errors.As(err, &userErr) || userErr.Code != tc.code {
+				t.Fatalf("error = %#v, want UserError code %q", err, tc.code)
+			}
+			if fc.ran.ImageRef != "" {
+				t.Fatalf("Control.Run called for invalid request: %#v", fc.ran)
+			}
+		})
+	}
+}
+
+// Catches generated OpenAPI advertising the legacy comma strings after the
+// HTTP create route learned lossless object/array inputs.
+func TestAgentRunDeclaresStructuredHTTPInputs(t *testing.T) {
+	args := map[string]registry.Arg{}
+	for _, arg := range agentRun().Args {
+		args[arg.Name] = arg
+	}
+	for _, name := range []string{"env", "plugins"} {
+		oneOf, ok := args[name].Schema["oneOf"].([]any)
+		if !ok || len(oneOf) != 2 {
+			t.Fatalf("%s schema = %#v, want two-form oneOf", name, args[name].Schema)
+		}
+	}
+	envObject := args["env"].Schema["oneOf"].([]any)[1].(map[string]any)
+	if envObject["type"] != "object" || envObject["additionalProperties"].(map[string]any)["type"] != "string" {
+		t.Fatalf("env object schema = %#v", envObject)
+	}
+	pluginArray := args["plugins"].Schema["oneOf"].([]any)[1].(map[string]any)
+	if pluginArray["type"] != "array" || pluginArray["items"].(map[string]any)["type"] != "string" {
+		t.Fatalf("plugins array schema = %#v", pluginArray)
+	}
+	for _, name := range []string{"interval_s", "timeout_s", "hard_timeout_s", "max_idle_iterations", "messages_batch", "messages_max_queue"} {
+		if args[name].Type != registry.Int {
+			t.Fatalf("%s type = %q, want int", name, args[name].Type)
+		}
+	}
+}
+
 func TestAgentStatusIncludesActiveIterationDeadlines(t *testing.T) {
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
@@ -243,5 +352,32 @@ func TestAgentInspectReportsEffectiveCwd(t *testing.T) {
 	}
 	if got := v.(map[string]any)["cwd"]; got != "/srv/work" {
 		t.Fatalf("explicit cwd: got %q want %q", got, "/srv/work")
+	}
+}
+
+// Catches regressions where clone initialization sees the effective managed
+// workdir instead of the raw configured CWD, or silently guesses message
+// delivery defaults that belong to the persisted source agent.
+func TestAgentInspectReportsCompleteCloneProjection(t *testing.T) {
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{
+		Name: "source", MessagesBatch: 17, MessagesMaxQueue: 1234,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	value, err := h(t, "agent.inspect")(c, registry.Params{"name": "source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := value.(map[string]any)
+	if got["configured_cwd"] != "" {
+		t.Fatalf("configured_cwd = %#v, want raw empty configured value", got["configured_cwd"])
+	}
+	if got["cwd"] == "" {
+		t.Fatal("effective cwd is empty, want managed-workdir fallback")
+	}
+	if got["messages_batch"] != 17 || got["messages_max_queue"] != 1234 {
+		t.Fatalf("message limits = %#v/%#v, want 17/1234", got["messages_batch"], got["messages_max_queue"])
 	}
 }
