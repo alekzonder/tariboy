@@ -202,6 +202,20 @@ def append_query(url: str, params: dict[str, Any]) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
+def extend_bounded_collection(
+    items: list[Any], values: list[Any], encoded_size: int
+) -> int:
+    for value in values:
+        item_size = len(
+            json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        )
+        encoded_size += item_size + (1 if items else 0)
+        if encoded_size > MAX_RESPONSE_BYTES:
+            fail("GitHub paginated collection exceeded its size limit")
+        items.append(value)
+    return encoded_size
+
+
 def stop_process(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is None:
         process.kill()
@@ -355,6 +369,7 @@ class GitHubClient:
 
     def paginated_array(self, path: str, *, params: dict[str, Any] | None = None) -> list[Any]:
         items: list[Any] = []
+        encoded_size = 2
         page = 1
         while True:
             page_params = dict(params or {})
@@ -362,13 +377,14 @@ class GitHubClient:
             response = self.request("GET", path, params=page_params)
             if not isinstance(response, list):
                 fail("GitHub returned an unexpected array response")
-            items.extend(response)
+            encoded_size = extend_bounded_collection(items, response, encoded_size)
             if len(response) < 100:
                 return items
             page += 1
 
     def paginated_check_runs(self, path: str) -> list[Any]:
         items: list[Any] = []
+        encoded_size = 2
         page = 1
         while True:
             response = self.request(
@@ -380,7 +396,7 @@ class GitHubClient:
             current = response.get("check_runs")
             if not isinstance(total, int) or total < 0 or not isinstance(current, list):
                 fail("GitHub returned an incomplete check-runs response")
-            items.extend(current)
+            encoded_size = extend_bounded_collection(items, current, encoded_size)
             if len(current) < 100:
                 return items
             page += 1
@@ -722,10 +738,16 @@ def load_snapshot(path: Path, repo: str, number: int) -> dict[str, Any] | None:
     return value
 
 
-def atomic_write(path: Path, value: dict[str, Any]) -> None:
+def encode_snapshot(value: dict[str, Any]) -> bytes:
     payload = (
         json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
     ).encode("utf-8")
+    if len(payload) > MAX_RESPONSE_BYTES:
+        fail("monitor snapshot exceeds its size limit")
+    return payload
+
+
+def atomic_write(path: Path, payload: bytes) -> None:
     descriptor = -1
     temporary = ""
     try:
@@ -785,15 +807,17 @@ def changed_untrusted_facts(
         old_item = previous.get(item["id"])
         if old_item == item:
             continue
-        facts.append(
-            {
-                "kind": label,
-                "id": item["id"],
-                "change": "new" if old_item is None else "updated",
-                "untrusted": True,
-                "body": bodies[item["id"]],
-            }
-        )
+        fact = {
+            "kind": label,
+            "id": item["id"],
+            "change": "new" if old_item is None else "updated",
+            "untrusted": True,
+            "body": bodies[item["id"]],
+        }
+        if label == "untrusted_review":
+            fact["state"] = item["state"]
+            fact["commit_id"] = item["commit_id"]
+        facts.append(fact)
     return facts
 
 
@@ -849,6 +873,8 @@ def observation_facts(
             facts.append(
                 {
                     "kind": key,
+                    "head_sha": current_pr["head_sha"],
+                    key: snapshot[key],
                     "message": f"Observed changed {label} for head {current_pr['head_sha']}.",
                 }
             )
@@ -904,6 +930,8 @@ def command_monitor(args: argparse.Namespace, client: GitHubClient) -> int:
         "review_comments": review_comment_meta,
         "reviews": review_meta,
     }
+    validate_snapshot(snapshot, repository, args.pr)
+    payload = encode_snapshot(snapshot)
     if old == snapshot:
         return 2
 
@@ -916,7 +944,7 @@ def command_monitor(args: argparse.Namespace, client: GitHubClient) -> int:
             ("reviews", review_bodies, "untrusted_review"),
         ],
     )
-    atomic_write(snapshot_path, snapshot)
+    atomic_write(snapshot_path, payload)
     emit_json({"changed": True, "facts": facts})
     return 0
 

@@ -69,9 +69,14 @@ not enable shell tracing around these commands.
 5. Process every delivered result before waiting again:
 
    - Exit `0`: read the run's recorded log path and process the changed JSON
-     facts. A new head SHA invalidates all prior check success. Route failed
-     checks through `systematic-debugging`; route substantive review feedback
-     through `receiving-code-review`; commit and push fixes to the same branch.
+     facts. Changed `check_runs` and `statuses` facts contain the current
+     `head_sha` plus normalized arrays; use their `status`, `conclusion`, and
+     `state` fields to identify failures. An `untrusted_review` fact contains
+     its normalized review `state` and `commit_id` alongside its transient
+     untrusted body. A new head SHA invalidates all prior check success. Route
+     failed checks through `systematic-debugging`; route substantive review
+     feedback through `receiving-code-review`; commit and push fixes to the
+     same branch.
    - Exit `2`: unchanged complete observation. This is the only quiet result;
      the recurring run continues without waking the agent.
    - Any other nonzero exit: read the bounded diagnostic from the run log,
