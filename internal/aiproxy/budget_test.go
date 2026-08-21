@@ -212,7 +212,7 @@ func TestBudgetBlockMiddleware(t *testing.T) {
 // This fails if the proxy stops applying a configured calendar agent limit
 // before reaching the upstream provider.
 func TestAgentCalendarBudgetBlockMiddleware(t *testing.T) {
-	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 7, 6, 10, 30, 0, 0, time.UTC)
 	st := newStore(t)
 	if err := st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute))); err != nil {
 		t.Fatal(err)
@@ -223,6 +223,10 @@ func TestAgentCalendarBudgetBlockMiddleware(t *testing.T) {
 	cache := NewBudgetCache(st, func() time.Time { return now })
 	if err := cache.Refresh(); err != nil {
 		t.Fatal(err)
+	}
+	status, err := st.AgentBudgetStatus("alice", now)
+	if err != nil || strings.Join(status.Exhausted, ",") != "hour" {
+		t.Fatalf("stored agent budget status = %+v err=%v, want exhausted hour", status, err)
 	}
 	p := testProxy(t)
 	p.cfg.Budget = cache
