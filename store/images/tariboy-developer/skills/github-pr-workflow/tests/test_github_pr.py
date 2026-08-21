@@ -146,26 +146,46 @@ class GitHubPRWorkflowTests(unittest.TestCase):
             self.fail(f"github PR utility is missing: {UTILITY}")
 
     def run_utility(self, *args, curl, gh_token=SECRET, github_token=None):
-        with tempfile.TemporaryDirectory() as process_temp:
+        with tempfile.TemporaryDirectory() as process_sandbox:
+            sandbox = Path(process_sandbox)
+            home = sandbox / "home"
+            xdg_state = sandbox / "xdg-state"
+            xdg_cache = sandbox / "xdg-cache"
+            xdg_config = sandbox / "xdg-config"
+            process_temp = sandbox / "tmp"
+            working_dir = sandbox / "cwd"
+            for directory in (home, xdg_state, xdg_cache, xdg_config, process_temp, working_dir):
+                directory.mkdir(mode=0o700)
             env = os.environ.copy()
             env.pop("GH_TOKEN", None)
             env.pop("GITHUB_TOKEN", None)
-            env.update({"TMPDIR": process_temp, "TMP": process_temp, "TEMP": process_temp})
+            env.update({
+                "HOME": str(home),
+                "PWD": str(working_dir),
+                "XDG_STATE_HOME": str(xdg_state),
+                "XDG_CACHE_HOME": str(xdg_cache),
+                "XDG_CONFIG_HOME": str(xdg_config),
+                "TMPDIR": str(process_temp),
+                "TMP": str(process_temp),
+                "TEMP": str(process_temp),
+            })
             expected_token = gh_token if gh_token is not None else (github_token if github_token is not None else SECRET)
-            env.update(curl.env(expected_token, process_temp))
+            env.update(curl.env(expected_token, sandbox))
             if gh_token is not None:
                 env["GH_TOKEN"] = gh_token
             if github_token is not None:
                 env["GITHUB_TOKEN"] = github_token
             result = subprocess.run(
                 [sys.executable, str(UTILITY), *args],
-                cwd=SKILL_DIR,
+                cwd=working_dir,
                 env=env,
                 text=True,
                 capture_output=True,
                 check=False,
             )
-            self.assert_no_secret_on_disk(Path(process_temp))
+            self.assert_no_secret_on_disk(sandbox)
+            for state_dir in self.absolute_state_dirs(args, sandbox):
+                self.assert_no_secret_on_disk(state_dir)
             return result
 
     def assert_secret_free(self, result):
@@ -176,6 +196,16 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         for candidate in root.rglob("*"):
             if candidate.is_file():
                 self.assertNotIn(SECRET.encode("utf-8"), candidate.read_bytes(), candidate)
+
+    def absolute_state_dirs(self, args, sandbox):
+        state_dirs = []
+        for index, arg in enumerate(args[:-1]):
+            if arg != "--state-dir":
+                continue
+            candidate = Path(args[index + 1])
+            if candidate.is_absolute() and not candidate.is_relative_to(sandbox):
+                state_dirs.append(candidate)
+        return state_dirs
 
     def assert_no_requests(self, curl):
         self.assertEqual(curl.records_json(), [])
@@ -273,16 +303,23 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses()) as curl:
             curl.set_responses(monitor_responses(pr_body=pr(head="old-head"), checks=[old_check]))
             first = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+            old_state = (Path(state_dir) / "pr-31.json").read_text(encoding="utf-8")
             curl.set_responses(monitor_responses(pr_body=pr(head="new-head"), checks=[]))
             result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
             state = (Path(state_dir) / "pr-31.json").read_text(encoding="utf-8")
         self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("old-head", old_state)
+        self.assertIn("old-success-check", old_state)
+        self.assertIn("success", old_state.lower())
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("new-head", state)
+        self.assertNotIn("old-head", state)
         self.assertNotIn("old-success-check", state)
+        self.assertNotIn("success", state.lower())
         self.assertIn("new-head", result.stdout)
         self.assertIn("head", result.stdout.lower())
         self.assertIn("check", result.stdout.lower())
+        self.assertTrue(any(marker in result.stdout.lower() for marker in ("invalidate", "replace", "reset")), result.stdout)
 
     def test_monitor_emits_each_untrusted_comment_and_review_only_when_new_or_updated(self):
         comments = [{"id": 1, "updated_at": "2026-08-21T12:00:00Z", "body": "initial issue body"}]
