@@ -159,6 +159,25 @@ Native Task assignment and mention notifications use this same path; they do
 not call a Tasks-specific runner or poller. A disabled loop keeps the delivery
 pending until it is enabled or started manually.
 
+### Idle task reminders
+
+`task_reminder` is a daemon configuration policy for an idle agent with
+assigned Native Tasks. With no saved value it is off and uses
+`idle_threshold_s: 300`; the threshold is a positive integral number of
+seconds. Its eligibility is independent of timer cadence, so an agent with
+`interval_s=0` can qualify. The policy must be enabled, as must the agent and
+its loop; the agent must have assigned open Native Tasks and have passed the
+idle threshold since its latest durable activity boundary.
+
+For each eligible generation, the reconciler publishes one normal
+`task.reminder` message to `agent:<name>:inbox`. Its saved fingerprint combines
+the sorted assigned-open task keys with the activity boundary, deduping repeated
+scans and daemon restarts. A changed assignment set or a newer completed
+iteration makes a new generation eligible after the threshold. The order is
+strictly `Publish -> delivery -> WakeMessage`: no direct iteration starts, and
+disabled loops retain a pending delivery. The message is only a reminder; it
+does not claim, assign, or change a Native Task.
+
 ### Workflow-owned channel use
 
 A managed assignment is deliberately different from an agent's standing bus
