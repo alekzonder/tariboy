@@ -254,6 +254,18 @@ func (c *BudgetCache) Refresh() error {
 // group and global scopes. block beats warn. A non-over agent scope still
 // yields a group/global block if either is over.
 func (c *BudgetCache) Check(agent string) Decision {
+	// Agent calendar limits must become effective as soon as costs or limits
+	// are persisted. Keep the periodic cache for legacy global/group budgets,
+	// but derive the agent-specific decision from durable accounting here.
+	liveAgent := Decision{}
+	liveAgentKnown := false
+	if status, err := c.store.AgentBudgetStatus(agent, c.clock()); err == nil {
+		liveAgentKnown = true
+		if len(status.Exhausted) > 0 {
+			liveAgent = Decision{Over: true, Mode: "block", Scope: "agent:" + agent, Exhausted: status.Exhausted}
+		}
+	}
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	scopes := []string{"agent:" + agent, "global"}
@@ -261,8 +273,14 @@ func (c *BudgetCache) Check(agent string) Decision {
 		scopes = append(scopes, "group:"+g)
 	}
 	worst := Decision{}
-	if d, ok := c.agents[agent]; ok {
-		worst = d
+	if liveAgent.Over {
+		worst = liveAgent
+	} else if !liveAgentKnown {
+		// If durable accounting is unavailable, retain the last cached block
+		// rather than accidentally allowing a request through on a DB fault.
+		if d, ok := c.agents[agent]; ok {
+			worst = d
+		}
 	}
 	for _, scope := range scopes {
 		if d, ok := c.decided[scope]; ok && d.Over {

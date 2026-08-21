@@ -61,6 +61,28 @@ func TestSetAgentBudgetRejectsInvalidLimits(t *testing.T) {
 	}
 }
 
+// This fails if CostSince compares RFC3339Nano text lexically: a fractional
+// timestamp immediately after a whole-second calendar boundary sorts before
+// the boundary's trailing Z even though it belongs inside the window.
+func TestAgentBudgetStatusIncludesFractionalSecondAfterCalendarBoundary(t *testing.T) {
+	st := newStore(t)
+	now := time.Date(2026, time.July, 6, 10, 0, 1, 0, time.UTC)
+	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 0.50}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Insert(sampleReq("fractional", "alice", "basic", 0.60, time.Date(2026, time.July, 6, 10, 0, 0, 1, time.UTC))); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := st.AgentBudgetStatus("alice", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.HourSpentUSD != 0.60 || strings.Join(status.Exhausted, ",") != "hour" {
+		t.Fatalf("calendar-boundary status = %+v, want hour spent 0.60 and exhausted hour", status)
+	}
+}
+
 func TestBudgetStoreCRUD(t *testing.T) {
 	s := newStore(t)
 	if err := s.SetBudget(Budget{Scope: "agent:alice", LimitUSD: 1.0, PeriodS: 3600, Mode: "block"}); err != nil {
@@ -104,6 +126,57 @@ func TestBudgetCacheCheck(t *testing.T) {
 	// bob has no budget -> not over.
 	if cache.Check("bob").Over {
 		t.Fatal("bob should not be over")
+	}
+}
+
+// This fails if agent budget enforcement waits for the periodic cache refresh
+// after a newly persisted cost exhausts a calendar window.
+func TestBudgetCacheCheckUsesLatestAgentSpendWithoutRefresh(t *testing.T) {
+	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	st := newStore(t)
+	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 0.50}); err != nil {
+		t.Fatal(err)
+	}
+	cache := NewBudgetCache(st, func() time.Time { return now })
+	if err := cache.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	if cache.Check("alice").Over {
+		t.Fatal("agent should be within budget before any cost is persisted")
+	}
+	if err := st.Insert(sampleReq("newly-exhausted", "alice", "basic", 0.60, now)); err != nil {
+		t.Fatal(err)
+	}
+
+	d := cache.Check("alice")
+	if !d.Over || d.Mode != "block" || strings.Join(d.Exhausted, ",") != "hour" {
+		t.Fatalf("decision after persisted cost = %+v, want an immediate hour block", d)
+	}
+}
+
+// This fails if an already-cached agent block survives a later update that
+// raises the limit (including zero, which means unlimited).
+func TestBudgetCacheCheckUsesLatestAgentLimitsWithoutRefresh(t *testing.T) {
+	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	st := newStore(t)
+	if err := st.Insert(sampleReq("already-exhausted", "alice", "basic", 0.60, now)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 0.50}); err != nil {
+		t.Fatal(err)
+	}
+	cache := NewBudgetCache(st, func() time.Time { return now })
+	if err := cache.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	if !cache.Check("alice").Over {
+		t.Fatal("agent should start over budget")
+	}
+	if err := st.SetAgentBudget("alice", AgentBudget{}); err != nil {
+		t.Fatal(err)
+	}
+	if d := cache.Check("alice"); d.Over {
+		t.Fatalf("decision after removing limits = %+v, want within budget", d)
 	}
 }
 

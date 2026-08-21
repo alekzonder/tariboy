@@ -35,6 +35,7 @@ export default function AgentConfigurationTab({
   const [copied, setCopied] = useState(false);
 	const [budget, setBudget] = useState<AgentBudgetStatus | null>(null);
 	const [budgetSaving, setBudgetSaving] = useState(false);
+	const [budgetError, setBudgetError] = useState("");
   const [images,setImages]=useState<ImageRow[]>([]);const [imageStatus,setImageStatus]=useState<AgentImageStatus|null>(null);const [selectedImage,setSelectedImage]=useState("");const [imageSaving,setImageSaving]=useState(false);
   const targetId = target?.id;
   const targetLabel = target?.label;
@@ -140,12 +141,16 @@ export default function AgentConfigurationTab({
 	const saveBudget = async () => {
 		if (!budget) return;
 		setBudgetSaving(true);
+		setBudgetError("");
 		try {
 			const next = await agentPostOn<AgentBudgetStatus>(requestTarget, name, "budget", {
 				hour_usd: String(budget.hour_usd), day_usd: String(budget.day_usd),
 				week_usd: String(budget.week_usd), month_usd: String(budget.month_usd),
 			});
 			setBudget(next); await load(); refresh();
+		} catch (cause) {
+			const reason = cause instanceof Error ? cause.message : String(cause);
+			setBudgetError(`Agent budgets were not saved.${reason ? ` ${reason}` : ""}`);
 		} finally { setBudgetSaving(false); }
 	};
 	const budgetRows = budget ? ([
@@ -216,6 +221,7 @@ export default function AgentConfigurationTab({
 				{budgetRows.map(([label, key, spent, limit]) => <label key={key} className="flex items-center gap-2 text-sm"><span className="w-14">{label}</span><span>{spent.toFixed(2)} /</span><input aria-label={`${label} budget`} className="w-28 rounded border px-2 py-1" type="number" min="0" step="0.01" value={limit} onChange={(event) => setBudget({ ...budget, [`${key}_usd`]: Number(event.target.value) })} /><span className="text-muted-foreground">{limit === 0 ? "Unlimited" : "USD"}</span></label>)}
 			</div>
 			{budget.exhausted.length > 0 && <p role="status" className="mt-3 text-sm text-destructive">Out of budget: {budget.exhausted.join(", ")}</p>}
+			{budgetError && <p role="alert" className="mt-3 text-sm text-destructive">{budgetError}</p>}
 			<Button className="mt-4" disabled={budgetSaving} onClick={() => void saveBudget()}>{budgetSaving ? "Saving…" : "Save agent budgets"}</Button>
 		</section>}
       <section className="rounded-lg border p-4">

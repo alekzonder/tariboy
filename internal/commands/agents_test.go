@@ -355,6 +355,39 @@ func TestAgentInspectReportsEffectiveCwd(t *testing.T) {
 	}
 }
 
+// The four calendar limits are an atomic agent configuration: malformed input
+// must not partially replace the last accepted limits, and every agent view
+// must expose the same derived budget projection.
+func TestAgentBudgetSetIsAtomicAndProjected(t *testing.T) {
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	set := h(t, "agent.budget.set")
+	params := registry.Params{"name": "alice", "hour_usd": "1.25", "day_usd": "2.50", "week_usd": "3.75", "month_usd": "5.00"}
+	value, err := set(c, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := value.(map[string]any)
+	if budget["hour_usd"] != 1.25 || budget["day_usd"] != 2.50 || budget["week_usd"] != 3.75 || budget["month_usd"] != 5.00 {
+		t.Fatalf("saved budget = %#v", budget)
+	}
+
+	bad := registry.Params{"name": "alice", "hour_usd": "9", "day_usd": "-1", "week_usd": "9", "month_usd": "9"}
+	if _, err := set(c, bad); !isCode(err, "bad_budget") {
+		t.Fatalf("invalid budget error = %v, want bad_budget", err)
+	}
+	inspect, err := h(t, "agent.inspect")(c, registry.Params{"name": "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected := inspect.(map[string]any)["budget"].(map[string]any)
+	if projected["hour_usd"] != 1.25 || projected["day_usd"] != 2.50 || projected["week_usd"] != 3.75 || projected["month_usd"] != 5.00 {
+		t.Fatalf("budget changed after rejected update: %#v", projected)
+	}
+}
+
 // Catches regressions where clone initialization sees the effective managed
 // workdir instead of the raw configured CWD, or silently guesses message
 // delivery defaults that belong to the persisted source agent.

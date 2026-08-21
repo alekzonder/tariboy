@@ -562,7 +562,12 @@ func (s *Store) GroupCostSince(members []string, since time.Time) (float64, erro
 
 // CostSince sums cost_usd for an agent (empty = all agents) since a cutoff.
 func (s *Store) CostSince(agent string, since time.Time) (float64, error) {
-	q := `SELECT COALESCE(SUM(cost_usd),0) FROM ai_requests WHERE ts>=?`
+	// ts is variable-width RFC3339Nano text, so comparing it directly to a
+	// whole-second calendar boundary misorders fractional timestamps (the dot
+	// sorts before the boundary's trailing Z). Normalize both sides through
+	// SQLite's offset-aware time parser before comparing.
+	q := `SELECT COALESCE(SUM(cost_usd),0) FROM ai_requests
+		WHERE strftime('%Y-%m-%dT%H:%M:%f',ts)>=strftime('%Y-%m-%dT%H:%M:%f',?)`
 	args := []any{since.UTC().Format(time.RFC3339Nano)}
 	if agent != "" {
 		q += ` AND agent=?`
