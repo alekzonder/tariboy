@@ -128,8 +128,6 @@ function CreateAgentDialogForm({
   const [pluginDraft, setPluginDraft] = useState("");
   const runtimeInitializedForTarget = useRef("");
   const [busy, setBusy] = useState(false);
-  const [loadingImages, setLoadingImages] = useState(true);
-  const [loadingManifest, setLoadingManifest] = useState(imageRef !== "");
   const [sourceState, setSourceState] = useState<"idle" | "loading" | "ready" | "error">(
     cloneSource ? "loading" : "idle",
   );
@@ -141,10 +139,28 @@ function CreateAgentDialogForm({
   const selectedHostRevision = hosts.find((entry) => entry.id === host)?.revision ?? "missing";
   const targetIsCurrent = resolvedRevision === selectedHostRevision;
   const targetIsUsable = host === "" || target !== null;
+  const loadingImages = !targetIsCurrent;
+  const targetImageAvailable = images.some(
+    (entry) => `${entry.name}:${entry.tag}` === draft.image,
+  );
   const expectedManifestKey = `${selectedHostRevision}\u0000${draft.image}`;
   const runtimeTargetKey = `${host}\u0000${draft.image}`;
   const manifestIsCurrent =
-    draft.image !== "" && manifestKey === expectedManifestKey && manifest !== null;
+    draft.image !== ""
+    && targetImageAvailable
+    && manifestKey === expectedManifestKey
+    && manifest !== null;
+  const loadingManifest = draft.image !== ""
+    && targetIsCurrent
+    && targetIsUsable
+    && targetImageAvailable
+    && manifestKey !== expectedManifestKey;
+  const targetImageError = draft.image !== ""
+    && targetIsCurrent
+    && targetIsUsable
+    && !targetImageAvailable
+    ? `Image ${draft.image} is not built on the selected host`
+    : "";
   const currentManifest = manifestIsCurrent ? manifest : null;
   const bare = currentManifest?.bare === true;
   const schemaV2 = currentManifest?.schema_version === 2;
@@ -161,36 +177,57 @@ function CreateAgentDialogForm({
     : draft.plugins;
   const sourceReady = !cloneSource || sourceState === "ready";
   const formDisabled = busy || created !== null || sourceState === "loading";
+  const visibleFormError = formError || targetImageError;
 
   const updateDraft = <K extends keyof AgentCreateDraft>(key: K, value: AgentCreateDraft[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
-  const loadSource = useCallback(async () => {
-    if (!cloneSource) return;
-    setSourceState("loading");
-    setSourceError("");
-    try {
-      const sourceTarget = cloneSource.hostId ? await resolveDaemon(cloneSource.hostId) : null;
-      if (cloneSource.hostId && !sourceTarget) {
-        throw new Error(`host ${cloneSource.hostId} was not found`);
-      }
-      const source = await agentGetOn<AgentView>(sourceTarget, cloneSource.agentName, "");
-      setDraft(cloneAgentDraft(source));
-      setSourceState("ready");
-    } catch (error) {
-      setSourceState("error");
-      setSourceError(`Could not load source agent: ${errorMessage(error)}`);
+  const fetchSource = useCallback(async (): Promise<AgentCreateDraft | null> => {
+    if (!cloneSource) return null;
+    const sourceTarget = cloneSource.hostId ? await resolveDaemon(cloneSource.hostId) : null;
+    if (cloneSource.hostId && !sourceTarget) {
+      throw new Error(`host ${cloneSource.hostId} was not found`);
     }
+    const source = await agentGetOn<AgentView>(sourceTarget, cloneSource.agentName, "");
+    return cloneAgentDraft(source);
   }, [cloneSource]);
 
   useEffect(() => {
-    void loadSource();
-  }, [loadSource]);
+    let alive = true;
+    void fetchSource().then(
+      (nextDraft) => {
+        if (!alive || !nextDraft) return;
+        setDraft(nextDraft);
+        setSourceState("ready");
+      },
+      (error) => {
+        if (!alive) return;
+        setSourceState("error");
+        setSourceError(`Could not load source agent: ${errorMessage(error)}`);
+      },
+    );
+    return () => { alive = false; };
+  }, [fetchSource]);
+
+  const retrySource = () => {
+    setSourceState("loading");
+    setSourceError("");
+    void fetchSource().then(
+      (nextDraft) => {
+        if (!nextDraft) return;
+        setDraft(nextDraft);
+        setSourceState("ready");
+      },
+      (error) => {
+        setSourceState("error");
+        setSourceError(`Could not load source agent: ${errorMessage(error)}`);
+      },
+    );
+  };
 
   useEffect(() => {
     let alive = true;
-    setLoadingImages(true);
     void (async () => {
       try {
         const nextTarget = host ? await resolveDaemon(host) : null;
@@ -207,8 +244,6 @@ function CreateAgentDialogForm({
         setResolvedRevision(selectedHostRevision);
         setImages([]);
         setFormError(`Could not load images: ${errorMessage(error)}`);
-      } finally {
-        if (alive) setLoadingImages(false);
       }
     })();
     return () => { alive = false; };
@@ -216,15 +251,8 @@ function CreateAgentDialogForm({
 
   useEffect(() => {
     if (!draft.image || loadingImages || !targetIsCurrent || !targetIsUsable) return;
-    if (!images.some((entry) => `${entry.name}:${entry.tag}` === draft.image)) {
-      setManifest(null);
-      setManifestKey("");
-      setLoadingManifest(false);
-      setFormError(`Image ${draft.image} is not built on the selected host`);
-      return;
-    }
+    if (!targetImageAvailable) return;
     let alive = true;
-    setLoadingManifest(true);
     void imageManifestGet(draft.image, target)
       .then((next) => {
         if (!alive) return;
@@ -249,19 +277,16 @@ function CreateAgentDialogForm({
         setManifest(null);
         setManifestKey(expectedManifestKey);
         setFormError(`Could not load ${draft.image}: ${errorMessage(error)}`);
-      })
-      .finally(() => {
-        if (alive) setLoadingManifest(false);
       });
     return () => { alive = false; };
   }, [
     cloneSource,
     draft.image,
     expectedManifestKey,
-    images,
     loadingImages,
     runtimeTargetKey,
     target,
+    targetImageAvailable,
     targetIsCurrent,
     targetIsUsable,
   ]);
@@ -275,7 +300,6 @@ function CreateAgentDialogForm({
     setImages([]);
     setManifest(null);
     setManifestKey("");
-    setLoadingManifest(false);
     setFormError("");
     if (!cloneSource) updateDraft("image", "");
   };
@@ -284,7 +308,6 @@ function CreateAgentDialogForm({
     updateDraft("image", image);
     setManifest(null);
     setManifestKey("");
-    setLoadingManifest(image !== "");
     setFormError("");
   };
 
@@ -411,7 +434,7 @@ function CreateAgentDialogForm({
           {sourceState === "error" && (
             <div role="alert" className="space-y-2 rounded border border-destructive p-3">
               <p className="text-sm text-destructive">{sourceError}</p>
-              <Button size="sm" variant="outline" onClick={() => void loadSource()}>Retry source</Button>
+              <Button size="sm" variant="outline" onClick={retrySource}>Retry source</Button>
             </div>
           )}
 
@@ -501,7 +524,7 @@ function CreateAgentDialogForm({
             <SwitchRow label="Start now" id="create-agent-start" checked={draft.startNow} onCheckedChange={(value) => updateDraft("startNow", value)} disabled={formDisabled} help="Off creates the agent in stopped state." />
           </section>
 
-          {formError && <p role="alert" className="text-sm text-destructive">{formError}</p>}
+          {visibleFormError && <p role="alert" className="text-sm text-destructive">{visibleFormError}</p>}
           {startError && (
             <div role="alert" className="space-y-2 rounded border border-destructive p-3">
               <p className="text-sm text-destructive">{startError}</p>

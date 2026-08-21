@@ -278,8 +278,9 @@ it("retries a failed source load without allowing a partial clone", async () => 
 });
 
 it("requires a daemon with the complete clone projection", async () => {
-  const { configured_cwd: _cwd, ...oldProjection } = cloneSource;
-  vi.mocked(agentGetOn).mockResolvedValueOnce(oldProjection as AgentView);
+  const oldProjection: AgentView = { ...cloneSource };
+  delete oldProjection.configured_cwd;
+  vi.mocked(agentGetOn).mockResolvedValueOnce(oldProjection);
   renderDialog({
     imageRef: undefined,
     cloneSource: { hostId: "d1", agentName: "source", hostLabel: "prod" },
