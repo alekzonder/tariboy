@@ -45,6 +45,9 @@ if not config.startswith("/dev/fd/"):
 config_text = Path(config).read_text(encoding="utf-8")
 if "Authorization: Bearer " + secret not in config_text:
     raise SystemExit("authorization header was not supplied through config")
+for candidate in Path(os.environ["FAKE_CURL_PROCESS_TEMP"]).rglob("*"):
+    if candidate.is_file() and secret.encode("utf-8") in candidate.read_bytes():
+        raise SystemExit("token materialized in the process temporary directory")
 
 method = "GET"
 for flag in ("-X", "--request"):
@@ -102,12 +105,13 @@ class FakeCurl:
             return []
         return [json.loads(line) for line in self.records.read_text(encoding="utf-8").splitlines()]
 
-    def env(self, expected_token=SECRET):
+    def env(self, expected_token, process_temp):
         return {
             "TARIBOY_GITHUB_CURL_BIN": str(self.binary),
             "FAKE_CURL_QUEUE": str(self.queue),
             "FAKE_CURL_RECORDS": str(self.records),
             "FAKE_CURL_EXPECTED_TOKEN": expected_token,
+            "FAKE_CURL_PROCESS_TEMP": str(process_temp),
         }
 
 
@@ -142,27 +146,36 @@ class GitHubPRWorkflowTests(unittest.TestCase):
             self.fail(f"github PR utility is missing: {UTILITY}")
 
     def run_utility(self, *args, curl, gh_token=SECRET, github_token=None):
-        env = os.environ.copy()
-        env.pop("GH_TOKEN", None)
-        env.pop("GITHUB_TOKEN", None)
-        expected_token = gh_token if gh_token is not None else (github_token if github_token is not None else SECRET)
-        env.update(curl.env(expected_token))
-        if gh_token is not None:
-            env["GH_TOKEN"] = gh_token
-        if github_token is not None:
-            env["GITHUB_TOKEN"] = github_token
-        return subprocess.run(
-            [sys.executable, str(UTILITY), *args],
-            cwd=SKILL_DIR,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory() as process_temp:
+            env = os.environ.copy()
+            env.pop("GH_TOKEN", None)
+            env.pop("GITHUB_TOKEN", None)
+            env.update({"TMPDIR": process_temp, "TMP": process_temp, "TEMP": process_temp})
+            expected_token = gh_token if gh_token is not None else (github_token if github_token is not None else SECRET)
+            env.update(curl.env(expected_token, process_temp))
+            if gh_token is not None:
+                env["GH_TOKEN"] = gh_token
+            if github_token is not None:
+                env["GITHUB_TOKEN"] = github_token
+            result = subprocess.run(
+                [sys.executable, str(UTILITY), *args],
+                cwd=SKILL_DIR,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assert_no_secret_on_disk(Path(process_temp))
+            return result
 
     def assert_secret_free(self, result):
         self.assertNotIn(SECRET, result.stdout)
         self.assertNotIn(SECRET, result.stderr)
+
+    def assert_no_secret_on_disk(self, root):
+        for candidate in root.rglob("*"):
+            if candidate.is_file():
+                self.assertNotIn(SECRET.encode("utf-8"), candidate.read_bytes(), candidate)
 
     def assert_no_requests(self, curl):
         self.assertEqual(curl.records_json(), [])
@@ -231,6 +244,13 @@ class GitHubPRWorkflowTests(unittest.TestCase):
                 with self.subTest(args=args):
                     result = self.run_utility(*args, curl=curl)
                     self.assertNotEqual(result.returncode, 0)
+            with tempfile.TemporaryDirectory() as state_parent:
+                actual = Path(state_parent) / "actual"
+                actual.mkdir()
+                linked = Path(state_parent) / "linked"
+                linked.symlink_to(actual, target_is_directory=True)
+                result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", str(linked), curl=curl)
+                self.assertNotEqual(result.returncode, 0)
             self.assert_no_requests(curl)
 
     def test_monitor_first_unchanged_and_check_change_have_exact_exit_contract(self):
@@ -248,26 +268,48 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         self.assertEqual(unchanged.returncode, 2, unchanged.stderr)
         self.assertEqual(changed.returncode, 0, changed.stderr)
 
-    def test_monitor_new_head_invalidates_prior_snapshot(self):
+    def test_monitor_new_head_invalidates_old_successful_checks(self):
+        old_check = {"id": 7, "name": "old-success-check", "status": "completed", "conclusion": "success"}
         with tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses()) as curl:
-            self.assertEqual(self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl).returncode, 0)
-            curl.set_responses(monitor_responses(pr_body=pr(head="new-head")))
+            curl.set_responses(monitor_responses(pr_body=pr(head="old-head"), checks=[old_check]))
+            first = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+            curl.set_responses(monitor_responses(pr_body=pr(head="new-head"), checks=[]))
             result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
             state = (Path(state_dir) / "pr-31.json").read_text(encoding="utf-8")
+        self.assertEqual(first.returncode, 0, first.stderr)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("new-head", state)
+        self.assertNotIn("old-success-check", state)
+        self.assertIn("new-head", result.stdout)
+        self.assertIn("head", result.stdout.lower())
+        self.assertIn("check", result.stdout.lower())
 
-    def test_monitor_emits_untrusted_new_comment_and_review_bodies_without_persisting_them(self):
-        comments = [{"id": 1, "updated_at": "2026-08-21T12:00:00Z", "body": "comment body"}]
+    def test_monitor_emits_each_untrusted_comment_and_review_only_when_new_or_updated(self):
+        comments = [{"id": 1, "updated_at": "2026-08-21T12:00:00Z", "body": "initial issue body"}]
         review_comments = [{"id": 2, "updated_at": "2026-08-21T12:00:00Z", "body": "review comment body"}]
         reviews = [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "body": "review body", "state": "COMMENTED"}]
         with tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses(comments=comments, review_comments=review_comments, reviews=reviews)) as curl:
-            result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+            first = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+            curl.set_responses(monitor_responses(comments=comments, review_comments=review_comments, reviews=reviews))
+            unchanged = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+            updated_comments = [{"id": 1, "updated_at": "2026-08-22T12:00:00Z", "body": "updated comment body"}]
+            curl.set_responses(monitor_responses(comments=updated_comments, review_comments=review_comments, reviews=reviews))
+            updated = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
             state = (Path(state_dir) / "pr-31.json").read_text(encoding="utf-8")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("untrusted", result.stdout.lower())
-        self.assertIn("comment body", result.stdout)
-        for body in ("comment body", "review comment body", "review body"):
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertGreaterEqual(first.stdout.lower().count("untrusted"), 3)
+        for body in ("initial issue body", "review comment body", "review body"):
+            self.assertIn(body, first.stdout)
+            self.assertNotIn(body, state)
+        self.assertEqual(unchanged.returncode, 2, unchanged.stderr)
+        for body in ("initial issue body", "review comment body", "review body"):
+            self.assertNotIn(body, unchanged.stdout)
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        self.assertIn("untrusted", updated.stdout.lower())
+        self.assertIn("updated comment body", updated.stdout)
+        for body in ("initial issue body", "review comment body", "review body"):
+            self.assertNotIn(body, updated.stdout)
+        for body in ("updated comment body", "review comment body", "review body"):
             self.assertNotIn(body, state)
 
     def test_monitor_reports_merged_and_closed_without_merge_as_distinct_states(self):
@@ -316,23 +358,33 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         self.assertEqual(snapshot.read_bytes(), before)
         self.assertEqual(leftovers, [])
 
-    def test_monitor_paginates_all_collections(self):
-        first_page = [{"id": i, "updated_at": "2026-08-21T12:00:00Z", "body": "body"} for i in range(100)]
-        second_page = [{"id": 100, "updated_at": "2026-08-22T12:00:00Z", "body": "tail"}]
+    def test_monitor_paginates_check_runs_statuses_and_each_comment_collection(self):
+        check_runs = [{"id": i, "name": f"check-{i}", "status": "completed", "conclusion": "success"} for i in range(101)]
+        statuses = [{"id": i, "context": f"status-{i}", "state": "success"} for i in range(101)]
+        issue_comments = [{"id": i, "updated_at": "2026-08-21T12:00:00Z", "body": f"issue-{i}"} for i in range(101)]
+        review_comments = [{"id": i, "updated_at": "2026-08-21T12:00:00Z", "body": f"review-comment-{i}"} for i in range(101)]
+        reviews = [{"id": i, "submitted_at": "2026-08-21T12:00:00Z", "body": f"review-{i}", "state": "COMMENTED"} for i in range(101)]
         responses = [
             {"body": pr()},
-            {"body": {"total_count": 0, "check_runs": []}},
-            {"body": []},
-            {"body": first_page},
-            {"body": second_page},
-            {"body": []},
-            {"body": []},
+            {"body": {"total_count": 101, "check_runs": check_runs[:100]}},
+            {"body": {"total_count": 101, "check_runs": check_runs[100:]}},
+            {"body": statuses[:100]},
+            {"body": statuses[100:]},
+            {"body": issue_comments[:100]},
+            {"body": issue_comments[100:]},
+            {"body": review_comments[:100]},
+            {"body": review_comments[100:]},
+            {"body": reviews[:100]},
+            {"body": reviews[100:]},
         ]
         with tempfile.TemporaryDirectory() as state_dir, FakeCurl(responses) as curl:
             result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
             records = curl.records_json()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(any("page=2" in record["url"] for record in records), records)
+        urls = [record["url"] for record in records]
+        for endpoint in ("/check-runs", "/statuses", "/issues/31/comments", "/pulls/31/comments", "/pulls/31/reviews"):
+            with self.subTest(endpoint=endpoint):
+                self.assertTrue(any(endpoint in url and "page=2" in url for url in urls), urls)
 
 
 if __name__ == "__main__":
