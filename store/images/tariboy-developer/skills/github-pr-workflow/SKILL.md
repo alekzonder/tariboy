@@ -29,8 +29,8 @@ not enable shell tracing around these commands.
 
    `REPO` is `OWNER/REPO`. Stop PR-mode setup on any nonzero result.
 
-2. After branch verification, commit and push the task branch. Idempotently
-   find or create its one PR:
+2. Commit the task changes, run complete branch verification on that commit,
+   then push the task branch. Idempotently find or create its one PR:
 
    ```bash
    "$UTILITY" ensure --repo "$REPO" --head "$HEAD" --base "$BASE" \
@@ -38,8 +38,9 @@ not enable shell tracing around these commands.
    ```
 
    Record the returned PR number and URL. Re-run `ensure` after an uncertain
-   result; never create a PR by another path. An ambiguous or closed matching
-   PR requires a human decision and must not cause creation of another PR.
+   result; never create a PR by another path. Multiple matches are ambiguous.
+   One closed match returns `requires_decision: true`: it is the identified PR,
+   so never create a replacement and continue immediately to its monitor.
 
 3. Choose a new absolute, task-scoped state path in agent-owned persistent
    storage outside the task worktree. Create exactly that directory owner-only:
@@ -61,6 +62,9 @@ not enable shell tracing around these commands.
    the Native Task. On recovery, reuse that recorded schedule instead of
    creating a duplicate. End an iteration only with that schedule active and
    the task explicitly waiting for its `script.result` and PR state change.
+   When `ensure` returned `requires_decision: true`, record the closed-unmerged
+   blocker and ask any needed decision through the Native Task after this
+   monitor is active; keep both the task and schedule active.
 
 5. Process every delivered result before waiting again:
 
@@ -85,8 +89,7 @@ not enable shell tracing around these commands.
    on the same schedule for reopening or another state change.
 
 7. Cancel and remove the schedule only after observing `merged: true` with
-   merge commit metadata, or after an explicit workflow disposition recorded
-   on the Native Task:
+   merge commit metadata:
 
    ```bash
    tools script cancel "$SCHEDULE_ID"

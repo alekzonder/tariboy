@@ -443,13 +443,9 @@ def validate_pr_result(value: Any) -> dict[str, Any]:
 
 def canonical_pull(items: list[Any]) -> dict[str, Any] | None:
     pulls = [validate_pr_result(item) for item in items]
-    open_pulls = [item for item in pulls if item["state"] == "open"]
-    closed_pulls = [item for item in pulls if item["state"] == "closed"]
-    if len(open_pulls) > 1:
-        fail("multiple open pull requests match the requested head and base")
-    if closed_pulls:
-        fail("a closed pull request matches this head and base; human decision required")
-    return open_pulls[0] if open_pulls else None
+    if len(pulls) > 1:
+        fail("multiple pull requests match the requested head and base")
+    return pulls[0] if pulls else None
 
 
 def pull_query(client: GitHubClient, owner: str, repo: str, head: str, base: str) -> list[Any]:
@@ -473,7 +469,10 @@ def command_ensure(args: argparse.Namespace, client: GitHubClient) -> int:
     owner, repo = args.resolved_repo
     existing = canonical_pull(pull_query(client, owner, repo, args.head, args.base))
     if existing is not None:
-        emit_json({"created": False, **existing})
+        result = {"created": False, **existing}
+        if existing["state"] == "closed":
+            result["requires_decision"] = True
+        emit_json(result)
         return 0
 
     create_body: dict[str, Any] = {
@@ -503,7 +502,10 @@ def command_ensure(args: argparse.Namespace, client: GitHubClient) -> int:
         if create_error is not None:
             raise create_error
         fail("pull request creation did not reconcile to one open pull request")
-    emit_json({"created": created, **reconciled})
+    result = {"created": created, **reconciled}
+    if reconciled["state"] == "closed":
+        result["requires_decision"] = True
+    emit_json(result)
     return 0
 
 

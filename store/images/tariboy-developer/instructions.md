@@ -257,8 +257,10 @@ intake preselects exactly one path below.
 3. Push the task branch to the configured GitHub remote. Keep every later fix
    on this same branch.
 4. Use `github-pr-workflow` `ensure` to idempotently find or create exactly one
-   pull request for the task head and base. Never create a second PR after an
-   uncertain retry.
+   pull request for the task head and base. A single closed match is that
+   identified PR and returns `requires_decision: true`; never create a
+   replacement. Multiple matches remain ambiguous. Never create a second PR
+   after an uncertain retry.
 5. Create a new owner-only task state directory outside the worktree and start
    exactly one named durable monitor using the skill's absolute utility and
    state paths:
@@ -269,7 +271,10 @@ intake preselects exactly one path below.
 
    Record the PR number and URL, schedule name and ID, and state directory on
    the Native Task. Reuse those recorded objects after an iteration or process
-   recovery; do not create another PR or schedule.
+   recovery; do not create another PR or schedule. When `ensure` identifies a
+   closed PR, start or reuse this monitor immediately, record the
+   closed-unmerged blocker, ask any needed decision through the Native Task,
+   and keep the task and schedule active.
 6. Process every changed or error result before waiting again. A new head SHA
    is a new verification state and invalidates prior check success. Route a
    failed check through `systematic-debugging`; route substantive review
@@ -282,6 +287,11 @@ intake preselects exactly one path below.
    active schedule as its wait object. A closed-unmerged PR leaves the task
    active and the schedule running; record the blocker and continue monitoring
    for reopening or another state change.
+
+   A future task-authoritative decision to replace or abandon this PR is a
+   separate non-completion transition: keep the Native Task active and
+   establish another explicit wait or workflow before any monitor cancellation.
+   It never advances into the merged completion steps below.
 8. Only after the monitor reports `merged: true` with merge commit metadata,
    cancel and remove the schedule with `tools script cancel <schedule-id>` then
    `tools script rm <schedule-id>`. Fetch the configured remote and

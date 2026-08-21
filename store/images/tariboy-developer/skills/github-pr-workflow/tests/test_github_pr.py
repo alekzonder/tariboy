@@ -292,6 +292,24 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout), {"created": False, "number": 31, "state": "open", "url": pr()["html_url"]})
         self.assertEqual([record["method"] for record in records], ["GET"])
 
+    def test_ensure_returns_one_existing_closed_pull_request_for_monitoring(self):
+        closed = pr(state="closed")
+        with FakeCurl([{"body": [closed]}]) as curl:
+            result = self.run_utility("ensure", "--repo", REPO, "--head", HEAD, "--base", BASE, "--title", "TARI-31", curl=curl)
+            records = curl.records_json()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "created": False,
+                "number": 31,
+                "requires_decision": True,
+                "state": "closed",
+                "url": closed["html_url"],
+            },
+        )
+        self.assertEqual([record["method"] for record in records], ["GET"])
+
     def test_ensure_creates_then_reconciles_one_pull_request(self):
         with FakeCurl([{"body": []}, {"body": pr()}, {"body": [pr()]}]) as curl:
             result = self.run_utility("ensure", "--repo", REPO, "--head", HEAD, "--base", BASE, "--title", "TARI-31", curl=curl)
