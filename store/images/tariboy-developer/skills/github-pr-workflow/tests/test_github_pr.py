@@ -152,9 +152,11 @@ class GitHubPRWorkflowTests(unittest.TestCase):
             xdg_state = sandbox / "xdg-state"
             xdg_cache = sandbox / "xdg-cache"
             xdg_config = sandbox / "xdg-config"
+            xdg_data = sandbox / "xdg-data"
+            xdg_runtime = sandbox / "xdg-runtime"
             process_temp = sandbox / "tmp"
             working_dir = sandbox / "cwd"
-            for directory in (home, xdg_state, xdg_cache, xdg_config, process_temp, working_dir):
+            for directory in (home, xdg_state, xdg_cache, xdg_config, xdg_data, xdg_runtime, process_temp, working_dir):
                 directory.mkdir(mode=0o700)
             env = os.environ.copy()
             env.pop("GH_TOKEN", None)
@@ -165,6 +167,8 @@ class GitHubPRWorkflowTests(unittest.TestCase):
                 "XDG_STATE_HOME": str(xdg_state),
                 "XDG_CACHE_HOME": str(xdg_cache),
                 "XDG_CONFIG_HOME": str(xdg_config),
+                "XDG_DATA_HOME": str(xdg_data),
+                "XDG_RUNTIME_DIR": str(xdg_runtime),
                 "TMPDIR": str(process_temp),
                 "TMP": str(process_temp),
                 "TEMP": str(process_temp),
