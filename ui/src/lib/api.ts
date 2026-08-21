@@ -179,11 +179,9 @@ export const getDaemonStatus = () => apiGet<DaemonStatus>("/api/daemon/status");
 export const listAgents = () => apiGet<{ agents: AgentSummary[]; count: number }>("/api/agents");
 
 // ---- Agent creation (create forms; POST /api/agents = agent.run) ----
-// The daemon's run handler takes env/plugins as pre-serialized strings
-// (`K=V,K=V` and a comma list); the create forms build those strings from their
-// key/value repeater and chip inputs so this helper is a thin pass-through.
-// Only `image` is required; every other field maps to an optional run arg and
-// is omitted when empty so the daemon applies its default.
+// The daemon keeps legacy scalar env/plugins forms for CLI and older callers,
+// while the complete Desktop dialog uses structured values so commas, equals
+// signs, whitespace, and newlines round-trip without reparsing.
 export interface CreateAgentSpec {
   image: string;
   name?: string;
@@ -193,10 +191,22 @@ export interface CreateAgentSpec {
   effort?: string;
   interactive?: boolean;
   loop?: boolean;
-  env?: string; // serialized "K=V,K=V"
-  plugins?: string; // serialized comma list
+  env?: string | Record<string, string>;
+  plugins?: string | string[];
   timeout?: string;
+  interval_s?: number;
+  timeout_s?: number;
+  hard_timeout_s?: number;
+  on_timeout?: "restart" | "stop";
+  on_error?: "restart" | "stop";
+  max_idle_iterations?: number;
+  user_prompt?: string;
+  messages_batch?: number;
+  messages_max_queue?: number;
   group?: string;
+  alias?: string;
+  notes?: string;
+  color?: string;
 }
 export interface CreateAgentResult { name: string; state: string }
 export const createAgent = (spec: CreateAgentSpec, target?: ApiTarget) =>
