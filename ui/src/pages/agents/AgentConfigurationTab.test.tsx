@@ -357,3 +357,29 @@ it("shows a save error without discarding the entered CWD", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("directory does not exist");
   expect(input).toHaveValue("/srv/missing");
 });
+
+it("shows a budget save error without discarding the entered limit", async () => {
+  const budget = {
+    hour_usd: 1, day_usd: 0, week_usd: 0, month_usd: 0,
+    hour_spent_usd: 0.25, day_spent_usd: 0.25, week_spent_usd: 0.25, month_spent_usd: 0.25,
+    exhausted: [],
+  };
+  vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+    if (url.endsWith("/api/agents/worker/budget") && init?.method === "POST") {
+      return response({ code: "bad_budget", message: "budget update rejected" }, false, 400);
+    }
+    if (url.includes("/api/fs/list")) {
+      return response({ path: "/srv", parent: "/", entries: [] });
+    }
+    return response({ ...stopped, budget });
+  }));
+
+  renderConfiguration();
+  const input = await screen.findByLabelText("Hour budget");
+  fireEvent.change(input, { target: { value: "2" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save agent budgets" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Agent budgets were not saved.");
+  expect(screen.getByRole("alert")).toHaveTextContent("budget update rejected");
+  expect(input).toHaveValue(2);
+});

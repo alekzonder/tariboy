@@ -47,6 +47,8 @@ adoption revokes the remaining lease when its shim finishes.
 - Soft and hard timeouts bound an iteration.
 - Rate/model policy rules constrain calls.
 - Budgets constrain spend.
+- Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
+  zero is unlimited, and an exhausted request is rejected before upstream access.
 - Usage and per-iteration audit make outcomes reviewable.
 
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
