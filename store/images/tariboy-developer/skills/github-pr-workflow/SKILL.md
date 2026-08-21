@@ -88,17 +88,26 @@ not enable shell tracing around these commands.
    closed-unmerged PR remains active and monitored; record the blocker and wait
    on the same schedule for reopening or another state change.
 
-7. Cancel and remove the schedule only after observing `merged: true` with
-   merge commit metadata:
+7. Use exactly one schedule-cancellation branch:
 
-   ```bash
-   tools script cancel "$SCHEDULE_ID"
-   tools script rm "$SCHEDULE_ID"
-   ```
+   - **Merged completion:** after observing `merged: true` with merge commit
+     metadata, cancel and remove the schedule:
 
-   Then return to the role prompt for main refresh, post-merge verification,
-   worktree and branch cleanup, final Native Task comment, `tasks done`, and
-   context cleanup.
+     ```bash
+     tools script cancel "$SCHEDULE_ID"
+     tools script rm "$SCHEDULE_ID"
+     ```
+
+     Only this branch returns to the role prompt for main refresh, post-merge
+     verification, worktree and branch cleanup, final Native Task comment,
+     `tasks done`, and context cleanup.
+
+   - **Separate non-completion:** only an explicit task-authoritative decision
+     may replace or abandon this PR. Keep the Native Task active, record that
+     decision, and establish a named valid wait object with its stable
+     identifier and resume event. Then the old schedule may be cancelled and
+     removed. Never enter main refresh, post-merge verification, final
+     completion comment, `tasks done`, or context cleanup from this branch.
 
 ## Quick Reference
 

@@ -288,15 +288,20 @@ intake preselects exactly one path below.
    active and the schedule running; record the blocker and continue monitoring
    for reopening or another state change.
 
-   A future task-authoritative decision to replace or abandon this PR is a
-   separate non-completion transition: keep the Native Task active and
-   establish another explicit wait or workflow before any monitor cancellation.
-   It never advances into the merged completion steps below.
-8. Only after the monitor reports `merged: true` with merge commit metadata,
-   cancel and remove the schedule with `tools script cancel <schedule-id>` then
-   `tools script rm <schedule-id>`. Fetch the configured remote and
-   fast-forward local `main` to its upstream. A failure keeps the task active;
-   never reset or overwrite main.
+8. Use exactly one schedule-cancellation branch:
+   - **Merged completion:** only after the monitor reports `merged: true` with
+     merge commit metadata, cancel and remove the schedule with
+     `tools script cancel <schedule-id>` then
+     `tools script rm <schedule-id>`. Fetch the configured remote and
+     fast-forward local `main` to its upstream. A failure keeps the task active;
+     never reset or overwrite main. Only this branch continues to step 9.
+   - **Separate non-completion:** only an explicit task-authoritative decision
+     may replace or abandon this PR. Keep the Native Task active, record that
+     replacement or abandonment decision, and establish a named valid wait
+     object with its stable identifier and resume event. Then the old monitor
+     may be cancelled and removed. Never continue to step 9 or enter main
+     refresh, post-merge verification, final completion comment, `tasks done`,
+     or context cleanup from this branch.
 9. Run the distinct post-merge relevant verification suite on refreshed
    `main`.
 10. Remove the task worktree and local task branch.
