@@ -394,10 +394,10 @@ class GitHubPRWorkflowTests(unittest.TestCase):
             curl.set_responses(partial)
             result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
             leftovers = list(Path(state_dir).glob("*.tmp"))
-        self.assertEqual(initial.returncode, 0, initial.stderr)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(snapshot.read_bytes(), before)
-        self.assertEqual(leftovers, [])
+            self.assertEqual(initial.returncode, 0, initial.stderr)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(snapshot.read_bytes(), before)
+            self.assertEqual(leftovers, [])
 
     def test_monitor_paginates_check_runs_statuses_and_each_comment_collection(self):
         check_runs = [{"id": i, "name": f"check-{i}", "status": "completed", "conclusion": "success"} for i in range(101)]
