@@ -17,6 +17,7 @@ import {
   CliSettings,
   GeneralSettings,
 } from "@/pages/settings/SettingsPage";
+import TaskReminderSettings from "@/pages/settings/TaskReminderSettings";
 import UsagePage from "@/pages/UsagePage";
 import GroupsPage from "@/pages/GroupsPage";
 import BudgetsPage from "@/pages/BudgetsPage";
@@ -30,7 +31,7 @@ import ChannelsPage from "@/pages/ChannelsPage";
 import DaemonsPage from "@/pages/DaemonsPage";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import { useSharedSidebarState } from "@/pages/terminals/sidebarStateContext";
-import { hostToParam } from "@/lib/terminalsHost";
+import { hostToParam, paramToHost, targetFor } from "@/lib/terminalsHost";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
 
 export default function App() {
@@ -125,6 +126,7 @@ function MainApp() {
 
           <Route path="/servers/:hostId/settings" element={<TerminalsPage serverView="settings" />}>
             <Route index element={<GeneralSettings />} />
+            <Route path="task-reminders" element={<TaskReminderSettingsRoute />} />
             <Route path="hosts" element={<DaemonsPage />} />
             <Route path="cli" element={<CliSettings />} />
             <Route path="appearance" element={<AppearanceSettings />} />
@@ -165,6 +167,11 @@ function MainApp() {
       </main>
     </>
   );
+}
+
+function TaskReminderSettingsRoute() {
+  const { hostId = "local" } = useParams();
+  return <TaskReminderSettings target={targetFor(paramToHost(hostId))} />;
 }
 
 function LegacyTerminalRedirect() {
