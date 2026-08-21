@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import type { ApiTarget } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SupportBundle } from "@/components/SupportBundle";
 
@@ -24,7 +25,10 @@ const ADVANCED = [
   ["channels", "Raw channels"],
 ] as const;
 
-export default function SettingsPage({ basePath = "/settings" }: { basePath?: string }) {
+export default function SettingsPage({ basePath = "/settings", target = null }: {
+  basePath?: string;
+  target?: ApiTarget;
+}) {
   const location = useLocation();
   const advanced = location.pathname.startsWith(`${basePath}/advanced`);
   return (
@@ -63,7 +67,7 @@ export default function SettingsPage({ basePath = "/settings" }: { basePath?: st
         )}
       </aside>
       <section className="min-w-0 flex-1 overflow-auto p-5">
-        <Outlet />
+        <Outlet context={target} />
       </section>
     </div>
   );

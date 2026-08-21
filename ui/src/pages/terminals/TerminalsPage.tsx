@@ -265,7 +265,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           </RouteHostBoundary>
         ) : serverView === "settings" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
-            <SettingsPage basePath={`${serverBasePath}/settings`} />
+            {(target) => <SettingsPage basePath={`${serverBasePath}/settings`} target={target} />}
           </RouteHostBoundary>
         ) : teamName && selectedHost && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>

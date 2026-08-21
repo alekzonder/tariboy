@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useDaemons } from "@/components/DaemonProvider";
+import { getActiveDaemon } from "@/lib/api";
+import type { Daemon } from "@/lib/daemons";
 
 export function RouteHostBoundary({ hostId, unavailable = false, children }: {
   hostId: string;
   unavailable?: boolean;
-  children: ReactNode;
+  children: ReactNode | ((target: Daemon | null) => ReactNode);
 }) {
   const { activeId, daemons, select } = useDaemons();
   const [selection, setSelection] = useState<{
@@ -17,6 +19,7 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
   const hostReady = hostId === "" || (
     !!host?.baseURL && (host.kind !== "ssh" || host.state === "ready")
   );
+  const renderChildren = () => typeof children === "function" ? children(getActiveDaemon()) : children;
 
   useEffect(() => {
     let cancelled = false;
@@ -49,10 +52,10 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
           This host is reconnecting; actions are temporarily unavailable.
         </p>
         <div inert={true} aria-disabled="true" className="opacity-60">
-          {children}
+          {renderChildren()}
         </div>
       </>
     );
   }
-  return children;
+  return renderChildren();
 }

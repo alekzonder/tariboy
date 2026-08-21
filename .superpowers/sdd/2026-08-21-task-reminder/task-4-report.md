@@ -67,3 +67,41 @@ check ok
 - The async load effect follows the existing deferred-loading pattern, avoiding
   synchronous effect state updates that violate the project lint rule.
 - No generated Desktop output or version files changed.
+
+## Review follow-up — cold remote route targeting
+
+The original route calculated `targetFor(hostId)` independently of the host
+boundary. A direct remote settings route could therefore retain its temporary
+empty-base-URL descriptor instead of the daemon descriptor resolved by the
+boundary.
+
+`RouteHostBoundary` now supports a render child and supplies the current
+resolved target only after selection. The Settings shell forwards that target
+through its outlet context, and the task-reminder route consumes it. This keeps
+the explicit host binding while ensuring the page re-renders with the resolved
+daemon before its configuration request begins.
+
+### Review RED/GREEN evidence
+
+Added a cold direct-route App regression test with only persisted remote host
+metadata (no runtime cache) and an intentionally stale `targetFor` result.
+Before the fix it rendered the page but never issued:
+
+```text
+https://production.example/api/daemon/config
+```
+
+After the boundary-context change:
+
+```text
+cd ui && npm test -- --run src/App.test.tsx src/pages/terminals/RouteHostBoundary.test.tsx src/pages/settings/TaskReminderSettings.test.tsx
+Test Files  3 passed (3)
+Tests       29 passed (29)
+
+make check
+ui-typecheck  ok
+ui-lint       ok
+ui-test       ok
+docs          ok
+check ok
+```

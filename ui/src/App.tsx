@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DaemonBanner } from "@/components/DaemonBanner";
@@ -31,8 +31,9 @@ import ChannelsPage from "@/pages/ChannelsPage";
 import DaemonsPage from "@/pages/DaemonsPage";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import { useSharedSidebarState } from "@/pages/terminals/sidebarStateContext";
-import { hostToParam, paramToHost, targetFor } from "@/lib/terminalsHost";
+import { hostToParam } from "@/lib/terminalsHost";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
+import type { ApiTarget } from "@/lib/api";
 
 export default function App() {
   return (
@@ -170,8 +171,8 @@ function MainApp() {
 }
 
 function TaskReminderSettingsRoute() {
-  const { hostId = "local" } = useParams();
-  return <TaskReminderSettings target={targetFor(paramToHost(hostId))} />;
+  const target = useOutletContext<ApiTarget>();
+  return <TaskReminderSettings target={target} />;
 }
 
 function LegacyTerminalRedirect() {
