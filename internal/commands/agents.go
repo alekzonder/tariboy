@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -17,7 +18,20 @@ import (
 
 func agentStore(c *registry.Ctx) *agent.Store { return agent.NewStore(c.Store) }
 
-func agentView(a agent.Agent, state string) map[string]any {
+func agentBudgetView(c *registry.Ctx, name string) (map[string]any, error) {
+	b, err := aiproxy.NewStore(c.Store, time.Now).AgentBudgetStatus(name, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"hour_usd": b.HourUSD, "day_usd": b.DayUSD, "week_usd": b.WeekUSD, "month_usd": b.MonthUSD,
+		"hour_spent_usd": b.HourSpentUSD, "day_spent_usd": b.DaySpentUSD,
+		"week_spent_usd": b.WeekSpentUSD, "month_spent_usd": b.MonthSpentUSD,
+		"exhausted": b.Exhausted,
+	}, nil
+}
+
+func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, error) {
 	v := map[string]any{
 		"name": a.Name, "image": a.ImageRef, "digest": a.ImageDigest, "state": state,
 		"cwd": a.Cwd, "configured_cwd": a.Cwd,
@@ -29,11 +43,16 @@ func agentView(a agent.Agent, state string) map[string]any {
 		"group": a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
 		"max_idle_iterations": a.MaxIdleIterations,
 	}
+	budget, err := agentBudgetView(c, a.Name)
+	if err != nil {
+		return nil, err
+	}
+	v["budget"] = budget
 	if a.ErrorReason != "" {
 		v["error_reason"] = a.ErrorReason
 	}
 	addHaltReason(v, a)
-	return v
+	return v, nil
 }
 
 func agentImageSet() registry.Command {
@@ -361,6 +380,11 @@ func agentPs() registry.Command {
 					"max_idle_iterations": a.MaxIdleIterations,
 					"interactive":         a.Interactive,
 				}
+				if budget, err := agentBudgetView(c, a.Name); err != nil {
+					return nil, err
+				} else {
+					row["budget"] = budget
+				}
 				addHaltReason(row, a)
 				rows = append(rows, row)
 			}
@@ -391,6 +415,11 @@ func agentStatus() registry.Command {
 				"iterations": len(its), "last_iteration": last, "last_iteration_id": lastID,
 				"status_message": a.StatusMessage, "status_updated": a.StatusUpdated,
 				"server_now": time.Now().UTC().Format(time.RFC3339Nano)}
+			if budget, err := agentBudgetView(c, a.Name); err != nil {
+				return nil, err
+			} else {
+				out["budget"] = budget
+			}
 			addHaltReason(out, a)
 			for i := len(its) - 1; i >= 0; i-- {
 				it := its[i]
@@ -446,7 +475,10 @@ func agentInspect() registry.Command {
 				return nil, err
 			}
 			state, _ := c.Control.LiveState(a.Name)
-			v := agentView(a, state)
+			v, err := agentView(c, a, state)
+			if err != nil {
+				return nil, err
+			}
 			// Report the EFFECTIVE cwd (the workdir fallback when Cwd is unset),
 			// matching cwdOf/agentCwdFor, so the UI never shows an empty value.
 			if cwd, err := agentCwdFor(c, a.Name); err == nil {
@@ -455,6 +487,42 @@ func agentInspect() registry.Command {
 			return v, nil
 		},
 	}
+}
+
+func agentBudgetGet() registry.Command {
+	return registry.Command{Path: "agent.budget.get", Summary: "Show an agent's calendar USD budget", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		name := str(p, "name")
+		if _, err := getAgent(c, name); err != nil {
+			return nil, err
+		}
+		return agentBudgetView(c, name)
+	}}
+}
+
+func agentBudgetSet() registry.Command {
+	return registry.Command{Path: "agent.budget.set", Summary: "Set an agent's calendar USD budget", Args: []registry.Arg{
+		{Name: "name", Type: registry.String, Required: true},
+		{Name: "hour_usd", Type: registry.String, Required: true}, {Name: "day_usd", Type: registry.String, Required: true},
+		{Name: "week_usd", Type: registry.String, Required: true}, {Name: "month_usd", Type: registry.String, Required: true},
+	}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		name := str(p, "name")
+		if _, err := getAgent(c, name); err != nil {
+			return nil, err
+		}
+		values := []string{str(p, "hour_usd"), str(p, "day_usd"), str(p, "week_usd"), str(p, "month_usd")}
+		parsed := [4]float64{}
+		for i, value := range values {
+			var err error
+			parsed[i], err = parseFloat(value)
+			if err != nil {
+				return nil, api.UserError{Code: "bad_budget", Msg: "budget limits must be finite non-negative USD values"}
+			}
+		}
+		if err := aiproxy.NewStore(c.Store, nil).SetAgentBudget(name, aiproxy.AgentBudget{HourUSD: parsed[0], DayUSD: parsed[1], WeekUSD: parsed[2], MonthUSD: parsed[3]}); err != nil {
+			return nil, api.UserError{Code: "bad_budget", Msg: err.Error()}
+		}
+		return agentBudgetView(c, name)
+	}}
 }
 
 func agentLifecycle(path, summary, verb string) registry.Command {

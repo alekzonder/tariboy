@@ -19,6 +19,12 @@ through the daemon's **in-process AI proxy** (`internal/aiproxy`). The proxy:
   be replayed and inspected after the fact. `tariboy daemon reindex` rebuilds
   the `ai_requests` metadata from these transcripts.
 
+Every agent may also have four independent USD limits for the local calendar
+hour, day, ISO week (Monday start), and month. Each defaults to `0` (unlimited)
+and is separate from the legacy global/group rolling budgets. When one or more
+non-zero limits are exhausted from immutable `ai_requests.cost_usd` history,
+the proxy denies the next request before upstream provider access.
+
 Agents can attribute subsequent requests in their current iteration with
 `tools task current KEY`. The daemon validates the key through Native Tasks as
 the calling agent, stores the selected key as `task_id`, and stores its

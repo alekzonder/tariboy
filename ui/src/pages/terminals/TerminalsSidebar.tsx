@@ -164,7 +164,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
                           </span>
                         )}
                       </span>
-                      <Badge variant={a.state === "running" ? "default" : "secondary"}>{a.state}</Badge>
+						{a.budget?.exhausted?.length ? <Badge variant="destructive" title={`Out of budget: ${a.budget.exhausted.join(", ")}`}>out of budget</Badge> : <Badge variant={a.state === "running" ? "default" : "secondary"}>{a.state}</Badge>}
                     </button>
                   </div>
                 </ContextMenuTrigger>

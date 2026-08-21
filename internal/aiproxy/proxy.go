@@ -195,7 +195,11 @@ func (p *Proxy) budget(next Handler) Handler {
 			}
 			ex.W.Header().Set("Content-Type", "application/json")
 			ex.W.WriteHeader(http.StatusTooManyRequests)
-			ex.W.Write([]byte(`{"type":"error","error":{"type":"rate_limit_error","message":"budget exceeded"}}`))
+			message := "budget exceeded"
+			if len(d.Exhausted) > 0 {
+				message += ": " + strings.Join(d.Exhausted, ", ")
+			}
+			ex.W.Write([]byte(`{"type":"error","error":{"type":"rate_limit_error","message":"` + message + `"}}`))
 			return nil
 		}
 		// warn: emit once, keep serving.

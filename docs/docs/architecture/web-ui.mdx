@@ -253,6 +253,14 @@ operations: each selection is persisted without confirmation or an automatic
 restart, takes effect the next time the agent starts, and leaves the timing of
 any restart under the operator's control.
 
+Configuration also renders the daemon-authoritative per-agent USD budget
+projection. Its four calendar rows pair each current spend with one editable
+limit (`spent / limit`), label zero as Unlimited, and save atomically against
+the explicit agent-route host. The agent header and sidebar use the same
+projection; they show an explicit Out of budget state and every exhausted
+period rather than recomputing spend in the browser. Older daemons simply omit
+the additive projection.
+
 When the daemon reports a halt reason for the agent, the Autopilot card shows
 it under the Running/Stopped line, toned as an error for an `error`
 halt and neutrally for an `idle_limit` one. The line is deliberately not gated

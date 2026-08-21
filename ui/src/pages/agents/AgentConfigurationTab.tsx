@@ -5,11 +5,11 @@ import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/com
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { RunStateActions } from "@/components/AgentControls";
 import AgentSettings from "@/pages/AgentSettings";
-import { agentGetOn, agentImageCancelOn,agentImageSetOn,agentImageStatusGetOn,agentPost,listImagesOn,setAgentCwdOn,type AgentImageStatus,type ImageRow } from "@/lib/api";
+import { agentGetOn, agentImageCancelOn,agentImageSetOn,agentImageStatusGetOn,agentPost,agentPostOn,listImagesOn,setAgentCwdOn,type AgentImageStatus,type ImageRow } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
 import { useAgentName, useAgentStatus } from "@/lib/agent";
 import type { Daemon } from "@/lib/daemons";
-import type { AgentView } from "@/lib/types";
+import type { AgentBudgetStatus, AgentView } from "@/lib/types";
 import { serverPath } from "@/lib/terminalsHost";
 
 // A digest is a 64-hex-character hash: shown whole it dominates the identity
@@ -33,6 +33,8 @@ export default function AgentConfigurationTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+	const [budget, setBudget] = useState<AgentBudgetStatus | null>(null);
+	const [budgetSaving, setBudgetSaving] = useState(false);
   const [images,setImages]=useState<ImageRow[]>([]);const [imageStatus,setImageStatus]=useState<AgentImageStatus|null>(null);const [selectedImage,setSelectedImage]=useState("");const [imageSaving,setImageSaving]=useState(false);
   const targetId = target?.id;
   const targetLabel = target?.label;
@@ -55,6 +57,7 @@ export default function AgentConfigurationTab({
     try {
       const next = await agentGetOn<AgentView>(requestTarget, name, "");
       setAgent(next);
+		setBudget(next.budget ?? null);
       setCwd(next.cwd);
     } catch {
       setAgent(null);
@@ -134,6 +137,22 @@ export default function AgentConfigurationTab({
     }
   };
 
+	const saveBudget = async () => {
+		if (!budget) return;
+		setBudgetSaving(true);
+		try {
+			const next = await agentPostOn<AgentBudgetStatus>(requestTarget, name, "budget", {
+				hour_usd: String(budget.hour_usd), day_usd: String(budget.day_usd),
+				week_usd: String(budget.week_usd), month_usd: String(budget.month_usd),
+			});
+			setBudget(next); await load(); refresh();
+		} finally { setBudgetSaving(false); }
+	};
+	const budgetRows = budget ? ([
+		["Hour", "hour", budget.hour_spent_usd, budget.hour_usd], ["Day", "day", budget.day_spent_usd, budget.day_usd],
+		["Week", "week", budget.week_spent_usd, budget.week_usd], ["Month", "month", budget.month_spent_usd, budget.month_usd],
+	] as const) : [];
+
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <h2 className="font-semibold">Configuration</h2>
@@ -190,6 +209,15 @@ export default function AgentConfigurationTab({
           </div>
         )}
       </section>
+		{budget && <section className="rounded-lg border p-4">
+			<h3 className="text-base font-semibold">Agent budgets (USD)</h3>
+			<p className="mt-1 text-sm text-muted-foreground">Zero means Unlimited. Each configured calendar limit applies independently.</p>
+			<div className="mt-4 space-y-2">
+				{budgetRows.map(([label, key, spent, limit]) => <label key={key} className="flex items-center gap-2 text-sm"><span className="w-14">{label}</span><span>{spent.toFixed(2)} /</span><input aria-label={`${label} budget`} className="w-28 rounded border px-2 py-1" type="number" min="0" step="0.01" value={limit} onChange={(event) => setBudget({ ...budget, [`${key}_usd`]: Number(event.target.value) })} /><span className="text-muted-foreground">{limit === 0 ? "Unlimited" : "USD"}</span></label>)}
+			</div>
+			{budget.exhausted.length > 0 && <p role="status" className="mt-3 text-sm text-destructive">Out of budget: {budget.exhausted.join(", ")}</p>}
+			<Button className="mt-4" disabled={budgetSaving} onClick={() => void saveBudget()}>{budgetSaving ? "Saving…" : "Save agent budgets"}</Button>
+		</section>}
       <section className="rounded-lg border p-4">
         <h3 className="text-base font-semibold">Identity and location</h3>
         {agent && (

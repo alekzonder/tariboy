@@ -23,7 +23,7 @@
 ### Task 1: Persist and derive agent budget status
 
 **Files:**
-- Create: `internal/store/migrations/0034_agent_budgets.sql`
+- Create: `internal/store/migrations/0035_agent_budgets.sql`
 - Modify: `internal/aiproxy/budget.go`, `internal/aiproxy/store.go`
 - Test: `internal/aiproxy/budget_test.go`, `internal/aiproxy/store_test.go`, `internal/store/store_test.go`
 

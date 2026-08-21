@@ -22,6 +22,19 @@ export interface AgentSummary {
   color?: string; // per-agent accent hex (#rrggbb), empty/absent when unset
   interactive?: boolean;
   cwd?: string;
+	budget?: AgentBudgetStatus;
+}
+
+export interface AgentBudgetStatus {
+	hour_usd: number;
+	day_usd: number;
+	week_usd: number;
+	month_usd: number;
+	hour_spent_usd: number;
+	day_spent_usd: number;
+	week_spent_usd: number;
+	month_spent_usd: number;
+	exhausted: string[];
 }
 
 export interface AgentLifecycleResult {
@@ -57,6 +70,7 @@ export interface AgentView {
   alias: string;
   notes: string;
   color?: string; // per-agent accent hex (#rrggbb), empty/absent when unset
+	budget?: AgentBudgetStatus;
 }
 
 export interface AgentStatus {
@@ -76,6 +90,7 @@ export interface AgentStatus {
   // snapshot so countdowns do not assume the browser clock is correct.
   server_now?: string;
   active_iteration?: ActiveIteration;
+	budget?: AgentBudgetStatus;
 }
 
 export interface ActiveIteration {

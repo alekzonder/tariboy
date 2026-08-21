@@ -1,12 +1,65 @@
 package aiproxy
 
 import (
+	"math"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// This fails if the agent-budget store stops treating absent rows as four
+// unlimited limits, or if it uses rolling rather than calendar windows.
+func TestAgentBudgetStatusUsesCalendarWindows(t *testing.T) {
+	loc := time.FixedZone("operator", -7*60*60)
+	now := time.Date(2026, time.August, 19, 10, 30, 0, 0, loc) // Wednesday
+	st := newStore(t)
+
+	status, err := st.AgentBudgetStatus("alice", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.HourUSD != 0 || status.DayUSD != 0 || status.WeekUSD != 0 || status.MonthUSD != 0 || len(status.Exhausted) != 0 {
+		t.Fatalf("missing budget status = %+v, want four unlimited limits", status)
+	}
+	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 1, DayUSD: 3, WeekUSD: 4, MonthUSD: 5}); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []AIRequest{
+		sampleReq("current-hour", "alice", "basic", 1.25, now.Add(-20*time.Minute)),
+		sampleReq("previous-hour", "alice", "basic", 2, now.Add(-2*time.Hour)),
+		sampleReq("monday", "alice", "basic", 1, time.Date(2026, time.August, 17, 1, 0, 0, 0, loc)),
+		sampleReq("previous-week", "alice", "basic", 9, time.Date(2026, time.August, 16, 23, 0, 0, 0, loc)),
+		sampleReq("month", "alice", "basic", 0.5, time.Date(2026, time.August, 1, 0, 0, 0, 0, loc)),
+		sampleReq("previous-month", "alice", "basic", 20, time.Date(2026, time.July, 31, 23, 59, 0, 0, loc)),
+	} {
+		if err := st.Insert(row); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	status, err = st.AgentBudgetStatus("alice", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.HourSpentUSD != 1.25 || status.DaySpentUSD != 3.25 || status.WeekSpentUSD != 4.25 || status.MonthSpentUSD != 13.75 {
+		t.Fatalf("calendar spend = %+v; want hour/day/week/month 1.25/3.25/4.25/13.75", status)
+	}
+	if got, want := status.Exhausted, []string{"hour", "day", "week", "month"}; strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("exhausted = %v, want %v", got, want)
+	}
+}
+
+func TestSetAgentBudgetRejectsInvalidLimits(t *testing.T) {
+	st := newStore(t)
+	for _, budget := range []AgentBudget{{HourUSD: -1}, {DayUSD: math.Inf(1)}, {WeekUSD: math.NaN()}} {
+		if err := st.SetAgentBudget("alice", budget); err == nil {
+			t.Fatalf("SetAgentBudget(%+v) succeeded, want validation error", budget)
+		}
+	}
+}
 
 func TestBudgetStoreCRUD(t *testing.T) {
 	s := newStore(t)
@@ -80,6 +133,37 @@ func TestBudgetBlockMiddleware(t *testing.T) {
 	}
 	if forwarded {
 		t.Fatal("blocked request must not reach the upstream")
+	}
+}
+
+// This fails if the proxy stops applying a configured calendar agent limit
+// before reaching the upstream provider.
+func TestAgentCalendarBudgetBlockMiddleware(t *testing.T) {
+	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	st := newStore(t)
+	if err := st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute))); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 0.50}); err != nil {
+		t.Fatal(err)
+	}
+	cache := NewBudgetCache(st, func() time.Time { return now })
+	if err := cache.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	p := testProxy(t)
+	p.cfg.Budget = cache
+	p.cfg.Store = st
+	p.rebuild()
+	forwarded := false
+	p.forward = func(ex *Exchange) error { forwarded = true; ex.W.WriteHeader(http.StatusOK); return nil }
+	tok, _ := p.Mint(Attribution{Agent: "alice", Iteration: "alice-9", ImageName: "basic", ImageTag: "latest"})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/_tariboy/"+tok+"/v1/messages", strings.NewReader(`{"model":"claude-opus-4-8"}`))
+	req.Header.Set("x-api-key", "real-provider-key")
+	p.ServeHTTP(rr, req)
+	if rr.Code != http.StatusTooManyRequests || forwarded || !strings.Contains(rr.Body.String(), "hour") {
+		t.Fatalf("agent calendar budget response code=%d forwarded=%v body=%s", rr.Code, forwarded, rr.Body.String())
 	}
 }
 

@@ -117,6 +117,8 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, budgetSet())
 	mustRegister(r, budgetLs())
 	mustRegister(r, budgetStatus())
+	mustRegister(r, agentBudgetGet())
+	mustRegister(r, agentBudgetSet())
 	mustRegister(r, daemonReindex())
 	mustRegister(r, pluginInstall())
 	mustRegister(r, pluginLs())
@@ -158,6 +160,7 @@ func BuildRegistry() *registry.Registry {
 		mustRegister(r, command)
 	}
 	mustGroup(r, "agent", "Manage agents (run, stop, inspect, exec, files)")
+	mustGroup(r, "agent.budget", "Manage an agent's calendar USD budget")
 	mustGroup(r, "agent.status", "Agent runtime status and history")
 	mustGroup(r, "agent.alias", "Agent display alias")
 	mustGroup(r, "agent.notes", "Freeform agent notes")

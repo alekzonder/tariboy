@@ -449,6 +449,9 @@ func (s *Store) Delete(name string) error {
 	if _, err := s.db.Exec(`DELETE FROM secrets WHERE agent=?`, name); err != nil {
 		return err
 	}
+	if _, err := s.db.Exec(`DELETE FROM agent_budgets WHERE agent_name=?`, name); err != nil {
+		return err
+	}
 	res, err := s.db.Exec(`DELETE FROM agents WHERE name=?`, name)
 	if err != nil {
 		return err

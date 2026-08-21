@@ -151,6 +151,10 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                 </Button>
               )}
             </div>
+			{status?.budget && (status.budget.hour_usd > 0 || status.budget.day_usd > 0 || status.budget.week_usd > 0 || status.budget.month_usd > 0) && <div className="mt-2 text-xs" data-testid="agent-budget-header">
+				{status.budget.exhausted.length > 0 && <p className="font-semibold text-destructive">Out of budget: {status.budget.exhausted.join(", ")}</p>}
+				<p>Hour {status.budget.hour_spent_usd.toFixed(2)} / {status.budget.hour_usd || "Unlimited"} · Day {status.budget.day_spent_usd.toFixed(2)} / {status.budget.day_usd || "Unlimited"} · Week {status.budget.week_spent_usd.toFixed(2)} / {status.budget.week_usd || "Unlimited"} · Month {status.budget.month_spent_usd.toFixed(2)} / {status.budget.month_usd || "Unlimited"}</p>
+			</div>}
             <nav aria-label="Agent workspace" className="mt-2 flex gap-1 border-b">
               {TABS.map(([key, label]) => (
                 <NavLink
