@@ -29,17 +29,32 @@ adoption/start and saved-host reconnect continue independently in the
 background, so their existing status banners may be visible during startup.
 Dock reopen and the menu-bar Open action raise the same main window.
 
-The primary **New agent** dialog keeps host, image, harness, model, effort, cwd,
-and launch controls in the main flow. Harness is selected from the supported
-Tariboy harnesses. Model and effort are editable preset fields: they start
-from explicit runtime defaults for schema-v2 images, accept arbitrary
-overrides, and include conservative built-in suggestions instead of querying
-harness or provider catalogs. Schema-v1 image defaults remain readable for
-compatibility.
-Successful custom overrides are remembered in the Desktop WebView by harness
-and offered on later creates. These local suggestions are an operator
-convenience, not a capability check for the selected host; failed creates do
-not add values. Advanced overrides contains only the raw environment field.
+The primary agent dialog has **Target**, **Identity**, **Runtime**,
+**Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
+documented defaults and submits one complete create request; the daemon writes
+one complete stopped agent row. Environment is a string-valued JSON object,
+schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
+read-only. Bare images force Interactive on and Autopilot off.
+
+Right-clicking any grouped or individual sidebar agent exposes **Clone**.
+Clone loads the source inspect projection from that agent's explicit host,
+leaves the unique name blank, and prefills every persisted agent-row
+configuration field, including raw configured CWD and message limits. It does
+not copy secrets, history, runtime evidence, messages, subscriptions, scripts,
+workdir contents, retention/evals, budgets, or proxy policy. The target host
+and image remain editable, and every follow-up request stays pinned to that
+explicit target. Older daemons that do not expose the complete clone projection
+must be updated. **Start now** remains a separate retryable lifecycle request
+after creation.
+
+Harness is selected from the supported Tariboy harnesses. Model and effort are
+editable preset fields: they start from explicit runtime defaults for schema-v2
+images, accept arbitrary overrides, and include conservative built-in
+suggestions instead of querying harness or provider catalogs. Schema-v1 image
+defaults remain readable for compatibility. Successful custom overrides are
+remembered in the Desktop WebView by harness and offered on later creates.
+These local suggestions are an operator convenience, not a capability check
+for the selected host; failed creates do not add values.
 
 The Agents sidebar partitions each host into expandable **Teams** and
 **Individual agents** without changing agent navigation or terminal drag
