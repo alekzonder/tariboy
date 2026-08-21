@@ -134,11 +134,14 @@ without a Native Task because no task can exist without a queue.
 
 ## 2. Communicate Through the Task
 
-Ask every customer question through the Native Task. For a flexible task, use
-`tasks ask <key> user:<login> "<question>"`; this posts the question as a task
-comment and records a durable answer wait. For a workflow assignment, use its
-assignment-scoped `tasks ask` command with the required question, context, and
-blocking scope.
+Ask every customer question through the Native Task. Choose the `tasks ask`
+form from whether you have a workflow work packet, not from the task key alone.
+The flexible and workflow forms are mutually exclusive.
+For a flexible task without a work packet, ask with `tasks ask <TASK-KEY> user:<login>|agent:<name> <TEXT>`.
+This posts the question and creates the durable answer wait; it requires neither
+an assignment ID nor revisions. A plain comment is not a substitute. For a
+workflow-managed task with a work packet, use only its assignment-scoped `tasks ask` form
+with the required question, context, and blocking scope.
 
 Do not duplicate a question in chat or accept a chat reply as the decision.
 Resume only from the answer recorded on the Native Task, then summarize the
