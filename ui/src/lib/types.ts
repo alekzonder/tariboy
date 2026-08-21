@@ -34,7 +34,7 @@ export interface AgentBudgetStatus {
 	day_spent_usd: number;
 	week_spent_usd: number;
 	month_spent_usd: number;
-	exhausted: string[];
+	exhausted?: string[] | null;
 }
 
 export interface AgentLifecycleResult {
