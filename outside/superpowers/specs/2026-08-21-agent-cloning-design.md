@@ -284,9 +284,8 @@ reconciliation behavior remains unchanged.
   and explicit-host configuration loading.
 - `ui/src/pages/terminals/TerminalsSidebar.tsx`: expose the agent context-menu
   action without changing navigation or drag behavior.
-- `ui/src/components/ui/context-menu.tsx`, `ui/package.json`, and
-  `ui/package-lock.json`: add the repository-local Radix context-menu wrapper
-  and pinned dependency.
+- `ui/src/components/ui/context-menu.tsx`: add the repository-local context-menu
+  wrapper using the already-pinned `radix-ui` umbrella dependency.
 - `docs/docs/architecture/web-ui.mdx`: document complete creation and cloning
   behavior.
 
