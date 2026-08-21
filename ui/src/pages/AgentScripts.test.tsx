@@ -7,7 +7,7 @@ afterEach(() => vi.restoreAllMocks());
 
 const definition = {
   id: "scr-alpha-1", agent: "alpha", name: "nightly", description: "backup database",
-  command: "backup", mode: "every", interval_seconds: 60, state: "active",
+  command: "backup --database primary --destination /mnt/archive/nightly", mode: "every", interval_seconds: 60, state: "active",
   created_at: "2026-08-20T10:00:00Z", next_run_at: "2026-08-20T10:02:00Z",
   latest_run: { id: "srun-alpha-2", script_id: "scr-alpha-1", agent: "alpha", status: "failed", exit_code: 2, created_at: "2026-08-20T10:01:00Z", started_at: "2026-08-20T10:01:01Z", finished_at: "2026-08-20T10:01:03Z", log_path: "/data/agents/alpha/scripts/srun-alpha-2.log" },
 };
@@ -50,6 +50,13 @@ it("starts an immediate fixed-interval script with explicit quiet exit", async (
   fireEvent.change(screen.getByLabelText("Quiet exit (optional)"), { target: { value: "2" } });
   fireEvent.click(screen.getAllByRole("button", { name: "Schedule" }).at(-1)!);
   await waitFor(() => expect(calls.some((call) => call.path === "/api/agents/alpha/scripts/schedule" && (call.body as { interval_seconds?: number; quiet_exit?: number }).interval_seconds === 30 && (call.body as { quiet_exit?: number }).quiet_exit === 2)).toBe(true));
+});
+
+it("shows the complete stored launch command in the script definition", async () => {
+  const calls: Array<{ path: string; method: string; body?: unknown }> = [];
+  stubFetch(calls); renderPage();
+
+  expect(await screen.findByText("backup --database primary --destination /mnt/archive/nightly")).toBeInTheDocument();
 });
 
 it("lazy-loads runs and expands run metadata and log inline", async () => {
