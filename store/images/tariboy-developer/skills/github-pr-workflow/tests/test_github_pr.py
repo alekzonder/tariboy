@@ -36,6 +36,11 @@ args = sys.argv[1:]
 secret = os.environ["FAKE_CURL_EXPECTED_TOKEN"]
 if secret in "\0".join(args):
     raise SystemExit("token appeared in curl argv")
+if os.environ.get("FAKE_CURL_REQUIRE_DISABLE") == "1":
+    if not (Path(os.environ["HOME"]) / ".curlrc").is_file():
+        raise SystemExit("hostile curlrc fixture is missing")
+    if not args or args[0] != "--disable":
+        raise SystemExit("--disable was not the first curl option")
 try:
     config = args[args.index("--config") + 1]
 except (ValueError, IndexError) as exc:
@@ -70,6 +75,18 @@ if not queue:
     raise SystemExit("unexpected curl request")
 response = queue.pop(0)
 queue_path.write_text(json.dumps(queue), encoding="utf-8")
+for stream_name, output in (("stdout_bytes", sys.stdout.buffer), ("stderr_bytes", sys.stderr.buffer)):
+    stream_bytes = response.get(stream_name)
+    if stream_bytes is None:
+        continue
+    remaining = stream_bytes
+    chunk = b"x" * 65536
+    while remaining:
+        output.write(chunk[:min(remaining, len(chunk))])
+        output.flush()
+        remaining -= min(remaining, len(chunk))
+    Path(os.environ["FAKE_CURL_STREAM_COMPLETE"]).write_text(stream_name, encoding="utf-8")
+    raise SystemExit(response.get("exit", 0))
 payload = response.get("body", {})
 if isinstance(payload, str):
     sys.stdout.write(payload)
@@ -80,13 +97,15 @@ raise SystemExit(response.get("exit", 0))
 
 
 class FakeCurl:
-    def __init__(self, responses):
+    def __init__(self, responses, require_disable=False):
         self.responses = responses
+        self.require_disable = require_disable
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name)
         self.binary = self.path / "curl"
         self.queue = self.path / "queue.json"
         self.records = self.path / "records.jsonl"
+        self.stream_complete = self.path / "stream-complete"
 
     def __enter__(self):
         self.binary.write_text(textwrap.dedent(FAKE_CURL), encoding="utf-8")
@@ -99,6 +118,7 @@ class FakeCurl:
 
     def set_responses(self, responses):
         self.queue.write_text(json.dumps(responses), encoding="utf-8")
+        self.stream_complete.unlink(missing_ok=True)
 
     def records_json(self):
         if not self.records.exists():
@@ -112,6 +132,8 @@ class FakeCurl:
             "FAKE_CURL_RECORDS": str(self.records),
             "FAKE_CURL_EXPECTED_TOKEN": expected_token,
             "FAKE_CURL_PROCESS_TEMP": str(process_temp),
+            "FAKE_CURL_REQUIRE_DISABLE": "1" if self.require_disable else "0",
+            "FAKE_CURL_STREAM_COMPLETE": str(self.stream_complete),
         }
 
 
@@ -158,6 +180,7 @@ class GitHubPRWorkflowTests(unittest.TestCase):
             working_dir = sandbox / "cwd"
             for directory in (home, xdg_state, xdg_cache, xdg_config, xdg_data, xdg_runtime, process_temp, working_dir):
                 directory.mkdir(mode=0o700)
+            (home / ".curlrc").write_text('header = "X-Hostile-Curlrc: loaded"\n', encoding="utf-8")
             env = os.environ.copy()
             env.pop("GH_TOKEN", None)
             env.pop("GITHUB_TOKEN", None)
@@ -240,6 +263,26 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         self.assertNotEqual(invalid.returncode, 0)
         self.assert_secret_free(invalid)
         self.assert_no_requests(curl)
+
+    def test_curl_disables_default_config_before_every_other_option(self):
+        with FakeCurl([{"body": {"full_name": REPO}}], require_disable=True) as curl:
+            result = self.run_utility("preflight", "--repo", REPO, curl=curl)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_secret_free(result)
+
+    def test_curl_output_pipes_are_stopped_at_bounded_sizes(self):
+        cases = [
+            ("stdout", {"stdout_bytes": 16 * 1024 * 1024}),
+            ("stderr", {"stderr_bytes": 1024 * 1024}),
+        ]
+        for name, response in cases:
+            with self.subTest(name=name), FakeCurl([response]) as curl:
+                result = self.run_utility("preflight", "--repo", REPO, curl=curl)
+                completed = curl.stream_complete.exists()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(completed, f"curl completed writing oversized {name}")
+            self.assertNotIn("Traceback", result.stderr)
+            self.assert_secret_free(result)
 
     def test_ensure_returns_one_existing_open_pull_request(self):
         with FakeCurl([{"body": [pr()]}]) as curl:
@@ -328,7 +371,7 @@ class GitHubPRWorkflowTests(unittest.TestCase):
     def test_monitor_emits_each_untrusted_comment_and_review_only_when_new_or_updated(self):
         comments = [{"id": 1, "updated_at": "2026-08-21T12:00:00Z", "body": "initial issue body"}]
         review_comments = [{"id": 2, "updated_at": "2026-08-21T12:00:00Z", "body": "review comment body"}]
-        reviews = [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "body": "review body", "state": "COMMENTED"}]
+        reviews = [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "body": "review body", "state": "COMMENTED", "commit_id": "abc123"}]
         with tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses(comments=comments, review_comments=review_comments, reviews=reviews)) as curl:
             first = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
             curl.set_responses(monitor_responses(comments=comments, review_comments=review_comments, reviews=reviews))
@@ -352,6 +395,56 @@ class GitHubPRWorkflowTests(unittest.TestCase):
             self.assertNotIn(body, updated.stdout)
         for body in ("updated comment body", "review comment body", "review body"):
             self.assertNotIn(body, state)
+
+    def test_monitor_rejects_incomplete_comment_and_review_objects_without_advancing_state(self):
+        cases = [
+            ("issue body missing", 3, [{"id": 1, "updated_at": "2026-08-21T12:00:00Z"}]),
+            ("issue body null", 3, [{"id": 1, "updated_at": "2026-08-21T12:00:00Z", "body": None}]),
+            ("issue timestamp null", 3, [{"id": 1, "updated_at": None, "body": "body"}]),
+            ("review comment timestamp missing", 4, [{"id": 2, "body": "body"}]),
+            ("review body missing", 5, [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "state": "COMMENTED", "commit_id": "abc123"}]),
+            ("review state missing", 5, [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "body": "body", "commit_id": "abc123"}]),
+            ("review commit null", 5, [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "body": "body", "state": "COMMENTED", "commit_id": None}]),
+        ]
+        for name, endpoint_index, objects in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses()) as curl:
+                initial = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+                snapshot = Path(state_dir) / "pr-31.json"
+                before = snapshot.read_bytes()
+                responses = monitor_responses()
+                responses[endpoint_index] = {"body": objects}
+                curl.set_responses(responses)
+                result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+                self.assertEqual(initial.returncode, 0, initial.stderr)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(snapshot.read_bytes(), before)
+                self.assertEqual(list(Path(state_dir).glob("*.tmp")), [])
+
+    def test_monitor_rejects_malformed_nested_snapshot_before_network(self):
+        mutations = [
+            ("pr null", lambda snapshot: snapshot.__setitem__("pr", None)),
+            ("collection object", lambda snapshot: snapshot.__setitem__("check_runs", {})),
+            ("collection null member", lambda snapshot: snapshot.__setitem__("statuses", [None])),
+            ("comment bad id", lambda snapshot: snapshot.__setitem__("issue_comments", [{"id": "bad", "updated_at": "2026-08-21T12:00:00Z"}])),
+            ("review member null", lambda snapshot: snapshot.__setitem__("reviews", [None])),
+        ]
+        for name, mutate in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses()) as curl:
+                initial = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+                snapshot_path = Path(state_dir) / "pr-31.json"
+                snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+                mutate(snapshot)
+                snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+                before = snapshot_path.read_bytes()
+                curl.records.write_text("", encoding="utf-8")
+                curl.set_responses([])
+                result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
+                self.assertEqual(initial.returncode, 0, initial.stderr)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(snapshot_path.read_bytes(), before)
+                self.assert_no_requests(curl)
 
     def test_monitor_reports_merged_and_closed_without_merge_as_distinct_states(self):
         with tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses(pr_body=pr(merged=True, merge_commit_sha="merge123"))) as curl:
@@ -404,7 +497,7 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         statuses = [{"id": i, "context": f"status-{i}", "state": "success"} for i in range(101)]
         issue_comments = [{"id": i, "updated_at": "2026-08-21T12:00:00Z", "body": f"issue-{i}"} for i in range(101)]
         review_comments = [{"id": i, "updated_at": "2026-08-21T12:00:00Z", "body": f"review-comment-{i}"} for i in range(101)]
-        reviews = [{"id": i, "submitted_at": "2026-08-21T12:00:00Z", "body": f"review-{i}", "state": "COMMENTED"} for i in range(101)]
+        reviews = [{"id": i, "submitted_at": "2026-08-21T12:00:00Z", "body": f"review-{i}", "state": "COMMENTED", "commit_id": "abc123"} for i in range(101)]
         responses = [
             {"body": pr()},
             {"body": {"total_count": 101, "check_runs": check_runs[:100]}},

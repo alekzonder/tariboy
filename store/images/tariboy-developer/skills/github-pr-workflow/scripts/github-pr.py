@@ -8,12 +8,14 @@ import json
 import os
 from pathlib import Path
 import re
+import selectors
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
-from typing import Any, NoReturn
+import time
+from typing import Any, Callable, NoReturn
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 
@@ -200,6 +202,65 @@ def append_query(url: str, params: dict[str, Any]) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
+def stop_process(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is None:
+        process.kill()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired as exc:
+        raise WorkflowError("failed to reap curl after termination") from exc
+
+
+def bounded_process_output(process: subprocess.Popen[bytes]) -> tuple[bytes, bytes]:
+    if process.stdout is None or process.stderr is None:
+        fail("curl output pipes are unavailable")
+    streams = {
+        process.stdout.fileno(): ("response", process.stdout, MAX_RESPONSE_BYTES),
+        process.stderr.fileno(): ("diagnostic", process.stderr, MAX_DIAGNOSTIC_BYTES),
+    }
+    buffers = {"response": bytearray(), "diagnostic": bytearray()}
+    selector = selectors.DefaultSelector()
+    deadline = time.monotonic() + 35
+    try:
+        for descriptor in streams:
+            os.set_blocking(descriptor, False)
+            selector.register(descriptor, selectors.EVENT_READ)
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                stop_process(process)
+                fail("GitHub request exceeded its time limit")
+            events = selector.select(remaining)
+            if not events:
+                stop_process(process)
+                fail("GitHub request exceeded its time limit")
+            for key, _ in events:
+                descriptor = key.fd
+                try:
+                    chunk = os.read(descriptor, 65536)
+                except BlockingIOError:
+                    continue
+                if not chunk:
+                    selector.unregister(descriptor)
+                    continue
+                label, _, limit = streams[descriptor]
+                buffers[label].extend(chunk)
+                if len(buffers[label]) > limit:
+                    stop_process(process)
+                    fail(f"GitHub {label} exceeded its size limit")
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            stop_process(process)
+            fail("GitHub request exceeded its time limit")
+        return bytes(buffers["response"]), bytes(buffers["diagnostic"])
+    finally:
+        selector.close()
+        process.stdout.close()
+        process.stderr.close()
+
+
 class GitHubClient:
     def __init__(self, token: str, curl_bin: str):
         self.token = token
@@ -223,6 +284,7 @@ class GitHubClient:
 
         args = [
             self.curl_bin,
+            "--disable",
             "--silent",
             "--show-error",
             "--fail-with-body",
@@ -273,16 +335,10 @@ class GitHubClient:
                 view = view[written:]
             os.close(write_fd)
             write_fd = -1
-            try:
-                stdout, stderr = process.communicate(timeout=35)
-            except subprocess.TimeoutExpired as exc:
-                process.kill()
-                process.communicate()
-                raise WorkflowError("GitHub request exceeded its time limit") from exc
+            stdout, stderr = bounded_process_output(process)
         except OSError as exc:
             if process is not None:
-                process.kill()
-                process.communicate()
+                stop_process(process)
             raise WorkflowError("failed to execute curl") from exc
         finally:
             if read_fd >= 0:
@@ -290,10 +346,6 @@ class GitHubClient:
             if write_fd >= 0:
                 os.close(write_fd)
 
-        if len(stdout) > MAX_RESPONSE_BYTES:
-            fail("GitHub response exceeded the 8 MiB limit")
-        if len(stderr) > MAX_DIAGNOSTIC_BYTES:
-            fail("curl diagnostic exceeded its size limit")
         if process.returncode != 0:
             fail(f"GitHub request failed (curl exit {process.returncode})")
         try:
@@ -358,10 +410,17 @@ def text_field(
     return redact_text(item)
 
 
+def nonempty_text_field(value: dict[str, Any], key: str, label: str) -> str:
+    item = text_field(value, key, label)
+    if not item:
+        fail(f"GitHub {label} has an invalid {key}")
+    return item
+
+
 def body_field(value: dict[str, Any], key: str, label: str) -> str:
-    item = value.get(key)
-    if item is None:
-        return ""
+    if key not in value:
+        fail(f"GitHub {label} is missing {key}")
+    item = value[key]
     if not isinstance(item, str) or "\x00" in item or len(item) > MAX_RESPONSE_BYTES:
         fail(f"GitHub {label} has an invalid {key}")
     return redact_text(item)
@@ -517,15 +576,126 @@ def normalize_body_items(
         object_id = integer_field(item, "id", kind)
         if object_id in bodies:
             fail(f"GitHub returned duplicate {kind} IDs")
-        timestamp = text_field(item, timestamp_key, kind, nullable=True)
+        timestamp = nonempty_text_field(item, timestamp_key, kind)
         body = body_field(item, "body", kind)
         entry: dict[str, Any] = {"id": object_id, timestamp_key: timestamp}
         if kind == "review":
-            entry["state"] = text_field(item, "state", kind)
-            entry["commit_id"] = text_field(item, "commit_id", kind, nullable=True)
+            entry["state"] = nonempty_text_field(item, "state", kind)
+            entry["commit_id"] = nonempty_text_field(item, "commit_id", kind)
         metadata.append(entry)
         bodies[object_id] = body
     return sorted(metadata, key=lambda item: item["id"]), bodies
+
+
+def snapshot_dict(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        fail(f"monitor snapshot has an invalid {label}")
+    return value
+
+
+def snapshot_integer(value: dict[str, Any], key: str, label: str) -> int:
+    item = value.get(key)
+    if isinstance(item, bool) or not isinstance(item, int) or item < 0:
+        fail(f"monitor snapshot {label} has an invalid {key}")
+    return item
+
+
+def snapshot_text(
+    value: dict[str, Any],
+    key: str,
+    label: str,
+    *,
+    nullable: bool = False,
+    nonempty: bool = True,
+) -> str | None:
+    if key not in value:
+        fail(f"monitor snapshot {label} is missing {key}")
+    item = value[key]
+    if nullable and item is None:
+        return None
+    if not isinstance(item, str) or CONTROL_RE.search(item):
+        fail(f"monitor snapshot {label} has an invalid {key}")
+    if nonempty and not item:
+        fail(f"monitor snapshot {label} has an invalid {key}")
+    return item
+
+
+def snapshot_collection(
+    snapshot: dict[str, Any],
+    key: str,
+    validate: Callable[[dict[str, Any]], None],
+) -> None:
+    values = snapshot.get(key)
+    if not isinstance(values, list):
+        fail(f"monitor snapshot has an invalid {key} collection")
+    seen: set[int] = set()
+    for index, value in enumerate(values):
+        item = snapshot_dict(value, f"{key}[{index}]")
+        validate(item)
+        item_id = item["id"]
+        if item_id in seen:
+            fail(f"monitor snapshot has duplicate {key} IDs")
+        seen.add(item_id)
+
+
+def validate_snapshot(snapshot: dict[str, Any], repo: str, number: int) -> None:
+    if (
+        snapshot.get("version") != 1
+        or snapshot.get("repo") != repo
+        or snapshot.get("pr_number") != number
+    ):
+        fail("monitor snapshot does not match this repository and pull request")
+
+    pr = snapshot_dict(snapshot.get("pr"), "pr metadata")
+    if snapshot_integer(pr, "number", "pr metadata") != number:
+        fail("monitor snapshot has the wrong pull request number")
+    state = snapshot_text(pr, "state", "pr metadata")
+    if state not in {"open", "closed"}:
+        fail("monitor snapshot pr metadata has an invalid state")
+    merged = pr.get("merged")
+    if not isinstance(merged, bool):
+        fail("monitor snapshot pr metadata has an invalid merged flag")
+    merge_sha = snapshot_text(
+        pr, "merge_commit_sha", "pr metadata", nullable=True
+    )
+    if merged and not merge_sha:
+        fail("monitor snapshot merged PR is missing merge commit metadata")
+    snapshot_text(pr, "updated_at", "pr metadata")
+    snapshot_text(pr, "head_sha", "pr metadata")
+
+    def validate_check(item: dict[str, Any]) -> None:
+        snapshot_integer(item, "id", "check run")
+        snapshot_text(item, "name", "check run")
+        snapshot_text(item, "status", "check run")
+        snapshot_text(item, "conclusion", "check run", nullable=True)
+        snapshot_text(item, "started_at", "check run", nullable=True)
+        snapshot_text(item, "completed_at", "check run", nullable=True)
+
+    def validate_status(item: dict[str, Any]) -> None:
+        snapshot_integer(item, "id", "commit status")
+        snapshot_text(item, "context", "commit status")
+        snapshot_text(item, "state", "commit status")
+        snapshot_text(item, "created_at", "commit status", nullable=True)
+        snapshot_text(item, "updated_at", "commit status", nullable=True)
+
+    def validate_comment(timestamp_key: str) -> Callable[[dict[str, Any]], None]:
+        def validate(item: dict[str, Any]) -> None:
+            snapshot_integer(item, "id", "comment metadata")
+            snapshot_text(item, timestamp_key, "comment metadata")
+
+        return validate
+
+    def validate_review(item: dict[str, Any]) -> None:
+        snapshot_integer(item, "id", "review metadata")
+        snapshot_text(item, "submitted_at", "review metadata")
+        snapshot_text(item, "state", "review metadata")
+        snapshot_text(item, "commit_id", "review metadata")
+
+    snapshot_collection(snapshot, "check_runs", validate_check)
+    snapshot_collection(snapshot, "statuses", validate_status)
+    snapshot_collection(snapshot, "issue_comments", validate_comment("updated_at"))
+    snapshot_collection(snapshot, "review_comments", validate_comment("updated_at"))
+    snapshot_collection(snapshot, "reviews", validate_review)
 
 
 def load_snapshot(path: Path, repo: str, number: int) -> dict[str, Any] | None:
@@ -546,8 +716,7 @@ def load_snapshot(path: Path, repo: str, number: int) -> dict[str, Any] | None:
         raise WorkflowError("monitor snapshot is unreadable or malformed") from exc
     if not isinstance(value, dict):
         fail("monitor snapshot has an unexpected shape")
-    if value.get("version") != 1 or value.get("repo") != repo or value.get("pr_number") != number:
-        fail("monitor snapshot does not match this repository and pull request")
+    validate_snapshot(value, repo, number)
     return value
 
 
