@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
+	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
@@ -258,6 +260,125 @@ func TestRunServesAndShutsDown(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("daemon did not shut down")
+	}
+}
+
+func TestRunTaskReminderInitialScanUsesPublishHookAndStops(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("TARIBOY_RUNTIME_DIR", t.TempDir())
+	stubHarness := filepath.Join(t.TempDir(), "stub-harness")
+	if err := os.WriteFile(stubHarness, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TARIBOY_STUB_HARNESS", stubHarness)
+	imagesDir := filepath.Join(base, "images")
+	buildBasicImage(t, imagesDir)
+	manifest, err := (&image.Store{Dir: imagesDir}).Inspect(image.Ref{Name: "basic", Tag: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seed, err := store.Open(filepath.Join(base, "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.ConfigSet("task_reminder", `{"enabled":true,"idle_threshold_s":1}`); err != nil {
+		t.Fatal(err)
+	}
+	worker := agent.Agent{
+		Name: "worker", ImageRef: "basic:latest", ImageDigest: manifest.Digest, HarnessType: "stub", Cwd: t.TempDir(),
+		Enabled: true, LoopEnabled: true, Plugins: []string{"context"},
+	}
+	if err := agent.NewStore(seed).Create(worker); err != nil {
+		t.Fatal(err)
+	}
+	if err := agentdir.Provision(
+		agentdir.New(filepath.Join(base, "agents"), worker.Name), worker,
+		&image.Store{Dir: imagesDir}, image.Ref{Name: "basic", Tag: "latest"}, "/bin/true",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seed.DB.Exec(`INSERT INTO task_queues(prefix,name,created_at,updated_at)
+		VALUES ('REM','Reminders','2020-01-01T00:00:00Z','2020-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seed.DB.Exec(`INSERT INTO tasks(
+		task_key,queue_prefix,title,status,author,customer,assignee,created_at,updated_at)
+		VALUES ('REM-1','REM','Reminder','open','user:customer','user:customer','agent:worker',
+		'2020-01-01T00:00:00Z','2020-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	spawner := &captureSpawner{fired: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, daemonTestOptions(Options{
+			BaseDir: base, Listen: "unix", HTTPAddr: "", LogLevel: "error", Spawner: spawner,
+		}))
+	}()
+
+	select {
+	case <-spawner.fired:
+		// interval_s=0 leaves the ordinary bus publish hook as the only route
+		// that can wake this agent and reach the injected spawner.
+	case err := <-done:
+		cancel()
+		t.Fatalf("daemon returned before reminder wake: %v", err)
+	case <-time.After(15 * time.Second):
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("daemon did not stop after reminder wake timeout")
+		}
+		t.Fatal("task reminder initial scan did not publish through the wake hook")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("daemon did not await task reminder shutdown")
+	}
+
+	reopened, err := store.Open(filepath.Join(base, "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	var channel, typ, source, data, idempotencyKey string
+	if err := reopened.DB.QueryRow(`SELECT channel,type,source,data,idempotency_key
+		FROM messages WHERE type='task.reminder'`).Scan(&channel, &typ, &source, &data, &idempotencyKey); err != nil {
+		t.Fatal(err)
+	}
+	if channel != "agent:worker:inbox" || typ != "task.reminder" || source != "tasks" || idempotencyKey == "" {
+		t.Fatalf("reminder = channel:%q type:%q source:%q idempotency:%q", channel, typ, source, idempotencyKey)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["reason"] != "assigned-work-idle" || payload["idle_threshold_s"] != float64(1) ||
+		!reflect.DeepEqual(payload["task_keys"], []any{"REM-1"}) {
+		t.Fatalf("payload = %#v", payload)
+	}
+	var deliveries, marked int
+	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM deliveries d
+		JOIN messages m ON m.id=d.message_id WHERE m.type='task.reminder'`).Scan(&deliveries); err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM task_reminders WHERE agent='worker'`).Scan(&marked); err != nil {
+		t.Fatal(err)
+	}
+	if deliveries != 1 || marked != 1 {
+		t.Fatalf("durable route = deliveries:%d marked:%d, want 1/1", deliveries, marked)
 	}
 }
 

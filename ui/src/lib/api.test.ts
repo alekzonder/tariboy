@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
   api, apiGet, apiOn, setActiveDaemon, getActiveDaemon, ApiError, agentApiPath, fsList,
   setLocalBaseURL, getLocalBaseURL, listImagesOn, imageManifestGetOn, imagePromptGetOn,
-  imageFilesListOn, imageFileReadOn, startAgent,
+  imageFilesListOn, imageFileReadOn, startAgent, getTaskReminderPolicyOn, setTaskReminderPolicyOn,
 } from "./api";
 import { subscribeAgentEvents, agentUploadFile, setAgentInteractive } from "./api";
 import { setAlias, getStatusHistory, loopEnable } from "./api";
@@ -47,6 +47,31 @@ describe("api envelope", () => {
 });
 
 describe("overview api helpers", () => {
+  it("defaults an absent task reminder config key to disabled at 300 seconds", async () => {
+    vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: {} }));
+
+    await expect(getTaskReminderPolicyOn(null)).resolves.toEqual({ enabled: false, idle_threshold_s: 300 });
+  });
+
+  it("writes task reminder config to the explicit daemon", async () => {
+    let seenUrl = "";
+    let seenInit: RequestInit = {};
+    const target: Daemon = { id: "remote", label: "Remote", baseURL: "https://remote.test", token: "token" };
+    vi.stubGlobal("fetch", mockFetch(200, {
+      ok: true,
+      result: { key: "task_reminder", value: '{"enabled":true,"idle_threshold_s":120}' },
+    }, (url, init) => { seenUrl = url; seenInit = init; }));
+
+    await expect(setTaskReminderPolicyOn(target, { enabled: true, idle_threshold_s: 120 }))
+      .resolves.toEqual({ enabled: true, idle_threshold_s: 120 });
+    expect(seenUrl).toBe("https://remote.test/api/daemon/config");
+    expect((seenInit.headers as Record<string, string>)["Authorization"]).toBe("Bearer token");
+    expect(JSON.parse(seenInit.body as string)).toEqual({
+      key: "task_reminder",
+      value: '{"enabled":true,"idle_threshold_s":120}',
+    });
+  });
+
   it("setAlias posts {value} to the alias route", async () => {
     let captured: { url: string; body: unknown } | undefined;
     vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: { name: "a1", alias: "x" } }, (url, init) => {

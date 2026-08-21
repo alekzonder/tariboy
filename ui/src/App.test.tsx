@@ -1,7 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import type { ReactNode } from "react";
+import { fetchAllAgents } from "@/lib/aggregate";
+import { targetFor } from "@/lib/terminalsHost";
 import App from "./App";
+
+vi.mock("@/lib/aggregate", () => ({
+  fetchAllAgents: vi.fn(),
+}));
+
+vi.mock("@/components/CustomerQuestionNotifications", () => ({
+  CustomerQuestionNotifications: ({ children }: { children: ReactNode }) => children,
+}));
+
+vi.mock("@/lib/terminalsHost", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/terminalsHost")>();
+  return { ...actual, targetFor: vi.fn(actual.targetFor) };
+});
 
 function LocationProbe() {
   const location = useLocation();
@@ -20,6 +36,9 @@ function renderAt(path: string) {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  vi.mocked(fetchAllAgents).mockResolvedValue([
+    { host: { id: "", label: "This daemon (local)" }, agents: [] },
+  ]);
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
@@ -40,6 +59,7 @@ beforeEach(() => {
           rows: [], series: [], requests: [],
         }
         : url.includes("/api/groups") ? { groups: [], count: 0 }
+        : url.includes("/api/daemon/config") ? { task_reminder: '{"enabled":false,"idle_threshold_s":300}' }
         : url.includes("/api/channels") ? { channels: [] }
         : { agents: [], count: 0 };
       return {
@@ -90,6 +110,30 @@ describe("product routing", () => {
     expect(screen.getByTestId("tasks-workspace")).toHaveAttribute("data-scope-agent", "");
     expect(screen.getByRole("navigation", { name: "Server workspace" }))
       .toBeInTheDocument();
+  });
+
+  it("loads task reminders from a cold direct remote settings route", async () => {
+    const remote = {
+      id: "remote-cold",
+      label: "Production",
+      baseURL: "https://production.example",
+    };
+    localStorage.setItem("tariboy_daemons", JSON.stringify([remote]));
+    sessionStorage.setItem("tariboy_daemon_token_remote-cold", "test-token");
+    vi.mocked(targetFor).mockImplementation((hostId) => hostId === remote.id ? {
+      id: remote.id,
+      label: remote.label,
+      baseURL: "",
+      token: "",
+    } : null);
+
+    renderAt(`/servers/${remote.id}/settings/task-reminders`);
+
+    expect(await screen.findByRole("switch", { name: "Enable task reminders" })).toBeInTheDocument();
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      "https://production.example/api/daemon/config",
+      expect.objectContaining({ method: "GET" }),
+    ));
   });
 
   it.each([

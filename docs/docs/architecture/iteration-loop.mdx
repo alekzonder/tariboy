@@ -34,6 +34,25 @@ Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline.
 
+### Idle assigned-task reminders
+
+Task reminders are an optional daemon policy, not another execution path. The
+absent/default policy is disabled with `idle_threshold_s: 300`; the threshold is
+a positive integral number of seconds and applies even when `interval_s=0`.
+When enabled, the daemon reconciler selects only master-enabled agents with
+enabled loops, assigned open Native Tasks, and a durable activity boundary at
+least that old. It records a per-agent generation fingerprint after publishing,
+so the same assigned-open task set and activity boundary wake at most once
+across scans and daemon restarts. A changed assignment set or a newer completed
+iteration creates a later eligible generation.
+
+The reconciler only publishes `task.reminder` to the agent inbox. The normal
+bus creates its delivery and the publish hook calls `WakeMessage`; the loop then
+starts only if it remains enabled and has a pending delivery. The reminder does
+not execute an iteration directly and does not claim, assign, or transition a
+task. The resulting iteration must still obtain work from the authoritative
+Native Task store.
+
 ## Harness environment and preflight
 
 The daemon's own environment is the baseline every iteration starts from, so

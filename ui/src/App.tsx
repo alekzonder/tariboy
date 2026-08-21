@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DaemonBanner } from "@/components/DaemonBanner";
@@ -17,6 +17,7 @@ import {
   CliSettings,
   GeneralSettings,
 } from "@/pages/settings/SettingsPage";
+import TaskReminderSettings from "@/pages/settings/TaskReminderSettings";
 import UsagePage from "@/pages/UsagePage";
 import GroupsPage from "@/pages/GroupsPage";
 import BudgetsPage from "@/pages/BudgetsPage";
@@ -32,6 +33,7 @@ import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import { useSharedSidebarState } from "@/pages/terminals/sidebarStateContext";
 import { hostToParam } from "@/lib/terminalsHost";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
+import type { ApiTarget } from "@/lib/api";
 
 export default function App() {
   return (
@@ -125,6 +127,7 @@ function MainApp() {
 
           <Route path="/servers/:hostId/settings" element={<TerminalsPage serverView="settings" />}>
             <Route index element={<GeneralSettings />} />
+            <Route path="task-reminders" element={<TaskReminderSettingsRoute />} />
             <Route path="hosts" element={<DaemonsPage />} />
             <Route path="cli" element={<CliSettings />} />
             <Route path="appearance" element={<AppearanceSettings />} />
@@ -165,6 +168,11 @@ function MainApp() {
       </main>
     </>
   );
+}
+
+function TaskReminderSettingsRoute() {
+  const target = useOutletContext<ApiTarget>();
+  return <TaskReminderSettings target={target} />;
 }
 
 function LegacyTerminalRedirect() {

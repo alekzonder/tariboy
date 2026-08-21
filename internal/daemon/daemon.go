@@ -41,6 +41,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/supportbundle"
 	"github.com/alekzonder/tariboy/internal/tasknotify"
+	"github.com/alekzonder/tariboy/internal/taskreminder"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
 	"github.com/alekzonder/tariboy/internal/userpath"
@@ -266,6 +267,9 @@ func Run(ctx context.Context, o Options) error {
 	taskHub := tasks.NewHub(taskService)
 	taskService.SetHub(taskHub)
 	taskPublisher := tasknotify.New(st.DB, channelBus, time.Now, log)
+	taskReminder := taskreminder.NewReconciler(taskreminder.ReconcilerConfig{
+		Store: st, Bus: channelBus, Clock: time.Now, Log: log,
+	})
 	imgStore := &image.Store{Dir: p.ImagesDir()}
 	if err := image.EnsureBare(imgStore, time.Now); err != nil {
 		log.Error("seed bare image", "err", err)
@@ -687,7 +691,7 @@ func Run(ctx context.Context, o Options) error {
 	// their final flush/refresh before the store closes.
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(10)
+	wg.Add(11)
 	go func() {
 		defer wg.Done()
 		pricingCatalog.Run(gctx)
@@ -711,6 +715,10 @@ func Run(ctx context.Context, o Options) error {
 	go func() {
 		defer wg.Done()
 		taskPublisher.Run(gctx)
+	}()
+	go func() {
+		defer wg.Done()
+		taskReminder.Run(gctx)
 	}()
 	go func() {
 		defer wg.Done()
