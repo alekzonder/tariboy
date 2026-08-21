@@ -49,6 +49,30 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("AgentWorkspace", () => {
+  it("renders configured budget rows when an older daemon omits exhausted periods", async () => {
+    vi.mocked(agentGetOn).mockResolvedValue({
+      name: "worker", state: "running", loop_enabled: false, iterations: 0,
+      last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+      budget: {
+        hour_usd: 1, day_usd: 0, week_usd: 0, month_usd: 0,
+        hour_spent_usd: 0.25, day_spent_usd: 0.25, week_spent_usd: 0.25, month_spent_usd: 0.25,
+      },
+    });
+
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    expect(await screen.findByTestId("agent-budget-header")).toHaveTextContent("Hour 0.25 / 1");
+    expect(screen.queryByText(/Out of budget:/)).not.toBeInTheDocument();
+  });
+
   it("offers the action only for local and resolved SSH hosts", () => {
     const daemons = [
       { id: "ssh-1", label: "ssh", baseURL: "http://127.0.0.1:1", kind: "ssh" as const },

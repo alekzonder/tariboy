@@ -157,6 +157,7 @@ export default function AgentConfigurationTab({
 		["Hour", "hour", budget.hour_spent_usd, budget.hour_usd], ["Day", "day", budget.day_spent_usd, budget.day_usd],
 		["Week", "week", budget.week_spent_usd, budget.week_usd], ["Month", "month", budget.month_spent_usd, budget.month_usd],
 	] as const) : [];
+	const exhaustedPeriods = budget?.exhausted ?? [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -220,7 +221,7 @@ export default function AgentConfigurationTab({
 			<div className="mt-4 space-y-2">
 				{budgetRows.map(([label, key, spent, limit]) => <label key={key} className="flex items-center gap-2 text-sm"><span className="w-14">{label}</span><span>{spent.toFixed(2)} /</span><input aria-label={`${label} budget`} className="w-28 rounded border px-2 py-1" type="number" min="0" step="0.01" value={limit} onChange={(event) => setBudget({ ...budget, [`${key}_usd`]: Number(event.target.value) })} /><span className="text-muted-foreground">{limit === 0 ? "Unlimited" : "USD"}</span></label>)}
 			</div>
-			{budget.exhausted.length > 0 && <p role="status" className="mt-3 text-sm text-destructive">Out of budget: {budget.exhausted.join(", ")}</p>}
+			{exhaustedPeriods.length > 0 && <p role="status" className="mt-3 text-sm text-destructive">Out of budget: {exhaustedPeriods.join(", ")}</p>}
 			{budgetError && <p role="alert" className="mt-3 text-sm text-destructive">{budgetError}</p>}
 			<Button className="mt-4" disabled={budgetSaving} onClick={() => void saveBudget()}>{budgetSaving ? "Saving…" : "Save agent budgets"}</Button>
 		</section>}

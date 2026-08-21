@@ -383,3 +383,24 @@ it("shows a budget save error without discarding the entered limit", async () =>
   expect(screen.getByRole("alert")).toHaveTextContent("budget update rejected");
   expect(input).toHaveValue(2);
 });
+
+it("renders a budget projection from an older daemon without exhausted periods", async () => {
+  // Removing the defensive fallback in AgentConfigurationTab should make this
+  // fail by dereferencing the omitted additive field.
+  const legacyBudget = {
+    hour_usd: 1, day_usd: 0, week_usd: 0, month_usd: 0,
+    hour_spent_usd: 0.25, day_spent_usd: 0.25, week_spent_usd: 0.25, month_spent_usd: 0.25,
+  };
+  vi.stubGlobal("fetch", vi.fn((url: string) => {
+    if (url.includes("/api/fs/list")) {
+      return response({ path: "/srv", parent: "/", entries: [] });
+    }
+    return response({ ...stopped, budget: legacyBudget });
+  }));
+
+  renderConfiguration();
+
+  expect(await screen.findByRole("heading", { name: "Agent budgets (USD)" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save agent budgets" })).toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
