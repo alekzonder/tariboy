@@ -5,7 +5,7 @@ import { fetchAllAgents, type HostAgents } from "@/lib/aggregate";
 import { paramToHost, hostToParam, serverPath, targetFor } from "@/lib/terminalsHost";
 import { TerminalsSidebar } from "./TerminalsSidebar";
 import { useSharedSidebarState } from "./sidebarStateContext";
-import { CreateAgentDialog } from "./CreateAgentDialog";
+import { CreateAgentDialog, type CloneAgentSource } from "./CreateAgentDialog";
 import { ServerDialog } from "./ServerDialog";
 import { useDaemons } from "@/components/DaemonProvider";
 import { listDaemons, removeDaemon, type DaemonMeta } from "@/lib/daemons";
@@ -26,7 +26,11 @@ import SettingsPage from "@/pages/settings/SettingsPage";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 
 type ServerDialogState = { mode: "add" } | { mode: "edit"; server: DaemonMeta };
-type CreateDialogState = { hostId: string; imageRef?: string };
+type CreateDialogState = {
+  hostId: string;
+  imageRef?: string;
+  cloneSource?: CloneAgentSource;
+};
 export type ServerView = "tasks" | "images" | "image-detail" | "settings";
 
 export default function TerminalsPage({ serverView }: { serverView?: ServerView }) {
@@ -208,6 +212,14 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         onBeginWorkspaceDrag={(identity, event) => {
           workspaceRef.current?.beginExternalPointerDrag(identity, event.nativeEvent);
         }}
+        onClone={(cloneHostId, cloneAgentName) => {
+          const hostLabel = sidebarHosts.find((entry) => entry.host.id === cloneHostId)?.host.label
+            ?? (cloneHostId === "" ? "This daemon (local)" : cloneHostId);
+          setCreateFor({
+            hostId: cloneHostId,
+            cloneSource: { hostId: cloneHostId, agentName: cloneAgentName, hostLabel },
+          });
+        }}
         onCreate={(hostId) => setCreateFor({ hostId })}
         onAddServer={() => setServerDialog({ mode: "add" })}
         onEditServer={(id) => void editServer(id)}
@@ -292,6 +304,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         open={createFor !== null}
         hostId={createFor?.hostId ?? ""}
         imageRef={createFor?.imageRef}
+        cloneSource={createFor?.cloneSource}
         hosts={createHosts}
         onOpenChange={(o) => { if (!o) setCreateFor(null); }}
         onCreated={(h, name) => {

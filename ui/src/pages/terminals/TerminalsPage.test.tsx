@@ -5,6 +5,7 @@ import { DaemonProvider } from "@/components/DaemonProvider";
 import TerminalsPage from "./TerminalsPage";
 import { fetchAllAgents } from "@/lib/aggregate";
 import {
+  agentGetOn,
   createAgent,
   imageManifestGet,
   listImages,
@@ -14,6 +15,7 @@ import { addDaemon, listDaemons, getDaemonToken } from "@/lib/daemons";
 import * as desktop from "@/lib/desktop";
 import { SidebarStateProvider } from "./SidebarStateProvider";
 import { CustomerQuestionNotificationsContext } from "@/components/customerQuestionNotificationsContext";
+import { targetFor } from "@/lib/terminalsHost";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -23,6 +25,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
+    agentGetOn: vi.fn(),
     createAgent: vi.fn(),
     imageManifestGet: vi.fn(),
     listImages: vi.fn(),
@@ -47,6 +50,36 @@ vi.mock("@/hooks/useTerminalSocket", () => ({
 vi.mock("@/components/TuiScreen", () => ({
   TuiScreen: () => <div data-testid="tui-screen" />,
 }));
+
+const cloneProjection = {
+  name: "source",
+  image: "worker:v1",
+  digest: "sha256",
+  state: "stopped",
+  cwd: "/managed/source",
+  configured_cwd: "",
+  harness: "codex",
+  model: "gpt-5",
+  effort: "high",
+  interactive: true,
+  loop_enabled: false,
+  enabled: false,
+  interval_s: 0,
+  timeout_s: 0,
+  hard_timeout_s: 0,
+  on_timeout: "restart",
+  on_error: "restart",
+  max_idle_iterations: 0,
+  user_prompt: "",
+  env: {},
+  plugins: [],
+  messages_batch: 10,
+  messages_max_queue: 1000,
+  group: null,
+  alias: "",
+  notes: "",
+  color: "",
+} as const;
 
 beforeEach(() => {
   localStorage.clear();
@@ -81,6 +114,7 @@ beforeEach(() => {
     layers: null,
   });
   vi.mocked(startAgent).mockResolvedValue({ name: "new-agent", action: "start" });
+  vi.mocked(agentGetOn).mockResolvedValue(cloneProjection);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -329,6 +363,42 @@ describe("TerminalsPage", () => {
     expect(screen.getByText("Individual agents")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open lead" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open solo" })).toBeInTheDocument();
+  });
+
+  it.each([
+    { agentName: "lead", group: "dev-team" },
+    { agentName: "solo", group: null },
+  ])("opens Clone for the $agentName sidebar row without navigating", async ({ agentName, group }) => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([{
+      host: { id: "", label: "This daemon (local)" },
+      agents: [
+        { name: "lead", image: "worker:v1", state: "running", harness: "codex", loop_enabled: true, group: "dev-team", interactive: true },
+        { name: "solo", image: "worker:v1", state: "stopped", harness: "codex", loop_enabled: false, group: null, interactive: true },
+      ],
+    }]);
+    vi.mocked(agentGetOn).mockResolvedValueOnce({ ...cloneProjection, name: agentName, group });
+    renderAt("/");
+
+    const row = await screen.findByRole("button", { name: `Open ${agentName}` });
+    fireEvent.contextMenu(row);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Clone" }));
+
+    expect(await screen.findByRole("heading", { name: "Clone agent" })).toBeInTheDocument();
+    expect(agentGetOn).toHaveBeenCalledWith(targetFor(""), agentName, "");
+    expect(screen.getByTestId("location")).toHaveTextContent("/");
+  });
+
+  it("does not navigate or start a Workspace drag for a context-menu gesture", async () => {
+    renderAt("/workspace");
+    const row = await screen.findByRole("button", { name: "Open a1" });
+
+    fireEvent.pointerDown(row, { button: 2, pointerId: 12, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 12, clientX: 200, clientY: 200 });
+    fireEvent.contextMenu(row);
+
+    expect(await screen.findByRole("menuitem", { name: "Clone" })).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("/workspace");
+    expect(screen.queryByTestId("workspace-drop-preview")).toBeNull();
   });
 
   it("keeps the individual agents subsection visible when a host only has an empty team", async () => {
