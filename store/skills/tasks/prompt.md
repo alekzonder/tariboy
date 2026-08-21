@@ -3,9 +3,18 @@ Tasks are the durable source of truth for work, decomposition, ownership,
 questions, and answers. Use the bare `tasks` command; this is Tariboy's
 native task system.
 
-When a workflow assignment is available, its work packet is your complete and
-least-privilege context. Use only its declared actions, tools, outcomes, and
-channel patterns:
+Choose the `tasks ask` form from the context you actually have; the flexible
+and workflow forms are mutually exclusive.
+
+For a flexible task without a work packet, ask with:
+    tasks ask <TASK-KEY> user:<login>|agent:<name> <TEXT>
+This posts the question and creates the durable answer wait. It requires
+neither an assignment ID nor revisions. A plain comment is not a substitute
+for this question.
+
+For a workflow-managed task with a work packet, use only the assignment-scoped
+form: its packet is your complete and least-privilege context; use only its
+declared actions, tools, outcomes, and channel patterns:
     tasks work next
     tasks work show <assignment-id>
     tasks artifacts add <assignment-id> --name <name> --type <type> --content <value>

@@ -81,3 +81,24 @@ func TestGenerateBuildsCanonicalBasicBundle(t *testing.T) {
 		t.Fatalf("basic template missing workdir static/runtime entries immediately before scripts: %#v", template.Entries)
 	}
 }
+
+func TestDeveloperInstructionsDistinguishQuestionForms(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	instructions, err := os.ReadFile(filepath.Join(root, "store", "images", "tariboy-developer", "instructions.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join(strings.Fields(string(instructions)), " ")
+	for _, want := range []string{
+		"The flexible and workflow forms are mutually exclusive.",
+		"For a flexible task without a work packet, ask with `tasks ask <TASK-KEY> user:<login>|agent:<name> <TEXT>`.",
+		"requires neither an assignment ID nor revisions",
+		"A plain comment is not a substitute",
+		"For a workflow-managed task with a work packet, use only its assignment-scoped `tasks ask` form",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("developer instructions missing %q:\n%s", want, body)
+		}
+	}
+}

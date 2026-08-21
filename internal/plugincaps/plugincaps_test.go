@@ -243,6 +243,34 @@ func TestTasksCapabilityIsOptionalAndContributesItsOwnPrompt(t *testing.T) {
 	}
 }
 
+func TestTasksPromptDistinguishesFlexibleAndWorkflowQuestions(t *testing.T) {
+	resolved, err := Resolve([]string{"tasks"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body string
+	for _, fragment := range BodyFragments(resolved) {
+		if fragment.Plugin == "tasks" {
+			body = fragment.Body
+			break
+		}
+	}
+	body = strings.Join(strings.Fields(body), " ")
+	for _, want := range []string{
+		"the flexible and workflow forms are mutually exclusive",
+		"For a flexible task without a work packet, ask with:",
+		"tasks ask <TASK-KEY> user:<login>|agent:<name> <TEXT>",
+		"requires neither an assignment ID nor revisions",
+		"A plain comment is not a substitute",
+		"For a workflow-managed task with a work packet, use only the assignment-scoped form:",
+		"tasks ask <assignment-id> --question <text> --context <why> --blocking-scope assignment",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("tasks prompt missing %q:\n%s", want, body)
+		}
+	}
+}
+
 func TestCurrentTaskCapabilityUsesNativeTasksContract(t *testing.T) {
 	resolved, err := Resolve([]string{"current-task"})
 	if err != nil {
