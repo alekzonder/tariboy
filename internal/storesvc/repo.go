@@ -20,6 +20,7 @@ import (
 // ErrDigestMismatch is returned by Put when the uploaded bytes do not hash to
 // the claimed digest (content-addressing integrity, spec §13).
 var ErrDigestMismatch = errors.New("digest mismatch")
+var ErrInvalidArchive = errors.New("invalid image archive")
 
 // Repo is the content-addressed image repository on disk. Its layout is
 // byte-identical to internal/image.Store (<Dir>/<name>/<tag>.tar.gz + .digest)
@@ -80,6 +81,9 @@ func (r *Repo) Put(ref image.Ref, body io.Reader, claimed string) (string, error
 	got := hex.EncodeToString(hasher.Sum(nil))
 	if got != claimed {
 		return "", fmt.Errorf("%w: computed %s, claimed %s", ErrDigestMismatch, got, claimed)
+	}
+	if _, err := image.ValidateArchive(tmpName, ref); err != nil {
+		return "", fmt.Errorf("%w: %v", ErrInvalidArchive, err)
 	}
 	if err := os.Rename(tmpName, r.tarPath(ref)); err != nil {
 		return "", err

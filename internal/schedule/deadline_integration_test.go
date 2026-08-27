@@ -1,6 +1,7 @@
 package schedule
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +21,7 @@ import (
 // exercise the exact production wiring.
 func wireDeadline(b *bus.Bus, sched *Store, now func() time.Time) {
 	b.SetDeadlineHooks(
-		func(agent, correlationID, deadline string) error {
+		func(tx *sql.Tx, agent, correlationID, deadline string) error {
 			dur, err := time.ParseDuration(deadline)
 			if err != nil {
 				return fmt.Errorf("request deadline %q: %w", deadline, err)
@@ -33,7 +34,7 @@ func wireDeadline(b *bus.Bus, sched *Store, now func() time.Time) {
 			if err != nil {
 				return err
 			}
-			_, err = sched.Add(Schedule{
+			_, err = sched.AddTx(tx, Schedule{
 				Agent: agent, Kind: "oneshot",
 				Spec:            now().UTC().Add(dur).Format(time.RFC3339),
 				Channel:         bus.InboxChannel(agent),
@@ -42,7 +43,7 @@ func wireDeadline(b *bus.Bus, sched *Store, now func() time.Time) {
 			})
 			return err
 		},
-		func(correlationID string) error { return sched.CancelByCorrelation(correlationID) },
+		func(tx *sql.Tx, correlationID string) error { return sched.CancelByCorrelationTx(tx, correlationID) },
 	)
 }
 

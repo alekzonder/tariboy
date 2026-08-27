@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -33,6 +34,8 @@ type Server struct {
 	cctx            *registry.Ctx
 	http            *http.Server
 	webSrv          *http.Server // loopback web listener (nil until ServeWeb)
+	serveMu         sync.Mutex
+	stopping        bool
 	events          events.Source
 	plugins         http.Handler
 	support         SupportBundleSource
@@ -751,7 +754,7 @@ func toLowerMethod(m string) string {
 func (s *Server) ServeUnix(sock string) error {
 	// Rebuild the handler so a SetEventSource that ran after NewServer (which
 	// cached a handler built without the SSE route) takes effect.
-	s.http.Handler = s.Handler()
+	handler := s.Handler()
 	_ = os.Remove(sock) // stale socket from a previous run
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
@@ -761,6 +764,14 @@ func (s *Server) ServeUnix(sock string) error {
 		ln.Close()
 		return err
 	}
+	s.serveMu.Lock()
+	if s.stopping {
+		s.serveMu.Unlock()
+		_ = ln.Close()
+		return nil
+	}
+	s.http.Handler = handler
+	s.serveMu.Unlock()
 	err = s.http.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
@@ -792,11 +803,19 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) ServeTCP(addr, authToken string) error {
-	s.http.Handler = corsMiddleware(AuthMiddleware(authToken, s.Handler()))
+	handler := corsMiddleware(AuthMiddleware(authToken, s.Handler()))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
+	s.serveMu.Lock()
+	if s.stopping {
+		s.serveMu.Unlock()
+		_ = ln.Close()
+		return nil
+	}
+	s.http.Handler = handler
+	s.serveMu.Unlock()
 	err = s.http.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
@@ -910,8 +929,16 @@ func (s *Server) ServeWeb(addr string) error {
 	}
 	// Host check outermost: a request with a non-loopback Host is refused 421
 	// before CORS ever labels it, preflight included.
-	s.webSrv = &http.Server{Handler: webHostMiddleware(webCORSMiddleware(s.Handler()))}
-	err = s.webSrv.Serve(ln)
+	webSrv := &http.Server{Handler: webHostMiddleware(webCORSMiddleware(s.Handler()))}
+	s.serveMu.Lock()
+	if s.stopping {
+		s.serveMu.Unlock()
+		_ = ln.Close()
+		return nil
+	}
+	s.webSrv = webSrv
+	s.serveMu.Unlock()
+	err = webSrv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -919,8 +946,12 @@ func (s *Server) ServeWeb(addr string) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	if s.webSrv != nil {
-		_ = s.webSrv.Shutdown(ctx)
+	s.serveMu.Lock()
+	s.stopping = true
+	webSrv := s.webSrv
+	s.serveMu.Unlock()
+	if webSrv != nil {
+		_ = webSrv.Shutdown(ctx)
 	}
 	return s.http.Shutdown(ctx)
 }

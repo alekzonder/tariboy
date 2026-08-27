@@ -3,6 +3,7 @@ package daemon
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -79,7 +80,8 @@ type Options struct {
 	// tests push AIRequest rows straight into the real *aiproxy.Ingester the
 	// daemon manages, and read the store back, to exercise the shutdown-drain
 	// path end to end.
-	wireHook func(ing *aiproxy.Ingester, aiStore *aiproxy.Store)
+	wireHook     func(ing *aiproxy.Ingester, aiStore *aiproxy.Store)
+	schedulerRun func(context.Context, *schedule.Scheduler)
 
 	// UserPathResolver optionally overrides login-shell PATH discovery. Embedders
 	// and in-process tests may inject a deterministic resolver; nil preserves the
@@ -496,7 +498,7 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	})
 	channelBus.SetDeadlineHooks(
-		func(agent, correlationID, deadline string) error {
+		func(tx *sql.Tx, agent, correlationID, deadline string) error {
 			dur, err := parseDeadline(deadline)
 			if err != nil {
 				return err
@@ -510,7 +512,7 @@ func Run(ctx context.Context, o Options) error {
 			if err != nil {
 				return err
 			}
-			_, err = schedStore.Add(schedule.Schedule{
+			_, err = schedStore.AddTx(tx, schedule.Schedule{
 				Agent:           agent,
 				Kind:            "oneshot",
 				Spec:            fireAt,
@@ -520,7 +522,9 @@ func Run(ctx context.Context, o Options) error {
 			})
 			return err
 		},
-		func(correlationID string) error { return schedStore.CancelByCorrelation(correlationID) },
+		func(tx *sql.Tx, correlationID string) error {
+			return schedStore.CancelByCorrelationTx(tx, correlationID)
+		},
 	)
 
 	// Retention (spec §12): a background goroutine periodically prunes every
@@ -670,9 +674,6 @@ func Run(ctx context.Context, o Options) error {
 	// their outbox drains before the store closes (spec §13).
 	defer pluginHost.StopAll()
 
-	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
-	go scheduler.Run(ctx)
-
 	// Serve the proxy, drain the ingest queue and periodically refresh budget
 	// aggregates on the daemon context. Per-iteration proxy tokens are minted and
 	// revoked by the runner; the daemon only owns the listener's lifecycle.
@@ -691,7 +692,16 @@ func Run(ctx context.Context, o Options) error {
 	// their final flush/refresh before the store closes.
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(11)
+	wg.Add(12)
+	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
+	go func() {
+		defer wg.Done()
+		if o.schedulerRun != nil {
+			o.schedulerRun(gctx, scheduler)
+			return
+		}
+		scheduler.Run(gctx)
+	}()
 	go func() {
 		defer wg.Done()
 		pricingCatalog.Run(gctx)

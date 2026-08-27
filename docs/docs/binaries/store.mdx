@@ -9,6 +9,9 @@ sidebar:
 A standalone **image registry** server (`cmd/tariboy-store`,
 `internal/storesvc` + `internal/storeui`): stores agent-image blobs plus a SQLite
 catalog/token DB and serves an HTTP(S) push/pull API with bearer-token auth.
+Uploads are capped at 256 MiB and are digest-checked and manifest-validated
+before replacing a published image. Slow clients are bounded by HTTP header and
+idle timeouts.
 
 ## Flags
 

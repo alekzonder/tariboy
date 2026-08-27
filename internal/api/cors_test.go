@@ -246,6 +246,39 @@ func webServer(t *testing.T) string {
 	return base
 }
 
+func TestServeWebConcurrentShutdown(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		serve func(*Server, string) error
+	}{
+		{"web", func(s *Server, addr string) error { return s.ServeWeb(addr) }},
+		{"tcp", func(s *Server, addr string) error { return s.ServeTCP(addr, "token") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for range 20 {
+				srv := NewServer(registry.New(), &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+				ln, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					t.Fatal(err)
+				}
+				addr := ln.Addr().String()
+				_ = ln.Close()
+				done := make(chan error, 1)
+				go func() { done <- tc.serve(srv, addr) }()
+				time.Sleep(100 * time.Microsecond)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				_ = srv.Shutdown(ctx)
+				cancel()
+				select {
+				case <-done:
+				case <-time.After(time.Second):
+					t.Fatal("server did not stop")
+				}
+			}
+		})
+	}
+}
+
 // TestWebCORSLoopbackOrigin covers the port-forward case: a UI served by daemon
 // A on http://localhost:9990 fetching daemon B forwarded to another localhost
 // port. The origin is echoed back (never `*`), and a preflight is answered 204.

@@ -316,8 +316,9 @@ The agent row contains these message-related fields:
 - `messages_batch`: maximum number of pending messages inserted into one prompt.
   Default is `10`. If the runtime value is `<= 0`, the runner also falls back to
   `10`.
-- `messages_max_queue`: stored on the agent with default `1000`, but current
-  bus/runner code does not enforce it as a queue limit.
+- `messages_max_queue`: maximum pending messages for the agent, default `1000`.
+  A publish beyond the limit is retained in that agent's DLQ with result
+  `queue_limit`; it is not added to the runnable pending queue.
 - `loop_enabled`: if false, publish can create pending deliveries but the agent
   will not run automatically to consume them.
 - `interval_s`: timer-based loop interval. Message-triggered iterations do not

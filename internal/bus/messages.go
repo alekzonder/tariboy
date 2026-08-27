@@ -155,16 +155,13 @@ func (b *Bus) MarkProcessed(agent, msgID, result string) (InboxItem, error) {
 	if strings.TrimSpace(result) == "" {
 		return InboxItem{}, fmt.Errorf("mark processed: result is required")
 	}
-	now := b.clock().UTC().Format(time.RFC3339Nano)
+	now := b.clock().UTC()
 	// Set processed_at only where still unprocessed, so a re-call is a no-op.
 	// acked_at is set here too — explicit processing is the only acking path now.
 	// Clear dlq as well: processing is a terminal state, so a DLQ'd delivery an
 	// operator archives must land in the 'processed' tab only, never in both the
 	// 'processed' and 'dlq' tabs at once (P8-F6).
-	res, err := b.db.Exec(`UPDATE deliveries SET processed_at=?, result=?, dlq=0, acked_at=COALESCE(acked_at, ?)
-		WHERE message_id=? AND processed_at IS NULL
-		  AND subscription_id IN (SELECT id FROM subscriptions WHERE agent=?)`,
-		now, result, now, msgID, agent)
+	n, err := markProcessed(b.db, agent, msgID, result, now)
 	if err != nil {
 		return InboxItem{}, err
 	}
@@ -172,7 +169,7 @@ func (b *Bus) MarkProcessed(agent, msgID, result string) (InboxItem, error) {
 	if err != nil {
 		return InboxItem{}, err
 	}
-	if n, _ := res.RowsAffected(); n > 0 {
+	if n > 0 {
 		b.emitAudit(agent, "message_processed", auditJSON(map[string]string{
 			"message_id": msgID, "result": result,
 		}))
@@ -201,9 +198,8 @@ func (b *Bus) Requeue(agent, msgID string) error {
 	return nil
 }
 
-// getMessage loads one immutable message row by id, threading fields included.
-func (b *Bus) getMessage(id string) (Message, error) {
-	rows, err := b.db.Query(`SELECT id, channel, ts, source, type, subject, text, data,
+func getMessageFrom(x dbtx, id string) (Message, error) {
+	rows, err := x.Query(`SELECT id, channel, ts, source, type, subject, text, data,
 		produced_by_agent, produced_in_iteration, produced_by_plugin,
 		kind, correlation_id, in_reply_to, reply_to, deadline FROM messages WHERE id=?`, id)
 	if err != nil {
@@ -274,7 +270,13 @@ func inheritSubject(orig map[string]any) map[string]any {
 }
 
 func (b *Bus) Reply(actor, msgID, text string, data map[string]any, typeOverride string) (Message, error) {
-	orig, err := b.getMessage(msgID)
+	now := b.clock().UTC()
+	tx, err := b.db.Begin()
+	if err != nil {
+		return Message{}, err
+	}
+	defer tx.Rollback()
+	orig, err := getMessageFrom(tx, msgID)
 	if err != nil {
 		return Message{}, err
 	}
@@ -291,7 +293,7 @@ func (b *Bus) Reply(actor, msgID, text string, data map[string]any, typeOverride
 	// route replies back to external systems via subject.chat_id/message_id and
 	// have no bus read API, so the routing keys must ride along on the reply.
 	subject := inheritSubject(orig.Subject)
-	reply, err := b.Publish(Message{
+	reply, delivered, _, err := b.publishTx(tx, Message{
 		Channel:         replyTarget(orig),
 		Type:            typ,
 		Subject:         subject,
@@ -302,18 +304,30 @@ func (b *Bus) Reply(actor, msgID, text string, data map[string]any, typeOverride
 		Data:            data,
 		Source:          "agent:" + actor,
 		ProducedByAgent: actor,
-	})
+	}, now, nil, false)
 	if err != nil {
 		return Message{}, err
 	}
 	// Replying is handling: auto-process the actor's own delivery of the
 	// original, if it has one. No delivery (e.g. an operator reply) → skip.
-	if _, err := b.MarkProcessed(actor, orig.ID, "replied: "+reply.ID); err != nil && err != ErrNotFound {
+	processed, err := markProcessed(tx, actor, orig.ID, "replied: "+reply.ID, now)
+	if err != nil {
 		return Message{}, err
 	}
 	// A reply retires the request's deadline timeout, if one was armed.
 	if b.cancelDeadline != nil {
-		_ = b.cancelDeadline(correlation)
+		if err := b.cancelDeadline(tx, correlation); err != nil {
+			return Message{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, err
+	}
+	b.emitPublish(reply, delivered)
+	if processed > 0 {
+		b.emitAudit(actor, "message_processed", auditJSON(map[string]string{
+			"message_id": orig.ID, "result": "replied: " + reply.ID,
+		}))
 	}
 	b.emitAudit(actor, "message_replied", auditJSON(map[string]string{
 		"message_id": orig.ID, "reply_id": reply.ID, "correlation_id": correlation,
@@ -335,17 +349,20 @@ func (b *Bus) Request(fromAgent, targetChannel, text, deadline string) (Message,
 	if deadline != "" && b.armDeadline == nil {
 		return Message{}, ErrDeadlineUnsupported
 	}
-	// Validate the deadline BEFORE publishing. armDeadline (which parses the
-	// deadline) can only run after Publish because it keys the timeout on the
-	// request's own id; so a malformed deadline must be caught here or it would
-	// leave a live, timeout-less request in the member inbox while Request still
-	// returns the parse error — a partial failure a retry would duplicate.
+	// Validate before opening the publish transaction. The arm hook still parses
+	// defensively once the request id exists inside that transaction.
 	if deadline != "" && b.validateDeadline != nil {
 		if err := b.validateDeadline(deadline); err != nil {
 			return Message{}, err
 		}
 	}
-	req, err := b.Publish(Message{
+	now := b.clock().UTC()
+	tx, err := b.db.Begin()
+	if err != nil {
+		return Message{}, err
+	}
+	defer tx.Rollback()
+	req, delivered, _, err := b.publishTx(tx, Message{
 		Channel:         targetChannel,
 		Type:            "request",
 		Kind:            "request",
@@ -354,23 +371,31 @@ func (b *Bus) Request(fromAgent, targetChannel, text, deadline string) (Message,
 		Deadline:        deadline,
 		Source:          "agent:" + fromAgent,
 		ProducedByAgent: fromAgent,
-	})
+	}, now, nil, true)
 	if err != nil {
 		return Message{}, err
 	}
-	// A fresh correlation id per request: use the request's own (unique) id, so
-	// replies (correlation_id = orig.id) thread back and PendingRequests can
-	// match the exchange by correlation id.
-	if _, err := b.db.Exec(`UPDATE messages SET correlation_id=? WHERE id=?`, req.ID, req.ID); err != nil {
-		return Message{}, err
-	}
-	req.CorrelationID = req.ID
 	if deadline != "" && b.armDeadline != nil {
-		if err := b.armDeadline(fromAgent, req.CorrelationID, deadline); err != nil {
+		if err := b.armDeadline(tx, fromAgent, req.CorrelationID, deadline); err != nil {
 			return Message{}, err
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, err
+	}
+	b.emitPublish(req, delivered)
 	return req, nil
+}
+
+func markProcessed(x dbtx, agent, msgID, result string, now time.Time) (int64, error) {
+	res, err := x.Exec(`UPDATE deliveries SET processed_at=?, result=?, dlq=0, acked_at=COALESCE(acked_at, ?)
+		WHERE message_id=? AND processed_at IS NULL
+		  AND subscription_id IN (SELECT id FROM subscriptions WHERE agent=?)`,
+		now.UTC().Format(time.RFC3339Nano), result, now.UTC().Format(time.RFC3339Nano), msgID, agent)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // PendingRequests returns agent's outstanding requests — its kind=request

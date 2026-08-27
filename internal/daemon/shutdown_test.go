@@ -10,8 +10,52 @@ import (
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/paths"
+	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store"
 )
+
+func TestShutdownWaitsForScheduler(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("TARIBOY_RUNTIME_DIR", t.TempDir())
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	release := make(chan struct{})
+	opts := daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error"})
+	opts.schedulerRun = func(ctx context.Context, _ *schedule.Scheduler) {
+		close(started)
+		<-ctx.Done()
+		close(canceled)
+		<-release
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, opts) }()
+	select {
+	case <-started:
+	case <-time.After(30 * time.Second):
+		t.Fatal("scheduler did not start")
+	}
+	cancel()
+	select {
+	case <-canceled:
+	case <-time.After(30 * time.Second):
+		t.Fatal("scheduler did not observe cancellation")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("daemon returned before scheduler drained: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("daemon did not finish after scheduler drained")
+	}
+}
 
 // TestShutdownDrainsIngesterBeforeStoreClose is the regression test for the
 // M5 review finding: the AI-proxy ingester and budget-cache refresher touch

@@ -53,6 +53,29 @@ func NewStore(s *store.Store, clock func() time.Time) *Store {
 // Add validates Kind/Spec, computes the initial next_fire_at and inserts.
 func (s *Store) Add(sch Schedule) (Schedule, error) {
 	now := s.clock().UTC()
+	// The id and the INSERT must be computed inside the same tx so the
+	// sequence lookup is race-safe under the store's single-connection mode
+	// (store.Open calls SetMaxOpenConns(1)): see nextScheduleID.
+	tx, err := s.db.Begin()
+	if err != nil {
+		return Schedule{}, err
+	}
+	defer tx.Rollback()
+	sch, err = add(tx, sch, now)
+	if err != nil {
+		return Schedule{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Schedule{}, err
+	}
+	return sch, nil
+}
+
+func (s *Store) AddTx(tx *sql.Tx, sch Schedule) (Schedule, error) {
+	return add(tx, sch, s.clock().UTC())
+}
+
+func add(tx *sql.Tx, sch Schedule, now time.Time) (Schedule, error) {
 	next, err := computeNext(sch.Kind, sch.Spec, now)
 	if err != nil {
 		return Schedule{}, err
@@ -63,33 +86,16 @@ func (s *Store) Add(sch Schedule) (Schedule, error) {
 	sch.NextFireAt = next
 	sch.Enabled = true
 	sch.CreatedAt = now.Format(time.RFC3339)
-
-	// The id and the INSERT must be computed inside the same tx so the
-	// sequence lookup is race-safe under the store's single-connection mode
-	// (store.Open calls SetMaxOpenConns(1)): see nextScheduleID.
-	tx, err := s.db.Begin()
+	sch.ID, err = nextScheduleID(tx, sch.Agent, now)
 	if err != nil {
 		return Schedule{}, err
 	}
-	defer tx.Rollback()
-
-	id, err := nextScheduleID(tx, sch.Agent, now)
-	if err != nil {
-		return Schedule{}, err
-	}
-	sch.ID = id
-
-	if _, err := tx.Exec(`INSERT INTO schedules
+	_, err = tx.Exec(`INSERT INTO schedules
 		(id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at, correlation_id)
 		VALUES (?,?,?,?,?,?,?,1,?,?)`,
 		sch.ID, sch.Agent, sch.Kind, sch.Spec, sch.Channel, sch.MessageTemplate, sch.NextFireAt, sch.CreatedAt,
-		nullable(sch.CorrelationID)); err != nil {
-		return Schedule{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return Schedule{}, err
-	}
-	return sch, nil
+		nullable(sch.CorrelationID))
+	return sch, err
 }
 
 // nextScheduleID derives a collision-safe, (ts, seq)-sortable id of the form
@@ -123,13 +129,20 @@ func (s *Store) List(agent string) ([]Schedule, error) {
 // request-deadline one-shot armed by Request, spec §4.2). Idempotent: a reply
 // landing on a request that never had a deadline — or after the timeout already
 // fired and disabled the row — finds nothing to delete and returns nil, so the
-// bus's fire-and-forget cancel on every reply is always safe. An empty
-// correlationID matches nothing.
+// reply cancellation is always safe. An empty correlationID matches nothing.
 func (s *Store) CancelByCorrelation(correlationID string) error {
+	return cancelByCorrelation(s.db, correlationID)
+}
+
+func (s *Store) CancelByCorrelationTx(tx *sql.Tx, correlationID string) error {
+	return cancelByCorrelation(tx, correlationID)
+}
+
+func cancelByCorrelation(x dbtx, correlationID string) error {
 	if correlationID == "" {
 		return nil
 	}
-	_, err := s.db.Exec(`DELETE FROM schedules WHERE correlation_id=?`, correlationID)
+	_, err := x.Exec(`DELETE FROM schedules WHERE correlation_id=?`, correlationID)
 	return err
 }
 

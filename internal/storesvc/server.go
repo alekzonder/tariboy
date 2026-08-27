@@ -7,10 +7,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 )
+
+const maxImageUploadBytes int64 = 256 << 20
 
 // Config configures the store service.
 type Config struct {
@@ -26,11 +29,12 @@ type Config struct {
 
 // Server is the tariboy-store HTTP service.
 type Server struct {
-	cfg  Config
-	repo *Repo
-	db   *DB
-	ui   http.Handler // public SPA handler for non-/v1 paths (nil = no UI)
-	http *http.Server
+	cfg         Config
+	repo        *Repo
+	db          *DB
+	ui          http.Handler // public SPA handler for non-/v1 paths (nil = no UI)
+	http        *http.Server
+	uploadLimit int64
 }
 
 // New opens the repo+DB and builds the (auth-wrapped) handler. It enforces
@@ -44,8 +48,8 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{cfg: cfg, repo: NewRepo(cfg.DataDir), db: db}
-	s.http = &http.Server{Addr: cfg.Addr, Handler: s.rootMux()}
+	s := &Server{cfg: cfg, repo: NewRepo(cfg.DataDir), db: db, uploadLimit: maxImageUploadBytes}
+	s.http = &http.Server{Addr: cfg.Addr, Handler: s.rootMux(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	return s, nil
 }
 
@@ -217,10 +221,20 @@ func (s *Server) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
+	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit)
 	digest, err := s.repo.Put(ref, r.Body, claimed)
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			api.WriteErr(w, http.StatusRequestEntityTooLarge, "image_too_large", err.Error())
+			return
+		}
 		if errors.Is(err, ErrDigestMismatch) {
 			api.WriteErr(w, http.StatusBadRequest, "digest_mismatch", err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidArchive) {
+			api.WriteErr(w, http.StatusBadRequest, "invalid_image", err.Error())
 			return
 		}
 		api.WriteErr(w, http.StatusInternalServerError, "put_failed", err.Error())

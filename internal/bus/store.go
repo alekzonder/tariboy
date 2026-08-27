@@ -46,15 +46,11 @@ type Bus struct {
 	// bus decides WHEN a request's timeout is armed or cancelled; the daemon
 	// decides HOW (a one-shot schedule entry publishing type=timeout into the
 	// requester's inbox). Both are no-ops when unset.
-	armDeadline    func(agent, correlationID, deadline string) error
-	cancelDeadline func(correlationID string) error
+	armDeadline    func(*sql.Tx, string, string, string) error
+	cancelDeadline func(*sql.Tx, string) error
 	// validateDeadline, if set, checks a deadline string for well-formedness
-	// BEFORE Request publishes anything (§4.2). armDeadline only runs after the
-	// request is committed (it needs the request's id as the correlation id), so
-	// without this pre-check an unparseable deadline would leave a live, timeout-
-	// less request in the member inbox and still return the parse error to the
-	// caller — a partial failure a retry would duplicate. The daemon wires the
-	// same format check its arm hook uses (time.ParseDuration); nil = no gate.
+	// BEFORE Request publishes anything (§4.2). The daemon wires the same format
+	// check its transactional arm hook uses (time.ParseDuration); nil = no gate.
 	validateDeadline func(deadline string) error
 	// paramsValidator, if set, gates parameterized subscribes (SubscribeParams):
 	// the daemon supplies the provider contract's params_schema check (spec §6.1)
@@ -91,7 +87,7 @@ func (b *Bus) SetAuditHook(fn func(agent, kind, dataJSON string)) { b.audit = fn
 // SetDeadlineHooks wires request-deadline handling to the schedule subsystem
 // (§4.2). arm registers a one-shot timeout for a request's correlation id;
 // cancel removes it when a reply lands first. Either may be nil.
-func (b *Bus) SetDeadlineHooks(arm func(agent, correlationID, deadline string) error, cancel func(correlationID string) error) {
+func (b *Bus) SetDeadlineHooks(arm func(*sql.Tx, string, string, string) error, cancel func(*sql.Tx, string) error) {
 	b.armDeadline, b.cancelDeadline = arm, cancel
 }
 
@@ -170,40 +166,53 @@ func (b *Bus) Publish(msg Message) (Message, error) {
 // that inserts the message and deliveries. Callers can therefore authorize
 // against durable state without a check/publish race.
 func (b *Bus) PublishWithGuard(msg Message, guard func(*sql.Tx, time.Time) error) (Message, error) {
-	if msg.Channel == "" {
-		return Message{}, fmt.Errorf("publish: channel is required")
-	}
 	now := b.clock().UTC()
-
-	// Spec §6: the message row and all its delivery rows are one atomic unit.
 	tx, err := b.db.Begin()
 	if err != nil {
 		return Message{}, err
 	}
 	defer tx.Rollback()
+	msg, delivered, existing, err := b.publishTx(tx, msg, now, guard, false)
+	if err != nil || existing {
+		return msg, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, err
+	}
+	b.emitPublish(msg, delivered)
+	return msg, nil
+}
+
+func (b *Bus) publishTx(tx *sql.Tx, msg Message, now time.Time, guard func(*sql.Tx, time.Time) error, selfCorrelation bool) (Message, []string, bool, error) {
+	if msg.Channel == "" {
+		return Message{}, nil, false, fmt.Errorf("publish: channel is required")
+	}
 	if guard != nil {
 		if err := guard(tx, now); err != nil {
-			return Message{}, err
+			return Message{}, nil, false, err
 		}
 	}
 
 	if msg.IdempotencyKey != "" {
 		existing, found, err := messageByIdempotency(tx, msg.IdempotencyKey)
 		if err != nil {
-			return Message{}, err
+			return Message{}, nil, false, err
 		}
 		if found {
-			return existing, nil
+			return existing, nil, true, nil
 		}
 	}
 	if err := ensureChannel(tx, msg.Channel, now); err != nil {
-		return Message{}, err
+		return Message{}, nil, false, err
 	}
 	id, err := nextMessageID(tx, msg.Channel, now)
 	if err != nil {
-		return Message{}, err
+		return Message{}, nil, false, err
 	}
 	msg.ID = id
+	if selfCorrelation {
+		msg.CorrelationID = id
+	}
 	// Fixed-width fractional seconds (always 9 digits) so the stored ts sorts
 	// lexically the same as chronologically. RFC3339Nano strips trailing zeros,
 	// which makes same-second timestamps of differing digit-widths sort wrong:
@@ -231,16 +240,16 @@ func (b *Bus) PublishWithGuard(msg Message, guard func(*sql.Tx, time.Time) error
 		nullableStr(msg.ProducedByAgent), nullableStr(msg.ProducedInIteration), nullableStr(msg.ProducedByPlugin),
 		msg.Kind, nullableStr(msg.CorrelationID), nullableStr(msg.InReplyTo), nullableStr(msg.ReplyTo), nullableStr(msg.Deadline),
 		nullableStr(msg.IdempotencyKey)); err != nil {
-		return Message{}, err
+		return Message{}, nil, false, err
 	}
 	if _, err := tx.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES (?)`, msg.ID); err != nil {
-		return Message{}, err
+		return Message{}, nil, false, err
 	}
 
 	// Fan-out: create a delivery row for each matching subscription.
 	subs, err := subscriptionsFor(tx, msg.Channel)
 	if err != nil {
-		return Message{}, err
+		return Message{}, nil, false, err
 	}
 	// An agent never receives its own OUTBOUND published message: whoever
 	// authored this message is excluded from the fan-out so a reply an agent
@@ -260,6 +269,8 @@ func (b *Bus) PublishWithGuard(msg Message, guard func(*sql.Tx, time.Time) error
 	author := messageAuthor(msg)
 	authorInbox := InboxChannel(author)
 	deliveredSet := map[string]bool{}
+	queueFull := map[string]bool{}
+	queueChecked := map[string]bool{}
 	for _, s := range subs {
 		if author != "" && s.Agent == author && msg.Channel != authorInbox {
 			continue
@@ -267,24 +278,53 @@ func (b *Bus) PublishWithGuard(msg Message, guard func(*sql.Tx, time.Time) error
 		if !MatchType(s.TypeFilter, msg.Type) || !s.Matcher.Match(msg) {
 			continue
 		}
-		if _, err := tx.Exec(`INSERT INTO deliveries(subscription_id, message_id) VALUES (?,?)
-			ON CONFLICT(subscription_id, message_id) DO NOTHING`, s.ID, msg.ID); err != nil {
-			return Message{}, err
+		if !queueChecked[s.Agent] {
+			queueFull[s.Agent], err = queueLimitReached(tx, s.Agent)
+			if err != nil {
+				return Message{}, nil, false, err
+			}
+			queueChecked[s.Agent] = true
 		}
-		deliveredSet[s.Agent] = true
+		dlq, result := 0, any(nil)
+		if queueFull[s.Agent] {
+			dlq, result = 1, "queue_limit"
+		}
+		if _, err := tx.Exec(`INSERT INTO deliveries(subscription_id, message_id, dlq, result) VALUES (?,?,?,?)
+			ON CONFLICT(subscription_id, message_id) DO NOTHING`, s.ID, msg.ID, dlq, result); err != nil {
+			return Message{}, nil, false, err
+		}
+		if dlq == 0 {
+			deliveredSet[s.Agent] = true
+		}
 	}
-	if err := tx.Commit(); err != nil {
-		return Message{}, err
-	}
-
 	delivered := make([]string, 0, len(deliveredSet))
 	for a := range deliveredSet {
 		delivered = append(delivered, a)
 	}
+	return msg, delivered, false, nil
+}
+
+func queueLimitReached(tx *sql.Tx, agent string) (bool, error) {
+	var limit int
+	if err := tx.QueryRow(`SELECT messages_max_queue FROM agents WHERE name=?`, agent).Scan(&limit); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	var pending int
+	if err := tx.QueryRow(`SELECT COUNT(DISTINCT d.message_id)
+		FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
+		WHERE s.agent=? AND d.acked_at IS NULL AND d.dlq=0`, agent).Scan(&pending); err != nil {
+		return false, err
+	}
+	return pending >= limit, nil
+}
+
+func (b *Bus) emitPublish(msg Message, delivered []string) {
 	if b.hook != nil {
 		b.hook(msg, delivered)
 	}
-	return msg, nil
 }
 
 func messageByIdempotency(x dbtx, key string) (Message, bool, error) {

@@ -1962,16 +1962,18 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 		m.mu.Unlock()
 		return fmt.Errorf("agent %q is running; stop it first or use --force", name)
 	}
+	servers := map[*agentapi.Server]struct{}{}
 	if rt != nil {
 		rt.cancel()
-		_ = rt.apiServer.Shutdown(context.Background())
+		servers[rt.apiServer] = struct{}{}
 		delete(m.runs, name)
 	}
 	if srv, ok := m.toolsAPI[name]; ok {
-		_ = srv.Shutdown(context.Background())
+		servers[srv] = struct{}{}
 		delete(m.toolsAPI, name)
 	}
 	m.mu.Unlock()
+	shutdownAgentAPIs(servers)
 
 	l := agentdir.New(m.cfg.AgentsDir, name)
 	rl := l.WithRuntime(m.cfg.RuntimeDir)
@@ -2185,21 +2187,23 @@ func (m *Manager) ActiveAgents() int {
 // Close that follows it.
 func (m *Manager) Shutdown() {
 	m.mu.Lock()
+	servers := map[*agentapi.Server]struct{}{}
 	if m.stop != nil {
 		m.stop() // unblock adopt/startAfter goroutines
 	}
 	for name, rt := range m.runs {
 		rt.cancel()
-		_ = rt.apiServer.Shutdown(context.Background())
+		servers[rt.apiServer] = struct{}{}
 		delete(m.runs, name)
 	}
 	// Agents that only ever got the boot-time bind (engine never started) own
 	// their tools server here, not in runs.
 	for name, srv := range m.toolsAPI {
-		_ = srv.Shutdown(context.Background())
+		servers[srv] = struct{}{}
 		delete(m.toolsAPI, name)
 	}
 	m.mu.Unlock()
+	shutdownAgentAPIs(servers)
 
 	done := make(chan struct{})
 	go func() { m.wg.Wait(); close(done) }()
@@ -2207,6 +2211,16 @@ func (m *Manager) Shutdown() {
 	case <-done:
 	case <-time.After(shutdownWait):
 		m.cfg.Log.Warn("shutdown: goroutines did not quiesce in time", "timeout", shutdownWait)
+	}
+}
+
+func shutdownAgentAPIs(servers map[*agentapi.Server]struct{}) {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownWait)
+	defer cancel()
+	for srv := range servers {
+		if srv != nil {
+			_ = srv.Shutdown(ctx)
+		}
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+
+	"github.com/alekzonder/tariboy/internal/image"
 )
 
 func authServer(t *testing.T, anonPull bool) (*Server, *httptest.Server) {
@@ -24,9 +26,9 @@ func authServer(t *testing.T, anonPull bool) (*Server, *httptest.Server) {
 
 func put(t *testing.T, url, token string) int {
 	t.Helper()
-	blob := []byte("bytes")
+	blob, digest := buildArchive(t, image.Manifest{SchemaVersion: 1, Name: "demo", Tag: "latest"})
 	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(blob))
-	req.Header.Set("X-Tariboy-Digest", sha256hex(blob))
+	req.Header.Set("X-Tariboy-Digest", digest)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

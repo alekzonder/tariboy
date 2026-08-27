@@ -3,6 +3,7 @@ package bus
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -163,6 +164,31 @@ func TestPublishIdempotencyKeyReturnsOriginalWithoutDuplicateDelivery(t *testing
 	}
 	if len(pending) != 1 || pending[0].ID != first.ID {
 		t.Fatalf("pending = %#v; want one original delivery", pending)
+	}
+}
+
+func TestPublishDeadLettersMessagesBeyondAgentQueueLimit(t *testing.T) {
+	b := newBusSeconds(t)
+	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref, messages_max_queue) VALUES ('alice', 'basic:latest', 2)`); err != nil {
+		t.Fatal(err)
+	}
+	channel := InboxChannel("alice")
+	sub(t, b, "alice", channel)
+	if _, err := b.Subscribe("alice", channel, nil, []string{"*"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 3 {
+		if _, err := b.Publish(Message{Channel: channel, Type: "note", Text: fmt.Sprintf("%d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending, err := b.Inbox("alice", "pending", 10, "")
+	if err != nil || len(pending) != 2 {
+		t.Fatalf("pending=%+v err=%v", pending, err)
+	}
+	dlq, err := b.Inbox("alice", "dlq", 10, "")
+	if err != nil || len(dlq) != 1 || dlq[0].Result != "queue_limit" {
+		t.Fatalf("dlq=%+v err=%v", dlq, err)
 	}
 }
 

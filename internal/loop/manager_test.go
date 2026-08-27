@@ -2,12 +2,14 @@ package loop
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/agentapi"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
@@ -32,6 +35,59 @@ import (
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
 )
+
+func TestShutdownDoesNotHoldManagerLockWhileDrainingHTTP(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	srv := agentapi.NewServer(agentapi.Deps{
+		Agent: "worker", Plugins: []string{"status"},
+		Status: func() (map[string]any, error) {
+			close(entered)
+			<-release
+			return map[string]any{"state": "idle"}, nil
+		},
+	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = srv.ServeListener(ln) }()
+	go func() {
+		resp, err := http.Get("http://" + ln.Addr().String() + "/tools/status")
+		if err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	<-entered
+	m := &Manager{
+		cfg:      ManagerConfig{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
+		runs:     map[string]*runtime{},
+		toolsAPI: map[string]*agentapi.Server{"worker": srv},
+	}
+	shutdownDone := make(chan struct{})
+	go func() {
+		m.Shutdown()
+		close(shutdownDone)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	activeDone := make(chan struct{})
+	go func() {
+		_ = m.ActiveAgents()
+		close(activeDone)
+	}()
+	select {
+	case <-activeDone:
+	case <-time.After(200 * time.Millisecond):
+		close(release)
+		t.Fatal("manager lock remained held while HTTP shutdown drained")
+	}
+	close(release)
+	select {
+	case <-shutdownDone:
+	case <-time.After(time.Second):
+		t.Fatal("manager shutdown did not finish")
+	}
+}
 
 func startScriptTestSupervisor(t *testing.T, m *Manager) {
 	t.Helper()
@@ -1960,12 +2016,12 @@ func TestManagerWiresGroupTools(t *testing.T) {
 	// reply cancels it (spec §4.2).
 	schedStore := schedule.NewStore(st, time.Now)
 	bs.SetDeadlineHooks(
-		func(agentName, correlationID, deadline string) error {
+		func(tx *sql.Tx, agentName, correlationID, deadline string) error {
 			dur, err := time.ParseDuration(deadline)
 			if err != nil {
 				return err
 			}
-			_, err = schedStore.Add(schedule.Schedule{
+			_, err = schedStore.AddTx(tx, schedule.Schedule{
 				Agent: agentName, Kind: "oneshot",
 				Spec:            time.Now().UTC().Add(dur).Format(time.RFC3339),
 				Channel:         bus.InboxChannel(agentName),
@@ -1974,7 +2030,9 @@ func TestManagerWiresGroupTools(t *testing.T) {
 			})
 			return err
 		},
-		func(correlationID string) error { return schedStore.CancelByCorrelation(correlationID) },
+		func(tx *sql.Tx, correlationID string) error {
+			return schedStore.CancelByCorrelationTx(tx, correlationID)
+		},
 	)
 	m.cfg.AuditFor = func(a string) Recorder { return audit.Open(agentdir.New(agentsDir, a).AuditLog(), time.Now) }
 	if err := prov.EnsureGroup("dev-team", "manager"); err != nil {

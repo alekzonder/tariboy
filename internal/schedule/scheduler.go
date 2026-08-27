@@ -68,7 +68,7 @@ func (s *Scheduler) fireDue(now time.Time) (int, error) {
 			if !ok {
 				publishErr = fmt.Errorf("scheduled channel publisher does not support atomic guards")
 			} else {
-				_, publishErr = guarded.PublishWithGuard(msg, workflowLeaseGuard(sch.Agent))
+				_, publishErr = guarded.PublishWithGuard(msg, scheduleGuard(sch))
 			}
 		} else {
 			_, publishErr = s.pub.Publish(msg)
@@ -86,6 +86,19 @@ func (s *Scheduler) fireDue(now time.Time) (int, error) {
 		}
 	}
 	return fired, nil
+}
+
+func scheduleGuard(sch Schedule) func(*sql.Tx, time.Time) error {
+	return func(tx *sql.Tx, now time.Time) error {
+		var live int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM schedules WHERE id=? AND enabled=1 AND next_fire_at=?`, sch.ID, sch.NextFireAt).Scan(&live); err != nil {
+			return err
+		}
+		if live == 0 {
+			return bus.ErrPublishGuardDenied
+		}
+		return workflowLeaseGuard(sch.Agent)(tx, now)
+	}
 }
 
 func workflowLeaseGuard(agent string) func(*sql.Tx, time.Time) error {
@@ -140,5 +153,6 @@ func renderTemplate(sch Schedule) bus.Message {
 	return bus.Message{
 		Channel: sch.Channel, Type: tpl.Type, Subject: tpl.Subject, Text: tpl.Text, Data: tpl.Data,
 		Source: "schedule", ProducedByAgent: sch.Agent,
+		IdempotencyKey: "schedule:" + sch.ID + ":" + sch.NextFireAt,
 	}
 }

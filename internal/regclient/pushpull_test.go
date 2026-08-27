@@ -1,6 +1,7 @@
 package regclient
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -16,26 +17,6 @@ import (
 
 func sha256hex(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
 
-// writeLocalBlob writes a fake <name>/<tag>.tar.gz + .digest into imagesDir,
-// exactly as image.Store.writeArchive would (bytes + sidecar). It is NOT a real
-// archive; Push/Pull move bytes content-addressed and never parse it. (The real
-// archive round-trip with manifest Inspect is the Task 12 e2e.)
-func writeLocalBlob(t *testing.T, imagesDir string, ref image.Ref, blob []byte) string {
-	t.Helper()
-	dir := filepath.Join(imagesDir, ref.Name)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, ref.Tag+".tar.gz"), blob, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	d := sha256hex(blob)
-	if err := os.WriteFile(filepath.Join(dir, ref.Tag+".digest"), []byte(d+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return d
-}
-
 func TestPushThenPullMovesBytesAndVerifies(t *testing.T) {
 	storeDir := t.TempDir()
 	srv, err := storesvc.New(storesvc.Config{AllowInsecure: true, DataDir: storeDir, DBPath: filepath.Join(storeDir, "s.db")})
@@ -50,10 +31,8 @@ func TestPushThenPullMovesBytesAndVerifies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref := image.Ref{Name: "demo", Tag: "latest"}
-
 	srcImages := t.TempDir()
-	digest := writeLocalBlob(t, srcImages, ref, []byte("archive-payload"))
+	ref, digest := buildImage(t, srcImages)
 	pres, err := Push(srcImages, ref, cl)
 	if err != nil {
 		t.Fatalf("Push: %v", err)
@@ -70,12 +49,7 @@ func TestPushThenPullMovesBytesAndVerifies(t *testing.T) {
 	// Pull into a FRESH image dir; the installed sidecar digest must match.
 	dstImages := t.TempDir()
 	if _, err := Pull(dstImages, ref, cl); err != nil {
-		// Pull ends by Inspect()ing the manifest; our fake blob has none, so a
-		// manifest error is expected — assert it is exactly that and the bytes
-		// nonetheless installed with the right digest.
-		if !strings.Contains(err.Error(), "inspect") {
-			t.Fatalf("Pull: unexpected error %v", err)
-		}
+		t.Fatalf("Pull: %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(dstImages, "demo", "latest.digest"))
 	if err != nil {
@@ -136,6 +110,37 @@ func TestPullRejectsDigestMismatch(t *testing.T) {
 	// And it must not be retrievable from the local store.
 	if (&image.Store{Dir: dst}).Exists(ref) {
 		t.Fatal("rejected pull must not be locally retrievable")
+	}
+}
+
+func TestPullRejectsInvalidArchiveWithoutReplacingExisting(t *testing.T) {
+	bad := []byte("not an image archive")
+	digest := sha256hex(bad)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Tariboy-Digest", digest)
+		_, _ = w.Write(bad)
+	}))
+	defer srv.Close()
+	client, err := NewClient(srv.URL, "rw", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := t.TempDir()
+	ref, _ := buildImage(t, dst)
+	archive := filepath.Join(dst, ref.Name, ref.Tag+".tar.gz")
+	want, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Pull(dst, ref, client); err == nil {
+		t.Fatal("correct-digest invalid archive was installed")
+	}
+	got, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("invalid pull replaced the existing image")
 	}
 }
 

@@ -73,16 +73,15 @@ func Pull(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 	if header != got {
 		return nil, fmt.Errorf("digest mismatch on pull: server=%s downloaded=%s (refusing to install)", header, got)
 	}
+	m, err := image.ValidateArchive(tmpName, ref)
+	if err != nil {
+		return nil, fmt.Errorf("pulled archive failed inspect (corrupt or unsupported schema): %w", err)
+	}
 	if err := os.Rename(tmpName, tarPath(imagesDir, ref)); err != nil {
 		return nil, err
 	}
 	if err := os.WriteFile(digestPath(imagesDir, ref), []byte(got+"\n"), 0o600); err != nil {
 		return nil, err
-	}
-	local := &image.Store{Dir: imagesDir}
-	m, err := local.Inspect(ref)
-	if err != nil {
-		return nil, fmt.Errorf("pulled archive failed inspect (corrupt or unsupported schema): %w", err)
 	}
 	return map[string]any{"name": m.Name, "tag": m.Tag, "digest": got, "pulled": true}, nil
 }

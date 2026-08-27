@@ -44,7 +44,6 @@ func (r *Runner) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			r.recover(context.Background())
 			return
 		case id := <-r.wake:
 			r.run(ctx, id)

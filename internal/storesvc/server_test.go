@@ -8,7 +8,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/alekzonder/tariboy/internal/image"
 )
 
 // newTestServer builds a store for the functional (non-auth) tests. Auth itself
@@ -31,8 +34,7 @@ func TestBlobRoundTripAndDigestGuard(t *testing.T) {
 	s := newTestServer(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
-	blob := []byte("archive-bytes")
-	digest := sha256hex(blob)
+	blob, digest := validBlob(t, image.Ref{Name: "demo", Tag: "latest"})
 
 	// HEAD on a missing blob -> 404.
 	resp, _ := http.Head(ts.URL + "/v1/images/demo/latest")
@@ -70,6 +72,23 @@ func TestBlobRoundTripAndDigestGuard(t *testing.T) {
 	back, _ := io.ReadAll(r4.Body)
 	if !bytes.Equal(back, blob) || r4.Header.Get("X-Tariboy-Digest") != digest {
 		t.Fatalf("GET body/digest mismatch")
+	}
+}
+
+func TestServerBoundsHeadersAndUploads(t *testing.T) {
+	s := newTestServer(t)
+	if s.http.ReadHeaderTimeout <= 0 || s.http.IdleTimeout <= 0 {
+		t.Fatalf("HTTP timeouts are not configured: read_header=%s idle=%s", s.http.ReadHeaderTimeout, s.http.IdleTimeout)
+	}
+	s.uploadLimit = 8
+	body := strings.NewReader("123456789")
+	req := httptest.NewRequest(http.MethodPut, "/v1/images/demo/latest", body)
+	req.Header.Set("Authorization", "Bearer rw")
+	req.Header.Set("X-Tariboy-Digest", sha256hex([]byte("123456789")))
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized PUT = %d, want 413", rec.Code)
 	}
 }
 
@@ -126,7 +145,7 @@ func TestCatalogAndTags(t *testing.T) {
 	s := newTestServer(t)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
-	blob := []byte("archive-bytes")
+	blob, _ := validBlob(t, image.Ref{Name: "demo", Tag: "latest"})
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/v1/images/demo/latest", bytes.NewReader(blob))
 	req.Header.Set("X-Tariboy-Digest", sha256hex(blob))
 	req.Header.Set("Authorization", "Bearer rw")

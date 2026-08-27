@@ -1,6 +1,7 @@
 package bus
 
 import (
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -547,8 +548,11 @@ func TestRequestDeadlineArmsAndReplyCancels(t *testing.T) {
 	var armed [][3]string
 	var cancelled []string
 	b.SetDeadlineHooks(
-		func(agent, corr, dl string) error { armed = append(armed, [3]string{agent, corr, dl}); return nil },
-		func(corr string) error { cancelled = append(cancelled, corr); return nil },
+		func(_ *sql.Tx, agent, corr, dl string) error {
+			armed = append(armed, [3]string{agent, corr, dl})
+			return nil
+		},
+		func(_ *sql.Tx, corr string) error { cancelled = append(cancelled, corr); return nil },
 	)
 	req, err := b.Request("alice", GroupDirect("dev", "carol"), "help", "2026-07-06T10:05:00Z")
 	if err != nil {
@@ -569,7 +573,7 @@ func TestRequestDeadlineArmsAndReplyCancels(t *testing.T) {
 func TestRequestNoDeadlineDoesNotArm(t *testing.T) {
 	b := newBusSeconds(t)
 	armedCount := 0
-	b.SetDeadlineHooks(func(a, c, d string) error { armedCount++; return nil }, nil)
+	b.SetDeadlineHooks(func(*sql.Tx, string, string, string) error { armedCount++; return nil }, nil)
 	if _, err := b.Request("alice", ChatChannel("x"), "hi", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -600,7 +604,7 @@ func TestRequestDeadlineValidatedBeforePublish(t *testing.T) {
 	// and arms exactly once.
 	b := newBusSeconds(t)
 	armed := 0
-	b.SetDeadlineHooks(func(a, c, d string) error { armed++; return nil }, nil)
+	b.SetDeadlineHooks(func(*sql.Tx, string, string, string) error { armed++; return nil }, nil)
 	b.SetDeadlineValidator(func(d string) error { _, err := time.ParseDuration(d); return err })
 
 	// "5min" is not a Go duration (5m is): reject, arm nothing, and leave no
@@ -625,6 +629,38 @@ func TestRequestDeadlineValidatedBeforePublish(t *testing.T) {
 	}
 	if pend, _ := b.PendingRequests("alice"); len(pend) != 1 || pend[0].ID != req.ID {
 		t.Fatalf("valid request should be pending: %+v", pend)
+	}
+}
+
+func TestRequestRollsBackWhenDeadlineArmFails(t *testing.T) {
+	b := newBusSeconds(t)
+	b.SetDeadlineHooks(func(*sql.Tx, string, string, string) error { return errors.New("arm failed") }, nil)
+	if _, err := b.Request("alice", GroupDirect("dev", "carol"), "help", "5m"); err == nil {
+		t.Fatal("request succeeded despite deadline arm failure")
+	}
+	if pending, _ := b.PendingRequests("alice"); len(pending) != 0 {
+		t.Fatalf("failed request was committed: %+v", pending)
+	}
+}
+
+func TestReplyRollsBackWhenDeadlineCancelFails(t *testing.T) {
+	b := newBusSeconds(t)
+	target := GroupDirect("dev", "carol")
+	sub(t, b, "carol", target)
+	req, err := b.Request("alice", target, "help", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.SetDeadlineHooks(nil, func(*sql.Tx, string) error { return errors.New("cancel failed") })
+	if _, err := b.Reply("carol", req.ID, "ok", nil, ""); err == nil {
+		t.Fatal("reply succeeded despite deadline cancel failure")
+	}
+	if pending, _ := b.PendingRequests("alice"); len(pending) != 1 || pending[0].ID != req.ID {
+		t.Fatalf("failed reply changed request state: %+v", pending)
+	}
+	items, err := b.Inbox("carol", "pending", 10, "")
+	if err != nil || len(items) != 1 || items[0].ID != req.ID {
+		t.Fatalf("failed reply processed original: %+v err=%v", items, err)
 	}
 }
 

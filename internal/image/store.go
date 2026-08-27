@@ -260,6 +260,11 @@ func inspectArchive(archivePath string, ref Ref) (Manifest, error) {
 	return m, nil
 }
 
+// ValidateArchive verifies a staged archive before callers publish it at ref.
+func ValidateArchive(archivePath string, ref Ref) (Manifest, error) {
+	return inspectArchive(archivePath, ref)
+}
+
 // InstallManagedArchive atomically replaces one daemon-managed ref with a
 // validated complete archive. Public authoring does not call this trusted path.
 func (s *Store) InstallManagedArchive(ref Ref, archive []byte) error {
