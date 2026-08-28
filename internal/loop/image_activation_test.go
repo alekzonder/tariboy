@@ -439,7 +439,7 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	ag := agent.Agent{Name: "worker", ImageRef: activeRef.String(), ImageDigest: activeManifest.Digest}
+	ag := agent.Agent{Name: "worker", ImageRef: activeRef.String(), ImageDigest: activeManifest.Digest, HarnessType: "codex"}
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
 	}
