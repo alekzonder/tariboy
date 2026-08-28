@@ -283,6 +283,108 @@ func (m Manifest) validateContributions() error {
 	return nil
 }
 
+func (m Manifest) ValidateOperatorAction(action string, data map[string]any) error {
+	types, required := map[string]string{}, map[string]bool{}
+	declared := false
+	for _, command := range m.OperatorCommands {
+		if command.Action != action {
+			continue
+		}
+		declared = true
+		for _, arg := range command.Args {
+			types[arg.Name] = arg.Type
+			required[arg.Name] = required[arg.Name] || arg.Required
+		}
+	}
+	for _, section := range settingsSections(m.Settings) {
+		fieldTypes := map[string]string{}
+		for _, field := range section.Fields {
+			fieldTypes[field.Name] = field.Type
+		}
+		for _, button := range section.Actions {
+			if button.Action != action {
+				continue
+			}
+			declared = true
+			for _, name := range button.Fields {
+				types[name] = fieldTypes[name]
+			}
+		}
+	}
+	if !declared {
+		return nil
+	}
+	for name := range required {
+		if required[name] {
+			if _, ok := data[name]; !ok {
+				return fmt.Errorf("plugin %s action %q requires field %q", m.Name, action, name)
+			}
+		}
+	}
+	for name, value := range data {
+		if name == "action" {
+			continue
+		}
+		typ, ok := types[name]
+		if !ok {
+			return fmt.Errorf("plugin %s action %q does not accept field %q", m.Name, action, name)
+		}
+		if !operatorValueMatches(typ, value) {
+			return fmt.Errorf("plugin %s action %q field %q must be %s", m.Name, action, name, typ)
+		}
+	}
+	return nil
+}
+
+func settingsSections(settings *SettingsContribution) []SettingSection {
+	if settings == nil {
+		return nil
+	}
+	return settings.Sections
+}
+
+func operatorValueMatches(typ string, value any) bool {
+	switch typ {
+	case "string", "secret-file", "password":
+		_, ok := value.(string)
+		return ok
+	case "boolean":
+		_, ok := value.(bool)
+		return ok
+	case "integer":
+		return integerValue(value)
+	case "integer-list":
+		switch values := value.(type) {
+		case []int64:
+			return true
+		case []int:
+			return true
+		case []any:
+			for _, item := range values {
+				if !integerValue(item) {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func integerValue(value any) bool {
+	switch value := value.(type) {
+	case int, int32, int64:
+		return true
+	case float64:
+		return value == float64(int64(value))
+	case json.Number:
+		_, err := value.Int64()
+		return err == nil
+	default:
+		return false
+	}
+}
+
 func (m Manifest) HasType(t string) bool {
 	for _, x := range m.Types {
 		if x == t {

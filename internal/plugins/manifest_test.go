@@ -129,6 +129,36 @@ func TestValidateOperatorContributions(t *testing.T) {
 	}
 }
 
+func TestValidateOperatorActionData(t *testing.T) {
+	m, err := ParseManifest([]byte(`{
+  "name":"telegram","version":"0.1.0","protocol_version":1,
+  "types":["channel-source"],"exec":"telegram",
+  "channels":{"publish":["chat:telegram:*"] ,"subscribe":[]},
+  "operator_commands":[{
+    "path":"configure","summary":"Configure","action":"configure",
+    "args":[
+      {"name":"token","flag":"token-file","type":"secret-file"},
+      {"name":"allowed_uids","flag":"allowed-uids","type":"integer-list","required":true}
+    ]
+  }]
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ValidateOperatorAction("configure", map[string]any{"allowed_uids": []int64{1, 2}}); err != nil {
+		t.Fatalf("valid action data rejected: %v", err)
+	}
+	if err := m.ValidateOperatorAction("configure", map[string]any{}); err == nil {
+		t.Fatal("missing required field should be rejected")
+	}
+	if err := m.ValidateOperatorAction("configure", map[string]any{"allowed_uids": []int64{1}, "admin": true}); err == nil {
+		t.Fatal("unknown field should be rejected")
+	}
+	if err := m.ValidateOperatorAction("legacy", map[string]any{"opaque": true}); err != nil {
+		t.Fatalf("undeclared legacy action rejected: %v", err)
+	}
+}
+
 const provideManifest = `{
   "name": "issue-provider",
   "version": "0.1.0",

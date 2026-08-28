@@ -10,14 +10,29 @@ import (
 )
 
 type fakePlugins struct {
-	installed   string
-	removed     string
-	restarted   string
-	restartErr  error
-	routesFn    func(name string) (map[string]any, error)
-	actionFn    func(name string, body map[string]any) (map[string]any, error)
-	applied     []map[string]any
-	actionCalls int
+	installed     string
+	removed       string
+	restarted     string
+	restartErr    error
+	routesFn      func(name string) (map[string]any, error)
+	actionFn      func(name string, body map[string]any) (map[string]any, error)
+	validateFn    func(name, action string, body map[string]any) error
+	applied       []map[string]any
+	actionCalls   int
+	validateCalls int
+	contributions []plugins.Contribution
+}
+
+func (f *fakePlugins) Contributions() ([]plugins.Contribution, error) {
+	return f.contributions, nil
+}
+
+func (f *fakePlugins) ValidateOperatorAction(name, action string, body map[string]any) error {
+	f.validateCalls++
+	if f.validateFn != nil {
+		return f.validateFn(name, action, body)
+	}
+	return nil
 }
 
 func (f *fakePlugins) Install(path string) (map[string]any, error) {
@@ -244,6 +259,24 @@ func TestPluginActionRejectsMalformedDataBeforeCallingPlugin(t *testing.T) {
 	}
 }
 
+func TestPluginActionRejectsManifestInvalidDataBeforeCallingPlugin(t *testing.T) {
+	c, _, _ := ctxWithStore(t)
+	fp := &fakePlugins{validateFn: func(_, _ string, body map[string]any) error {
+		if _, found := body["admin"]; found {
+			return errors.New("field admin is not declared")
+		}
+		return nil
+	}}
+	c.Plugins = fp
+	_, err := h(t, "plugin.action")(c, registry.Params{
+		"name": "telegram", "action": "configure", "data": `{"admin":true}`,
+	})
+	wantUserErr(t, err, "bad_action_data")
+	if fp.validateCalls != 1 || fp.actionCalls != 0 {
+		t.Fatalf("validate calls=%d action calls=%d", fp.validateCalls, fp.actionCalls)
+	}
+}
+
 // TestPluginActionMapsErrors proves host/plugin errors become clean UserErrors.
 func TestPluginActionMapsErrors(t *testing.T) {
 	c, _, _ := ctxWithStore(t)
@@ -273,5 +306,22 @@ func TestPluginRoutesForwards(t *testing.T) {
 	}
 	if res.(map[string]any)["has_token"] != false {
 		t.Fatalf("res = %v", res)
+	}
+}
+
+func TestPluginContributionsForwardsSafeManifestData(t *testing.T) {
+	c, _, _ := ctxWithStore(t)
+	c.Plugins = &fakePlugins{contributions: []plugins.Contribution{{
+		Name:     "telegram",
+		Commands: []plugins.OperatorCommand{{Path: "status", Summary: "Show status", Action: "status"}},
+		Settings: &plugins.SettingsContribution{Title: "Telegram"},
+	}}}
+	res, err := h(t, "plugin.contributions")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := res.(map[string]any)["plugins"].([]plugins.Contribution)
+	if len(got) != 1 || got[0].Name != "telegram" || got[0].Commands[0].Action != "status" {
+		t.Fatalf("contributions = %+v", got)
 	}
 }

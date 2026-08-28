@@ -123,6 +123,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, daemonReindex())
 	mustRegister(r, pluginInstall())
 	mustRegister(r, pluginLs())
+	mustRegister(r, pluginContributions())
 	mustRegister(r, pluginInspect())
 	mustRegister(r, pluginRm())
 	mustRegister(r, pluginRestart())

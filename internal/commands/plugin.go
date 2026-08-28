@@ -72,6 +72,33 @@ func pluginLs() registry.Command {
 	}
 }
 
+type pluginContributionsControl interface {
+	Contributions() ([]plugins.Contribution, error)
+}
+
+func pluginContributions() registry.Command {
+	return registry.Command{
+		Path:    "plugin.contributions",
+		Summary: "List enabled plugin CLI and settings contributions",
+		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugin-contributions"},
+		Handler: func(c *registry.Ctx, _ registry.Params) (any, error) {
+			pc, err := requirePlugins(c)
+			if err != nil {
+				return nil, err
+			}
+			contributor, ok := pc.(pluginContributionsControl)
+			if !ok {
+				return nil, api.UserError{Code: "no_plugin_contributions", Msg: "plugin host does not support contributions"}
+			}
+			items, err := contributor.Contributions()
+			if err != nil {
+				return nil, api.UserError{Code: "contributions_failed", Msg: err.Error()}
+			}
+			return map[string]any{"plugins": items, "count": len(items)}, nil
+		},
+	}
+}
+
 func pluginInspect() registry.Command {
 	return registry.Command{
 		Path:    "plugin.inspect",
@@ -244,6 +271,13 @@ func pluginAction() registry.Command {
 			}
 			if _, exists := body["action"]; exists {
 				return nil, api.UserError{Code: "bad_data", Msg: "data must not contain action"}
+			}
+			if validator, ok := pc.(interface {
+				ValidateOperatorAction(name, action string, body map[string]any) error
+			}); ok {
+				if err := validator.ValidateOperatorAction(name, action, body); err != nil {
+					return nil, api.UserError{Code: "bad_action_data", Msg: err.Error()}
+				}
 			}
 			body["action"] = action
 			res, err := pc.PluginAction(name, body)

@@ -96,6 +96,13 @@ type Host struct {
 	pushQueue map[string]*watchPush
 }
 
+type Contribution struct {
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Commands    []OperatorCommand     `json:"operator_commands,omitempty"`
+	Settings    *SettingsContribution `json:"settings,omitempty"`
+}
+
 // watchPush serializes watch-list delivery for one (plugin, channel) pair. The
 // provider reconciles by full replace, so only the newest snapshot matters: a
 // fresh PushWatches overwrites any queued-but-not-yet-delivered snapshot
@@ -197,6 +204,63 @@ func (h *Host) PluginAction(name string, body map[string]any) (map[string]any, e
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return NewClientWithTimeout(sock, 15*time.Second).Action(ctx, body)
+}
+
+func (h *Host) Contributions() ([]Contribution, error) {
+	recs, err := h.cfg.Store.List()
+	if err != nil {
+		return nil, err
+	}
+	out := []Contribution{}
+	for _, rec := range recs {
+		if !rec.Enabled {
+			continue
+		}
+		active, ok, err := h.cfg.Store.ActiveVersion(rec.Name)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || active != rec.Version {
+			continue
+		}
+		manifest, err := LoadManifest(h.versionDir(rec.Name, active))
+		if err != nil {
+			return nil, err
+		}
+		if len(manifest.OperatorCommands) == 0 && manifest.Settings == nil {
+			continue
+		}
+		out = append(out, Contribution{
+			Name: manifest.Name, Description: manifest.Description,
+			Commands: manifest.OperatorCommands, Settings: manifest.Settings,
+		})
+	}
+	return out, nil
+}
+
+func (h *Host) ValidateOperatorAction(name, action string, data map[string]any) error {
+	if err := checkName(name); err != nil {
+		return err
+	}
+	rec, ok, err := h.cfg.Store.Get(name)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound
+	}
+	active, ok, err := h.cfg.Store.ActiveVersion(name)
+	if err != nil {
+		return err
+	}
+	if !ok || active != rec.Version {
+		return fmt.Errorf("plugin %s has no active manifest", name)
+	}
+	manifest, err := LoadManifest(h.versionDir(name, active))
+	if err != nil {
+		return err
+	}
+	return manifest.ValidateOperatorAction(action, data)
 }
 func (h *Host) dir(name string) string                 { return filepath.Join(h.cfg.PluginsDir, name) }
 func (h *Host) versionDir(name, version string) string { return filepath.Join(h.dir(name), version) }

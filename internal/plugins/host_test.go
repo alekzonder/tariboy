@@ -48,6 +48,41 @@ func TestPluginActionNotRunning(t *testing.T) {
 	}
 }
 
+func TestHostContributionsReturnsEnabledInstalledManifests(t *testing.T) {
+	h, _, ps := newHost(t, nil)
+	install := func(name string, enabled bool) {
+		dir := h.versionDir(name, "1.0.0")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		manifest := fmt.Sprintf(`{
+  "name":%q,"version":"1.0.0","protocol_version":1,
+  "types":["channel-source"],"exec":"run.sh",
+  "channels":{"publish":["chat:%s:*"] ,"subscribe":[]},
+  "operator_commands":[{"path":"status","summary":"Show status","action":"status"}]
+}`, name, name)
+		if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := ps.Upsert(Record{Name: name, Version: "1.0.0", ProtocolVersion: 1, Types: []string{"channel-source"}, Exec: "run.sh", Enabled: enabled}); err != nil {
+			t.Fatal(err)
+		}
+		if err := ps.SetActiveVersion(name, "1.0.0"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	install("telegram", true)
+	install("disabled", false)
+
+	got, err := h.Contributions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "telegram" || got[0].Commands[0].Path != "status" {
+		t.Fatalf("contributions = %+v", got)
+	}
+}
+
 // writeExec creates the plugin dir and a real same-dir exec file so the
 // symlink-safe ResolveExec containment gate (wired in Start) resolves it.
 // sampleRecord uses Exec="echo.py".
