@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import type { ApiTarget } from "@/lib/api";
+import { getPluginContributionsOn, type ApiTarget, type PluginContribution } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SupportBundle } from "@/components/SupportBundle";
 
@@ -31,6 +32,14 @@ export default function SettingsPage({ basePath = "/settings", target = null }: 
 }) {
   const location = useLocation();
   const advanced = location.pathname.startsWith(`${basePath}/advanced`);
+  const [integrations, setIntegrations] = useState<PluginContribution[]>([]);
+  useEffect(() => {
+    let current = true;
+    void getPluginContributionsOn(target)
+      .then((result) => { if (current) setIntegrations(result.plugins.filter((plugin) => plugin.settings)); })
+      .catch(() => { if (current) setIntegrations([]); });
+    return () => { current = false; };
+  }, [target]);
   return (
     <div className="flex h-full min-h-0">
       <aside className="w-52 shrink-0 overflow-y-auto border-r p-3">
@@ -49,6 +58,22 @@ export default function SettingsPage({ basePath = "/settings", target = null }: 
             </NavLink>
           ))}
         </nav>
+        {integrations.length > 0 && (
+          <nav aria-label="Integration settings" className="mt-4 border-t pt-3">
+            <div className="mb-1 px-3 text-xs font-semibold uppercase text-muted-foreground">Integrations</div>
+            {integrations.map((plugin) => (
+              <NavLink
+                key={plugin.name}
+                to={`${basePath}/integrations/${encodeURIComponent(plugin.name)}`}
+                className={({ isActive }) =>
+                  cn("block rounded px-3 py-1.5 text-sm hover:bg-accent", isActive && "bg-accent font-medium")
+                }
+              >
+                {plugin.settings?.title ?? plugin.name}
+              </NavLink>
+            ))}
+          </nav>
+        )}
         {advanced && (
           <nav aria-label="Advanced settings" className="mt-4 border-t pt-3">
             <div className="mb-1 px-3 text-xs font-semibold uppercase text-muted-foreground">Operator tools</div>

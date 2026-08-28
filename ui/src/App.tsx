@@ -18,6 +18,7 @@ import {
   GeneralSettings,
 } from "@/pages/settings/SettingsPage";
 import TaskReminderSettings from "@/pages/settings/TaskReminderSettings";
+import PluginSettings from "@/pages/settings/PluginSettings";
 import UsagePage from "@/pages/UsagePage";
 import GroupsPage from "@/pages/GroupsPage";
 import BudgetsPage from "@/pages/BudgetsPage";
@@ -131,6 +132,7 @@ function MainApp() {
             <Route path="hosts" element={<DaemonsPage />} />
             <Route path="cli" element={<CliSettings />} />
             <Route path="appearance" element={<AppearanceSettings />} />
+            <Route path="integrations/:plugin" element={<PluginSettingsRoute />} />
             <Route path="advanced" element={<AdvancedSettingsIndex />} />
             <Route path="advanced/usage" element={<UsagePage />} />
             <Route path="advanced/budgets" element={<BudgetsPage />} />
@@ -173,6 +175,12 @@ function MainApp() {
 function TaskReminderSettingsRoute() {
   const target = useOutletContext<ApiTarget>();
   return <TaskReminderSettings target={target} />;
+}
+
+function PluginSettingsRoute() {
+  const target = useOutletContext<ApiTarget>();
+  const { plugin = "" } = useParams();
+  return <PluginSettings name={plugin} target={target} />;
 }
 
 function LegacyTerminalRedirect() {

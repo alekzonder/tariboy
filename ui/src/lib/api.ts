@@ -139,6 +139,59 @@ export const apiPost = <T>(path: string, body?: unknown) => api<T>("POST", path,
 export const apiPut = <T>(path: string, body?: unknown) => api<T>("PUT", path, body);
 export const apiDelete = <T>(path: string, body?: unknown) => api<T>("DELETE", path, body);
 
+export interface PluginOperatorArg {
+  name: string;
+  flag?: string;
+  type: "string" | "integer" | "integer-list" | "boolean" | "secret-file";
+  required?: boolean;
+  help?: string;
+}
+export interface PluginOperatorCommand {
+  path: string;
+  summary: string;
+  action: string;
+  args?: PluginOperatorArg[];
+}
+export interface PluginSettingField {
+  name: string;
+  label: string;
+  type: "string" | "password" | "integer-list";
+  required?: boolean;
+  help?: string;
+}
+export interface PluginSettingsContribution {
+  title: string;
+  status?: Array<{ name: string; label: string }>;
+  sections?: Array<{
+    title: string;
+    fields?: PluginSettingField[];
+    actions?: Array<{ label: string; action: string; fields?: string[] }>;
+  }>;
+}
+export interface PluginContribution {
+  name: string;
+  description?: string;
+  operator_commands?: PluginOperatorCommand[];
+  settings?: PluginSettingsContribution;
+}
+
+export const getPluginContributionsOn = (target: ApiTarget) =>
+  apiOn<{ plugins: PluginContribution[]; count: number }>(resolveTarget(target), "GET", "/api/plugin-contributions");
+export const getPluginStatusOn = async (target: ApiTarget, name: string): Promise<Record<string, unknown>> => {
+  const result = await apiOn<Record<string, unknown>>(
+    resolveTarget(target), "GET", `/api/plugins/${encodeURIComponent(name)}/routes`,
+  );
+  const status = result.status;
+  return status && typeof status === "object" && !Array.isArray(status)
+    ? status as Record<string, unknown>
+    : result;
+};
+export const runPluginActionOn = (target: ApiTarget, name: string, action: string, data: Record<string, unknown>) =>
+  apiOn<Record<string, unknown>>(
+    resolveTarget(target), "POST", `/api/plugins/${encodeURIComponent(name)}/action`,
+    { name, action, data: JSON.stringify(data) },
+  );
+
 // Name-scoped path builder, preserved from v1: /api/agents/<enc(name)>[/<tail>].
 export function agentApiPath(name: string, rest: string): string {
   const tail = rest.replace(/^\/+/, "").replace(/^api\//, "");
