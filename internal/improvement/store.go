@@ -275,6 +275,13 @@ func (s *Store) DecideRollout(ctx context.Context, releaseID, hash, actor string
 	if status != StatusImageBuilt {
 		return Approval{}, ErrInvalidTransition
 	}
+	var decisions int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM improvement_approvals WHERE proposal_id=? AND phase='rollout' AND object_hash=?`, proposalID, hash).Scan(&decisions); err != nil {
+		return Approval{}, err
+	}
+	if decisions != 0 {
+		return Approval{}, ErrInvalidTransition
+	}
 	approval := Approval{ID: uuid.NewString(), ProposalID: proposalID, Phase: PhaseRollout, ObjectHash: hash, Decision: decision, Actor: actor, Reason: reason, CreatedAt: s.now().UTC().Format(time.RFC3339Nano)}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO improvement_approvals(id,proposal_id,phase,object_hash,decision,actor,reason,created_at) VALUES(?,?,?,?,?,?,?,?)`, approval.ID, proposalID, approval.Phase, hash, decision, actor, reason, approval.CreatedAt); err != nil {
 		return Approval{}, err
@@ -292,9 +299,6 @@ func scanRollout(row interface{ Scan(...any) error }) (Rollout, error) {
 }
 
 func (s *Store) StageSingleRollout(ctx context.Context, releaseID, agentName, hash string) (Rollout, error) {
-	if existing, err := scanRollout(s.db.QueryRowContext(ctx, `SELECT id,release_id,target_agent,prior_image_ref,prior_image_digest,image_ref,image_digest,status,created_at,completed_at,rollback_of FROM image_rollouts WHERE release_id=? AND target_agent=? AND rollback_of=''`, releaseID, agentName)); err == nil {
-		return existing, nil
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Rollout{}, err
@@ -304,8 +308,16 @@ func (s *Store) StageSingleRollout(ctx context.Context, releaseID, agentName, ha
 	if err := tx.QueryRowContext(ctx, `SELECT id,proposal_id,repository_id,git_commit,source_name,source_digest,lock_digest,prompt_template_digest,image_ref,image_digest,builder_version,release_hash,status,created_at FROM image_releases WHERE id=?`, releaseID).Scan(&release.ID, &release.ProposalID, &release.RepositoryID, &release.GitCommit, &release.SourceName, &release.SourceDigest, &release.LockDigest, &release.PromptTemplateDigest, &release.ImageRef, &release.ImageDigest, &release.BuilderVersion, &release.ReleaseHash, &release.Status, &release.CreatedAt); err != nil {
 		return Rollout{}, err
 	}
-	if release.ReleaseHash != hash || release.Status != StatusImageBuilt {
+	if release.ReleaseHash != hash {
 		return Rollout{}, ErrRevisionMismatch
+	}
+	if existing, err := scanRollout(tx.QueryRowContext(ctx, `SELECT id,release_id,target_agent,prior_image_ref,prior_image_digest,image_ref,image_digest,status,created_at,completed_at,rollback_of FROM image_rollouts WHERE release_id=? AND target_agent=? AND rollback_of=''`, releaseID, agentName)); err == nil {
+		return existing, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return Rollout{}, err
+	}
+	if release.Status != StatusImageBuilt {
+		return Rollout{}, ErrInvalidTransition
 	}
 	var approvals int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM improvement_approvals WHERE proposal_id=? AND phase='rollout' AND object_hash=? AND decision='approve'`, release.ProposalID, hash).Scan(&approvals); err != nil || approvals == 0 {

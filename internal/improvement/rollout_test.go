@@ -32,6 +32,9 @@ func TestApprovedSingleRolloutStagesPendingImage(t *testing.T) {
 	if _, err := service.DecideRollout(context.Background(), release.ID, release.ReleaseHash, "operator", DecisionApprove, "safe"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := service.DecideRollout(context.Background(), release.ID, release.ReleaseHash, "operator", DecisionReject, "changed mind"); err != ErrInvalidTransition {
+		t.Fatalf("second rollout decision error = %v, want %v", err, ErrInvalidTransition)
+	}
 	rollout, err := service.StageSingleRollout(context.Background(), release.ID, "worker", release.ReleaseHash)
 	if err != nil {
 		t.Fatal(err)
@@ -46,6 +49,9 @@ func TestApprovedSingleRolloutStagesPendingImage(t *testing.T) {
 	second, err := service.StageSingleRollout(context.Background(), release.ID, "worker", release.ReleaseHash)
 	if err != nil || second.ID != rollout.ID {
 		t.Fatalf("idempotent rollout = %+v, %v", second, err)
+	}
+	if _, err := service.StageSingleRollout(context.Background(), release.ID, "worker", "sha256:wrong"); err != ErrRevisionMismatch {
+		t.Fatalf("wrong hash after staging error = %v, want %v", err, ErrRevisionMismatch)
 	}
 	if err := agents.PromotePendingImage("worker"); err != nil {
 		t.Fatal(err)
