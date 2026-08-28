@@ -1,6 +1,6 @@
 ---
 name: write-docs
-description: Use when creating or revising English project documentation in a Blume site, including Markdown or MDX tutorials, how-to guides, reference pages, explanations, architecture documentation, and workflow documentation.
+description: Use when creating or revising English project documentation, including Blume product pages, contributor guides, architecture and workflow documentation, or repository design records.
 ---
 
 # Write Project Documentation
@@ -18,6 +18,22 @@ Create documentation that helps a defined reader achieve a defined goal.
   content unless the user explicitly requests reuse.
 - Do not consult external sources unless the user provides a link and instructs
   you to use it.
+
+## Classify documentation ownership first
+
+Determine which files own the requested truth before drafting. Follow the
+repository's declared ownership model; a common split is:
+
+- entry-point README for concise discovery;
+- contributor guide for development workflow;
+- topical product and architecture pages for current behavior;
+- specs and plans for design and execution history.
+
+Historical specs and plans do not override current implementation or product
+documentation. Do not describe planned behavior as shipped, and do not copy a
+design document into product docs. When reviewing commits, treat commit
+messages as navigation: verify claims from their diffs, tests, schemas, and
+current code. Preserve explicit limitations and incomplete stages.
 
 ## Discover the project
 
@@ -59,12 +75,14 @@ Determine every required field before proposing the outline:
 | Excluded scope | Nearby topics the page must not absorb |
 
 Use facts already supplied by the user or safely discovered in the project. Ask
-one concise question at a time for anything still missing. Do not combine types
-such as “guide plus reference” to avoid choosing a primary reader need. If you
-propose an assumption, obtain confirmation before treating it as part of the
-brief.
+one concise question at a time only when a missing decision would materially
+change the result. Do not combine types such as “guide plus reference” to avoid
+choosing a primary reader need.
 
-When all five fields are known, restate the brief compactly for confirmation.
+For a new page or open-ended restructuring, restate the brief compactly for
+confirmation. For maintenance explicitly requested after implementation or a
+specified commit range, infer the brief from the request and authoritative diff
+and proceed without adding an approval pause.
 
 ### 2. Build an evidence map
 
@@ -84,7 +102,7 @@ Resolve contradictions in favor of the project's declared source of truth. If
 the sources do not prove a claim, ask for the missing evidence or omit the
 claim. Never turn a plausible guess into documentation.
 
-### 3. Propose the outline and wait
+### 3. Propose the outline when design is still open
 
 Propose an outline containing:
 
@@ -95,8 +113,9 @@ Propose an outline containing:
 - navigation or `meta.ts` changes;
 - evidence or user decisions still required.
 
-Ask the user to approve or revise the outline. Do not draft the full page before
-approval.
+Ask the user to approve or revise the outline for a new page or materially open
+information architecture. Skip this gate for bounded maintenance where the
+existing owner pages and implemented behavior determine the structure.
 
 ### 4. Draft the approved page
 
@@ -128,13 +147,18 @@ Review the rendered content and its sources:
    statement against current evidence.
 3. Confirm headings, frontmatter, components, directives, and navigation match
    the installed Blume version.
-4. Run the documentation workspace's formatting, link, doctor, and build
+4. Identify whether the changed files are inputs to the documentation site.
+   For Blume inputs, run the workspace's formatting, link, doctor, and build
    commands. When standard npm scripts exist, run:
 
    ```bash
    npm run doctor
    npm run build
    ```
+
+   For internal specs, plans, or other Markdown outside the Blume inputs, do
+   not run Blume commands unless repository instructions explicitly require
+   them; inspect the rendered Markdown and diff instead.
 
 5. Run every additional repository-required check and inspect the complete diff.
 
