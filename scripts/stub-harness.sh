@@ -13,6 +13,11 @@
 #   STUB_STDOUT    line to print before finishing             (default unset)
 set -eu
 
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' '2.1.227'
+  exit 0
+fi
+
 PROMPT_PATH="${1:-}"
 [ -n "$PROMPT_PATH" ] && [ -f "$PROMPT_PATH" ] && head -c 0 "$PROMPT_PATH" || true
 
