@@ -225,12 +225,12 @@ func TestSkillBridgeIsAdditiveAndEmptyImagesAreNoop(t *testing.T) {
 	}
 }
 
-func TestStubSkillBridgeMaterializesPackagedSkillsWithoutLaunchChanges(t *testing.T) {
+func TestStubSkillBridgeIgnoresPackagedSkills(t *testing.T) {
 	bridge, err := (stub{}).SkillBridge(skillBridgeRequest("stub"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bridge.Plan.SkillDestination != "skills" || len(bridge.Plan.Files) != 0 || len(bridge.Launch.Args) != 0 || len(bridge.Launch.Env) != 0 || bridge.Launch.PromptPrefix != "" {
+	if bridge.Plan.SkillDestination != "" || len(bridge.Plan.Files) != 0 || len(bridge.Launch.Args) != 0 || len(bridge.Launch.Env) != 0 || bridge.Launch.PromptPrefix != "" {
 		t.Fatalf("stub bridge = %#v", bridge)
 	}
 }

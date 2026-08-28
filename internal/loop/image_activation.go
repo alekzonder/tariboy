@@ -174,6 +174,9 @@ func (m *Manager) prepareImageSkillBridge(ag agent.Agent, manifest image.Manifes
 	if err != nil {
 		return harness.SkillLaunchConfig{}, err
 	}
+	if adapter.Type() == "stub" {
+		return harness.SkillLaunchConfig{}, nil
+	}
 	l := agentdir.New(m.cfg.AgentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
 	bridgeDir, err := l.ImageBridgeDir(manifest.Digest, harness.SkillAdapterContractVersion, adapter.Type())
 	if err != nil {

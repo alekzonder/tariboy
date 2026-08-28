@@ -699,6 +699,25 @@ func TestImageBridgeRestartReusesPublishedBridge(t *testing.T) {
 	}
 }
 
+func TestStubImageSkillsNeedNoBridge(t *testing.T) {
+	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	called := false
+	m := &Manager{cfg: ManagerConfig{PrepareImageBridge: func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
+		called = true
+		return nil
+	}}}
+	got, err := m.prepareImageSkillBridge(agent.Agent{Name: "worker", HarnessType: "stub"}, image.Manifest{
+		SchemaVersion: 2,
+		Skills:        []image.ManifestSkill{{Name: "review"}},
+	}, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called || len(got.Args) != 0 || len(got.Env) != 0 || got.PromptPrefix != "" {
+		t.Fatalf("stub bridge called=%v launch=%#v", called, got)
+	}
+}
+
 func TestActiveCodexImageSkillBridgeNeedsNoPluginProbe(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))

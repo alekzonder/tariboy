@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/google/uuid"
 )
 
@@ -295,11 +294,5 @@ func (s stub) Command(cwd, promptPath string, cfg Config) ([]string, []string, e
 }
 
 func (stub) SkillBridge(request SkillBridgeRequest) (SkillBridge, error) {
-	if len(request.Skills) == 0 {
-		return SkillBridge{}, nil
-	}
-	if err := validateSkillBridgeRequest(request, "stub"); err != nil {
-		return SkillBridge{}, err
-	}
-	return SkillBridge{Plan: agentdir.BridgePlan{SkillDestination: "skills"}}, nil
+	return SkillBridge{}, nil
 }
