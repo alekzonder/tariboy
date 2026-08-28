@@ -23,6 +23,7 @@ when the daemon is down.
 | `channel` / `message` | `channel ls`/`inspect`/`tail`, `message send` |
 | `group` | `create`, `assign`, `inspect`, `ls`, `rm` |
 | `plugin` | `install`, `ls`, `inspect`, `logs`, `rm` |
+| `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |
 | `schedule` | `ls` |
 | `eval` | `ls`, `inspect` |
 | `secret` | `set`, `ls`, `rm` |
@@ -39,6 +40,12 @@ every command and a one-line summary of each.
 
 `tariboy version` and `tariboy --version` are equivalent plain-text
 forms. Both work without a running daemon.
+
+Plugin command groups are declarative and namespaced. The CLI merges validated
+contributions from the selected running daemon; core help remains usable when
+that daemon is unavailable, while contributed commands require it. Secret
+arguments are accepted only through an owner-only file or stdin, never as a
+token value in argv. See the [Telegram setup workflow](/docs/plugins#bundled-telegram-plugin).
 
 Workflow definition, queue binding, pool, trigger, and execution inspection are
 operator REST routes rather than hand-written CLI verbs. Compose is the normal

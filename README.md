@@ -82,6 +82,14 @@ attribution, and native Tasks; it also tells new agents where their managed
 workdir is, even when they run in another CWD. Provider integrations remain
 opt-in.
 
+Packaged daemons also auto-enable the Telegram plugin. Create a Telegram
+supergroup with topics, add a bot that can manage topics, then configure it with
+`tariboy telegram configure` and bind it with `tariboy telegram chat setup` (or
+use **Server Settings → Integrations → Telegram**). Tariboy never creates the
+group or changes administrator rights. Empty allowed Telegram UIDs deny every
+incoming command and message. See the [plugin guide](docs/docs/plugins/index.mdx#bundled-telegram-plugin)
+for the topic and command model.
+
 Schema-v2 images are deliberately transparent: they contain an explicit plugin
 list, optional packaged Agent Skills, and an ordered `prompts` template. Prompt
 files and skill directories can come from

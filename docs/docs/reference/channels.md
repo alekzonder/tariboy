@@ -46,6 +46,7 @@ Built-in helpers define the main system channel shapes:
 - `group:<group>:inbox`: group lead inbox.
 - `group:<group>:direct:<agent>`: direct group lane; currently helper-defined, not the main group workflow.
 - `chat:<name>`: chat/plugin-facing channel.
+- `chat:telegram:<agent>`: the bundled Telegram topic for one agent.
 - `user:<name>`: user-facing channel.
 
 Channel kind is inferred from the name:
@@ -60,6 +61,13 @@ Channel kind is inferred from the name:
 
 Unknown shapes default to `chat` kind in low-level classification, but operator
 subscription validates channel names before creating them.
+
+The Telegram plugin subscribes the mapped agent and its sink to the concrete
+`chat:telegram:<agent>` channel. Authorized topic text is published as a normal
+plugin-produced message; an agent-produced reply is delivered back to that
+topic only after it passes through the same durable bus. The plugin suppresses
+its inbound echo and acknowledges the sink delivery only after Telegram accepts
+the reply.
 
 ## Messages
 

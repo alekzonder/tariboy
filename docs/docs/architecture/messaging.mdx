@@ -44,6 +44,7 @@ Channel name prefixes: `agent`, `group`, `user`, `chat`. Well-known shapes:
 - `group:<g>:broadcast` — fan-out to all group members,
 - `group:<g>:inbox` — group lead inbox,
 - `chat:<name>` — chat / plugin-facing channel,
+- `chat:telegram:<agent>` — one bundled Telegram forum topic mapped to an agent,
 - `user:<name>` — user-facing channel.
 
 Native Tasks publishes `task.assigned`, `task.question`, `task.answered`, and
@@ -51,6 +52,13 @@ Native Tasks publishes `task.assigned`, `task.question`, `task.answered`, and
 recipients use `user:<login>`. Mentions and unresolved-answer state remain in
 the task itself; the channel message is the delivery mechanism, not the source
 of truth.
+
+The bundled Telegram process remains outside the daemon. It authorizes and
+maps forum updates, then publishes ordinary text through the authenticated
+plugin API onto `chat:telegram:<agent>`. Agent replies return through the
+existing channel-sink outbox, so bus persistence, wake coalescing,
+acknowledgement, redelivery, and DLQ behavior remain authoritative; Telegram
+does not introduce a second agent-delivery path.
 
 ## Idle task reminders
 
