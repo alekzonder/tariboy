@@ -41,7 +41,7 @@ if test "$mode" != activate; then
   test "$(cat "$stage/VERSION")" = "$version"
   (cd "$stage" && sha256sum -c SHA256SUMS >&2)
 
-  for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+  for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
     test -f "$stage/$name"
     chmod 0755 "$stage/$name"
   done
@@ -49,7 +49,7 @@ fi
 
 rollback() {
   if test "$committed" != true; then
-    for name in tariboy-tools tariboy-shim tariboy tariboyd; do
+    for name in tariboy-plugin-telegram tariboy-tools tariboy-shim tariboy tariboyd; do
       target=$bindir/$name
       backup=$bindir/.$name.old-$suffix
       case " $switched " in
@@ -63,7 +63,7 @@ rollback() {
       rm -rf "$release"
     fi
   fi
-  for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+  for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
     rm -f "$bindir/.$name.new-$suffix"
     rm -f "$bindir/.$name.old-$suffix"
   done
@@ -98,7 +98,7 @@ else
 fi
 
 previous=
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
   target=$bindir/$name
   if test -e "$target" && ! test -L "$target"; then
     echo "refusing to replace non-symlink $target" >&2
@@ -137,10 +137,10 @@ if test "$mode" = activate && test "$previous" != "$expected_previous"; then
   exit 76
 fi
 
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
   ln -s "$release/$name" "$bindir/.$name.new-$suffix"
 done
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
   target=$bindir/$name
   backup=$bindir/.$name.old-$suffix
   if test -L "$target"; then
@@ -150,7 +150,7 @@ for name in tariboyd tariboy tariboy-shim tariboy-tools; do
   switched="$switched $name"
 done
 committed=true
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
   rm -f "$bindir/.$name.old-$suffix" || true
 done
 rollback

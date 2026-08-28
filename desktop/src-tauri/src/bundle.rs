@@ -6,12 +6,14 @@ use std::path::{Path, PathBuf};
 /// It remains separate from CARGO_PKG_VERSION so bundled payloads and the
 /// running daemon are checked against the same release value.
 pub const VERSION: &str = env!("TARIBOY_VERSION");
-pub const BINARIES: [&str; 4] = [
+pub const BINARIES: [&str; 5] = [
     "tariboyd",
     "tariboy",
     "tariboy-shim",
     "tariboy-tools",
+    "tariboy-plugin-telegram",
 ];
+pub const CLI_BINARIES: [&str; 5] = BINARIES;
 const VERSION_FILE: &str = "VERSION";
 const CHECKSUM_FILE: &str = "SHA256SUMS";
 const INSTALLER_FILE: &str = "remote-install.sh";
@@ -297,7 +299,7 @@ mod tests {
             root.path().join(Platform::local().directory())
         );
         let linux = bundle.platform(Platform::LinuxX86_64).unwrap();
-        assert_eq!(linux.files_for_upload().len(), 6);
+        assert_eq!(linux.files_for_upload().len(), 7);
         assert_eq!(linux.version, VERSION);
     }
 

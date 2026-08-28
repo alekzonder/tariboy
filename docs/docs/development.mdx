@@ -421,9 +421,9 @@ and a platform that does not match the current host before compiling payloads.
 `make desktop-alpha` packages and verifies the internal alpha; publication is a
 separate manual action.
 
-The tray action **Install/Update CLI** owns the local four-binary install. It
+The tray action **Install/Update CLI** owns the local five-binary install. It
 preflights and atomically switches `tariboyd`, `tariboy`,
-`tariboy-shim`, and `tariboy-tools` links under `~/.local/bin`, then
+`tariboy-shim`, `tariboy-tools`, and `tariboy-plugin-telegram` links under `~/.local/bin`, then
 restarts the bundled daemon even when the links already target the same app
 path. Its filesystem and lifecycle work must stay off the UI thread. Changes to
 this flow require Rust installer tests plus the daemon restart-handoff tests;

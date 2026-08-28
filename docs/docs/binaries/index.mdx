@@ -1,12 +1,12 @@
 ---
 title: Binaries & commands
-description: The five core binaries built by make build.
+description: Core binaries and the bundled Telegram plugin built by make build.
 sidebar:
   label: Overview
   icon: terminal
 ---
 
-Five core binaries are built by `make build`:
+Five core binaries and one bundled plugin are built by `make build`:
 
 | Binary | Role |
 | --- | --- |
@@ -15,9 +15,10 @@ Five core binaries are built by `make build`:
 | `tariboy-shim` | Runs [one harness iteration under a watchdog](/docs/architecture/shim). |
 | `tariboy-tools` | The [agent-facing `tools`](/docs/binaries/agent-tools) shim, run *inside* an agent. |
 | `tariboy-store` | A standalone [image registry](/docs/binaries/store) server. |
+| `tariboy-plugin-telegram` | The bundled Telegram channel and operator-surface plugin. |
 
-Optional external plugins are built and distributed independently. The daemon
-starts only plugins already installed in its configured data directory.
+The daemon installs or refreshes the Telegram plugin from its sibling binary at
+startup. Optional external plugins are built and distributed independently.
 
 `make build` also assembles the canonical
 `internal/builtinimages/source` image into an ignored bundle embedded in

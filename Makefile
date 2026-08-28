@@ -2,7 +2,7 @@ GO      ?= go
 BINDIR  := bin
 PREFIX  ?= $(HOME)/.local
 INSTALLDIR := $(PREFIX)/bin
-BINARIES := tariboyd tariboy tariboy-shim tariboy-tools tariboy-store
+BINARIES := tariboyd tariboy tariboy-shim tariboy-tools tariboy-store tariboy-plugin-telegram
 SA := $(BINDIR)/tariboy
 # Desktop E2E specs receive separate owner-only state from their fixture, so
 # two WebDriver workers can run safely on a normal development host. Keep this
@@ -32,6 +32,7 @@ build: build-basic-image
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-shim ./cmd/tariboy-shim
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-tools ./cmd/tariboy-tools
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-store ./cmd/tariboy-store
+	$(GO) build -trimpath -o $(BINDIR)/tariboy-plugin-telegram ./cmd/tariboy-plugin-telegram
 
 install:
 	$(MAKE) build
@@ -183,7 +184,7 @@ RELEASE_VERSION := $(shell cat scripts/release-version.txt 2>/dev/null)
 # macOS bundle metadata uses x.y.z. Keep the full canonical string available to
 # Rust as TARIBOY_VERSION while SEMVER owns the Cargo/Tauri comparison.
 SEMVER      := $(firstword $(subst -, ,$(VERSION)))
-DESKTOP_BINARIES := tariboyd tariboy tariboy-shim tariboy-tools
+DESKTOP_BINARIES := tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram
 # Resolved once so every desktop gate below agrees on what host it is running on.
 HOST_OS     := $(shell uname -s)
 HOST_ARCH   := $(shell uname -m)

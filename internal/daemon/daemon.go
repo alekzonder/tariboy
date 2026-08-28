@@ -44,6 +44,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/tasknotify"
 	"github.com/alekzonder/tariboy/internal/taskreminder"
 	"github.com/alekzonder/tariboy/internal/tasks"
+	"github.com/alekzonder/tariboy/internal/telegramplugin"
 	"github.com/alekzonder/tariboy/internal/telemetry"
 	"github.com/alekzonder/tariboy/internal/userpath"
 	"github.com/alekzonder/tariboy/internal/version"
@@ -668,6 +669,14 @@ func Run(ctx context.Context, o Options) error {
 
 	if err := pluginHost.StartAll(ctx); err != nil {
 		log.Error("plugin host start", "err", err)
+	}
+	if executable, err := os.Executable(); err == nil {
+		telegramExecutable := filepath.Join(filepath.Dir(executable), "tariboy-plugin-telegram")
+		if _, err := pluginHost.EnsureBundled(telegramExecutable, telegramplugin.Manifest(version.Version)); err != nil {
+			log.Error("install bundled telegram plugin", "err", err)
+		}
+	} else {
+		log.Warn("resolve daemon executable for bundled plugins", "err", err)
 	}
 	// StopAll cancels every supervisor + sink drainer and waits (drain-before-
 	// close): registered after manager.Shutdown so, by LIFO, plugins stop and

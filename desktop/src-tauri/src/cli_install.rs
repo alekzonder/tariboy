@@ -230,7 +230,7 @@ pub fn default_bin_dir(getenv: &dyn Fn(&str) -> Option<String>) -> Result<PathBu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bundle::BINARIES;
+    use crate::bundle::CLI_BINARIES;
 
     fn bundled(dir: &std::path::Path, app: &str) -> PathBuf {
         bundled_with_identifier(dir, app, "app.tariboy.desktop")
@@ -263,7 +263,7 @@ mod tests {
     fn bundled_set(dir: &Path, app: &str) -> PathBuf {
         let cli = bundled(dir, app);
         let source_dir = cli.parent().unwrap().to_path_buf();
-        for binary in BINARIES {
+        for binary in CLI_BINARIES {
             std::fs::write(source_dir.join(binary), b"#!/bin/sh\n").unwrap();
         }
         source_dir
@@ -276,17 +276,17 @@ mod tests {
         let link_dir = dir.path().join("local-bin");
 
         assert_eq!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &CLI_BINARIES).unwrap(),
             Outcome::Created
         );
-        for binary in BINARIES {
+        for binary in CLI_BINARIES {
             assert_eq!(
                 std::fs::read_link(link_dir.join(binary)).unwrap(),
                 source_dir.join(binary)
             );
         }
         assert_eq!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &CLI_BINARIES).unwrap(),
             Outcome::AlreadyInstalled
         );
     }
@@ -299,7 +299,7 @@ mod tests {
         std::fs::create_dir_all(&link_dir).unwrap();
         std::fs::write(link_dir.join("tariboy-tools"), b"foreign").unwrap();
 
-        match install_all(&link_dir, &source_dir, &BINARIES).unwrap() {
+        match install_all(&link_dir, &source_dir, &CLI_BINARIES).unwrap() {
             Outcome::Occupied { existing } => {
                 assert!(existing.contains("tariboy-tools"));
                 assert!(existing.contains("regular file"));
@@ -329,7 +329,7 @@ mod tests {
         std::os::unix::fs::symlink(&foreign_cli, link_dir.join("tariboy")).unwrap();
 
         assert!(matches!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &CLI_BINARIES).unwrap(),
             Outcome::Occupied { .. }
         ));
         assert_eq!(
@@ -351,7 +351,7 @@ mod tests {
         std::os::unix::fs::symlink(&noncanonical_cli, link_dir.join("tariboy")).unwrap();
 
         assert!(matches!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &CLI_BINARIES).unwrap(),
             Outcome::Occupied { .. }
         ));
         assert_eq!(
@@ -372,7 +372,7 @@ mod tests {
         std::fs::remove_dir_all(lowercase_root).unwrap();
 
         assert!(matches!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &CLI_BINARIES).unwrap(),
             Outcome::Occupied { .. }
         ));
         assert_eq!(
@@ -388,15 +388,15 @@ mod tests {
         let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
         let link_dir = dir.path().join("local-bin");
         std::fs::create_dir_all(&link_dir).unwrap();
-        for binary in BINARIES {
+        for binary in CLI_BINARIES {
             std::os::unix::fs::symlink(old.join(binary), link_dir.join(binary)).unwrap();
         }
 
         assert_eq!(
-            install_all(&link_dir, &new, &BINARIES).unwrap(),
+            install_all(&link_dir, &new, &CLI_BINARIES).unwrap(),
             Outcome::Created
         );
-        for binary in BINARIES {
+        for binary in CLI_BINARIES {
             assert_eq!(
                 std::fs::read_link(link_dir.join(binary)).unwrap(),
                 new.join(binary)
@@ -411,8 +411,8 @@ mod tests {
         std::fs::remove_file(source_dir.join("tariboy-shim")).unwrap();
         let link_dir = dir.path().join("local-bin");
 
-        assert!(install_all(&link_dir, &source_dir, &BINARIES).is_err());
-        for binary in BINARIES {
+        assert!(install_all(&link_dir, &source_dir, &CLI_BINARIES).is_err());
+        for binary in CLI_BINARIES {
             assert!(!link_dir.join(binary).exists());
         }
     }
@@ -424,7 +424,7 @@ mod tests {
         let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
         let link_dir = dir.path().join("local-bin");
         std::fs::create_dir_all(&link_dir).unwrap();
-        for binary in BINARIES {
+        for binary in CLI_BINARIES {
             std::os::unix::fs::symlink(old.join(binary), link_dir.join(binary)).unwrap();
         }
         let calls = std::cell::Cell::new(0);
@@ -437,8 +437,8 @@ mod tests {
             std::fs::rename(from, to)
         };
 
-        assert!(install_all_with_rename(&link_dir, &new, &BINARIES, &rename).is_err());
-        for binary in BINARIES {
+        assert!(install_all_with_rename(&link_dir, &new, &CLI_BINARIES, &rename).is_err());
+        for binary in CLI_BINARIES {
             assert_eq!(
                 std::fs::read_link(link_dir.join(binary)).unwrap(),
                 old.join(binary)

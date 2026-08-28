@@ -162,8 +162,8 @@ This separation gives operators:
 Core state lives in SQLite under `~/.tariboy`; runtime socket, pid, and logs
 live under `~/.tariboyd`. Remote releases are versioned below
 `~/.local/lib/tariboy`. The Desktop menu's **Install/Update CLI** action
-atomically points all four local commands (`tariboyd`, `tariboy`,
-`tariboy-shim`, and `tariboy-tools`) at the current app bundle, then
+atomically points all five managed binaries (`tariboyd`, `tariboy`,
+`tariboy-shim`, `tariboy-tools`, and `tariboy-plugin-telegram`) at the current app bundle, then
 restarts the local daemon. Existing shim-owned iterations survive that restart,
 retry through the brief AI-proxy outage, and are adopted by the new daemon.
 Terminal attach, resize, input, and Kill continue to target the surviving shim

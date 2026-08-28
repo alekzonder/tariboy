@@ -46,7 +46,7 @@ REMOTE
 }
 trap cleanup EXIT HUP INT TERM
 
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
   test -f "desktop/src-tauri/resources/bin/linux-x86_64/$name"
 done
 test -f desktop/src-tauri/resources/bin/linux-x86_64/SHA256SUMS
@@ -58,6 +58,7 @@ scp desktop/src-tauri/resources/bin/linux-x86_64/tariboyd \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-shim \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-tools \
+  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-plugin-telegram \
   desktop/src-tauri/resources/bin/linux-x86_64/SHA256SUMS \
   desktop/src-tauri/resources/bin/linux-x86_64/VERSION \
   desktop/src-tauri/resources/bin/linux-x86_64/remote-install.sh \
@@ -82,7 +83,7 @@ case "$root:$home:$base:$runtime:$stage:$release" in
 esac
 HOME=$home sh "$stage/remote-install.sh" "$version" "$staging"
 test -d "$release"
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
   test "$("$release/$name" --version)" = "$version"
   test "$(readlink "$home/.local/bin/$name")" = "$release/$name"
 done
