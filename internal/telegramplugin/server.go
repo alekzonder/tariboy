@@ -168,6 +168,10 @@ func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request, body map[stri
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
 		return
 	}
+	if err := s.ReconcileTopics(r.Context()); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_agent_topics_failed"})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"result": s.status()})
 }
 

@@ -49,6 +49,7 @@ type BotError struct {
 	Method     string
 	Code       int
 	RetryAfter int
+	Reason     string
 }
 
 func (e *BotError) Error() string {
@@ -126,10 +127,11 @@ func (c *BotClient) call(ctx context.Context, token, method string, body, result
 		return fmt.Errorf("telegram %s response failed", method)
 	}
 	var envelope struct {
-		OK         bool            `json:"ok"`
-		Result     json.RawMessage `json:"result"`
-		ErrorCode  int             `json:"error_code"`
-		Parameters struct {
+		OK          bool            `json:"ok"`
+		Result      json.RawMessage `json:"result"`
+		ErrorCode   int             `json:"error_code"`
+		Description string          `json:"description"`
+		Parameters  struct {
 			RetryAfter int `json:"retry_after"`
 		} `json:"parameters"`
 	}
@@ -141,7 +143,11 @@ func (c *BotClient) call(ctx context.Context, token, method string, body, result
 		if code == 0 {
 			code = response.StatusCode
 		}
-		return &BotError{Method: method, Code: code, RetryAfter: envelope.Parameters.RetryAfter}
+		reason := ""
+		if strings.Contains(strings.ToLower(envelope.Description), "message thread not found") {
+			reason = "message_thread_not_found"
+		}
+		return &BotError{Method: method, Code: code, RetryAfter: envelope.Parameters.RetryAfter, Reason: reason}
 	}
 	if result != nil && len(envelope.Result) > 0 {
 		if err := json.Unmarshal(envelope.Result, result); err != nil {

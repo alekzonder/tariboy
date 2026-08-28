@@ -122,6 +122,16 @@ func (s *Server) setAgent(ctx context.Context, agent, field, value string) (stri
 			return "", fmt.Errorf("interactive must be true or false")
 		}
 		bodyValue = parsed
+	case "loop":
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return "", fmt.Errorf("loop must be true or false")
+		}
+		verb := "disable"
+		if parsed {
+			verb = "enable"
+		}
+		return s.callText(ctx, http.MethodPost, "/api/agents/"+url.PathEscape(agent)+"/loop/"+verb, map[string]any{"name": agent})
 	case "interval", "timeout", "hard-timeout", "max-idle":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {

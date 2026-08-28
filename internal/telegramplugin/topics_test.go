@@ -38,7 +38,7 @@ func (d *fakeDaemon) Call(_ context.Context, method, path string, body, _ any) e
 
 func TestChatSetupRequiresForumSupergroupAndTopicPermission(t *testing.T) {
 	chatType, forum, canManage := "supergroup", true, true
-	created := ""
+	created := []string{}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/getMe"):
@@ -50,8 +50,9 @@ func TestChatSetupRequiresForumSupergroupAndTopicPermission(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/createForumTopic"):
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			created, _ = body["name"].(string)
-			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"message_thread_id": 9, "name": created}})
+			name, _ := body["name"].(string)
+			created = append(created, name)
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"message_thread_id": len(created) + 8, "name": name}})
 		default:
 			t.Fatalf("unexpected method %s", r.URL.Path)
 		}
@@ -64,7 +65,8 @@ func TestChatSetupRequiresForumSupergroupAndTopicPermission(t *testing.T) {
 	if err := state.Configure("token", []int64{11}); err != nil {
 		t.Fatal(err)
 	}
-	server := NewServer(state, NewBotClient(api.URL))
+	daemon := &fakeDaemon{agents: []AgentInfo{{Name: "worker"}}}
+	server := NewServer(state, NewBotClient(api.URL), daemon)
 	setup := func() *httptest.ResponseRecorder {
 		body := bytes.NewBufferString(`{"action":"chat_setup","chat_id":-100123}`)
 		response := httptest.NewRecorder()
@@ -89,12 +91,15 @@ func TestChatSetupRequiresForumSupergroupAndTopicPermission(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("setup status=%d body=%s", response.Code, response.Body.String())
 	}
-	if created != "tariboyd" {
-		t.Fatalf("created topic = %q", created)
+	if len(created) != 2 || created[0] != "tariboyd" || created[1] != "worker" {
+		t.Fatalf("created topics = %q", created)
 	}
 	got := state.Snapshot()
-	if got.ChatID != -100123 || got.ManagementTopicID != 9 {
+	if got.ChatID != -100123 || got.ManagementTopicID != 9 || got.AgentTopics["worker"].ThreadID != 10 {
 		t.Fatalf("state = %+v", got)
+	}
+	if len(daemon.subscribed) != 1 || daemon.subscribed[0] != "worker=chat:telegram:worker" {
+		t.Fatalf("subscriptions = %v", daemon.subscribed)
 	}
 }
 

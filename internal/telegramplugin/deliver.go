@@ -2,8 +2,10 @@ package telegramplugin
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/plugins"
 )
@@ -32,8 +34,27 @@ func (s *Server) deliver(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "telegram_not_configured"})
 		return
 	}
+	threadID := topic.ThreadID
 	for _, part := range splitTelegramText(message.Text) {
-		if _, err := s.bot.SendMessage(r.Context(), state.Token, state.ChatID, topic.ThreadID, part); err != nil {
+		_, err := s.bot.SendMessage(r.Context(), state.Token, state.ChatID, threadID, part)
+		var botErr *BotError
+		if errors.As(err, &botErr) && botErr.Code == http.StatusTooManyRequests && botErr.RetryAfter > 0 &&
+			waitContext(r.Context(), time.Duration(botErr.RetryAfter)*time.Second) {
+			_, err = s.bot.SendMessage(r.Context(), state.Token, state.ChatID, threadID, part)
+		}
+		if errors.As(err, &botErr) && botErr.Reason == "message_thread_not_found" {
+			replacement, createErr := s.bot.CreateForumTopic(r.Context(), state.Token, state.ChatID, agent)
+			if createErr == nil {
+				createErr = s.state.SetAgentTopic(agent, agent, replacement.MessageThreadID)
+			}
+			if createErr == nil {
+				threadID = replacement.MessageThreadID
+				_, err = s.bot.SendMessage(r.Context(), state.Token, state.ChatID, threadID, part)
+			} else {
+				err = createErr
+			}
+		}
+		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "telegram_send_failed"})
 			return
 		}
