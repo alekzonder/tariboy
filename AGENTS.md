@@ -150,3 +150,9 @@ cd docs
 npm run doctor
 npm run build
 ```
+
+Files under `docs/superpowers/specs/` and `docs/superpowers/plans/` are internal
+design artifacts, not Blume product documentation. For changes limited to
+those directories, do not run `npm run doctor`, `npm run build`, or the `docs`
+check; inspect the Markdown and diff instead. Run the documentation gates only
+when product documentation under `docs/docs/` or other Blume inputs changes.
