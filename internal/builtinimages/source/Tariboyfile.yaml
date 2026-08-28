@@ -9,6 +9,10 @@ plugins:
   - name: scripts
   - name: current-task
   - name: tasks
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: $CURRENT_VERSION_STORE/skills/scripts
+  - dir: $CURRENT_VERSION_STORE/skills/tasks
 prompts:
   - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
   - runtime: identity

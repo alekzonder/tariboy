@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	storeassets "github.com/alekzonder/tariboy/store"
 )
 
 func TestFragmentsContract(t *testing.T) {
@@ -194,9 +196,16 @@ func TestScriptsPromptTeachesExplicitRunAndSchedule(t *testing.T) {
 			body = fragment.Body
 		}
 	}
-	for _, want := range []string{"tools script run make-check -- make check", "tools script schedule", "runs never overlap", "--quiet-exit", "Do not call `script run` again"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("scripts prompt missing %q:\n%s", want, body)
+	if !strings.Contains(body, "`scripts` skill") {
+		t.Fatalf("scripts prompt does not route to its packaged skill:\n%s", body)
+	}
+	skill, err := storeassets.ReadBundled("skills/scripts/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"tools script run", "tools script schedule", "never overlap", "--quiet-exit", "Queue it exactly once"} {
+		if !strings.Contains(string(skill), want) {
+			t.Fatalf("scripts skill missing %q:\n%s", want, skill)
 		}
 	}
 	if strings.Contains(body, "tools script add") {
@@ -223,13 +232,17 @@ func TestTasksCapabilityIsOptionalAndContributesItsOwnPrompt(t *testing.T) {
 	if fragment == nil || fragment.Name != "system:tasks" {
 		t.Fatalf("tasks fragment = %#v", fragment)
 	}
+	skill, err := storeassets.ReadBundled("skills/tasks/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, command := range []string{
 		"tasks mine", "tasks ready", "tasks create", "tasks comment",
 		"tasks ask", "tasks done", "tasks work next", "tasks work show",
 		"tasks artifacts add", "tasks questions", "tasks answer", "tasks observe subscribe",
 	} {
-		if !strings.Contains(fragment.Body, command) {
-			t.Fatalf("tasks prompt missing %q:\n%s", command, fragment.Body)
+		if !strings.Contains(fragment.Body+string(skill), command) {
+			t.Fatalf("tasks instructions missing %q", command)
 		}
 	}
 	without, err := Resolve(nil)
@@ -244,29 +257,20 @@ func TestTasksCapabilityIsOptionalAndContributesItsOwnPrompt(t *testing.T) {
 }
 
 func TestTasksPromptDistinguishesFlexibleAndWorkflowQuestions(t *testing.T) {
-	resolved, err := Resolve([]string{"tasks"})
+	body, err := storeassets.ReadBundled("skills/tasks/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var body string
-	for _, fragment := range BodyFragments(resolved) {
-		if fragment.Plugin == "tasks" {
-			body = fragment.Body
-			break
-		}
-	}
-	body = strings.Join(strings.Fields(body), " ")
+	normalized := strings.Join(strings.Fields(string(body)), " ")
 	for _, want := range []string{
-		"the flexible and workflow forms are mutually exclusive",
-		"For a flexible task without a work packet, ask with:",
-		"tasks ask <TASK-KEY> user:<login>|agent:<name> <TEXT>",
-		"requires neither an assignment ID nor revisions",
-		"A plain comment is not a substitute",
-		"For a workflow-managed task with a work packet, use only the assignment-scoped form:",
-		"tasks ask <assignment-id> --question <text> --context <why> --blocking-scope assignment",
+		"For a flexible task",
+		"tasks ask <key> user:<login>|agent:<name> <text>",
+		"A comment is not a blocking question",
+		"For workflow-managed work",
+		"Treat its packet as the complete authority",
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("tasks prompt missing %q:\n%s", want, body)
+		if !strings.Contains(normalized, want) {
+			t.Fatalf("tasks skill missing %q:\n%s", want, body)
 		}
 	}
 }

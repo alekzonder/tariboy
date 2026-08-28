@@ -103,6 +103,19 @@ model, effort, environment,
 CWD, context, workdir, messages, history, group, and subscriptions are not image
 assignment fields.
 
+Controlled improvement adds durable task-level Judge subjects, structured
+proposals, append-only approvals, immutable image releases, and rollout rows.
+A proposal revision hash covers its citations, repository/base commit, file
+allowlist, acceptance criteria, risk, and rollback image. A release hash covers
+merged source and lock provenance plus prompt and image digests. Approvals for
+other hashes do not unlock either transition.
+
+Staging an approved single-agent release records the prior ref/digest and writes
+the candidate only to the existing pending fields. The launch gate remains the
+sole promotion path, so a running iteration is not interrupted. Successful
+promotion completes the linked rollout; failure leaves the old active image.
+Rollback stages the recorded prior immutable assignment through the same gate.
+
 ## Restart handoff
 
 A running iteration is owned by `tariboy-shim`, not by the lifetime of the

@@ -17,7 +17,7 @@ capability. Tariboy does not create a built-in group or choose models for it.
 
 | Role | Commands |
 | --- | --- |
-| Lead | `tools judge iterations search`, `run create`, `run inspect`, `summary claim`, `summary inputs`, `summary submit`, `run cancel`, `work retry` |
+| Lead | `tools judge iterations search`, `run create`, `run inspect`, `summary claim`, `summary inputs`, `improvement submit`, `summary submit`, `run cancel`, `work retry` |
 | Worker | `tools judge work claim`, `evidence search`, `evidence get`, `analysis submit` |
 
 The service authorizes actions using the authenticated agent, current
@@ -36,6 +36,12 @@ a request does not override those checks.
 5. The lead claims summary work, reads durable analyses, and submits the
    versioned summary.
 
+When evidence identifies a repeatable role, prompt, skill, or image defect, the
+summary agent may submit a structured improvement proposal. It is bound to task
+subjects and evidence bundle hashes and names the repository, base commit,
+relative file scope, acceptance criteria, risk, and immutable rollback image.
+The Judge cannot approve it, edit Git, publish, assign, or roll out.
+
 Failed assignments can be retried without discarding completed analyses.
 Cancelling a run cancels pending and claimed work while preserving immutable
 evidence and completed artifacts.
@@ -51,6 +57,11 @@ Snapshots remain readable after retention removes the original iteration
 directory. Evidence redaction and content hashes make citations stable, but do
 not grant a worker access to evidence from another assignment.
 
+New snapshots use Evidence Bundle v2. Runs group targets by attributed Native
+Task when available and record task/artifact metadata, participant image refs
+and digests, prompt-template hashes, packaged skills/plugins, source digest,
+repository commit, and lock digest. Schema-v1 bundles remain readable.
+
 ## Durable state
 
 Judge runs, targets, assignment leases, immutable evidence identities,
@@ -63,6 +74,8 @@ separately from the historical iterations being evaluated.
 ```yaml Tariboyfile.yaml
 plugins:
   - name: llm-as-judge
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/llm-as-judge
 prompts:
   - file: $CURRENT_VERSION_STORE/skills/llm-as-judge/prompt.md
 ```

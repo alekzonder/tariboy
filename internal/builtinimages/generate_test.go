@@ -61,8 +61,17 @@ func TestGenerateBuildsCanonicalBasicBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(prompt, "tasks ready --claim") {
-		t.Fatalf("basic prompt missing native Tasks guidance:\n%s", prompt)
+	if !strings.Contains(prompt, "packaged `tasks`") {
+		t.Fatalf("basic prompt does not route Native Tasks procedures to its skill:\n%s", prompt)
+	}
+	skills := map[string]bool{}
+	for _, skill := range manifest.Skills {
+		skills[skill.Name] = true
+	}
+	for _, required := range []string{"messages", "scripts", "tasks"} {
+		if !skills[required] {
+			t.Errorf("basic image missing packaged skill %q: %#v", required, manifest.Skills)
+		}
 	}
 	template, err := store.ReadTemplate(image.Ref{Name: "basic", Tag: "latest"})
 	if err != nil {

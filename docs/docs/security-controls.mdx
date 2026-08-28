@@ -70,6 +70,18 @@ prompt files. Agent-authored builds additionally confine source and absolute
 references to that agent's workdir.
 Native host metadata and exported support archives use owner-only permissions.
 
+Controlled production publication is stricter than an ordinary operator build.
+Its external source uses only vendored `./` prompt and skill inputs, provides
+`tariboy.lock.yaml`, and matches every declared SHA-256. Upstream entries must
+match upstream bytes; forks require upstream and local hashes. Validation rejects
+traversal, duplicate paths, symlinks, non-regular or oversized files, and Git
+changes outside the approved allowlist.
+
+Judge evidence cannot authorize mutation. Plan and rollout approvals are
+operator-only, append-only rows bound to canonical proposal or release hashes;
+agent-supplied actor fields are ignored. Production and rollback refs are
+immutable, and `latest` is rejected.
+
 ## Pricing catalog boundary
 
 The daemon downloads model prices only from LiteLLM's fixed production HTTPS

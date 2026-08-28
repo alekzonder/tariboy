@@ -125,6 +125,18 @@ Adoption removes the carried lease after the shim produces a terminal result.
 The handoff file is runtime-sensitive state: it is not part of SQLite, audit
 logs, transcripts, or support bundles.
 
+## Judge evidence and controlled improvements
+
+Judge snapshots copy the already-redacted prompt, audit, proxy transcript, and
+usage evidence into content-addressed bundles. Evidence Bundle v2 also records
+the attributed task subject and immutable runtime/source provenance; the proxy
+remains the transcript authority and grants no repository or rollout permission.
+
+An improvement citation contains only a bundle hash plus stable artifact and
+locator. Task text, model output, transcripts, messages, and repository content
+remain untrusted evidence and cannot act as approval. Plan and rollout decisions
+are append-only operator records bound to canonical object hashes.
+
 The pricing catalog cache has a different purpose and lifecycle from this
 handoff file. It contains external model-price data, not active tokens, but is
 also owner-only and excluded from support bundles. See [Security and
