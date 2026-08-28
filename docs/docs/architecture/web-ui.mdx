@@ -132,6 +132,12 @@ until the one download completes, after which cancellation only skips
 unstarted destinations.
 
 The persistent server context places **Tasks** beside **Images** and **Settings**.
+Settings discovers declarative pages from enabled plugins on that explicit
+server and lists them under **Integrations**. One generic React renderer owns
+the supported form controls and forwards actions through the daemon's existing
+plugin bridge; plugin-provided executable UI, HTML, and styles are never loaded.
+Password controls are write-only and status responses contain only the safe
+projection selected by the plugin contract.
 Tasks uses one reusable three-region workspace at `/servers/:hostId/tasks` and
 inside each Agent tab. The server route shows every task visible on that host;
 an Agent tab sends

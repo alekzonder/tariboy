@@ -92,8 +92,11 @@ tariboy plugin ls
 tariboy plugin inspect my-plugin
 ```
 
-External plugins are optional and are not compiled into Tariboy. Immutable
-versions live side by side under `$PLUGINS/<name>/<version>`. Exactly one
+Third-party external plugins are optional and installed separately. A
+first-party plugin may instead ship as a sibling Tariboy executable; the daemon
+ensures its reserved manifest at startup through the same supervised-process
+and versioned-directory path. Immutable versions live side by side under
+`$PLUGINS/<name>/<version>`. Exactly one
 version is active and one process is supervised per plugin name. Reinstalling
 identical bytes is idempotent; different bytes at an existing name/version are
 rejected.
@@ -103,6 +106,25 @@ Activating another installed version therefore changes what future launches of
 that named plugin run without changing the image manifest. Keep any static
 guidance explicit in the image template, normally with a `$PLUGINS/...` prompt
 path.
+
+### Operator CLI and settings contributions
+
+An external manifest may declare `operator_commands` and `settings`. Command
+paths are relative to the plugin name: a `telegram` manifest command named
+`chat.setup` becomes `tariboy telegram chat setup`. The CLI obtains these
+descriptors from the selected running daemon and invokes them through the
+existing generic plugin action endpoint. Core commands remain available when
+the daemon is down; contributed commands require the daemon that supplied
+their schema. Secret command arguments are file-or-stdin inputs and are never
+accepted as token values in argv.
+
+Settings descriptors use only Tariboy's built-in string, password,
+integer-list, status, and action controls. Desktop renders them under the
+route-selected server's **Settings → Integrations** section. Passwords are
+write-only. A plugin cannot inject JavaScript, HTML, CSS, React components,
+routes, or assets into the CLI or Desktop process. The daemon validates command
+names, field types, required values, action fields, and namespace ownership
+before forwarding an action to the supervised plugin.
 
 ## Related reference
 
