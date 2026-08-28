@@ -68,6 +68,15 @@ tariboy has three command surfaces:
 | `tariboy image prompt` | Print an image's assembled prompt |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
+| `tariboy image-release inspect` | Show immutable image release provenance |
+| `tariboy image-release rollback` | Stage the prior immutable image from a completed rollout |
+| `tariboy image-release rollout approve` | Approve an exact image release rollout |
+| `tariboy image-release rollout reject` | Reject an exact image release rollout |
+| `tariboy image-release rollout stage` | Stage an approved release for one agent |
+| `tariboy improvement inspect` | Show an agent improvement proposal |
+| `tariboy improvement ls` | List agent improvement proposals |
+| `tariboy improvement plan approve` | Approve an exact improvement plan revision |
+| `tariboy improvement plan reject` | Reject an exact improvement plan revision |
 | `tariboy judge cancel` | Cancel an LLM-as-Judge run while preserving immutable artifacts |
 | `tariboy judge evidence` | Read immutable judge evidence by stable locator |
 | `tariboy judge inspect` | Show an LLM-as-Judge run, targets, analyses, summaries and target usage |

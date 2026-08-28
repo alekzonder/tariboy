@@ -138,6 +138,15 @@ the supported form controls and forwards actions through the daemon's existing
 plugin bridge; plugin-provided executable UI, HTML, and styles are never loaded.
 Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
+
+A completed Judge run lists its evidence-linked improvement proposals. Opening
+one shows the repository and base commit, approved file scope, acceptance
+criteria, evidence citations, rollback image, and exact revision hash. Operators
+can approve or reject that plan; if an immutable release has been recorded, the
+same view shows its provenance and exact release hash and can approve, reject,
+or stage it for one agent's next iteration. The view does not run Git changes or
+build a release, and it does not provide atomic team rollout.
+
 Tasks uses one reusable three-region workspace at `/servers/:hostId/tasks` and
 inside each Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
