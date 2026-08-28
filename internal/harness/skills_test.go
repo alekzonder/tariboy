@@ -225,6 +225,16 @@ func TestSkillBridgeIsAdditiveAndEmptyImagesAreNoop(t *testing.T) {
 	}
 }
 
+func TestStubSkillBridgeMaterializesPackagedSkillsWithoutLaunchChanges(t *testing.T) {
+	bridge, err := (stub{}).SkillBridge(skillBridgeRequest("stub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bridge.Plan.SkillDestination != "skills" || len(bridge.Plan.Files) != 0 || len(bridge.Launch.Args) != 0 || len(bridge.Launch.Env) != 0 || bridge.Launch.PromptPrefix != "" {
+		t.Fatalf("stub bridge = %#v", bridge)
+	}
+}
+
 func TestSkillBridgeGeneratedNamesAreBoundedAndKeepDigest(t *testing.T) {
 	request := skillBridgeRequest("claude")
 	request.ImageName = strings.Repeat("Very_Long.Image Name!", 8)
