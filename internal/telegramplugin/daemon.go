@@ -65,7 +65,8 @@ func (c *DaemonClient) Subscribe(ctx context.Context, agent, channel string) err
 func (c *DaemonClient) Publish(ctx context.Context, message PublishedMessage) error {
 	body := map[string]any{
 		"channel": message.Channel, "type": "chat.message", "text": message.Text,
-		"data": map[string]any{"telegram_update_id": message.UpdateID, "external_id": message.ExternalID},
+		"idempotency_key": message.ExternalID,
+		"data":            map[string]any{"telegram_update_id": message.UpdateID},
 	}
 	return c.do(ctx, http.MethodPost, "/api/plugin/publish", body, nil, true)
 }

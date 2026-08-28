@@ -155,21 +155,55 @@ func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request, body map[stri
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "bot_must_manage_topics"})
 		return
 	}
-	managementID := state.ManagementTopicID
-	if state.ChatID != chatID || managementID == 0 {
+	if state.ChatID == chatID && state.ManagementTopicID != 0 {
+		if err := s.ReconcileTopics(r.Context()); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_agent_topics_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"result": s.status()})
+		return
+	}
+	pending := state.PendingChat
+	if pending == nil || pending.ChatID != chatID {
 		topic, err := s.bot.CreateForumTopic(r.Context(), state.Token, chatID, "tariboyd")
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_topic_failed"})
 			return
 		}
-		managementID = topic.MessageThreadID
+		if err := s.state.BeginPendingChat(chatID, topic.MessageThreadID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
+			return
+		}
+		state = s.state.Snapshot()
+		pending = state.PendingChat
 	}
-	if err := s.state.BindChat(chatID, managementID); err != nil {
+	if s.daemon != nil {
+		agents, err := s.daemon.ListAgents(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "list_agents_failed"})
+			return
+		}
+		for _, agent := range agents {
+			if _, ok := pending.AgentTopics[agent.Name]; !ok {
+				topic, err := s.bot.CreateForumTopic(r.Context(), state.Token, chatID, agent.Name)
+				if err != nil {
+					writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_agent_topics_failed"})
+					return
+				}
+				if err := s.state.SetPendingAgentTopic(chatID, agent.Name, agent.Name, topic.MessageThreadID); err != nil {
+					writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
+					return
+				}
+				pending = s.state.Snapshot().PendingChat
+			}
+			if err := s.daemon.Subscribe(r.Context(), agent.Name, "chat:telegram:"+agent.Name); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]any{"error": "subscribe_agent_failed"})
+				return
+			}
+		}
+	}
+	if err := s.state.CommitPendingChat(chatID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "save_failed"})
-		return
-	}
-	if err := s.ReconcileTopics(r.Context()); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "create_agent_topics_failed"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"result": s.status()})

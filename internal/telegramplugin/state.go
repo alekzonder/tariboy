@@ -13,6 +13,12 @@ type AgentTopic struct {
 	ThreadID int64  `json:"thread_id"`
 }
 
+type ChatBinding struct {
+	ChatID            int64                 `json:"chat_id"`
+	ManagementTopicID int64                 `json:"management_topic_id"`
+	AgentTopics       map[string]AgentTopic `json:"agent_topics"`
+}
+
 type State struct {
 	Token             string                `json:"bot_token,omitempty"`
 	AllowedUIDs       []int64               `json:"allowed_uids"`
@@ -20,6 +26,7 @@ type State struct {
 	ManagementTopicID int64                 `json:"management_topic_id,omitempty"`
 	Offset            int64                 `json:"offset,omitempty"`
 	AgentTopics       map[string]AgentTopic `json:"agent_topics"`
+	PendingChat       *ChatBinding          `json:"pending_chat,omitempty"`
 }
 
 type StateStore struct {
@@ -41,6 +48,9 @@ func OpenState(workdir string) (*StateStore, error) {
 		return nil, err
 	}
 	if len(b) > 0 {
+		if err := os.Chmod(store.path, 0o600); err != nil {
+			return nil, err
+		}
 		if err := json.Unmarshal(b, &store.state); err != nil {
 			return nil, err
 		}
@@ -51,19 +61,16 @@ func OpenState(workdir string) (*StateStore, error) {
 	if store.state.AgentTopics == nil {
 		store.state.AgentTopics = map[string]AgentTopic{}
 	}
+	if store.state.PendingChat != nil && store.state.PendingChat.AgentTopics == nil {
+		store.state.PendingChat.AgentTopics = map[string]AgentTopic{}
+	}
 	return store, nil
 }
 
 func (s *StateStore) Snapshot() State {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	copy := s.state
-	copy.AllowedUIDs = append([]int64(nil), s.state.AllowedUIDs...)
-	copy.AgentTopics = make(map[string]AgentTopic, len(s.state.AgentTopics))
-	for id, topic := range s.state.AgentTopics {
-		copy.AgentTopics[id] = topic
-	}
-	return copy
+	return cloneState(s.state)
 }
 
 func (s *StateStore) Configure(token string, allowed []int64) error {
@@ -82,6 +89,35 @@ func (s *StateStore) BindChat(chatID, managementTopicID int64) error {
 		}
 		state.ChatID = chatID
 		state.ManagementTopicID = managementTopicID
+		state.PendingChat = nil
+	})
+}
+
+func (s *StateStore) BeginPendingChat(chatID, managementTopicID int64) error {
+	return s.update(func(state *State) {
+		if state.PendingChat == nil || state.PendingChat.ChatID != chatID {
+			state.PendingChat = &ChatBinding{ChatID: chatID, ManagementTopicID: managementTopicID, AgentTopics: map[string]AgentTopic{}}
+		}
+	})
+}
+
+func (s *StateStore) SetPendingAgentTopic(chatID int64, id, name string, threadID int64) error {
+	return s.update(func(state *State) {
+		if state.PendingChat != nil && state.PendingChat.ChatID == chatID {
+			state.PendingChat.AgentTopics[id] = AgentTopic{Name: name, ThreadID: threadID}
+		}
+	})
+}
+
+func (s *StateStore) CommitPendingChat(chatID int64) error {
+	return s.update(func(state *State) {
+		if state.PendingChat == nil || state.PendingChat.ChatID != chatID {
+			return
+		}
+		state.ChatID = state.PendingChat.ChatID
+		state.ManagementTopicID = state.PendingChat.ManagementTopicID
+		state.AgentTopics = cloneTopics(state.PendingChat.AgentTopics)
+		state.PendingChat = nil
 	})
 }
 
@@ -98,8 +134,33 @@ func (s *StateStore) SetOffset(offset int64) error {
 func (s *StateStore) update(change func(*State)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	previous := cloneState(s.state)
 	change(&s.state)
-	return s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.state = previous
+		return err
+	}
+	return nil
+}
+
+func cloneState(state State) State {
+	copy := state
+	copy.AllowedUIDs = append([]int64(nil), state.AllowedUIDs...)
+	copy.AgentTopics = cloneTopics(state.AgentTopics)
+	if state.PendingChat != nil {
+		pending := *state.PendingChat
+		pending.AgentTopics = cloneTopics(state.PendingChat.AgentTopics)
+		copy.PendingChat = &pending
+	}
+	return copy
+}
+
+func cloneTopics(topics map[string]AgentTopic) map[string]AgentTopic {
+	copy := make(map[string]AgentTopic, len(topics))
+	for id, topic := range topics {
+		copy[id] = topic
+	}
+	return copy
 }
 
 func (s *StateStore) saveLocked() error {

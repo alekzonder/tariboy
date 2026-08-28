@@ -107,6 +107,13 @@ func TestValidateOperatorContributions(t *testing.T) {
 	if err := m.Validate(); err != nil {
 		t.Fatalf("valid operator contributions rejected: %v", err)
 	}
+	duplicateField := m
+	duplicateField.Settings.Sections = append(duplicateField.Settings.Sections, SettingSection{
+		Title: "Duplicate", Fields: []SettingField{{Name: "token", Label: "Again", Type: "password"}},
+	})
+	if err := duplicateField.Validate(); err == nil {
+		t.Fatal("settings fields shared by the form must be globally unique")
+	}
 
 	cases := map[string]string{
 		"absolute command path":    strings.Replace(valid, `"path":"configure"`, `"path":"telegram.configure"`, 1),
@@ -156,6 +163,13 @@ func TestValidateOperatorActionData(t *testing.T) {
 	}
 	if err := m.ValidateOperatorAction("legacy", map[string]any{"opaque": true}); err != nil {
 		t.Fatalf("undeclared legacy action rejected: %v", err)
+	}
+	settingsOnly := Manifest{Name: "settings", Settings: &SettingsContribution{Sections: []SettingSection{{
+		Fields:  []SettingField{{Name: "chat_id", Type: "string", Required: true}},
+		Actions: []SettingAction{{Action: "setup", Fields: []string{"chat_id"}}},
+	}}}}
+	if err := settingsOnly.ValidateOperatorAction("setup", map[string]any{}); err == nil {
+		t.Fatal("missing settings-required field should be rejected")
 	}
 }
 

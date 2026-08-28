@@ -66,11 +66,12 @@ func (a *API) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Channel string         `json:"channel"`
-		Type    string         `json:"type"`
-		Subject map[string]any `json:"subject"`
-		Text    string         `json:"text"`
-		Data    map[string]any `json:"data"`
+		Channel        string         `json:"channel"`
+		Type           string         `json:"type"`
+		Subject        map[string]any `json:"subject"`
+		Text           string         `json:"text"`
+		Data           map[string]any `json:"data"`
+		IdempotencyKey string         `json:"idempotency_key"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		api.WriteErr(w, http.StatusBadRequest, "bad_body", "invalid JSON body")
@@ -80,13 +81,18 @@ func (a *API) publish(w http.ResponseWriter, r *http.Request) {
 		api.WriteErr(w, http.StatusBadRequest, "missing_channel", "channel is required")
 		return
 	}
+	if len(body.IdempotencyKey) > 256 {
+		api.WriteErr(w, http.StatusBadRequest, "bad_idempotency_key", "idempotency_key is too long")
+		return
+	}
 	if !id.CanPublish(body.Channel) {
 		api.WriteErr(w, http.StatusForbidden, "forbidden_channel",
 			"plugin "+id.Name+" may not publish to "+body.Channel)
 		return
 	}
 	msg, err := a.bus.Publish(bus.Message{
-		Channel: body.Channel, Type: body.Type, Subject: body.Subject, Text: body.Text, Data: body.Data,
+		IdempotencyKey: pluginIdempotencyKey(id.Name, body.IdempotencyKey),
+		Channel:        body.Channel, Type: body.Type, Subject: body.Subject, Text: body.Text, Data: body.Data,
 		Source: "plugin:" + id.Name, ProducedByPlugin: id.Name,
 	})
 	if err != nil {
@@ -111,6 +117,13 @@ func (a *API) publish(w http.ResponseWriter, r *http.Request) {
 	}
 	a.audit(id.Name, "publish", body.Channel)
 	api.WriteOK(w, map[string]any{"id": msg.ID, "channel": msg.Channel})
+}
+
+func pluginIdempotencyKey(plugin, key string) string {
+	if key == "" {
+		return ""
+	}
+	return "plugin:" + plugin + ":" + key
 }
 
 func (a *API) subscriptions(w http.ResponseWriter, r *http.Request) {

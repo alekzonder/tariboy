@@ -39,8 +39,10 @@ func (s *Server) handleCommand(ctx context.Context, message *TelegramMessage, ag
 		response = "Error: " + err.Error()
 	}
 	state := s.state.Snapshot()
-	if _, err := s.bot.SendMessage(ctx, state.Token, state.ChatID, message.MessageThreadID, response); err != nil {
-		return true, err
+	for _, part := range splitTelegramText(response) {
+		if _, err := s.bot.SendMessage(ctx, state.Token, state.ChatID, message.MessageThreadID, part); err != nil {
+			return true, err
+		}
 	}
 	return true, nil
 }
@@ -116,6 +118,7 @@ func (s *Server) setAgent(ctx context.Context, agent, field, value string) (stri
 	case "alias", "harness", "model", "effort", "cwd":
 	case "image":
 		bodyKey = "image"
+		routeField = "reprovision"
 	case "interactive":
 		parsed, err := strconv.ParseBool(value)
 		if err != nil {

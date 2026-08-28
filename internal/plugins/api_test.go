@@ -49,6 +49,18 @@ func TestPublishScoped(t *testing.T) {
 	if len(msgs) != 1 || msgs[0].Source != "plugin:echo" || msgs[0].ProducedByPlugin != "echo" {
 		t.Fatalf("published msg = %+v", msgs)
 	}
+	// Stable plugin-local keys deduplicate retries without colliding with other
+	// plugins or daemon publishers.
+	if rr := do(tok, `{"channel":"chat:echo-out","text":"once","idempotency_key":"update-9"}`); rr.Code != 200 {
+		t.Fatalf("idempotent publish code = %d body=%s", rr.Code, rr.Body)
+	}
+	if rr := do(tok, `{"channel":"chat:echo-out","text":"duplicate","idempotency_key":"update-9"}`); rr.Code != 200 {
+		t.Fatalf("idempotent retry code = %d body=%s", rr.Code, rr.Body)
+	}
+	msgs, _ = b.Tail("chat:echo-out", 10)
+	if len(msgs) != 2 || msgs[1].Text != "once" {
+		t.Fatalf("idempotent messages = %+v", msgs)
+	}
 	// Out-of-scope channel -> 403.
 	if rr := do(tok, `{"channel":"user:ops","type":"x"}`); rr.Code != 403 {
 		t.Fatalf("out-of-scope code = %d", rr.Code)

@@ -258,15 +258,17 @@ func (m Manifest) validateContributions() error {
 		seenStatus[status.Name] = true
 	}
 	settingTypes := map[string]bool{"string": true, "password": true, "integer-list": true}
+	seenFields := map[string]bool{}
 	for _, section := range m.Settings.Sections {
 		if section.Title == "" {
 			return fmt.Errorf("plugin %s settings section title is required", m.Name)
 		}
 		fields := map[string]bool{}
 		for _, field := range section.Fields {
-			if !ValidName(field.Name) || field.Label == "" || !settingTypes[field.Type] || fields[field.Name] {
+			if !ValidName(field.Name) || field.Label == "" || !settingTypes[field.Type] || seenFields[field.Name] {
 				return fmt.Errorf("plugin %s has invalid or duplicate settings field %q", m.Name, field.Name)
 			}
+			seenFields[field.Name] = true
 			fields[field.Name] = true
 		}
 		for _, action := range section.Actions {
@@ -298,8 +300,10 @@ func (m Manifest) ValidateOperatorAction(action string, data map[string]any) err
 	}
 	for _, section := range settingsSections(m.Settings) {
 		fieldTypes := map[string]string{}
+		fieldRequired := map[string]bool{}
 		for _, field := range section.Fields {
 			fieldTypes[field.Name] = field.Type
+			fieldRequired[field.Name] = field.Required
 		}
 		for _, button := range section.Actions {
 			if button.Action != action {
@@ -308,6 +312,7 @@ func (m Manifest) ValidateOperatorAction(action string, data map[string]any) err
 			declared = true
 			for _, name := range button.Fields {
 				types[name] = fieldTypes[name]
+				required[name] = required[name] || fieldRequired[name]
 			}
 		}
 	}

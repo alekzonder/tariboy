@@ -52,7 +52,13 @@ func TestTopicCommandsHelpAndLifecycleUseDaemonAPI(t *testing.T) {
 	update(2, 7, "/start worker")
 	update(3, 9, "/start")
 	update(4, 7, "/agent set worker loop false")
-	if len(daemon.calls) != 3 || daemon.calls[0].path != "/api/agents/worker/start" || daemon.calls[1].path != "/api/agents/worker/start" || daemon.calls[2].path != "/api/agents/worker/loop/disable" {
+	update(5, 7, "/agent set worker image basic:latest")
+	if len(daemon.calls) != 4 || daemon.calls[0].path != "/api/agents/worker/start" || daemon.calls[1].path != "/api/agents/worker/start" || daemon.calls[2].path != "/api/agents/worker/loop/disable" || daemon.calls[3].path != "/api/agents/worker/reprovision" {
 		t.Fatalf("daemon calls = %#v", daemon.calls)
+	}
+	daemon.callResult = strings.Repeat("x", 5000)
+	update(6, 7, "/agents")
+	if len(replies) != 7 || len([]rune(replies[5]["text"].(string))) != 4096 {
+		t.Fatalf("long command reply was not split: replies=%d", len(replies))
 	}
 }
