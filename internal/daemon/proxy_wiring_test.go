@@ -434,12 +434,20 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 	if err != nil || final.Status != "no_i_am_done" {
 		t.Fatalf("adopted iteration = %+v, err=%v, want no_i_am_done", final, err)
 	}
-	registry, err := aiproxy.OpenTokenRegistry(paths.New(base).ProxyHandoffFile(), nil)
-	if err != nil {
-		t.Fatal(err)
+	deadline = time.Now().Add(5 * time.Second)
+	leaseCount := -1
+	for time.Now().Before(deadline) {
+		registry, openErr := aiproxy.OpenTokenRegistry(paths.New(base).ProxyHandoffFile(), nil)
+		if openErr == nil {
+			leaseCount = registry.Count()
+			if leaseCount == 0 {
+				break
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	if registry.Count() != 0 {
-		t.Fatalf("proxy leases after adopted completion = %d, want 0", registry.Count())
+	if leaseCount != 0 {
+		t.Fatalf("proxy leases after adopted completion = %d, want 0", leaseCount)
 	}
 }
 
