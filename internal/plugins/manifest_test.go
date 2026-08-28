@@ -3,6 +3,7 @@ package plugins
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -56,6 +57,75 @@ func TestValidateRejects(t *testing.T) {
 		if err := m.Validate(); err == nil {
 			t.Errorf("%s: expected validation error, got nil", name)
 		}
+	}
+}
+
+func TestValidateRejectsOperatorCommandWithoutAction(t *testing.T) {
+	m, err := ParseManifest([]byte(`{
+  "name":"telegram","version":"0.1.0","protocol_version":1,
+  "types":["channel-source"],"exec":"telegram",
+  "channels":{"publish":["chat:telegram:*"],"subscribe":[]},
+  "operator_commands":[{"path":"configure","summary":"Configure Telegram","action":""}]
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Validate(); err == nil {
+		t.Fatal("operator command without action should be rejected")
+	}
+}
+
+func TestValidateOperatorContributions(t *testing.T) {
+	valid := `{
+  "name":"telegram","version":"0.1.0","protocol_version":1,
+  "types":["channel-source","channel-sink"],"exec":"telegram",
+  "channels":{"publish":["chat:telegram:*"],"subscribe":["chat:telegram:*"]},
+  "operator_commands":[{
+    "path":"configure","summary":"Configure Telegram","action":"configure",
+    "args":[
+      {"name":"token","flag":"token-file","type":"secret-file","help":"token file"},
+      {"name":"allowed_uids","flag":"allowed-uids","type":"integer-list","required":true}
+    ]
+  }],
+  "settings":{
+    "title":"Telegram",
+    "status":[{"name":"token_configured","label":"Token configured"}],
+    "sections":[{
+      "title":"Bot",
+      "fields":[
+        {"name":"token","label":"Bot token","type":"password"},
+        {"name":"allowed_uids","label":"Allowed UIDs","type":"integer-list"}
+      ],
+      "actions":[{"label":"Save","action":"configure","fields":["token","allowed_uids"]}]
+    }]
+  }
+}`
+	m, err := ParseManifest([]byte(valid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Validate(); err != nil {
+		t.Fatalf("valid operator contributions rejected: %v", err)
+	}
+
+	cases := map[string]string{
+		"absolute command path":    strings.Replace(valid, `"path":"configure"`, `"path":"telegram.configure"`, 1),
+		"missing command summary":  strings.Replace(valid, `"summary":"Configure Telegram"`, `"summary":""`, 1),
+		"unsupported arg type":     strings.Replace(valid, `"type":"integer-list"`, `"type":"json"`, 1),
+		"secret without flag":      strings.Replace(valid, `"flag":"token-file"`, `"flag":""`, 1),
+		"unsupported setting type": strings.Replace(valid, `"type":"password"`, `"type":"html"`, 1),
+		"unknown action field":     strings.Replace(valid, `"fields":["token","allowed_uids"]`, `"fields":["missing"]`, 1),
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			m, err := ParseManifest([]byte(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := m.Validate(); err == nil {
+				t.Fatal("invalid contribution should be rejected")
+			}
+		})
 	}
 }
 

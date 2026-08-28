@@ -50,6 +50,52 @@ type Channels struct {
 	Provide   []Provided `json:"provide,omitempty"`
 }
 
+type OperatorCommand struct {
+	Path    string        `json:"path"`
+	Summary string        `json:"summary"`
+	Action  string        `json:"action"`
+	Args    []OperatorArg `json:"args,omitempty"`
+}
+
+type OperatorArg struct {
+	Name     string `json:"name"`
+	Flag     string `json:"flag,omitempty"`
+	Type     string `json:"type"`
+	Required bool   `json:"required,omitempty"`
+	Help     string `json:"help,omitempty"`
+}
+
+type SettingsContribution struct {
+	Title    string           `json:"title"`
+	Status   []SettingStatus  `json:"status,omitempty"`
+	Sections []SettingSection `json:"sections,omitempty"`
+}
+
+type SettingStatus struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+}
+
+type SettingSection struct {
+	Title   string          `json:"title"`
+	Fields  []SettingField  `json:"fields,omitempty"`
+	Actions []SettingAction `json:"actions,omitempty"`
+}
+
+type SettingField struct {
+	Name     string `json:"name"`
+	Label    string `json:"label"`
+	Type     string `json:"type"`
+	Required bool   `json:"required,omitempty"`
+	Help     string `json:"help,omitempty"`
+}
+
+type SettingAction struct {
+	Label  string   `json:"label"`
+	Action string   `json:"action"`
+	Fields []string `json:"fields,omitempty"`
+}
+
 // matchesAnyGlob reports whether channel matches at least one of the filepath
 // glob patterns. It is the single glob test shared by publish-scope checks
 // (Identity.CanPublish, provided-channel scope validation) — never inline
@@ -65,14 +111,16 @@ func matchesAnyGlob(patterns []string, channel string) bool {
 
 // Manifest is <plugin-dir>/plugin.json (spec §7.2).
 type Manifest struct {
-	Name            string   `json:"name"`
-	Version         string   `json:"version"`
-	ProtocolVersion int      `json:"protocol_version"`
-	Types           []string `json:"types"`
-	Exec            string   `json:"exec"`
-	Description     string   `json:"description"`
-	Commands        []string `json:"commands,omitempty"`
-	Channels        Channels `json:"channels"`
+	Name             string                `json:"name"`
+	Version          string                `json:"version"`
+	ProtocolVersion  int                   `json:"protocol_version"`
+	Types            []string              `json:"types"`
+	Exec             string                `json:"exec"`
+	Description      string                `json:"description"`
+	Commands         []string              `json:"commands,omitempty"`
+	OperatorCommands []OperatorCommand     `json:"operator_commands,omitempty"`
+	Settings         *SettingsContribution `json:"settings,omitempty"`
+	Channels         Channels              `json:"channels"`
 	// Prompt names a Markdown file, relative to the plugin dir, holding the
 	// system-prompt fragment this plugin contributes to an image that includes
 	// it. Optional. Kept with the plugin so plugin-tied guidance is owned by the
@@ -110,6 +158,9 @@ func (m Manifest) Validate() error {
 	if m.Exec == "" {
 		return fmt.Errorf("plugin %s has no exec", m.Name)
 	}
+	if err := m.validateContributions(); err != nil {
+		return err
+	}
 	if filepath.IsAbs(m.Exec) {
 		return fmt.Errorf("plugin %s exec must be relative to the plugin dir, got absolute %q", m.Name, m.Exec)
 	}
@@ -145,6 +196,87 @@ func (m Manifest) Validate() error {
 		if len(p.ParamsSchema) > 0 {
 			if err := validateSchemaDocument(p.ParamsSchema); err != nil {
 				return fmt.Errorf("plugin %s provided channel %q has invalid params_schema: %w", m.Name, p.Channel, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (m Manifest) validateContributions() error {
+	commandTypes := map[string]bool{"string": true, "integer": true, "integer-list": true, "boolean": true, "secret-file": true}
+	seenCommands := map[string]bool{}
+	for _, command := range m.OperatorCommands {
+		if command.Path == "" || strings.HasPrefix(command.Path, m.Name+".") {
+			return fmt.Errorf("plugin %s has invalid relative operator command path %q", m.Name, command.Path)
+		}
+		for _, part := range strings.Split(command.Path, ".") {
+			if !ValidName(part) {
+				return fmt.Errorf("plugin %s has invalid operator command path %q", m.Name, command.Path)
+			}
+		}
+		if seenCommands[command.Path] {
+			return fmt.Errorf("plugin %s declares operator command %q more than once", m.Name, command.Path)
+		}
+		seenCommands[command.Path] = true
+		if command.Summary == "" {
+			return fmt.Errorf("plugin %s operator command %q has no summary", m.Name, command.Path)
+		}
+		if !ValidName(command.Action) {
+			return fmt.Errorf("plugin %s operator command %q has invalid action %q", m.Name, command.Path, command.Action)
+		}
+		seenArgs, seenFlags := map[string]bool{}, map[string]bool{}
+		for _, arg := range command.Args {
+			if !ValidName(arg.Name) || !commandTypes[arg.Type] {
+				return fmt.Errorf("plugin %s operator command %q has invalid argument %q", m.Name, command.Path, arg.Name)
+			}
+			if seenArgs[arg.Name] {
+				return fmt.Errorf("plugin %s operator command %q repeats argument %q", m.Name, command.Path, arg.Name)
+			}
+			seenArgs[arg.Name] = true
+			if arg.Flag != "" {
+				if !ValidName(arg.Flag) || seenFlags[arg.Flag] {
+					return fmt.Errorf("plugin %s operator command %q has invalid or duplicate flag %q", m.Name, command.Path, arg.Flag)
+				}
+				seenFlags[arg.Flag] = true
+			}
+			if arg.Type == "secret-file" && arg.Flag == "" {
+				return fmt.Errorf("plugin %s operator command %q secret argument %q must be a flag", m.Name, command.Path, arg.Name)
+			}
+		}
+	}
+	if m.Settings == nil {
+		return nil
+	}
+	if m.Settings.Title == "" {
+		return fmt.Errorf("plugin %s settings title is required", m.Name)
+	}
+	seenStatus := map[string]bool{}
+	for _, status := range m.Settings.Status {
+		if !ValidName(status.Name) || status.Label == "" || seenStatus[status.Name] {
+			return fmt.Errorf("plugin %s has invalid or duplicate settings status %q", m.Name, status.Name)
+		}
+		seenStatus[status.Name] = true
+	}
+	settingTypes := map[string]bool{"string": true, "password": true, "integer-list": true}
+	for _, section := range m.Settings.Sections {
+		if section.Title == "" {
+			return fmt.Errorf("plugin %s settings section title is required", m.Name)
+		}
+		fields := map[string]bool{}
+		for _, field := range section.Fields {
+			if !ValidName(field.Name) || field.Label == "" || !settingTypes[field.Type] || fields[field.Name] {
+				return fmt.Errorf("plugin %s has invalid or duplicate settings field %q", m.Name, field.Name)
+			}
+			fields[field.Name] = true
+		}
+		for _, action := range section.Actions {
+			if action.Label == "" || !ValidName(action.Action) {
+				return fmt.Errorf("plugin %s has invalid settings action %q", m.Name, action.Action)
+			}
+			for _, field := range action.Fields {
+				if !fields[field] {
+					return fmt.Errorf("plugin %s settings action %q references unknown field %q", m.Name, action.Action, field)
+				}
 			}
 		}
 	}
