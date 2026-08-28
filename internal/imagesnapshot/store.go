@@ -26,6 +26,9 @@ type Snapshot struct {
 	SourceDigest string `json:"source_digest"`
 	RelativeDir  string `json:"relative_dir"`
 	CreatedAt    string `json:"created_at"`
+	RepositoryID string `json:"repository_id,omitempty"`
+	GitCommit    string `json:"git_commit,omitempty"`
+	LockDigest   string `json:"lock_digest,omitempty"`
 }
 
 type Store struct {
@@ -41,6 +44,10 @@ type file struct {
 }
 
 func (s Store) Capture(ctx context.Context, ref, imageDigest, sourceName, sourceDir string) (Snapshot, error) {
+	return s.CaptureWithProvenance(ctx, ref, imageDigest, sourceName, sourceDir, imagesource.Provenance{})
+}
+
+func (s Store) CaptureWithProvenance(ctx context.Context, ref, imageDigest, sourceName, sourceDir string, provenance imagesource.Provenance) (Snapshot, error) {
 	if s.DB == nil || s.Root == "" || ref == "" || imageDigest == "" || sourceName == "" {
 		return Snapshot{}, errors.New("image snapshot: incomplete capture request")
 	}
@@ -154,8 +161,8 @@ func (s Store) Capture(ctx context.Context, ref, imageDigest, sourceName, source
 	if s.Clock != nil {
 		now = s.Clock()
 	}
-	snapshot := Snapshot{Ref: ref, ImageDigest: imageDigest, SourceName: sourceName, SourceDigest: digest, RelativeDir: relativeDir, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
-	_, err = s.DB.ExecContext(ctx, `INSERT INTO image_source_snapshots(image_ref,image_digest,source_name,source_digest,relative_dir,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(image_ref) DO UPDATE SET image_digest=excluded.image_digest,source_name=excluded.source_name,source_digest=excluded.source_digest,relative_dir=excluded.relative_dir,created_at=excluded.created_at`, snapshot.Ref, snapshot.ImageDigest, snapshot.SourceName, snapshot.SourceDigest, snapshot.RelativeDir, snapshot.CreatedAt)
+	snapshot := Snapshot{Ref: ref, ImageDigest: imageDigest, SourceName: sourceName, SourceDigest: digest, RelativeDir: relativeDir, CreatedAt: now.UTC().Format(time.RFC3339Nano), RepositoryID: provenance.RepositoryID, GitCommit: provenance.GitCommit, LockDigest: provenance.LockDigest}
+	_, err = s.DB.ExecContext(ctx, `INSERT INTO image_source_snapshots(image_ref,image_digest,source_name,source_digest,relative_dir,created_at,repository_id,git_commit,lock_digest) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(image_ref) DO UPDATE SET image_digest=excluded.image_digest,source_name=excluded.source_name,source_digest=excluded.source_digest,relative_dir=excluded.relative_dir,created_at=excluded.created_at,repository_id=excluded.repository_id,git_commit=excluded.git_commit,lock_digest=excluded.lock_digest`, snapshot.Ref, snapshot.ImageDigest, snapshot.SourceName, snapshot.SourceDigest, snapshot.RelativeDir, snapshot.CreatedAt, snapshot.RepositoryID, snapshot.GitCommit, snapshot.LockDigest)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -164,11 +171,38 @@ func (s Store) Capture(ctx context.Context, ref, imageDigest, sourceName, source
 
 func (s Store) Lookup(ctx context.Context, ref string) (Snapshot, bool, error) {
 	var out Snapshot
-	err := s.DB.QueryRowContext(ctx, `SELECT image_ref,image_digest,source_name,source_digest,relative_dir,created_at FROM image_source_snapshots WHERE image_ref=?`, ref).Scan(&out.Ref, &out.ImageDigest, &out.SourceName, &out.SourceDigest, &out.RelativeDir, &out.CreatedAt)
+	err := s.DB.QueryRowContext(ctx, `SELECT image_ref,image_digest,source_name,source_digest,relative_dir,created_at,repository_id,git_commit,lock_digest FROM image_source_snapshots WHERE image_ref=?`, ref).Scan(&out.Ref, &out.ImageDigest, &out.SourceName, &out.SourceDigest, &out.RelativeDir, &out.CreatedAt, &out.RepositoryID, &out.GitCommit, &out.LockDigest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Snapshot{}, false, nil
 	}
 	return out, err == nil, err
+}
+
+func (s Store) LookupDigest(ctx context.Context, digest string) (Snapshot, bool, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT image_ref,image_digest,source_name,source_digest,relative_dir,created_at,repository_id,git_commit,lock_digest FROM image_source_snapshots WHERE image_digest=? ORDER BY created_at,image_ref`, digest)
+	if err != nil {
+		return Snapshot{}, false, err
+	}
+	defer rows.Close()
+	var first Snapshot
+	found := false
+	for rows.Next() {
+		var current Snapshot
+		if err := rows.Scan(&current.Ref, &current.ImageDigest, &current.SourceName, &current.SourceDigest, &current.RelativeDir, &current.CreatedAt, &current.RepositoryID, &current.GitCommit, &current.LockDigest); err != nil {
+			return Snapshot{}, false, err
+		}
+		if !found {
+			first, found = current, true
+			continue
+		}
+		if current.SourceDigest != first.SourceDigest || current.RepositoryID != first.RepositoryID || current.GitCommit != first.GitCommit || current.LockDigest != first.LockDigest {
+			return Snapshot{}, false, fmt.Errorf("image snapshot: conflicting provenance for digest %s", digest)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return Snapshot{}, false, err
+	}
+	return first, found, nil
 }
 
 func (s Store) Open(snapshot Snapshot) (string, error) {

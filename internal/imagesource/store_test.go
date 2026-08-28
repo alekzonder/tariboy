@@ -91,6 +91,26 @@ func TestStoreCreateListGetDelete(t *testing.T) {
 	}
 }
 
+func TestStoreCreatePreservesSourceProvenance(t *testing.T) {
+	s := testStore(t)
+	want := Provenance{
+		RepositoryID: "production-agent-images",
+		GitCommit:    "91ab820",
+		LockDigest:   "sha256:lock",
+	}
+	if _, err := s.Create(CreateRequest{Name: "reviewer", Provenance: want}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Get("reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Provenance != want {
+		t.Fatalf("provenance = %+v, want %+v", got.Provenance, want)
+	}
+}
+
 func TestStoreCreateGeneratesValidSourceFiles(t *testing.T) {
 	s := testStore(t)
 	src, err := s.Create(testCreateRequest("reviewer"))

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/alekzonder/tariboy/internal/imagesource"
 	storedb "github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -95,5 +96,74 @@ func TestCaptureRejectsUnsafeEntriesWithoutPublishing(t *testing.T) {
 	}
 	if _, ok, err := s.Lookup(context.Background(), "demo:v1"); err != nil || ok {
 		t.Fatalf("Lookup after rejected capture = ok %v, err %v", ok, err)
+	}
+}
+
+func TestCaptureStoresAndLooksUpGitProvenanceByImageDigest(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	source := filepath.Join(base, "source")
+	if err := os.Mkdir(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := imagesource.Provenance{
+		RepositoryID: "production-agent-images",
+		GitCommit:    "91ab820",
+		LockDigest:   "sha256:lock",
+	}
+
+	s := Store{DB: db.DB, Root: filepath.Join(base, "snapshots")}
+	if _, err := s.CaptureWithProvenance(
+		context.Background(), "reviewer:v7", "sha256:image", "reviewer", source, want,
+	); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := s.LookupDigest(context.Background(), "sha256:image")
+	if err != nil || !ok {
+		t.Fatalf("LookupDigest = ok %v, err %v", ok, err)
+	}
+	if got.RepositoryID != want.RepositoryID || got.GitCommit != want.GitCommit || got.LockDigest != want.LockDigest {
+		t.Fatalf("snapshot provenance = %+v, want %+v", got, want)
+	}
+}
+
+func TestLookupDigestRejectsConflictingGitProvenance(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	source := filepath.Join(base, "source")
+	if err := os.Mkdir(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := Store{DB: db.DB, Root: filepath.Join(base, "snapshots")}
+	for _, item := range []struct {
+		ref        string
+		provenance imagesource.Provenance
+	}{
+		{ref: "reviewer:v7", provenance: imagesource.Provenance{RepositoryID: "images-a", GitCommit: "91ab820"}},
+		{ref: "reviewer:v8", provenance: imagesource.Provenance{RepositoryID: "images-b", GitCommit: "22cc991"}},
+	} {
+		if _, err := s.CaptureWithProvenance(context.Background(), item.ref, "sha256:same-image", "reviewer", source, item.provenance); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, _, err := s.LookupDigest(context.Background(), "sha256:same-image"); err == nil {
+		t.Fatal("LookupDigest accepted conflicting Git provenance")
 	}
 }

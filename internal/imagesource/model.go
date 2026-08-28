@@ -28,6 +28,13 @@ type CreateRequest struct {
 	Interactive  *bool
 	Capabilities []string
 	Prompt       string
+	Provenance   Provenance
+}
+
+type Provenance struct {
+	RepositoryID string `json:"repository_id,omitempty"`
+	GitCommit    string `json:"git_commit,omitempty"`
+	LockDigest   string `json:"lock_digest,omitempty"`
 }
 
 type BuildRecord struct {
@@ -42,6 +49,7 @@ type Source struct {
 	CreatedAt     string       `json:"created_at"`
 	UpdatedAt     string       `json:"updated_at"`
 	LastBuild     *BuildRecord `json:"last_build,omitempty"`
+	Provenance    Provenance   `json:"provenance,omitempty"`
 }
 
 type FileEntry struct {

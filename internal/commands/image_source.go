@@ -277,10 +277,15 @@ func imageSourceBuild() registry.Command {
 				return nil, api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd", Status: http.StatusConflict}
 			}
 
+			sources := imageSourceStore(c)
+			source, err := sources.Get(name)
+			if err != nil {
+				return nil, imageSourceError(err)
+			}
 			var manifest image.Manifest
 			var parseErr error
 			store := imageStore(c)
-			record, err := imageSourceStore(c).RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
+			record, err := sources.RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
 				imgFile, err := imagefile.Parse(dir)
 				if err != nil {
 					parseErr = err
@@ -299,8 +304,8 @@ func imageSourceBuild() registry.Command {
 				if err != nil {
 					return imagesource.BuildRecord{}, err
 				}
-				if _, err := imageSnapshotStore(c).Capture(
-					context.Background(), ref.String(), manifest.Digest, name, dir,
+				if _, err := imageSnapshotStore(c).CaptureWithProvenance(
+					context.Background(), ref.String(), manifest.Digest, name, dir, source.Provenance,
 				); err != nil {
 					return imagesource.BuildRecord{}, err
 				}

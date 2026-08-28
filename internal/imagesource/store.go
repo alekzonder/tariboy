@@ -143,6 +143,7 @@ func (s *Store) Create(req CreateRequest) (Source, error) {
 		Name:          req.Name,
 		CreatedAt:     created,
 		UpdatedAt:     created,
+		Provenance:    req.Provenance,
 	}
 	if err := s.writeAtomic(filepath.Join(stage, "Tariboyfile.yaml"), config, 0o600); err != nil {
 		return Source{}, err
