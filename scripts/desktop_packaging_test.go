@@ -40,7 +40,7 @@ func TestTrackedCodeAndDocsDoNotReferenceDeletedStoreFixtures(t *testing.T) {
 				t.Errorf("deleted fixture remains tracked: %s", path)
 			}
 		}
-		if strings.HasPrefix(path, "outside/superpowers/") {
+		if strings.HasPrefix(path, "docs/superpowers/") {
 			continue
 		}
 		data, readErr := os.ReadFile(filepath.Join(root, path))

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.26, SQLite, React 19, TypeScript 6, Vitest/Testing Library, Starlight MDX.
 
-**Spec:** `outside/superpowers/specs/2026-08-21-task-reminder-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-21-task-reminder-design.md`
 
 ## Global Constraints
 

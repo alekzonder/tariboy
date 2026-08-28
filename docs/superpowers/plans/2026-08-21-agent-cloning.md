@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.26, SQLite, React 19, TypeScript 6, Radix UI through the existing `radix-ui` umbrella, Vitest/Testing Library, Playwright, Tauri/WebKit through `tauri-driver`, Starlight MDX.
 
-**Spec:** `outside/superpowers/specs/2026-08-21-agent-cloning-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-21-agent-cloning-design.md`
 
 ## Global Constraints
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Markdown Agent Skills, Python 3 standard library, curl, GitHub REST API, Go contract tests, YAML image manifest.
 
-**Spec:** `outside/superpowers/specs/2026-08-21-tariboy-developer-github-pr-workflow-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-21-tariboy-developer-github-pr-workflow-design.md`
 
 ## Global Constraints
 
@@ -304,7 +304,7 @@ finding and rerun affected focused tests after changes.
 - [ ] **Step 3: Commit any final reviewed changes**
 
 ```bash
-git add outside/superpowers/specs/2026-08-21-tariboy-developer-github-pr-workflow-design.md outside/superpowers/plans/2026-08-21-tariboy-developer-github-pr-workflow.md scripts/tariboy_developer_github_pr_test.go store/images/tariboy-developer docs/docs/images/agent-skills.mdx
+git add docs/superpowers/specs/2026-08-21-tariboy-developer-github-pr-workflow-design.md docs/superpowers/plans/2026-08-21-tariboy-developer-github-pr-workflow.md scripts/tariboy_developer_github_pr_test.go store/images/tariboy-developer docs/docs/images/agent-skills.mdx
 git commit -m "feat: add developer pull request workflow"
 ```
 

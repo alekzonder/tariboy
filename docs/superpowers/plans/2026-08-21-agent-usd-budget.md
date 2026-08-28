@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.26, SQLite migrations, existing command registry/API, React/TypeScript, Vitest.
 
-**Spec:** `outside/superpowers/specs/2026-08-21-agent-usd-budget-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-21-agent-usd-budget-design.md`
 
 ## Global Constraints
 

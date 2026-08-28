@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 19, TypeScript, Radix UI, Vitest/Testing Library, Playwright, Tauri WebDriver.
 
-**Spec:** `outside/superpowers/specs/2026-08-20-image-transfer-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-20-image-transfer-design.md`
 
 ## Global Constraints
 

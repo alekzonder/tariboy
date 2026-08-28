@@ -21,7 +21,7 @@ Before changing files:
    `docs/docs/development.mdx`.
 3. Select every matching row from the routing table below and read those
    documents completely before editing.
-4. Read the relevant feature spec or plan under `outside/superpowers/` when the
+4. Read the relevant feature spec or plan under `docs/superpowers/` when the
    task extends behavior designed there. Historical plans do not override
    current product or architecture documentation.
 5. Read `CLAUDE.md` when the task can start a daemon or agent, touch generated
@@ -137,7 +137,7 @@ Keep the ownership model clear:
 - `docs/docs/development.mdx` is the canonical contributor guide.
 - Topical files under `docs/docs/` own current product and architecture
   behavior.
-- `outside/superpowers/specs/` and `outside/superpowers/plans/` preserve design and
+- `docs/superpowers/specs/` and `docs/superpowers/plans/` preserve design and
   execution history.
 
 Documentation changes are verified by the `docs` step of `make check`, which

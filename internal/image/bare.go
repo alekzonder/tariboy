@@ -8,7 +8,7 @@ import (
 )
 
 // BareRef is the built-in instructions-free image the daemon seeds at startup
-// (spec: outside/superpowers/specs/2026-07-22-terminals-simple-ui-design.md §1).
+// (spec: docs/superpowers/specs/2026-07-22-terminals-simple-ui-design.md §1).
 var BareRef = Ref{Name: "bare", Tag: "latest"}
 
 // EnsureBare seeds bare:latest into the store if it is absent. An existing
