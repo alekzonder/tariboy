@@ -871,6 +871,12 @@ func TestToolsJudgeCommandsMapBodiesAndReadJSONFiles(t *testing.T) {
 	if actions[1] != "analysis.submit" || bodies[1]["assignment_id"] != "a1" || bodies[1]["raw_submission"] != `{"verdict":"pass"}` {
 		t.Fatalf("submit body=%v", bodies[1])
 	}
+	if code := Run(sock, []string{"judge", "improvement", "submit", "run-1", "--file", resultFile}, &out, &errOut); code != 0 {
+		t.Fatalf("improvement submit exit=%d err=%q", code, errOut.String())
+	}
+	if actions[2] != "improvement.submit" || bodies[2]["run_id"] != "run-1" || bodies[2]["raw_submission"] != `{"verdict":"pass"}` {
+		t.Fatalf("improvement body=%v", bodies[2])
+	}
 	if code := Run(sock, []string{"judge", "run", "create", "--request-file", requestFile, "--selector", `{bad`, "--judges", "j1", "--summary-agent", "lead"}, &out, &errOut); code != 2 {
 		t.Fatalf("invalid selector exit=%d err=%q", code, errOut.String())
 	}

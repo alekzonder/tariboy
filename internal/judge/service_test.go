@@ -2,13 +2,24 @@ package judge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/groups"
+	"github.com/alekzonder/tariboy/internal/improvement"
 )
+
+type recordingImprovements struct {
+	request improvement.CreateProposalRequest
+}
+
+func (r *recordingImprovements) CreateProposal(_ context.Context, request improvement.CreateProposalRequest) (improvement.Proposal, error) {
+	r.request = request
+	return improvement.Proposal{ID: "proposal-1", JudgeRunID: request.JudgeRunID, RevisionHash: "sha256:proposal", Status: improvement.StatusAwaitingPlanApproval, Draft: request.Draft}, nil
+}
 
 func serviceFixture(t *testing.T) (*Service, *Store, Run, string) {
 	t.Helper()
@@ -99,6 +110,53 @@ func TestOperatorInspectReturnsExecutionSubjects(t *testing.T) {
 	subjects, ok := got["subjects"].([]Subject)
 	if !ok || len(subjects) != 1 || subjects[0].Type != "iteration" || subjects[0].ExternalID != "target" {
 		t.Fatalf("subjects = %#v", got["subjects"])
+	}
+}
+
+func TestSummaryAgentSubmitsEvidenceScopedImprovementProposal(t *testing.T) {
+	s, js, run, _ := serviceFixture(t)
+	if _, err := js.db.Exec(`UPDATE judge_runs SET status='summarizing',last_error='summary claimed by lead-it' WHERE id=?`, run.ID); err != nil {
+		t.Fatal(err)
+	}
+	subjects, err := js.ListSubjects(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft := improvement.ProposalDraft{
+		SubjectIDs: []string{subjects[0].ID},
+		Target:     improvement.Target{Repository: "production-agent-images", BaseCommit: "91ab820", Image: "reviewer", ImageDigest: "sha256:image"},
+		Findings:   []improvement.Finding{{Severity: "important", Criterion: "review-completeness", Observation: "CI was not checked", Evidence: []improvement.Citation{{BundleHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Artifact: "transcript", Locator: "req-17"}}}},
+		Changes:    []improvement.Change{{File: "skills/code-review/SKILL.md", Intent: "Require current CI state"}},
+		Acceptance: []string{"Reviewer records current CI state"}, Risk: "medium", RollbackImage: "reviewer:v7",
+	}
+	raw, err := json.Marshal(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatal(err)
+	}
+	recorder := &recordingImprovements{}
+	s.improvements = recorder
+	if _, err := s.AgentAction(context.Background(), "judge", "judge-it", "improvement.submit", map[string]any{"run_id": run.ID, "result": body}); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("worker submit error = %v", err)
+	}
+	result, err := s.AgentAction(context.Background(), "lead", "lead-it", "improvement.submit", map[string]any{"run_id": run.ID, "result": body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["proposal"].(improvement.Proposal).ID != "proposal-1" || recorder.request.CreatorAgent != "lead" || recorder.request.CreatorIteration != "lead-it" || recorder.request.JudgeRunID != run.ID {
+		t.Fatalf("proposal result=%+v request=%+v", result, recorder.request)
+	}
+	if _, err := js.db.Exec(`UPDATE judge_runs SET status='completed',last_error='' WHERE id=?`, run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.db.Exec(`INSERT INTO judge_summaries(id,run_id,version,summary_agent,summary_iteration,coverage_json,result_json,raw_submission,created_at) VALUES('summary-1',?,1,'lead','lead-it','[]','{}','{}','2026-08-28T12:00:00Z')`, run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AgentAction(context.Background(), "lead", "lead-it", "improvement.submit", map[string]any{"run_id": run.ID, "result": body}); err != nil {
+		t.Fatalf("completed summary submit error = %v", err)
 	}
 }
 

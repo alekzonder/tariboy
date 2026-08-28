@@ -29,6 +29,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/improvement"
 	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/paths"
@@ -312,6 +313,8 @@ func Run(ctx context.Context, o Options) error {
 	// LLM-as-Judge survives daemon restarts: the runner recovers durable runs on
 	// startup and is drained before SQLite closes during shutdown.
 	judgeStore := judge.NewStore(st, time.Now)
+	improvementStore := improvement.NewStore(st, time.Now)
+	improvementService := improvement.NewService(improvementStore, channelBus)
 	judgeRunner := judge.NewRunner(judge.RunnerConfig{
 		Store:       judgeStore,
 		Snapshotter: judge.NewSnapshotter(judge.SnapshotConfig{Store: judgeStore, BaseDir: p.Base, AgentsDir: p.AgentsDir()}),
@@ -319,7 +322,7 @@ func Run(ctx context.Context, o Options) error {
 	})
 	judgeService := judge.NewService(judge.ServiceConfig{
 		Store: judgeStore, Agents: as, Groups: groups.NewStore(st, time.Now), Bus: channelBus,
-		Evidence: judge.NewEvidenceReader(p.Base), Enqueue: judgeRunner.Enqueue,
+		Evidence: judge.NewEvidenceReader(p.Base), Enqueue: judgeRunner.Enqueue, Improvements: improvementStore,
 		Audit: func(agent, kind, iteration string, data map[string]any) {
 			auditReg.For(agent).Record(kind, "system", iteration, data)
 		},
@@ -633,11 +636,13 @@ func Run(ctx context.Context, o Options) error {
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
 		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: channelBus, Plugins: pluginHost,
-		Groups:    groupProv,
-		Judges:    judgeService,
-		Retention: &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
-		Policy:    policyCache,
-		Tasks:     taskService,
+		Groups:       groupProv,
+		Judges:       judgeService,
+		Improvements: improvementService,
+		Operator:     taskService.CustomerLogin(),
+		Retention:    &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
+		Policy:       policyCache,
+		Tasks:        taskService,
 	}
 	srv := api.NewServer(commands.BuildRegistry(), cctx)
 	srv.SetEventSource(hub)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/improvement"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/taskreminder"
 )
@@ -150,6 +151,10 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, judgeEvidence())
 	mustRegister(r, judgeCancel())
 	mustRegister(r, judgeRetry())
+	mustRegister(r, improvementLs())
+	mustRegister(r, improvementInspect())
+	mustRegister(r, improvementPlanDecision(improvement.DecisionApprove))
+	mustRegister(r, improvementPlanDecision(improvement.DecisionReject))
 	mustRegister(r, ruleSet())
 	mustRegister(r, ruleLs())
 	mustRegister(r, ruleRm())
@@ -172,6 +177,8 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "loop", "Configure an agent's iteration loop")
 	mustGroup(r, "image", "Build and manage agent images")
 	mustGroup(r, "judge", "Inspect and recover LLM-as-Judge runs")
+	mustGroup(r, "improvement", "Review controlled agent improvements")
+	mustGroup(r, "improvement.plan", "Approve or reject improvement plans")
 	mustGroup(r, "daemon", "Control the tariboy daemon")
 	mustGroup(r, "daemon.config", "Read and set daemon config")
 	mustGroup(r, "user-prompt", "Per-agent user prompt")

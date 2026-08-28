@@ -144,7 +144,7 @@ func TestLLMAsJudgeCapability(t *testing.T) {
 			body = f.Body
 		}
 	}
-	for _, command := range []string{"tools judge iterations search", "tools judge evidence search", "tools judge summary submit"} {
+	for _, command := range []string{"tools judge iterations search", "tools judge evidence search", "tools judge summary submit", "tools judge improvement submit"} {
 		if !strings.Contains(body, command) {
 			t.Fatalf("judge prompt missing %q: %s", command, body)
 		}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/improvement"
 	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/retention"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -68,18 +69,20 @@ type Ctx struct {
 	// HTTPAddr is the loopback host:port of the API/WS listener, empty when the
 	// daemon runs socket-only. The desktop app reads it from the status payload
 	// to build a base URL for a daemon it adopted rather than started.
-	HTTPAddr  string
-	Version   string
-	StartedAt time.Time
-	Control   ServiceControl
-	Scripts   ScriptControl
-	Bus       *bus.Bus
-	Plugins   PluginControl
-	Groups    GroupControl
-	Judges    JudgeControl
-	Retention *retention.RetentionAPI
-	Policy    PolicyRefresher
-	Tasks     TaskControl
+	HTTPAddr     string
+	Version      string
+	StartedAt    time.Time
+	Control      ServiceControl
+	Scripts      ScriptControl
+	Bus          *bus.Bus
+	Plugins      PluginControl
+	Groups       GroupControl
+	Judges       JudgeControl
+	Improvements ImprovementControl
+	Operator     string
+	Retention    *retention.RetentionAPI
+	Policy       PolicyRefresher
+	Tasks        TaskControl
 }
 
 // TaskControl is the daemon-owned native Tasks surface consumed by typed HTTP
@@ -281,6 +284,12 @@ type JudgeControl interface {
 	OperatorEvidence(runID, targetID string, locator judge.EvidenceLocator) (map[string]any, error)
 	OperatorCancel(string) error
 	OperatorRetry(string) error
+}
+
+type ImprovementControl interface {
+	List(context.Context) ([]improvement.Proposal, error)
+	Get(context.Context, string) (improvement.Proposal, error)
+	DecidePlan(context.Context, string, string, string, improvement.ApprovalDecision, string) (improvement.Approval, error)
 }
 
 type HandlerFunc func(c *Ctx, p Params) (any, error)

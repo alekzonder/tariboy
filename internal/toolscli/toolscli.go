@@ -81,6 +81,7 @@ Commands:
   image build --name NAME [--tag TAG] --path DIR   Author+build a new image (image-creator only)
   judge iterations search --agent A --judge-group G [--group G] [--since T] [--until T] [--status S] [--limit N]
   judge run create --request-file F --selector JSON --judges a,b --summary-agent A [--judges-per-iteration N] [--judge-group G]
+  judge improvement submit RUN_ID --file F
   judge run inspect RUN
   judge work claim [--run RUN]
   judge evidence search --assignment ID --artifact K [--query Q] [--cursor C]
@@ -1084,6 +1085,17 @@ func judgeCommand(sc *argScan) (method, route string, body any, err error) {
 		result, raw, e := jsonFile(flags, "file")
 		if e != nil {
 			return "", "", nil, fmt.Errorf("tools judge summary submit: %w", e)
+		}
+		body = map[string]any{"run_id": id, "result": result, "raw_submission": raw}
+	case "improvement submit":
+		id, e := positional()
+		if e != nil {
+			return "", "", nil, e
+		}
+		action = "improvement.submit"
+		result, raw, e := jsonFile(flags, "file")
+		if e != nil {
+			return "", "", nil, fmt.Errorf("tools judge improvement submit: %w", e)
 		}
 		body = map[string]any{"run_id": id, "result": result, "raw_submission": raw}
 	default:

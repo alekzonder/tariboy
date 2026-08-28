@@ -16,29 +16,36 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/groups"
+	"github.com/alekzonder/tariboy/internal/improvement"
 )
 
+type proposalCreator interface {
+	CreateProposal(context.Context, improvement.CreateProposalRequest) (improvement.Proposal, error)
+}
+
 type ServiceConfig struct {
-	Store    *Store
-	Agents   *agent.Store
-	Groups   *groups.Store
-	Bus      *bus.Bus
-	Evidence *EvidenceReader
-	Audit    func(agent, typ, iteration string, data map[string]any)
-	Enqueue  func(string)
+	Store        *Store
+	Agents       *agent.Store
+	Groups       *groups.Store
+	Bus          *bus.Bus
+	Evidence     *EvidenceReader
+	Audit        func(agent, typ, iteration string, data map[string]any)
+	Enqueue      func(string)
+	Improvements proposalCreator
 }
 type Service struct {
-	store    *Store
-	agents   *agent.Store
-	groups   *groups.Store
-	bus      *bus.Bus
-	evidence *EvidenceReader
-	audit    func(string, string, string, map[string]any)
-	enqueue  func(string)
+	store        *Store
+	agents       *agent.Store
+	groups       *groups.Store
+	bus          *bus.Bus
+	evidence     *EvidenceReader
+	audit        func(string, string, string, map[string]any)
+	enqueue      func(string)
+	improvements proposalCreator
 }
 
 func NewService(c ServiceConfig) *Service {
-	return &Service{store: c.Store, agents: c.Agents, groups: c.Groups, bus: c.Bus, evidence: c.Evidence, audit: c.Audit, enqueue: c.Enqueue}
+	return &Service{store: c.Store, agents: c.Agents, groups: c.Groups, bus: c.Bus, evidence: c.Evidence, audit: c.Audit, enqueue: c.Enqueue, improvements: c.Improvements}
 }
 
 func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration, action string, body map[string]any) (map[string]any, error) {
@@ -181,6 +188,37 @@ func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration,
 			s.record(callerAgent, "judge_summary_submitted", callerIteration, map[string]any{"run_id": r.ID, "summary_id": out.ID})
 		}
 		return map[string]any{"summary": out}, e
+	case "improvement.submit":
+		r, e := s.store.GetRun(str(body, "run_id"))
+		if e != nil {
+			return nil, e
+		}
+		if r.SummaryAgent != callerAgent || s.improvements == nil {
+			return nil, ErrUnauthorized
+		}
+		if e = s.summaryOwned(r, callerIteration); e != nil {
+			return nil, e
+		}
+		raw, e := json.Marshal(body["result"])
+		if e != nil {
+			return nil, improvement.ErrInvalidProposal
+		}
+		var draft improvement.ProposalDraft
+		if e = json.Unmarshal(raw, &draft); e != nil {
+			return nil, improvement.ErrInvalidProposal
+		}
+		if e = s.validateImprovementScope(r.ID, draft); e != nil {
+			return nil, e
+		}
+		proposal, e := s.improvements.CreateProposal(ctx, improvement.CreateProposalRequest{JudgeRunID: r.ID, CreatorAgent: callerAgent, CreatorIteration: callerIteration, Draft: draft})
+		if e != nil {
+			return nil, e
+		}
+		s.record(callerAgent, "improvement_plan_requested", callerIteration, map[string]any{"run_id": r.ID, "proposal_id": proposal.ID, "revision_hash": proposal.RevisionHash})
+		if s.bus != nil {
+			_, _ = s.bus.Publish(bus.Message{Channel: bus.InboxChannel(r.LeadAgent), Type: "improvement.plan.approval_requested", Source: "system:judge", Text: "improvement plan approval requested", Data: map[string]any{"run_id": r.ID, "proposal_id": proposal.ID, "revision_hash": proposal.RevisionHash}})
+		}
+		return map[string]any{"proposal": proposal}, nil
 	case "run.cancel":
 		r, e := s.store.GetRun(str(body, "run_id"))
 		if e != nil {
@@ -209,6 +247,38 @@ func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration,
 	default:
 		return nil, ErrInvalidAction
 	}
+}
+
+func (s *Service) validateImprovementScope(runID string, draft improvement.ProposalDraft) error {
+	subjects, err := s.store.ListSubjects(runID)
+	if err != nil {
+		return err
+	}
+	allowedSubjects := map[string]bool{}
+	for _, subject := range subjects {
+		allowedSubjects[subject.ID] = true
+	}
+	for _, id := range draft.SubjectIDs {
+		if !allowedSubjects[id] {
+			return improvement.ErrInvalidProposal
+		}
+	}
+	targets, err := s.store.ListTargets(runID)
+	if err != nil {
+		return err
+	}
+	bundles := map[string]bool{}
+	for _, target := range targets {
+		bundles[target.BundleHash] = true
+	}
+	for _, finding := range draft.Findings {
+		for _, citation := range finding.Evidence {
+			if !bundles[citation.BundleHash] {
+				return improvement.ErrInvalidProposal
+			}
+		}
+	}
+	return improvement.ValidateDraft(draft)
 }
 func (s *Service) OperatorList(f ListFilter) ([]Run, error) { return s.store.ListRuns(f) }
 func (s *Service) OperatorInspect(id string) (map[string]any, error) {
@@ -339,6 +409,20 @@ func (s *Service) summaryClaimed(r Run, i string) error {
 		return e
 	}
 	if c != "summary claimed by "+i {
+		return ErrLeaseNotOwned
+	}
+	return nil
+}
+
+func (s *Service) summaryOwned(r Run, iteration string) error {
+	if err := s.summaryClaimed(r, iteration); err == nil {
+		return nil
+	}
+	var exists int
+	if err := s.store.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM judge_summaries WHERE run_id=? AND summary_agent=? AND summary_iteration=?)`, r.ID, r.SummaryAgent, iteration).Scan(&exists); err != nil {
+		return err
+	}
+	if exists != 1 {
 		return ErrLeaseNotOwned
 	}
 	return nil
