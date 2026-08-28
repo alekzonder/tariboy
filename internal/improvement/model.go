@@ -68,12 +68,21 @@ type CreateProposalRequest struct {
 }
 
 type Proposal struct {
-	ID, JudgeRunID, SummaryID, CreatorAgent, CreatorIteration   string
-	Draft                                                       ProposalDraft
-	RevisionHash                                                string
-	Status                                                      Status
-	Branch, PullRequestURL, HeadCommit, MergedCommit, LastError string
-	CreatedAt, UpdatedAt                                        string
+	ID               string        `json:"id"`
+	JudgeRunID       string        `json:"judge_run_id"`
+	SummaryID        string        `json:"summary_id"`
+	CreatorAgent     string        `json:"creator_agent"`
+	CreatorIteration string        `json:"creator_iteration"`
+	Draft            ProposalDraft `json:"draft"`
+	RevisionHash     string        `json:"revision_hash"`
+	Status           Status        `json:"status"`
+	Branch           string        `json:"branch"`
+	PullRequestURL   string        `json:"pull_request_url"`
+	HeadCommit       string        `json:"head_commit"`
+	MergedCommit     string        `json:"merged_commit"`
+	LastError        string        `json:"last_error"`
+	CreatedAt        string        `json:"created_at"`
+	UpdatedAt        string        `json:"updated_at"`
 }
 
 type ApprovalPhase string
@@ -96,16 +105,31 @@ type ApprovalRequest struct {
 }
 
 type Approval struct {
-	ID, ProposalID, ObjectHash, Actor, Reason, CreatedAt string
-	Phase                                                ApprovalPhase
-	Decision                                             ApprovalDecision
+	ID         string           `json:"id"`
+	ProposalID string           `json:"proposal_id"`
+	ObjectHash string           `json:"object_hash"`
+	Actor      string           `json:"actor"`
+	Reason     string           `json:"reason"`
+	CreatedAt  string           `json:"created_at"`
+	Phase      ApprovalPhase    `json:"phase"`
+	Decision   ApprovalDecision `json:"decision"`
 }
 
 type Release struct {
-	ID, ProposalID, RepositoryID, GitCommit, SourceName, SourceDigest string
-	LockDigest, PromptTemplateDigest, ImageRef, ImageDigest           string
-	BuilderVersion, ReleaseHash, CreatedAt                            string
-	Status                                                            Status
+	ID                   string `json:"id"`
+	ProposalID           string `json:"proposal_id"`
+	RepositoryID         string `json:"repository_id"`
+	GitCommit            string `json:"git_commit"`
+	SourceName           string `json:"source_name"`
+	SourceDigest         string `json:"source_digest"`
+	LockDigest           string `json:"lock_digest"`
+	PromptTemplateDigest string `json:"prompt_template_digest"`
+	ImageRef             string `json:"image_ref"`
+	ImageDigest          string `json:"image_digest"`
+	BuilderVersion       string `json:"builder_version"`
+	ReleaseHash          string `json:"release_hash"`
+	CreatedAt            string `json:"created_at"`
+	Status               Status `json:"status"`
 }
 
 type BuildRequest struct {
@@ -113,7 +137,15 @@ type BuildRequest struct {
 }
 
 type Rollout struct {
-	ID, ReleaseID, TargetAgent, PriorImageRef, PriorImageDigest string
-	ImageRef, ImageDigest, CreatedAt, CompletedAt, RollbackOf   string
-	Status                                                      Status
+	ID               string `json:"id"`
+	ReleaseID        string `json:"release_id"`
+	TargetAgent      string `json:"target_agent"`
+	PriorImageRef    string `json:"prior_image_ref"`
+	PriorImageDigest string `json:"prior_image_digest"`
+	ImageRef         string `json:"image_ref"`
+	ImageDigest      string `json:"image_digest"`
+	CreatedAt        string `json:"created_at"`
+	CompletedAt      string `json:"completed_at"`
+	RollbackOf       string `json:"rollback_of"`
+	Status           Status `json:"status"`
 }

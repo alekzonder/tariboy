@@ -20,6 +20,17 @@ func (s *Service) List(ctx context.Context) ([]Proposal, error) { return s.store
 func (s *Service) Get(ctx context.Context, id string) (Proposal, error) {
 	return s.store.GetProposal(ctx, id)
 }
+func (s *Service) Inspect(ctx context.Context, id string) (map[string]any, error) {
+	proposal, err := s.store.GetProposal(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	releases, err := s.store.ListReleases(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"proposal": proposal, "releases": releases}, nil
+}
 func (s *Service) GetRelease(ctx context.Context, id string) (Release, error) {
 	return s.store.GetRelease(ctx, id)
 }

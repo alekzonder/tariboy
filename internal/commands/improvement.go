@@ -45,8 +45,8 @@ func improvementInspect() registry.Command {
 		if err != nil {
 			return nil, err
 		}
-		proposal, err := control.Get(registry.RequestContext(p), str(p, "id"))
-		return proposal, improvementError(err)
+		detail, err := control.Inspect(registry.RequestContext(p), str(p, "id"))
+		return detail, improvementError(err)
 	}}
 }
 

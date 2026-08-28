@@ -289,6 +289,7 @@ type JudgeControl interface {
 type ImprovementControl interface {
 	List(context.Context) ([]improvement.Proposal, error)
 	Get(context.Context, string) (improvement.Proposal, error)
+	Inspect(context.Context, string) (map[string]any, error)
 	GetRelease(context.Context, string) (improvement.Release, error)
 	DecidePlan(context.Context, string, string, string, improvement.ApprovalDecision, string) (improvement.Approval, error)
 	DecideRollout(context.Context, string, string, string, improvement.ApprovalDecision, string) (improvement.Approval, error)

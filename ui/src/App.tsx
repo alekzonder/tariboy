@@ -26,6 +26,7 @@ import RulesPage from "@/pages/RulesPage";
 import EvalsPage from "@/pages/EvalsPage";
 import JudgeRunsPage from "@/pages/JudgeRunsPage";
 import JudgeRunDetailPage from "@/pages/JudgeRunDetailPage";
+import ImprovementDetailPage from "@/pages/ImprovementDetailPage";
 import PluginsPage from "@/pages/PluginsPage";
 import OpsPage from "@/pages/OpsPage";
 import ChannelsPage from "@/pages/ChannelsPage";
@@ -140,6 +141,7 @@ function MainApp() {
             <Route path="advanced/evals" element={<EvalsPage />} />
             <Route path="advanced/judges" element={<JudgeRunsPage />} />
             <Route path="advanced/judges/:id" element={<JudgeRunDetailPage />} />
+            <Route path="advanced/improvements/:id" element={<ImprovementDetailPage />} />
             <Route path="advanced/plugins" element={<PluginsPage />} />
             <Route path="advanced/ops" element={<OpsPage />} />
             <Route path="advanced/daemons" element={<DaemonsPage />} />

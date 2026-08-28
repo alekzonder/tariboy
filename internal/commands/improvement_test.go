@@ -19,6 +19,9 @@ func (r *recordingImprovementControl) List(context.Context) ([]improvement.Propo
 func (r *recordingImprovementControl) Get(context.Context, string) (improvement.Proposal, error) {
 	return improvement.Proposal{}, nil
 }
+func (r *recordingImprovementControl) Inspect(context.Context, string) (map[string]any, error) {
+	return map[string]any{}, nil
+}
 func (r *recordingImprovementControl) GetRelease(context.Context, string) (improvement.Release, error) {
 	return improvement.Release{}, nil
 }

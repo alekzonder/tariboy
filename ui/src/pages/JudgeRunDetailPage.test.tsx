@@ -5,7 +5,7 @@ import JudgeRunDetailPage from "./JudgeRunDetailPage";
 
 afterEach(() => vi.restoreAllMocks());
 
-const result = { run: { id: "r 1", status: "partial", original_request: "Check safety", judge_group: "judges", judges_per_iteration: 1, max_attempts: 2, targets_ready: 1, targets_total: 1, assignments_completed: 1, assignments_total: 1, current_summary_version: 1, last_error: "", judge_agents: ["judge-a"] }, targets: [{ id: "t1", iteration: "i1", agent: "worker", sequence: 0, target_state: "done", consensus_verdict: "pass", assignments_completed: 1, assignments_failed: 0, assignments_pending: 0 }], analyses: [{ id: "a1", target_id: "t1", judge_agent: "judge-a", result: { verdict: "pass", score: 0.9, confidence: 0.8, summary: "Good", violations: [{ description: "Evidence", citations: [{ artifact: "audit", locator: "12" }] }] } }], summaries: [{ id: "s1", version: 1, summary_agent: "judge-lead", result: { executive_conclusion: "Approved" } }], usage: [{ iteration: "i1", requests: 1, input_tokens: 2, output_tokens: 3, cache_write_tokens: 0, cache_read_tokens: 0, cost_usd: 0.01 }] };
+const result = { run: { id: "r 1", status: "partial", original_request: "Check safety", judge_group: "judges", judges_per_iteration: 1, max_attempts: 2, targets_ready: 1, targets_total: 1, assignments_completed: 1, assignments_total: 1, current_summary_version: 1, last_error: "", judge_agents: ["judge-a"] }, targets: [{ id: "t1", iteration: "i1", agent: "worker", sequence: 0, target_state: "done", consensus_verdict: "pass", assignments_completed: 1, assignments_failed: 0, assignments_pending: 0 }], analyses: [{ id: "a1", target_id: "t1", judge_agent: "judge-a", result: { verdict: "pass", score: 0.9, confidence: 0.8, summary: "Good", violations: [{ description: "Evidence", citations: [{ artifact: "audit", locator: "12" }] }] } }], summaries: [{ id: "s1", version: 1, summary_agent: "judge-lead", result: { executive_conclusion: "Approved" } }], improvements: [{ id: "proposal-1", revision_hash: "sha256:revision", status: "awaiting_plan_approval", draft: { target: { repository: "images", base_commit: "91ab820" }, findings: [], changes: [], acceptance: [], subject_ids: [], risk: "low", rollback_image: "reviewer:v7" } }], usage: [{ iteration: "i1", requests: 1, input_tokens: 2, output_tokens: 3, cache_write_tokens: 0, cache_read_tokens: 0, cost_usd: 0.01 }] };
 
 it("shows detail, retrieves immutable evidence, and retries after confirmation", async () => {
   const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -16,6 +16,7 @@ it("shows detail, retrieves immutable evidence, and retries after confirmation",
   render(<MemoryRouter initialEntries={["/judges/r%201"]}><Routes><Route path="/judges/:id" element={<JudgeRunDetailPage />} /></Routes></MemoryRouter>);
   await screen.findByText("Check safety");
   expect(screen.getByText("Version 1")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "proposal-1" })).toHaveAttribute("href", "/settings/advanced/improvements/proposal-1");
   fireEvent.click(screen.getByRole("button", { name: "[audit:12]" }));
   await screen.findByText(/Immutable evidence/);
   fireEvent.click(screen.getByRole("button", { name: "Retry failed work" }));

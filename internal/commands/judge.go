@@ -82,6 +82,19 @@ func judgeInspect() registry.Command {
 				return nil, e
 			}
 			x["usage"] = usage
+			if c.Improvements != nil {
+				proposals, err := c.Improvements.List(registry.RequestContext(p))
+				if err != nil {
+					return nil, err
+				}
+				linked := proposals[:0]
+				for _, proposal := range proposals {
+					if proposal.JudgeRunID == str(p, "id") {
+						linked = append(linked, proposal)
+					}
+				}
+				x["improvements"] = linked
+			}
 			return x, nil
 		},
 	}

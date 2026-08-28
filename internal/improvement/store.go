@@ -225,6 +225,34 @@ func (s *Store) GetRelease(ctx context.Context, id string) (Release, error) {
 	return release, err
 }
 
+func (s *Store) ListReleases(ctx context.Context, proposalID string) ([]Release, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM image_releases WHERE proposal_id=? ORDER BY created_at DESC,id DESC`, proposalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	releases := make([]Release, 0, len(ids))
+	for _, id := range ids {
+		release, err := s.GetRelease(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		releases = append(releases, release)
+	}
+	return releases, nil
+}
+
 func (s *Store) DecideRollout(ctx context.Context, releaseID, hash, actor string, decision ApprovalDecision, reason string) (Approval, error) {
 	if actor == "" || (decision != DecisionApprove && decision != DecisionReject) {
 		return Approval{}, ErrInvalidProposal

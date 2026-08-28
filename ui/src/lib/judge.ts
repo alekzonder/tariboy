@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "@/lib/api";
+import type { ImprovementProposal } from "@/lib/improvement";
 
 export type JudgeRunStatus =
   | "snapshotting"
@@ -50,7 +51,7 @@ export interface JudgeAnalysis {
 }
 export interface JudgeSummary { id: string; version: number; created_at: string; summary_agent: string; result: { executive_conclusion?: string; coverage?: Record<string, number>; cross_iteration_patterns?: string[]; recurring_violations?: string[]; strengths?: string[]; recommendations?: string[] } }
 export interface JudgeUsage { iteration: string; requests: number; input_tokens: number; output_tokens: number; cache_write_tokens: number; cache_read_tokens: number; cost_usd: number }
-export interface JudgeRunDetail { run: JudgeRun; targets: JudgeTarget[]; analyses: JudgeAnalysis[]; summaries: JudgeSummary[]; usage: JudgeUsage[] }
+export interface JudgeRunDetail { run: JudgeRun; targets: JudgeTarget[]; analyses: JudgeAnalysis[]; summaries: JudgeSummary[]; improvements?: ImprovementProposal[]; usage: JudgeUsage[] }
 
 export interface JudgeRunList {
   runs: JudgeRun[];
