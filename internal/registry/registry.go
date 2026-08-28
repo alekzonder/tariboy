@@ -25,9 +25,11 @@ import (
 type ArgType string
 
 const (
-	String ArgType = "string"
-	Bool   ArgType = "bool"
-	Int    ArgType = "int"
+	String      ArgType = "string"
+	Bool        ArgType = "bool"
+	Int         ArgType = "int"
+	IntegerList ArgType = "integer-list"
+	SecretFile  ArgType = "secret-file"
 )
 
 type Arg struct {

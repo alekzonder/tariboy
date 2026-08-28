@@ -75,7 +75,13 @@ func main() {
 	// Ctrl-C / SIGTERM cancels follow-mode composites (logs -f, channel tail -f)
 	// so they exit cleanly instead of being hard-killed mid-print.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := cli.Run(ctx, commands.BuildRegistry(), rest, client.New(sock), local, os.Stdout, os.Stderr)
+	reg := commands.BuildRegistry()
+	caller := client.New(sock)
+	// Plugin discovery is best-effort so core help and local commands still work
+	// while the daemon is down. A contributed command itself necessarily needs
+	// the daemon that supplied its schema.
+	_ = cli.LoadPluginCommands(reg, caller, os.Stdin)
+	code := cli.Run(ctx, reg, rest, caller, local, os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }

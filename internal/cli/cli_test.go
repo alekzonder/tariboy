@@ -12,6 +12,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/commands"
+	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -232,6 +233,111 @@ func TestRunPositionalAndFlagArgs(t *testing.T) {
 	code = Run(context.Background(), testReg(t), []string{"daemon", "config", "set", "--key", "k", "--value", "v"}, f, nil, &out, &errOut)
 	if code != 0 || f.body.(registry.Params)["key"] != "k" {
 		t.Fatalf("flag form failed: %v", f.body)
+	}
+}
+
+func TestMergePluginCommandsRunsActionAndReadsSecretFile(t *testing.T) {
+	r := registry.New()
+	caller := &fakeCaller{result: json.RawMessage(`{"configured":true}`)}
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("123:secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contributions := []plugins.Contribution{{
+		Name: "telegram", Description: "Telegram integration",
+		Commands: []plugins.OperatorCommand{{
+			Path: "configure", Summary: "Configure Telegram", Action: "configure",
+			Args: []plugins.OperatorArg{
+				{Name: "token", Flag: "token-file", Type: "secret-file"},
+				{Name: "allowed_uids", Flag: "allowed-uids", Type: "integer-list", Required: true},
+			},
+		}},
+	}}
+	if err := MergePluginCommands(r, contributions, caller, strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), r, []string{
+		"telegram", "configure", "--token-file", tokenFile, "--allowed-uids", "22,11,22",
+	}, caller, &registry.Ctx{}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d err=%s", code, errOut.String())
+	}
+	if caller.method != "POST" || caller.route != "/api/plugins/telegram/action" {
+		t.Fatalf("called %s %s", caller.method, caller.route)
+	}
+	body := caller.body.(map[string]any)
+	if body["action"] != "configure" {
+		t.Fatalf("body = %#v", body)
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(body["data"].(string)), &data); err != nil {
+		t.Fatal(err)
+	}
+	if data["token"] != "123:secret" || strings.Contains(body["data"].(string), tokenFile) {
+		t.Fatalf("secret action data = %#v", data)
+	}
+	if got := data["allowed_uids"].([]any); len(got) != 3 || got[0] != float64(22) {
+		t.Fatalf("allowed_uids = %#v", data["allowed_uids"])
+	}
+	help, _, helpCode := runHelp(t, r, "telegram")
+	if helpCode != 0 || !strings.Contains(help, "configure") {
+		t.Fatalf("help exit=%d out=%s", helpCode, help)
+	}
+}
+
+func TestMergePluginCommandsRejectsCoreNamespaceCollision(t *testing.T) {
+	r := testTreeReg(t)
+	err := MergePluginCommands(r, []plugins.Contribution{{
+		Name:     "agent",
+		Commands: []plugins.OperatorCommand{{Path: "configure", Summary: "bad", Action: "configure"}},
+	}}, &fakeCaller{}, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("plugin namespace collision should be rejected")
+	}
+}
+
+func TestLoadPluginCommandsDiscoversRegistry(t *testing.T) {
+	caller := &fakeCaller{result: json.RawMessage(`{
+  "plugins":[{"name":"telegram","description":"Telegram integration",
+    "operator_commands":[{"path":"status","summary":"Show status","action":"status"}]}]
+}`)}
+	r := registry.New()
+	if err := LoadPluginCommands(r, caller, strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	if caller.method != "GET" || caller.route != "/api/plugin-contributions" {
+		t.Fatalf("discovery called %s %s", caller.method, caller.route)
+	}
+	out, _, code := runHelp(t, r, "telegram")
+	if code != 0 || !strings.Contains(out, "status") {
+		t.Fatalf("help exit=%d out=%s", code, out)
+	}
+}
+
+func TestMergePluginCommandsRejectsPermissiveSecretFile(t *testing.T) {
+	r := registry.New()
+	caller := &fakeCaller{result: json.RawMessage(`{}`)}
+	if err := MergePluginCommands(r, []plugins.Contribution{{
+		Name: "telegram",
+		Commands: []plugins.OperatorCommand{{
+			Path: "configure", Summary: "Configure", Action: "configure",
+			Args: []plugins.OperatorArg{{Name: "token", Flag: "token-file", Type: "secret-file", Required: true}},
+		}},
+	}}, caller, strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), r, []string{"telegram", "configure", "--token-file", path}, caller, &registry.Ctx{}, &out, &errOut)
+	if code == 0 || !strings.Contains(errOut.String(), "owner-only") {
+		t.Fatalf("exit=%d err=%s", code, errOut.String())
+	}
+	if caller.method != "" {
+		t.Fatalf("plugin called despite unsafe secret file: %s %s", caller.method, caller.route)
 	}
 }
 

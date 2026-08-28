@@ -323,6 +323,20 @@ func convert(a registry.Arg, s string) (any, error) {
 			return nil, fmt.Errorf("argument %s: %q is not an integer", a.Name, s)
 		}
 		return n, nil
+	case registry.IntegerList:
+		if strings.TrimSpace(s) == "" {
+			return []int64{}, nil
+		}
+		parts := strings.Split(s, ",")
+		values := make([]int64, 0, len(parts))
+		for _, part := range parts {
+			n, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("argument %s: %q is not a comma-separated integer list", a.Name, s)
+			}
+			values = append(values, n)
+		}
+		return values, nil
 	default:
 		return s, nil
 	}
