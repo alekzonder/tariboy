@@ -88,6 +88,33 @@ type Target struct {
 	AssignmentsCompleted int      `json:"assignments_completed"`
 	AssignmentsFailed    int      `json:"assignments_failed"`
 	AssignmentsPending   int      `json:"assignments_pending"`
+	SubjectID            string   `json:"subject_id,omitempty"`
+}
+
+type SubjectParticipant struct {
+	Agent                string `json:"agent"`
+	Iteration            string `json:"iteration"`
+	ImageRef             string `json:"image_ref,omitempty"`
+	ImageDigest          string `json:"image_digest,omitempty"`
+	PromptTemplateSHA256 string `json:"prompt_template_sha256,omitempty"`
+}
+
+type SubjectSnapshot struct {
+	Status       string               `json:"status"`
+	Group        string               `json:"group,omitempty"`
+	Participants []SubjectParticipant `json:"participants"`
+	Artifacts    []string             `json:"artifacts"`
+}
+
+type Subject struct {
+	ID           string          `json:"id"`
+	RunID        string          `json:"run_id"`
+	Type         string          `json:"type"`
+	ExternalID   string          `json:"external_id"`
+	Sequence     int             `json:"sequence"`
+	SnapshotHash string          `json:"snapshot_hash"`
+	Snapshot     SubjectSnapshot `json:"snapshot"`
+	CreatedAt    string          `json:"created_at"`
 }
 
 type ListFilter struct {

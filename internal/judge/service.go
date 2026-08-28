@@ -217,6 +217,13 @@ func (s *Service) OperatorInspect(id string) (map[string]any, error) {
 		return nil, e
 	}
 	ts, e := s.store.ListTargets(id)
+	if e != nil {
+		return nil, e
+	}
+	subjects, e := s.store.ListSubjects(id)
+	if e != nil {
+		return nil, e
+	}
 	analyses, e := s.store.ListAnalyses(id)
 	if e != nil {
 		return nil, e
@@ -225,7 +232,7 @@ func (s *Service) OperatorInspect(id string) (map[string]any, error) {
 	if e != nil {
 		return nil, e
 	}
-	return map[string]any{"run": r, "targets": ts, "analyses": analyses, "summaries": summaries}, nil
+	return map[string]any{"run": r, "subjects": subjects, "targets": ts, "analyses": analyses, "summaries": summaries}, nil
 }
 
 // OperatorEvidence reads one immutable evidence item by its stable locator.

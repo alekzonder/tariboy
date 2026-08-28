@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -166,6 +167,77 @@ func TestCreateRunFreezesOrderedTargets(t *testing.T) {
 	}
 	if len(frozen) != 2 {
 		t.Fatalf("immutable snapshot grew: %+v", frozen)
+	}
+}
+
+func TestCreateRunGroupsTargetsIntoTaskSubjects(t *testing.T) {
+	db, js := newJudgeStore(t)
+	seedJudgeAgent(t, db.DB, "lead")
+	seedJudgeAgent(t, db.DB, "judge")
+	seedTarget(t, db.DB, "manager-it", "manager", "done", "2026-07-01T10:00:00Z")
+	seedTarget(t, db.DB, "developer-it", "developer", "done", "2026-07-01T10:01:00Z")
+	seedTarget(t, db.DB, "reviewer-it", "reviewer", "done", "2026-07-01T10:02:00Z")
+	for _, row := range []struct {
+		iteration string
+		ref       string
+		digest    string
+	}{
+		{iteration: "manager-it", ref: "manager:v3", digest: "sha256:manager"},
+		{iteration: "developer-it", ref: "developer:v5", digest: "sha256:developer"},
+		{iteration: "reviewer-it", ref: "reviewer:v7", digest: "sha256:reviewer"},
+	} {
+		if _, err := db.DB.Exec(`UPDATE iterations SET image_ref=?,image_digest=?,prompt_template_sha256='sha256:prompt' WHERE id=?`, row.ref, row.digest, row.iteration); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.DB.Exec(`INSERT INTO task_queues(prefix,name,created_at,updated_at) VALUES('TARI','Tariboy','2026-07-01T09:00:00Z','2026-07-01T09:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range []struct {
+		key      string
+		position int
+		status   string
+	}{
+		{key: "TARI-42", position: 1, status: "done"},
+		{key: "TARI-43", position: 2, status: "cancelled"},
+	} {
+		if _, err := db.DB.Exec(`INSERT INTO tasks(task_key,queue_prefix,position,title,status,author,customer,group_name,created_at,updated_at,completed_at) VALUES(?,?,?,?,?,'user:operator','user:operator','dev-team','2026-07-01T09:00:00Z','2026-07-01T11:00:00Z','2026-07-01T11:00:00Z')`, task.key, "TARI", task.position, task.key, task.status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, item := range []struct {
+		iteration string
+		agent     string
+		task      string
+	}{
+		{iteration: "manager-it", agent: "manager", task: "TARI-42"},
+		{iteration: "developer-it", agent: "developer", task: "TARI-42"},
+		{iteration: "reviewer-it", agent: "reviewer", task: "TARI-43"},
+	} {
+		if _, err := db.DB.Exec(`INSERT INTO ai_requests(id,ts,agent,iteration,task_id) VALUES(?,?,?,?,?)`, fmt.Sprintf("req-%d", i), "2026-07-01T10:30:00Z", item.agent, item.iteration, item.task); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run, targets, err := js.CreateRun(context.Background(), request("manager-it", "developer-it", "reviewer-it"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjects, err := js.ListSubjects(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subjects) != 2 {
+		t.Fatalf("subjects = %+v, want two task subjects", subjects)
+	}
+	if subjects[0].Type != "task" || subjects[0].ExternalID != "TARI-42" || subjects[0].Snapshot.Status != "done" || subjects[0].Snapshot.Group != "dev-team" || len(subjects[0].Snapshot.Participants) != 2 {
+		t.Fatalf("first subject = %+v", subjects[0])
+	}
+	if subjects[0].Snapshot.Participants[1].ImageDigest != "sha256:developer" {
+		t.Fatalf("participants = %+v", subjects[0].Snapshot.Participants)
+	}
+	if targets[0].SubjectID == "" || targets[0].SubjectID != targets[1].SubjectID || targets[2].SubjectID == targets[0].SubjectID {
+		t.Fatalf("target subject ids = %q %q %q", targets[0].SubjectID, targets[1].SubjectID, targets[2].SubjectID)
 	}
 }
 

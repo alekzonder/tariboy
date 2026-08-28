@@ -90,6 +90,18 @@ func TestServiceRunInspectRemainsLeadOnly(t *testing.T) {
 	}
 }
 
+func TestOperatorInspectReturnsExecutionSubjects(t *testing.T) {
+	s, _, run, _ := serviceFixture(t)
+	got, err := s.OperatorInspect(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjects, ok := got["subjects"].([]Subject)
+	if !ok || len(subjects) != 1 || subjects[0].Type != "iteration" || subjects[0].ExternalID != "target" {
+		t.Fatalf("subjects = %#v", got["subjects"])
+	}
+}
+
 func TestServiceIterationsSearchAuthorizesJudgeGroupAndPreservesTargetGroupFilter(t *testing.T) {
 	s, _, _, _ := serviceFixture(t)
 	if _, err := s.store.db.Exec(`UPDATE agents SET "group"='targets' WHERE name='target-agent'`); err != nil {

@@ -2,7 +2,9 @@ package judge
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,10 +80,88 @@ func (s *Store) CreateRun(ctx context.Context, req CreateRunRequest) (Run, []Tar
 		}
 		targets = append(targets, t)
 	}
+	if _, err := s.createSubjects(ctx, tx, run.ID, selected, targets, now); err != nil {
+		return Run{}, nil, err
+	}
 	if err = tx.Commit(); err != nil {
 		return Run{}, nil, err
 	}
 	return run, targets, nil
+}
+
+func (s *Store) createSubjects(ctx context.Context, tx *sql.Tx, runID string, selected []selectedIteration, targets []Target, now string) ([]Subject, error) {
+	type grouped struct {
+		subject Subject
+		targets []int
+	}
+	groups := []grouped{}
+	indexes := map[string]int{}
+	for i, row := range selected {
+		typ, externalID := "iteration", row.ID
+		if row.TaskID != "" {
+			typ, externalID = "task", row.TaskID
+		}
+		key := typ + "\x00" + externalID
+		index, ok := indexes[key]
+		if !ok {
+			index = len(groups)
+			indexes[key] = index
+			groups = append(groups, grouped{subject: Subject{
+				ID: uuid.NewString(), RunID: runID, Type: typ, ExternalID: externalID,
+				Sequence: index, CreatedAt: now,
+				Snapshot: SubjectSnapshot{Status: row.Status, Group: row.Group, Participants: []SubjectParticipant{}, Artifacts: []string{}},
+			}})
+		}
+		group := &groups[index]
+		group.targets = append(group.targets, i)
+		group.subject.Snapshot.Participants = append(group.subject.Snapshot.Participants, SubjectParticipant{
+			Agent: row.Agent, Iteration: row.ID, ImageRef: row.ImageRef, ImageDigest: row.ImageDigest, PromptTemplateSHA256: row.PromptTemplateSHA256,
+		})
+	}
+
+	for i := range groups {
+		group := &groups[i]
+		if group.subject.Type == "task" {
+			if err := tx.QueryRowContext(ctx, `SELECT status,group_name FROM tasks WHERE task_key=?`, group.subject.ExternalID).Scan(&group.subject.Snapshot.Status, &group.subject.Snapshot.Group); err != nil {
+				return nil, fmt.Errorf("judge: snapshot task %s: %w", group.subject.ExternalID, err)
+			}
+			rows, err := tx.QueryContext(ctx, `SELECT ta.name FROM task_artifacts ta JOIN tasks t ON t.id=ta.task_id WHERE t.task_key=? ORDER BY ta.name,ta.id`, group.subject.ExternalID)
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var name string
+				if err := rows.Scan(&name); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				group.subject.Snapshot.Artifacts = append(group.subject.Snapshot.Artifacts, name)
+			}
+			if err := rows.Close(); err != nil {
+				return nil, err
+			}
+		}
+		raw, err := json.Marshal(group.subject.Snapshot)
+		if err != nil {
+			return nil, err
+		}
+		hash := sha256.Sum256(raw)
+		group.subject.SnapshotHash = "sha256:" + hex.EncodeToString(hash[:])
+		if _, err := tx.ExecContext(ctx, `INSERT INTO judge_subjects(id,run_id,subject_type,external_id,sequence,snapshot_hash,snapshot_json,created_at) VALUES(?,?,?,?,?,?,?,?)`, group.subject.ID, runID, group.subject.Type, group.subject.ExternalID, group.subject.Sequence, group.subject.SnapshotHash, string(raw), now); err != nil {
+			return nil, err
+		}
+		for _, targetIndex := range group.targets {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO judge_subject_targets(subject_id,target_id) VALUES(?,?)`, group.subject.ID, targets[targetIndex].ID); err != nil {
+				return nil, err
+			}
+			targets[targetIndex].SubjectID = group.subject.ID
+		}
+	}
+	out := make([]Subject, len(groups))
+	for i := range groups {
+		out[i] = groups[i].subject
+	}
+	return out, nil
 }
 
 // validateJudgeAgents keeps worker authority explicit. Every named judge-side
@@ -191,7 +271,7 @@ func (s *Store) ListRuns(f ListFilter) ([]Run, error) {
 	return out, rows.Err()
 }
 func (s *Store) ListTargets(runID string) ([]Target, error) {
-	rows, err := s.db.Query(`SELECT id,run_id,target_iteration,target_agent,sequence,bundle_path,bundle_hash,bundle_bytes,snapshot_status,target_state,consensus_verdict,consensus_score,assignments_completed,assignments_failed,assignments_pending FROM judge_targets WHERE run_id=? ORDER BY sequence`, runID)
+	rows, err := s.db.Query(`SELECT t.id,t.run_id,t.target_iteration,t.target_agent,t.sequence,t.bundle_path,t.bundle_hash,t.bundle_bytes,t.snapshot_status,t.target_state,t.consensus_verdict,t.consensus_score,t.assignments_completed,t.assignments_failed,t.assignments_pending,COALESCE(st.subject_id,'') FROM judge_targets t LEFT JOIN judge_subject_targets st ON st.target_id=t.id WHERE t.run_id=? ORDER BY t.sequence`, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +279,7 @@ func (s *Store) ListTargets(runID string) ([]Target, error) {
 	out := []Target{}
 	for rows.Next() {
 		var t Target
-		if err := rows.Scan(&t.ID, &t.RunID, &t.Iteration, &t.Agent, &t.Sequence, &t.BundlePath, &t.BundleHash, &t.BundleBytes, &t.SnapshotStatus, &t.TargetState, &t.ConsensusVerdict, &t.ConsensusScore, &t.AssignmentsCompleted, &t.AssignmentsFailed, &t.AssignmentsPending); err != nil {
+		if err := rows.Scan(&t.ID, &t.RunID, &t.Iteration, &t.Agent, &t.Sequence, &t.BundlePath, &t.BundleHash, &t.BundleBytes, &t.SnapshotStatus, &t.TargetState, &t.ConsensusVerdict, &t.ConsensusScore, &t.AssignmentsCompleted, &t.AssignmentsFailed, &t.AssignmentsPending, &t.SubjectID); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -215,6 +295,35 @@ func (s *Store) ListTargets(runID string) ([]Target, error) {
 		}
 		if n == 0 {
 			return nil, ErrNotFound
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) ListSubjects(runID string) ([]Subject, error) {
+	rows, err := s.db.Query(`SELECT id,run_id,subject_type,external_id,sequence,snapshot_hash,snapshot_json,created_at FROM judge_subjects WHERE run_id=? ORDER BY sequence`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Subject{}
+	for rows.Next() {
+		var subject Subject
+		var raw string
+		if err := rows.Scan(&subject.ID, &subject.RunID, &subject.Type, &subject.ExternalID, &subject.Sequence, &subject.SnapshotHash, &raw, &subject.CreatedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(raw), &subject.Snapshot); err != nil {
+			return nil, err
+		}
+		out = append(out, subject)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		if _, err := s.GetRun(runID); err != nil {
+			return nil, err
 		}
 	}
 	return out, nil
