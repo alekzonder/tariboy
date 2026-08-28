@@ -172,6 +172,69 @@ func TestSnapshotMissingPromptAndFailureReleasePin(t *testing.T) {
 	}
 }
 
+func TestSnapshotBuildsEvidenceV2WithTaskAndImageProvenance(t *testing.T) {
+	base := t.TempDir()
+	db, js := newJudgeStore(t)
+	seedJudgeAgent(t, db.DB, "lead")
+	seedJudgeAgent(t, db.DB, "judge")
+	seedTarget(t, db.DB, "iter-v2", "worker", "done", "2026-07-01T10:00:00Z")
+	if _, err := db.DB.Exec(`UPDATE iterations SET image_ref='worker:v7',image_digest='sha256:image',prompt_template_sha256='sha256:prompt' WHERE id='iter-v2'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO task_queues(prefix,name,created_at,updated_at) VALUES('TARI','Tariboy','2026-07-01T09:00:00Z','2026-07-01T09:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO tasks(task_key,queue_prefix,position,title,status,author,customer,group_name,created_at,updated_at,completed_at) VALUES('TARI-42','TARI',1,'Review','done','user:operator','user:operator','dev-team','2026-07-01T09:00:00Z','2026-07-01T11:00:00Z','2026-07-01T11:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO ai_requests(id,ts,agent,iteration,task_id) VALUES('req-v2','2026-07-01T10:30:00Z','worker','iter-v2','TARI-42')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB.Exec(`INSERT INTO image_source_snapshots(image_ref,image_digest,source_name,source_digest,relative_dir,created_at,repository_id,git_commit,lock_digest) VALUES('worker:v7','sha256:image','worker','sha256:source','source-dir','2026-07-01T09:00:00Z','production-agent-images','91ab820','sha256:lock')`); err != nil {
+		t.Fatal(err)
+	}
+	agentsDir := paths.New(base).AgentsDir()
+	l := agentdir.New(agentsDir, "worker")
+	if err := l.EnsureIteration("iter-v2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.PromptPath("iter-v2"), []byte("review the task"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	run, _, err := js.CreateRun(context.Background(), request("iter-v2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NewSnapshotter(SnapshotConfig{Store: js, BaseDir: base, AgentsDir: agentsDir}).BuildRun(context.Background(), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := js.ListTargets(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := NewEvidenceReader(base).Manifest(targets[0].BundleHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bundle.SchemaVersion != 2 || bundle.Subject.Type != "task" || bundle.Subject.ExternalID != "TARI-42" || bundle.Subject.Status != "done" || bundle.Subject.Group != "dev-team" {
+		t.Fatalf("subject evidence = %+v", bundle.Subject)
+	}
+	if bundle.Runtime.ImageRef != "worker:v7" || bundle.Runtime.ImageDigest != "sha256:image" || bundle.Runtime.RepositoryID != "production-agent-images" || bundle.Runtime.GitCommit != "91ab820" || bundle.Runtime.SourceDigest != "sha256:source" || bundle.Runtime.LockDigest != "sha256:lock" {
+		t.Fatalf("runtime evidence = %+v", bundle.Runtime)
+	}
+	if bundle.Configuration.PromptTemplateSHA256 != "sha256:prompt" {
+		t.Fatalf("configuration evidence = %+v", bundle.Configuration)
+	}
+	page, err := NewEvidenceReader(base).Search(targets[0].BundleHash, EvidenceQuery{Artifacts: []string{"task", "image", "source"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Results) != 4 {
+		t.Fatalf("v2 evidence results = %+v", page.Results)
+	}
+}
+
 func stringMustJSON(t *testing.T, v any) string {
 	t.Helper()
 	b, err := json.Marshal(v)

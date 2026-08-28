@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/paths"
 )
 
@@ -33,15 +34,50 @@ type UsageTotal struct {
 	CostUSD                             float64
 }
 type TargetMetadata struct{ Iteration, Agent, Status, StartedAt string }
+type SubjectEvidence struct {
+	ID           string   `json:"id"`
+	Type         string   `json:"type"`
+	ExternalID   string   `json:"external_id"`
+	SnapshotHash string   `json:"snapshot_hash"`
+	Status       string   `json:"status"`
+	Group        string   `json:"group,omitempty"`
+	Artifacts    []string `json:"artifacts"`
+}
+type RuntimeEvidence struct {
+	Agent        string `json:"agent"`
+	Group        string `json:"group,omitempty"`
+	ImageRef     string `json:"image_ref,omitempty"`
+	ImageDigest  string `json:"image_digest,omitempty"`
+	SourceDigest string `json:"source_digest,omitempty"`
+	RepositoryID string `json:"repository_id,omitempty"`
+	GitCommit    string `json:"git_commit,omitempty"`
+	LockDigest   string `json:"lock_digest,omitempty"`
+}
+type ConfigurationEvidence struct {
+	PromptTemplateSHA256 string                 `json:"prompt_template_sha256,omitempty"`
+	Plugins              []image.ManifestPlugin `json:"plugins"`
+	Skills               []image.ManifestSkill  `json:"skills"`
+}
+type SourceEvidence struct {
+	Name         string `json:"name,omitempty"`
+	Digest       string `json:"digest,omitempty"`
+	RepositoryID string `json:"repository_id,omitempty"`
+	GitCommit    string `json:"git_commit,omitempty"`
+	LockDigest   string `json:"lock_digest,omitempty"`
+}
 type EvidenceBundle struct {
-	SchemaVersion int              `json:"schema_version"`
-	BundleHash    string           `json:"bundle_hash"`
-	Target        TargetMetadata   `json:"target"`
-	Prompt        EvidenceArtifact `json:"prompt"`
-	Audit         []map[string]any `json:"audit"`
-	Transcript    []map[string]any `json:"transcript"`
-	Usage         UsageTotal       `json:"usage"`
-	Completeness  []ArtifactStatus `json:"completeness"`
+	SchemaVersion int                   `json:"schema_version"`
+	BundleHash    string                `json:"bundle_hash"`
+	Target        TargetMetadata        `json:"target"`
+	Subject       SubjectEvidence       `json:"subject,omitempty"`
+	Runtime       RuntimeEvidence       `json:"runtime,omitempty"`
+	Configuration ConfigurationEvidence `json:"configuration,omitempty"`
+	Source        SourceEvidence        `json:"source,omitempty"`
+	Prompt        EvidenceArtifact      `json:"prompt"`
+	Audit         []map[string]any      `json:"audit"`
+	Transcript    []map[string]any      `json:"transcript"`
+	Usage         UsageTotal            `json:"usage"`
+	Completeness  []ArtifactStatus      `json:"completeness"`
 }
 type EvidenceQuery struct {
 	Artifacts     []string
@@ -128,6 +164,14 @@ func (r *EvidenceReader) Search(hash string, q EvidenceQuery) (EvidencePage, err
 	}
 	if b.Prompt.Present {
 		add("prompt", "prompt", b.Prompt)
+	}
+	if b.SchemaVersion >= 2 {
+		add("task", "subject", b.Subject)
+		add("image", "runtime", b.Runtime)
+		add("image", "configuration", b.Configuration)
+		if b.Source.Digest != "" {
+			add("source", "metadata", b.Source)
+		}
 	}
 	add("metadata", "metadata", b.Target)
 	add("usage", "usage", b.Usage)

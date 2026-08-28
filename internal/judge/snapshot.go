@@ -7,13 +7,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/alekzonder/tariboy/internal/agentdir"
-	"github.com/alekzonder/tariboy/internal/aiproxy/session"
-	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/paths"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/aiproxy/session"
+	"github.com/alekzonder/tariboy/internal/audit"
+	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagesnapshot"
+	"github.com/alekzonder/tariboy/internal/paths"
 )
 
 type SnapshotConfig struct {
@@ -69,9 +72,13 @@ func (s *Snapshotter) build(ctx context.Context, t Target) (err error) {
 			_, _ = s.store.db.Exec(`UPDATE judge_targets SET snapshot_status='snapshot_failed' WHERE id=?`, t.ID)
 		}
 	}()
-	var status, started string
-	if e = s.store.db.QueryRowContext(ctx, `SELECT status,started_at FROM iterations WHERE id=?`, t.Iteration).Scan(&status, &started); e != nil {
+	var status, started, imageRef, imageDigest, promptTemplateSHA string
+	if e = s.store.db.QueryRowContext(ctx, `SELECT status,started_at,image_ref,image_digest,prompt_template_sha256 FROM iterations WHERE id=?`, t.Iteration).Scan(&status, &started, &imageRef, &imageDigest, &promptTemplateSHA); e != nil {
 		return fmt.Errorf("snapshot source: %w", e)
+	}
+	subject, e := s.store.SubjectForTarget(t.ID)
+	if e != nil {
+		return e
 	}
 	secrets := []string{}
 	rows, e := s.store.db.QueryContext(ctx, `SELECT value FROM secrets WHERE agent=?`, t.Agent)
@@ -123,7 +130,45 @@ func (s *Snapshotter) build(ctx context.Context, t Target) (err error) {
 		}
 		tr = append(tr, m)
 	}
-	b := EvidenceBundle{SchemaVersion: 1, Target: TargetMetadata{Iteration: t.Iteration, Agent: t.Agent, Status: status, StartedAt: started}, Prompt: EvidenceArtifact{Locator: "prompt", Content: redact(string(prompt)), Present: present}, Audit: aud, Transcript: tr, Completeness: []ArtifactStatus{{Artifact: "prompt", Status: map[bool]string{true: "present", false: "missing"}[present]}, {Artifact: "audit", Status: "present"}, {Artifact: "transcript", Status: "present"}}}
+	runtime := RuntimeEvidence{Agent: t.Agent, Group: subject.Snapshot.Group, ImageRef: imageRef, ImageDigest: imageDigest}
+	configuration := ConfigurationEvidence{PromptTemplateSHA256: promptTemplateSHA, Plugins: []image.ManifestPlugin{}, Skills: []image.ManifestSkill{}}
+	sourceEvidence := SourceEvidence{}
+	completeness := []ArtifactStatus{{Artifact: "prompt", Status: map[bool]string{true: "present", false: "missing"}[present]}, {Artifact: "audit", Status: "present"}, {Artifact: "transcript", Status: "present"}, {Artifact: "task", Status: "present"}}
+	if imageDigest != "" {
+		snapshots := imagesnapshot.Store{DB: s.store.db, Root: filepath.Join(s.base, "image-source-snapshots")}
+		snapshot, ok, lookupErr := snapshots.LookupDigest(ctx, imageDigest)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if ok {
+			runtime.SourceDigest, runtime.RepositoryID, runtime.GitCommit, runtime.LockDigest = snapshot.SourceDigest, snapshot.RepositoryID, snapshot.GitCommit, snapshot.LockDigest
+			sourceEvidence = SourceEvidence{Name: snapshot.SourceName, Digest: snapshot.SourceDigest, RepositoryID: snapshot.RepositoryID, GitCommit: snapshot.GitCommit, LockDigest: snapshot.LockDigest}
+			completeness = append(completeness, ArtifactStatus{Artifact: "source", Status: "present", SHA256: snapshot.SourceDigest})
+		} else {
+			completeness = append(completeness, ArtifactStatus{Artifact: "source", Status: "missing"})
+		}
+	}
+	imageStatus := "missing"
+	if ref, parseErr := image.ParseRef(imageRef); parseErr == nil && imageDigest != "" {
+		manifest, inspectErr := (&image.Store{Dir: paths.New(s.base).ImagesDir()}).InspectPinned(ref, imageDigest)
+		if inspectErr == nil {
+			configuration.Plugins, configuration.Skills = manifest.Plugins, manifest.Skills
+			imageStatus = "present"
+		}
+	}
+	completeness = append(completeness, ArtifactStatus{Artifact: "image", Status: imageStatus, SHA256: imageDigest})
+	b := EvidenceBundle{
+		SchemaVersion: 2,
+		Target:        TargetMetadata{Iteration: t.Iteration, Agent: t.Agent, Status: status, StartedAt: started},
+		Subject:       SubjectEvidence{ID: subject.ID, Type: subject.Type, ExternalID: subject.ExternalID, SnapshotHash: subject.SnapshotHash, Status: subject.Snapshot.Status, Group: subject.Snapshot.Group, Artifacts: subject.Snapshot.Artifacts},
+		Runtime:       runtime,
+		Configuration: configuration,
+		Source:        sourceEvidence,
+		Prompt:        EvidenceArtifact{Locator: "prompt", Content: redact(string(prompt)), Present: present},
+		Audit:         aud,
+		Transcript:    tr,
+		Completeness:  completeness,
+	}
 	raw, e := json.Marshal(b)
 	if e != nil {
 		return e

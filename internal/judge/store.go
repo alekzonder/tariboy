@@ -329,6 +329,22 @@ func (s *Store) ListSubjects(runID string) ([]Subject, error) {
 	return out, nil
 }
 
+func (s *Store) SubjectForTarget(targetID string) (Subject, error) {
+	var subject Subject
+	var raw string
+	err := s.db.QueryRow(`SELECT s.id,s.run_id,s.subject_type,s.external_id,s.sequence,s.snapshot_hash,s.snapshot_json,s.created_at FROM judge_subjects s JOIN judge_subject_targets st ON st.subject_id=s.id WHERE st.target_id=?`, targetID).Scan(&subject.ID, &subject.RunID, &subject.Type, &subject.ExternalID, &subject.Sequence, &subject.SnapshotHash, &raw, &subject.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Subject{}, ErrNotFound
+	}
+	if err != nil {
+		return Subject{}, err
+	}
+	if err := json.Unmarshal([]byte(raw), &subject.Snapshot); err != nil {
+		return Subject{}, err
+	}
+	return subject, nil
+}
+
 // ListAnalyses and ListSummaries are intentionally operator read models. They
 // decode normalized JSON so callers never need to parse database payloads.
 func (s *Store) ListAnalyses(runID string) ([]Analysis, error) {
