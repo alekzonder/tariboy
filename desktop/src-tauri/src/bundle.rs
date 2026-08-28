@@ -13,7 +13,6 @@ pub const BINARIES: [&str; 5] = [
     "tariboy-tools",
     "tariboy-plugin-telegram",
 ];
-pub const CLI_BINARIES: [&str; 5] = BINARIES;
 const VERSION_FILE: &str = "VERSION";
 const CHECKSUM_FILE: &str = "SHA256SUMS";
 const INSTALLER_FILE: &str = "remote-install.sh";
