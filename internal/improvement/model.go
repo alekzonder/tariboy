@@ -100,3 +100,20 @@ type Approval struct {
 	Phase                                                ApprovalPhase
 	Decision                                             ApprovalDecision
 }
+
+type Release struct {
+	ID, ProposalID, RepositoryID, GitCommit, SourceName, SourceDigest string
+	LockDigest, PromptTemplateDigest, ImageRef, ImageDigest           string
+	BuilderVersion, ReleaseHash, CreatedAt                            string
+	Status                                                            Status
+}
+
+type BuildRequest struct {
+	ProposalID, RepositoryID, GitCommit, SourceDir, SourceName, ImageRef string
+}
+
+type Rollout struct {
+	ID, ReleaseID, TargetAgent, PriorImageRef, PriorImageDigest string
+	ImageRef, ImageDigest, CreatedAt, CompletedAt, RollbackOf   string
+	Status                                                      Status
+}

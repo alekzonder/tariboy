@@ -68,3 +68,37 @@ BEFORE DELETE ON improvement_approvals
 BEGIN
   SELECT RAISE(ABORT, 'improvement approvals are append-only');
 END;
+
+CREATE TABLE image_releases (
+  id TEXT PRIMARY KEY,
+  proposal_id TEXT NOT NULL REFERENCES improvement_proposals(id) ON DELETE RESTRICT,
+  repository_id TEXT NOT NULL,
+  git_commit TEXT NOT NULL,
+  source_name TEXT NOT NULL,
+  source_digest TEXT NOT NULL,
+  lock_digest TEXT NOT NULL,
+  prompt_template_digest TEXT NOT NULL,
+  image_ref TEXT NOT NULL UNIQUE,
+  image_digest TEXT NOT NULL,
+  builder_version TEXT NOT NULL,
+  release_hash TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX image_releases_proposal_idx ON image_releases(proposal_id, created_at);
+
+CREATE TABLE image_rollouts (
+  id TEXT PRIMARY KEY,
+  release_id TEXT NOT NULL REFERENCES image_releases(id) ON DELETE RESTRICT,
+  target_agent TEXT NOT NULL,
+  prior_image_ref TEXT NOT NULL,
+  prior_image_digest TEXT NOT NULL,
+  image_ref TEXT NOT NULL,
+  image_digest TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  completed_at TEXT NOT NULL DEFAULT '',
+  rollback_of TEXT NOT NULL DEFAULT '',
+  UNIQUE(release_id, target_agent, rollback_of)
+);

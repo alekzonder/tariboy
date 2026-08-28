@@ -19,9 +19,21 @@ func (r *recordingImprovementControl) List(context.Context) ([]improvement.Propo
 func (r *recordingImprovementControl) Get(context.Context, string) (improvement.Proposal, error) {
 	return improvement.Proposal{}, nil
 }
+func (r *recordingImprovementControl) GetRelease(context.Context, string) (improvement.Release, error) {
+	return improvement.Release{}, nil
+}
 func (r *recordingImprovementControl) DecidePlan(_ context.Context, id, hash, actor string, decision improvement.ApprovalDecision, reason string) (improvement.Approval, error) {
 	r.id, r.hash, r.actor, r.decision, r.reason = id, hash, actor, decision, reason
 	return improvement.Approval{ProposalID: id, ObjectHash: hash, Actor: actor, Decision: decision}, nil
+}
+func (r *recordingImprovementControl) DecideRollout(context.Context, string, string, string, improvement.ApprovalDecision, string) (improvement.Approval, error) {
+	return improvement.Approval{}, nil
+}
+func (r *recordingImprovementControl) StageSingleRollout(context.Context, string, string, string) (improvement.Rollout, error) {
+	return improvement.Rollout{}, nil
+}
+func (r *recordingImprovementControl) StageRollback(context.Context, string) (improvement.Rollout, error) {
+	return improvement.Rollout{}, nil
 }
 
 func TestImprovementPlanApprovalUsesContextOperator(t *testing.T) {

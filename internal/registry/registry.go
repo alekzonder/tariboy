@@ -289,7 +289,11 @@ type JudgeControl interface {
 type ImprovementControl interface {
 	List(context.Context) ([]improvement.Proposal, error)
 	Get(context.Context, string) (improvement.Proposal, error)
+	GetRelease(context.Context, string) (improvement.Release, error)
 	DecidePlan(context.Context, string, string, string, improvement.ApprovalDecision, string) (improvement.Approval, error)
+	DecideRollout(context.Context, string, string, string, improvement.ApprovalDecision, string) (improvement.Approval, error)
+	StageSingleRollout(context.Context, string, string, string) (improvement.Rollout, error)
+	StageRollback(context.Context, string) (improvement.Rollout, error)
 }
 
 type HandlerFunc func(c *Ctx, p Params) (any, error)

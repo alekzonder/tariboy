@@ -181,3 +181,177 @@ func (s *Store) DecidePlan(ctx context.Context, request ApprovalRequest) (Approv
 	}
 	return approval, nil
 }
+
+func (s *Store) RecordRelease(ctx context.Context, release Release, proposalRevision string) (Release, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Release{}, err
+	}
+	defer tx.Rollback()
+	var approvals int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM improvement_approvals WHERE proposal_id=? AND phase='plan' AND object_hash=? AND decision='approve'`, release.ProposalID, proposalRevision).Scan(&approvals); err != nil {
+		return Release{}, err
+	}
+	if approvals == 0 {
+		return Release{}, ErrInvalidTransition
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO image_releases(id,proposal_id,repository_id,git_commit,source_name,source_digest,lock_digest,prompt_template_digest,image_ref,image_digest,builder_version,release_hash,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, release.ID, release.ProposalID, release.RepositoryID, release.GitCommit, release.SourceName, release.SourceDigest, release.LockDigest, release.PromptTemplateDigest, release.ImageRef, release.ImageDigest, release.BuilderVersion, release.ReleaseHash, release.Status, release.CreatedAt)
+	if err != nil {
+		return Release{}, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE improvement_proposals SET status='image_built',updated_at=? WHERE id=? AND revision_hash=? AND status='merged' AND merged_commit=?`, release.CreatedAt, release.ProposalID, proposalRevision, release.GitCommit)
+	if err != nil {
+		return Release{}, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed != 1 {
+		if err != nil {
+			return Release{}, err
+		}
+		return Release{}, ErrInvalidTransition
+	}
+	if err := tx.Commit(); err != nil {
+		return Release{}, err
+	}
+	return release, nil
+}
+
+func (s *Store) GetRelease(ctx context.Context, id string) (Release, error) {
+	var release Release
+	err := s.db.QueryRowContext(ctx, `SELECT id,proposal_id,repository_id,git_commit,source_name,source_digest,lock_digest,prompt_template_digest,image_ref,image_digest,builder_version,release_hash,status,created_at FROM image_releases WHERE id=?`, id).Scan(&release.ID, &release.ProposalID, &release.RepositoryID, &release.GitCommit, &release.SourceName, &release.SourceDigest, &release.LockDigest, &release.PromptTemplateDigest, &release.ImageRef, &release.ImageDigest, &release.BuilderVersion, &release.ReleaseHash, &release.Status, &release.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Release{}, ErrNotFound
+	}
+	return release, err
+}
+
+func (s *Store) DecideRollout(ctx context.Context, releaseID, hash, actor string, decision ApprovalDecision, reason string) (Approval, error) {
+	if actor == "" || (decision != DecisionApprove && decision != DecisionReject) {
+		return Approval{}, ErrInvalidProposal
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Approval{}, err
+	}
+	defer tx.Rollback()
+	var proposalID, releaseHash string
+	var status Status
+	if err := tx.QueryRowContext(ctx, `SELECT proposal_id,release_hash,status FROM image_releases WHERE id=?`, releaseID).Scan(&proposalID, &releaseHash, &status); errors.Is(err, sql.ErrNoRows) {
+		return Approval{}, ErrNotFound
+	} else if err != nil {
+		return Approval{}, err
+	}
+	if releaseHash != hash {
+		return Approval{}, ErrRevisionMismatch
+	}
+	if status != StatusImageBuilt {
+		return Approval{}, ErrInvalidTransition
+	}
+	approval := Approval{ID: uuid.NewString(), ProposalID: proposalID, Phase: PhaseRollout, ObjectHash: hash, Decision: decision, Actor: actor, Reason: reason, CreatedAt: s.now().UTC().Format(time.RFC3339Nano)}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO improvement_approvals(id,proposal_id,phase,object_hash,decision,actor,reason,created_at) VALUES(?,?,?,?,?,?,?,?)`, approval.ID, proposalID, approval.Phase, hash, decision, actor, reason, approval.CreatedAt); err != nil {
+		return Approval{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Approval{}, err
+	}
+	return approval, nil
+}
+
+func scanRollout(row interface{ Scan(...any) error }) (Rollout, error) {
+	var rollout Rollout
+	err := row.Scan(&rollout.ID, &rollout.ReleaseID, &rollout.TargetAgent, &rollout.PriorImageRef, &rollout.PriorImageDigest, &rollout.ImageRef, &rollout.ImageDigest, &rollout.Status, &rollout.CreatedAt, &rollout.CompletedAt, &rollout.RollbackOf)
+	return rollout, err
+}
+
+func (s *Store) StageSingleRollout(ctx context.Context, releaseID, agentName, hash string) (Rollout, error) {
+	if existing, err := scanRollout(s.db.QueryRowContext(ctx, `SELECT id,release_id,target_agent,prior_image_ref,prior_image_digest,image_ref,image_digest,status,created_at,completed_at,rollback_of FROM image_rollouts WHERE release_id=? AND target_agent=? AND rollback_of=''`, releaseID, agentName)); err == nil {
+		return existing, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Rollout{}, err
+	}
+	defer tx.Rollback()
+	var release Release
+	if err := tx.QueryRowContext(ctx, `SELECT id,proposal_id,repository_id,git_commit,source_name,source_digest,lock_digest,prompt_template_digest,image_ref,image_digest,builder_version,release_hash,status,created_at FROM image_releases WHERE id=?`, releaseID).Scan(&release.ID, &release.ProposalID, &release.RepositoryID, &release.GitCommit, &release.SourceName, &release.SourceDigest, &release.LockDigest, &release.PromptTemplateDigest, &release.ImageRef, &release.ImageDigest, &release.BuilderVersion, &release.ReleaseHash, &release.Status, &release.CreatedAt); err != nil {
+		return Rollout{}, err
+	}
+	if release.ReleaseHash != hash || release.Status != StatusImageBuilt {
+		return Rollout{}, ErrRevisionMismatch
+	}
+	var approvals int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM improvement_approvals WHERE proposal_id=? AND phase='rollout' AND object_hash=? AND decision='approve'`, release.ProposalID, hash).Scan(&approvals); err != nil || approvals == 0 {
+		if err != nil {
+			return Rollout{}, err
+		}
+		return Rollout{}, ErrInvalidTransition
+	}
+	var currentRef, currentDigest, pendingRef, pendingDigest string
+	if err := tx.QueryRowContext(ctx, `SELECT image_ref,image_digest,pending_image_ref,pending_image_digest FROM agents WHERE name=?`, agentName).Scan(&currentRef, &currentDigest, &pendingRef, &pendingDigest); errors.Is(err, sql.ErrNoRows) {
+		return Rollout{}, ErrNotFound
+	} else if err != nil {
+		return Rollout{}, err
+	}
+	if pendingRef != "" && (pendingRef != release.ImageRef || pendingDigest != release.ImageDigest) {
+		return Rollout{}, ErrInvalidTransition
+	}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	rollout := Rollout{ID: uuid.NewString(), ReleaseID: releaseID, TargetAgent: agentName, PriorImageRef: currentRef, PriorImageDigest: currentDigest, ImageRef: release.ImageRef, ImageDigest: release.ImageDigest, Status: StatusRolloutPending, CreatedAt: now}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO image_rollouts(id,release_id,target_agent,prior_image_ref,prior_image_digest,image_ref,image_digest,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)`, rollout.ID, releaseID, agentName, currentRef, currentDigest, release.ImageRef, release.ImageDigest, rollout.Status, now); err != nil {
+		return Rollout{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE agents SET pending_image_ref=?,pending_image_digest=?,pending_image_error='' WHERE name=?`, release.ImageRef, release.ImageDigest, agentName); err != nil {
+		return Rollout{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE image_releases SET status=? WHERE id=?`, StatusRolloutPending, releaseID); err != nil {
+		return Rollout{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE improvement_proposals SET status=?,updated_at=? WHERE id=?`, StatusRolloutPending, now, release.ProposalID); err != nil {
+		return Rollout{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Rollout{}, err
+	}
+	return rollout, nil
+}
+
+func (s *Store) StageRollback(ctx context.Context, rolloutID string) (Rollout, error) {
+	columns := `id,release_id,target_agent,prior_image_ref,prior_image_digest,image_ref,image_digest,status,created_at,completed_at,rollback_of`
+	if existing, err := scanRollout(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM image_rollouts WHERE rollback_of=?`, rolloutID)); err == nil {
+		return existing, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Rollout{}, err
+	}
+	defer tx.Rollback()
+	original, err := scanRollout(tx.QueryRowContext(ctx, `SELECT `+columns+` FROM image_rollouts WHERE id=?`, rolloutID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Rollout{}, ErrNotFound
+	}
+	if err != nil {
+		return Rollout{}, err
+	}
+	if original.Status != StatusRolledOut || original.RollbackOf != "" {
+		return Rollout{}, ErrInvalidTransition
+	}
+	var currentRef, currentDigest string
+	if err := tx.QueryRowContext(ctx, `SELECT image_ref,image_digest FROM agents WHERE name=?`, original.TargetAgent).Scan(&currentRef, &currentDigest); err != nil {
+		return Rollout{}, err
+	}
+	if currentRef != original.ImageRef || currentDigest != original.ImageDigest {
+		return Rollout{}, ErrInvalidTransition
+	}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	rollback := Rollout{ID: uuid.NewString(), ReleaseID: original.ReleaseID, TargetAgent: original.TargetAgent, PriorImageRef: currentRef, PriorImageDigest: currentDigest, ImageRef: original.PriorImageRef, ImageDigest: original.PriorImageDigest, Status: StatusRolloutPending, CreatedAt: now, RollbackOf: original.ID}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO image_rollouts(id,release_id,target_agent,prior_image_ref,prior_image_digest,image_ref,image_digest,status,created_at,rollback_of) VALUES(?,?,?,?,?,?,?,?,?,?)`, rollback.ID, rollback.ReleaseID, rollback.TargetAgent, rollback.PriorImageRef, rollback.PriorImageDigest, rollback.ImageRef, rollback.ImageDigest, rollback.Status, rollback.CreatedAt, rollback.RollbackOf); err != nil {
+		return Rollout{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE agents SET pending_image_ref=?,pending_image_digest=?,pending_image_error='' WHERE name=?`, rollback.ImageRef, rollback.ImageDigest, rollback.TargetAgent); err != nil {
+		return Rollout{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Rollout{}, err
+	}
+	return rollback, nil
+}

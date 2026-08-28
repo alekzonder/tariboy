@@ -50,6 +50,17 @@ func improvementInspect() registry.Command {
 	}}
 }
 
+func imageReleaseInspect() registry.Command {
+	return registry.Command{Path: "image-release.inspect", Summary: "Show immutable image release provenance", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/image-releases/{id}"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireImprovements(c)
+		if err != nil {
+			return nil, err
+		}
+		release, err := control.GetRelease(registry.RequestContext(p), str(p, "id"))
+		return release, improvementError(err)
+	}}
+}
+
 func improvementPlanDecision(decision improvement.ApprovalDecision) registry.Command {
 	name := string(decision)
 	return registry.Command{Path: "improvement.plan." + name, Summary: name + " an exact improvement plan revision", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}, {Name: "revision", Flag: "revision", Type: registry.String, Required: true}, {Name: "reason", Flag: "reason", Type: registry.String}}, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/improvements/{id}/plan/" + name}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -59,5 +70,39 @@ func improvementPlanDecision(decision improvement.ApprovalDecision) registry.Com
 		}
 		approval, err := control.DecidePlan(registry.RequestContext(p), str(p, "id"), str(p, "revision"), c.Operator, decision, str(p, "reason"))
 		return approval, improvementError(err)
+	}}
+}
+
+func imageReleaseRolloutDecision(decision improvement.ApprovalDecision) registry.Command {
+	name := string(decision)
+	return registry.Command{Path: "image-release.rollout." + name, Summary: name + " an exact image release rollout", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}, {Name: "release-hash", Flag: "release-hash", Type: registry.String, Required: true}, {Name: "reason", Flag: "reason", Type: registry.String}}, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/image-releases/{id}/rollout/" + name}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireImprovements(c)
+		if err != nil {
+			return nil, err
+		}
+		approval, err := control.DecideRollout(registry.RequestContext(p), str(p, "id"), str(p, "release-hash"), c.Operator, decision, str(p, "reason"))
+		return approval, improvementError(err)
+	}}
+}
+
+func imageReleaseRolloutStage() registry.Command {
+	return registry.Command{Path: "image-release.rollout.stage", Summary: "Stage an approved release for one agent", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}, {Name: "agent", Flag: "agent", Type: registry.String, Required: true}, {Name: "release-hash", Flag: "release-hash", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/image-releases/{id}/rollout/stage"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireImprovements(c)
+		if err != nil {
+			return nil, err
+		}
+		rollout, err := control.StageSingleRollout(registry.RequestContext(p), str(p, "id"), str(p, "agent"), str(p, "release-hash"))
+		return rollout, improvementError(err)
+	}}
+}
+
+func imageReleaseRollback() registry.Command {
+	return registry.Command{Path: "image-release.rollback", Summary: "Stage the prior immutable image from a completed rollout", Args: []registry.Arg{{Name: "rollout", Flag: "rollout", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/image-rollouts/{rollout}/rollback"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireImprovements(c)
+		if err != nil {
+			return nil, err
+		}
+		rollout, err := control.StageRollback(registry.RequestContext(p), str(p, "rollout"))
+		return rollout, improvementError(err)
 	}}
 }

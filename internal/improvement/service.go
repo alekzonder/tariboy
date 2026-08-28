@@ -20,6 +20,9 @@ func (s *Service) List(ctx context.Context) ([]Proposal, error) { return s.store
 func (s *Service) Get(ctx context.Context, id string) (Proposal, error) {
 	return s.store.GetProposal(ctx, id)
 }
+func (s *Service) GetRelease(ctx context.Context, id string) (Release, error) {
+	return s.store.GetRelease(ctx, id)
+}
 
 func (s *Service) DecidePlan(ctx context.Context, id, hash, actor string, decision ApprovalDecision, reason string) (Approval, error) {
 	if actor == "" {
@@ -35,4 +38,24 @@ func (s *Service) DecidePlan(ctx context.Context, id, hash, actor string, decisi
 	}
 	_, err = s.bus.Publish(bus.Message{Channel: "system:improvements", Source: "system", Type: typ, Data: map[string]any{"proposal_id": id, "revision_hash": hash}})
 	return approval, err
+}
+
+func (s *Service) DecideRollout(ctx context.Context, releaseID, hash, actor string, decision ApprovalDecision, reason string) (Approval, error) {
+	approval, err := s.store.DecideRollout(ctx, releaseID, hash, actor, decision, reason)
+	if err == nil && s.bus != nil {
+		typ := "image.rollout.approved"
+		if decision == DecisionReject {
+			typ = "image.rollout.rejected"
+		}
+		_, err = s.bus.Publish(bus.Message{Channel: "system:improvements", Source: "system", Type: typ, Data: map[string]any{"release_id": releaseID, "release_hash": hash}})
+	}
+	return approval, err
+}
+
+func (s *Service) StageSingleRollout(ctx context.Context, releaseID, agent, hash string) (Rollout, error) {
+	return s.store.StageSingleRollout(ctx, releaseID, agent, hash)
+}
+
+func (s *Service) StageRollback(ctx context.Context, rolloutID string) (Rollout, error) {
+	return s.store.StageRollback(ctx, rolloutID)
 }
