@@ -79,6 +79,7 @@ Commands:
   script cancel SCRIPT_OR_RUN_ID
   script rm SCRIPT_ID
   image build --name NAME [--tag TAG] --path DIR   Author+build a new image (image-creator only)
+  judge automation begin --revision R --delivery ID [--limit N]
   judge iterations search --agent A --judge-group G [--group G] [--since T] [--until T] [--status S] [--limit N]
   judge run create --request-file F --selector JSON --judges a,b --summary-agent A [--judges-per-iteration N] [--judge-group G]
   judge improvement submit RUN_ID --file F
@@ -939,6 +940,28 @@ func judgeCommand(sc *argScan) (method, route string, body any, err error) {
 		return pos[0], nil
 	}
 	switch args[0] + " " + args[1] {
+	case "automation begin":
+		action = "automation.begin"
+		revisionText, e := request("revision")
+		if e != nil {
+			return "", "", nil, e
+		}
+		revision, e := strconv.Atoi(revisionText)
+		if e != nil || revision <= 0 {
+			return "", "", nil, fmt.Errorf("tools judge automation begin: --revision must be a positive integer")
+		}
+		delivery, e := request("delivery")
+		if e != nil {
+			return "", "", nil, e
+		}
+		limit := 100
+		if flags.Get("limit") != "" {
+			limit, e = strconv.Atoi(flags.Get("limit"))
+			if e != nil || limit <= 0 {
+				return "", "", nil, fmt.Errorf("tools judge automation begin: --limit must be a positive integer")
+			}
+		}
+		body = map[string]any{"config_revision": revision, "delivery_id": delivery, "limit": limit}
 	case "iterations search":
 		action = "iterations.search"
 		agent, e := request("agent")

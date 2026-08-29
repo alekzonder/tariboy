@@ -320,9 +320,54 @@ func Run(ctx context.Context, o Options) error {
 		Snapshotter: judge.NewSnapshotter(judge.SnapshotConfig{Store: judgeStore, BaseDir: p.Base, AgentsDir: p.AgentsDir()}),
 		Bus:         channelBus,
 	})
+	judgeAutomation := judge.NewAutomationService(judgeStore, schedStore, judge.AutomationValidator{
+		Customer: daemonCustomerLogin(),
+		AgentExists: func(_ context.Context, name string) bool {
+			_, err := as.Get(name)
+			return err == nil
+		},
+		ImagePlugins: func(refText string) ([]string, error) {
+			ref, err := image.ParseRef(refText)
+			if err != nil {
+				return nil, err
+			}
+			manifest, err := imgStore.Inspect(ref)
+			plugins := make([]string, len(manifest.Plugins))
+			for i, plugin := range manifest.Plugins {
+				plugins[i] = plugin.Name
+			}
+			return plugins, err
+		},
+		ImageDigest: func(refText string) (string, error) {
+			ref, err := image.ParseRef(refText)
+			if err != nil {
+				return "", err
+			}
+			manifest, err := imgStore.Inspect(ref)
+			return manifest.Digest, err
+		},
+		TargetImageUsed: func(ctx context.Context, names []string, ref string) bool {
+			if len(names) == 0 {
+				return false
+			}
+			args := make([]any, 0, len(names)+1)
+			args = append(args, ref)
+			marks := make([]string, len(names))
+			for i, name := range names {
+				marks[i], args = "?", append(args, name)
+			}
+			var count int
+			err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM iterations WHERE image_ref=? AND agent IN (`+strings.Join(marks, ",")+`)`, args...).Scan(&count)
+			return err == nil && count > 0
+		},
+	}, time.Now)
+	judgeAutomation.ConfigureExecution(taskService, judgeRunner.Enqueue)
+	judgeRunner.SetFailureCallback(func(ctx context.Context, runID string, err error) {
+		_ = judgeAutomation.Fail(ctx, runID, err)
+	})
 	judgeService := judge.NewService(judge.ServiceConfig{
 		Store: judgeStore, Agents: as, Groups: groups.NewStore(st, time.Now), Bus: channelBus,
-		Evidence: judge.NewEvidenceReader(p.Base), Enqueue: judgeRunner.Enqueue, Improvements: improvementStore,
+		Evidence: judge.NewEvidenceReader(p.Base), Enqueue: judgeRunner.Enqueue, Improvements: improvementStore, Automation: judgeAutomation,
 		Audit: func(agent, kind, iteration string, data map[string]any) {
 			auditReg.For(agent).Record(kind, "system", iteration, data)
 		},

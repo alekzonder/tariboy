@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/schedule"
+	"github.com/alekzonder/tariboy/internal/tasks"
+	"github.com/google/uuid"
 )
 
 type AutomationConfig struct {
@@ -66,6 +68,20 @@ type AutomationService struct {
 	schedules *schedule.Store
 	validator AutomationValidator
 	now       func() time.Time
+	tasks     *tasks.Service
+	enqueue   func(string)
+}
+
+type AutomationCycle struct {
+	ID             string `json:"id"`
+	ConfigRevision int    `json:"config_revision"`
+	DeliveryID     string `json:"delivery_id"`
+	TaskKey        string `json:"task_key"`
+	RunID          string `json:"run_id"`
+	Status         string `json:"status"`
+	LastError      string `json:"last_error"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 func NewAutomationService(store *Store, schedules *schedule.Store, validator AutomationValidator, now func() time.Time) *AutomationService {
@@ -75,10 +91,15 @@ func NewAutomationService(store *Store, schedules *schedule.Store, validator Aut
 	return &AutomationService{store: store, schedules: schedules, validator: validator, now: now}
 }
 
+func (s *AutomationService) ConfigureExecution(taskService *tasks.Service, enqueue func(string)) {
+	s.tasks, s.enqueue = taskService, enqueue
+}
+
 type AutomationValidator struct {
 	Customer        string
 	AgentExists     func(context.Context, string) bool
 	ImagePlugins    func(string) ([]string, error)
+	ImageDigest     func(string) (string, error)
 	TargetImageUsed func(context.Context, []string, string) bool
 }
 
@@ -268,6 +289,13 @@ func (s *Store) ActiveAutomation(ctx context.Context) (AutomationRevision, error
 	return out, err
 }
 
+func (s *Store) automationRevision(ctx context.Context, revision int) (AutomationRevision, error) {
+	var out AutomationRevision
+	err := s.db.QueryRowContext(ctx, `SELECT revision,config_hash,config_json,created_at FROM judge_automation_revisions WHERE revision=?`, revision).
+		Scan(&out.Revision, &out.Hash, &out.CanonicalJSON, &out.CreatedAt)
+	return out, err
+}
+
 func (s *Store) saveAutomationTx(ctx context.Context, tx *sql.Tx, canonical, scheduleID string) (AutomationRevision, error) {
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(canonical)))
 	var out AutomationRevision
@@ -337,8 +365,18 @@ func (s *AutomationService) Apply(ctx context.Context, raw []byte) (AutomationAp
 		return AutomationApplyResult{}, err
 	}
 	roles := append([]string{parsed.Config.Judge.Lead}, parsed.Config.Judge.Workers...)
+	imageDigest := ""
+	if s.validator.ImageDigest != nil {
+		imageDigest, err = s.validator.ImageDigest(parsed.Config.Judge.ImageRef)
+		if err != nil {
+			return AutomationApplyResult{}, err
+		}
+	}
 	for _, name := range roles {
-		if _, err := tx.ExecContext(ctx, `UPDATE agents SET enabled=1,loop_enabled=1,max_idle_iterations=0 WHERE name=?`, name); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE agents SET enabled=1,loop_enabled=1,max_idle_iterations=0,
+			pending_image_ref=CASE WHEN ?='' THEN pending_image_ref ELSE ? END,
+			pending_image_digest=CASE WHEN ?='' THEN pending_image_digest ELSE ? END,
+			pending_image_error=CASE WHEN ?='' THEN pending_image_error ELSE '' END WHERE name=?`, imageDigest, parsed.Config.Judge.ImageRef, imageDigest, imageDigest, imageDigest, name); err != nil {
 			return AutomationApplyResult{}, err
 		}
 	}
@@ -366,4 +404,164 @@ func (s *AutomationService) RunOnce(ctx context.Context, limit int) (schedule.Sc
 		Agent: parsed.Config.Judge.Lead, Kind: "oneshot", Spec: s.now().UTC().Format(time.RFC3339),
 		Channel: "agent:" + parsed.Config.Judge.Lead + ":inbox", MessageTemplate: string(message),
 	})
+}
+
+func (s *AutomationService) Begin(ctx context.Context, callerAgent, callerIteration string, revision int, deliveryID string, limit int) (AutomationCycle, error) {
+	if s.tasks == nil {
+		return AutomationCycle{}, fmt.Errorf("judge automation: tasks service is not configured")
+	}
+	if strings.TrimSpace(deliveryID) == "" || limit <= 0 {
+		return AutomationCycle{}, fmt.Errorf("judge automation: delivery id and positive limit are required")
+	}
+	if cycle, err := s.store.automationCycleByDelivery(ctx, deliveryID); err == nil {
+		return cycle, nil
+	} else if err != sql.ErrNoRows {
+		return AutomationCycle{}, err
+	}
+	active, err := s.store.ActiveAutomation(ctx)
+	if err != nil {
+		return AutomationCycle{}, err
+	}
+	parsed := ParseAutomation([]byte(active.CanonicalJSON))
+	validated := s.validator.Validate(ctx, parsed.Config)
+	if len(parsed.Diagnostics) > 0 || len(validated.Diagnostics) > 0 || !parsed.Config.Enabled || active.Revision != revision {
+		return AutomationCycle{}, fmt.Errorf("judge automation: requested configuration is not active and runnable")
+	}
+	if callerAgent != parsed.Config.Judge.Lead {
+		return AutomationCycle{}, ErrUnauthorized
+	}
+	actor := tasks.AgentActor(callerAgent)
+	task, err := s.tasks.CreateTask(ctx, actor, tasks.CreateTaskInput{
+		Queue: "JUDGE", Title: fmt.Sprintf("Judge automation cycle %s", deliveryID),
+		Description: fmt.Sprintf("Automatic review using configuration revision %d.", revision),
+		Assignee:    "agent:" + callerAgent, Priority: tasks.PriorityP2, IdempotencyKey: "judge-cycle:" + deliveryID,
+	})
+	if err != nil {
+		return AutomationCycle{}, err
+	}
+	cycle := AutomationCycle{ID: uuid.NewString(), ConfigRevision: revision, DeliveryID: deliveryID, TaskKey: task.Key, Status: "starting"}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	cycle.CreatedAt, cycle.UpdatedAt = now, now
+	var activeCycle string
+	err = s.store.db.QueryRowContext(ctx, `SELECT id FROM judge_automation_cycles WHERE config_revision=? AND status IN ('starting','running','summarizing')`, revision).Scan(&activeCycle)
+	if err != nil && err != sql.ErrNoRows {
+		return AutomationCycle{}, err
+	}
+	if activeCycle != "" {
+		cycle.Status = "skipped"
+		cycle.LastError = "another cycle for this configuration revision is active"
+		if err := s.store.insertAutomationCycle(ctx, cycle); err != nil {
+			return AutomationCycle{}, err
+		}
+		if err := s.completeTask(ctx, cycle, cycle.LastError); err != nil {
+			return AutomationCycle{}, err
+		}
+		return cycle, nil
+	}
+	if err := s.store.insertAutomationCycle(ctx, cycle); err != nil {
+		if existing, getErr := s.store.automationCycleByDelivery(ctx, deliveryID); getErr == nil {
+			return existing, nil
+		}
+		return AutomationCycle{}, err
+	}
+	var group string
+	if err := s.store.db.QueryRowContext(ctx, `SELECT "group" FROM agents WHERE name=?`, callerAgent).Scan(&group); err != nil {
+		return AutomationCycle{}, err
+	}
+	run, _, err := s.store.CreateRun(ctx, CreateRunRequest{
+		OriginalRequest: fmt.Sprintf("Automatic Judge review for task %s, configuration revision %d.", task.Key, revision),
+		Selector:        Selector{Agents: parsed.Config.Targets.Agents, ImageRefs: parsed.Config.Targets.ImageRefs, OnlyUnprocessed: parsed.Config.Targets.OnlyUnprocessed, Statuses: []string{"done", "no_i_am_done", "harness_error", "timeout", "killed"}, Order: "oldest", Limit: limit},
+		JudgeGroup:      group, LeadAgent: callerAgent, SummaryAgent: callerAgent, CreatorIteration: callerIteration,
+		JudgeAgents: parsed.Config.Judge.Workers, JudgesPerIteration: 1, MaxAttempts: 1,
+	})
+	if err != nil {
+		status := "failed"
+		if err == ErrEmptySelection {
+			status = "completed"
+		}
+		_, _ = s.store.db.ExecContext(ctx, `UPDATE judge_automation_cycles SET status=?,last_error=?,updated_at=? WHERE id=?`, status, err.Error(), s.now().UTC().Format(time.RFC3339Nano), cycle.ID)
+		if err == ErrEmptySelection {
+			cycle.Status, cycle.LastError = status, err.Error()
+			if taskErr := s.completeTask(ctx, cycle, "No eligible target iterations were found."); taskErr != nil {
+				return AutomationCycle{}, taskErr
+			}
+			return cycle, nil
+		}
+		return AutomationCycle{}, err
+	}
+	cycle.RunID, cycle.Status, cycle.UpdatedAt = run.ID, "running", s.now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.store.db.ExecContext(ctx, `UPDATE judge_automation_cycles SET run_id=?,status=?,updated_at=? WHERE id=?`, cycle.RunID, cycle.Status, cycle.UpdatedAt, cycle.ID); err != nil {
+		return AutomationCycle{}, err
+	}
+	if s.enqueue != nil {
+		s.enqueue(run.ID)
+	}
+	return cycle, nil
+}
+
+func (s *AutomationService) Finish(ctx context.Context, runID, conclusion string) error {
+	var cycle AutomationCycle
+	if err := s.store.db.QueryRowContext(ctx, `SELECT id,config_revision,delivery_id,task_key,run_id,status,last_error,created_at,updated_at FROM judge_automation_cycles WHERE run_id=?`, runID).
+		Scan(&cycle.ID, &cycle.ConfigRevision, &cycle.DeliveryID, &cycle.TaskKey, &cycle.RunID, &cycle.Status, &cycle.LastError, &cycle.CreatedAt, &cycle.UpdatedAt); err == sql.ErrNoRows {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := s.completeTask(ctx, cycle, conclusion); err != nil {
+		return err
+	}
+	_, err := s.store.db.ExecContext(ctx, `UPDATE judge_automation_cycles SET status='completed',last_error='',updated_at=? WHERE id=?`, s.now().UTC().Format(time.RFC3339Nano), cycle.ID)
+	return err
+}
+
+func (s *AutomationService) Fail(ctx context.Context, runID string, failure error) error {
+	var cycle AutomationCycle
+	if err := s.store.db.QueryRowContext(ctx, `SELECT id,config_revision,delivery_id,task_key,run_id,status,last_error,created_at,updated_at FROM judge_automation_cycles WHERE run_id=?`, runID).
+		Scan(&cycle.ID, &cycle.ConfigRevision, &cycle.DeliveryID, &cycle.TaskKey, &cycle.RunID, &cycle.Status, &cycle.LastError, &cycle.CreatedAt, &cycle.UpdatedAt); err == sql.ErrNoRows {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	message := "Judge automation failed."
+	if failure != nil {
+		message += " " + failure.Error()
+	}
+	if err := s.completeTask(ctx, cycle, message); err != nil {
+		return err
+	}
+	_, err := s.store.db.ExecContext(ctx, `UPDATE judge_automation_cycles SET status='failed',last_error=?,updated_at=? WHERE id=?`, message, s.now().UTC().Format(time.RFC3339Nano), cycle.ID)
+	return err
+}
+
+func (s *AutomationService) completeTask(ctx context.Context, cycle AutomationCycle, result string) error {
+	revision, err := s.store.automationRevision(ctx, cycle.ConfigRevision)
+	if err != nil {
+		return err
+	}
+	config := ParseAutomation([]byte(revision.CanonicalJSON)).Config
+	actor := tasks.AgentActor(config.Judge.Lead)
+	if _, err := s.tasks.AddComment(ctx, actor, cycle.TaskKey, tasks.AddCommentInput{
+		Body:           fmt.Sprintf("%s\n\n@user:%s", strings.TrimSpace(result), strings.TrimPrefix(s.validator.Customer, "user:")),
+		IdempotencyKey: "judge-cycle-result:" + cycle.ID,
+	}); err != nil {
+		return err
+	}
+	detail, err := s.tasks.GetTask(ctx, actor, cycle.TaskKey)
+	if err != nil {
+		return err
+	}
+	_, err = s.tasks.CompleteTask(ctx, actor, cycle.TaskKey, tasks.CompleteInput{Revision: detail.Task.Revision, CompleteAnyway: true})
+	return err
+}
+
+func (s *Store) automationCycleByDelivery(ctx context.Context, deliveryID string) (AutomationCycle, error) {
+	var cycle AutomationCycle
+	err := s.db.QueryRowContext(ctx, `SELECT id,config_revision,delivery_id,task_key,run_id,status,last_error,created_at,updated_at FROM judge_automation_cycles WHERE delivery_id=?`, deliveryID).
+		Scan(&cycle.ID, &cycle.ConfigRevision, &cycle.DeliveryID, &cycle.TaskKey, &cycle.RunID, &cycle.Status, &cycle.LastError, &cycle.CreatedAt, &cycle.UpdatedAt)
+	return cycle, err
+}
+
+func (s *Store) insertAutomationCycle(ctx context.Context, cycle AutomationCycle) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO judge_automation_cycles(id,config_revision,delivery_id,task_key,run_id,status,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, cycle.ID, cycle.ConfigRevision, cycle.DeliveryID, cycle.TaskKey, cycle.RunID, cycle.Status, cycle.LastError, cycle.CreatedAt, cycle.UpdatedAt)
+	return err
 }

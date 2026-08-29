@@ -882,6 +882,25 @@ func TestToolsJudgeCommandsMapBodiesAndReadJSONFiles(t *testing.T) {
 	}
 }
 
+func TestToolsJudgeAutomationBeginIsAThinAuthenticatedAction(t *testing.T) {
+	var action string
+	var body map[string]any
+	sock := startAgentAPIFull(t, agentapi.Deps{
+		Agent: "lead", Plugins: []string{"llm-as-judge"}, CurrentIteration: func() string { return "iteration-1" },
+		JudgeAction: func(gotAction string, gotBody map[string]any) (map[string]any, error) {
+			action, body = gotAction, gotBody
+			return map[string]any{"ok": true}, nil
+		},
+	})
+	var out, errOut bytes.Buffer
+	if code := Run(sock, []string{"judge", "automation", "begin", "--revision", "7", "--delivery", "delivery-1", "--limit", "3"}, &out, &errOut); code != 0 {
+		t.Fatalf("begin exit=%d err=%q", code, errOut.String())
+	}
+	if action != "automation.begin" || body["config_revision"] != float64(7) || body["delivery_id"] != "delivery-1" || body["limit"] != float64(3) {
+		t.Fatalf("action=%q body=%v", action, body)
+	}
+}
+
 func TestToolsJudgeIterationsSearchSeparatesJudgeAndTargetGroups(t *testing.T) {
 	var actions []string
 	var bodies []map[string]any

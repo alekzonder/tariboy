@@ -32,6 +32,7 @@ type ServiceConfig struct {
 	Audit        func(agent, typ, iteration string, data map[string]any)
 	Enqueue      func(string)
 	Improvements proposalCreator
+	Automation   *AutomationService
 }
 type Service struct {
 	store        *Store
@@ -42,10 +43,11 @@ type Service struct {
 	audit        func(string, string, string, map[string]any)
 	enqueue      func(string)
 	improvements proposalCreator
+	automation   *AutomationService
 }
 
 func NewService(c ServiceConfig) *Service {
-	return &Service{store: c.Store, agents: c.Agents, groups: c.Groups, bus: c.Bus, evidence: c.Evidence, audit: c.Audit, enqueue: c.Enqueue, improvements: c.Improvements}
+	return &Service{store: c.Store, agents: c.Agents, groups: c.Groups, bus: c.Bus, evidence: c.Evidence, audit: c.Audit, enqueue: c.Enqueue, improvements: c.Improvements, automation: c.Automation}
 }
 
 func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration, action string, body map[string]any) (map[string]any, error) {
@@ -53,6 +55,12 @@ func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration,
 		return nil, err
 	}
 	switch action {
+	case "automation.begin":
+		if s.automation == nil {
+			return nil, ErrCapabilityDisabled
+		}
+		cycle, err := s.automation.Begin(ctx, callerAgent, callerIteration, num(body, "config_revision"), str(body, "delivery_id"), num(body, "limit"))
+		return map[string]any{"cycle": cycle}, err
 	case "iterations.search":
 		if err := s.lead(callerAgent, str(body, "judge_group")); err != nil {
 			return nil, err
@@ -186,6 +194,9 @@ func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration,
 		out, e := s.store.SubmitSummary(SubmitSummaryRequest{RunID: r.ID, Agent: callerAgent, Iteration: callerIteration, RawSubmission: str(body, "raw_submission"), Result: result})
 		if e == nil {
 			s.record(callerAgent, "judge_summary_submitted", callerIteration, map[string]any{"run_id": r.ID, "summary_id": out.ID})
+			if s.automation != nil {
+				e = s.automation.Finish(ctx, r.ID, out.Result.ExecutiveConclusion)
+			}
 		}
 		return map[string]any{"summary": out}, e
 	case "improvement.submit":

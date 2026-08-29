@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/schedule"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 const validAutomationJSON = `{
@@ -147,5 +148,83 @@ func TestAutomationRunOnceUsesActiveRevisionAndLimit(t *testing.T) {
 	var recurring int
 	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM schedules WHERE enabled=1 AND kind='cron'`).Scan(&recurring); err != nil || recurring != 1 {
 		t.Fatalf("recurring=%d err=%v", recurring, err)
+	}
+}
+
+func TestAutomationBeginCreatesOneTaskAndOneRunPerDelivery(t *testing.T) {
+	db, js := newJudgeStore(t)
+	for _, name := range []string{"summary-alpha", "review-alpha", "review-beta"} {
+		seedJudgeAgent(t, db.DB, name)
+	}
+	for i, name := range []string{"maker-one", "maker-two", "maker-one"} {
+		id := []string{"target-one", "target-two", "target-three"}[i]
+		seedTarget(t, db.DB, id, name, "done", time.Date(2026, 8, 20+i, 9, 0, 0, 0, time.UTC).Format(time.RFC3339))
+		if _, err := db.DB.Exec(`UPDATE iterations SET image_ref=? WHERE id=?`, []string{"maker:11", "maker:12", "maker:12"}[i], id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clock := func() time.Time { return time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC) }
+	service := NewAutomationService(js, schedule.NewStore(db, clock), validAutomationValidator(), clock)
+	service.tasks = tasks.NewService(db.DB, "operator", clock)
+	enqueued := ""
+	service.enqueue = func(id string) { enqueued = id }
+	if _, err := service.Apply(context.Background(), []byte(validAutomationJSON)); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := service.Begin(context.Background(), "summary-alpha", "lead-iteration", 1, "delivery-1", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Begin(context.Background(), "summary-alpha", "lead-iteration", 1, "delivery-1", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID != second.ID || first.TaskKey == "" || first.RunID == "" || enqueued != first.RunID {
+		t.Fatalf("first=%+v second=%+v enqueued=%q", first, second, enqueued)
+	}
+	var taskCount, runCount int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix='JUDGE'`).Scan(&taskCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM judge_runs`).Scan(&runCount); err != nil {
+		t.Fatal(err)
+	}
+	if taskCount != 1 || runCount != 1 {
+		t.Fatalf("tasks=%d runs=%d", taskCount, runCount)
+	}
+}
+
+func TestAutomationFinishCompletesLinkedTaskAndMentionsConfiguredCustomer(t *testing.T) {
+	db, js := newJudgeStore(t)
+	for _, name := range []string{"summary-alpha", "review-alpha", "review-beta"} {
+		seedJudgeAgent(t, db.DB, name)
+	}
+	seedTarget(t, db.DB, "target-one", "maker-one", "done", "2026-08-20T09:00:00Z")
+	if _, err := db.DB.Exec(`UPDATE iterations SET image_ref='maker:11' WHERE id='target-one'`); err != nil {
+		t.Fatal(err)
+	}
+	clock := func() time.Time { return time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC) }
+	service := NewAutomationService(js, schedule.NewStore(db, clock), validAutomationValidator(), clock)
+	service.tasks = tasks.NewService(db.DB, "operator", clock)
+	if _, err := service.Apply(context.Background(), []byte(validAutomationJSON)); err != nil {
+		t.Fatal(err)
+	}
+	cycle, err := service.Begin(context.Background(), "summary-alpha", "lead-iteration", 1, "delivery-1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Finish(context.Background(), cycle.RunID, "Three recommendations are ready."); err != nil {
+		t.Fatal(err)
+	}
+	var status, body string
+	if err := db.DB.QueryRow(`SELECT status FROM tasks WHERE task_key=?`, cycle.TaskKey).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DB.QueryRow(`SELECT body FROM task_comments WHERE task_id=(SELECT id FROM tasks WHERE task_key=?) ORDER BY id DESC LIMIT 1`, cycle.TaskKey).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	if status != tasks.StatusDone || !strings.Contains(body, "Three recommendations") || !strings.Contains(body, "@user:operator") {
+		t.Fatalf("status=%q body=%q", status, body)
 	}
 }

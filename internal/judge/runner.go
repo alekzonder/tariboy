@@ -2,8 +2,10 @@ package judge
 
 import (
 	"context"
-	"github.com/alekzonder/tariboy/internal/bus"
+	"fmt"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/bus"
 )
 
 type RunnerConfig struct {
@@ -22,7 +24,10 @@ type Runner struct {
 	bus  *bus.Bus
 	tick time.Duration
 	wake chan string
+	fail func(context.Context, string, error)
 }
+
+func (r *Runner) SetFailureCallback(fn func(context.Context, string, error)) { r.fail = fn }
 
 func NewRunner(c RunnerConfig) *Runner {
 	t := c.Tick
@@ -70,10 +75,16 @@ func (r *Runner) run(ctx context.Context, id string) {
 		return
 	}
 	if x.Status == RunSnapshotting && r.snapshotter != nil {
-		if r.snapshotter.BuildRun(ctx, id) == nil {
+		if err := r.snapshotter.BuildRun(ctx, id); err == nil {
 			_ = r.store.CreateAssignments(id)
 			x, _ = r.store.GetRun(id)
 			r.work(x)
+		} else {
+			_, _ = r.store.db.ExecContext(ctx, `UPDATE judge_runs SET status='partial',last_error=?,updated_at=? WHERE id=?`, err.Error(), r.store.now().UTC().Format(time.RFC3339Nano), id)
+			if r.fail != nil {
+				r.fail(ctx, id, fmt.Errorf("snapshot failed: %w", err))
+			}
+			return
 		}
 	}
 	if x.Status == RunRunning {
@@ -81,6 +92,10 @@ func (r *Runner) run(ctx context.Context, id string) {
 		r.work(x)
 	}
 	x, _ = r.store.GetRun(id)
+	if x.Status == RunPartial && r.fail != nil {
+		r.fail(ctx, id, fmt.Errorf("judge run ended without a complete summary: %s", x.LastError))
+		return
+	}
 	if x.Status == RunSummarizing {
 		r.summary(x)
 	}
