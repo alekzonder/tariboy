@@ -1,7 +1,11 @@
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useOutletContext } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { usePolling } from "@/hooks/usePolling";
-import { listJudgeRuns, type JudgeRun, type JudgeRunStatus } from "@/lib/judge";
+import type { ApiTarget } from "@/lib/api";
+import { applyJudgeAutomation, getJudgeAutomation, listJudgeRunsOn, validateJudgeAutomation, type JudgeAutomationDiagnostic, type JudgeRun, type JudgeRunStatus } from "@/lib/judge";
 
 const statusVariant = (status: JudgeRunStatus) => {
   if (status === "completed") return "default";
@@ -21,8 +25,41 @@ function modelFor(run: JudgeRun): string {
 }
 
 export default function JudgeRunsPage() {
-  const { data, error } = usePolling(listJudgeRuns, 5000);
-  const runs = data?.runs ?? [];
+	const target = useOutletContext<ApiTarget>();
+	const listRuns = useCallback(() => listJudgeRunsOn(target), [target]);
+	const { data, error } = usePolling(listRuns, 5000);
+	const runs = data?.runs ?? [];
+	const [config, setConfig] = useState("");
+	const [saved, setSaved] = useState("");
+	const [diagnostics, setDiagnostics] = useState<JudgeAutomationDiagnostic[]>([]);
+	const [configError, setConfigError] = useState("");
+	const [busy, setBusy] = useState(false);
+
+	useEffect(() => {
+		let current = true;
+		void getJudgeAutomation(target).then((state) => {
+			if (!current) return;
+			const raw = state.revision?.canonical_json ?? "";
+			setConfig(raw);
+			setSaved(raw);
+		}).catch((cause) => { if (current) setConfigError((cause as Error).message); });
+		return () => { current = false; };
+	}, [target]);
+
+	const validate = async () => {
+		setBusy(true); setConfigError("");
+		try { setDiagnostics((await validateJudgeAutomation(target, config)).diagnostics); }
+		catch (cause) { setConfigError((cause as Error).message); }
+		finally { setBusy(false); }
+	};
+	const apply = async () => {
+		setBusy(true); setConfigError("");
+		try {
+			const result = await applyJudgeAutomation(target, config);
+			setConfig(result.revision.canonical_json); setSaved(result.revision.canonical_json); setDiagnostics([]);
+		} catch (cause) { setConfigError((cause as Error).message); }
+		finally { setBusy(false); }
+	};
 
   return (
     <div className="space-y-4 p-6">
@@ -30,6 +67,13 @@ export default function JudgeRunsPage() {
         <h1 className="text-lg font-semibold">Judge runs</h1>
         <p className="text-sm text-muted-foreground">Historical iterations evaluated by LLM-as-Judge.</p>
       </div>
+	  <section className="space-y-3 rounded border p-4">
+		<div><h2 className="font-medium">Automation configuration</h2><p className="text-sm text-muted-foreground">Raw JSON validated and applied by the selected tariboyd.</p></div>
+		<label className="block space-y-1 text-sm"><span>Judge automation JSON</span><Textarea className="min-h-72 font-mono text-xs" value={config} onChange={(event) => setConfig(event.target.value)} spellCheck={false} /></label>
+		{diagnostics.length > 0 && <ul role="alert" className="space-y-1 text-sm text-destructive">{diagnostics.map((item) => <li key={`${item.path}:${item.message}`}><code>{item.path}</code>: {item.message}</li>)}</ul>}
+		{configError && <p className="text-sm text-destructive">{configError}</p>}
+		<div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => void validate()}>Validate</Button><Button type="button" disabled={busy} onClick={() => void apply()}>Apply</Button><Button type="button" variant="ghost" disabled={busy || config === saved} onClick={() => { setConfig(saved); setDiagnostics([]); }}>Reset</Button></div>
+	  </section>
       {error && <p role="alert" className="rounded border border-destructive/40 px-3 py-2 text-sm text-destructive">Could not load judge runs: {error.message}</p>}
       <div className="overflow-x-auto rounded border">
         <table className="w-full text-sm">

@@ -17,6 +17,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/improvement"
 	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/retention"
+	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
@@ -69,20 +70,21 @@ type Ctx struct {
 	// HTTPAddr is the loopback host:port of the API/WS listener, empty when the
 	// daemon runs socket-only. The desktop app reads it from the status payload
 	// to build a base URL for a daemon it adopted rather than started.
-	HTTPAddr     string
-	Version      string
-	StartedAt    time.Time
-	Control      ServiceControl
-	Scripts      ScriptControl
-	Bus          *bus.Bus
-	Plugins      PluginControl
-	Groups       GroupControl
-	Judges       JudgeControl
-	Improvements ImprovementControl
-	Operator     string
-	Retention    *retention.RetentionAPI
-	Policy       PolicyRefresher
-	Tasks        TaskControl
+	HTTPAddr        string
+	Version         string
+	StartedAt       time.Time
+	Control         ServiceControl
+	Scripts         ScriptControl
+	Bus             *bus.Bus
+	Plugins         PluginControl
+	Groups          GroupControl
+	Judges          JudgeControl
+	JudgeAutomation JudgeAutomationControl
+	Improvements    ImprovementControl
+	Operator        string
+	Retention       *retention.RetentionAPI
+	Policy          PolicyRefresher
+	Tasks           TaskControl
 }
 
 // TaskControl is the daemon-owned native Tasks surface consumed by typed HTTP
@@ -284,6 +286,13 @@ type JudgeControl interface {
 	OperatorEvidence(runID, targetID string, locator judge.EvidenceLocator) (map[string]any, error)
 	OperatorCancel(string) error
 	OperatorRetry(string) error
+}
+
+type JudgeAutomationControl interface {
+	Get(context.Context) (judge.AutomationRevision, error)
+	Validate(context.Context, []byte) judge.AutomationValidation
+	Apply(context.Context, []byte) (judge.AutomationApplyResult, error)
+	RunOnce(context.Context, int) (schedule.Schedule, error)
 }
 
 type ImprovementControl interface {

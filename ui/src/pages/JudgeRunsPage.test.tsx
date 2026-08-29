@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import JudgeRunsPage, { compactCriteria } from "./JudgeRunsPage";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 function response(result: unknown, ok = true): Response {
   return { ok, status: ok ? 200 : 500, text: async () => JSON.stringify(result) } as Response;
@@ -70,4 +70,32 @@ it("stops polling when unmounted", async () => {
   unmount();
   await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
   expect(fetchMock).toHaveBeenCalledTimes(callsBeforeUnmount);
+});
+
+it("edits raw automation JSON and renders daemon validation diagnostics", async () => {
+  const canonical = "{\n  \"schema_version\": 1\n}\n";
+  const fetchMock = vi.fn().mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(_input);
+    if (url.endsWith("/api/judge-automation/validate")) {
+      return Promise.resolve(response({ ok: true, result: { diagnostics: [{ path: "/judge/workers", message: "must contain exactly two agents" }] } }));
+    }
+    if (url.endsWith("/api/judge-automation") && init?.method === "PUT") {
+      return Promise.resolve(response({ ok: true, result: { revision: { revision: 2, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    }
+    if (url.endsWith("/api/judge-automation")) {
+      return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    }
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<MemoryRouter><JudgeRunsPage /></MemoryRouter>);
+
+  const editor = await screen.findByLabelText("Judge automation JSON");
+  await waitFor(() => expect(editor).toHaveValue(canonical));
+  fireEvent.change(editor, { target: { value: "{bad" } });
+  fireEvent.click(screen.getByRole("button", { name: "Validate" }));
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("/judge/workers"));
+  fireEvent.change(editor, { target: { value: canonical } });
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/judge-automation"), expect.objectContaining({ method: "PUT", body: expect.stringContaining("config_json") })));
 });

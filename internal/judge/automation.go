@@ -91,6 +91,18 @@ func NewAutomationService(store *Store, schedules *schedule.Store, validator Aut
 	return &AutomationService{store: store, schedules: schedules, validator: validator, now: now}
 }
 
+func (s *AutomationService) Get(ctx context.Context) (AutomationRevision, error) {
+	return s.store.ActiveAutomation(ctx)
+}
+
+func (s *AutomationService) Validate(ctx context.Context, raw []byte) AutomationValidation {
+	parsed := ParseAutomation(raw)
+	if len(parsed.Diagnostics) > 0 {
+		return parsed
+	}
+	return s.validator.Validate(ctx, parsed.Config)
+}
+
 func (s *AutomationService) ConfigureExecution(taskService *tasks.Service, enqueue func(string)) {
 	s.tasks, s.enqueue = taskService, enqueue
 }
@@ -320,14 +332,11 @@ func (s *Store) saveAutomationTx(ctx context.Context, tx *sql.Tx, canonical, sch
 }
 
 func (s *AutomationService) Apply(ctx context.Context, raw []byte) (AutomationApplyResult, error) {
-	parsed := ParseAutomation(raw)
-	if len(parsed.Diagnostics) > 0 {
-		return AutomationApplyResult{}, fmt.Errorf("judge automation: %s: %s", parsed.Diagnostics[0].Path, parsed.Diagnostics[0].Message)
-	}
-	validated := s.validator.Validate(ctx, parsed.Config)
+	validated := s.Validate(ctx, raw)
 	if len(validated.Diagnostics) > 0 {
 		return AutomationApplyResult{}, fmt.Errorf("judge automation: %s: %s", validated.Diagnostics[0].Path, validated.Diagnostics[0].Message)
 	}
+	parsed := AutomationValidation{Config: validated.Config}
 	tx, err := s.store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return AutomationApplyResult{}, err

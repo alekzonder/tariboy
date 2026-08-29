@@ -681,13 +681,14 @@ func Run(ctx context.Context, o Options) error {
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
 		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: channelBus, Plugins: pluginHost,
-		Groups:       groupProv,
-		Judges:       judgeService,
-		Improvements: improvementService,
-		Operator:     taskService.CustomerLogin(),
-		Retention:    &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
-		Policy:       policyCache,
-		Tasks:        taskService,
+		Groups:          groupProv,
+		Judges:          judgeService,
+		JudgeAutomation: judgeAutomation,
+		Improvements:    improvementService,
+		Operator:        taskService.CustomerLogin(),
+		Retention:       &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
+		Policy:          policyCache,
+		Tasks:           taskService,
 	}
 	srv := api.NewServer(commands.BuildRegistry(), cctx)
 	srv.SetEventSource(hub)

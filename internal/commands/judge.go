@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"database/sql"
 	"errors"
 
 	"github.com/alekzonder/tariboy/internal/aiproxy"
@@ -14,6 +15,12 @@ func requireJudges(c *registry.Ctx) (registry.JudgeControl, error) {
 		return nil, api.UserError{Code: "no_judge_control", Msg: "judge control is not available"}
 	}
 	return c.Judges, nil
+}
+func requireJudgeAutomation(c *registry.Ctx) (registry.JudgeAutomationControl, error) {
+	if c.JudgeAutomation == nil {
+		return nil, api.UserError{Code: "no_judge_automation_control", Msg: "judge automation control is not available"}
+	}
+	return c.JudgeAutomation, nil
 }
 func judgeError(err error) error {
 	if errors.Is(err, judge.ErrNotFound) {
@@ -144,4 +151,52 @@ func judgeRetry() registry.Command {
 			return map[string]any{"id": str(p, "id"), "retried": true}, nil
 		},
 	}
+}
+
+func judgeAutomationGet() registry.Command {
+	return registry.Command{Path: "judge.automation.get", Summary: "Read the active Judge automation JSON", HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/judge-automation"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireJudgeAutomation(c)
+		if err != nil {
+			return nil, err
+		}
+		revision, err := control.Get(registry.RequestContext(p))
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]any{"configured": false}, nil
+		}
+		return map[string]any{"configured": err == nil, "revision": revision}, err
+	}}
+}
+
+func judgeAutomationValidate() registry.Command {
+	return registry.Command{Path: "judge.automation.validate", Summary: "Validate Judge automation JSON in tariboyd", Args: []registry.Arg{{Name: "config_json", Flag: "json", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/judge-automation/validate"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireJudgeAutomation(c)
+		if err != nil {
+			return nil, err
+		}
+		return control.Validate(registry.RequestContext(p), []byte(str(p, "config_json"))), nil
+	}}
+}
+
+func judgeAutomationApply() registry.Command {
+	return registry.Command{Path: "judge.automation.apply", Summary: "Apply Judge automation JSON without starting a review", Args: []registry.Arg{{Name: "config_json", Flag: "json", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: "PUT", Path: "/api/judge-automation"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireJudgeAutomation(c)
+		if err != nil {
+			return nil, err
+		}
+		validation := control.Validate(registry.RequestContext(p), []byte(str(p, "config_json")))
+		if len(validation.Diagnostics) > 0 {
+			return nil, api.UserError{Code: "invalid_judge_automation", Msg: "Judge automation configuration is invalid", Data: map[string]any{"diagnostics": validation.Diagnostics}}
+		}
+		return control.Apply(registry.RequestContext(p), []byte(str(p, "config_json")))
+	}}
+}
+
+func judgeAutomationRunOnce() registry.Command {
+	return registry.Command{Path: "judge.automation.run-once", Summary: "Queue one automatic Judge cycle through the current scheduler", Args: []registry.Arg{{Name: "limit", Flag: "limit", Type: registry.Int, Default: 100}}, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/judge-automation/run-once"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		control, err := requireJudgeAutomation(c)
+		if err != nil {
+			return nil, err
+		}
+		return control.RunOnce(registry.RequestContext(p), intOf(p, "limit", 100))
+	}}
 }

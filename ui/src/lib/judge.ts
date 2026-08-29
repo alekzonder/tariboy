@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiOn, apiPost, resolveTarget, type ApiTarget } from "@/lib/api";
 import type { ImprovementProposal } from "@/lib/improvement";
 
 export type JudgeRunStatus =
@@ -66,3 +66,14 @@ export const getJudgeEvidence = (runID: string, targetID: string, artifact: stri
 };
 export const retryJudgeRun = (id: string) => apiPost<{ id: string; retried: boolean }>(`/api/judges/${encodeURIComponent(id)}/retry`);
 export const cancelJudgeRun = (id: string) => apiPost<{ id: string; cancelled: boolean }>(`/api/judges/${encodeURIComponent(id)}/cancel`);
+
+export interface JudgeAutomationDiagnostic { path: string; message: string }
+export interface JudgeAutomationRevision { revision: number; hash: string; canonical_json: string; created_at: string }
+export interface JudgeAutomationState { configured: boolean; revision?: JudgeAutomationRevision }
+export interface JudgeAutomationValidation { canonical_json?: string; diagnostics: JudgeAutomationDiagnostic[] }
+export interface JudgeAutomationApply { revision: JudgeAutomationRevision }
+
+export const listJudgeRunsOn = (target: ApiTarget) => apiOn<JudgeRunList>(resolveTarget(target), "GET", "/api/judges");
+export const getJudgeAutomation = (target: ApiTarget) => apiOn<JudgeAutomationState>(resolveTarget(target), "GET", "/api/judge-automation");
+export const validateJudgeAutomation = (target: ApiTarget, configJSON: string) => apiOn<JudgeAutomationValidation>(resolveTarget(target), "POST", "/api/judge-automation/validate", { config_json: configJSON });
+export const applyJudgeAutomation = (target: ApiTarget, configJSON: string) => apiOn<JudgeAutomationApply>(resolveTarget(target), "PUT", "/api/judge-automation", { config_json: configJSON });
