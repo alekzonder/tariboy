@@ -25,6 +25,7 @@ func TestBuiltinJudgeImageDeclaresAutomaticCycleContract(t *testing.T) {
 		`"schema_version": 1`, `"recommendations": [{"description": "..."}]`, `"evidence_gaps": ["..."]`,
 		`"locator": "exact string returned by evidence search"`,
 		"tools judge summary claim RUN", "tools judge summary inputs RUN", "tools judge summary submit RUN --file summary.json",
+		"tools judge improvement submit RUN --file proposal.json", `"rollback_image": "name:immutable-tag"`,
 	} {
 		if !strings.Contains(string(instructions), required) {
 			t.Fatalf("instructions missing %q", required)

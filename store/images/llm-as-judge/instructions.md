@@ -91,7 +91,21 @@ present.
 
 After the summary, submit one improvement proposal per repository/release unit
 that needs changes. Do not combine changes to different images, skills,
-prompts, or repositories. Each proposal must include evidence, file allowlist,
-intent, acceptance criteria, risk, and rollback image. The daemon records the
-proposal on the JUDGE task and requests customer approval; only approval can
-create its corresponding IMPROVE task. Process the wake message and finish.
+prompts, or repositories. Write each `proposal.json` in exactly this shape and
+run `tools judge improvement submit RUN --file proposal.json`:
+
+```json
+{
+  "subject_ids": ["target subject id"],
+  "target": {"repository": "...", "base_commit": "...", "image": "...", "image_digest": "..."},
+  "findings": [{"severity": "...", "criterion": "...", "observation": "...", "evidence": [{"bundle_hash": "64 hex characters", "artifact": "...", "locator": "exact locator string"}]}],
+  "changes": [{"file": "relative/path", "intent": "..."}],
+  "acceptance": ["measurable criterion"],
+  "risk": "low|medium|high",
+  "rollback_image": "name:immutable-tag"
+}
+```
+
+The daemon records each proposal on the JUDGE task and requests customer
+approval; only approval can create its corresponding IMPROVE task. Process the
+wake message and finish.
