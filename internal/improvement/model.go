@@ -113,6 +113,7 @@ type Approval struct {
 	CreatedAt  string           `json:"created_at"`
 	Phase      ApprovalPhase    `json:"phase"`
 	Decision   ApprovalDecision `json:"decision"`
+	TaskKeys   []string         `json:"task_keys,omitempty"`
 }
 
 type Release struct {

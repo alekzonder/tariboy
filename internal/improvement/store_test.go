@@ -3,6 +3,7 @@ package improvement
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,6 +71,39 @@ func TestPlanApprovalBindsRevisionAndIsAppendOnly(t *testing.T) {
 	}
 	if _, err := db.DB.Exec(`DELETE FROM improvement_approvals WHERE id=?`, approval.ID); err == nil {
 		t.Fatal("approval row was deletable")
+	}
+}
+
+func TestPlanApprovalAtomicallyCreatesOneImproveTask(t *testing.T) {
+	db, store := testStore(t)
+	proposal, err := store.CreateProposal(context.Background(), CreateProposalRequest{
+		JudgeRunID: "judge-run-1", CreatorAgent: "judge-lead", CreatorIteration: "judge-it", Draft: validDraft(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := ApprovalRequest{ProposalID: proposal.ID, ObjectHash: proposal.RevisionHash, Decision: DecisionApprove, Actor: "operator"}
+	first, err := store.DecidePlan(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.DecidePlan(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.TaskKeys) != 1 || len(second.TaskKeys) != 1 || first.TaskKeys[0] != second.TaskKeys[0] {
+		t.Fatalf("first=%+v second=%+v", first, second)
+	}
+	var count int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix='IMPROVE'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("tasks=%d err=%v", count, err)
+	}
+	var description string
+	if err := db.DB.QueryRow(`SELECT description FROM tasks WHERE task_key=?`, first.TaskKeys[0]).Scan(&description); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(description, proposal.ID) || !strings.Contains(description, proposal.RevisionHash) || !strings.Contains(description, "judge-run-1") {
+		t.Fatalf("description=%q", description)
 	}
 }
 

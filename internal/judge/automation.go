@@ -533,6 +533,26 @@ func (s *AutomationService) Fail(ctx context.Context, runID string, failure erro
 	return err
 }
 
+func (s *AutomationService) RecordProposal(ctx context.Context, runID, proposalID, revisionHash string) error {
+	var cycle AutomationCycle
+	if err := s.store.db.QueryRowContext(ctx, `SELECT id,config_revision,delivery_id,task_key,run_id,status,last_error,created_at,updated_at FROM judge_automation_cycles WHERE run_id=?`, runID).
+		Scan(&cycle.ID, &cycle.ConfigRevision, &cycle.DeliveryID, &cycle.TaskKey, &cycle.RunID, &cycle.Status, &cycle.LastError, &cycle.CreatedAt, &cycle.UpdatedAt); err == sql.ErrNoRows {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	revision, err := s.store.automationRevision(ctx, cycle.ConfigRevision)
+	if err != nil {
+		return err
+	}
+	config := ParseAutomation([]byte(revision.CanonicalJSON)).Config
+	_, err = s.tasks.AddComment(ctx, tasks.AgentActor(config.Judge.Lead), cycle.TaskKey, tasks.AddCommentInput{
+		Body:           fmt.Sprintf("Improvement proposal `%s` is awaiting plan approval (revision `%s`).\n\n@user:%s", proposalID, revisionHash, strings.TrimPrefix(s.validator.Customer, "user:")),
+		IdempotencyKey: "judge-proposal:" + proposalID + ":" + revisionHash,
+	})
+	return err
+}
+
 func (s *AutomationService) completeTask(ctx context.Context, cycle AutomationCycle, result string) error {
 	revision, err := s.store.automationRevision(ctx, cycle.ConfigRevision)
 	if err != nil {

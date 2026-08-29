@@ -225,6 +225,11 @@ func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration,
 		if e != nil {
 			return nil, e
 		}
+		if s.automation != nil {
+			if e = s.automation.RecordProposal(ctx, r.ID, proposal.ID, proposal.RevisionHash); e != nil {
+				return nil, e
+			}
+		}
 		s.record(callerAgent, "improvement_plan_requested", callerIteration, map[string]any{"run_id": r.ID, "proposal_id": proposal.ID, "revision_hash": proposal.RevisionHash})
 		if s.bus != nil {
 			_, _ = s.bus.Publish(bus.Message{Channel: bus.InboxChannel(r.LeadAgent), Type: "improvement.plan.approval_requested", Source: "system:judge", Text: "improvement plan approval requested", Data: map[string]any{"run_id": r.ID, "proposal_id": proposal.ID, "revision_hash": proposal.RevisionHash}})

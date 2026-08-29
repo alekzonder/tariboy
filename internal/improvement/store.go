@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	storedb "github.com/alekzonder/tariboy/internal/store"
@@ -143,15 +144,38 @@ func (s *Store) DecidePlan(ctx context.Context, request ApprovalRequest) (Approv
 		return Approval{}, err
 	}
 	defer tx.Rollback()
-	var revision string
+	var revision, document, judgeRun string
 	var status Status
-	if err := tx.QueryRowContext(ctx, `SELECT revision_hash,status FROM improvement_proposals WHERE id=?`, request.ProposalID).Scan(&revision, &status); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT revision_hash,status,document_json,judge_run_id FROM improvement_proposals WHERE id=?`, request.ProposalID).Scan(&revision, &status, &document, &judgeRun); errors.Is(err, sql.ErrNoRows) {
 		return Approval{}, ErrNotFound
 	} else if err != nil {
 		return Approval{}, err
 	}
 	if revision != request.ObjectHash {
 		return Approval{}, ErrRevisionMismatch
+	}
+	if (status == StatusApproved && request.Decision == DecisionApprove) || (status == StatusRejected && request.Decision == DecisionReject) {
+		var existing Approval
+		if err := tx.QueryRowContext(ctx, `SELECT id,proposal_id,object_hash,actor,reason,created_at,phase,decision FROM improvement_approvals WHERE proposal_id=? AND phase='plan' AND object_hash=? AND decision=? ORDER BY created_at LIMIT 1`, request.ProposalID, request.ObjectHash, request.Decision).
+			Scan(&existing.ID, &existing.ProposalID, &existing.ObjectHash, &existing.Actor, &existing.Reason, &existing.CreatedAt, &existing.Phase, &existing.Decision); err != nil {
+			return Approval{}, err
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT task_key FROM improvement_tasks WHERE proposal_id=? AND revision_hash=? ORDER BY task_key`, request.ProposalID, request.ObjectHash)
+		if err != nil {
+			return Approval{}, err
+		}
+		for rows.Next() {
+			var key string
+			if err := rows.Scan(&key); err != nil {
+				rows.Close()
+				return Approval{}, err
+			}
+			existing.TaskKeys = append(existing.TaskKeys, key)
+		}
+		if err := rows.Close(); err != nil {
+			return Approval{}, err
+		}
+		return existing, tx.Commit()
 	}
 	if status != StatusAwaitingPlanApproval {
 		return Approval{}, ErrInvalidTransition
@@ -176,10 +200,66 @@ func (s *Store) DecidePlan(ctx context.Context, request ApprovalRequest) (Approv
 		}
 		return Approval{}, ErrRevisionMismatch
 	}
+	if request.Decision == DecisionApprove {
+		key, err := s.createImprovementTaskTx(ctx, tx, request, document, judgeRun, now)
+		if err != nil {
+			return Approval{}, err
+		}
+		approval.TaskKeys = []string{key}
+	}
 	if err := tx.Commit(); err != nil {
 		return Approval{}, err
 	}
 	return approval, nil
+}
+
+func (s *Store) createImprovementTaskTx(ctx context.Context, tx *sql.Tx, request ApprovalRequest, document, judgeRun, now string) (string, error) {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO task_queues(prefix,name,description,responsible_agent,next_number,revision,created_at,updated_at) VALUES('IMPROVE','Improve','Approved Judge improvement plans','',1,1,?,?) ON CONFLICT(prefix) DO NOTHING`, now, now); err != nil {
+		return "", err
+	}
+	var existing string
+	if err := tx.QueryRowContext(ctx, `SELECT task_key FROM improvement_tasks WHERE proposal_id=? AND revision_hash=?`, request.ProposalID, request.ObjectHash).Scan(&existing); err == nil {
+		return existing, nil
+	} else if err != sql.ErrNoRows {
+		return "", err
+	}
+	var draft ProposalDraft
+	if err := json.Unmarshal([]byte(document), &draft); err != nil {
+		return "", err
+	}
+	var next int64
+	if err := tx.QueryRowContext(ctx, `SELECT next_number FROM task_queues WHERE prefix='IMPROVE'`).Scan(&next); err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE task_queues SET next_number=next_number+1,revision=revision+1,updated_at=? WHERE prefix='IMPROVE'`, now); err != nil {
+		return "", err
+	}
+	var position int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position),-1)+1 FROM tasks WHERE queue_prefix='IMPROVE' AND parent_id IS NULL AND priority='P2'`).Scan(&position); err != nil {
+		return "", err
+	}
+	key := fmt.Sprintf("IMPROVE-%d", next)
+	actor := strings.TrimSpace(request.Actor)
+	if !strings.HasPrefix(actor, "user:") && !strings.HasPrefix(actor, "agent:") {
+		actor = "user:" + actor
+	}
+	description := fmt.Sprintf("Judge run: %s\nProposal: %s\nRevision: %s\nRepository: %s\nBase commit: %s\nImage: %s\nRollback image: %s\n\nCanonical plan:\n```json\n%s\n```", judgeRun, request.ProposalID, request.ObjectHash, draft.Target.Repository, draft.Target.BaseCommit, draft.Target.Image, draft.RollbackImage, document)
+	result, err := tx.ExecContext(ctx, `INSERT INTO tasks(task_key,queue_prefix,parent_id,position,priority,title,description,status,author,customer,group_name,assignee,created_at,updated_at) VALUES(?,'IMPROVE',NULL,?,'P2',?,?,'open',?,?, '', '',?,?)`, key, position, "Improve "+draft.Target.Repository+" / "+draft.Target.Image, description, actor, actor, now, now)
+	if err != nil {
+		return "", err
+	}
+	taskID, err := result.LastInsertId()
+	if err != nil {
+		return "", err
+	}
+	payload, _ := json.Marshal(map[string]any{"key": key, "proposal_id": request.ProposalID, "revision_hash": request.ObjectHash, "priority": "P2"})
+	if _, err := tx.ExecContext(ctx, `INSERT INTO task_events(event_id,task_id,queue_prefix,kind,actor,task_revision,payload,created_at) VALUES(?,?,'IMPROVE','task.created',?,1,?,?)`, "te-"+uuid.NewString(), taskID, actor, string(payload), now); err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO improvement_tasks(proposal_id,revision_hash,task_key,created_at) VALUES(?,?,?,?)`, request.ProposalID, request.ObjectHash, key, now); err != nil {
+		return "", err
+	}
+	return key, nil
 }
 
 func (s *Store) RecordRelease(ctx context.Context, release Release, proposalRevision string) (Release, error) {
