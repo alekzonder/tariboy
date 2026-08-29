@@ -5,6 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/alekzonder/tariboy/internal/schedule"
 )
 
 const validAutomationJSON = `{
@@ -93,5 +96,56 @@ func TestAutomationRevisionRoundTrip(t *testing.T) {
 	}
 	if got.Revision != first.Revision || got.Hash != first.Hash || got.CanonicalJSON != validated.CanonicalJSON {
 		t.Fatalf("active=%+v want=%+v", got, first)
+	}
+}
+
+func TestAutomationApplyCreatesQueuesAndOneRecurringSchedule(t *testing.T) {
+	db, js := newJudgeStore(t)
+	clock := func() time.Time { return time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC) }
+	service := NewAutomationService(js, schedule.NewStore(db, clock), validAutomationValidator(), clock)
+
+	first, err := service.Apply(context.Background(), []byte(validAutomationJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Apply(context.Background(), []byte(validAutomationJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Revision.Revision != second.Revision.Revision || first.Schedule.ID == "" || second.Schedule.ID == "" {
+		t.Fatalf("first=%+v second=%+v", first, second)
+	}
+	for _, prefix := range []string{"JUDGE", "IMPROVE"} {
+		var responsible string
+		if err := db.DB.QueryRow(`SELECT responsible_agent FROM task_queues WHERE prefix=?`, prefix).Scan(&responsible); err != nil {
+			t.Fatalf("queue %s: %v", prefix, err)
+		}
+		if prefix == "JUDGE" && responsible != "summary-alpha" {
+			t.Fatalf("JUDGE responsible=%q", responsible)
+		}
+	}
+	var schedules int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM schedules WHERE enabled=1 AND kind='cron'`).Scan(&schedules); err != nil || schedules != 1 {
+		t.Fatalf("schedules=%d err=%v", schedules, err)
+	}
+}
+
+func TestAutomationRunOnceUsesActiveRevisionAndLimit(t *testing.T) {
+	db, js := newJudgeStore(t)
+	clock := func() time.Time { return time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC) }
+	service := NewAutomationService(js, schedule.NewStore(db, clock), validAutomationValidator(), clock)
+	if _, err := service.Apply(context.Background(), []byte(validAutomationJSON)); err != nil {
+		t.Fatal(err)
+	}
+	one, err := service.RunOnce(context.Background(), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one.Kind != "oneshot" || !strings.Contains(one.MessageTemplate, `"limit":3`) || !strings.Contains(one.MessageTemplate, `"config_revision":1`) {
+		t.Fatalf("oneshot=%+v", one)
+	}
+	var recurring int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM schedules WHERE enabled=1 AND kind='cron'`).Scan(&recurring); err != nil || recurring != 1 {
+		t.Fatalf("recurring=%d err=%v", recurring, err)
 	}
 }

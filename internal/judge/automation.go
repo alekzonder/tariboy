@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -53,6 +54,25 @@ type AutomationRevision struct {
 	Hash          string `json:"hash"`
 	CanonicalJSON string `json:"canonical_json"`
 	CreatedAt     string `json:"created_at"`
+}
+
+type AutomationApplyResult struct {
+	Revision AutomationRevision `json:"revision"`
+	Schedule schedule.Schedule  `json:"schedule"`
+}
+
+type AutomationService struct {
+	store     *Store
+	schedules *schedule.Store
+	validator AutomationValidator
+	now       func() time.Time
+}
+
+func NewAutomationService(store *Store, schedules *schedule.Store, validator AutomationValidator, now func() time.Time) *AutomationService {
+	if now == nil {
+		now = time.Now
+	}
+	return &AutomationService{store: store, schedules: schedules, validator: validator, now: now}
 }
 
 type AutomationValidator struct {
@@ -226,33 +246,19 @@ func (v AutomationValidator) Validate(ctx context.Context, config AutomationConf
 }
 
 func (s *Store) SaveAutomation(ctx context.Context, canonical string) (AutomationRevision, error) {
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(canonical)))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return AutomationRevision{}, err
 	}
 	defer tx.Rollback()
-	var existing AutomationRevision
-	err = tx.QueryRowContext(ctx, `SELECT revision,config_hash,config_json,created_at FROM judge_automation_revisions WHERE config_hash=?`, hash).
-		Scan(&existing.Revision, &existing.Hash, &existing.CanonicalJSON, &existing.CreatedAt)
-	if err == nil {
-		return existing, tx.Commit()
-	}
-	var revision int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(revision),0)+1 FROM judge_automation_revisions`).Scan(&revision); err != nil {
-		return AutomationRevision{}, err
-	}
-	now := s.now().UTC().Format(time.RFC3339Nano)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO judge_automation_revisions(revision,config_json,config_hash,created_at) VALUES(?,?,?,?)`, revision, canonical, hash, now); err != nil {
-		return AutomationRevision{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO judge_automation_state(singleton,active_revision,updated_at) VALUES(1,?,?) ON CONFLICT(singleton) DO UPDATE SET active_revision=excluded.active_revision,updated_at=excluded.updated_at`, revision, now); err != nil {
+	revision, err := s.saveAutomationTx(ctx, tx, canonical, "")
+	if err != nil {
 		return AutomationRevision{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return AutomationRevision{}, err
 	}
-	return AutomationRevision{Revision: revision, Hash: hash, CanonicalJSON: canonical, CreatedAt: now}, nil
+	return revision, nil
 }
 
 func (s *Store) ActiveAutomation(ctx context.Context) (AutomationRevision, error) {
@@ -260,4 +266,104 @@ func (s *Store) ActiveAutomation(ctx context.Context) (AutomationRevision, error
 	err := s.db.QueryRowContext(ctx, `SELECT r.revision,r.config_hash,r.config_json,r.created_at FROM judge_automation_state s JOIN judge_automation_revisions r ON r.revision=s.active_revision WHERE s.singleton=1`).
 		Scan(&out.Revision, &out.Hash, &out.CanonicalJSON, &out.CreatedAt)
 	return out, err
+}
+
+func (s *Store) saveAutomationTx(ctx context.Context, tx *sql.Tx, canonical, scheduleID string) (AutomationRevision, error) {
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(canonical)))
+	var out AutomationRevision
+	err := tx.QueryRowContext(ctx, `SELECT revision,config_hash,config_json,created_at FROM judge_automation_revisions WHERE config_hash=?`, hash).
+		Scan(&out.Revision, &out.Hash, &out.CanonicalJSON, &out.CreatedAt)
+	if err == sql.ErrNoRows {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(revision),0)+1 FROM judge_automation_revisions`).Scan(&out.Revision); err != nil {
+			return AutomationRevision{}, err
+		}
+		out.Hash, out.CanonicalJSON, out.CreatedAt = hash, canonical, s.now().UTC().Format(time.RFC3339Nano)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO judge_automation_revisions(revision,config_json,config_hash,created_at) VALUES(?,?,?,?)`, out.Revision, canonical, hash, out.CreatedAt); err != nil {
+			return AutomationRevision{}, err
+		}
+	} else if err != nil {
+		return AutomationRevision{}, err
+	}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO judge_automation_state(singleton,active_revision,schedule_id,updated_at) VALUES(1,?,?,?) ON CONFLICT(singleton) DO UPDATE SET active_revision=excluded.active_revision,schedule_id=excluded.schedule_id,updated_at=excluded.updated_at`, out.Revision, scheduleID, now); err != nil {
+		return AutomationRevision{}, err
+	}
+	return out, nil
+}
+
+func (s *AutomationService) Apply(ctx context.Context, raw []byte) (AutomationApplyResult, error) {
+	parsed := ParseAutomation(raw)
+	if len(parsed.Diagnostics) > 0 {
+		return AutomationApplyResult{}, fmt.Errorf("judge automation: %s: %s", parsed.Diagnostics[0].Path, parsed.Diagnostics[0].Message)
+	}
+	validated := s.validator.Validate(ctx, parsed.Config)
+	if len(validated.Diagnostics) > 0 {
+		return AutomationApplyResult{}, fmt.Errorf("judge automation: %s: %s", validated.Diagnostics[0].Path, validated.Diagnostics[0].Message)
+	}
+	tx, err := s.store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return AutomationApplyResult{}, err
+	}
+	defer tx.Rollback()
+	var oldSchedule string
+	_ = tx.QueryRowContext(ctx, `SELECT schedule_id FROM judge_automation_state WHERE singleton=1`).Scan(&oldSchedule)
+	if oldSchedule != "" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM schedules WHERE id=?`, oldSchedule); err != nil {
+			return AutomationApplyResult{}, err
+		}
+	}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	for _, queue := range []struct{ prefix, name, responsible string }{
+		{"JUDGE", "Judge", parsed.Config.Judge.Lead},
+		{"IMPROVE", "Improve", ""},
+	} {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO task_queues(prefix,name,description,responsible_agent,next_number,revision,created_at,updated_at) VALUES(?,?,?, ?,1,1,?,?) ON CONFLICT(prefix) DO UPDATE SET responsible_agent=excluded.responsible_agent,revision=task_queues.revision+1,updated_at=excluded.updated_at`, queue.prefix, queue.name, "", queue.responsible, now, now); err != nil {
+			return AutomationApplyResult{}, err
+		}
+	}
+	revision, err := s.store.saveAutomationTx(ctx, tx, validated.CanonicalJSON, "")
+	if err != nil {
+		return AutomationApplyResult{}, err
+	}
+	var sch schedule.Schedule
+	if parsed.Config.Enabled {
+		message, _ := json.Marshal(map[string]any{"type": "judge.review.requested", "data": map[string]any{"config_revision": revision.Revision}})
+		sch, err = s.schedules.AddTx(tx, schedule.Schedule{Agent: parsed.Config.Judge.Lead, Kind: "cron", Spec: parsed.Config.Schedule.Spec, Channel: "agent:" + parsed.Config.Judge.Lead + ":inbox", MessageTemplate: string(message)})
+		if err != nil {
+			return AutomationApplyResult{}, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE judge_automation_state SET schedule_id=? WHERE singleton=1`, sch.ID); err != nil {
+		return AutomationApplyResult{}, err
+	}
+	roles := append([]string{parsed.Config.Judge.Lead}, parsed.Config.Judge.Workers...)
+	for _, name := range roles {
+		if _, err := tx.ExecContext(ctx, `UPDATE agents SET enabled=1,loop_enabled=1,max_idle_iterations=0 WHERE name=?`, name); err != nil {
+			return AutomationApplyResult{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return AutomationApplyResult{}, err
+	}
+	return AutomationApplyResult{Revision: revision, Schedule: sch}, nil
+}
+
+func (s *AutomationService) RunOnce(ctx context.Context, limit int) (schedule.Schedule, error) {
+	if limit <= 0 {
+		return schedule.Schedule{}, fmt.Errorf("judge automation: limit must be positive")
+	}
+	revision, err := s.store.ActiveAutomation(ctx)
+	if err != nil {
+		return schedule.Schedule{}, err
+	}
+	parsed := ParseAutomation([]byte(revision.CanonicalJSON))
+	validated := s.validator.Validate(ctx, parsed.Config)
+	if len(parsed.Diagnostics) > 0 || len(validated.Diagnostics) > 0 || !parsed.Config.Enabled {
+		return schedule.Schedule{}, fmt.Errorf("judge automation: active configuration is not runnable")
+	}
+	message, _ := json.Marshal(map[string]any{"type": "judge.review.requested", "data": map[string]any{"config_revision": revision.Revision, "limit": limit}})
+	return s.schedules.Add(schedule.Schedule{
+		Agent: parsed.Config.Judge.Lead, Kind: "oneshot", Spec: s.now().UTC().Format(time.RFC3339),
+		Channel: "agent:" + parsed.Config.Judge.Lead + ":inbox", MessageTemplate: string(message),
+	})
 }
