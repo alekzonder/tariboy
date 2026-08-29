@@ -78,6 +78,11 @@ func TestAutomationValidationReportsJSONPointerDiagnostics(t *testing.T) {
 	if len(result.Diagnostics) == 0 || result.Diagnostics[0].Path != "/customer" {
 		t.Fatalf("diagnostics=%+v", result.Diagnostics)
 	}
+
+	parsed = ParseAutomation([]byte(validAutomationJSON + `{}`))
+	if len(parsed.Diagnostics) != 1 || parsed.Diagnostics[0].Message != "multiple JSON values are not allowed" {
+		t.Fatalf("trailing diagnostics=%+v", parsed.Diagnostics)
+	}
 }
 
 func TestAutomationRevisionRoundTrip(t *testing.T) {

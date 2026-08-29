@@ -110,6 +110,11 @@ allowlist, acceptance criteria, risk, and rollback image. A release hash covers
 merged source and lock provenance plus prompt and image digests. Approvals for
 other hashes do not unlock either transition.
 
+Judge automation adds immutable JSON revisions, one active revision pointer,
+one owned schedule ID, and cycles keyed by schedule delivery ID. A cycle links
+its Native Task and Judge run. Proposal revision hashes link approved plans to
+idempotent `IMPROVE` tasks.
+
 Staging an approved single-agent release records the prior ref/digest and writes
 the candidate only to the existing pending fields. The launch gate remains the
 sole promotion path, so a running iteration is not interrupted. Successful

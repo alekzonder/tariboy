@@ -12,6 +12,11 @@ This document describes the v2 channel bus: how messages move through channels,
 how agents receive them, how deliveries are acknowledged, and which agent
 settings affect message handling.
 
+Judge automation uses ordinary inbox deliveries. `judge.review.requested` goes
+to the configured lead from a cron or one-shot schedule,
+`judge.work.available` wakes configured workers, and `judge.summary.ready`
+wakes the lead. The delivery ID is the automatic cycle's idempotency key.
+
 ## Mental model
 
 The bus is a store-backed fan-out system with four core tables:

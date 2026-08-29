@@ -82,6 +82,10 @@ tariboy has three command surfaces:
 | `tariboy judge inspect` | Show an LLM-as-Judge run, targets, analyses, summaries and target usage |
 | `tariboy judge ls` | List LLM-as-Judge runs |
 | `tariboy judge retry` | Retry failed assignments in an LLM-as-Judge run |
+| `tariboy judge automation get` | Read the active Judge automation revision |
+| `tariboy judge automation validate --json JSON` | Validate raw JSON in `tariboyd` without applying it |
+| `tariboy judge automation apply --json JSON` | Apply JSON, create `JUDGE`/`IMPROVE`, and reconcile the recurring schedule without starting a review |
+| `tariboy judge automation run-once --limit N` | Queue one immediate cycle through the existing scheduler |
 | `tariboy iteration inspect` | Show one iteration |
 | `tariboy iteration logs` | Print an iteration's harness logs |
 | `tariboy iteration ls` | List an agent's iterations |

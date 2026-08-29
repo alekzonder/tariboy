@@ -9,6 +9,11 @@ sidebar:
 Native Tasks are Tariboy's central work domain. They live in the existing
 host-local `tariboyd.db`.
 
+Judge automation reserves queue prefixes `JUDGE` and `IMPROVE`; Apply creates
+both if absent. Every scheduled fire has a `JUDGE-*` task, including skipped,
+empty, and failed cycles. Approving an exact proposal revision creates its
+idempotent `IMPROVE-*` task in the same database transaction.
+
 Queues may optionally activate a [configurable task workflow](/docs/task-workflows).
 New tasks in such a queue automatically pin that published version; callers do
 not pass a workflow when creating the task. Existing tasks and unmanaged queues

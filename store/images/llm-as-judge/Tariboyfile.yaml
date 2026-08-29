@@ -6,9 +6,14 @@ plugins:
   - name: messages
   - name: context
   - name: status
+  - name: schedule
+  - name: tasks
+  - name: current-task
   - name: llm-as-judge
 
 skills:
+  - dir: $CURRENT_VERSION_STORE/skills/schedule
+  - dir: $CURRENT_VERSION_STORE/skills/tasks
   - dir: ./skills/llm-as-judge
 
 prompts:
@@ -19,6 +24,9 @@ prompts:
   - file: $CURRENT_VERSION_STORE/skills/context/prompt.md
   - runtime: context
   - file: $CURRENT_VERSION_STORE/skills/status/prompt.md
+  - file: $CURRENT_VERSION_STORE/skills/schedule/prompt.md
+  - file: $CURRENT_VERSION_STORE/skills/tasks/prompt.md
+  - file: $CURRENT_VERSION_STORE/skills/current-task/prompt.md
   - file: $CURRENT_VERSION_STORE/skills/llm-as-judge/prompt.md
   - file: ./instructions.md
   - runtime: user-prompt

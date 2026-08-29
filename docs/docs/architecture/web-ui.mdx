@@ -147,6 +147,12 @@ same view shows its provenance and exact release hash and can approve, reject,
 or stage it for one agent's next iteration. The view does not run Git changes or
 build a release, and it does not provide atomic team rollout.
 
+The Judge page also exposes the selected daemon's automation document as a raw
+JSON textarea. Validate and Apply send unchanged text to `tariboyd`; JSON
+Pointer diagnostics and canonical applied JSON come back from the daemon.
+Unsaved text stays only in component state, and Reset restores the last applied
+revision.
+
 Tasks uses one reusable three-region workspace at `/servers/:hostId/tasks` and
 inside each Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
