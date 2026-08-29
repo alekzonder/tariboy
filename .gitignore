@@ -9,6 +9,7 @@ node_modules
 # Local agent/tooling scratch — not part of the project
 .agents/
 .claude/
+.serena/
 .superpowers/
 .worktrees/
 .tariboy
