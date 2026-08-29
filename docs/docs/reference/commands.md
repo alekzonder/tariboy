@@ -66,6 +66,7 @@ tariboy has three command surfaces:
 | `tariboy image inspect` | Show an image manifest |
 | `tariboy image ls` | List built agent images |
 | `tariboy image prompt` | Print an image's assembled prompt |
+| `tariboy image provenance REF` | Show local source and immutable snapshot Git provenance |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
 | `tariboy image-release inspect` | Show immutable image release provenance |

@@ -160,6 +160,14 @@ func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
 	if snapshot.RepositoryID != "tariboy" || snapshot.GitCommit != "97cf20ec0c8542f54b68904521be6a2ca85552a1" {
 		t.Fatalf("snapshot provenance = %+v", snapshot)
 	}
+	shown, err := cmdHandler(t, "image.provenance")(c, registry.Params{"ref": "developer:v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provenance := shown.(map[string]any)
+	if provenance["repository_id"] != "tariboy" || provenance["git_commit"] != "97cf20ec0c8542f54b68904521be6a2ca85552a1" || provenance["source_digest"] == "" {
+		t.Fatalf("shown provenance = %#v", provenance)
+	}
 }
 
 func TestImageBuildRejectsPartialGitProvenance(t *testing.T) {

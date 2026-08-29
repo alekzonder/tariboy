@@ -312,7 +312,17 @@ func imageProvenance() registry.Command {
 			if !ok {
 				return map[string]any{"ref": ref.String(), "source_cwd": nil, "source_available": false}, nil
 			}
-			return record, nil
+			result := map[string]any{
+				"ref": record.Ref, "digest": record.Digest, "source_cwd": record.SourceCWD,
+				"built_at": record.BuiltAt, "source_available": record.SourceAvailable,
+			}
+			if snapshot, found, lookupErr := imageSnapshotStore(c).Lookup(context.Background(), ref.String()); lookupErr != nil {
+				return nil, lookupErr
+			} else if found && snapshot.ImageDigest == record.Digest {
+				result["source_name"], result["source_digest"] = snapshot.SourceName, snapshot.SourceDigest
+				result["repository_id"], result["git_commit"], result["lock_digest"] = snapshot.RepositoryID, snapshot.GitCommit, snapshot.LockDigest
+			}
+			return result, nil
 		},
 	}
 }
