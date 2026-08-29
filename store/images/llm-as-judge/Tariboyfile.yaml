@@ -1,0 +1,26 @@
+schema_version: 2
+
+plugins:
+  - name: whoami
+  - name: loop
+  - name: messages
+  - name: context
+  - name: status
+  - name: llm-as-judge
+
+skills:
+  - dir: ./skills/llm-as-judge
+
+prompts:
+  - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
+  - runtime: identity
+  - file: $CURRENT_VERSION_STORE/skills/messages/prompt.md
+  - runtime: messages
+  - file: $CURRENT_VERSION_STORE/skills/context/prompt.md
+  - runtime: context
+  - file: $CURRENT_VERSION_STORE/skills/status/prompt.md
+  - file: $CURRENT_VERSION_STORE/skills/llm-as-judge/prompt.md
+  - file: ./instructions.md
+  - runtime: user-prompt
+  - runtime: one-shot
+  - file: $CURRENT_VERSION_STORE/skills/loop/finish.md
