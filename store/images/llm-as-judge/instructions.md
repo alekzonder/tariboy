@@ -57,8 +57,17 @@ after successful submission.
 
 ## Summary lead
 
-On `judge.summary.ready`, claim the summary, read every page from `tools judge
-summary inputs`, and submit `summary.json` in exactly this shape:
+On `judge.summary.ready`, use these exact positional commands (there is no
+`--run` flag):
+
+```text
+tools judge summary claim RUN
+tools judge summary inputs RUN [--cursor C]
+tools judge summary submit RUN --file summary.json
+```
+
+Claim the summary, read every inputs page, and submit `summary.json` in exactly
+this shape:
 
 ```json
 {
