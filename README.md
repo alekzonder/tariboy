@@ -40,7 +40,7 @@ required to get value from the desktop app.
 The internal alpha supports macOS 12+ on Apple Silicon and remote Linux x86_64
 hosts reachable through the user's existing SSH configuration.
 
-1. Obtain `Tariboy_0.42.0_aarch64.dmg` and `SHA256SUMS` from the
+1. Obtain `Tariboy_0.43.0_aarch64.dmg` and `SHA256SUMS` from the
    release owner, verify the checksum, drag `Tariboy.app` to Applications,
    and open it.
 2. Select the local server in the Agents sidebar, then open **Settings → Hosts**
@@ -270,6 +270,15 @@ make build
 ./bin/tariboy daemon status
 ```
 
+Install or update all six server binaries as one versioned release:
+
+```bash
+make server-install
+```
+
+This writes `~/.local/lib/tariboy/<version>` and atomically updates the matching
+links under `~/.local/bin`; it does not start or restart the daemon.
+
 Build native Desktop packages for the current host:
 
 ```bash
@@ -311,7 +320,7 @@ make desktop-alpha
 The target builds both platform payloads and the SPA, creates an ad-hoc-signed
 app and DMG, runs an isolated smoke test, validates signatures, versions,
 architectures, checksums, and secret exclusions, then writes
-`dist/releases/0.42.0/`. Publication is a separate manual action.
+`dist/releases/0.43.0/`. Publication is a separate manual action.
 
 ## CLI entry path
 

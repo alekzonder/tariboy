@@ -1006,6 +1006,41 @@ mod tests {
     }
 
     #[test]
+    fn installer_switches_optional_store_binary_with_the_release() {
+        let home = tempfile::tempdir().unwrap();
+        let stage = home
+            .path()
+            .join(".local/lib/tariboy/.stage-with-store");
+        write_release(&stage, "new", true);
+        fs::write(stage.join("tariboy-store"), b"tariboy-store\n").unwrap();
+        let output = Command::new("sha256sum")
+            .arg(stage.join("tariboy-store"))
+            .output()
+            .unwrap();
+        let sums = stage.join("SHA256SUMS");
+        let mut contents = fs::read(&sums).unwrap();
+        contents.extend_from_slice(&output.stdout);
+        fs::write(sums, contents).unwrap();
+
+        let status = Command::new("sh")
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/src/remote-install.sh"
+            ))
+            .args(["new", ".stage-with-store"])
+            .env("HOME", home.path())
+            .status()
+            .unwrap();
+
+        assert!(status.success());
+        assert_eq!(
+            fs::read_link(home.path().join(".local/bin/tariboy-store")).unwrap(),
+            home.path()
+                .join(".local/lib/tariboy/new/tariboy-store")
+        );
+    }
+
+    #[test]
     fn installer_refuses_foreign_symlinks_without_replacing_any_link() {
         let home = tempfile::tempdir().unwrap();
         let root = home.path().join(".local/lib/tariboy");

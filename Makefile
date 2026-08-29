@@ -21,7 +21,7 @@ DESKTOP_INSTALL_UI_DEPS ?= 1
 
 export CGO_ENABLED=0
 
-.PHONY: build build-basic-image install uninstall setup check full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e
+.PHONY: build build-basic-image install uninstall setup check full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build-basic-image:
 	$(GO) run ./internal/builtinimages/generate -source internal/builtinimages/source -output internal/builtinimages/generated -version $(VERSION)
@@ -42,6 +42,22 @@ install:
 		install -m 0755 $(BINDIR)/$$b $(INSTALLDIR)/$$b; \
 	done
 
+server-install: build
+	@set -eu; \
+	root="$(HOME)/.local/lib/tariboy"; \
+	mkdir -p "$$root"; \
+	stage=$$(mktemp -d "$$root/.stage-make-XXXXXXXX"); \
+	trap 'rm -rf -- "$$stage"' EXIT HUP INT TERM; \
+	for b in $(BINARIES); do install -m 0755 "$(BINDIR)/$$b" "$$stage/$$b"; done; \
+	printf '%s\n' "$(VERSION)" >"$$stage/VERSION"; \
+	cp desktop/src-tauri/src/remote-install.sh "$$stage/remote-install.sh"; \
+	(cd "$$stage" && sha256sum $(BINARIES) >SHA256SUMS); \
+	HOME="$(HOME)" sh "$$stage/remote-install.sh" "$(VERSION)" "$${stage##*/}"; \
+	for b in $(BINARIES); do \
+		test "$$($(HOME)/.local/bin/$$b --version)" = "$(VERSION)"; \
+	done; \
+	echo "server binaries installed: $(VERSION)"
+
 setup:
 	./scripts/setup.sh
 
@@ -60,6 +76,7 @@ smoke-contract-test:
 	./scripts/tariboy-smoke-contract-test.sh
 	./scripts/tariboy-branding-contract-test.sh
 	./scripts/make-clean-contract-test.sh
+	./scripts/server-install-contract-test.sh
 	./scripts/publish-docs-contract-test.sh
 
 smoke-image-skills-contract: build

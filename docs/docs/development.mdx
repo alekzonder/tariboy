@@ -217,6 +217,11 @@ the same image step before compiling its local and remote daemon payloads.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
+`make server-install` builds all six commands, stages and verifies their
+checksums, publishes a versioned release under
+`$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
+`$HOME/.local/bin` links. It does not start or restart the daemon.
+
 Configurable Native Tasks workflow changes normally need focused tests under
 `internal/tasks`, the operator route/OpenAPI registry tests under
 `internal/commands`, and agent command parsing under `internal/toolscli`.
