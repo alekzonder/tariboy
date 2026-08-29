@@ -640,6 +640,14 @@ func Run(ctx context.Context, o Options) error {
 			return in, out, cost
 		},
 	})
+	judgeAutomation.SetActivator(func(names []string) error {
+		for _, name := range names {
+			if err := manager.Start(name); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 
 	// Register the observable gauges exactly once (spec §14): bus queue depth,
 	// healthy plugins, active agent loops. No-op instruments when OTel is off.

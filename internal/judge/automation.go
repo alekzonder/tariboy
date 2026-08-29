@@ -70,6 +70,7 @@ type AutomationService struct {
 	now       func() time.Time
 	tasks     *tasks.Service
 	enqueue   func(string)
+	activate  func([]string) error
 }
 
 type AutomationCycle struct {
@@ -106,6 +107,8 @@ func (s *AutomationService) Validate(ctx context.Context, raw []byte) Automation
 func (s *AutomationService) ConfigureExecution(taskService *tasks.Service, enqueue func(string)) {
 	s.tasks, s.enqueue = taskService, enqueue
 }
+
+func (s *AutomationService) SetActivator(activate func([]string) error) { s.activate = activate }
 
 type AutomationValidator struct {
 	Customer        string
@@ -391,6 +394,11 @@ func (s *AutomationService) Apply(ctx context.Context, raw []byte) (AutomationAp
 	}
 	if err := tx.Commit(); err != nil {
 		return AutomationApplyResult{}, err
+	}
+	if s.activate != nil {
+		if err := s.activate(roles); err != nil {
+			return AutomationApplyResult{}, fmt.Errorf("judge automation: activate configured agents: %w", err)
+		}
 	}
 	return AutomationApplyResult{Revision: revision, Schedule: sch}, nil
 }

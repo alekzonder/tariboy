@@ -109,6 +109,8 @@ func TestAutomationApplyCreatesQueuesAndOneRecurringSchedule(t *testing.T) {
 	db, js := newJudgeStore(t)
 	clock := func() time.Time { return time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC) }
 	service := NewAutomationService(js, schedule.NewStore(db, clock), validAutomationValidator(), clock)
+	var activated []string
+	service.SetActivator(func(names []string) error { activated = append(activated, names...); return nil })
 
 	first, err := service.Apply(context.Background(), []byte(validAutomationJSON))
 	if err != nil {
@@ -133,6 +135,9 @@ func TestAutomationApplyCreatesQueuesAndOneRecurringSchedule(t *testing.T) {
 	var schedules int
 	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM schedules WHERE enabled=1 AND kind='cron'`).Scan(&schedules); err != nil || schedules != 1 {
 		t.Fatalf("schedules=%d err=%v", schedules, err)
+	}
+	if strings.Join(activated, ",") != "summary-alpha,review-alpha,review-beta,summary-alpha,review-alpha,review-beta" {
+		t.Fatalf("activated=%v", activated)
 	}
 }
 
