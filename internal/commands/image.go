@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,12 +15,15 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
+	"github.com/alekzonder/tariboy/internal/imagesource"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/version"
 )
+
+var gitCommitPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
 
 func imageStore(c *registry.Ctx) *image.Store {
 	return &image.Store{Dir: paths.Paths{Base: c.BaseDir}.ImagesDir()}
@@ -33,6 +37,8 @@ func imageBuild() registry.Command {
 			{Name: "name", Flag: "name", Type: registry.String, Required: true, Help: "target image name"},
 			{Name: "tag", Flag: "tag", Type: registry.String, Default: "latest", Help: "target image tag (default latest)"},
 			{Name: "path", Flag: "path", Type: registry.String, Required: true, Help: "Tariboyfile.yaml or its directory"},
+			{Name: "repository-id", Flag: "repository-id", Type: registry.String, Help: "source repository ID"},
+			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -50,6 +56,10 @@ func imageBuild() registry.Command {
 			}
 			if tag == "" {
 				tag = "latest"
+			}
+			repositoryID, gitCommit := strings.TrimSpace(str(p, "repository-id")), strings.TrimSpace(str(p, "git-commit"))
+			if (repositoryID == "") != (gitCommit == "") || (gitCommit != "" && !gitCommitPattern.MatchString(gitCommit)) {
+				return nil, api.UserError{Code: "bad_provenance", Msg: "repository-id and a 7-64 character hexadecimal git-commit must be provided together", Status: http.StatusBadRequest}
 			}
 			path, _ := p["path"].(string)
 			ref, err := image.ParseRef(name + ":" + tag)
@@ -96,7 +106,12 @@ func imageBuild() registry.Command {
 				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
 			}
 			if c.Store != nil {
+				if _, err := imageSnapshotStore(c).CaptureWithProvenance(context.Background(), ref.String(), man.Digest, name, sourceCWD, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
+					_ = imageStore(c).Remove(ref)
+					return nil, api.UserError{Code: "provenance_failed", Msg: err.Error()}
+				}
 				if err := (imageprovenance.Store{DB: c.Store.DB}).Upsert(imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
+					_, _ = c.Store.DB.Exec(`DELETE FROM image_source_snapshots WHERE image_ref=?`, ref.String())
 					if removeErr := imageStore(c).Remove(ref); removeErr != nil {
 						return nil, api.UserError{Code: "provenance_failed", Msg: fmt.Sprintf("%v; rollback image: %v", err, removeErr)}
 					}

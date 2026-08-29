@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -138,6 +139,37 @@ func TestImageBuildV2RequiresNameAndDefaultsTag(t *testing.T) {
 	manifest, err := imageStore(c).Inspect(image.Ref{Name: "transparent", Tag: "latest"})
 	if err != nil || manifest.SchemaVersion != 2 {
 		t.Fatalf("manifest = %#v, %v", manifest, err)
+	}
+}
+
+func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{
+		"name": "developer", "tag": "v1", "path": src,
+		"repository-id": "tariboy", "git-commit": "97cf20ec0c8542f54b68904521be6a2ca85552a1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := result.(map[string]any)["digest"].(string)
+	snapshot, ok, err := imageSnapshotStore(c).LookupDigest(context.Background(), digest)
+	if err != nil || !ok {
+		t.Fatalf("LookupDigest = ok %v, err %v", ok, err)
+	}
+	if snapshot.RepositoryID != "tariboy" || snapshot.GitCommit != "97cf20ec0c8542f54b68904521be6a2ca85552a1" {
+		t.Fatalf("snapshot provenance = %+v", snapshot)
+	}
+}
+
+func TestImageBuildRejectsPartialGitProvenance(t *testing.T) {
+	c := localCtx(t)
+	_, err := cmdHandler(t, "image.build")(c, registry.Params{
+		"name": "developer", "tag": "v1", "path": writeExample(t), "repository-id": "tariboy",
+	})
+	var userErr api.UserError
+	if !errors.As(err, &userErr) || userErr.Code != "bad_provenance" {
+		t.Fatalf("error = %#v, want bad_provenance", err)
 	}
 }
 

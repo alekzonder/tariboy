@@ -16,8 +16,8 @@ runtime or compose configuration. They are not schema-v2 image fields.
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
 required name and an optional tag, then select **Validate** or **Build**. The
 default tag is `latest`. Tariboy records the canonical source CWD as local
-provenance, but does not copy or retain an editable source snapshot. Rebuilding
-therefore always reads the original directory and its current paths.
+provenance and retains an immutable source snapshot for evidence. Rebuilding
+still reads the original directory and its current paths.
 
 **Validate** is read-only. Before a build it shows the schema version, explicit
 plugin names, packaged skill metadata, template hash, and every prompt entry in
@@ -37,8 +37,15 @@ The equivalent operator command is:
 ```bash
 tariboy image validate --path ./reviewer-image --name reviewer --tag v3
 tariboy image build --path ./reviewer-image --name reviewer --tag v3
+tariboy image build --path ./reviewer-image --name reviewer --tag v4 \
+  --repository-id agent-images --git-commit 91ab820
 tariboy image ls
 ```
+
+Provide `--repository-id` and `--git-commit` together when the source is an
+exact Git revision. Tariboy records those explicit values in the immutable
+source snapshot used by Judge; it never infers a commit from the current
+working directory.
 
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
