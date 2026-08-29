@@ -20,7 +20,11 @@ func TestBuiltinJudgeImageDeclaresAutomaticCycleContract(t *testing.T) {
 			t.Fatalf("manifest missing %q", required)
 		}
 	}
-	for _, required := range []string{"judge.review.requested", "judge automation begin", "exactly two configured workers", "@user:"} {
+	for _, required := range []string{
+		"judge.review.requested", "judge automation begin", "exactly two configured workers", "@user:",
+		`"schema_version": 1`, `"recommendations": [{"description": "..."}]`, `"evidence_gaps": ["..."]`,
+		`"locator": "exact string returned by evidence search"`,
+	} {
 		if !strings.Contains(string(instructions), required) {
 			t.Fatalf("instructions missing %q", required)
 		}

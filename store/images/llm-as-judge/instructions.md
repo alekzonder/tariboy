@@ -32,21 +32,53 @@ inspect`. Prefer prompt, metadata, usage, and targeted audit searches. Search
 the large transcript only with narrow task-relevant terms.
 
 Always identify the target `image_ref` and full image digest from metadata and
-state both in the analysis summary. Submit `result.json` with schema version 1,
-a pass/fail/uncertain verdict, score and confidence in [0,1], non-empty summary,
-violations with exact citations, strengths, recommendations, and evidence gaps.
-Every citation must use the exact bundle hash, artifact, and locator returned
-by evidence search. Repair validation errors, process the wake message, and
-finish only after successful submission.
+state both in the analysis summary. Submit `result.json` in exactly this shape;
+all shown arrays may be empty:
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "pass|fail|uncertain",
+  "score": 0.0,
+  "confidence": 0.0,
+  "summary": "non-empty; includes image_ref and full digest",
+  "violations": [{"criterion": "...", "severity": "...", "description": "...", "citations": [{"bundle_hash": "...", "artifact": "...", "locator": "exact string returned by evidence search"}]}],
+  "strengths": [{"description": "...", "citations": [{"bundle_hash": "...", "artifact": "...", "locator": "exact string returned by evidence search"}]}],
+  "recommendations": [{"description": "..."}],
+  "evidence_gaps": ["..."]
+}
+```
+
+Scores are numbers in `[0,1]`. Do not substitute `summary`, `action`, objects,
+or numbers for fields shown as strings. Every citation must copy the exact
+bundle hash, artifact, and locator returned by evidence search. Repair any
+field-specific validation error, process the wake message, and finish only
+after successful submission.
 
 ## Summary lead
 
 On `judge.summary.ready`, claim the summary, read every page from `tools judge
-summary inputs`, and submit schema-version-1 `summary.json`. Include a bounded
-executive conclusion, integer coverage counts, patterns, recurring violations,
-strengths, disputed cases, recommendations, follow-up evaluations, and every
-target and analysis ID. Compare target agents and exact image ref/digest
-separately when multiple versions are present.
+summary inputs`, and submit `summary.json` in exactly this shape:
+
+```json
+{
+  "schema_version": 1,
+  "executive_conclusion": "...",
+  "coverage": {"targets": 3, "analyses": 3},
+  "cross_iteration_patterns": ["..."],
+  "recurring_violations": ["..."],
+  "strengths": ["..."],
+  "disputed_cases": ["..."],
+  "recommendations": ["..."],
+  "follow_up_evaluations": ["..."],
+  "target_ids": ["..."],
+  "analysis_ids": ["..."]
+}
+```
+
+Coverage values are integers. Include every target and analysis ID. Compare
+target agents and exact image ref/digest separately when multiple versions are
+present.
 
 After the summary, submit one improvement proposal per repository/release unit
 that needs changes. Do not combine changes to different images, skills,
