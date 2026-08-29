@@ -55,7 +55,7 @@ func (s *Store) selectIterations(ctx context.Context, tx *sql.Tx, selector Selec
 			return nil, err
 		}
 	}
-	if len(selector.Agents) == 0 && selector.Group == "" && selector.Since == "" && selector.Until == "" && len(selector.Statuses) == 0 {
+	if len(selector.Agents) == 0 && selector.Group == "" && selector.Since == "" && selector.Until == "" && len(selector.Statuses) == 0 && len(selector.ImageRefs) == 0 && !selector.OnlyUnprocessed {
 		return out, nil
 	}
 	where, args := []string{"1=1"}, []any{}
@@ -82,6 +82,19 @@ func (s *Store) selectIterations(ctx context.Context, tx *sql.Tx, selector Selec
 		for _, v := range selector.Statuses {
 			args = append(args, v)
 		}
+	}
+	if len(selector.ImageRefs) > 0 {
+		where = append(where, "i.image_ref IN ("+placeholders(len(selector.ImageRefs))+")")
+		for _, v := range selector.ImageRefs {
+			args = append(args, v)
+		}
+	}
+	if selector.OnlyUnprocessed {
+		where = append(where, `NOT EXISTS (
+			SELECT 1 FROM judge_targets jt
+			JOIN judge_runs jr ON jr.id=jt.run_id
+			WHERE jt.target_iteration=i.id AND jr.status<>'cancelled'
+		)`)
 	}
 	order := "ASC"
 	if selector.Order == "newest" {

@@ -31,14 +31,16 @@ const (
 )
 
 type Selector struct {
-	ExplicitIDs []string `json:"iteration_ids,omitempty"`
-	Agents      []string `json:"agents,omitempty"`
-	Group       string   `json:"group,omitempty"`
-	Since       string   `json:"since,omitempty"`
-	Until       string   `json:"until,omitempty"`
-	Statuses    []string `json:"statuses,omitempty"`
-	Order       string   `json:"order,omitempty"`
-	Limit       int      `json:"limit,omitempty"`
+	ExplicitIDs     []string `json:"iteration_ids,omitempty"`
+	Agents          []string `json:"agents,omitempty"`
+	Group           string   `json:"group,omitempty"`
+	Since           string   `json:"since,omitempty"`
+	Until           string   `json:"until,omitempty"`
+	Statuses        []string `json:"statuses,omitempty"`
+	ImageRefs       []string `json:"image_refs,omitempty"`
+	OnlyUnprocessed bool     `json:"only_unprocessed,omitempty"`
+	Order           string   `json:"order,omitempty"`
+	Limit           int      `json:"limit,omitempty"`
 }
 
 type CreateRunRequest struct {

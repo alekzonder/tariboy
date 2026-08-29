@@ -260,6 +260,44 @@ func TestSelectorDeduplicatesExplicitAndFilter(t *testing.T) {
 	}
 }
 
+func TestSelectorFiltersImageRefsAndPreviouslyJudgedBeforeLimit(t *testing.T) {
+	db, js := newJudgeStore(t)
+	seedJudgeAgent(t, db.DB, "lead")
+	seedJudgeAgent(t, db.DB, "judge")
+	for _, row := range []struct {
+		id, image, started string
+	}{
+		{"old-image", "developer:0.5", "2026-07-01T10:00:00Z"},
+		{"already-judged", "developer:0.6", "2026-07-02T10:00:00Z"},
+		{"eligible", "developer:0.6", "2026-07-03T10:00:00Z"},
+	} {
+		seedTarget(t, db.DB, row.id, "worker", "done", row.started)
+		if _, err := db.DB.Exec(`UPDATE iterations SET image_ref=? WHERE id=?`, row.image, row.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := js.CreateRun(context.Background(), request("already-judged")); err != nil {
+		t.Fatal(err)
+	}
+
+	r := request()
+	r.Selector = Selector{
+		Agents:          []string{"worker"},
+		ImageRefs:       []string{"developer:0.6"},
+		Statuses:        []string{"done"},
+		OnlyUnprocessed: true,
+		Order:           "oldest",
+		Limit:           1,
+	}
+	_, targets, err := js.CreateRun(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].Iteration != "eligible" {
+		t.Fatalf("targets=%+v, want eligible", targets)
+	}
+}
+
 func TestSelectorRejectsEmptyAndRunning(t *testing.T) {
 	db, js := newJudgeStore(t)
 	seedJudgeAgent(t, db.DB, "lead")
