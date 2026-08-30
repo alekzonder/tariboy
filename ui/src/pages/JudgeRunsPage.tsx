@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { usePolling } from "@/hooks/usePolling";
 import type { ApiTarget } from "@/lib/api";
-import { applyJudgeAutomation, getJudgeAutomation, listJudgeRunsOn, validateJudgeAutomation, type JudgeAutomationDiagnostic, type JudgeRun, type JudgeRunStatus } from "@/lib/judge";
+import { applyJudgeAutomation, getJudgeAutomation, listJudgeRunsOn, runJudgeAutomationOnce, validateJudgeAutomation, type JudgeAutomationDiagnostic, type JudgeRun, type JudgeRunStatus } from "@/lib/judge";
 
 const statusVariant = (status: JudgeRunStatus) => {
   if (status === "completed") return "default";
@@ -60,6 +60,12 @@ export default function JudgeRunsPage() {
 		} catch (cause) { setConfigError((cause as Error).message); }
 		finally { setBusy(false); }
 	};
+	const runOnce = async () => {
+		setBusy(true); setConfigError("");
+		try { await runJudgeAutomationOnce(target); }
+		catch (cause) { setConfigError((cause as Error).message); }
+		finally { setBusy(false); }
+	};
 
   return (
     <div className="space-y-4 p-6">
@@ -72,7 +78,7 @@ export default function JudgeRunsPage() {
 		<label className="block space-y-1 text-sm"><span>Judge automation JSON</span><Textarea className="min-h-72 font-mono text-xs" value={config} onChange={(event) => setConfig(event.target.value)} spellCheck={false} /></label>
 		{diagnostics.length > 0 && <ul role="alert" className="space-y-1 text-sm text-destructive">{diagnostics.map((item) => <li key={`${item.path}:${item.message}`}><code>{item.path}</code>: {item.message}</li>)}</ul>}
 		{configError && <p className="text-sm text-destructive">{configError}</p>}
-		<div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => void validate()}>Validate</Button><Button type="button" disabled={busy} onClick={() => void apply()}>Apply</Button><Button type="button" variant="ghost" disabled={busy || config === saved} onClick={() => { setConfig(saved); setDiagnostics([]); }}>Reset</Button></div>
+		<div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => void validate()}>Validate</Button><Button type="button" disabled={busy} onClick={() => void apply()}>Apply</Button><Button type="button" variant="outline" disabled={busy} onClick={() => void runOnce()}>Run once</Button><Button type="button" variant="ghost" disabled={busy || config === saved} onClick={() => { setConfig(saved); setDiagnostics([]); }}>Reset</Button></div>
 	  </section>
       {error && <p role="alert" className="rounded border border-destructive/40 px-3 py-2 text-sm text-destructive">Could not load judge runs: {error.message}</p>}
       <div className="overflow-x-auto rounded border">

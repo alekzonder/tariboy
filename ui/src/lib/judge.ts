@@ -77,3 +77,4 @@ export const listJudgeRunsOn = (target: ApiTarget) => apiOn<JudgeRunList>(resolv
 export const getJudgeAutomation = (target: ApiTarget) => apiOn<JudgeAutomationState>(resolveTarget(target), "GET", "/api/judge-automation");
 export const validateJudgeAutomation = (target: ApiTarget, configJSON: string) => apiOn<JudgeAutomationValidation>(resolveTarget(target), "POST", "/api/judge-automation/validate", { config_json: configJSON });
 export const applyJudgeAutomation = (target: ApiTarget, configJSON: string) => apiOn<JudgeAutomationApply>(resolveTarget(target), "PUT", "/api/judge-automation", { config_json: configJSON });
+export const runJudgeAutomationOnce = (target: ApiTarget) => apiOn(resolveTarget(target), "POST", "/api/judge-automation/run-once");
