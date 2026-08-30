@@ -329,6 +329,20 @@ describe("TasksWorkspace", () => {
     expect(screen.getByDisplayValue("Second answer needed")).toBeInTheDocument()
   })
 
+  it("shows newest comments first and can switch to oldest first", async () => {
+    const oldComment = { ...detail.comments[0], id: 1, body: "Oldest" }
+    const newComment = { ...detail.comments[0], id: 2, body: "Newest", created_at: "2026-08-01T10:00:00Z" }
+    api.getTask.mockResolvedValue({ ...detail, comments: [oldComment, newComment] })
+
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+
+    const comments = screen.getByText("Comments").closest("section")!
+    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Newest")
+    await userEvent.selectOptions(screen.getByLabelText("Comment order"), "oldest")
+    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Oldest")
+  })
+
   it("keeps the latest task selected during a real-time refresh", async () => {
     const first = deferred<TaskDetail>()
     const second = deferred<TaskDetail>()
