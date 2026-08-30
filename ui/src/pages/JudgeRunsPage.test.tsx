@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import JudgeRunsPage, { compactCriteria } from "./JudgeRunsPage";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -98,4 +98,20 @@ it("edits raw automation JSON and renders daemon validation diagnostics", async 
   fireEvent.change(editor, { target: { value: canonical } });
   fireEvent.click(screen.getByRole("button", { name: "Apply" }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/judge-automation"), expect.objectContaining({ method: "PUT", body: expect.stringContaining("config_json") })));
+});
+
+it("queues an automation run from the selected Judge UI", async () => {
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/api/judge-automation/run-once")) return Promise.resolve(response({ ok: true, result: { queued: true } }));
+    if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: false } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "secret" };
+  render(<MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Run once" }));
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("https://remote.example/api/judge-automation/run-once", expect.objectContaining({ method: "POST" })));
 });

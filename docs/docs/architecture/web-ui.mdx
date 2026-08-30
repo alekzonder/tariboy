@@ -148,7 +148,8 @@ or stage it for one agent's next iteration. The view does not run Git changes or
 build a release, and it does not provide atomic team rollout.
 
 The Judge page also exposes the selected daemon's automation document as a raw
-JSON textarea. Validate and Apply send unchanged text to `tariboyd`; JSON
+JSON textarea. Validate, Apply, and Run once send unchanged text or the existing
+one-shot request to `tariboyd`; JSON
 Pointer diagnostics and canonical applied JSON come back from the daemon.
 Unsaved text stays only in component state, and Reset restores the last applied
 revision.
