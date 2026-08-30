@@ -33,7 +33,7 @@ const api = vi.hoisted(() => ({
 }))
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
 const daemonContext = vi.hoisted(() => ({ activeId: "" }))
-const taskSocket = vi.hoisted(() => ({ options: undefined as Record<string, unknown> | undefined }))
+const taskSocket = vi.hoisted(() => ({ options: undefined as { onHint?: (event: { sequence: number }) => void } | undefined }))
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -327,6 +327,39 @@ describe("TasksWorkspace", () => {
 
     expect(await screen.findByRole("heading", { name: "ASK-8" })).toBeInTheDocument()
     expect(screen.getByDisplayValue("Second answer needed")).toBeInTheDocument()
+  })
+
+  it("shows newest comments first and can switch to oldest first", async () => {
+    const oldComment = { ...detail.comments[0], id: 1, body: "Oldest" }
+    const newComment = { ...detail.comments[0], id: 2, body: "Newest", created_at: "2026-08-01T10:00:00Z" }
+    api.getTask.mockResolvedValue({ ...detail, comments: [oldComment, newComment] })
+
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+
+    const comments = screen.getByText("Comments").closest("section")!
+    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Newest")
+    await userEvent.selectOptions(screen.getByLabelText("Comment order"), "oldest")
+    expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Oldest")
+  })
+
+  it("keeps the latest task selected during a real-time refresh", async () => {
+    const first = deferred<TaskDetail>()
+    const second = deferred<TaskDetail>()
+    const secondDetail = { ...detail, task: child }
+    api.getTask.mockImplementation((key: string) => key === "TEST-1" ? first.promise : Promise.resolve(secondDetail))
+
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    first.resolve(detail)
+    await screen.findByRole("heading", { name: "TEST-1" })
+    api.getTask.mockImplementation((key: string) => key === "TEST-2" ? second.promise : Promise.resolve(detail))
+    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
+    await userEvent.click(screen.getByRole("button", { name: /Desktop tree/ }))
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }))
+    second.resolve(secondDetail)
+
+    expect(await screen.findByRole("heading", { name: "TEST-2" })).toBeInTheDocument()
   })
 
   it("renders managed execution state read-only and hides lifecycle controls", async () => {

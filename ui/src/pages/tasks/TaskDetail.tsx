@@ -72,6 +72,8 @@ export default function TaskDetail({
   const [relationTarget, setRelationTarget] = useState("")
   const [relationBusy, setRelationBusy] = useState(false)
   const [relationError, setRelationError] = useState("")
+  const [commentOrder, setCommentOrder] = useState<"newest" | "oldest">("newest")
+  const comments = commentOrder === "newest" ? [...detail.comments].reverse() : detail.comments
   const submitRelation = () => {
     if (!relationTarget.trim()) return
     setRelationBusy(true)
@@ -228,12 +230,13 @@ export default function TaskDetail({
             {relationError && <p role="alert">{relationError}</p>}
           </section>
           </> : <div className="tasks-empty">Response access — comments only.</div>}
-          <TaskComments
-            comments={detail.comments}
-            waits={detail.waiting_for}
-            principals={principals}
-            onComment={onComment}
-          />
+          <label>Comment order
+            <select aria-label="Comment order" value={commentOrder} onChange={(event) => setCommentOrder(event.target.value as "newest" | "oldest")}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </label>
+          <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} onComment={onComment} />
           <section className="task-history">
             <div className="task-section-title">History <span>{events.length}</span></div>
             <ol>
