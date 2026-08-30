@@ -294,7 +294,7 @@ type taskHandler func(context.Context, registry.TaskControl, tasks.Actor, regist
 
 func taskRoute(path, method, route, summary string, handler taskHandler) registry.Command {
 	return registry.Command{
-		Path: path, Summary: summary, CLIHidden: true,
+		Path: path, Summary: summary, CLIHidden: path != "tasks.queue.create",
 		Args: taskHTTPArgs(path), ResultSchema: taskHTTPResultSchema(path),
 		Schemas: taskOpenAPISchemas(),
 		HTTP:    &registry.HTTPRoute{Method: method, Path: route},
@@ -321,6 +321,14 @@ func taskRoute(path, method, route, summary string, handler taskHandler) registr
 
 func taskHTTPArgs(path string) []registry.Arg {
 	switch path {
+	case "tasks.queue.create":
+		return []registry.Arg{
+			{Name: "prefix", Required: true, Help: "Queue key prefix"},
+			{Name: "name", Required: true, Help: "Queue name"},
+			{Name: "description", Help: "Queue description"},
+			{Name: "owners", Help: "Comma-separated owner agents"},
+			{Name: "responsible_agent", Flag: "responsible-agent", Help: "Responsible agent"},
+		}
 	case "tasks.workflows.create":
 		return []registry.Arg{{Name: "definition", Required: true, Help: "Versioned workflow definition", Schema: schemaRef("WorkflowDefinition")}}
 	case "tasks.queue.workflow.set":
@@ -427,6 +435,11 @@ func stringSliceParam(p registry.Params, key string) []string {
 			}
 		}
 		return out
+	case string:
+		if strings.TrimSpace(values) == "" {
+			return nil
+		}
+		return strings.Split(values, ",")
 	default:
 		return nil
 	}
