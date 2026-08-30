@@ -21,7 +21,8 @@ iteration loop. It is a historical core capability and is included in
 | `tools loop stop` | Disable this agent's loop without impersonating another agent. |
 
 Provisioning writes `i-am-done` as an executable shim only when `loop` is
-enabled. The shim calls the version-pinned `tariboy-tools loop done` client.
+enabled. The shim calls `loop/scripts/loop.py done` inside the versioned Store
+skill directory.
 Image activation adds or removes it to match the next active plugin set.
 
 ## Completion semantics

@@ -23,6 +23,8 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
+	"github.com/alekzonder/tariboy/internal/version"
+	storeassets "github.com/alekzonder/tariboy/store"
 )
 
 type fakeObservationReconciler struct{ calls chan struct{} }
@@ -292,9 +294,13 @@ func TestRunTaskReminderInitialScanUsesPublishHookAndStops(t *testing.T) {
 	if err := agent.NewStore(seed).Create(worker); err != nil {
 		t.Fatal(err)
 	}
+	skillsDir := filepath.Join(paths.New(base).CurrentVersionStoreDir(version.Version), "skills")
+	if err := storeassets.Ensure(paths.New(base), version.Version); err != nil {
+		t.Fatal(err)
+	}
 	if err := agentdir.Provision(
 		agentdir.New(filepath.Join(base, "agents"), worker.Name), worker,
-		&image.Store{Dir: imagesDir}, image.Ref{Name: "basic", Tag: "latest"}, "/bin/true",
+		&image.Store{Dir: imagesDir}, image.Ref{Name: "basic", Tag: "latest"}, skillsDir,
 	); err != nil {
 		t.Fatal(err)
 	}

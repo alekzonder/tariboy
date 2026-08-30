@@ -730,7 +730,7 @@ func TestPendingImageActivationSwapsOnlyImageAndPromotes(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
-	if err := agentdir.Provision(l, ag, images, aRef, "/bin/true"); err != nil {
+	if err := agentdir.Provision(l, ag, images, aRef, testSkillsDir(t)); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(l.ContextPath(), []byte("keep"), 0o600); err != nil {
@@ -740,7 +740,7 @@ func TestPendingImageActivationSwapsOnlyImageAndPromotes(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorder := &captureRecorder{}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true", Log: slog.New(slog.NewTextHandler(io.Discard, nil)), AuditFor: func(string) Recorder { return recorder }}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: testSkillsDir(t), Log: slog.New(slog.NewTextHandler(io.Discard, nil)), AuditFor: func(string) Recorder { return recorder }}}
 	sha, err := m.activatePendingImage(&ag)
 	if err != nil {
 		t.Fatal(err)
@@ -868,7 +868,7 @@ func TestImageActivationCrashRecoveryReconcilesActiveShimsAfterCancel(t *testing
 		t.Fatal(err)
 	}
 	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
-	if err := agentdir.Provision(l, ag, images, aRef, "/bin/true"); err != nil {
+	if err := agentdir.Provision(l, ag, images, aRef, testSkillsDir(t)); err != nil {
 		t.Fatal(err)
 	}
 	backup := filepath.Join(l.Root, ".image-backup")
@@ -880,14 +880,14 @@ func TestImageActivationCrashRecoveryReconcilesActiveShimsAfterCancel(t *testing
 	}
 	candidate := ag
 	candidate.Plugins = nil
-	if err := agentdir.WriteShims(l, candidate, "/bin/true"); err != nil {
+	if err := agentdir.WriteShims(l, candidate, testSkillsDir(t)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(l.BinDir(), "i-am-done")); !os.IsNotExist(err) {
 		t.Fatalf("candidate loop shim survived simulated crash setup: %v", err)
 	}
 
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: testSkillsDir(t)}}
 	if _, err := m.activatePendingImage(&ag); err != nil {
 		t.Fatal(err)
 	}
@@ -938,7 +938,7 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 		t.Fatal(err)
 	}
 	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
-	if err := agentdir.Provision(l, ag, images, activeRef, "/bin/true"); err != nil {
+	if err := agentdir.Provision(l, ag, images, activeRef, testSkillsDir(t)); err != nil {
 		t.Fatal(err)
 	}
 	if err := as.SetPendingImage(ag.Name, basicRef.String(), pendingManifest.Digest); err != nil {
@@ -955,7 +955,7 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 	if current.Digest == pendingManifest.Digest {
 		t.Fatal("test setup did not replace managed basic image")
 	}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: testSkillsDir(t)}}
 	sha, err := m.activatePendingImage(&ag)
 	if err != nil {
 		t.Fatalf("pre-upgrade pending image did not activate: %v", err)
@@ -1006,7 +1006,7 @@ func TestPendingImageActivationFailuresPreserveActiveImageAndRecordError(t *test
 				t.Fatal(err)
 			}
 			l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
-			if err := agentdir.Provision(l, ag, images, activeRef, "/bin/true"); err != nil {
+			if err := agentdir.Provision(l, ag, images, activeRef, testSkillsDir(t)); err != nil {
 				t.Fatal(err)
 			}
 			pendingDigest := candidateManifest.Digest
@@ -1022,7 +1022,7 @@ func TestPendingImageActivationFailuresPreserveActiveImageAndRecordError(t *test
 				}
 				defer os.Chmod(l.Root, 0o700)
 			}
-			m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+			m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: testSkillsDir(t)}}
 			if _, err := m.activatePendingImage(&ag); err == nil {
 				t.Fatal("invalid pending image activated")
 			}
@@ -1080,7 +1080,7 @@ func TestPendingImageActivationBridgeFailurePreservesActiveImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
-	if err := agentdir.Provision(l, ag, images, activeRef, "/bin/true"); err != nil {
+	if err := agentdir.Provision(l, ag, images, activeRef, testSkillsDir(t)); err != nil {
 		t.Fatal(err)
 	}
 	if err := as.SetPendingImage(ag.Name, pendingRef.String(), pendingManifest.Digest); err != nil {
@@ -1089,7 +1089,7 @@ func TestPendingImageActivationBridgeFailurePreservesActiveImage(t *testing.T) {
 	bridgeErr := errors.New("bridge publication failed")
 	bridgeCalled := false
 	m := &Manager{cfg: ManagerConfig{
-		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true",
+		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: testSkillsDir(t),
 		PrepareImageBridge: func(sourceDir, finalDir string, skills []image.ManifestSkill, plan agentdir.BridgePlan) error {
 			bridgeCalled = true
 			if sourceDir == filepath.Join(l.ImageDir(), "skills") {
@@ -1159,10 +1159,10 @@ func TestImageBridgeRestartReusesPublishedBridge(t *testing.T) {
 	}
 	agentsDir := filepath.Join(base, "agents")
 	l := agentdir.New(agentsDir, ag.Name)
-	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
+	if err := agentdir.Provision(l, ag, images, ref, testSkillsDir(t)); err != nil {
 		t.Fatal(err)
 	}
-	config := ManagerConfig{AgentsDir: agentsDir, Store: as, ImgStore: images, ToolsBin: "/bin/true"}
+	config := ManagerConfig{AgentsDir: agentsDir, Store: as, ImgStore: images, SkillsDir: testSkillsDir(t)}
 	first, err := (&Manager{cfg: config}).activatePendingImage(&ag)
 	if err != nil {
 		t.Fatal(err)
@@ -1245,11 +1245,11 @@ func TestActiveCodexImageSkillBridgeNeedsNoPluginProbe(t *testing.T) {
 	}
 	agentsDir := filepath.Join(base, "agents")
 	l := agentdir.New(agentsDir, ag.Name)
-	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
+	if err := agentdir.Provision(l, ag, images, ref, testSkillsDir(t)); err != nil {
 		t.Fatal(err)
 	}
 	activated, err := (&Manager{cfg: ManagerConfig{
-		AgentsDir: agentsDir, Store: as, ImgStore: images, ToolsBin: "/bin/true",
+		AgentsDir: agentsDir, Store: as, ImgStore: images, SkillsDir: testSkillsDir(t),
 	}}).activatePendingImage(&ag)
 	if err != nil {
 		t.Fatalf("Codex bridge required an executable/plugin probe: %v", err)

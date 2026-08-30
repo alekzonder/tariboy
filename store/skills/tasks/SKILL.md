@@ -5,6 +5,9 @@ description: Use when claiming, decomposing, delegating, questioning, updating, 
 
 # Native Tasks
 
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 Inspect work with `tasks mine`, `tasks ready`, `tasks ready --claim`, and
 `tasks show <key>`. Create/decompose with `tasks create`; delegate with
 `tasks assign`; keep decisions in `tasks comment`; advance with `tasks update`

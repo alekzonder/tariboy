@@ -71,7 +71,6 @@ describe("host progress model", () => {
           "tariboyd: OK",
           "tariboy: OK",
           "tariboy-shim: OK",
-          "tariboy-tools: OK",
           "refusing to replace non-symlink /home/me/.local/bin/tariboyd",
         ].join("\n"),
       }),

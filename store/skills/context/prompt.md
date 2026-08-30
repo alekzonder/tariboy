@@ -1,4 +1,7 @@
 ## Context
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 You keep a durable working memory that survives between iterations. Read it with
     tools context get
 and overwrite it with

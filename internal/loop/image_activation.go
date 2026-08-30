@@ -116,7 +116,7 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 			return activatedImage{}, err
 		}
 		if recoveredSwap {
-			if err := agentdir.WriteShims(l, *ag, m.cfg.ToolsBin); err != nil {
+			if err := agentdir.WriteShims(l, *ag, m.cfg.SkillsDir); err != nil {
 				_, _ = m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
 				return activatedImage{}, err
 			}
@@ -129,7 +129,7 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 	// the daemon-owned shims derived from the active plugin set before retrying
 	// any still-pending activation.
 	if recoveredSwap {
-		if err := agentdir.WriteShims(l, *ag, m.cfg.ToolsBin); err != nil {
+		if err := agentdir.WriteShims(l, *ag, m.cfg.SkillsDir); err != nil {
 			return fail(err)
 		}
 	}
@@ -199,16 +199,16 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 	}
 	nextAgent := *ag
 	nextAgent.Plugins = nextPlugins
-	if err := agentdir.WriteShims(l, nextAgent, m.cfg.ToolsBin); err != nil {
+	if err := agentdir.WriteShims(l, nextAgent, m.cfg.SkillsDir); err != nil {
 		_ = os.RemoveAll(l.ImageDir())
 		_ = os.Rename(backup, l.ImageDir())
-		_ = agentdir.WriteShims(l, *ag, m.cfg.ToolsBin)
+		_ = agentdir.WriteShims(l, *ag, m.cfg.SkillsDir)
 		return fail(err)
 	}
 	if err := m.cfg.Store.PromotePendingImageWithPlugins(ag.Name, pending.Ref, pending.Digest, nextPlugins); err != nil {
 		_ = os.RemoveAll(l.ImageDir())
 		_ = os.Rename(backup, l.ImageDir())
-		_ = agentdir.WriteShims(l, *ag, m.cfg.ToolsBin)
+		_ = agentdir.WriteShims(l, *ag, m.cfg.SkillsDir)
 		return fail(err)
 	}
 	_ = os.RemoveAll(backup)

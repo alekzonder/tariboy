@@ -297,11 +297,11 @@ mod tests {
         let source_dir = bundled_set(dir.path(), "Tariboy.app");
         let link_dir = dir.path().join("local-bin");
         std::fs::create_dir_all(&link_dir).unwrap();
-        std::fs::write(link_dir.join("tariboy-tools"), b"foreign").unwrap();
+        std::fs::write(link_dir.join("tariboy-plugin-telegram"), b"foreign").unwrap();
 
         match install_all(&link_dir, &source_dir, &BINARIES).unwrap() {
             Outcome::Occupied { existing } => {
-                assert!(existing.contains("tariboy-tools"));
+                assert!(existing.contains("tariboy-plugin-telegram"));
                 assert!(existing.contains("regular file"));
             }
             other => panic!("outcome = {other:?}, want Occupied"),
@@ -310,7 +310,7 @@ mod tests {
             assert!(!link_dir.join(binary).exists());
         }
         assert_eq!(
-            std::fs::read(link_dir.join("tariboy-tools")).unwrap(),
+            std::fs::read(link_dir.join("tariboy-plugin-telegram")).unwrap(),
             b"foreign"
         );
     }
@@ -336,7 +336,7 @@ mod tests {
             std::fs::read_link(link_dir.join("tariboy")).unwrap(),
             foreign_cli
         );
-        for binary in ["tariboyd", "tariboy-shim", "tariboy-tools"] {
+        for binary in ["tariboyd", "tariboy-shim"] {
             assert!(!link_dir.join(binary).exists());
         }
     }

@@ -62,7 +62,7 @@ type ScriptResultNotifier interface {
 type ManagerConfig struct {
 	AgentsDir     string
 	RuntimeDir    string
-	ToolsBin      string
+	SkillsDir     string
 	ShimBin       string
 	ImgStore      *image.Store
 	Store         *agent.Store
@@ -299,31 +299,32 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		return m.cfg.RunnerFactory(ag)
 	}
 	return NewShimRunner(RunnerConfig{
-		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, ShimBin: m.cfg.ShimBin, ToolsBin: m.cfg.ToolsBin,
+		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, ShimBin: m.cfg.ShimBin,
 		ImgStore: m.cfg.ImgStore, Store: m.cfg.Store, Spawner: m.cfg.Spawner, Clock: m.cfg.Clock,
 		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Bus: m.cfg.Bus, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
 	})
 }
 
 // refreshShims rewrites each agent's bin shims against the running daemon's
-// tools binary. Disabled agents are included — they may be enabled later and
+// skill scripts. Disabled agents are included — they may be enabled later and
 // must find a working client then. One unwritable agent dir is logged and
 // skipped: daemon startup is not a place to die over a single directory.
 //
-// A tools binary that is not there aborts the whole pass before any shim is
+// A missing tools dispatcher aborts the whole pass before any shim is
 // touched: the path is the same for every agent, so writing it would only
 // replace each agent's working (if stale) client with one that is certainly
 // dead, and the breakage would not surface until an exec inside an iteration.
 // Startup still succeeds — losing the refresh is not worth refusing to run.
 func (m *Manager) refreshShims(agents []agent.Agent) {
-	if _, err := os.Stat(m.cfg.ToolsBin); err != nil {
-		m.cfg.Log.Error("skip agent shim refresh: tools binary is unavailable",
-			"tools_bin", m.cfg.ToolsBin, "err", err)
+	dispatcher := filepath.Join(m.cfg.SkillsDir, "agent-tools", "scripts", "tools.py")
+	if _, err := os.Stat(dispatcher); err != nil {
+		m.cfg.Log.Error("skip agent shim refresh: skill scripts are unavailable",
+			"skills_dir", m.cfg.SkillsDir, "err", err)
 		return
 	}
 	for _, a := range agents {
 		l := agentdir.New(m.cfg.AgentsDir, a.Name)
-		if err := agentdir.WriteShims(l, a, m.cfg.ToolsBin); err != nil {
+		if err := agentdir.WriteShims(l, a, m.cfg.SkillsDir); err != nil {
 			m.cfg.Log.Error("refresh agent shims", "agent", a.Name, "err", err)
 		}
 	}
@@ -345,7 +346,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	// Repoint every agent's bin shims at this daemon's client before anything
 	// can run: they were written once at provision time with an absolute path
 	// to the then-current release, so an upgraded daemon would otherwise keep
-	// serving agents a frozen (and flag-incompatible) tariboy-tools. This
+	// serving agents frozen (and flag-incompatible) client scripts. This
 	// stays above the script supervisor: its first scan runs before the first
 	// tick, so a script already due at daemon start would otherwise inherit a
 	// PATH pointing at the stale shims.
@@ -835,7 +836,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 		ag.Group = spec.Group
 	}
 	l := agentdir.New(m.cfg.AgentsDir, name)
-	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref, m.cfg.ToolsBin); err != nil {
+	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref, m.cfg.SkillsDir); err != nil {
 		return "", err
 	}
 	if err := m.cfg.Store.Create(ag); err != nil {
@@ -2060,7 +2061,7 @@ func (m *Manager) reprovision(name, imageRef string) error {
 		return err
 	}
 	l := agentdir.New(m.cfg.AgentsDir, name)
-	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref, m.cfg.ToolsBin); err != nil {
+	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref, m.cfg.SkillsDir); err != nil {
 		return err
 	}
 	// Bring the loop back up on the refreshed tree. Persist the enabled intent so

@@ -5,6 +5,9 @@ description: Use when sending requests or replies, subscribing to channels, or r
 
 # Tariboy Messages
 
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 Incoming messages are shown in the iteration prompt. Act on each, then close it
 with `tools message processed <id> "<result>"`; `tools message reply` replies and
 closes it atomically.

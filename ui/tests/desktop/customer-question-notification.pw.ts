@@ -1,12 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { access } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { expect, test, waitForMainWindow } from "./fixture";
-
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const tools = join(repositoryRoot, "desktop/src-tauri/resources/bin/linux-x86_64/tariboy-tools");
 
 test("opens an agent customer question from the production Desktop notification flow", async ({ desktop, desktopWorker }) => {
   desktopWorker.registerAgentForCleanup("question-requester");
@@ -60,8 +56,9 @@ test("opens an agent customer question from the production Desktop notification 
   await expect.poll(async () => {
     try { await access(socket); return true; } catch { return false; }
   }, { timeout: 30_000 }).toBe(true);
-  const commented = spawnSync(tools, [
-    "--json", "tasks", "comment", setup.taskKey,
+  const tasks = join(desktopWorker.baseDir, "agents", "question-requester", "bin", "tasks");
+  const commented = spawnSync(tasks, [
+    "--json", "comment", setup.taskKey,
     `Need a decision from @${setup.customer}`,
   ], {
     env: { ...process.env, TARIBOY_TOOLS_SOCKET: socket },

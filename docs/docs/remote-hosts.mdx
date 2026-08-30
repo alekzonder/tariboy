@@ -137,7 +137,7 @@ To uninstall remotely after confirming no work is active:
 ```bash
 ssh build-box 'set -eu
 managed_cli=
-for name in tariboy tariboyd tariboy-shim tariboy-tools tariboy-plugin-telegram; do
+for name in tariboy tariboyd tariboy-shim tariboy-plugin-telegram; do
   link=$HOME/.local/bin/$name
   if test -L "$link"; then
     target=$(readlink "$link")
@@ -154,7 +154,7 @@ for name in tariboy tariboyd tariboy-shim tariboy-tools tariboy-plugin-telegram;
 done
 test -n "$managed_cli"
 "$managed_cli" daemon stop || true
-for name in tariboy tariboyd tariboy-shim tariboy-tools tariboy-plugin-telegram; do
+for name in tariboy tariboyd tariboy-shim tariboy-plugin-telegram; do
   link=$HOME/.local/bin/$name
   test ! -L "$link" || rm -- "$link"
 done

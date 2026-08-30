@@ -19,7 +19,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/shim"
 )
 
-// toolsHTTP dials the per-agent tools socket the way tariboy-tools does: a
+// toolsHTTP dials the per-agent tools socket the way the skill scripts do: a
 // fresh connection per call (the client is a one-shot process), so a rebound
 // socket is picked up by the next call without any reconnect logic.
 func toolsHTTP(sock string) *http.Client {

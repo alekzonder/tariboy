@@ -262,10 +262,10 @@ reaction to a mismatch belongs to the client, see
 
 Provisioning writes three shims into `<data dir>/agents/<name>/bin`: `tools`,
 `i-am-done`, and — only for agents with the `tasks` capability — `tasks`. Each
-one `exec`s an **absolute path** to a specific release's `tariboy-tools`
-(`$TARIBOY_TOOLS_BIN`, else the binary next to the running `tariboyd`).
-The path stays absolute on purpose: an agent must talk to the daemon that owns
-it, and that is also what lets a test daemon isolate its agents.
+one `exec`s Python 3 with an **absolute path** inside the running daemon's
+versioned Store: the generic dispatcher under `agent-tools/scripts`, the loop
+script for `i-am-done`, or the tasks script. The script then uses
+`$TARIBOY_TOOLS_SOCKET`; the daemon derives identity from that socket.
 
 Because the path is absolute, shims written at create time would otherwise
 outlive the daemon that wrote them, leaving every agent on a frozen client whose

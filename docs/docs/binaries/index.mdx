@@ -6,14 +6,13 @@ sidebar:
   icon: terminal
 ---
 
-Five core binaries and one bundled plugin are built by `make build`:
+Four core binaries and one bundled plugin are built by `make build`:
 
 | Binary | Role |
 | --- | --- |
 | `tariboyd` | The [daemon](/docs/architecture) — long-running, owns all durable state. |
 | `tariboy` | The [operator CLI](/docs/binaries/operator-cli) — human/CI client over the socket. |
 | `tariboy-shim` | Runs [one harness iteration under a watchdog](/docs/architecture/shim). |
-| `tariboy-tools` | The [agent-facing `tools`](/docs/binaries/agent-tools) shim, run *inside* an agent. |
 | `tariboy-store` | A standalone [image registry](/docs/binaries/store) server. |
 | `tariboy-plugin-telegram` | The bundled Telegram channel and operator-surface plugin. |
 
@@ -28,17 +27,17 @@ installation path receives the same default image.
 
 ## Client/daemon version drift
 
-`tariboy` and `tariboy-tools` share one socket client, and it reads the
+`tariboy` and the [agent tool scripts](/docs/binaries/agent-tools) read the
 `X-Tariboy-Version` header the daemon stamps on
 [every response](/docs/architecture#version-reporting). When that version differs
 from the client's own build, the client prints a warning naming both versions and
-its own executable path — once per process, strictly on **stderr**. It does not
+its own path, strictly on **stderr**. It does not
 change stdout or the exit code, so output parsing is unaffected. A daemon old
 enough to send no header produces no warning.
 
-This matters because an agent's `tools` / `tasks` / `i-am-done` shims are written
-when the agent is created and stay pinned to that build: without the warning, a
-client too old to know a newer flag looks like it simply did nothing.
+This matters because an agent's `tools` / `tasks` / `i-am-done` shims select a
+versioned Store skill tree: without the warning, a script too old to know a
+newer flag looks like it simply did nothing.
 `tools whoami` prints both `client_version` and `daemon_version` for exactly this
 reason — it is the first command to run when the tools behave strangely.
 

@@ -123,8 +123,8 @@ func TestStartAllRefreshesShimsBeforeScriptSupervisorStarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(seen), m.cfg.ToolsBin) {
-		t.Fatalf("due script ran against a shim that does not exec the live client %q: %s", m.cfg.ToolsBin, seen)
+	if !strings.Contains(string(seen), m.cfg.SkillsDir) {
+		t.Fatalf("due script ran against a shim that does not exec a live skill script from %q: %s", m.cfg.SkillsDir, seen)
 	}
 	if strings.Contains(string(seen), "0.21.6") {
 		t.Fatalf("due script ran against the shim pinned to the provisioning release: %s", seen)

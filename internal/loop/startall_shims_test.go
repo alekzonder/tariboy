@@ -22,7 +22,7 @@ func writeStaleShims(t *testing.T, agentsDir, name string) agentdir.Layout {
 		t.Fatal(err)
 	}
 	for _, f := range []string{"tools", "i-am-done", "tasks"} {
-		body := "#!/usr/bin/env bash\nexec \"/opt/tariboy/0.21.6/tariboy-tools\" \"$@\"\n"
+		body := "#!/usr/bin/env bash\nexec python3 \"/opt/tariboy/0.21.6/skills/agent-tools/scripts/tools.py\" \"$@\"\n"
 		if err := os.WriteFile(filepath.Join(l.BinDir(), f), []byte(body), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -72,8 +72,8 @@ func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
 			if strings.Contains(got, "0.21.6") {
 				t.Fatalf("%s/%s still pinned to the provisioning release: %s", l.Name, f, got)
 			}
-			if !strings.Contains(got, m.cfg.ToolsBin) {
-				t.Fatalf("%s/%s does not exec the live client %q: %s", l.Name, f, m.cfg.ToolsBin, got)
+			if !strings.Contains(got, m.cfg.SkillsDir) {
+				t.Fatalf("%s/%s does not exec a live skill script from %q: %s", l.Name, f, m.cfg.SkillsDir, got)
 			}
 		}
 	}
@@ -113,7 +113,7 @@ func TestStartAllSurvivesOneUnwritableAgentDir(t *testing.T) {
 	if err := m.StartAll(context.Background()); err != nil {
 		t.Fatalf("StartAll failed because of one bad agent dir: %v", err)
 	}
-	if got := readShim(t, lFine, "tools"); !strings.Contains(got, m.cfg.ToolsBin) {
+	if got := readShim(t, lFine, "tools"); !strings.Contains(got, m.cfg.SkillsDir) {
 		t.Fatalf("healthy agent was skipped after the broken one: %s", got)
 	}
 	if !strings.Contains(logs.String(), "broken") {

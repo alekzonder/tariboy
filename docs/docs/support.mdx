@@ -101,7 +101,7 @@ app=/Applications/Tariboy.app
 identifier=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
 test "$identifier" = app.tariboy.desktop
 bundle_bin=$app/Contents/Resources/bin/darwin-arm64
-for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-shim tariboy-plugin-telegram; do
   link="$HOME/.local/bin/$name"
   expected="$bundle_bin/$name"
   test -x "$expected"
@@ -117,7 +117,7 @@ for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram;
   fi
 done
 "$bundle_bin/tariboy" daemon stop || true
-for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-shim tariboy-plugin-telegram; do
   link="$HOME/.local/bin/$name"
   test ! -L "$link" || rm -- "$link"
 done

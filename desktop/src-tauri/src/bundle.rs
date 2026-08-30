@@ -6,11 +6,10 @@ use std::path::{Path, PathBuf};
 /// It remains separate from CARGO_PKG_VERSION so bundled payloads and the
 /// running daemon are checked against the same release value.
 pub const VERSION: &str = env!("TARIBOY_VERSION");
-pub const BINARIES: [&str; 5] = [
+pub const BINARIES: [&str; 4] = [
     "tariboyd",
     "tariboy",
     "tariboy-shim",
-    "tariboy-tools",
     "tariboy-plugin-telegram",
 ];
 const VERSION_FILE: &str = "VERSION";
@@ -100,15 +99,11 @@ impl Bundle {
         }
     }
 
-    // Consumed once the daemon is spawned (Task 15/16): the daemon resolves the
-    // shim and tools binaries beside itself, so the bundle must ship them there.
+    // Consumed once the daemon is spawned: the daemon resolves the shim beside
+    // itself, so the bundle must ship it there.
     #[allow(dead_code)]
     pub fn shim_bin(&self) -> PathBuf {
         self.local_dir().join("tariboy-shim")
-    }
-    #[allow(dead_code)]
-    pub fn tools_bin(&self) -> PathBuf {
-        self.local_dir().join("tariboy-tools")
     }
     pub fn version(&self) -> &'static str {
         VERSION
@@ -226,8 +221,7 @@ mod tests {
         );
     }
 
-    // The daemon looks for the shim and tools NEXT TO ITSELF
-    // (internal/daemon/daemon.go:163-164), so all four binaries share one dir.
+    // The daemon looks for the shim next to itself, so the helpers share one dir.
     #[test]
     fn cli_and_helpers_sit_beside_the_daemon() {
         let b = Bundle::new(PathBuf::from("/bin"));
@@ -236,20 +230,16 @@ mod tests {
             b.shim_bin(),
             PathBuf::from(format!("/bin/{directory}/tariboy-shim"))
         );
-        assert_eq!(
-            b.tools_bin(),
-            PathBuf::from(format!("/bin/{directory}/tariboy-tools"))
-        );
     }
 
     #[test]
     // build.rs checks explicit overrides. This covers bare Cargo test runs,
     // where build.rs defaults TARIBOY_VERSION to the source value.
     fn runtime_version_matches_the_go_source() {
-        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../internal/version/version.go");
-        let go_source = std::fs::read_to_string(&source)
-            .expect("read ../../internal/version/version.go");
+        let source =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../internal/version/version.go");
+        let go_source =
+            std::fs::read_to_string(&source).expect("read ../../internal/version/version.go");
         let source_version = go_source
             .lines()
             .find_map(|line| {
@@ -298,7 +288,7 @@ mod tests {
             root.path().join(Platform::local().directory())
         );
         let linux = bundle.platform(Platform::LinuxX86_64).unwrap();
-        assert_eq!(linux.files_for_upload().len(), 7);
+        assert_eq!(linux.files_for_upload().len(), 6);
         assert_eq!(linux.version, VERSION);
     }
 
@@ -308,13 +298,13 @@ mod tests {
         let dir = write_bundle(root.path(), Platform::LinuxX86_64, VERSION);
         let bundle = Bundle::new(root.path().to_path_buf());
 
-        std::fs::remove_file(dir.join("tariboy-tools")).unwrap();
+        std::fs::remove_file(dir.join("tariboy-shim")).unwrap();
         assert!(bundle
             .platform(Platform::LinuxX86_64)
             .unwrap_err()
-            .contains("tariboy-tools"));
+            .contains("tariboy-shim"));
 
-        std::fs::write(dir.join("tariboy-tools"), b"binary").unwrap();
+        std::fs::write(dir.join("tariboy-shim"), b"binary").unwrap();
         std::fs::remove_file(dir.join(CHECKSUM_FILE)).unwrap();
         assert!(bundle
             .platform(Platform::LinuxX86_64)

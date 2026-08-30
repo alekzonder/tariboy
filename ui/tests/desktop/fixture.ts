@@ -35,6 +35,8 @@ export interface UsageSeed {
 interface DesktopWorker {
   client: W3CClient;
   log: TailBuffer;
+  /** Isolated base directory owned and removed by this test fixture. */
+  baseDir: string;
   /** Isolated runtime directory owned and removed by this test fixture. */
   runtimeDir: string;
   /** Registers an agent whose active iteration this fixture must kill before
@@ -437,6 +439,7 @@ export const test = base.extend<DesktopFixtures>({
       await provide({
         client: session,
         log,
+        baseDir,
         runtimeDir,
         registerAgentForCleanup: (name) => cleanupAgents.add(name),
         externalOpenLog,

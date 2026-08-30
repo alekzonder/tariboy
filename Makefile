@@ -2,7 +2,7 @@ GO      ?= go
 BINDIR  := bin
 PREFIX  ?= $(HOME)/.local
 INSTALLDIR := $(PREFIX)/bin
-BINARIES := tariboyd tariboy tariboy-shim tariboy-tools tariboy-store tariboy-plugin-telegram
+BINARIES := tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram
 SA := $(BINDIR)/tariboy
 # Desktop E2E specs receive separate owner-only state from their fixture, so
 # two WebDriver workers can run safely on a normal development host. Keep this
@@ -30,7 +30,6 @@ build: build-basic-image
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
 	$(GO) build -trimpath -o $(BINDIR)/tariboy ./cmd/tariboy
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-shim ./cmd/tariboy-shim
-	$(GO) build -trimpath -o $(BINDIR)/tariboy-tools ./cmd/tariboy-tools
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-store ./cmd/tariboy-store
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-plugin-telegram ./cmd/tariboy-plugin-telegram
 
@@ -201,7 +200,7 @@ RELEASE_VERSION := $(shell cat scripts/release-version.txt 2>/dev/null)
 # macOS bundle metadata uses x.y.z. Keep the full canonical string available to
 # Rust as TARIBOY_VERSION while SEMVER owns the Cargo/Tauri comparison.
 SEMVER      := $(firstword $(subst -, ,$(VERSION)))
-DESKTOP_BINARIES := tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram
+DESKTOP_BINARIES := tariboyd tariboy tariboy-shim tariboy-plugin-telegram
 # Resolved once so every desktop gate below agrees on what host it is running on.
 HOST_OS     := $(shell uname -s)
 HOST_ARCH   := $(shell uname -m)
@@ -490,6 +489,7 @@ check:
 	run_step "fmt-check"    '$(SUBMAKE) fmt-check'; \
 	run_step "vet"          '$(SUBMAKE) vet'; \
 	run_step "test"         '$(SUBMAKE) test'; \
+	run_step "agent-tools"  'PYTHONDONTWRITEBYTECODE=1 python3 -m unittest store/skills/agent-tools/scripts/test_agent_tools.py'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \
 	run_step "ui-typecheck" 'need_node_modules ui && cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'need_node_modules ui && cd ui && npm run lint'; \

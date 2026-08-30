@@ -12,7 +12,6 @@ export TARIBOY_RUNTIME_DIR="$RUNTIME"
 trap 'kill "$DPID" 2>/dev/null || true; kill "${FAKE_PID:-}" 2>/dev/null || true; kill "${OTLP_PID:-}" 2>/dev/null || true; kill "${STORE_PID:-}" 2>/dev/null || true; rm -rf "${STORE_PULL_BASE:-}" "$BASE" "$RUNTIME"' EXIT
 
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
-export TARIBOY_TOOLS_BIN="$BIN/tariboy-tools"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 chmod +x "$TARIBOY_STUB_HARNESS"
 

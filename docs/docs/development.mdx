@@ -217,14 +217,15 @@ the same image step before compiling its local and remote daemon payloads.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
-`make server-install` builds all six commands, stages and verifies their
+`make server-install` builds all five commands, stages and verifies their
 checksums, publishes a versioned release under
 `$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
 `$HOME/.local/bin` links. It does not start or restart the daemon.
 
 Configurable Native Tasks workflow changes normally need focused tests under
 `internal/tasks`, the operator route/OpenAPI registry tests under
-`internal/commands`, and agent command parsing under `internal/toolscli`.
+`internal/commands`, and agent command parsing under
+`store/skills/agent-tools/scripts/test_agent_tools.py`.
 Changes to queue-trigger or observation delivery also exercise bus/daemon
 recovery; Compose changes exercise `internal/compose`. The isolated product
 path is `scripts/workflow-e2e.sh` and is included by `make full-check`. Keep the
@@ -426,9 +427,9 @@ and a platform that does not match the current host before compiling payloads.
 `make desktop-alpha` packages and verifies the internal alpha; publication is a
 separate manual action.
 
-The tray action **Install/Update CLI** owns the local five-binary install. It
+The tray action **Install/Update CLI** owns the local four-binary install. It
 preflights and atomically switches `tariboyd`, `tariboy`,
-`tariboy-shim`, `tariboy-tools`, and `tariboy-plugin-telegram` links under `~/.local/bin`, then
+`tariboy-shim`, and `tariboy-plugin-telegram` links under `~/.local/bin`, then
 restarts the bundled daemon even when the links already target the same app
 path. Its filesystem and lifecycle work must stay off the UI thread. Changes to
 this flow require Rust installer tests plus the daemon restart-handoff tests;

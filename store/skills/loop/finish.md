@@ -1,4 +1,7 @@
 ## Finishing this iteration
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 Only the root iteration owner may run `i-am-done` (with or without `--idle`).
 A subagent must never run `i-am-done`: when its assigned work is complete, it
 must return its result to its parent. This remains true even if the parent is

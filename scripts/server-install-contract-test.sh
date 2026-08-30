@@ -25,7 +25,7 @@ chmod 0755 "$output"
 SH
 chmod 0755 "$tools/go"
 
-binaries="tariboyd tariboy tariboy-shim tariboy-tools tariboy-store tariboy-plugin-telegram"
+binaries="tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram"
 for name in $binaries; do
   printf 'old\n' >"$home/.local/lib/tariboy/old/$name"
   ln -s "$home/.local/lib/tariboy/old/$name" "$home/.local/bin/$name"

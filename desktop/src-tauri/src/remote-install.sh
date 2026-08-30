@@ -35,7 +35,7 @@ suffix=${staging#.stage-}
 switched=
 release_created=false
 committed=false
-binaries="tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram"
+binaries="tariboyd tariboy tariboy-shim tariboy-plugin-telegram"
 binary_source=$stage
 test "$mode" != activate || binary_source=$release
 test ! -f "$binary_source/tariboy-store" || binaries="$binaries tariboy-store"

@@ -14,7 +14,6 @@ mkdir -p "$BASE" "$RUNTIME"
 export TARIBOY_BASE_DIR="$BASE"
 export TARIBOY_RUNTIME_DIR="$RUNTIME"
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
-export TARIBOY_TOOLS_BIN="$BIN/tariboy-tools"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 
 WEB_PORT="${TARIBOY_WORKFLOW_E2E_PORT:-$(python3 - <<'PY'
@@ -91,7 +90,7 @@ assert_field() {
 }
 tools() {
   local agent="$1"; shift
-  TARIBOY_TOOLS_SOCKET="$RUNTIME/$agent.sock" "$BIN/tariboy-tools" --json "$@"
+  TARIBOY_TOOLS_SOCKET="$RUNTIME/$agent.sock" "$BASE/agents/$agent/bin/tools" --json "$@"
 }
 packet() { tools "$1" tasks work show "$2"; }
 fresh_revisions() {

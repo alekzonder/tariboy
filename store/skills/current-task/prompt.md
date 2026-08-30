@@ -1,4 +1,7 @@
 ## Current task
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 Tag your AI usage with the Native Tasks item you are working on, so each
 iteration's cost is attributed to that task and its top-level root instead of an
 untagged bucket. As soon as you pick a task up — from tasks mine, tasks ready,

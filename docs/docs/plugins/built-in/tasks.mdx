@@ -13,8 +13,9 @@ SQLite database.
 ## Command and identity boundary
 
 When the capability is active, provisioning writes a bare `tasks` shim into the
-agent's bin directory. It invokes the version-pinned `tariboy-tools tasks`
-client over the per-agent socket. Removing the capability removes the shim.
+agent's bin directory. It invokes `tasks/scripts/tasks.py` inside the versioned
+Store skill directory over the per-agent socket. Removing the capability
+removes the shim.
 
 Every mutation derives its author or actor from that socket. Request fields
 that could forge an author, customer, principal identity, or iteration are

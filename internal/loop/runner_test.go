@@ -549,7 +549,7 @@ func newRunnerForProxyTest(t *testing.T, binder ProxyBinder) (*ShimRunner, agent
 	}
 
 	r := NewShimRunner(RunnerConfig{
-		AgentsDir: agentsDir, ShimBin: "/opt/tariboy-shim", ToolsBin: "/opt/tariboy-tools",
+		AgentsDir: agentsDir, ShimBin: "/opt/tariboy-shim",
 		Store: as, Spawner: &fakeProxySpawner{resultPath: l.ResultPath("alice-1")},
 		Clock: time.Now, PollInterval: 5 * time.Millisecond,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Proxy: binder,

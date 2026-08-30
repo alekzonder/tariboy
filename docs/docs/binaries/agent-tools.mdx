@@ -1,13 +1,15 @@
 ---
-title: tariboy-tools (agent-facing)
+title: Agent tool scripts
 description: Run inside an agent, surfaced as `tools …` — identity, status, loop control, context, messaging, schedules, and durable scripts.
 sidebar:
   label: Agent tools
   icon: wrench
 ---
 
-Run **inside** an agent (`cmd/tariboy-tools`, `internal/toolscli`); talks to
-the per-agent socket `$TARIBOY_TOOLS_SOCKET`, surfaced to agents as `tools …`.
+Run **inside** an agent through `tools`, `tasks`, or `i-am-done`. Each launcher
+executes a Python 3 standard-library script inside the owning Store skill
+directory. The scripts talk to the identity-bound per-agent socket selected by
+`$TARIBOY_TOOLS_SOCKET`; the daemon derives the agent identity server-side.
 
 | Tool | Purpose |
 | --- | --- |
@@ -54,8 +56,8 @@ same. Unknown or inaccessible keys fail without changing existing attribution.
 
 ## Unknown flags are rejected
 
-A flag that no command branch reads is a hard error: the CLI prints
-`unknown flag … (tariboy-tools X does not know it)` and exits `2`. The check
+A flag that no command branch reads is a hard error: the script prints
+`unknown flag …` and exits `2`. The check
 runs after the request is built but before it is sent, so nothing reaches the
 daemon. Older builds dropped an unread flag silently and exited `0`, which is how
 `tasks update --priority` could look like it worked while changing nothing.

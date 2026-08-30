@@ -521,21 +521,34 @@ func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string
 	as := agent.NewStore(s)
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	buildBasic(t, imgStore)
-	// A real file: Manager.refreshShims skips the whole pass when ToolsBin does
-	// not exist, so a placeholder path would silently disable shim writing for
-	// every test built on this helper.
-	toolsBin := filepath.Join(base, "tariboy-tools")
-	if err := os.WriteFile(toolsBin, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	skillsDir := testSkillsDir(t)
 	m := NewManager(ManagerConfig{
-		AgentsDir: filepath.Join(base, "agents"), ToolsBin: toolsBin,
+		AgentsDir: filepath.Join(base, "agents"), SkillsDir: skillsDir,
 		ShimBin: "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
 		Bus:           bus.New(s, time.Now),
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
 	})
 	return m, as, filepath.Join(base, "agents"), s
+}
+
+func testSkillsDir(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, path := range []string{
+		"agent-tools/scripts/tools.py",
+		"loop/scripts/loop.py",
+		"tasks/scripts/tasks.py",
+	} {
+		path = filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("#!/usr/bin/env python3\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
 }
 
 // Removing the own-inbox subscription from Manager.Run must make this fail:
@@ -1760,7 +1773,7 @@ func TestStartAfterStopRestoresRunningState(t *testing.T) {
 
 	// A fresh manager over the same store/dir reattaches the running agent.
 	m2 := NewManager(ManagerConfig{
-		AgentsDir: agentsDir, ToolsBin: "/opt/tariboy-tools", ShimBin: "/opt/tariboy-shim",
+		AgentsDir: agentsDir, SkillsDir: testSkillsDir(t), ShimBin: "/opt/tariboy-shim",
 		Store: as, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
 	})

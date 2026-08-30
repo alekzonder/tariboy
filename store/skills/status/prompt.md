@@ -1,4 +1,7 @@
 ## Status
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 Publish a one-line "what I'm doing now" message so operators can follow your
 progress without reading full logs. Update it whenever you move to a new step:
     tools status set "reviewing the failing test"

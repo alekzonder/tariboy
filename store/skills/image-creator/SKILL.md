@@ -5,6 +5,9 @@ description: Use when creating or revising a Tariboy agent image from a Tariboyf
 
 # Agent Image Authoring
 
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 Create a schema-v2 `Tariboyfile.yaml` with explicit ordered plugins, packaged
 skills, prompt files, and runtime placeholders. Build with:
 

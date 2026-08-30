@@ -137,7 +137,7 @@ REMOTE_CLEANUP
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
-for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-shim tariboy-plugin-telegram; do
   [ -f "desktop/src-tauri/resources/bin/linux-x86_64/$name" ] ||
     fail "missing packaged Linux binary: $name"
 done
@@ -151,7 +151,6 @@ ssh "$TARIBOY_SSH_TEST_HOST" mkdir -p "$REMOTE_STAGE"
 scp desktop/src-tauri/resources/bin/linux-x86_64/tariboyd \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-shim \
-  desktop/src-tauri/resources/bin/linux-x86_64/tariboy-tools \
   desktop/src-tauri/resources/bin/linux-x86_64/tariboy-plugin-telegram \
   desktop/src-tauri/resources/bin/linux-x86_64/SHA256SUMS \
   desktop/src-tauri/resources/bin/linux-x86_64/VERSION \
@@ -199,7 +198,7 @@ for command in curl python3 tmux; do
 done
 
 HOME=$home sh "$stage/remote-install.sh" "$version" ".stage-alpha-$stamp"
-for name in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
+for name in tariboyd tariboy tariboy-shim tariboy-plugin-telegram; do
   test "$("$release/$name" --version)" = "$version"
   test "$(readlink "$home/.local/bin/$name")" = "$release/$name"
 done

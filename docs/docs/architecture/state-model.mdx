@@ -143,7 +143,7 @@ A running iteration is owned by `tariboy-shim`, not by the lifetime of the
 daemon process. During a graceful daemon restart, cancellation detaches the old
 engine observer without changing the durable iteration row from `running`.
 Before any of that, the replacement daemon repoints every stored agent's bin
-shims at its own `tariboy-tools` (see
+shims at its own versioned Store skill scripts (see
 [Agent bin shims](/docs/architecture#agent-bin-shims)), so an adopted or
 newly-started agent never calls the client of the release that provisioned it.
 The replacement daemon enumerates live shim sockets before starting loop

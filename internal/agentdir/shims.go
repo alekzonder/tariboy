@@ -9,23 +9,36 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 )
 
-// WriteShims (re)writes the agent's bin shims so they exec toolsBin — nothing
+// WriteShims (re)writes the agent's bin shims so they exec skill-owned Python
+// scripts — nothing
 // else: it neither unpacks the image nor creates the tree, so the bin dir must
 // already exist (Provision makes it).
 //
-// The shims embed an absolute path to one release's tariboy-tools, so an
-// agent provisioned by an older daemon keeps calling that old client forever
-// unless someone repoints it. The daemon therefore calls this for every stored
-// agent at startup, on top of create/reprovision. Writing is skipped when the
-// file already holds exactly the wanted bytes, so a restart on the same version
-// is a true no-op.
-func WriteShims(l Layout, a agent.Agent, toolsBin string) error {
-	if err := writeShim(l, "tools", fmt.Sprintf("#!/usr/bin/env bash\nexec %q \"$@\"\n", toolsBin)); err != nil {
+// The absolute paths select the running daemon's versioned Store. The daemon
+// therefore calls this for every stored agent at startup, on top of
+// create/reprovision. Writing is skipped when the bytes already match.
+func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
+	toolsScript := filepath.Join(skillsDir, "agent-tools", "scripts", "tools.py")
+	doneScript := filepath.Join(skillsDir, "loop", "scripts", "loop.py")
+	tasksScript := filepath.Join(skillsDir, "tasks", "scripts", "tasks.py")
+	required := []string{toolsScript}
+	if hasCapability(a.Plugins, "loop") {
+		required = append(required, doneScript)
+	}
+	if hasCapability(a.Plugins, "tasks") {
+		required = append(required, tasksScript)
+	}
+	for _, path := range required {
+		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+			return fmt.Errorf("skill script unavailable: %s", path)
+		}
+	}
+	if err := writeShim(l, "tools", fmt.Sprintf("#!/usr/bin/env bash\nexec python3 -B %q \"$@\"\n", toolsScript)); err != nil {
 		return err
 	}
 	donePath := filepath.Join(l.BinDir(), "i-am-done")
 	if hasCapability(a.Plugins, "loop") {
-		if err := writeShim(l, "i-am-done", fmt.Sprintf("#!/usr/bin/env bash\nexec %q loop done \"$@\"\n", toolsBin)); err != nil {
+		if err := writeShim(l, "i-am-done", fmt.Sprintf("#!/usr/bin/env bash\nexec python3 -B %q done \"$@\"\n", doneScript)); err != nil {
 			return err
 		}
 	} else if err := os.Remove(donePath); err != nil && !os.IsNotExist(err) {
@@ -33,7 +46,7 @@ func WriteShims(l Layout, a agent.Agent, toolsBin string) error {
 	}
 	tasksPath := filepath.Join(l.BinDir(), "tasks")
 	if hasCapability(a.Plugins, "tasks") {
-		return writeShim(l, "tasks", fmt.Sprintf("#!/usr/bin/env bash\nexec %q tasks \"$@\"\n", toolsBin))
+		return writeShim(l, "tasks", fmt.Sprintf("#!/usr/bin/env bash\nexec python3 -B %q \"$@\"\n", tasksScript))
 	}
 	if err := os.Remove(tasksPath); err != nil && !os.IsNotExist(err) {
 		return err

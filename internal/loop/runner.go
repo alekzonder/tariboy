@@ -348,7 +348,6 @@ type RunnerConfig struct {
 	AgentsDir    string
 	RuntimeDir   string
 	ShimBin      string
-	ToolsBin     string
 	ImgStore     *image.Store
 	Store        *agent.Store
 	Spawner      Spawner

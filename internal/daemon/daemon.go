@@ -292,7 +292,7 @@ func Run(ctx context.Context, o Options) error {
 		exeDir = filepath.Dir(exe)
 	}
 	shimBin := firstNonEmpty(os.Getenv("TARIBOY_SHIM_BIN"), filepath.Join(exeDir, "tariboy-shim"))
-	toolsBin := firstNonEmpty(os.Getenv("TARIBOY_TOOLS_BIN"), filepath.Join(exeDir, "tariboy-tools"))
+	skillsDir := filepath.Join(p.CurrentVersionStoreDir(version.Version), "skills")
 
 	schedStore := schedule.NewStore(st, time.Now)
 	scriptStore := script.NewStore(st, time.Now)
@@ -607,7 +607,7 @@ func Run(ctx context.Context, o Options) error {
 	var _ loop.EvalRunner = evalRunner
 
 	manager := loop.NewManager(loop.ManagerConfig{
-		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), ToolsBin: toolsBin, ShimBin: shimBin,
+		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), SkillsDir: skillsDir, ShimBin: shimBin,
 		ImgStore: imgStore, Store: as, Log: log, Clock: time.Now, Bus: channelBus,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: hub.Emit, Proxy: proxy,
 		Groups:          groupProv,

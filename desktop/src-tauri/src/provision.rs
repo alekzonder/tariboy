@@ -796,7 +796,7 @@ mod tests {
         assert_eq!(calls.len(), 4);
         assert!(calls[0].starts_with("run:stage:sh|-s|--|.stage-"));
         assert!(calls[1].starts_with(
-            "upload:tariboyd,tariboy,tariboy-shim,tariboy-tools,tariboy-plugin-telegram,SHA256SUMS,VERSION,remote-install.sh:~/.local/lib/tariboy/.stage-"
+            "upload:tariboyd,tariboy,tariboy-shim,tariboy-plugin-telegram,SHA256SUMS,VERSION,remote-install.sh:~/.local/lib/tariboy/.stage-"
         ));
         assert!(calls[2].contains("run:verify_install:sh|-s|--|0.9.0|.stage-"));
         assert_eq!(calls[3], "run:status:sh|-s|--|0.9.0|9990");

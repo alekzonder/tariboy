@@ -5,6 +5,9 @@ description: Use when a local command must continue beyond the current Tariboy i
 
 # Durable Scripts
 
+The Python script lives inside this skill directory under `scripts/` and calls
+the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+
 Run once with `tools script run <name> -- <command>`. Queue it exactly once,
 finish the iteration, and consume the later `script.result` message instead of
 waiting in the current iteration.

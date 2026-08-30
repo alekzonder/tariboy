@@ -214,7 +214,7 @@ for platform in darwin-arm64 linux-x86_64; do
   else
     expected_format="ELF 64-bit.*x86-64"
   fi
-  for binary in tariboyd tariboy tariboy-shim tariboy-tools tariboy-plugin-telegram; do
+  for binary in tariboyd tariboy tariboy-shim tariboy-plugin-telegram; do
     path="$APP/Contents/Resources/bin/$platform/$binary"
     [ -x "$path" ] || { echo "FAIL: missing bundled binary: $path" >&2; exit 1; }
     description="$(file "$path")"

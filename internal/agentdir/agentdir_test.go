@@ -36,8 +36,9 @@ func TestProvisionAndLayout(t *testing.T) {
 	buildImage(t, imgStore, "basic")
 
 	l := New(filepath.Join(base, "agents"), "smoke")
+	skills := skillScriptsFor(t)
 	a := agent.Agent{Name: "smoke", ImageRef: "basic:latest", Cwd: "", Plugins: []string{"whoami", "loop", "messages", "context"}}
-	if err := Provision(l, a, imgStore, image.Ref{Name: "basic", Tag: "latest"}, "/opt/tariboy-tools"); err != nil {
+	if err := Provision(l, a, imgStore, image.Ref{Name: "basic", Tag: "latest"}, skills); err != nil {
 		t.Fatal(err)
 	}
 	// image unpacked
@@ -48,13 +49,13 @@ func TestProvisionAndLayout(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.Root, "config.json")); !os.IsNotExist(err) {
 		t.Fatalf("config.json should not exist after Provision, stat err=%v", err)
 	}
-	// bin shims exist and are executable and reference the tools binary
+	// bin shims exist and are executable and reference the skill script
 	tools, err := os.ReadFile(filepath.Join(l.BinDir(), "tools"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(tools), "/opt/tariboy-tools") {
-		t.Fatalf("tools shim does not exec the tools binary: %s", tools)
+	if !strings.Contains(string(tools), filepath.Join(skills, "agent-tools/scripts/tools.py")) {
+		t.Fatalf("tools shim does not exec the tools skill script: %s", tools)
 	}
 	info, _ := os.Stat(filepath.Join(l.BinDir(), "i-am-done"))
 	if info.Mode().Perm()&0o100 == 0 {
@@ -132,21 +133,22 @@ func TestProvisionReconcilesConditionalTasksShim(t *testing.T) {
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	buildImage(t, imgStore, "basic")
 	layout := New(filepath.Join(base, "agents"), "worker")
+	skills := skillScriptsFor(t)
 	ref := image.Ref{Name: "basic", Tag: "latest"}
 
 	enabled := agent.Agent{
 		Name: "worker", ImageRef: ref.String(),
 		Plugins: []string{"whoami", "loop", "messages", "tasks"},
 	}
-	if err := Provision(layout, enabled, imgStore, ref, "/opt/tariboy-tools"); err != nil {
+	if err := Provision(layout, enabled, imgStore, ref, skills); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(filepath.Join(layout.BinDir(), "tasks"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `/opt/tariboy-tools`) ||
-		!strings.Contains(string(raw), `tasks "$@"`) {
+	if !strings.Contains(string(raw), filepath.Join(skills, "tasks/scripts/tasks.py")) ||
+		!strings.Contains(string(raw), `"$@"`) {
 		t.Fatalf("tasks shim = %q", raw)
 	}
 	info, err := os.Stat(filepath.Join(layout.BinDir(), "tasks"))
@@ -156,7 +158,7 @@ func TestProvisionReconcilesConditionalTasksShim(t *testing.T) {
 
 	disabled := enabled
 	disabled.Plugins = []string{"whoami", "loop", "messages"}
-	if err := Provision(layout, disabled, imgStore, ref, "/opt/tariboy-tools"); err != nil {
+	if err := Provision(layout, disabled, imgStore, ref, skills); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(layout.BinDir(), "tasks")); !os.IsNotExist(err) {
