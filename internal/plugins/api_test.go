@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,59 @@ func TestPublishScoped(t *testing.T) {
 	// No token -> 401.
 	if rr := do("", `{"channel":"chat:x"}`); rr.Code != 401 {
 		t.Fatalf("no token code = %d", rr.Code)
+	}
+}
+
+func TestPublishReportsNonDLQRecipients(t *testing.T) {
+	a, b, reg := newAPI(t)
+	if _, err := b.Subscribe("worker", "chat:telegram:worker", bus.Matcher{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	token, _ := reg.Mint(Identity{Name: "telegram", Publish: []string{"chat:telegram:*"}})
+	req := httptest.NewRequest("POST", "/api/plugin/publish", strings.NewReader(`{"channel":"chat:telegram:worker","text":"hello"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	a.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("publish code=%d body=%s", rr.Code, rr.Body)
+	}
+	var response struct {
+		Result struct {
+			DeliveredAgents []string `json:"delivered_agents"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Result.DeliveredAgents) != 1 || response.Result.DeliveredAgents[0] != "worker" {
+		t.Fatalf("delivered agents=%v", response.Result.DeliveredAgents)
+	}
+}
+
+func TestPublishRequiresDeliveryBeforePersistingIdempotentMessage(t *testing.T) {
+	a, b, reg := newAPI(t)
+	token, _ := reg.Mint(Identity{Name: "telegram", Publish: []string{"chat:telegram:*"}})
+	publish := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/api/plugin/publish", strings.NewReader(`{"channel":"chat:telegram:worker","text":"hello","idempotency_key":"update-9","require_delivery_agent":"worker"}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		a.ServeHTTP(rr, req)
+		return rr
+	}
+	if rr := publish(); rr.Code != http.StatusConflict {
+		t.Fatalf("publish without recipient code=%d body=%s", rr.Code, rr.Body)
+	}
+	if msgs, err := b.Tail("chat:telegram:worker", 10); err != nil || len(msgs) != 0 {
+		t.Fatalf("undeliverable message persisted: msgs=%v err=%v", msgs, err)
+	}
+	if _, err := b.Subscribe("worker", "chat:telegram:worker", bus.Matcher{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if rr := publish(); rr.Code != http.StatusOK {
+		t.Fatalf("publish after subscription code=%d body=%s", rr.Code, rr.Body)
+	}
+	if msgs, err := b.Tail("chat:telegram:worker", 10); err != nil || len(msgs) != 1 {
+		t.Fatalf("recovered publish: msgs=%v err=%v", msgs, err)
 	}
 }
 

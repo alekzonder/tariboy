@@ -19,6 +19,7 @@ type AgentInfo struct {
 
 type PublishedMessage struct {
 	Channel    string
+	Agent      string
 	Text       string
 	UpdateID   int64
 	ExternalID string
@@ -65,10 +66,22 @@ func (c *DaemonClient) Subscribe(ctx context.Context, agent, channel string) err
 func (c *DaemonClient) Publish(ctx context.Context, message PublishedMessage) error {
 	body := map[string]any{
 		"channel": message.Channel, "type": "chat.message", "text": message.Text,
-		"idempotency_key": message.ExternalID,
-		"data":            map[string]any{"telegram_update_id": message.UpdateID},
+		"idempotency_key":        message.ExternalID,
+		"require_delivery_agent": message.Agent,
+		"data":                   map[string]any{"telegram_update_id": message.UpdateID},
 	}
-	return c.do(ctx, http.MethodPost, "/api/plugin/publish", body, nil, true)
+	var result struct {
+		DeliveredAgents []string `json:"delivered_agents"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/api/plugin/publish", body, &result, true); err != nil {
+		return err
+	}
+	for _, agent := range result.DeliveredAgents {
+		if agent == message.Agent {
+			return nil
+		}
+	}
+	return fmt.Errorf("daemon did not deliver message to agent %q", message.Agent)
 }
 
 func (c *DaemonClient) Call(ctx context.Context, method, path string, body, result any) error {

@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -66,12 +67,13 @@ func (a *API) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Channel        string         `json:"channel"`
-		Type           string         `json:"type"`
-		Subject        map[string]any `json:"subject"`
-		Text           string         `json:"text"`
-		Data           map[string]any `json:"data"`
-		IdempotencyKey string         `json:"idempotency_key"`
+		Channel              string         `json:"channel"`
+		Type                 string         `json:"type"`
+		Subject              map[string]any `json:"subject"`
+		Text                 string         `json:"text"`
+		Data                 map[string]any `json:"data"`
+		IdempotencyKey       string         `json:"idempotency_key"`
+		RequireDeliveryAgent string         `json:"require_delivery_agent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		api.WriteErr(w, http.StatusBadRequest, "bad_body", "invalid JSON body")
@@ -90,13 +92,29 @@ func (a *API) publish(w http.ResponseWriter, r *http.Request) {
 			"plugin "+id.Name+" may not publish to "+body.Channel)
 		return
 	}
-	msg, err := a.bus.Publish(bus.Message{
+	message := bus.Message{
 		IdempotencyKey: pluginIdempotencyKey(id.Name, body.IdempotencyKey),
 		Channel:        body.Channel, Type: body.Type, Subject: body.Subject, Text: body.Text, Data: body.Data,
 		Source: "plugin:" + id.Name, ProducedByPlugin: id.Name,
-	})
+	}
+	var msg bus.Message
+	var err error
+	if body.RequireDeliveryAgent != "" {
+		msg, err = a.bus.PublishRequiringDelivery(message, body.RequireDeliveryAgent)
+	} else {
+		msg, err = a.bus.Publish(message)
+	}
 	if err != nil {
+		if errors.Is(err, bus.ErrRequiredDelivery) {
+			api.WriteErr(w, http.StatusConflict, "delivery_required", err.Error())
+			return
+		}
 		api.WriteErr(w, http.StatusInternalServerError, "publish_failed", err.Error())
+		return
+	}
+	deliveredAgents, err := a.bus.DeliveryAgents(msg.ID)
+	if err != nil {
+		api.WriteErr(w, http.StatusInternalServerError, "delivery_lookup_failed", err.Error())
 		return
 	}
 	// Seed-on-publish: a channel-sink plugin declares its drain surface as globs
@@ -116,7 +134,7 @@ func (a *API) publish(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.audit(id.Name, "publish", body.Channel)
-	api.WriteOK(w, map[string]any{"id": msg.ID, "channel": msg.Channel})
+	api.WriteOK(w, map[string]any{"id": msg.ID, "channel": msg.Channel, "delivered_agents": deliveredAgents})
 }
 
 func pluginIdempotencyKey(plugin, key string) string {

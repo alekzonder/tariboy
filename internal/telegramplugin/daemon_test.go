@@ -2,10 +2,12 @@ package telegramplugin
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -28,7 +30,7 @@ func TestDaemonClientUsesOperatorAndPluginAPIs(t *testing.T) {
 				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 			}
 			published = true
-			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"id": "m1"}})
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"id": "m1", "delivered_agents": []string{"worker"}}})
 		default:
 			t.Fatalf("unexpected daemon path %s", r.URL.Path)
 		}
@@ -44,7 +46,7 @@ func TestDaemonClientUsesOperatorAndPluginAPIs(t *testing.T) {
 	if err := client.Subscribe(context.Background(), "worker", "chat:telegram:worker"); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.Publish(context.Background(), PublishedMessage{Channel: "chat:telegram:worker", Text: "hello", UpdateID: 9}); err != nil {
+	if err := client.Publish(context.Background(), PublishedMessage{Channel: "chat:telegram:worker", Agent: "worker", Text: "hello", UpdateID: 9}); err != nil {
 		t.Fatal(err)
 	}
 	if !published {
@@ -52,5 +54,18 @@ func TestDaemonClientUsesOperatorAndPluginAPIs(t *testing.T) {
 	}
 	if info, err := os.Stat(socket); err != nil || info.Mode()&os.ModeSocket == 0 {
 		t.Fatalf("socket missing: %v", err)
+	}
+}
+
+type roundTripper func(*http.Request) (*http.Response, error)
+
+func (f roundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestPublishRejectsMissingAgentDelivery(t *testing.T) {
+	client := &DaemonClient{token: "token", http: &http.Client{Transport: roundTripper(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"ok":true,"result":{"delivered_agents":[]}}`)), Header: make(http.Header)}, nil
+	})}}
+	if err := client.Publish(context.Background(), PublishedMessage{Channel: "chat:telegram:worker", Agent: "worker", Text: "hello"}); err == nil {
+		t.Fatal("publish without an agent delivery succeeded")
 	}
 }
