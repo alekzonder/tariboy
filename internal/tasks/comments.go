@@ -61,6 +61,16 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 			commentID, now, task.ID, actor.Principal); err != nil {
 			return CommentResult{}, err
 		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE task_notification_state SET read_at = ?
+			WHERE customer_principal = ? AND read_at = '' AND notification_id IN (
+				SELECT o.notification_id
+				FROM task_notification_outbox o
+				JOIN task_events e ON e.sequence = o.event_sequence
+				WHERE o.message_type = 'task.question' AND e.task_id = ?
+			)`, now, userPrincipal(s.customer), task.ID); err != nil {
+			return CommentResult{}, err
+		}
 		for i := range resolved {
 			resolved[i].ResolvingCommentID = commentID
 			resolved[i].ResolvedAt = now

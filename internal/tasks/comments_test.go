@@ -25,6 +25,29 @@ func TestQuestionNotificationProjectsRequestingPrincipal(t *testing.T) {
 	}
 }
 
+func TestAnswerMarksResolvedQuestionNotificationRead(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	customer := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Questions"})
+	task, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "ASK", Title: "decision", Assignee: "requester"})
+	if _, err := svc.AddComment(ctx, AgentActor("requester"), task.Key, AddCommentInput{
+		Body: "Need input from @user:customer",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, customer, task.Key, AddCommentInput{Body: "Approved"}); err != nil {
+		t.Fatal(err)
+	}
+	notifications, err := svc.ListNotifications(ctx, customer, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notifications) != 1 || notifications[0].ReadAt == "" {
+		t.Fatalf("notifications = %#v; want resolved question marked read", notifications)
+	}
+}
+
 func TestAnswerResolvesOnlyAuthorsOpenWaitsAndMentionGrantsResponseAccess(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
