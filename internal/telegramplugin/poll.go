@@ -147,7 +147,7 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 		return discard()
 	}
 	if err := s.daemon.Publish(ctx, PublishedMessage{
-		Channel: "chat:telegram:" + agent, Text: message.Text,
+		Channel: "chat:telegram:" + agent, Agent: agent, Text: message.Text,
 		UpdateID: update.UpdateID, ExternalID: "telegram:" + strconv.FormatInt(update.UpdateID, 10),
 	}); err != nil {
 		return err

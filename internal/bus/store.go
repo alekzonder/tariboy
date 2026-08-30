@@ -20,6 +20,7 @@ const seqWidth = 9
 
 var ErrNotFound = errors.New("not found")
 var ErrPublishGuardDenied = errors.New("publish guard denied")
+var ErrRequiredDelivery = errors.New("required agent delivery missing")
 
 // ErrDeadlineUnsupported is returned by Request when a --deadline is given but
 // no deadline hook is wired (SetDeadlineHooks), so no timeout could ever fire.
@@ -160,6 +161,63 @@ func nextMessageID(x dbtx, channel string, now time.Time) (string, error) {
 
 func (b *Bus) Publish(msg Message) (Message, error) {
 	return b.PublishWithGuard(msg, nil)
+}
+
+// PublishRequiringDelivery persists only messages delivered to agent.
+func (b *Bus) PublishRequiringDelivery(msg Message, agent string) (Message, error) {
+	now := b.clock().UTC()
+	tx, err := b.db.Begin()
+	if err != nil {
+		return Message{}, err
+	}
+	defer tx.Rollback()
+	msg, delivered, existing, err := b.publishTx(tx, msg, now, nil, false)
+	if err != nil {
+		return Message{}, err
+	}
+	found := false
+	for _, deliveredAgent := range delivered {
+		if deliveredAgent == agent {
+			found = true
+			break
+		}
+	}
+	if existing {
+		err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id WHERE d.message_id=? AND d.dlq=0 AND s.agent=?)`, msg.ID, agent).Scan(&found)
+		if err != nil {
+			return Message{}, err
+		}
+	}
+	if !found {
+		return Message{}, ErrRequiredDelivery
+	}
+	if existing {
+		return msg, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, err
+	}
+	b.emitPublish(msg, delivered)
+	return msg, nil
+}
+
+// DeliveryAgents returns agents with a non-DLQ delivery for messageID.
+func (b *Bus) DeliveryAgents(messageID string) ([]string, error) {
+	rows, err := b.db.Query(`SELECT DISTINCT s.agent FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
+		WHERE d.message_id=? AND d.dlq=0 ORDER BY s.agent`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var agents []string
+	for rows.Next() {
+		var agent string
+		if err := rows.Scan(&agent); err != nil {
+			return nil, err
+		}
+		agents = append(agents, agent)
+	}
+	return agents, rows.Err()
 }
 
 // PublishWithGuard evaluates guard inside the same SQLite write transaction
