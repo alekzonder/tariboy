@@ -329,6 +329,25 @@ describe("TasksWorkspace", () => {
     expect(screen.getByDisplayValue("Second answer needed")).toBeInTheDocument()
   })
 
+  it("keeps the latest task selected during a real-time refresh", async () => {
+    const first = deferred<TaskDetail>()
+    const second = deferred<TaskDetail>()
+    const secondDetail = { ...detail, task: child }
+    api.getTask.mockImplementation((key: string) => key === "TEST-1" ? first.promise : Promise.resolve(secondDetail))
+
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    first.resolve(detail)
+    await screen.findByRole("heading", { name: "TEST-1" })
+    api.getTask.mockImplementation((key: string) => key === "TEST-2" ? second.promise : Promise.resolve(detail))
+    await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
+    await userEvent.click(screen.getByRole("button", { name: /Desktop tree/ }))
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }))
+    second.resolve(secondDetail)
+
+    expect(await screen.findByRole("heading", { name: "TEST-2" })).toBeInTheDocument()
+  })
+
   it("renders managed execution state read-only and hides lifecycle controls", async () => {
     const managed = {
       ...root,

@@ -272,6 +272,7 @@ function TasksWorkspaceContent({
   const [query, setQuery] = useState("")
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedKey, setSelectedKey] = useState("")
+  const selectedKeyRef = useRef("")
   const [detail, setDetail] = useState<Detail | null>(null)
   const [events, setEvents] = useState<TaskEvent[]>([])
   const [workflow, setWorkflow] = useState<WorkflowExecutionView | null>(null)
@@ -373,6 +374,7 @@ function TasksWorkspaceContent({
   }, [principalFilter, principalMetadataError, query, queue, scopeAgent, statusView, target, view])
 
   const loadDetail = useCallback(async (key: string) => {
+    selectedKeyRef.current = key
     const request = ++detailRequestRef.current
     try {
       const loadHistory = async (): Promise<TaskEvent[]> => {
@@ -392,7 +394,7 @@ function TasksWorkspaceContent({
         getTask(key, target),
         loadHistory(),
       ])
-      if (!mountedRef.current || request !== detailRequestRef.current) return
+      if (!mountedRef.current || request !== detailRequestRef.current || selectedKeyRef.current !== key) return
       setDetail(next)
       setEvents(history)
       setWorkflow(null)
@@ -427,6 +429,7 @@ function TasksWorkspaceContent({
       }
     } catch (error) {
       if (!mountedRef.current || request !== detailRequestRef.current) return
+      selectedKeyRef.current = ""
       setSelectedKey("")
       setDetail(null)
       setEvents([])
@@ -470,12 +473,12 @@ function TasksWorkspaceContent({
           loadTree(),
           loadMetadata(),
           refreshInbox(),
-          selectedKey ? loadDetail(selectedKey) : Promise.resolve(),
+          selectedKeyRef.current ? loadDetail(selectedKeyRef.current) : Promise.resolve(),
         ])
       } while (refresh.pending && mountedRef.current)
       refresh.running = false
     })
-  }, [loadDetail, loadMetadata, loadTree, refreshInbox, selectedKey])
+  }, [loadDetail, loadMetadata, loadTree, refreshInbox])
 
   useEffect(() => {
     mountedRef.current = true
@@ -747,6 +750,7 @@ function TasksWorkspaceContent({
           principals={principals}
           onClose={() => {
             detailRequestRef.current += 1
+            selectedKeyRef.current = ""
             setSelectedKey("")
             setDetail(null)
             setEvents([])
