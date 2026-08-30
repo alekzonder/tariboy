@@ -33,7 +33,7 @@ const api = vi.hoisted(() => ({
 }))
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
 const daemonContext = vi.hoisted(() => ({ activeId: "" }))
-const taskSocket = vi.hoisted(() => ({ options: undefined as Record<string, unknown> | undefined }))
+const taskSocket = vi.hoisted(() => ({ options: undefined as { onHint?: (event: { sequence: number }) => void } | undefined }))
 
 function deferred<T>() {
   let resolve!: (value: T) => void
