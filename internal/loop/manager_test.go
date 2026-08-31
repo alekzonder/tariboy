@@ -142,7 +142,11 @@ func TestScriptSupervisorKeepsOutputInLogAndPublishesPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 140000 || got[0] != 'o' || got[len(got)-1] != 'e' {
+	header := "cwd: " + workdir + "\n"
+	if !strings.HasPrefix(string(got), header) {
+		t.Fatalf("log does not start with resolved CWD: %q", got[:min(len(got), len(header))])
+	}
+	if len(got) != len(header)+140000 || got[len(header)] != 'o' || got[len(got)-1] != 'e' {
 		t.Fatalf("log size=%d first=%q last=%q", len(got), got[0], got[len(got)-1])
 	}
 	publisher := scriptnotify.New(raw.DB, m.cfg.Bus, time.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
