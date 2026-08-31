@@ -10,6 +10,7 @@ Run **inside** an agent through `tools`, `tasks`, or `i-am-done`. Each launcher
 executes a Python 3 standard-library script inside the owning Store skill
 directory. The scripts talk to the identity-bound per-agent socket selected by
 `$TARIBOY_TOOLS_SOCKET`; the daemon derives the agent identity server-side.
+`python3` must be available on the host running the agent.
 
 | Tool | Purpose |
 | --- | --- |

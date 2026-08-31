@@ -79,6 +79,32 @@ func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
 	}
 }
 
+func TestStartAllDoesNotStartPersistedAgentsWithoutPython3(t *testing.T) {
+	runner := &fakeRunner{}
+	m, as, agentsDir, _ := newManager(t, runner)
+	t.Cleanup(m.Shutdown)
+	a := agent.Agent{
+		Name: "runner", ImageRef: "basic:latest", HarnessType: "stub",
+		Enabled: true, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
+	}
+	if err := as.Create(a); err != nil {
+		t.Fatal(err)
+	}
+	writeStaleShims(t, agentsDir, a.Name)
+	t.Setenv("PATH", t.TempDir())
+
+	err := m.StartAll(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "python3") {
+		t.Fatalf("StartAll error = %v, want missing python3", err)
+	}
+	m.mu.Lock()
+	_, started := m.runs[a.Name]
+	m.mu.Unlock()
+	if started {
+		t.Fatal("persisted agent started without python3")
+	}
+}
+
 // One unwritable agent dir must not take the daemon down or stop the other
 // agents from being refreshed; the failure is logged against the agent name.
 func TestStartAllSurvivesOneUnwritableAgentDir(t *testing.T) {

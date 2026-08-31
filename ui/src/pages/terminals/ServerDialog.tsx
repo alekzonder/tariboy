@@ -68,6 +68,7 @@ const INSTALL_REQUIREMENTS = new Set([
   "x86_64",
   "writable ~/.local",
   "flock",
+  "python3",
 ]);
 
 function hostMeta(view: DesktopHostView): DaemonMeta {

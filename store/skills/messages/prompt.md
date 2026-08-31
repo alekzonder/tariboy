@@ -1,4 +1,5 @@
 ## Messages & channels
+The Python script lives inside this skill directory under `scripts/`.
 Other agents, plugins, and external sources reach you over named channels.
 Incoming messages arrive inline in this prompt, batched per iteration — read them
 there; each carries its own id.

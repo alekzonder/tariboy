@@ -51,13 +51,15 @@ def run(args):
         print_result(call("GET", "/tools/script/ls"))
         return
     if args[:1] in (["rerun"], ["cancel"], ["rm"]):
-        if len(args) < 2:
+        _, pos = parse_flags(args, 1)
+        if not pos:
             raise UsageError(f"tools script {args[0]}: <id> is required")
-        return post("/tools/script/" + args[0], {"id": args[1]})
+        return post("/tools/script/" + args[0], {"id": pos[0]})
     if args[:1] in (["runs"], ["logs"]):
-        if len(args) < 2:
+        _, pos = parse_flags(args, 1)
+        if not pos:
             raise UsageError(f"tools script {args[0]}: <id> is required")
-        print_result(call("GET", "/tools/script/" + args[0] + "/" + args[1]))
+        print_result(call("GET", "/tools/script/" + args[0] + "/" + pos[0]))
         return
     raise UsageError("tools script: unknown command " + " ".join(args))
 

@@ -62,6 +62,23 @@ fn is_managed_bundle_binary(target: &Path, link: &Path, binaries: &[&str]) -> bo
         == Some(BUNDLE_IDENTIFIER)
 }
 
+fn is_managed_legacy_tools_link(target: &Path, link: &Path) -> bool {
+    if link.file_name().and_then(|name| name.to_str()) != Some("tariboy-tools")
+        || target.file_name().and_then(|name| name.to_str()) != Some("tariboy-tools")
+    {
+        return false;
+    }
+    let resolved_target = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        link.parent().unwrap_or_else(|| Path::new(".")).join(target)
+    };
+    bundle_root(&resolved_target)
+        .and_then(bundle_identifier)
+        .as_deref()
+        == Some(BUNDLE_IDENTIFIER)
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
     /// The link now points at the bundled CLI (freshly made or re-pointed).
@@ -135,7 +152,14 @@ fn install_all_with_rename(
             },
         }
     }
+    let legacy_link = link_dir.join("tariboy-tools");
+    let remove_legacy = std::fs::read_link(&legacy_link)
+        .is_ok_and(|target| is_managed_legacy_tools_link(&target, &legacy_link));
     if pending.is_empty() {
+        if remove_legacy {
+            std::fs::remove_file(legacy_link)?;
+            return Ok(Outcome::Created);
+        }
         return Ok(Outcome::AlreadyInstalled);
     }
 
@@ -191,6 +215,9 @@ fn install_all_with_rename(
         if let Some(backup) = &change.backup {
             let _ = std::fs::remove_file(backup);
         }
+    }
+    if remove_legacy {
+        std::fs::remove_file(legacy_link)?;
     }
     Ok(Outcome::Created)
 }
@@ -402,6 +429,25 @@ mod tests {
                 new.join(binary)
             );
         }
+    }
+
+    #[test]
+    fn removes_dangling_legacy_tools_link_from_managed_bundle() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = bundled_set(dir.path(), "Tariboy.app");
+        let link_dir = dir.path().join("local-bin");
+        std::fs::create_dir_all(&link_dir).unwrap();
+        std::os::unix::fs::symlink(
+            source_dir.join("tariboy-tools"),
+            link_dir.join("tariboy-tools"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            Outcome::Created
+        );
+        assert!(!std::fs::symlink_metadata(link_dir.join("tariboy-tools")).is_ok());
     }
 
     #[test]

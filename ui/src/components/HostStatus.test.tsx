@@ -60,6 +60,23 @@ describe("HostStatus", () => {
     expect(screen.getByText("Install blocked")).toBeInTheDocument();
   });
 
+  it("blocks install when python3 is missing", () => {
+    render(
+      <HostStatus
+        host={host({
+          state: "failed",
+          platform: "Linux",
+          arch: "x86_64",
+          prerequisites: ["python3"],
+        })}
+        appVersion="0.11.5"
+      />,
+    );
+
+    expect(screen.getByText("Install blocked")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect gpu" })).toBeNull();
+  });
+
   it("never offers an insecure bypass for host-key mismatch", () => {
     render(
       <HostStatus

@@ -67,6 +67,20 @@ func TestWriteShimsDispatchesToOwningSkillScripts(t *testing.T) {
 	}
 }
 
+func TestWriteShimsRequiresPython3BeforeWriting(t *testing.T) {
+	l := binDirFor(t)
+	skills := skillScriptsFor(t)
+	t.Setenv("PATH", t.TempDir())
+
+	err := WriteShims(l, agent.Agent{Name: "worker"}, skills)
+	if err == nil || !strings.Contains(err.Error(), "python3") {
+		t.Fatalf("WriteShims error = %v, want missing python3", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(statErr) {
+		t.Fatalf("tools shim was written without python3: %v", statErr)
+	}
+}
+
 // A shim frozen at an old release path must be repointed at the live daemon's
 // tools binary — this is the whole point of SUPER-224.
 func TestWriteShimsRepointsStaleToolsPath(t *testing.T) {

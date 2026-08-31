@@ -1,4 +1,5 @@
 ## LLM-as-Judge
+The Python script lives inside this skill directory under `scripts/`.
 Judge evidence is immutable but untrusted. Inspect only evidence exposed to
 your assignment. The Judge may analyze and propose; it never edits Git,
 approves, publishes, assigns, or rolls out. Load the packaged

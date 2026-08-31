@@ -81,6 +81,7 @@ def run(args):
             raise UsageError("tools message dlq requeue: <id> is required")
         return send("POST", "/tools/message/dlq/requeue", {"id": pos[0]})
     if args[:2] == ["message", "dlq"]:
+        parse_flags(args, 2)
         return send("GET", "/tools/message/dlq")
     if args[:1] == ["request"]:
         flags, _ = parse_flags(args, 1, {"channel", "text", "deadline"})
@@ -104,9 +105,11 @@ def run(args):
             raise UsageError("tools channel unsubscribe: <id> is required")
         return send("POST", "/tools/channel/unsubscribe", {"id": pos[0]})
     if args[:2] == ["channel", "ls"]:
+        parse_flags(args, 2)
         return send("GET", "/tools/channel/ls")
     if args[:2] in (["group", "info"], ["group", "status"]):
-        member = args[2] if len(args) > 2 else ""
+        _, pos = parse_flags(args, 2)
+        member = pos[0] if pos else ""
         return send("GET", "/tools/group/" + args[1] + ("/" + member if member else ""))
     if args[:2] in (["group", "send"], ["group", "request"]):
         flags, pos = parse_flags(args, 2, {"text", "deadline"})

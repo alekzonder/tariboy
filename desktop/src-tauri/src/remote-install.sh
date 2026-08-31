@@ -102,6 +102,16 @@ else
 fi
 
 previous=
+legacy_tools=$bindir/tariboy-tools
+remove_legacy_tools=false
+if test -L "$legacy_tools"; then
+  legacy_target=$(readlink "$legacy_tools")
+  legacy_version=$(basename "$(dirname "$legacy_target")")
+  case "$legacy_version" in
+    ""|*[!A-Za-z0-9._-]*|.*|*/*) ;;
+    *) test "$legacy_target" != "$root/$legacy_version/tariboy-tools" || remove_legacy_tools=true ;;
+  esac
+fi
 for name in $binaries; do
   target=$bindir/$name
   if test -e "$target" && ! test -L "$target"; then
@@ -154,6 +164,7 @@ for name in $binaries; do
   switched="$switched $name"
 done
 committed=true
+test "$remove_legacy_tools" != true || rm -f "$legacy_tools"
 for name in $binaries; do
   rm -f "$bindir/.$name.old-$suffix" || true
 done

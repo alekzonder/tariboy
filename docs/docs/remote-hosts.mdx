@@ -21,7 +21,8 @@ by the operator. The desktop does not implement a second SSH stack.
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
 
-Automatic installation requires a writable `~/.local` and `flock`. Preflight
+Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
+The Python runtime executes the standard-library agent tool scripts. Preflight
 also reports `tmux`, Claude, Codex, and OpenCode so you can see which workflows
 are available. At least one chosen harness must be installed on the remote host.
 
@@ -60,7 +61,7 @@ keys, `known_hosts`, and organization authentication. Tariboy never adds
 
 ## Install and update behavior
 
-Desktop uploads the four CLI binaries, the bundled Telegram plugin, a version marker, checksums, and a
+Desktop uploads four bundled commands including the Telegram plugin, a version marker, checksums, and a
 fixed installer script to a staging directory. The remote installer:
 
 - validates checksums;
@@ -115,7 +116,7 @@ action because they have no SSH identity.
 Missing harnesses and `tmux` are reported separately as agent workflow
 prerequisites. They do not make an otherwise successful Tariboy update
 appear failed. Platform, architecture, writable install root, and `flock`
-remain installation requirements.
+plus `python3` remain installation requirements.
 
 ## Connection lifecycle
 

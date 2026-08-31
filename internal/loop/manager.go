@@ -343,6 +343,11 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if len(agents) > 0 {
+		if err := agentdir.RequirePython3(); err != nil {
+			return err
+		}
+	}
 	// Repoint every agent's bin shims at this daemon's client before anything
 	// can run: they were written once at provision time with an absolute path
 	// to the then-current release, so an upgraded daemon would otherwise keep

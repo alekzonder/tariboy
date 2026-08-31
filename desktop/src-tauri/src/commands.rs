@@ -1342,7 +1342,7 @@ fn run_host_install(
         return Err(ssh::SshError {
             code: "unsupported_host".into(),
             message: format!(
-                "remote installation requires Linux x86_64 and writable ~/.local (found {}/{})",
+                "remote installation requires Linux x86_64, writable ~/.local, flock, and python3 (found {}/{})",
                 preflight.platform, preflight.arch
             ),
         });
@@ -2085,7 +2085,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("ssh-argv.log");
         let preflight_stdin = dir.path().join("preflight.sh");
-        let json = r#"{"platform":"Linux","arch":"x86_64","home":"/home/u","free_disk_kb":1000,"writable_local":true,"tmux":{"available":true,"version":"tmux 3"},"flock":{"available":true,"version":"flock 2"},"claude":{"available":true,"version":"1"},"codex":{"available":false,"version":""},"opencode":{"available":false,"version":""}}"#;
+        let json = r#"{"platform":"Linux","arch":"x86_64","home":"/home/u","free_disk_kb":1000,"writable_local":true,"tmux":{"available":true,"version":"tmux 3"},"flock":{"available":true,"version":"flock 2"},"python3":{"available":true,"version":"Python 3.12"},"claude":{"available":true,"version":"1"},"codex":{"available":false,"version":""},"opencode":{"available":false,"version":""}}"#;
         let behavior = format!(
             r#"if [ "${{1:-}}" = "-G" ]; then
   printf 'hostname prod\nproxyjump jump\nidentityfile ~/.ssh/id_ed25519\n'

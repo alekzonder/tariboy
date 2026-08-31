@@ -44,7 +44,7 @@ class AgentToolsTest(unittest.TestCase):
             server = UnixHTTPServer(sock, response, version, envelope)
             thread = threading.Thread(target=server.handle_request)
             thread.start()
-            env = os.environ | {"TARIBOY_TOOLS_SOCKET": sock, "TARIBOY_CLIENT_VERSION": "0.46.0"}
+            env = dict(os.environ, TARIBOY_TOOLS_SOCKET=sock, TARIBOY_CLIENT_VERSION="0.46.0")
             result = subprocess.run(
                 ["python3", ROOT / "store/skills" / relative, *args],
                 env=env,
@@ -61,7 +61,7 @@ class AgentToolsTest(unittest.TestCase):
             server = UnixHTTPServer(sock, {"agent": "alice", "iteration": "iter-1"})
             thread = threading.Thread(target=server.handle_request)
             thread.start()
-            env = os.environ | {"TARIBOY_TOOLS_SOCKET": sock, "TARIBOY_CLIENT_VERSION": "0.46.0"}
+            env = dict(os.environ, TARIBOY_TOOLS_SOCKET=sock, TARIBOY_CLIENT_VERSION="0.46.0")
             result = subprocess.run(
                 ["python3", ROOT / "store/skills/whoami/scripts/whoami.py"],
                 env=env,
@@ -93,13 +93,48 @@ class AgentToolsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stderr, "status disabled\n")
 
-        env = os.environ | {"TARIBOY_CLIENT_VERSION": "0.46.0"}
+        env = dict(os.environ, TARIBOY_CLIENT_VERSION="0.46.0")
         result = subprocess.run(
             ["python3", ROOT / "store/skills/agent-tools/scripts/tools.py", "--version"],
             env=env, text=True, capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "0.46.0\n")
+
+    def test_dispatcher_help_preserves_command_reference(self):
+        result = subprocess.run(
+            ["python3", ROOT / "store/skills/agent-tools/scripts/tools.py", "help"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for command in [
+            "tasks work show|complete|release ASSIGNMENT",
+            "message processed ID <result...>",
+            "script schedule NAME --every SECONDS",
+            "judge summary submit RUN --file summary.json",
+        ]:
+            self.assertIn(command, result.stdout)
+
+    def test_plain_output_matches_previous_cli_format(self):
+        result, _ = self.run_script(
+            "status/scripts/status.py",
+            [],
+            {"enabled": True, "items": ["a", "b"], "missing": None},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "enabled: true\nitems: [a b]\nmissing: <nil>\n",
+        )
+
+        result, _ = self.run_script(
+            "status/scripts/status.py",
+            [],
+            ["a", True, None],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, '["a",true,null]\n')
 
     def test_version_mismatch_warns_without_changing_success(self):
         result, _ = self.run_script(
@@ -116,6 +151,9 @@ class AgentToolsTest(unittest.TestCase):
             ("context/scripts/context.py", ["set", "next", "--bogus"]),
             ("loop/scripts/loop.py", ["done", "--bogus"]),
             ("current-task/scripts/current_task.py", ["TARI-41", "--bogus"]),
+            ("schedule/scripts/schedule.py", ["cancel", "sched-1", "--bogus"]),
+            ("scripts/scripts/scripts.py", ["rerun", "scr-1", "--bogus"]),
+            ("messages/scripts/messages.py", ["group", "info", "--bogus"]),
         ]
         for relative, args in cases:
             with self.subTest(relative=relative):

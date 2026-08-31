@@ -22,7 +22,8 @@ def run(args):
         print_result(call("GET", "/tools/schedule/ls"))
         return
     if args[:1] == ["cancel"] and len(args) > 1:
-        print_result(call("POST", "/tools/schedule/cancel", {"id": args[1]}))
+        _, pos = parse_flags(args, 1)
+        print_result(call("POST", "/tools/schedule/cancel", {"id": pos[0]}))
         return
     raise UsageError("tools schedule: add, ls, or cancel is required")
 

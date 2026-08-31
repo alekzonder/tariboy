@@ -86,11 +86,11 @@ fn install_cli_with_dialog(app: &AppHandle) {
             r.existing
         ),
         Ok(r) if r.outcome == "already-installed" => format!(
-            "All five managed binaries were already installed from {}.\n\nThe daemon was restarted.",
+            "All four managed binaries were already installed from {}.\n\nThe daemon was restarted.",
             r.target
         ),
         Ok(r) => format!(
-            "Updated all five managed binaries.\n\nExample: {} -> {}\n\nThe daemon was restarted. Make sure ~/.local/bin is on your PATH.",
+            "Updated all four managed binaries.\n\nExample: {} -> {}\n\nThe daemon was restarted. Make sure ~/.local/bin is on your PATH.",
             r.link, r.target
         ),
         Err(e) => format!("Install/Update CLI failed: {e}"),

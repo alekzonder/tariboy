@@ -263,7 +263,8 @@ described in the development guide.
 
 ## Build from source
 
-Go 1.26 is required for the control plane. Desktop builds also need stable
+Go 1.26 is required for the control plane, and running agent tools requires
+`python3`. Desktop builds also need stable
 Rust and Tauri CLI 2.x. macOS packaging additionally needs Xcode. Linux
 packaging needs the Tauri Linux development libraries; Linux native E2E also
 needs `tauri-driver`,
@@ -275,7 +276,7 @@ make build
 ./bin/tariboy daemon status
 ```
 
-Install or update all six server binaries as one versioned release:
+Install or update all five server binaries as one versioned release:
 
 ```bash
 make server-install

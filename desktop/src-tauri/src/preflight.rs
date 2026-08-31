@@ -40,6 +40,7 @@ printf '{"platform":"%s","arch":"%s","home":"%s","free_disk_kb":%s,"writable_loc
   "$free_disk_kb" "$writable_local"
 printf '"tmux":'; tool_json tmux
 printf ',"flock":'; tool_json flock
+printf ',"python3":'; tool_json python3
 printf ',"claude":'; tool_json claude
 printf ',"codex":'; tool_json codex
 printf ',"opencode":'; tool_json opencode
@@ -61,6 +62,7 @@ pub struct Result {
     pub writable_local: bool,
     pub tmux: Tool,
     pub flock: Tool,
+    pub python3: Tool,
     pub claude: Tool,
     pub codex: Tool,
     pub opencode: Tool,
@@ -76,7 +78,8 @@ pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     result.install_supported = result.platform == "Linux"
         && result.arch == "x86_64"
         && result.writable_local
-        && result.flock.available;
+        && result.flock.available
+        && result.python3.available;
     let mut prerequisites = Vec::new();
     if result.platform != "Linux" {
         prerequisites.push("Linux".to_string());
@@ -89,6 +92,9 @@ pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     }
     if !result.flock.available {
         prerequisites.push("flock".to_string());
+    }
+    if !result.python3.available {
+        prerequisites.push("python3".to_string());
     }
     for (name, tool) in [
         ("tmux", &result.tmux),
@@ -142,6 +148,7 @@ mod tests {
               "free_disk_kb":2048,"writable_local":true,
               "tmux":{{"available":{tmux},"version":"tmux 3.4"}},
               "flock":{{"available":true,"version":"flock 2.39"}},
+              "python3":{{"available":true,"version":"Python 3.12.3"}},
               "claude":{{"available":true,"version":"2.0"}},
               "codex":{{"available":false,"version":""}},
               "opencode":{{"available":false,"version":""}}
@@ -166,11 +173,24 @@ mod tests {
 
     #[test]
     fn missing_flock_blocks_transactional_install() {
-        let json = fixture("Linux", "x86_64", true)
-            .replace(r#""flock":{"available":true"#, r#""flock":{"available":false"#);
+        let json = fixture("Linux", "x86_64", true).replace(
+            r#""flock":{"available":true"#,
+            r#""flock":{"available":false"#,
+        );
         let result = parse(&json).unwrap();
         assert!(!result.install_supported);
         assert!(result.prerequisites.contains(&"flock".to_string()));
+    }
+
+    #[test]
+    fn missing_python_blocks_install_and_is_reported() {
+        let json = fixture("Linux", "x86_64", true).replace(
+            r#""python3":{"available":true"#,
+            r#""python3":{"available":false"#,
+        );
+        let result = parse(&json).unwrap();
+        assert!(!result.install_supported);
+        assert!(result.prerequisites.contains(&"python3".to_string()));
     }
 
     #[test]

@@ -57,9 +57,23 @@ def print_result(result):
         return
     if isinstance(result, dict):
         for key in sorted(result):
-            print(f"{key}: {result[key]}")
+            print(f"{key}: {format_value(result[key])}")
+    elif isinstance(result, str):
+        print(json.dumps(result)[1:-1])
     else:
-        print(result)
+        print(json.dumps(result, separators=(",", ":")))
+
+
+def format_value(value):
+    if value is None:
+        return "<nil>"
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, list):
+        return "[" + " ".join(format_value(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return "map[" + " ".join(f"{key}:{format_value(value[key])}" for key in sorted(value)) + "]"
+    return str(value)
 
 
 def parse_flags(args, start=0, allowed=()):

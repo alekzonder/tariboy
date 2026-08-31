@@ -1,4 +1,5 @@
 ## Native Tasks
+The Python script lives inside this skill directory under `scripts/`.
 Tasks are the durable source of truth for work, decomposition, ownership,
 questions, and answers. Use the bare `tasks` command; this is Tariboy's
 native task system.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -18,6 +19,9 @@ import (
 // therefore calls this for every stored agent at startup, on top of
 // create/reprovision. Writing is skipped when the bytes already match.
 func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
+	if err := RequirePython3(); err != nil {
+		return err
+	}
 	toolsScript := filepath.Join(skillsDir, "agent-tools", "scripts", "tools.py")
 	doneScript := filepath.Join(skillsDir, "loop", "scripts", "loop.py")
 	tasksScript := filepath.Join(skillsDir, "tasks", "scripts", "tasks.py")
@@ -50,6 +54,13 @@ func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
 	}
 	if err := os.Remove(tasksPath); err != nil && !os.IsNotExist(err) {
 		return err
+	}
+	return nil
+}
+
+func RequirePython3() error {
+	if _, err := exec.LookPath("python3"); err != nil {
+		return fmt.Errorf("python3 is required for agent tool scripts: %w", err)
 	}
 	return nil
 }

@@ -1041,6 +1041,48 @@ mod tests {
     }
 
     #[test]
+    fn installer_removes_only_managed_legacy_tools_link() {
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path().join(".local/lib/tariboy");
+        let bin = home.path().join(".local/bin");
+        let old = root.join("old");
+        fs::create_dir_all(&bin).unwrap();
+        write_release(&old, "old", true);
+        fs::write(old.join("tariboy-tools"), b"old tools\n").unwrap();
+        std::os::unix::fs::symlink(old.join("tariboy-tools"), bin.join("tariboy-tools")).unwrap();
+        write_release(&root.join(".stage-new"), "new", true);
+
+        let status = Command::new("sh")
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/src/remote-install.sh"
+            ))
+            .args(["new", ".stage-new"])
+            .env("HOME", home.path())
+            .status()
+            .unwrap();
+
+        assert!(status.success());
+        assert!(!fs::symlink_metadata(bin.join("tariboy-tools")).is_ok());
+
+        let foreign = home.path().join("foreign-tools");
+        fs::write(&foreign, b"foreign\n").unwrap();
+        std::os::unix::fs::symlink(&foreign, bin.join("tariboy-tools")).unwrap();
+        write_release(&root.join(".stage-next"), "next", true);
+        let status = Command::new("sh")
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/src/remote-install.sh"
+            ))
+            .args(["next", ".stage-next"])
+            .env("HOME", home.path())
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert_eq!(fs::read_link(bin.join("tariboy-tools")).unwrap(), foreign);
+    }
+
+    #[test]
     fn installer_refuses_foreign_symlinks_without_replacing_any_link() {
         let home = tempfile::tempdir().unwrap();
         let root = home.path().join(".local/lib/tariboy");
