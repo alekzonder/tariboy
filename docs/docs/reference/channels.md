@@ -301,8 +301,8 @@ queues one attempt, while `tools script schedule NAME --every N -- COMMAND`
 runs immediately and then after a fixed post-completion delay. Non-quiet runs
 publish `script.result` to the owner's inbox. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
-Combined stdout and stderr remain in that file and are not copied into the
-message.
+The log starts with the resolved execution CWD; combined stdout and stderr
+follow in that file and are not copied into the message.
 
 ## Operator visibility
 

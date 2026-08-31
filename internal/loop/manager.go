@@ -1842,6 +1842,12 @@ func (m *Manager) startScript(ctx context.Context, ag agent.Agent, r script.Run)
 		m.finishScript(key, r, -1, err, logPath)
 		return
 	}
+	if _, err := fmt.Fprintf(logFile, "cwd: %s\n", cmd.Dir); err != nil {
+		cancelRunContext()
+		_ = logFile.Close()
+		m.finishScript(key, r, -1, err, logPath)
+		return
+	}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	if err := cmd.Start(); err != nil {
 		cancelRunContext()
