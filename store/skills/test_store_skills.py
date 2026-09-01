@@ -42,7 +42,15 @@ class StoreSkillsTest(unittest.TestCase):
             path = str(Path(tmp) / "agent.sock")
             server = socketserver.UnixStreamServer(path, Handler)
             server.request = None
-            thread = threading.Thread(target=server.handle_request)
+            errors = []
+
+            def serve():
+                try:
+                    server.serve_forever(poll_interval=0.01)
+                except BaseException as error:
+                    errors.append(error)
+
+            thread = threading.Thread(target=serve)
             thread.start()
             process = subprocess.run(
                 [ROOT / relative, *args],
@@ -50,8 +58,12 @@ class StoreSkillsTest(unittest.TestCase):
                 text=True,
                 capture_output=True,
             )
+            server.shutdown()
             thread.join(timeout=2)
             server.server_close()
+            self.assertFalse(thread.is_alive(), "test socket server did not stop")
+            if errors:
+                raise errors[0]
         return process, server.request
 
     def test_each_command_skill_has_a_direct_self_contained_entrypoint(self):
