@@ -53,7 +53,7 @@ not enable shell tracing around these commands.
    absolute utility and state paths; substitute a stable task-derived name:
 
    ```bash
-   tools script schedule "$SCHEDULE_NAME" --every 60 --quiet-exit 2 -- \
+   scripts/scripts.sh schedule "$SCHEDULE_NAME" --every 60 --quiet-exit 2 -- \
      "$UTILITY" monitor --repo "$REPO" --pr "$PR_NUMBER" \
      --state-dir "$STATE_DIR"
    ```
@@ -99,8 +99,8 @@ not enable shell tracing around these commands.
      metadata, cancel and remove the schedule:
 
      ```bash
-     tools script cancel "$SCHEDULE_ID"
-     tools script rm "$SCHEDULE_ID"
+     scripts/scripts.sh cancel "$SCHEDULE_ID"
+     scripts/scripts.sh rm "$SCHEDULE_ID"
      ```
 
      Only this branch returns to the role prompt for main refresh, post-merge

@@ -33,7 +33,7 @@ var knownTypes = map[string]bool{
 
 // Provided is one channel a plugin fulfils for parameterized (query-like)
 // subscriptions (spec §6.1). The daemon validates a subscriber's params against
-// ParamsSchema at subscribe time; Help is surfaced by `tools sources` / the UI
+// ParamsSchema at subscribe time; Help is surfaced by the Messages skill / UI
 // so an agent can discover how to subscribe. A provided channel must lie inside
 // the plugin's Publish scope (enforced by Manifest.Validate).
 type Provided struct {

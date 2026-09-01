@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// TestTaskCurrentTagsProxiedRows is the integration proof for the `tools task
+// TestTaskCurrentTagsProxiedRows is the integration proof for the current-task
 // current` chain (epic dev-t-3e1 §1): it drives real proxied requests through
 // the proxy's forward+persist pipeline and asserts that the ingested ai_requests
 // row carries task_id/epic_id exactly per the current-task tag on the live token.

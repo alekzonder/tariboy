@@ -141,7 +141,7 @@ workflow-e2e: build
 iteration-timeout-e2e: build
 	./scripts/iteration-timeout-e2e.sh
 
-# Isolated e2e for the request primitive behind `tools group request` (EPIC R
+# Isolated e2e for the request primitive behind the Messages skill group request (EPIC R
 # R3, spec §4.2): a group request with a --deadline that gets no reply must fire
 # a type=timeout event into the lead's inbox. Wall-clock (scheduler ticks once a
 # second). Never touches the live daemon.
@@ -489,7 +489,7 @@ check:
 	run_step "fmt-check"    '$(SUBMAKE) fmt-check'; \
 	run_step "vet"          '$(SUBMAKE) vet'; \
 	run_step "test"         '$(SUBMAKE) test'; \
-	run_step "agent-tools"  'PYTHONDONTWRITEBYTECODE=1 python3 -m unittest store/skills/agent-tools/scripts/test_agent_tools.py'; \
+	run_step "store-skills" 'PYTHONDONTWRITEBYTECODE=1 python3 store/skills/test_store_skills.py'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \
 	run_step "ui-typecheck" 'need_node_modules ui && cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'need_node_modules ui && cd ui && npm run lint'; \

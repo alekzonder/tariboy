@@ -1,4 +1,4 @@
-// Package agentapi serves the per-agent tools socket (spec §8): loop done,
+// Package agentapi serves the per-agent capability socket (spec §8): loop done,
 // whoami, context get/set, status. Routes are gated by the agent's plugins.
 package agentapi
 
@@ -43,7 +43,7 @@ type Deps struct {
 	// and its top-level root (clear=true drops the tags). The daemon resolves both
 	// as the current agent and updates the live proxy token. An unknown or
 	// inaccessible key leaves attribution unchanged. Nil hook yields
-	// unavailable. Backs `tools task current` (epic dev-t-3e1 §1).
+	// unavailable. Backs the current-task skill (epic dev-t-3e1 §1).
 	SetTask func(id string, clear bool) (map[string]any, error)
 
 	// Bus surface (messages is CORE; nil hooks yield bus_unavailable).
@@ -54,7 +54,7 @@ type Deps struct {
 	Channels          func() ([]bus.Channel, error)
 
 	// ProvidedChannels returns the provider-declared channels drawn from installed
-	// plugin manifests (spec §6.1). `tools sources` merges these into the channel
+	// plugin manifests (spec §6.1). The Messages skill merges these into channel
 	// list so provider channels are listed and annotated (provider, param keys,
 	// help) even before their channel row exists. Nil is treated as "none".
 	ProvidedChannels func() ([]ProvidedChannel, error)
@@ -112,7 +112,7 @@ type Deps struct {
 }
 
 // ProvidedChannel is the daemon-independent view of one plugin provided-channel
-// declaration surfaced by `tools sources` (spec §6.1). The daemon builds these
+// declaration surfaced by the Messages skill's sources command (spec §6.1).
 // from plugin manifests; agentapi stays decoupled from the plugins package.
 type ProvidedChannel struct {
 	Channel  string   `json:"channel"`
@@ -153,7 +153,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /tools/whoami", s.gated("whoami", func(w http.ResponseWriter, r *http.Request) {
 		api.WriteOK(w, map[string]any{
 			"agent": s.d.Agent, "cwd": s.d.Cwd, "iteration": s.d.CurrentIteration(),
-			// The daemon's own build, so `tools whoami` can print it next to the
+			// The daemon's own build, so the Whoami skill can print it next to the
 			// version of the client that asked (SUPER-224 §4).
 			"daemon_version": version.Version,
 		})
@@ -232,7 +232,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /tools/group/loop", s.workflowGated("groups.loop", s.groupLoop))
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		api.WriteErr(w, http.StatusNotFound, "not_found", "unknown tools route "+r.Method+" "+r.URL.Path)
+		api.WriteErr(w, http.StatusNotFound, "not_found", "unknown agent route "+r.Method+" "+r.URL.Path)
 	})
 	// One wrapper for the whole agent-facing surface: every response carries the
 	// daemon's version, so a shim pinned to an older build can notice the drift.
@@ -701,7 +701,7 @@ func (s *Server) messageProcessed(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(body.Result) == "" {
 		api.WriteErr(w, http.StatusBadRequest, "missing_result",
-			`a result is required: tools message processed <id> "<result>"`)
+			`a result is required: scripts/messages.sh message processed <id> "<result>"`)
 		return
 	}
 	item, err := s.d.MarkProcessed(body.ID, body.Result)

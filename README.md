@@ -263,7 +263,7 @@ described in the development guide.
 
 ## Build from source
 
-Go 1.26 is required for the control plane, and running agent tools requires
+Go 1.26 is required for the control plane, and running agent skill scripts requires
 `python3`. Desktop builds also need stable
 Rust and Tauri CLI 2.x. macOS packaging additionally needs Xcode. Linux
 packaging needs the Tauri Linux development libraries; Linux native E2E also

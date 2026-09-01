@@ -1,30 +1,31 @@
 ---
-title: Agent tool scripts
-description: Run inside an agent, surfaced as `tools …` — identity, status, loop control, context, messaging, schedules, and durable scripts.
+title: Agent capability scripts
+description: Run packaged skill-local scripts inside an agent for identity, status, loop control, context, messaging, schedules, and durable work.
 sidebar:
-  label: Agent tools
+  label: Capability scripts
   icon: wrench
 ---
 
-Run **inside** an agent through `tools`, `tasks`, or `i-am-done`. Each launcher
-executes a Python 3 standard-library script inside the owning Store skill
-directory. The scripts talk to the identity-bound per-agent socket selected by
+Run **inside** an agent from the applicable packaged skill directory. Each
+`scripts/*.sh` launcher executes the skill's Python 3 standard-library client.
+Only `tasks` and `i-am-done` also have PATH compatibility shims. The scripts
+talk to the identity-bound per-agent socket selected by
 `$TARIBOY_TOOLS_SOCKET`; the daemon derives the agent identity server-side.
 `python3` must be available on the host running the agent.
 
 | Tool | Purpose |
 | --- | --- |
-| `tools whoami` | agent, cwd, current iteration |
-| `tools status [set …]` | read / set the one-line status |
-| `tools loop done` | finish this iteration (`i-am-done`) |
-| `tools context get` / `set <text>` | read / overwrite durable working memory |
-| `tools task current KEY` / `--clear` | attribute AI usage to a native task and its top-level root |
-| `tools message send --channel C …` | publish to a channel |
-| `tools message ls` / `processed` / `reply` | inbox handling |
-| `tools channel subscribe`/`unsubscribe`/`ls`, `tools sources` | manage subscriptions |
-| `tools schedule add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
-| `tools script run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
-| `tools group info`/`status`/`send`/`request`/`loop` | group coordination |
+| `scripts/whoami.sh` | agent, cwd, current iteration |
+| `scripts/status.sh [set …]` | read / set the one-line status |
+| `scripts/loop.sh done` | finish this iteration (`i-am-done`) |
+| `scripts/context.sh get` / `set <text>` | read / overwrite durable working memory |
+| `scripts/current_task.sh KEY` / `--clear` | attribute AI usage to a native task and its top-level root |
+| `scripts/messages.sh message send --channel C …` | publish to a channel |
+| `scripts/messages.sh message ls` / `processed` / `reply` | inbox handling |
+| `scripts/messages.sh channel subscribe`/`unsubscribe`/`ls`, `scripts/messages.sh sources` | manage subscriptions |
+| `scripts/schedule.sh add`/`ls`/`cancel` | agent-owned scheduled wake-ups |
+| `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
+| `scripts/messages.sh group info`/`status`/`send`/`request`/`loop` | group coordination |
 
 Agents whose image contains `plugins: [{name: tasks}]` also get the bare
 `tasks` command. It reaches native `tariboyd.db` Tasks through a
@@ -36,7 +37,7 @@ In a workflow-managed queue, `tasks work next` returns a leased work packet;
 `tasks work complete` are the only execution path. The active packet also makes
 ordinary direct messaging/group/channel tools deny-by-default, except for tools
 explicitly declared by the pinned workflow. See
-[Configurable task workflows](/docs/task-workflows#agent-tools-and-security-boundary).
+[Configurable task workflows](/docs/task-workflows#agent-capability-security-boundary).
 
 Task priority is one of `P0` (Critical), `P1` (High), `P2` (Normal), or `P3`
 (Low). New tasks default to `P2`; set or change it explicitly with:
@@ -50,7 +51,7 @@ tasks update OPS-12 --priority P1
 nested siblings are returned in priority order (`P0` through `P3`), then by
 their manual position within the same priority bucket.
 
-`tools task current KEY` validates `KEY` through that identity-bound Native
+`scripts/current_task.sh KEY` validates `KEY` through that identity-bound Native
 Tasks service. It records the selected key as `task_id` and follows `parent_key`
 to record the top-level root as `epic_id`; for a root task both values are the
 same. Unknown or inaccessible keys fail without changing existing attribution.
@@ -63,7 +64,7 @@ runs after the request is built but before it is sent, so nothing reaches the
 daemon. Older builds dropped an unread flag silently and exited `0`, which is how
 `tasks update --priority` could look like it worked while changing nothing.
 
-`tools script run` and `tools script schedule` have a `--` separator: flags are parsed up to it, and
+`scripts/scripts.sh run` and `scripts/scripts.sh schedule` have a `--` separator: flags are parsed up to it, and
 everything after it is taken verbatim for the local command — that is why
 `-- curl --silent URL` hands `--silent` to `curl`. No other command has one, so
 elsewhere an argument that starts with `--` cannot be passed through: it is
@@ -76,15 +77,15 @@ Scripts run shell commands in the agent's workdir without blocking its current
 iteration. Queue one run, or create a fixed-delay recurring definition:
 
 ```bash
-tools script run health --description "Check service health" -- curl -fsS http://localhost:8080/health
-tools script schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
-tools script ls
-tools script runs scr-agent-...
-tools script logs srun-agent-...
-tools script rerun scr-agent-...
-tools script cancel scr-agent-...       # definition, including its active run
-tools script cancel srun-agent-...      # this run only
-tools script rm scr-agent-...
+scripts/scripts.sh run health --description "Check service health" -- curl -fsS http://localhost:8080/health
+scripts/scripts.sh schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
+scripts/scripts.sh ls
+scripts/scripts.sh runs scr-agent-...
+scripts/scripts.sh logs srun-agent-...
+scripts/scripts.sh rerun scr-agent-...
+scripts/scripts.sh cancel scr-agent-...       # definition, including its active run
+scripts/scripts.sh cancel srun-agent-...      # this run only
+scripts/scripts.sh rm scr-agent-...
 ```
 
 Each run's combined stdout and stderr is kept in its own agent scripts log. Exit

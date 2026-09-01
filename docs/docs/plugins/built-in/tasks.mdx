@@ -79,11 +79,11 @@ messages bus, so notifications survive restarts and can wake enabled agents.
 ```yaml Tariboyfile.yaml
 plugins:
   - name: tasks
-prompts:
-  - file: $CURRENT_VERSION_STORE/skills/tasks/prompt.md
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/tasks
 ```
 
-The Store prompt teaches both flexible and workflow-managed operation. There is
+The packaged Store skill teaches both flexible and workflow-managed operation. There is
 no general Tasks runtime marker: ordinary work is queried through `tasks`, and
 a managed assignment supplies its work packet through the workflow launch
 path.

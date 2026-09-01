@@ -97,13 +97,13 @@ tariboy message send --channel chat:ops --type note --text "hello"
 Agent publish from inside an iteration:
 
 ```bash
-tools message send --channel chat:ops --type note --text "hello"
+scripts/messages.sh message send --channel chat:ops --type note --text "hello"
 ```
 
 Group request is a convenience wrapper over normal message publish:
 
 ```bash
-tools group request worker --text "What is blocking you?" --deadline 5m
+scripts/messages.sh group request worker --text "What is blocking you?" --deadline 5m
 ```
 
 It publishes to `agent:worker:inbox` with type `group.request` and
@@ -119,15 +119,15 @@ A subscription belongs to one agent and one channel. It can also include:
 An empty matcher and empty type filter match all messages on the channel.
 Subscriptions are idempotent on `(agent, channel, matcher)`.
 
-Agent-side subscription tools:
+Agent-side subscription script:
 
 ```bash
-tools channel subscribe chat:ops
-tools channel subscribe chat:ops --type incident.*
-tools channel subscribe chat:ops --matcher '{"subject.env":"prod"}'
-tools channel ls
-tools channel unsubscribe <subscription-id>
-tools sources
+scripts/messages.sh channel subscribe chat:ops
+scripts/messages.sh channel subscribe chat:ops --type incident.*
+scripts/messages.sh channel subscribe chat:ops --matcher '{"subject.env":"prod"}'
+scripts/messages.sh channel ls
+scripts/messages.sh channel unsubscribe <subscription-id>
+scripts/messages.sh sources
 ```
 
 Operator-side subscription commands:
@@ -265,7 +265,7 @@ For a group named `dev-team`:
 - the lead subscribes to `group:dev-team:inbox`;
 - non-lead members are not subscribed to the group inbox.
 
-`tools group request <member> ...` and `tools group send <member> ...` publish
+`scripts/messages.sh group request <member> ...` and `scripts/messages.sh group send <member> ...` publish
 directly to the member's `agent:<member>:inbox`, not to the group broadcast.
 
 `group:<group>:inbox` is the external entry point for the lead. Broadcast is the
@@ -283,21 +283,21 @@ Schedules are agent-owned bus producers. A schedule has:
 - `next_fire_at`
 - `enabled`
 
-Agent tools can create schedules:
+The packaged Schedule skill can create schedules:
 
 ```bash
-tools schedule add --kind oneshot --spec 2026-07-10T10:00:00Z
-tools schedule add --kind cron --spec "*/15 * * * *" --channel agent:worker:inbox --message '{"text":"wake"}'
-tools schedule ls
-tools schedule cancel <id>
+scripts/schedule.sh add --kind oneshot --spec 2026-07-10T10:00:00Z
+scripts/schedule.sh add --kind cron --spec "*/15 * * * *" --channel agent:worker:inbox --message '{"text":"wake"}'
+scripts/schedule.sh ls
+scripts/schedule.sh cancel <id>
 ```
 
 If no channel is passed, the agent API defaults the schedule target to the
 agent's own inbox.
 
 Scripts are also agent-owned, but they execute only local commands; they do not
-schedule arbitrary channel publication. `tools script run NAME -- COMMAND`
-queues one attempt, while `tools script schedule NAME --every N -- COMMAND`
+schedule arbitrary channel publication. `scripts/scripts.sh run NAME -- COMMAND`
+queues one attempt, while `scripts/scripts.sh schedule NAME --every N -- COMMAND`
 runs immediately and then after a fixed post-completion delay. Non-quiet runs
 publish `script.result` to the owner's inbox. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
@@ -359,10 +359,10 @@ tariboy loop interval worker <seconds>
 Inside an agent:
 
 ```bash
-tools loop start
-tools loop stop
-tools channel subscribe <channel>
-tools channel unsubscribe <subscription-id>
+scripts/loop.sh start
+scripts/loop.sh stop
+scripts/messages.sh channel subscribe <channel>
+scripts/messages.sh channel unsubscribe <subscription-id>
 ```
 
 There is currently no public CLI command dedicated to changing
@@ -373,14 +373,14 @@ There is currently no public CLI command dedicated to changing
 Direct worker request from a lead:
 
 ```bash
-tools group request worker --text "Please take TARI-12" --deadline 5m
-tools group loop start worker
+scripts/messages.sh group request worker --text "Please take TARI-12" --deadline 5m
+scripts/messages.sh group loop start worker
 ```
 
 Broadcast to a group:
 
 ```bash
-tools message send --channel group:dev-team:broadcast --type note --text "Stand by"
+scripts/messages.sh message send --channel group:dev-team:broadcast --type note --text "Stand by"
 ```
 
 Subscribe an agent to a plugin/chat channel:

@@ -656,7 +656,7 @@ curl -H 'Content-Type: application/json' -X POST \
   -d '{"pattern":"external:incidents","correlation_key":"prod","action":"create_task"}'
 ```
 
-## Agent tools and security boundary
+## Agent capability security boundary
 
 The bare `tasks` shim is available only when the image enables the `tasks`
 capability. Workflow operations are:
@@ -683,7 +683,7 @@ management, schedules that publish, and raw channel management. A direct tool
 is allowed only when named in `permissions.tools`; workflow observation
 subscriptions must go through `tasks observe ...` and match the resolved
 assignment policy. Core identity and completion remain available. Unmanaged
-iterations retain the legacy tools surface.
+iterations retain their ordinary capability scripts.
 
 ## Persistence, delivery, restart, and audit
 
@@ -763,6 +763,6 @@ together.
   delivery/outbox state. The durable assignment remains claimable even if a
   wake notification is delayed.
 
-When debugging client drift, compare the agent-tools client and daemon versions.
+When debugging client drift, compare the skill-script client and daemon versions.
 Operator routes and agent flags are described in the generated OpenAPI and
 binary help; unknown flags fail before sending a request.

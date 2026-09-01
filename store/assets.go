@@ -15,7 +15,7 @@ import (
 
 // bundled is the canonical source for prompts shipped with this Tariboy version.
 //
-//go:embed skills/**
+//go:embed skills/** prompts/**
 var bundled embed.FS
 
 // ReadBundled returns one canonical Store asset from the embedded distribution.
@@ -50,7 +50,7 @@ func Ensure(p paths.Paths, productVersion string) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	if err := fs.WalkDir(bundled, "skills", func(name string, entry fs.DirEntry, walkErr error) error {
+	if err := fs.WalkDir(bundled, ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -62,7 +62,11 @@ func Ensure(p paths.Paths, productVersion string) error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(target, body, 0o600)
+		mode := os.FileMode(0o600)
+		if strings.HasSuffix(name, ".sh") {
+			mode = 0o700
+		}
+		return os.WriteFile(target, body, mode)
 	}); err != nil {
 		return fmt.Errorf("install bundled Store: %w", err)
 	}
@@ -77,7 +81,7 @@ func Ensure(p paths.Paths, productVersion string) error {
 
 func verify(dst string) error {
 	seen := map[string]bool{}
-	err := fs.WalkDir(bundled, "skills", func(name string, entry fs.DirEntry, walkErr error) error {
+	if err := fs.WalkDir(bundled, ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -106,8 +110,7 @@ func verify(dst string) error {
 			return fmt.Errorf("conflicting Store asset %s", rel)
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	return filepath.WalkDir(dst, func(name string, entry fs.DirEntry, walkErr error) error {

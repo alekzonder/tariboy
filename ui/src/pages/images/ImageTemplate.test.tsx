@@ -19,8 +19,8 @@ it("renders static layers and runtime placeholders in declared order", async () 
         sha256: "template-sha",
         entries: [
           {
-            kind: "file", source: "$STORE/skills/whoami/prompt.md", category: "store",
-            archive_path: "prompt/layers/000-prompt.md", size: 220, sha256: "abcdef0123456789",
+            kind: "file", source: "$STORE/prompts/iteration-finish.md", category: "store",
+            archive_path: "prompt/layers/000-iteration-finish.md", size: 220, sha256: "abcdef0123456789",
           },
           { kind: "runtime", runtime: "identity" },
           {
@@ -37,7 +37,7 @@ it("renders static layers and runtime placeholders in declared order", async () 
   expect(await screen.findByText(/template sha256 template-sha/)).toBeInTheDocument();
   const rows = screen.getAllByRole("listitem");
   expect(rows).toHaveLength(3);
-  expect(within(rows[0]).getByText("$STORE/skills/whoami/prompt.md")).toBeInTheDocument();
+  expect(within(rows[0]).getByText("$STORE/prompts/iteration-finish.md")).toBeInTheDocument();
   expect(within(rows[1]).getByText("identity")).toBeInTheDocument();
   expect(within(rows[2]).getByText("/srv/prompts/reviewer.md")).toBeInTheDocument();
   expect(vi.mocked(fetch)).toHaveBeenCalledWith(

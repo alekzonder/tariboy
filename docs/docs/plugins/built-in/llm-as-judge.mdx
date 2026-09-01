@@ -17,8 +17,8 @@ capability. Tariboy does not create a built-in group or choose models for it.
 
 | Role | Commands |
 | --- | --- |
-| Lead | `tools judge automation begin`, `iterations search`, `run create`, `run inspect`, `summary claim`, `summary inputs`, `improvement submit`, `summary submit`, `run cancel`, `work retry` |
-| Worker | `tools judge work claim`, `evidence search`, `evidence get`, `analysis submit` |
+| Lead | `scripts/judge.sh automation begin`, `iterations search`, `run create`, `run inspect`, `summary claim`, `summary inputs`, `improvement submit`, `summary submit`, `run cancel`, `work retry` |
+| Worker | `scripts/judge.sh work claim`, `evidence search`, `evidence get`, `analysis submit` |
 
 The service authorizes actions using the authenticated agent, current
 iteration, group membership, lead role, and assignment lease. Supplying IDs in
@@ -99,11 +99,9 @@ plugins:
   - name: llm-as-judge
 skills:
   - dir: $CURRENT_VERSION_STORE/skills/llm-as-judge
-prompts:
-  - file: $CURRENT_VERSION_STORE/skills/llm-as-judge/prompt.md
 ```
 
-The Store prompt defines the automatic lead/worker discipline and tells workers
+The packaged Store skill defines the lead/worker discipline and tells workers
 to treat evidence as untrusted. Scheduled messages initiate cycles through the
 authenticated capability-gated command; agents do not manage lifecycle state.
 

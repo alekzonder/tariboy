@@ -88,11 +88,11 @@ assert_field() {
   got="$(printf '%s' "$json" | field "$path")"
   [ "$got" = "$want" ] || fail "$path=$got, want $want; payload=$json"
 }
-tools() {
+tasks() {
   local agent="$1"; shift
-  TARIBOY_TOOLS_SOCKET="$RUNTIME/$agent.sock" "$BASE/agents/$agent/bin/tools" --json "$@"
+  TARIBOY_TOOLS_SOCKET="$RUNTIME/$agent.sock" "$BASE/agents/$agent/bin/tasks" --json "$@"
 }
-packet() { tools "$1" tasks work show "$2"; }
+packet() { tasks "$1" work show "$2"; }
 fresh_revisions() {
   local p="$1"
   TASK_REV="$(printf '%s' "$p" | field task_revision)"
@@ -101,20 +101,20 @@ fresh_revisions() {
 add_artifact() {
   local agent="$1" assignment="$2" name="$3" content="$4" key="$5" p
   p="$(packet "$agent" "$assignment")"; fresh_revisions "$p"
-  tools "$agent" tasks artifacts add "$assignment" --name "$name" --type markdown \
+  tasks "$agent" artifacts add "$assignment" --name "$name" --type markdown \
     --content "$content" --task-revision "$TASK_REV" --assignment-revision "$ASSIGN_REV" \
     --idempotency-key "$key" >/dev/null
 }
 complete_work() {
   local agent="$1" assignment="$2" outcome="$3" key="$4" p
   p="$(packet "$agent" "$assignment")"; fresh_revisions "$p"
-  tools "$agent" tasks work complete "$assignment" --outcome "$outcome" \
+  tasks "$agent" work complete "$assignment" --outcome "$outcome" \
     --task-revision "$TASK_REV" --assignment-revision "$ASSIGN_REV" \
     --idempotency-key "$key" >/dev/null
 }
 claim_work() {
   local agent="$1" key="$2" p
-  p="$(tools "$agent" tasks work next --queue DEV --idempotency-key "$key")"
+  p="$(tasks "$agent" work next --queue DEV --idempotency-key "$key")"
   [ "$p" != "[]" ] || fail "$agent has no claimable workflow work"
   printf '%s' "$p"
 }
@@ -188,7 +188,7 @@ DEV_ITER="$(printf '%s' "$DEV" | field assignment.lease_iteration)"
 stop_daemon
 start_daemon
 for _ in $(seq 1 200); do
-  [ -S "$RUNTIME/developer.sock" ] && RECOVERED="$(tools developer tasks work show "$DEV_ID" 2>/dev/null || true)" && [ -n "$RECOVERED" ] && break
+  [ -S "$RUNTIME/developer.sock" ] && RECOVERED="$(tasks developer work show "$DEV_ID" 2>/dev/null || true)" && [ -n "$RECOVERED" ] && break
   sleep 0.05
 done
 [ -n "${RECOVERED:-}" ] || fail "active assignment lease/tools socket not recovered after daemon restart"
@@ -196,7 +196,7 @@ assert_field "$RECOVERED" assignment.lease_iteration "$DEV_ITER"
 
 echo "--- record an allowed channel observation without changing workflow status"
 P="$(packet developer "$DEV_ID")"; fresh_revisions "$P"
-tools developer tasks observe subscribe "$DEV_ID" metrics:api --reaction record_only \
+tasks developer observe subscribe "$DEV_ID" metrics:api --reaction record_only \
   --task-revision "$TASK_REV" --assignment-revision "$ASSIGN_REV" --idempotency-key observe-metrics >/dev/null
 BEFORE_STATUS="$(workflow_view "$TASK_KEY" | field task.workflow_status)"
 sa message send --channel metrics:api --type alert --text 'latency high' >/dev/null
@@ -211,13 +211,13 @@ assert_field "$VIEW" task.workflow_status "$BEFORE_STATUS"
 
 echo "--- blocking universal question routes to manager and resumes developer"
 P="$(packet developer "$DEV_ID")"; fresh_revisions "$P"
-QUESTION="$(tools developer tasks ask "$DEV_ID" --question 'Which retry limit?' --context 'The acceptance criteria omit the retry count.' \
+QUESTION="$(tasks developer ask "$DEV_ID" --question 'Which retry limit?' --context 'The acceptance criteria omit the retry count.' \
   --blocking-scope assignment --task-revision "$TASK_REV" --assignment-revision "$ASSIGN_REV" --idempotency-key ask-retries)"
 Q_ID="$(printf '%s' "$QUESTION" | field id)"
 assert_field "$(workflow_view "$TASK_KEY")" task.workflow_status implementation
 ANSWER="$(claim_work manager claim-answer)"; ANSWER_ID="$(printf '%s' "$ANSWER" | field assignment.id)"
 P="$(packet manager "$ANSWER_ID")"; fresh_revisions "$P"
-tools manager tasks answer "$Q_ID" --assignment "$ANSWER_ID" --answer 'Use three retries.' \
+tasks manager answer "$Q_ID" --assignment "$ANSWER_ID" --answer 'Use three retries.' \
   --task-revision "$TASK_REV" --assignment-revision "$ASSIGN_REV" --idempotency-key answer-retries >/dev/null
 RESUMED="$(packet developer "$DEV_ID")"
 assert_field "$RESUMED" questions.0.answer 'Use three retries.'
@@ -315,10 +315,10 @@ echo "--- legacy queue retains current task claim/complete commands"
 api POST /api/task-queues '{"prefix":"LEG","name":"Legacy E2E","owners":["user:customer","agent:manager"]}' >/dev/null
 LEGACY="$(api POST /api/tasks '{"queue":"LEG","title":"Legacy task","priority":"P2","idempotency_key":"legacy-task"}' | result)"
 LEGACY_KEY="$(printf '%s' "$LEGACY" | field key)"
-CLAIMED="$(tools manager tasks ready --queue LEG --claim --idempotency-key legacy-claim)"
+CLAIMED="$(tasks manager ready --queue LEG --claim --idempotency-key legacy-claim)"
 assert_field "$CLAIMED" status in_progress
 LEGACY_REV="$(printf '%s' "$CLAIMED" | field revision)"
-DONE="$(tools manager tasks done "$LEGACY_KEY" --revision "$LEGACY_REV")"
+DONE="$(tasks manager done "$LEGACY_KEY" --revision "$LEGACY_REV")"
 assert_field "$DONE" status done
 
 echo "workflow e2e ok"

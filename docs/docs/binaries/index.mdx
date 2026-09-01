@@ -35,10 +35,10 @@ its own path, strictly on **stderr**. It does not
 change stdout or the exit code, so output parsing is unaffected. A daemon old
 enough to send no header produces no warning.
 
-This matters because an agent's `tools` / `tasks` / `i-am-done` shims select a
-versioned Store skill tree: without the warning, a script too old to know a
+This matters because packaged skill scripts and the agent's `tasks` / `i-am-done`
+compatibility shims select a versioned Store skill tree: without the warning, a script too old to know a
 newer flag looks like it simply did nothing.
-`tools whoami` prints both `client_version` and `daemon_version` for exactly this
+`scripts/whoami.sh` prints both `client_version` and `daemon_version` for exactly this
 reason — it is the first command to run when the tools behave strangely.
 
 The authoritative operator command list is generated from the binary
@@ -56,8 +56,8 @@ them with the identity-bound `tasks` shim. See
   <Card title="Operator commands" href="/docs/binaries/operator-cli" icon="user-cog">
     `tariboy <group> <command>` — run by a human or CI against the daemon.
   </Card>
-  <Card title="Agent tools" href="/docs/binaries/agent-tools" icon="wrench">
-    `tools <group> <command>` — run *inside* an agent, over its per-agent socket.
+  <Card title="Agent capability scripts" href="/docs/binaries/agent-tools" icon="wrench">
+    Packaged skill-local scripts — run *inside* an agent over its per-agent socket.
   </Card>
   <Card title="Native Tasks" href="/docs/tasks" icon="list-tree">
     `tasks <verb>` — optional identity-bound task workflow inside an agent.

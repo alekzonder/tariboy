@@ -13,7 +13,7 @@ func TestEnsureInstallsVersionedSkillsWithoutChangingOldVersions(t *testing.T) {
 	if err := Ensure(p, "0.33.0"); err != nil {
 		t.Fatal(err)
 	}
-	oldPath := filepath.Join(p.CurrentVersionStoreDir("0.33.0"), "skills", "whoami", "prompt.md")
+	oldPath := filepath.Join(p.CurrentVersionStoreDir("0.33.0"), "skills", "whoami", "SKILL.md")
 	first, err := os.ReadFile(oldPath)
 	if err != nil || len(first) == 0 {
 		t.Fatalf("read installed prompt: bytes=%d err=%v", len(first), err)
@@ -24,6 +24,20 @@ func TestEnsureInstallsVersionedSkillsWithoutChangingOldVersions(t *testing.T) {
 	after, err := os.ReadFile(oldPath)
 	if err != nil || string(after) != string(first) {
 		t.Fatalf("old version changed: err=%v", err)
+	}
+}
+
+func TestEnsureInstallsSkillLaunchersExecutable(t *testing.T) {
+	p := paths.New(t.TempDir())
+	if err := Ensure(p, "0.33.0"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(p.CurrentVersionStoreDir("0.33.0"), "skills", "loop", "scripts", "loop.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("loop launcher mode = %o, want executable", info.Mode().Perm())
 	}
 }
 
@@ -47,7 +61,7 @@ func TestEnsureRejectsSymlinkedStoreAsset(t *testing.T) {
 	if err := Ensure(p, version); err != nil {
 		t.Fatal(err)
 	}
-	asset := filepath.Join(p.CurrentVersionStoreDir(version), "skills", "whoami", "prompt.md")
+	asset := filepath.Join(p.CurrentVersionStoreDir(version), "skills", "whoami", "SKILL.md")
 	body, err := os.ReadFile(asset)
 	if err != nil {
 		t.Fatal(err)

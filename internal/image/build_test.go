@@ -99,7 +99,7 @@ func TestBuildSingleImage(t *testing.T) {
 	}
 	prompt, tail := readMember(t, st, Ref{Name: "app", Tag: "latest"}, "PROMPT.md"),
 		readMember(t, st, Ref{Name: "app", Tag: "latest"}, "PROMPT_TAIL.md")
-	for _, want := range []string{"# Who you are", "## Context", "DO THE TASK"} {
+	for _, want := range []string{"# Who you are", "# Context", "scripts/context.sh", "DO THE TASK"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("PROMPT.md missing %q", want)
 		}
@@ -149,10 +149,10 @@ func TestBuildFromChain(t *testing.T) {
 	}
 	prompt := readMember(t, st, Ref{Name: "child", Tag: "latest"}, "PROMPT.md")
 	// SYSTEM recomputed for the full set, not duplicated
-	if n := strings.Count(prompt, "## Context"); n != 1 {
-		t.Fatalf("## Context appears %d times, want 1", n)
+	if n := strings.Count(prompt, "# Context"); n != 1 {
+		t.Fatalf("# Context appears %d times, want 1", n)
 	}
-	if !strings.Contains(prompt, "## Status") {
+	if !strings.Contains(prompt, "# Status") {
 		t.Fatal("status system fragment missing")
 	}
 	// body inherited from base and extended

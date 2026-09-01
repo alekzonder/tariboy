@@ -96,7 +96,7 @@ test("builds a transparent image from its original directory and assigns it to a
   await desktop.execute(`window.location.hash = "#/servers/local/images/transparent-e2e/latest/template";`);
   await expect.poll(() => bodyText(desktop)).toContain("Template");
   await expect.poll(() => bodyText(desktop)).toContain("identity");
-  await expect.poll(() => bodyText(desktop)).toContain("$CURRENT_VERSION_STORE/skills/whoami/prompt.md");
+  await expect.poll(() => bodyText(desktop)).toContain("$CURRENT_VERSION_STORE/prompts/iteration-finish.md");
 
   await desktop.execute(`window.location.hash = "#/agents/local/image-select-e2e/configuration";`);
   await expect.poll(() => bodyText(desktop)).toContain("Agent image");

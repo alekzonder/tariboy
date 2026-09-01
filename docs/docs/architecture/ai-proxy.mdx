@@ -26,9 +26,9 @@ non-zero limits are exhausted from immutable `ai_requests.cost_usd` history,
 the proxy denies the next request before upstream provider access.
 
 Agents can attribute subsequent requests in their current iteration with
-`tools task current KEY`. The daemon validates the key through Native Tasks as
+`scripts/current_task.sh KEY`. The daemon validates the key through Native Tasks as
 the calling agent, stores the selected key as `task_id`, and stores its
-top-level root key as `epic_id`. `tools task current --clear` removes both tags.
+top-level root key as `epic_id`. `scripts/current_task.sh --clear` removes both tags.
 
 ## Pricing catalog and request costs
 

@@ -16,13 +16,13 @@ plugin owns timed bus messages and is unchanged.
 Run exactly once:
 
 ```bash
-tools script run health --description "Check service health" -- curl -fsS http://localhost:8080/health
+scripts/scripts.sh run health --description "Check service health" -- curl -fsS http://localhost:8080/health
 ```
 
 Run immediately and then 60 seconds after each completion:
 
 ```bash
-tools script schedule poll --every 60 --description "Poll the queue" -- ./bin/poll-queue
+scripts/scripts.sh schedule poll --every 60 --description "Poll the queue" -- ./bin/poll-queue
 ```
 
 Runs of one recurring script never overlap. The fixed delay starts at the
@@ -32,13 +32,13 @@ schedule.
 Inspect and control definitions and runs separately:
 
 ```bash
-tools script ls
-tools script runs scr-agent-...
-tools script logs srun-agent-...
-tools script rerun scr-agent-...        # completed one-shot definitions only
-tools script cancel scr-agent-...       # stop a definition and its active run
-tools script cancel srun-agent-...      # stop only this run
-tools script rm scr-agent-...           # inactive definitions only
+scripts/scripts.sh ls
+scripts/scripts.sh runs scr-agent-...
+scripts/scripts.sh logs srun-agent-...
+scripts/scripts.sh rerun scr-agent-...        # completed one-shot definitions only
+scripts/scripts.sh cancel scr-agent-...       # stop a definition and its active run
+scripts/scripts.sh cancel srun-agent-...      # stop only this run
+scripts/scripts.sh rm scr-agent-...           # inactive definitions only
 ```
 
 Both creation commands require `--`. Everything after it is preserved as the
@@ -93,7 +93,7 @@ By default:
 A recurring script can suppress one expected numeric result explicitly:
 
 ```bash
-tools script schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
+scripts/scripts.sh schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
 ```
 
 The matching run is still stored with its exit code and log, but creates no
@@ -127,13 +127,14 @@ script data.
 plugins:
   - name: scripts
   - name: workdir
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/scripts
+  - dir: $CURRENT_VERSION_STORE/skills/workdir
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/workdir/prompt.md
   - runtime: workdir
-  - file: $CURRENT_VERSION_STORE/skills/scripts/prompt.md
 ```
 
-The prompt tells agents to queue a durable run once, finish the current
+The Scripts skill tells agents to queue a durable run once, finish the current
 iteration, and inspect the later result instead of invoking the creation
 command repeatedly.
 

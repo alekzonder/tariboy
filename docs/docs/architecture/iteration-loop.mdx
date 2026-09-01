@@ -115,7 +115,7 @@ before the watchdog is updated, so a daemon restart can adopt the running
 iteration with the same deadline and extension count. Extensions are unavailable
 after the timeout starts firing or for agents with no soft timeout.
 
-Agents signal completion with `tools loop done` (surfaced as `i-am-done`).
+Agents signal completion with `scripts/loop.sh done` (surfaced as `i-am-done`).
 
 When a schema-v2 template declares `runtime: workdir`, preparation resolves the
 agent's managed `agents/<agent>/workdir` to an absolute path and renders it
@@ -154,15 +154,15 @@ On top of the core, an image opts into **optional capabilities**:
   installed external plugin capability.
 
 The built-in `workdir` plugin is instruction-only rather than a capability. It
-adds no tool or shim; a schema-v2 image explicitly composes its Store prompt and
-`runtime: workdir` marker. See [workdir](/docs/plugins/built-in/workdir).
+adds no route or shim; a schema-v2 image explicitly packages its Store skill
+and composes `runtime: workdir`. See [workdir](/docs/plugins/built-in/workdir).
 
 See [Built-in plugins](/docs/plugins/built-in) for the complete capability,
 command, prompt, and persistence reference.
 
-Capabilities gate tools and shims, but do not contribute prompt text
-automatically. Every static instruction is an explicit `prompts` file entry.
-Schema-v1 images retain the historical core union and fragment behavior.
+Capabilities gate routes and compatibility shims, but do not package skills or
+contribute prompt text automatically. Schema-v1 images retain the historical
+core union and render the matching skill instructions for compatibility.
 
 Before each iteration's prompt or message preparation, the launch gate first
 honors a pending image assignment. Without one, it checks whether the active

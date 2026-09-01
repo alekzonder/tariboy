@@ -16,9 +16,9 @@ iteration loop. It is a historical core capability and is included in
 | --- | --- |
 | `i-am-done` | Mark the current iteration complete and productive. |
 | `i-am-done --idle` | Mark it complete and idle. |
-| `tools loop done` | Socket-facing spelling used by the shim. |
-| `tools loop start` | Enable and start this agent's loop. |
-| `tools loop stop` | Disable this agent's loop without impersonating another agent. |
+| `scripts/loop.sh done` | Socket-facing spelling used by the shim. |
+| `scripts/loop.sh start` | Enable and start this agent's loop. |
+| `scripts/loop.sh stop` | Disable this agent's loop without impersonating another agent. |
 
 Provisioning writes `i-am-done` as an executable shim only when `loop` is
 enabled. The shim calls `loop/scripts/loop.py done` inside the versioned Store
@@ -43,20 +43,22 @@ configuration.
 
 ## Prompt integration
 
-The canonical finishing instructions are a tail prompt so they remain at the
-end of a schema-v1 assembled prompt. Schema v2 must place the file explicitly:
+The canonical finishing instructions remain an unconditional prompt tail.
+Schema v2 packages the Loop skill and places the mandatory file explicitly:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: loop
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/loop
 prompts:
   - runtime: user-prompt
-  - file: $CURRENT_VERSION_STORE/skills/loop/finish.md
+  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md
 ```
 
 The prompt tells agents to wait for dispatched subagents and terminal-tool jobs,
 inspect their final results, and resolve failures before completing the iteration.
-Manager-owned durable `tools script run` and `tools script schedule` jobs remain non-blocking because their
+Manager-owned durable `scripts/scripts.sh run` and `scripts/scripts.sh schedule` jobs remain non-blocking because their
 results are intentionally delivered in a later iteration. The prompt also
 explains when the idle form is appropriate.
 

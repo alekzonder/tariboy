@@ -40,8 +40,8 @@ it("renders schema v2 file layers and runtime placeholders in declared order", a
     layers: [
       {
         kind: "file",
-        source: "$STORE/skills/whoami/prompt.md",
-        archive_path: "prompt/layers/000-prompt.md",
+        source: "$STORE/prompts/iteration-finish.md",
+        archive_path: "prompt/layers/000-iteration-finish.md",
         sha256: "abcdef0123456789",
       },
       { kind: "runtime", runtime: "identity" },
@@ -52,7 +52,7 @@ it("renders schema v2 file layers and runtime placeholders in declared order", a
   await waitFor(() => expect(screen.getByDisplayValue("assembled schema v2 prompt")).toBeInTheDocument());
   const rows = screen.getAllByRole("listitem");
   expect(rows).toHaveLength(2);
-  expect(within(rows[0]).getByText(/\$STORE\/skills\/whoami\/prompt\.md.*abcdef012345/)).toBeInTheDocument();
+  expect(within(rows[0]).getByText(/\$STORE\/prompts\/iteration-finish\.md.*abcdef012345/)).toBeInTheDocument();
   expect(within(rows[1]).getByText(/runtime.*identity/i)).toBeInTheDocument();
 });
 

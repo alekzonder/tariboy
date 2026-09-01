@@ -41,7 +41,7 @@ func TestAgentAPIStampsVersionHeader(t *testing.T) {
 	}
 }
 
-// whoami reports the daemon's version in its result, so `tools whoami` can show
+// whoami reports the daemon's version in its result, so the skill script can show
 // both sides of the conversation.
 func TestAgentAPIWhoamiReportsDaemonVersion(t *testing.T) {
 	srv := NewServer(Deps{

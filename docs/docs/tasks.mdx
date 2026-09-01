@@ -80,7 +80,7 @@ defect it noticed outside its current assignment. Triage stays with the queue's
 has none, that notification goes to the customer instead. To let a specific
 agent triage a queue, the customer adds it to the queue's owners.
 
-`tools tasks move KEY --to-root` detaches a task from its parent, which is the
+`tasks move KEY --to-root` detaches a task from its parent, which is the
 inverse operation: the task becomes a root, and the mover loses access to it
 unless it is the assignee or runs the queue. A move without `--parent`,
 `--before`, or `--to-root` is refused rather than treated as a detach.
@@ -180,8 +180,8 @@ plugins:
 ```
 
 When enabled, provisioning creates the agent-local `tasks` shim. Schema-v2
-images must also list the Tasks Store prompt explicitly in `prompts`; capability
-selection never injects prompt text automatically. When disabled,
+images must also package the Tasks Store skill; capability selection never
+packages instructions automatically. When disabled,
 reprovisioning removes a stale shim. This reuses image capability resolution
 without installing or supervising a Tasks plugin. See the [`tasks` built-in
 reference](/docs/plugins/built-in/tasks) for the complete boundary.

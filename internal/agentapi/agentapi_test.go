@@ -1169,7 +1169,7 @@ func TestMessageReplyAutoProcesses(t *testing.T) {
 
 // TestMessageReplyToChatChannelNoSelfDelivery is the end-to-end proof for the
 // dev-t-gmb.1 fix against the exact customer scenario, one layer above the bus
-// unit test: it drives the real `tools message reply` path an agent runs during
+// unit test: it drives the real Messages skill reply path an agent runs during
 // an iteration (POST /tools/message/reply on the per-agent agentapi server,
 // wired to a live bus exactly as loop/manager.go wires it).
 //

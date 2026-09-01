@@ -82,16 +82,17 @@ plugins:
   - name: workdir
   - name: jira
 skills:
+  - dir: $CURRENT_VERSION_STORE/skills/whoami
+  - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: $CURRENT_VERSION_STORE/skills/context
+  - dir: $CURRENT_VERSION_STORE/skills/workdir
   - dir: ./skills/code-review
   - dir: $PLUGINS/jira/2.5.0/skills/triage
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
   - runtime: identity
-  - file: $CURRENT_VERSION_STORE/skills/messages/prompt.md
   - runtime: messages
   - file: $PLUGINS/jira/2.5.0/prompts/reviewer.md
   - runtime: context
-  - file: $CURRENT_VERSION_STORE/skills/workdir/prompt.md
   - runtime: workdir
   - file: ./task.md
   - runtime: user-prompt
@@ -248,15 +249,15 @@ for this operation, not source backup or persistent state.
 
 - `bare:latest` is a schema-v2 image with no plugins and an empty prompt. Its
   terminal-only behavior is runtime policy.
-- `basic:latest` explicitly declares every plugin, static Store prompt, and
-  runtime placeholder it uses, including the instruction-only `workdir`
-  plugin, its Store prompt, and `runtime: workdir`. New agents receive the
+- `basic:latest` explicitly declares every plugin, packaged Store skill,
+  runtime placeholder, and mandatory finish prompt it uses, including the
+  instruction-only `workdir` plugin, its skill, and `runtime: workdir`. New agents receive the
   current managed generation. A daemon upgrade may advance this managed ref,
   while active agents and pending assignments continue resolving their pinned
   pre-upgrade digest until the operator selects another image.
 - Existing schema-v1 sources and images retain their historical behavior.
   Compatibility is selected by `schema_version`; new sources should use v2.
 
-Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and the
-corresponding Store prompt path when an image should expose its agent command
-and instructions.
+Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
+`$CURRENT_VERSION_STORE/skills/tasks` when an image should expose its agent
+command and instructions.

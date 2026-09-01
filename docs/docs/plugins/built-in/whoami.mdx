@@ -13,7 +13,7 @@ Schema-v2 images must still declare it explicitly.
 ## Capability surface
 
 ```bash
-tools whoami
+scripts/whoami.sh
 ```
 
 The daemon response contains:
@@ -32,20 +32,21 @@ drift on stderr without changing command output or the exit code.
 
 ## Prompt integration
 
-The Store prompt teaches the command, while the runtime `identity` marker
-inserts the current identity block into an iteration prompt:
+Package the Store skill and place the runtime `identity` marker where the live
+identity block belongs:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: whoami
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/whoami
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
   - runtime: identity
 ```
 
-These entries are independent. Without the prompt file, the command remains
-available but is not explained to the agent. Without `runtime: identity`, the
-live identity block is not inserted automatically.
+These declarations are independent. Without the skill the procedure is not
+available to the harness; without `runtime: identity`, the live identity block
+is not inserted automatically.
 
 ## State and security
 
@@ -54,7 +55,7 @@ agent name comes from the daemon-owned socket server, not from a command flag or
 request body. Run it only inside an agent where `$TARIBOY_TOOLS_SOCKET` is set.
 
 If the capability is absent, the API returns `plugin_disabled`. If the socket
-environment is absent, `tools` exits before contacting a daemon.
+environment is absent, the skill script exits before contacting a daemon.
 
 ## Related reference
 

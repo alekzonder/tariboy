@@ -1,5 +1,5 @@
-// Package plugincaps declares built-in capability metadata. Prompt bodies live
-// in the versioned Store and are loaded only for legacy schema-v1 builds.
+// Package plugincaps declares built-in capability metadata. Schema-v1 images
+// retain compatibility by rendering the same skill instructions schema v2 packages.
 package plugincaps
 
 import (
@@ -44,17 +44,17 @@ type Fragment struct {
 // fragments contains ordering and capability metadata only. The canonical text
 // is maintained under store/skills and installed into the current version Store.
 var fragments = []Fragment{
-	{Plugin: "whoami", Name: "system:whoami", Order: 10, Path: "skills/whoami/prompt.md", Teaches: []string{"tools whoami"}},
-	{Plugin: "messages", Name: "system:messages", Order: 20, Path: "skills/messages/prompt.md", Teaches: []string{"tools message send", "tools message ls", "tools message processed", "tools message reply", "tools message dlq", "tools request", "tools channel subscribe", "tools channel unsubscribe", "tools channel ls", "tools sources"}},
-	{Plugin: "context", Name: "system:context", Order: 30, Path: "skills/context/prompt.md", Teaches: []string{"tools context get", "tools context set"}},
-	{Plugin: "status", Name: "system:status", Order: 40, Path: "skills/status/prompt.md", Teaches: []string{"tools status", "tools status set"}},
-	{Plugin: "schedule", Name: "system:schedule", Order: 50, Path: "skills/schedule/prompt.md", Teaches: []string{"tools schedule add", "tools schedule ls", "tools schedule cancel"}},
-	{Plugin: "scripts", Name: "system:scripts", Order: 60, Path: "skills/scripts/prompt.md", Teaches: []string{"tools script run", "tools script schedule", "tools script rerun", "tools script ls", "tools script runs", "tools script logs", "tools script cancel", "tools script rm"}},
-	{Plugin: "current-task", Name: "system:current-task", Order: 70, Path: "skills/current-task/prompt.md", Teaches: []string{"tools task current"}},
-	{Plugin: "llm-as-judge", Name: "system:llm-as-judge", Order: 80, Path: "skills/llm-as-judge/prompt.md", Teaches: []string{"tools judge automation begin", "tools judge iterations search", "tools judge run create", "tools judge run inspect", "tools judge work claim", "tools judge evidence search", "tools judge evidence get", "tools judge analysis submit", "tools judge summary claim", "tools judge summary inputs", "tools judge summary submit", "tools judge improvement submit", "tools judge run cancel", "tools judge work retry"}},
-	{Plugin: "image-creator", Name: "system:image-creator", Order: 90, Path: "skills/image-creator/prompt.md", Teaches: []string{"tools image build"}},
-	{Plugin: "tasks", Name: "system:tasks", Order: 100, Path: "skills/tasks/prompt.md", Teaches: []string{"tasks mine", "tasks ready", "tasks show", "tasks create", "tasks comment", "tasks ask", "tasks done"}},
-	{Plugin: "loop", Name: "system:i-am-done", Order: 1000, Path: "skills/loop/finish.md", Teaches: []string{"i-am-done"}, Tail: true},
+	{Plugin: "whoami", Name: "system:whoami", Order: 10, Path: "skills/whoami/SKILL.md", Teaches: []string{"scripts/whoami.sh"}},
+	{Plugin: "messages", Name: "system:messages", Order: 20, Path: "skills/messages/SKILL.md", Teaches: []string{"scripts/messages.sh message", "scripts/messages.sh request", "scripts/messages.sh channel", "scripts/messages.sh sources"}},
+	{Plugin: "context", Name: "system:context", Order: 30, Path: "skills/context/SKILL.md", Teaches: []string{"scripts/context.sh"}},
+	{Plugin: "status", Name: "system:status", Order: 40, Path: "skills/status/SKILL.md", Teaches: []string{"scripts/status.sh"}},
+	{Plugin: "schedule", Name: "system:schedule", Order: 50, Path: "skills/schedule/SKILL.md", Teaches: []string{"scripts/schedule.sh"}},
+	{Plugin: "scripts", Name: "system:scripts", Order: 60, Path: "skills/scripts/SKILL.md", Teaches: []string{"scripts/scripts.sh"}},
+	{Plugin: "current-task", Name: "system:current-task", Order: 70, Path: "skills/current-task/SKILL.md", Teaches: []string{"scripts/current_task.sh"}},
+	{Plugin: "llm-as-judge", Name: "system:llm-as-judge", Order: 80, Path: "skills/llm-as-judge/SKILL.md", Teaches: []string{"scripts/judge.sh"}},
+	{Plugin: "image-creator", Name: "system:image-creator", Order: 90, Path: "skills/image-creator/SKILL.md", Teaches: []string{"scripts/image_creator.sh"}},
+	{Plugin: "tasks", Name: "system:tasks", Order: 100, Path: "skills/tasks/SKILL.md", Teaches: []string{"scripts/tasks.sh"}},
+	{Plugin: "loop", Name: "system:i-am-done", Order: 1000, Path: "prompts/iteration-finish.md", Teaches: []string{"i-am-done"}, Tail: true},
 }
 
 func known(name string) bool {
@@ -180,6 +180,9 @@ func selectFragments(plugins []string, tail bool, storeRoot string) ([]Fragment,
 		}
 		fragment := metadata
 		fragment.Body = string(body)
+		if !tail && len(fragment.Teaches) > 0 {
+			fragment.Body += "\n\nSchema-v1 compatibility launchers: `" + fragment.Teaches[0] + "`."
+		}
 		out = append(out, fragment)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Order < out[j].Order })

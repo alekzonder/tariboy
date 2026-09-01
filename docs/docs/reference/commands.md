@@ -1,6 +1,6 @@
 ---
 title: Command reference
-description: The full command reference — operator commands and agent tools, generated from the binary registry.
+description: The full command reference — operator commands and agent capability scripts.
 sidebar:
   label: Commands
   icon: terminal
@@ -16,8 +16,8 @@ tariboy has three command surfaces:
    human or CI against the daemon. Global flags: `--json`, `--help`,
    `--help-json`, `--version`. This is the authoritative list, generated from the
    binary's registry (`tariboy --help-json`).
-2. **Agent tools** — `tools <group> <command>`, run *inside* an agent (the
-   `tools` shim talks to the per-agent socket `$TARIBOY_TOOLS_SOCKET`).
+2. **Agent capability scripts** — the applicable packaged skill's
+   `scripts/*.sh` launcher, run *inside* an agent over `$TARIBOY_TOOLS_SOCKET`.
 3. **Native Tasks** — optional `tasks <verb>`, run inside an enabled agent
    against daemon-owned work.
 
@@ -123,33 +123,32 @@ tariboy has three command surfaces:
 
 > Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
 
-## Agent tools (`tools …`)
+## Agent capability scripts
 
 Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 
 | Tool | Purpose |
 | --- | --- |
-| `tools whoami` | Print agent, cwd and current iteration |
-| `tools status` | Print the agent status |
-| `tools loop done` | Signal this iteration is finished (i-am-done) |
-| `tools context get` | Print the durable working memory (CONTEXT.md) |
-| `tools context set <text>` | Overwrite the durable working memory |
-| `tools message send --channel C [--type T] [--subject k=v,…] [--text … \| --data JSON]` | Publish a message to a channel |
-| `tools channel subscribe C [--matcher JSON] [--type globs]` | Subscribe to a channel |
-| `tools channel unsubscribe ID` | Remove a subscription |
-| `tools channel ls` | List your subscriptions |
-| `tools sources` | List available channels |
-| `tools schedule add --kind cron\|oneshot --spec S [--channel C] [--message JSON]` | Schedule a future wake-up |
-| `tools schedule ls` | List your schedules |
-| `tools schedule cancel ID` | Cancel a schedule |
-| `tools script ls` | List your scripts |
-| `tools script run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
-| `tools script schedule NAME --every SECONDS [--quiet-exit CODE] -- COMMAND` | Run now and repeat after each completion |
-| `tools script runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
-| `tools script rerun SCRIPT_ID` | Rerun a completed one-shot definition |
-| `tools script cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
-| `tools image build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
-| `tools help` | Show tool help |
+| `scripts/whoami.sh` | Print agent, cwd and current iteration |
+| `scripts/status.sh` | Print the agent status |
+| `scripts/loop.sh done` | Signal this iteration is finished (i-am-done) |
+| `scripts/context.sh get` | Print the durable working memory (CONTEXT.md) |
+| `scripts/context.sh set <text>` | Overwrite the durable working memory |
+| `scripts/messages.sh message send --channel C [--type T] [--subject k=v,…] [--text … \| --data JSON]` | Publish a message to a channel |
+| `scripts/messages.sh channel subscribe C [--matcher JSON] [--type globs]` | Subscribe to a channel |
+| `scripts/messages.sh channel unsubscribe ID` | Remove a subscription |
+| `scripts/messages.sh channel ls` | List your subscriptions |
+| `scripts/messages.sh sources` | List available channels |
+| `scripts/schedule.sh add --kind cron\|oneshot --spec S [--channel C] [--message JSON]` | Schedule a future wake-up |
+| `scripts/schedule.sh ls` | List your schedules |
+| `scripts/schedule.sh cancel ID` | Cancel a schedule |
+| `scripts/scripts.sh ls` | List your scripts |
+| `scripts/scripts.sh run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
+| `scripts/scripts.sh schedule NAME --every SECONDS [--quiet-exit CODE] -- COMMAND` | Run now and repeat after each completion |
+| `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
+| `scripts/scripts.sh rerun SCRIPT_ID` | Rerun a completed one-shot definition |
+| `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
+| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
 
 ## Native Tasks (`tasks …`)
 

@@ -13,15 +13,16 @@ variable, or filesystem permission.
 
 ## Prompt composition
 
-Declare the plugin, its static Store instruction, and its runtime value
+Declare the instruction-only plugin, its Store skill, and its runtime value
 explicitly:
 
 ```yaml Tariboyfile.yaml
 schema_version: 2
 plugins:
   - name: workdir
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/workdir
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/workdir/prompt.md
   - runtime: workdir
 ```
 
@@ -46,7 +47,7 @@ image activation. To schedule a script while working in another CWD, pass its
 absolute path to the [`scripts` plugin](/docs/plugins/built-in/scripts):
 
 ```bash
-tools script schedule poll \
+scripts/scripts.sh schedule poll \
   --description "Poll the queue" \
   --every 60 \
   -- /home/alice/.tariboy/agents/worker/workdir/scripts/poll-queue

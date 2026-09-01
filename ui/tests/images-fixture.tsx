@@ -74,7 +74,7 @@ window.fetch = async (input, init) => {
   if (path === "/api/images/validate" && method === "POST") {
     return envelope({ valid: true, schema_version: 2, plugins: ["loop"], template: { schema_version: 2, sha256: "template-sha", entries: [
       { kind: "runtime", runtime: "identity" },
-      { kind: "file", source: "$CURRENT_VERSION_STORE/skills/loop/prompt.md", category: "current_version_store", archive_path: "prompt/layers/001-loop.md", size: 42, sha256: "layer-sha" },
+      { kind: "file", source: "$CURRENT_VERSION_STORE/prompts/iteration-finish.md", category: "current_version_store", archive_path: "prompt/layers/001-iteration-finish.md", size: 42, sha256: "layer-sha" },
       { kind: "runtime", runtime: "context" },
     ] } });
   }

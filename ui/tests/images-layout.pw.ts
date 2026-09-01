@@ -32,7 +32,7 @@ test("portable image export, source states, and import retag work in a real brow
   await page.getByRole("button", { name: "Validate" }).click();
   const template = page.getByLabel("Validated image template");
   await expect(template).toContainText("identity");
-  await expect(template).toContainText("$CURRENT_VERSION_STORE/skills/loop/prompt.md");
+  await expect(template).toContainText("$CURRENT_VERSION_STORE/prompts/iteration-finish.md");
   await expect(template).toContainText("context");
   const imagesWorkspace = page.getByRole("heading", { name: "Images" }).locator("../..");
   await imagesWorkspace.hover();

@@ -1,8 +1,10 @@
 schema_version: 2
 
 plugins:
+  - name: whoami
   - name: context
   - name: status
+  - name: workdir
   - name: scripts
   - name: tasks
   - name: current-task
@@ -10,8 +12,14 @@ plugins:
   - name: loop
 
 skills:
+  - dir: $CURRENT_VERSION_STORE/skills/whoami
+  - dir: $CURRENT_VERSION_STORE/skills/loop
   - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: $CURRENT_VERSION_STORE/skills/context
+  - dir: $CURRENT_VERSION_STORE/skills/status
+  - dir: $CURRENT_VERSION_STORE/skills/workdir
   - dir: $CURRENT_VERSION_STORE/skills/scripts
+  - dir: $CURRENT_VERSION_STORE/skills/current-task
   - dir: $CURRENT_VERSION_STORE/skills/tasks
   - dir: ./.agents/skills/brainstorming
   - dir: ./.agents/skills/dispatching-parallel-agents
@@ -30,18 +38,12 @@ skills:
   - dir: ./skills/github-pr-workflow
 
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
   - runtime: identity
-  - file: $CURRENT_VERSION_STORE/skills/context/prompt.md
   - runtime: context
-  - file: $CURRENT_VERSION_STORE/skills/status/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/scripts/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/tasks/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/current-task/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/messages/prompt.md
   - runtime: messages
   - runtime: awaiting-replies
-  - file: $CURRENT_VERSION_STORE/skills/loop/finish.md
+  - runtime: workdir
   - file: ./instructions.md
   - runtime: user-prompt
   - runtime: one-shot
+  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md

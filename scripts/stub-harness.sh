@@ -13,6 +13,11 @@
 #   STUB_STDOUT    line to print before finishing             (default unset)
 set -eu
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MESSAGES="$ROOT/store/skills/messages/scripts/messages.sh"
+SCHEDULE="$ROOT/store/skills/schedule/scripts/schedule.sh"
+IMAGE_CREATOR="$ROOT/store/skills/image-creator/scripts/image_creator.sh"
+
 if [ "${1:-}" = "--version" ]; then
   printf '%s\n' '2.1.227'
   exit 0
@@ -30,7 +35,7 @@ fi
 # Optional: subscribe this agent to a channel before finishing.
 #   STUB_SUBSCRIBE="chat:room"
 if [ -n "${STUB_SUBSCRIBE:-}" ]; then
-  tools channel subscribe "$STUB_SUBSCRIBE" >/dev/null 2>&1 || true
+  "$MESSAGES" channel subscribe "$STUB_SUBSCRIBE" >/dev/null 2>&1 || true
 fi
 
 # Optional: emit a message before finishing.
@@ -38,7 +43,7 @@ fi
 if [ -n "${STUB_SEND:-}" ]; then
   SEND_CHANNEL="${STUB_SEND%%|*}"
   SEND_TEXT="${STUB_SEND#*|}"
-  tools message send --channel "$SEND_CHANNEL" --text "$SEND_TEXT" >/dev/null 2>&1 || true
+  "$MESSAGES" message send --channel "$SEND_CHANNEL" --text "$SEND_TEXT" >/dev/null 2>&1 || true
 fi
 
 # Optional: arm a one-shot schedule N seconds ahead, exactly once (a marker in
@@ -47,7 +52,7 @@ fi
 if [ -n "${STUB_SCHEDULE:-}" ] && [ ! -f .stub_scheduled ]; then
   SPEC="$(date -u -d "+${STUB_SCHEDULE} seconds" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
   if [ -n "$SPEC" ]; then
-    tools schedule add --kind oneshot --spec "$SPEC" >/dev/null 2>&1 || true
+    "$SCHEDULE" add --kind oneshot --spec "$SPEC" >/dev/null 2>&1 || true
     : > .stub_scheduled
   fi
 fi
@@ -62,7 +67,7 @@ if [ -n "${STUB_GROUP_REQUEST:-}" ] && [ ! -f .stub_group_req ]; then
   GR_REST="${STUB_GROUP_REQUEST#*|}"
   GR_TEXT="${GR_REST%%|*}"
   GR_DEADLINE="${GR_REST#*|}"
-  tools group request "$GR_MEMBER" --text "$GR_TEXT" --deadline "$GR_DEADLINE" >/dev/null 2>&1 || true
+  "$MESSAGES" group request "$GR_MEMBER" --text "$GR_TEXT" --deadline "$GR_DEADLINE" >/dev/null 2>&1 || true
   : > .stub_group_req
 fi
 
@@ -72,7 +77,7 @@ fi
 if [ -n "${STUB_IMAGE_BUILD:-}" ]; then
   IB_TAG="${STUB_IMAGE_BUILD%%|*}"
   IB_PATH="${STUB_IMAGE_BUILD#*|}"
-  tools image build --name "${IB_TAG%%:*}" --tag "${IB_TAG#*:}" --path "$IB_PATH" >"${STUB_IMAGE_BUILD_OUT:-/dev/null}" 2>&1 || true
+  "$IMAGE_CREATOR" build --name "${IB_TAG%%:*}" --tag "${IB_TAG#*:}" --path "$IB_PATH" >"${STUB_IMAGE_BUILD_OUT:-/dev/null}" 2>&1 || true
 fi
 
 # Optional: drive a real AI call through the proxy before finishing.
@@ -114,19 +119,19 @@ if [ -n "${STUB_REPLY_INBOX:-}" ] && [ -n "$PROMPT_PATH" ] && [ -f "$PROMPT_PATH
   IDS="$(sed -n 's/^- id \([^ ]*\).*/\1/p' "$PROMPT_PATH")"
   if [ -n "$IDS" ] && [ ! -f .stub_replied ]; then
     FIRST_ID="$(printf '%s\n' "$IDS" | head -n1)"
-    tools message reply "$FIRST_ID" --text "$STUB_REPLY_INBOX" >"${STUB_REPLY_INBOX_OUT:-/dev/null}" 2>&1 || true
+    "$MESSAGES" message reply "$FIRST_ID" --text "$STUB_REPLY_INBOX" >"${STUB_REPLY_INBOX_OUT:-/dev/null}" 2>&1 || true
     : > .stub_replied
   fi
   # Drain any still-pending messages (the just-replied one auto-processed; a
   # no-op re-process is harmless).
   for MID in $IDS; do
-    tools message processed "$MID" "e2e-drain" >/dev/null 2>&1 || true
+    "$MESSAGES" message processed "$MID" "e2e-drain" >/dev/null 2>&1 || true
   done
 fi
 
 if [ "${STUB_CALL_DONE:-1}" = "1" ]; then
-  # bin/i-am-done and bin/tools are on PATH via the agent's bin dir.
-  i-am-done >/dev/null 2>&1 || tools loop done >/dev/null 2>&1 || true
+  # bin/i-am-done is the one PATH compatibility shim.
+  i-am-done >/dev/null 2>&1 || true
 fi
 
 exit "${STUB_EXIT:-0}"

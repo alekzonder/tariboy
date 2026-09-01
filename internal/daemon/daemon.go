@@ -536,7 +536,7 @@ func Run(ctx context.Context, o Options) error {
 	// schedule that publishes a type=timeout event into the requester's inbox at
 	// the deadline; a reply landing first cancels exactly that entry by its
 	// correlation id. This wires the bus's deadline seam to the schedule
-	// subsystem so cross-agent requests (tools request / group request) honour
+	// subsystem so cross-agent requests from the Messages skill honour
 	// their deadlines instead of failing ErrDeadlineUnsupported.
 	// parseDeadline is the single source of truth for the deadline format,
 	// shared by the pre-publish validator and the arm hook so both accept exactly
@@ -615,7 +615,7 @@ func Run(ctx context.Context, o Options) error {
 		Tasks:           taskService,
 		ExternalPlugins: plugins.ResolveEnabledInstalledMetadata(p.PluginsDir(), pluginStore),
 		Spawner:         o.Spawner, OnIterationClose: onIterationClose,
-		// ProvidedChannels feeds `tools sources` the provider-declared channels
+		// ProvidedChannels feeds the Messages skill provider-declared channels
 		// from installed plugin manifests (spec §6.1), read fresh per call so a
 		// newly installed provider is annotated without a restart.
 		ProvidedChannels: func() ([]agentapi.ProvidedChannel, error) {

@@ -93,7 +93,7 @@ func ParamsValidatorFor(lister RecordLister, onListErr func(channel string, err 
 }
 
 // ProvidedChannelInfo is a flattened, presentation-ready view of one plugin
-// provided-channel declaration, used by `tools sources` (spec §6.1) to list and
+// provided-channel declaration, used by the Messages skill (spec §6.1) to list and
 // annotate provider channels — even before the channel row exists in the bus.
 type ProvidedChannelInfo struct {
 	Channel  string   // the provided channel name
@@ -153,7 +153,7 @@ func schemaParamKeys(raw json.RawMessage) []string {
 }
 
 // firstLine returns the first non-empty line of s, trimmed. Provider help can be
-// a multi-line paragraph; `tools sources` shows only the lead line.
+// a multi-line paragraph; the sources command shows only the lead line.
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if head, _, found := strings.Cut(s, "\n"); found {

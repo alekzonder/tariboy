@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E for the request primitive behind `tools group request` (spec §4.2, EPIC R
+# E2E for the request primitive behind the Messages skill group request (spec §4.2, EPIC R
 # R3). Brings up a fully ISOLATED tariboyd (own base/runtime dirs, web off,
 # never touches the user's live daemon), creates a dev group, and drives the
 # lead through the stub harness to send a group request with a short --deadline.

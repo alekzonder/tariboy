@@ -36,20 +36,20 @@ flowchart LR
 
   subgraph daemon[tariboyd on one host]
     api[Operator API and event hub]
-    tools[Per-agent tools sockets]
+    agentapi[Per-agent capability sockets]
     manager[Loop manager]
     proxy[In-process AI proxy]
     plugins[Plugin supervisor]
     store[(SQLite and agent files)]
     api <--> store
-    tools <--> store
+    agentapi <--> store
     manager <--> store
     proxy <--> store
     plugins <--> store
   end
 
   manager -->|one supervised iteration| shim[tariboy-shim and harness]
-  shim -->|identity-bound tools calls| tools
+  shim -->|identity-bound capability calls| agentapi
   shim -->|short-lived scoped token| proxy
   plugins -->|declared channels and API| daemon
 ```
@@ -57,7 +57,7 @@ flowchart LR
 | Surface | Typical client | Boundary and identity |
 | --- | --- | --- |
 | Operator API | Desktop, CLI, automation | Unix socket by default; a TCP listener requires the configured bearer-token policy. The optional HTTP/WebSocket listener accepts loopback addresses only. |
-| Agent tools socket | `tools`, `tasks`, and `i-am-done` within an agent | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
+| Agent capability socket | Skill-local scripts plus `tasks` and `i-am-done` compatibility shims | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
 | AI proxy | Harness or plugin making an LLM request | Loopback listener plus a short-lived iteration- or plugin-scoped token. Upstream provider keys remain in the daemon. |
 
 Remote Desktop access is an SSH local-forward to the remote daemon's loopback
@@ -124,12 +124,12 @@ sequenceDiagram
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
   D->>P: bind proxy and prepare plugin host
-  D->>C: serve operator API, tools sockets, and optional HTTP/WS
+  D->>C: serve operator API, capability sockets, and optional HTTP/WS
   D->>D: refresh stale prices without blocking clients; run background workers
   O->>D: cancellation or controlled stop
   D->>C: stop API and proxy listeners
   D->>D: cancel and drain background workers
-  D->>M: stop managed loops and tools servers
+  D->>M: stop managed loops and capability servers
   D->>S: flush and close durable state
 ```
 
@@ -210,7 +210,7 @@ advance work.
 
 ```mermaid
 flowchart LR
-  mutation[API or agent-tools mutation] --> transaction[One SQLite transaction]
+  mutation[API or skill-script mutation] --> transaction[One SQLite transaction]
   transaction --> state[Authoritative rows and event]
   transaction --> outbox[Durable outbox intent]
   outbox --> publisher[Background publisher]
@@ -247,7 +247,7 @@ transcripts are sensitive data and support bundles intentionally exclude them.
 
 ## Version reporting
 
-Every HTTP response from the daemon — the operator API and the per-agent tools
+Every HTTP response from the daemon — the operator API and per-agent capability
 socket alike — carries the daemon's build version in the `X-Tariboy-Version`
 response header. It is stamped by one wrapper around each server's handler, so
 successes, error envelopes and 404s all carry it; clients never need a dedicated
@@ -260,11 +260,11 @@ reaction to a mismatch belongs to the client, see
 
 ## Agent bin shims
 
-Provisioning writes three shims into `<data dir>/agents/<name>/bin`: `tools`,
-`i-am-done`, and — only for agents with the `tasks` capability — `tasks`. Each
-one `exec`s Python 3 with an **absolute path** inside the running daemon's
-versioned Store: the generic dispatcher under `agent-tools/scripts`, the loop
-script for `i-am-done`, or the tasks script. The script then uses
+Provisioning writes only the compatibility shims enabled by the image into
+`<data dir>/agents/<name>/bin`: `i-am-done` and `tasks`. Each `exec`s its owning
+skill script by an **absolute path** inside the running daemon's versioned
+Store. Every other capability is invoked through its packaged skill-local
+`scripts/*.sh` launcher. The scripts use
 `$TARIBOY_TOOLS_SOCKET`; the daemon derives identity from that socket.
 
 Because the path is absolute, shims written at create time would otherwise

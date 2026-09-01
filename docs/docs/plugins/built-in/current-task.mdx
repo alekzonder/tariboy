@@ -12,8 +12,8 @@ Task being worked on. It is optional and is included in `basic:latest`.
 ## Capability surface
 
 ```bash
-tools task current OPS-12
-tools task current --clear
+scripts/current_task.sh OPS-12
+scripts/current_task.sh --clear
 ```
 
 Setting a key validates it through the identity-bound Native Tasks service. The
@@ -42,11 +42,11 @@ capability when the agent must inspect or mutate Native Tasks.
 ```yaml Tariboyfile.yaml
 plugins:
   - name: current-task
-prompts:
-  - file: $CURRENT_VERSION_STORE/skills/current-task/prompt.md
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/current-task
 ```
 
-The Store prompt teaches the Native Tasks contract. There is no runtime marker
+The packaged Store skill teaches the Native Tasks contract. There is no runtime marker
 for the current tag; the usage proxy holds the live attribution for the current
 iteration.
 

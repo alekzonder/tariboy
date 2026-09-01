@@ -6,29 +6,31 @@ plugins:
   - name: messages
   - name: context
   - name: status
+  - name: workdir
   - name: schedule
   - name: tasks
   - name: current-task
   - name: llm-as-judge
 
 skills:
+  - dir: $CURRENT_VERSION_STORE/skills/whoami
+  - dir: $CURRENT_VERSION_STORE/skills/loop
+  - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: $CURRENT_VERSION_STORE/skills/context
+  - dir: $CURRENT_VERSION_STORE/skills/status
+  - dir: $CURRENT_VERSION_STORE/skills/workdir
   - dir: $CURRENT_VERSION_STORE/skills/schedule
   - dir: $CURRENT_VERSION_STORE/skills/tasks
-  - dir: ./skills/llm-as-judge
+  - dir: $CURRENT_VERSION_STORE/skills/current-task
+  - dir: $CURRENT_VERSION_STORE/skills/llm-as-judge
 
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
   - runtime: identity
-  - file: $CURRENT_VERSION_STORE/skills/messages/prompt.md
   - runtime: messages
-  - file: $CURRENT_VERSION_STORE/skills/context/prompt.md
+  - runtime: awaiting-replies
   - runtime: context
-  - file: $CURRENT_VERSION_STORE/skills/status/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/schedule/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/tasks/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/current-task/prompt.md
-  - file: $CURRENT_VERSION_STORE/skills/llm-as-judge/prompt.md
+  - runtime: workdir
   - file: ./instructions.md
   - runtime: user-prompt
   - runtime: one-shot
-  - file: $CURRENT_VERSION_STORE/skills/loop/finish.md
+  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md

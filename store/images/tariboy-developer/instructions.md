@@ -91,7 +91,7 @@ Do not perform the work without a task key or assignment. Keep the Native Task
 as the durable source of truth: add concise comments for important findings,
 decisions, progress, verification results, and integration status.
 
-Use `tools context get` only to recover pointers to active work. Context is an
+Use `scripts/context.sh get` only to recover pointers to active work. Context is an
 index, not a task report. Its entire content consists of one line per active
 task with exactly two whitespace-separated fields:
 
@@ -104,16 +104,16 @@ executable action, for example `DEV-417 commit` or `DEV-417 wait-answer`. Put
 requirements, findings, decisions, test output, progress summaries, status,
 branch and worktree details, blockers, history, and later workflow steps in the
 Native Task, never in context. After the active-task set or a next action
-changes, read the current value with `tools context get`, preserve the other
+changes, read the current value with `scripts/context.sh get`, preserve the other
 active-task lines, and replace the document with
-`tools context set "<minimal active-task lines>"`. Remove a completed task's
-line; use `tools context set ""` when none remain.
+`scripts/context.sh set "<minimal active-task lines>"`. Remove a completed task's
+line; use `scripts/context.sh set ""` when none remain.
 
-Before every non-empty `tools context set`, validate the complete payload: each
+Before every non-empty `scripts/context.sh set`, validate the complete payload: each
 line must match `^[A-Z][A-Z0-9]*-[0-9]+ [a-z][a-z0-9-]*$`. If any line does not
 match, move its information to the Native Task and reduce the context line to
 the two-field form before setting it. For one active task whose next action is
-commit, the complete call is exactly `tools context set "DEV-417 commit"`.
+commit, the complete call is exactly `scripts/context.sh set "DEV-417 commit"`.
 
 | Native Task state | Complete context entry |
 |---|---|
@@ -269,7 +269,7 @@ intake preselects exactly one path below.
    state paths:
 
    ```text
-   tools script schedule NAME --every 60 --quiet-exit 2 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
+   scripts/scripts.sh schedule NAME --every 60 --quiet-exit 2 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
    ```
 
    Record the PR number and URL, schedule name and ID, and state directory on
@@ -294,8 +294,8 @@ intake preselects exactly one path below.
 8. Use exactly one schedule-cancellation branch:
    - **Merged completion:** only after the monitor reports `merged: true` with
      merge commit metadata, cancel and remove the schedule with
-     `tools script cancel <schedule-id>` then
-     `tools script rm <schedule-id>`. Fetch the configured remote and
+     `scripts/scripts.sh cancel <schedule-id>` then
+     `scripts/scripts.sh rm <schedule-id>`. Fetch the configured remote and
      fast-forward local `main` to its upstream. A failure keeps the task active;
      never reset or overwrite main. Only this branch continues to step 9.
    - **Separate non-completion:** only an explicit task-authoritative decision
@@ -323,9 +323,9 @@ intake preselects exactly one path below.
     its declared successful outcome. After the final comment succeeds,
     completion is the next command: do not return a response or perform an
     unrelated action between them.
-13. Read context with `tools context get`, remove the completed task's line,
+13. Read context with `scripts/context.sh get`, remove the completed task's line,
     and replace context with the remaining minimal lines; use
-    `tools context set ""` when no active tasks remain.
+    `scripts/context.sh set ""` when no active tasks remain.
 
 If PR creation, monitoring, checks, refresh, post-merge verification, or
 cleanup fails, keep the Native Task active, post the exact failure as a task
@@ -358,8 +358,8 @@ the preselected local integration sequence:
    another event. After the final comment succeeds, `tasks done` is the next
    command: do not return a response or perform an unrelated action between
    them. "Close next turn" is not a valid completion state.
-8. Read context with `tools context get`, remove the completed task's line, and
-   replace context with the remaining minimal lines; use `tools context set ""`
+8. Read context with `scripts/context.sh get`, remove the completed task's line, and
+   replace context with the remaining minimal lines; use `scripts/context.sh set ""`
    when no active tasks remain.
 
 If merge, verification, or cleanup fails, keep the Native Task active, post the

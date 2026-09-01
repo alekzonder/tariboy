@@ -57,13 +57,6 @@ func TestGenerateBuildsCanonicalBasicBundle(t *testing.T) {
 			t.Errorf("basic image unexpectedly includes %q", excluded)
 		}
 	}
-	prompt, err := store.RenderPrompt(image.Ref{Name: "basic", Tag: "latest"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(prompt, "packaged `tasks`") {
-		t.Fatalf("basic prompt does not route Native Tasks procedures to its skill:\n%s", prompt)
-	}
 	skills := map[string]bool{}
 	for _, skill := range manifest.Skills {
 		skills[skill.Name] = true
@@ -73,21 +66,31 @@ func TestGenerateBuildsCanonicalBasicBundle(t *testing.T) {
 			t.Errorf("basic image missing packaged skill %q: %#v", required, manifest.Skills)
 		}
 	}
+	for _, required := range []string{"whoami", "loop", "messages", "context", "status", "workdir", "scripts", "current-task", "tasks"} {
+		if !skills[required] {
+			t.Errorf("basic image capability %q is not packaged as a skill: %#v", required, manifest.Skills)
+		}
+	}
 	template, err := store.ReadTemplate(image.Ref{Name: "basic", Tag: "latest"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	foundWorkdirSequence := false
-	for i := 0; i+2 < len(template.Entries); i++ {
-		if template.Entries[i].Source == "$CURRENT_VERSION_STORE/skills/workdir/prompt.md" &&
-			template.Entries[i+1].Kind == "runtime" && template.Entries[i+1].Runtime == "workdir" &&
-			template.Entries[i+2].Source == "$CURRENT_VERSION_STORE/skills/scripts/prompt.md" {
-			foundWorkdirSequence = true
-			break
+	runtimes := map[string]bool{}
+	for _, entry := range template.Entries {
+		if entry.Kind == "runtime" {
+			runtimes[entry.Runtime] = true
+		}
+		if strings.HasSuffix(entry.Source, "/prompt.md") {
+			t.Errorf("basic template retains migrated prompt fragment %q", entry.Source)
 		}
 	}
-	if !foundWorkdirSequence {
-		t.Fatalf("basic template missing workdir static/runtime entries immediately before scripts: %#v", template.Entries)
+	for _, required := range []string{"identity", "messages", "context", "workdir", "user-prompt", "one-shot"} {
+		if !runtimes[required] {
+			t.Errorf("basic template missing runtime %q: %#v", required, template.Entries)
+		}
+	}
+	if got := template.Entries[len(template.Entries)-1].Source; got != "$CURRENT_VERSION_STORE/prompts/iteration-finish.md" {
+		t.Fatalf("basic final prompt = %q, want mandatory iteration finish prompt", got)
 	}
 }
 

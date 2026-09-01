@@ -29,6 +29,25 @@ func TestFragmentsContract(t *testing.T) {
 	}
 }
 
+func TestSchemaV1FragmentsResolveDirectSkillInstructions(t *testing.T) {
+	for _, fragment := range fragments {
+		if fragment.Tail {
+			if fragment.Path != "prompts/iteration-finish.md" {
+				t.Fatalf("finish fragment path = %q", fragment.Path)
+			}
+			continue
+		}
+		if want := "skills/" + fragment.Plugin + "/SKILL.md"; fragment.Path != want {
+			t.Errorf("%s path = %q, want %q", fragment.Plugin, fragment.Path, want)
+		}
+		for _, command := range fragment.Teaches {
+			if strings.HasPrefix(command, "tools ") {
+				t.Errorf("%s retains dispatcher command %q", fragment.Plugin, command)
+			}
+		}
+	}
+}
+
 func TestResolve(t *testing.T) {
 	got, err := Resolve([]string{"context", "status"})
 	if err != nil {
@@ -146,7 +165,7 @@ func TestLLMAsJudgeCapability(t *testing.T) {
 			body = f.Body
 		}
 	}
-	for _, command := range []string{"tools judge iterations search", "tools judge evidence search", "tools judge summary submit", "tools judge improvement submit"} {
+	for _, command := range []string{"scripts/judge.sh", "evidence", "proposal"} {
 		if !strings.Contains(body, command) {
 			t.Fatalf("judge prompt missing %q: %s", command, body)
 		}
@@ -180,7 +199,7 @@ func TestImageCreatorCapability(t *testing.T) {
 	if body == "" {
 		t.Fatal("image-creator has no system fragment")
 	}
-	if !strings.Contains(body, "tools image build") {
+	if !strings.Contains(body, "scripts/image_creator.sh build") {
 		t.Fatalf("image-creator fragment must teach the build tool, got:\n%s", body)
 	}
 }
@@ -196,19 +215,19 @@ func TestScriptsPromptTeachesExplicitRunAndSchedule(t *testing.T) {
 			body = fragment.Body
 		}
 	}
-	if !strings.Contains(body, "`scripts` skill") {
-		t.Fatalf("scripts prompt does not route to its packaged skill:\n%s", body)
+	if !strings.Contains(body, "scripts/scripts.sh") {
+		t.Fatalf("scripts compatibility instructions omit the direct launcher:\n%s", body)
 	}
 	skill, err := storeassets.ReadBundled("skills/scripts/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"tools script run", "tools script schedule", "never overlap", "--quiet-exit", "Queue it exactly once"} {
+	for _, want := range []string{"scripts/scripts.sh run", "scripts/scripts.sh schedule", "never overlap", "--quiet-exit", "Queue it exactly once"} {
 		if !strings.Contains(string(skill), want) {
 			t.Fatalf("scripts skill missing %q:\n%s", want, skill)
 		}
 	}
-	if strings.Contains(body, "tools script add") {
+	if strings.Contains(body, "tools script") {
 		t.Fatalf("scripts prompt still teaches removed add command:\n%s", body)
 	}
 }
@@ -237,9 +256,9 @@ func TestTasksCapabilityIsOptionalAndContributesItsOwnPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, command := range []string{
-		"tasks mine", "tasks ready", "tasks create", "tasks comment",
-		"tasks ask", "tasks done", "tasks work next", "tasks work show",
-		"tasks artifacts add", "tasks questions", "tasks answer", "tasks observe subscribe",
+		"scripts/tasks.sh mine", "scripts/tasks.sh ready", "scripts/tasks.sh create", "scripts/tasks.sh comment",
+		"scripts/tasks.sh ask", "scripts/tasks.sh done", "scripts/tasks.sh work next", "scripts/tasks.sh work show",
+		"scripts/tasks.sh observe",
 	} {
 		if !strings.Contains(fragment.Body+string(skill), command) {
 			t.Fatalf("tasks instructions missing %q", command)
@@ -264,7 +283,7 @@ func TestTasksPromptDistinguishesFlexibleAndWorkflowQuestions(t *testing.T) {
 	normalized := strings.Join(strings.Fields(string(body)), " ")
 	for _, want := range []string{
 		"For a flexible task",
-		"tasks ask <key> user:<login>|agent:<name> <text>",
+		"scripts/tasks.sh ask <key> user:<login>|agent:<name> <text>",
 		"A comment is not a blocking question",
 		"For workflow-managed work",
 		"Treat its packet as the complete authority",
@@ -287,7 +306,7 @@ func TestCurrentTaskCapabilityUsesNativeTasksContract(t *testing.T) {
 			break
 		}
 	}
-	for _, want := range []string{"Native Tasks", "tasks mine", "top-level root"} {
+	for _, want := range []string{"Current task", "scripts/current_task.sh KEY", "--clear"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("current-task prompt missing %q:\n%s", want, body)
 		}

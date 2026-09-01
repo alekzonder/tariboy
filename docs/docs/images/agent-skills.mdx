@@ -57,7 +57,7 @@ the worktree and starts exactly one durable Scripts-plugin schedule, recording
 the PR, schedule, and state identifiers on the Native Task:
 
 ```text
-tools script schedule NAME --every 60 --quiet-exit 2 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
+scripts/scripts.sh schedule NAME --every 60 --quiet-exit 2 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
 ```
 
 The monitor exits `0` for its first complete observation or a meaningful
