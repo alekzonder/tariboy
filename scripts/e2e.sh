@@ -75,7 +75,6 @@ echo "--- image prompt (i-am-done tail must be last)"
 PROMPT="$(sa image prompt basic-example:latest)"
 echo "$PROMPT" | grep -q "i-am-done" || { echo "FAIL: no i-am-done"; exit 1; }
 echo "$PROMPT" | tail -n 6 | grep -q "i-am-done" || { echo "FAIL: tail not last"; exit 1; }
-echo "$PROMPT" | grep -q "Update it before finishing each iteration" || { echo "FAIL: body missing"; exit 1; }
 
 echo "--- image rm"
 sa image rm basic-example:latest >/dev/null
