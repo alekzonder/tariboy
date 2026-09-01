@@ -1,8 +1,10 @@
 package image
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -314,6 +316,78 @@ func TestBuildMutableRetainsPinnedGeneration(t *testing.T) {
 	}
 	if body, err := os.ReadFile(filepath.Join(dest, "BODY.md")); err != nil || string(body) != "first generation" {
 		t.Fatalf("unpacked pinned body = %q, %v", body, err)
+	}
+}
+
+func TestBuildMutableMigrationKeepsCurrentWhenMarkerWriteFails(t *testing.T) {
+	source := t.TempDir()
+	prompt := promptFile(t, source, "prompt.md", "immutable generation")
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "reviewer", Tag: "latest"}
+	imageSpec := &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}
+	first, err := Build(imageSpec, ref, store, fixedClock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(prompt, []byte("mutable generation"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(store.mutablePath(ref), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(imageSpec, ref, store, fixedClock(), WithMutableRef()); err == nil {
+		t.Fatal("mutable migration succeeded despite marker write failure")
+	}
+	if err := os.Remove(store.mutablePath(ref)); err != nil {
+		t.Fatal(err)
+	}
+	if current, err := store.Inspect(ref); err != nil || current.Digest != first.Digest {
+		t.Fatalf("current generation = %#v, %v", current, err)
+	}
+	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
+		t.Fatalf("pinned immutable generation = %#v, %v", pinned, err)
+	}
+}
+
+func TestBuildMutableConcurrentPublishesRetainEveryGeneration(t *testing.T) {
+	previous := runtime.GOMAXPROCS(4)
+	defer runtime.GOMAXPROCS(previous)
+
+	storeDir := t.TempDir()
+	ref := Ref{Name: "reviewer", Tag: "latest"}
+	baseSource := t.TempDir()
+	if _, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Dir: baseSource}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef()); err != nil {
+		t.Fatal(err)
+	}
+	for round := 0; round < 6; round++ {
+		const publishes = 12
+		start := make(chan struct{})
+		results := make(chan struct {
+			manifest Manifest
+			err      error
+		}, publishes)
+		for worker := 0; worker < publishes; worker++ {
+			source := t.TempDir()
+			prompt := promptFile(t, source, "prompt.md", fmt.Sprintf("round %d worker %d", round, worker))
+			go func(source, prompt string) {
+				<-start
+				manifest, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef())
+				results <- struct {
+					manifest Manifest
+					err      error
+				}{manifest, err}
+			}(source, prompt)
+		}
+		close(start)
+		for worker := 0; worker < publishes; worker++ {
+			result := <-results
+			if result.err != nil {
+				t.Fatal(result.err)
+			}
+			if pinned, err := (&Store{Dir: storeDir}).InspectPinned(ref, result.manifest.Digest); err != nil || pinned.Digest != result.manifest.Digest {
+				t.Fatalf("round %d pinned generation %s = %#v, %v", round, result.manifest.Digest, pinned, err)
+			}
+		}
 	}
 }
 

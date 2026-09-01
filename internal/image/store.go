@@ -12,10 +12,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // Store is an on-disk image store rooted at Dir (paths.ImagesDir()).
 type Store struct{ Dir string }
+
+// ponytail: global lock, use per-ref locks if mutable image publication becomes a bottleneck.
+var mutablePublishMu sync.Mutex
 
 func (s *Store) refDir(ref Ref) string     { return filepath.Join(s.Dir, ref.Name) }
 func (s *Store) tarPath(ref Ref) string    { return filepath.Join(s.Dir, ref.Name, ref.Tag+".tar.gz") }
@@ -37,8 +41,8 @@ func (s *Store) Exists(ref Ref) bool {
 
 // IsMutable reports whether ref was published through the mutable authoring path.
 func (s *Store) IsMutable(ref Ref) bool {
-	_, err := os.Stat(s.mutablePath(ref))
-	return err == nil
+	info, err := os.Stat(s.mutablePath(ref))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func (s *Store) ArchiveBytes(ref Ref) ([]byte, error) {
@@ -464,6 +468,20 @@ func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool) (string, e
 			return "", fmt.Errorf("publish image %s: %w", ref.String(), err)
 		}
 	} else {
+		mutablePublishMu.Lock()
+		defer mutablePublishMu.Unlock()
+		markerCreated := false
+		if !s.IsMutable(ref) {
+			if err := writeMutableMarker(s.mutablePath(ref)); err != nil {
+				return "", fmt.Errorf("mark mutable image %s: %w", ref.String(), err)
+			}
+			markerCreated = true
+		}
+		defer func() {
+			if markerCreated {
+				_ = os.Remove(s.mutablePath(ref))
+			}
+		}()
 		if s.Exists(ref) {
 			current, err := s.Inspect(ref)
 			if err != nil {
@@ -480,14 +498,37 @@ func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool) (string, e
 		if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
 			return "", fmt.Errorf("publish mutable image %s: %w", ref.String(), err)
 		}
-		if err := os.WriteFile(s.mutablePath(ref), []byte("mutable\n"), 0o600); err != nil {
-			return "", fmt.Errorf("mark mutable image %s: %w", ref.String(), err)
-		}
+		markerCreated = false
 	}
 	if err := writeDigestCache(s.digestPath(ref), manifest.Digest); err != nil {
 		_ = os.Remove(s.digestPath(ref))
 	}
 	return manifest.Digest, nil
+}
+
+func writeMutableMarker(path string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".mutable-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := io.WriteString(tmp, "mutable\n"); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 func writeDigestCache(path, digest string) error {
