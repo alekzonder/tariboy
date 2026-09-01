@@ -64,6 +64,38 @@ func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 	}
 }
 
+func TestStartAllSkipsEnabledAgentMissingRequiredDirectScript(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	t.Cleanup(m.Shutdown)
+	m.cfg.SkillsDir = testSkillsDir(t)
+	if err := os.Remove(filepath.Join(m.cfg.SkillsDir, "loop", "scripts", "loop.sh")); err != nil {
+		t.Fatal(err)
+	}
+
+	blocked := agent.Agent{Name: "blocked", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, Plugins: []string{"loop"}}
+	healthy := agent.Agent{Name: "healthy", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, Plugins: []string{"tasks"}}
+	for _, a := range []agent.Agent{blocked, healthy} {
+		if err := as.Create(a); err != nil {
+			t.Fatal(err)
+		}
+		writeStaleShims(t, agentsDir, a.Name)
+	}
+
+	if err := m.StartAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	_, blockedStarted := m.runs[blocked.Name]
+	_, healthyStarted := m.runs[healthy.Name]
+	m.mu.Unlock()
+	if blockedStarted {
+		t.Fatal("enabled agent started without its required direct launcher")
+	}
+	if !healthyStarted {
+		t.Fatal("healthy enabled agent did not start")
+	}
+}
+
 // Direct scripts, not the removed central dispatcher, are the startup
 // prerequisite for a stale shim refresh.
 func TestRefreshShimsRewritesShimsWithDirectScripts(t *testing.T) {

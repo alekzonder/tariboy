@@ -202,6 +202,22 @@ func TestWriteShimsKeepsUserOwnedToolsShim(t *testing.T) {
 	}
 }
 
+func TestWriteShimsKeepsCustomWrapperThatMentionsLegacyDispatcher(t *testing.T) {
+	l := binDirFor(t)
+	tools := filepath.Join(l.BinDir(), "tools")
+	body := "#!/usr/bin/env bash\n# exec python3 agent-tools/scripts/tools.py through a custom wrapper\nexec python3 -B /custom/tools.py \"$@\"\n"
+	if err := os.WriteFile(tools, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteShims(l, agent.Agent{Name: "worker"}, skillScriptsFor(t)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(tools)
+	if err != nil || string(got) != body {
+		t.Fatalf("custom tools wrapper changed: %q err=%v", got, err)
+	}
+}
+
 // The tasks shim is conditional on the capability, in both directions.
 func TestWriteShimsReconcilesTasksCapability(t *testing.T) {
 	l := binDirFor(t)

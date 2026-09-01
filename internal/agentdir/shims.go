@@ -75,10 +75,20 @@ func removeManagedLegacyToolsShim(l Layout) error {
 	if err != nil {
 		return err
 	}
-	if bytes.Contains(body, []byte("agent-tools/scripts/tools.py")) && bytes.Contains(body, []byte("exec python3")) {
+	if isManagedLegacyToolsShim(body) {
 		return os.Remove(path)
 	}
 	return nil
+}
+
+func isManagedLegacyToolsShim(body []byte) bool {
+	const prefix = "#!/usr/bin/env bash\nexec python3 -B \""
+	const suffix = "/agent-tools/scripts/tools.py\" \"$@\"\n"
+	if !bytes.HasPrefix(body, []byte(prefix)) || !bytes.HasSuffix(body, []byte(suffix)) {
+		return false
+	}
+	root := body[len(prefix) : len(body)-len(suffix)]
+	return filepath.IsAbs(string(root)) && !bytes.ContainsAny(root, "\r\n\\\"")
 }
 
 func RequirePython3() error {

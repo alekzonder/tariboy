@@ -312,13 +312,16 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 //
 // Each agent validates its own capability-owned direct scripts before changing
 // its shims, so a missing script skips that agent without blocking the fleet.
-func (m *Manager) refreshShims(agents []agent.Agent) {
+func (m *Manager) refreshShims(agents []agent.Agent) map[string]bool {
+	failed := make(map[string]bool)
 	for _, a := range agents {
 		l := agentdir.New(m.cfg.AgentsDir, a.Name)
 		if err := agentdir.WriteShims(l, a, m.cfg.SkillsDir); err != nil {
+			failed[a.Name] = true
 			m.cfg.Log.Error("refresh agent shims", "agent", a.Name, "err", err)
 		}
 	}
+	return failed
 }
 
 // StartAll reattaches live iterations and starts every persisted-running agent.
@@ -346,7 +349,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	// stays above the script supervisor: its first scan runs before the first
 	// tick, so a script already due at daemon start would otherwise inherit a
 	// PATH pointing at the stale shims.
-	m.refreshShims(agents)
+	shimRefreshFailed := m.refreshShims(agents)
 
 	if m.cfg.Scripts != nil {
 		if err := m.cfg.Scripts.RecoverRunning(); err != nil {
@@ -376,6 +379,9 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	m.bindLiveToolsSockets(agents, adopting)
 	m.reapOrphanSessions(agents, adopting)
 	for _, a := range agents {
+		if shimRefreshFailed[a.Name] {
+			continue
+		}
 		if dones, ok := adopting[a.Name]; ok {
 			m.startAfter(cctx, a.Name, dones)
 			continue
