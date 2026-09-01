@@ -251,7 +251,16 @@ func parseArgs(cmd registry.Command, args []string) (registry.Params, error) {
 		if err != nil {
 			return nil, err
 		}
-		p[arg.Name] = v
+		if arg.Repeatable {
+			values, _ := p[arg.Name].([]string)
+			value, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("repeatable argument %s must be a string", arg.Name)
+			}
+			p[arg.Name] = append(values, value)
+		} else {
+			p[arg.Name] = v
+		}
 		i++
 	}
 	pi := 0

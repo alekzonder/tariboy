@@ -35,13 +35,14 @@ const (
 )
 
 type Arg struct {
-	Name     string
-	Flag     string
-	Short    string // explicit one-letter alias, e.g. "a" for -a
-	Type     ArgType
-	Default  any
-	Required bool
-	Help     string
+	Name       string
+	Flag       string
+	Short      string // explicit one-letter alias, e.g. "a" for -a
+	Type       ArgType
+	Default    any
+	Required   bool
+	Repeatable bool
+	Help       string
 	// Schema optionally supplies the OpenAPI JSON schema for HTTP-only object or
 	// array inputs that do not have a CLI scalar representation.
 	Schema map[string]any
@@ -492,7 +493,7 @@ func (r *Registry) Tree() map[string]any {
 		for _, a := range c.Args {
 			args = append(args, map[string]any{
 				"name": a.Name, "flag": a.Flag, "short": a.Short, "type": string(a.Type),
-				"required": a.Required, "default": a.Default, "help": a.Help,
+				"required": a.Required, "repeatable": a.Repeatable, "default": a.Default, "help": a.Help,
 			})
 		}
 		leaf["args"] = args

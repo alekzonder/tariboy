@@ -142,6 +142,89 @@ func TestImageBuildV2RequiresNameAndDefaultsTag(t *testing.T) {
 	}
 }
 
+func TestImageBuildRebuildsMutableTag(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	first, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("UPDATED TEST AGENT"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.(map[string]any)["digest"] == second.(map[string]any)["digest"] {
+		t.Fatal("rebuild kept the old digest")
+	}
+	if !imageStore(c).IsMutable(image.Ref{Name: "reviewer", Tag: "latest"}) {
+		t.Fatal("rebuilt ref is not mutable")
+	}
+}
+
+func TestImageBuildMultipleTags(t *testing.T) {
+	c := localCtx(t)
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{
+		"name": "reviewer", "tag": []string{"latest", "v2"}, "path": writeExample(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	images, ok := result.(map[string]any)["images"].([]map[string]any)
+	if !ok || len(images) != 2 {
+		t.Fatalf("images = %#v", result)
+	}
+	for _, tag := range []string{"latest", "v2"} {
+		if !imageStore(c).Exists(image.Ref{Name: "reviewer", Tag: tag}) {
+			t.Fatalf("reviewer:%s was not published", tag)
+		}
+	}
+}
+
+func TestImageBuildRejectsDuplicateAndReservedTagsBeforePublishing(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		tags []string
+	}{
+		{name: "reviewer", tags: []string{"latest", "latest"}},
+		{name: "basic", tags: []string{"latest", "v2"}},
+	} {
+		t.Run(test.name+"-"+strings.Join(test.tags, "-"), func(t *testing.T) {
+			c := localCtx(t)
+			_, err := cmdHandler(t, "image.build")(c, registry.Params{
+				"name": test.name, "tag": test.tags, "path": writeExample(t),
+			})
+			if err == nil {
+				t.Fatal("invalid tags were accepted")
+			}
+			if imageStore(c).Exists(image.Ref{Name: test.name, Tag: "latest"}) {
+				t.Fatal("a tag was published before validation completed")
+			}
+		})
+	}
+}
+
+func TestImageBuildRejectsReleaseRef(t *testing.T) {
+	c := localCtx(t)
+	if _, err := c.Store.DB.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = c.Store.DB.Exec(`PRAGMA foreign_keys = ON`) })
+	if _, err := c.Store.DB.Exec(`INSERT INTO image_releases(id,proposal_id,repository_id,git_commit,source_name,source_digest,lock_digest,prompt_template_digest,image_ref,image_digest,builder_version,release_hash,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, "release", "proposal", "repo", "abc1234", "reviewer", "source", "lock", "prompt", "reviewer:latest", "sha256:release", "test", "sha256:hash", "image_built", "2026-09-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": writeExample(t)})
+	var userErr api.UserError
+	if !errors.As(err, &userErr) || userErr.Code != "immutable_release" {
+		t.Fatalf("error = %#v, want immutable_release", err)
+	}
+	if imageStore(c).Exists(image.Ref{Name: "reviewer", Tag: "latest"}) {
+		t.Fatal("release ref was published")
+	}
+}
+
 func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)

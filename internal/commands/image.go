@@ -35,7 +35,7 @@ func imageBuild() registry.Command {
 		Summary: "Build an agent image from a Tariboyfile.yaml",
 		Args: []registry.Arg{
 			{Name: "name", Flag: "name", Type: registry.String, Required: true, Help: "target image name"},
-			{Name: "tag", Flag: "tag", Type: registry.String, Default: "latest", Help: "target image tag (default latest)"},
+			{Name: "tag", Flag: "tag", Type: registry.String, Default: "latest", Repeatable: true, Help: "target image tag (default latest)"},
 			{Name: "path", Flag: "path", Type: registry.String, Required: true, Help: "Tariboyfile.yaml or its directory"},
 			{Name: "repository-id", Flag: "repository-id", Type: registry.String, Help: "source repository ID"},
 			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
@@ -43,31 +43,58 @@ func imageBuild() registry.Command {
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
 			name := str(p, "name")
-			tag := str(p, "tag")
+			var tags []string
+			if tag, ok := p["tag"].(string); ok {
+				tags = []string{tag}
+			} else if values, ok := stringSlice(p["tag"]); ok {
+				tags = values
+			} else {
+				return nil, api.UserError{Code: "bad_ref", Msg: "image tag must be a string or string array"}
+			}
 			// Accept the pre-v2 direct-handler shape during the schema-v1
 			// compatibility window. Registry-driven callers must pass --name.
-			if name == "" && tag != "" {
-				if legacy, legacyErr := image.ParseRef(tag); legacyErr == nil {
-					name, tag = legacy.Name, legacy.Tag
+			if name == "" && len(tags) == 1 && tags[0] != "" {
+				if legacy, legacyErr := image.ParseRef(tags[0]); legacyErr == nil {
+					name, tags = legacy.Name, []string{legacy.Tag}
 				}
 			}
 			if name == "" {
 				return nil, api.UserError{Code: "missing_name", Msg: "image name is required", Status: http.StatusBadRequest}
 			}
-			if tag == "" {
-				tag = "latest"
+			if len(tags) == 0 {
+				tags = []string{"latest"}
 			}
 			repositoryID, gitCommit := strings.TrimSpace(str(p, "repository-id")), strings.TrimSpace(str(p, "git-commit"))
 			if (repositoryID == "") != (gitCommit == "") || (gitCommit != "" && !gitCommitPattern.MatchString(gitCommit)) {
 				return nil, api.UserError{Code: "bad_provenance", Msg: "repository-id and a 7-64 character hexadecimal git-commit must be provided together", Status: http.StatusBadRequest}
 			}
 			path, _ := p["path"].(string)
-			ref, err := image.ParseRef(name + ":" + tag)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_ref", Msg: err.Error()}
+			refs := make([]image.Ref, 0, len(tags))
+			seen := make(map[string]bool, len(tags))
+			for _, tag := range tags {
+				ref, err := image.ParseRef(name + ":" + tag)
+				if err != nil {
+					return nil, api.UserError{Code: "bad_ref", Msg: err.Error()}
+				}
+				if seen[ref.String()] {
+					return nil, api.UserError{Code: "duplicate_tag", Msg: "duplicate image tag " + tag}
+				}
+				if image.IsReserved(ref) {
+					return nil, api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd"}
+				}
+				seen[ref.String()] = true
+				refs = append(refs, ref)
 			}
-			if image.IsReserved(ref) {
-				return nil, api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd"}
+			if c.Store != nil {
+				for _, ref := range refs {
+					var releases int
+					if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM image_releases WHERE image_ref=?`, ref.String()).Scan(&releases); err != nil {
+						return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
+					}
+					if releases != 0 {
+						return nil, api.UserError{Code: "immutable_release", Msg: "image " + ref.String() + " is a controlled release", Status: http.StatusConflict}
+					}
+				}
 			}
 			parsed, err := imagefile.ParseAny(path)
 			if err != nil {
@@ -80,7 +107,6 @@ func imageBuild() registry.Command {
 			layout := paths.Paths{Base: c.BaseDir}
 			pluginsDir := layout.PluginsDir()
 			resolver := plugins.ResolveInstalled(pluginsDir)
-			var man image.Manifest
 			if parsed.Version == 2 {
 				if c.Store != nil {
 					resolver = plugins.ResolveEnabledInstalledMetadata(pluginsDir, plugins.NewStore(c.Store, time.Now))
@@ -91,34 +117,52 @@ func imageBuild() registry.Command {
 				if productVersion == "" {
 					productVersion = version.Version
 				}
-				man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, imageStore(c), time.Now, resolver)
-			} else {
-				productVersion := c.Version
-				if productVersion == "" {
-					productVersion = version.Version
-				}
-				man, err = image.Build(parsed.V1, ref, imageStore(c), time.Now,
-					image.WithExternalPlugins(resolver),
-					image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
-				)
 			}
-			if err != nil {
-				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
+			productVersion := c.Version
+			if productVersion == "" {
+				productVersion = version.Version
 			}
-			if c.Store != nil {
-				if _, err := imageSnapshotStore(c).CaptureWithProvenance(context.Background(), ref.String(), man.Digest, name, sourceCWD, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
-					_ = imageStore(c).Remove(ref)
-					return nil, api.UserError{Code: "provenance_failed", Msg: err.Error()}
+			builtAt := time.Now()
+			clock := func() time.Time { return builtAt }
+			results := make([]map[string]any, 0, len(refs))
+			for _, ref := range refs {
+				hadRef := imageStore(c).Exists(ref)
+				var man image.Manifest
+				if parsed.Version == 2 {
+					man, err = image.BuildV2Mutable(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, imageStore(c), clock, resolver)
+				} else {
+					man, err = image.Build(parsed.V1, ref, imageStore(c), clock,
+						image.WithExternalPlugins(resolver),
+						image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
+						image.WithMutableRef(),
+					)
 				}
-				if err := (imageprovenance.Store{DB: c.Store.DB}).Upsert(imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
-					_, _ = c.Store.DB.Exec(`DELETE FROM image_source_snapshots WHERE image_ref=?`, ref.String())
-					if removeErr := imageStore(c).Remove(ref); removeErr != nil {
-						return nil, api.UserError{Code: "provenance_failed", Msg: fmt.Sprintf("%v; rollback image: %v", err, removeErr)}
+				if err != nil {
+					return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
+				}
+				if c.Store != nil {
+					if _, err := imageSnapshotStore(c).CaptureWithProvenance(context.Background(), ref.String(), man.Digest, name, sourceCWD, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
+						if !hadRef {
+							_ = imageStore(c).Remove(ref)
+						}
+						return nil, api.UserError{Code: "provenance_failed", Msg: err.Error()}
 					}
-					return nil, api.UserError{Code: "provenance_failed", Msg: err.Error()}
+					if err := (imageprovenance.Store{DB: c.Store.DB}).Upsert(imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
+						if !hadRef {
+							_, _ = c.Store.DB.Exec(`DELETE FROM image_source_snapshots WHERE image_ref=?`, ref.String())
+							if removeErr := imageStore(c).Remove(ref); removeErr != nil {
+								return nil, api.UserError{Code: "provenance_failed", Msg: fmt.Sprintf("%v; rollback image: %v", err, removeErr)}
+							}
+						}
+						return nil, api.UserError{Code: "provenance_failed", Msg: err.Error()}
+					}
 				}
+				results = append(results, map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)})
 			}
-			return map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)}, nil
+			if len(results) == 1 {
+				return results[0], nil
+			}
+			return map[string]any{"images": results}, nil
 		},
 	}
 }

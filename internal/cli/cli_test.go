@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -238,6 +239,23 @@ func TestRunResolvesImageSourcePathAgainstClientCWD(t *testing.T) {
 				t.Fatalf("path = %q, want %q", got, source)
 			}
 		})
+	}
+}
+
+func TestRunImageBuildRepeatableTags(t *testing.T) {
+	source := t.TempDir()
+	caller := &fakeCaller{result: json.RawMessage(`{}`)}
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), commands.BuildRegistry(), []string{
+		"image", "build", "--name", "reviewer", "--path", source,
+		"--tag", "latest", "--tag", "v2",
+	}, caller, nil, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d err=%s", code, errOut.String())
+	}
+	body := caller.body.(registry.Params)
+	if got, want := body["tag"], []string{"latest", "v2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("tag = %#v, want %#v", got, want)
 	}
 }
 
