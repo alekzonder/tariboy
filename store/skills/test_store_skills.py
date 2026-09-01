@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent
@@ -52,18 +53,20 @@ class StoreSkillsTest(unittest.TestCase):
 
             thread = threading.Thread(target=serve)
             thread.start()
-            process = subprocess.run(
-                [ROOT / relative, *args],
-                env=dict(os.environ, TARIBOY_TOOLS_SOCKET=path, TARIBOY_CLIENT_VERSION="0.46.0"),
-                text=True,
-                capture_output=True,
-            )
-            server.shutdown()
-            thread.join(timeout=2)
-            server.server_close()
-            self.assertFalse(thread.is_alive(), "test socket server did not stop")
-            if errors:
-                raise errors[0]
+            try:
+                process = subprocess.run(
+                    [ROOT / relative, *args],
+                    env=dict(os.environ, TARIBOY_TOOLS_SOCKET=path, TARIBOY_CLIENT_VERSION="0.46.0"),
+                    text=True,
+                    capture_output=True,
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+                self.assertFalse(thread.is_alive(), "test socket server did not stop")
+                if errors:
+                    raise errors[0]
         return process, server.request
 
     def test_each_command_skill_has_a_direct_self_contained_entrypoint(self):
@@ -170,6 +173,11 @@ class StoreSkillsTest(unittest.TestCase):
         self.assertEqual(process.returncode, 2)
         self.assertIn("unknown flag --bogus", process.stderr)
         self.assertIsNone(request)
+
+    def test_socket_server_stops_when_launch_raises(self):
+        with patch("subprocess.run", side_effect=RuntimeError("launch failed")):
+            with self.assertRaisesRegex(RuntimeError, "launch failed"):
+                self.run_script("whoami/scripts/whoami.sh", [], {})
 
     def test_workdir_is_an_instruction_only_skill(self):
         skill = ROOT / "workdir" / "SKILL.md"
