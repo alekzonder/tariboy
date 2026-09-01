@@ -62,3 +62,20 @@ func TestTopicCommandsHelpAndLifecycleUseDaemonAPI(t *testing.T) {
 		t.Fatalf("long command reply was not split: replies=%d", len(replies))
 	}
 }
+
+func TestCommandRepliesAreHumanReadable(t *testing.T) {
+	server := NewServer(nil, nil, &fakeDaemon{callResult: map[string]any{
+		"agents": []any{map[string]any{"name": "worker", "status": "running"}},
+	}})
+
+	got, err := server.runCommand(context.Background(), "agents", nil, "/agents", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Agents:\n- Name: worker\n  Status: running" {
+		t.Fatalf("reply = %q", got)
+	}
+	if strings.ContainsAny(got, "{}[]\"") {
+		t.Fatalf("reply still looks like JSON: %q", got)
+	}
+}

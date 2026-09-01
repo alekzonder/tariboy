@@ -2,10 +2,10 @@ package telegramplugin
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -220,8 +220,59 @@ func (s *Server) callText(ctx context.Context, method, path string, body any) (s
 	if result == nil {
 		return "OK", nil
 	}
-	encoded, _ := json.Marshal(result)
-	return string(encoded), nil
+	return formatCommandReply(result), nil
+}
+
+func formatCommandReply(result any) string {
+	if object, ok := result.(map[string]any); ok && len(object) == 1 {
+		for key, value := range object {
+			if !isCommandScalar(value) {
+				return commandLabel(key) + ":\n" + formatCommandValue(value, 0)
+			}
+		}
+	}
+	return formatCommandValue(result, 0)
+}
+
+func formatCommandValue(value any, indent int) string {
+	pad := strings.Repeat(" ", indent)
+	switch value := value.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(value))
+		for key := range value {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		lines := make([]string, 0, len(keys))
+		for _, key := range keys {
+			if isCommandScalar(value[key]) {
+				lines = append(lines, pad+commandLabel(key)+": "+fmt.Sprint(value[key]))
+			} else {
+				lines = append(lines, pad+commandLabel(key)+":\n"+formatCommandValue(value[key], indent+2))
+			}
+		}
+		return strings.Join(lines, "\n")
+	case []any:
+		lines := make([]string, 0, len(value))
+		for _, item := range value {
+			formatted := formatCommandValue(item, indent+2)
+			lines = append(lines, pad+"- "+strings.TrimPrefix(formatted, strings.Repeat(" ", indent+2)))
+		}
+		return strings.Join(lines, "\n")
+	default:
+		return pad + fmt.Sprint(value)
+	}
+}
+
+func isCommandScalar(value any) bool {
+	_, object := value.(map[string]any)
+	_, list := value.([]any)
+	return !object && !list
+}
+
+func commandLabel(key string) string {
+	label := strings.ReplaceAll(key, "_", " ")
+	return strings.ToUpper(label[:1]) + label[1:]
 }
 
 func validTaskStatus(status string) bool {
