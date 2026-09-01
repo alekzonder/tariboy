@@ -89,6 +89,9 @@ func liveIterationOnDisk(t *testing.T, m *Manager, as *agent.Store, agentsDir, n
 		t.Fatal(err)
 	}
 	l := agentdir.New(agentsDir, name).WithRuntime(m.cfg.RuntimeDir)
+	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	id := name + "-20260806170459-1"
 	if err := l.EnsureIteration(id); err != nil {
 		t.Fatal(err)
