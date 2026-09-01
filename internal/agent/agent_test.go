@@ -37,6 +37,30 @@ func TestSetPendingImageIfEmptyPreservesExistingAssignment(t *testing.T) {
 	}
 }
 
+func TestSetPendingImageErrorIfEmptyKeepsExplicitAssignment(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(sampleAgent()); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := st.SetPendingImageErrorIfEmpty("smoke", "image discovery failed"); err != nil || !recorded {
+		t.Fatalf("empty pending error recorded=%t err=%v", recorded, err)
+	}
+	pending, err := st.PendingImage("smoke")
+	if err != nil || pending.Ref != "" || pending.Digest != "" || pending.Error != "image discovery failed" {
+		t.Fatalf("empty pending error=%+v err=%v", pending, err)
+	}
+	if err := st.SetPendingImage("smoke", "explicit:latest", "explicit-digest"); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := st.SetPendingImageErrorIfEmpty("smoke", "late discovery failure"); err != nil || recorded {
+		t.Fatalf("explicit pending error recorded=%t err=%v", recorded, err)
+	}
+	pending, err = st.PendingImage("smoke")
+	if err != nil || pending.Ref != "explicit:latest" || pending.Digest != "explicit-digest" || pending.Error != "" {
+		t.Fatalf("explicit pending=%+v err=%v", pending, err)
+	}
+}
+
 func TestPurgeAgentDataRollsBackAllRowsWhenADeleteFails(t *testing.T) {
 	st := openStore(t)
 	const name = "purge-me"

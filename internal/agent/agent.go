@@ -164,6 +164,30 @@ func (s *Store) SetPendingImageIfEmpty(name, ref, digest string) (bool, error) {
 	}
 	return false, nil
 }
+
+// SetPendingImageErrorIfEmpty records a retryable discovery error without
+// replacing a pending operator or controlled assignment.
+func (s *Store) SetPendingImageErrorIfEmpty(name, message string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE agents SET pending_image_error=? WHERE name=? AND pending_image_ref='' AND pending_image_digest=''`, message, name)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if n != 0 {
+		return true, nil
+	}
+	var exists bool
+	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM agents WHERE name=?)`, name).Scan(&exists); err != nil {
+		return false, err
+	}
+	if !exists {
+		return false, ErrNotFound
+	}
+	return false, nil
+}
 func (s *Store) SetPendingImageError(name, message string) error {
 	res, err := s.db.Exec(`UPDATE agents SET pending_image_error=? WHERE name=?`, message, name)
 	if err != nil {

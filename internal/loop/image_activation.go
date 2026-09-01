@@ -45,9 +45,18 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 		if m.cfg.ImgStore.IsMutable(activeRef) {
 			current, err := m.cfg.ImgStore.Inspect(activeRef)
 			if err != nil {
-				return activatedImage{}, err
-			}
-			if current.Digest != ag.ImageDigest {
+				recorded, recordErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
+				if recordErr != nil {
+					return activatedImage{}, recordErr
+				}
+				if recorded {
+					return activatedImage{}, err
+				}
+				pending, err = m.cfg.Store.PendingImage(ag.Name)
+				if err != nil {
+					return activatedImage{}, err
+				}
+			} else if current.Digest != ag.ImageDigest {
 				won, err := m.cfg.Store.SetPendingImageIfEmpty(ag.Name, activeRef.String(), current.Digest)
 				if err != nil {
 					return activatedImage{}, err
@@ -62,6 +71,10 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 				}
 			}
 		}
+	}
+	fail := func(cause error) (activatedImage, error) {
+		_ = m.cfg.Store.SetPendingImageErrorIf(ag.Name, pending.Ref, pending.Digest, cause.Error())
+		return activatedImage{}, cause
 	}
 	if pending.Ref == "" {
 		activeRef, err := image.ParseRef(ag.ImageRef)
@@ -78,6 +91,7 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 		}
 		if recoveredSwap {
 			if err := agentdir.WriteShims(l, *ag, m.cfg.ToolsBin); err != nil {
+				_, _ = m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
 				return activatedImage{}, err
 			}
 		}
@@ -90,12 +104,8 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 	// any still-pending activation.
 	if recoveredSwap {
 		if err := agentdir.WriteShims(l, *ag, m.cfg.ToolsBin); err != nil {
-			return activatedImage{}, err
+			return fail(err)
 		}
-	}
-	fail := func(cause error) (activatedImage, error) {
-		_ = m.cfg.Store.SetPendingImageErrorIf(ag.Name, pending.Ref, pending.Digest, cause.Error())
-		return activatedImage{}, cause
 	}
 	ref, err := image.ParseRef(pending.Ref)
 	if err != nil {

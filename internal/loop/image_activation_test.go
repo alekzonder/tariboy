@@ -123,6 +123,201 @@ func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
 	}
 }
 
+func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte("first"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: first.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(images.Dir, ref.Name, ref.Tag+".tar.gz")); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	if _, err := m.activatePendingImage(&ag); err == nil {
+		t.Fatal("mutable discovery failure did not fail activation")
+	}
+	pending, err := as.PendingImage(ag.Name)
+	if err != nil || pending.Ref != "" || pending.Digest != "" || pending.Error == "" {
+		t.Fatalf("discovery failure pending=%+v err=%v", pending, err)
+	}
+	stored, err := as.Get(ag.Name)
+	if err != nil || stored.ImageDigest != first.Digest {
+		t.Fatalf("active agent changed after discovery failure: %+v err=%v", stored, err)
+	}
+	localDigest, err := os.ReadFile(filepath.Join(l.ImageDir(), ".image-digest"))
+	if err != nil || strings.TrimSpace(string(localDigest)) != first.Digest {
+		t.Fatalf("active bytes changed after discovery failure: %q err=%v", localDigest, err)
+	}
+}
+
+func TestRecoveredSwapShimFailureRecordsPendingImageError(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	build := func(name string) (image.Ref, image.Manifest) {
+		ref := image.Ref{Name: name, Tag: "latest"}
+		manifest, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ref, manifest
+	}
+	activeRef, active := build("active")
+	pendingRef, pendingManifest := build("pending")
+	ag := agent.Agent{Name: "worker", ImageRef: activeRef.String(), ImageDigest: active.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, activeRef, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.SetPendingImage(ag.Name, pendingRef.String(), pendingManifest.Digest); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(l.ImageDir(), filepath.Join(l.Root, ".image-backup")); err != nil {
+		t.Fatal(err)
+	}
+	if err := images.Unpack(pendingRef, l.ImageDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(l.BinDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.BinDir(), []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	if _, err := m.activatePendingImage(&ag); err == nil {
+		t.Fatal("recovered swap shim failure did not fail activation")
+	}
+	pending, err := as.PendingImage(ag.Name)
+	if err != nil || pending.Ref != pendingRef.String() || pending.Digest != pendingManifest.Digest || pending.Error == "" {
+		t.Fatalf("recovered swap pending=%+v err=%v", pending, err)
+	}
+	stored, err := as.Get(ag.Name)
+	if err != nil || stored.ImageDigest != active.Digest {
+		t.Fatalf("active agent changed after recovered swap failure: %+v err=%v", stored, err)
+	}
+}
+
+func TestMutableRefreshLosesToExplicitPendingDuringStaging(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	mutableRef := image.Ref{Name: "reviewer", Tag: "latest"}
+	source := t.TempDir()
+	buildMutable := func(body string, plugins []imagefile.V2Plugin) image.Manifest {
+		if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Dir: source, Plugins: plugins, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, mutableRef, images, time.Now, func(string) (plugincaps.ResolvedPlugin, error) {
+			return plugincaps.ResolvedPlugin{Installed: true}, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return manifest
+	}
+	first := buildMutable("first", nil)
+	explicitRef := image.Ref{Name: "explicit", Tag: "v1"}
+	explicit, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2}, imagefile.ResolveRoots{}, explicitRef, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: mutableRef.String(), ImageDigest: first.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, mutableRef, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	second := buildMutable("second", []imagefile.V2Plugin{{Name: "external-widget"}})
+	if second.Digest == first.Digest {
+		t.Fatal("test setup did not replace mutable ref")
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	recorder := &captureRecorder{}
+	m := &Manager{cfg: ManagerConfig{
+		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true", AuditFor: func(string) Recorder { return recorder },
+		ExternalPlugins: func(string) (plugincaps.ResolvedPlugin, error) {
+			close(entered)
+			<-release
+			return plugincaps.ResolvedPlugin{Installed: true}, nil
+		},
+	}}
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.activatePendingImage(&ag)
+		done <- err
+	}()
+	<-entered
+	if err := as.SetPendingImage(ag.Name, explicitRef.String(), explicit.Digest); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err == nil {
+		t.Fatal("automatic activation won after explicit pending replacement")
+	}
+	stored, err := as.Get(ag.Name)
+	if err != nil || stored.ImageDigest != first.Digest {
+		t.Fatalf("active agent changed after conditional promotion loss: %+v err=%v", stored, err)
+	}
+	localDigest, err := os.ReadFile(filepath.Join(l.ImageDir(), ".image-digest"))
+	if err != nil || strings.TrimSpace(string(localDigest)) != first.Digest {
+		t.Fatalf("active bytes changed after conditional promotion loss: %q err=%v", localDigest, err)
+	}
+	pending, err := as.PendingImage(ag.Name)
+	if err != nil || pending.Ref != explicitRef.String() || pending.Digest != explicit.Digest || pending.Error != "" {
+		t.Fatalf("explicit pending after conditional promotion loss=%+v err=%v", pending, err)
+	}
+	if events := recorder.snapshot(); len(events) != 0 {
+		t.Fatalf("automatic activation audited despite rollback: %#v", events)
+	}
+	if _, err := m.activatePendingImage(&ag); err != nil {
+		t.Fatal(err)
+	}
+	if ag.ImageRef != explicitRef.String() || ag.ImageDigest != explicit.Digest {
+		t.Fatalf("explicit pending retry did not activate: %+v", ag)
+	}
+	events := recorder.snapshot()
+	if len(events) != 1 || events[0].data["old_digest"] != first.Digest || events[0].data["new_digest"] != explicit.Digest {
+		t.Fatalf("explicit retry audit=%#v", events)
+	}
+}
+
 func TestImmutableRefRemainsPinned(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))
