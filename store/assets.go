@@ -109,6 +109,11 @@ func verify(dst string) error {
 		if !bytes.Equal(got, want) {
 			return fmt.Errorf("conflicting Store asset %s", rel)
 		}
+		if strings.HasSuffix(name, ".sh") && info.Mode().Perm() != 0o700 {
+			if err := os.Chmod(installed, 0o700); err != nil {
+				return fmt.Errorf("repair Store launcher %s: %w", rel, err)
+			}
+		}
 		return nil
 	}); err != nil {
 		return err

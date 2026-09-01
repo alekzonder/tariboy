@@ -1,10 +1,14 @@
 package plugincaps
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/alekzonder/tariboy/internal/paths"
 	storeassets "github.com/alekzonder/tariboy/store"
 )
 
@@ -45,6 +49,46 @@ func TestSchemaV1FragmentsResolveDirectSkillInstructions(t *testing.T) {
 				t.Errorf("%s retains dispatcher command %q", fragment.Plugin, command)
 			}
 		}
+	}
+}
+
+func TestSchemaV1FragmentsRenderRunnableInstalledLaunchers(t *testing.T) {
+	p := paths.New(t.TempDir())
+	const productVersion = "0.33.0"
+	if err := storeassets.Ensure(p, productVersion); err != nil {
+		t.Fatal(err)
+	}
+	storeRoot := p.CurrentVersionStoreDir(productVersion)
+	plugins, err := Resolve(OPTIONAL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := BodyFragmentsFromStore(plugins, storeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range resolved {
+		launcher := strings.Fields(fragment.Teaches[0])[0]
+		installed := filepath.Join(storeRoot, "skills", fragment.Plugin, filepath.FromSlash(launcher))
+		if !strings.Contains(fragment.Body, installed) {
+			t.Errorf("%s schema-v1 instructions omit installed launcher %q:\n%s", fragment.Plugin, installed, fragment.Body)
+		}
+		info, err := os.Stat(installed)
+		if err != nil {
+			t.Errorf("%s installed launcher: %v", fragment.Plugin, err)
+			continue
+		}
+		if info.Mode().Perm()&0o111 == 0 {
+			t.Errorf("%s installed launcher mode = %o, want executable", fragment.Plugin, info.Mode().Perm())
+		}
+	}
+
+	whoami := filepath.Join(storeRoot, "skills", "whoami", "scripts", "whoami.sh")
+	cmd := exec.Command(whoami)
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	output, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "TARIBOY_TOOLS_SOCKET") {
+		t.Fatalf("run rendered whoami launcher: output=%q err=%v", output, err)
 	}
 }
 

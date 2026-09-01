@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	storeassets "github.com/alekzonder/tariboy/store"
 )
@@ -181,7 +182,18 @@ func selectFragments(plugins []string, tail bool, storeRoot string) ([]Fragment,
 		fragment := metadata
 		fragment.Body = string(body)
 		if !tail && len(fragment.Teaches) > 0 {
-			fragment.Body += "\n\nSchema-v1 compatibility launchers: `" + fragment.Teaches[0] + "`."
+			launcher := strings.Fields(fragment.Teaches[0])[0]
+			if storeRoot != "" {
+				root, err := filepath.Abs(storeRoot)
+				if err != nil {
+					return nil, fmt.Errorf("resolve Store root: %w", err)
+				}
+				installed := filepath.Join(root, filepath.Dir(fragment.Path), filepath.FromSlash(launcher))
+				fragment.Body = strings.ReplaceAll(fragment.Body, launcher, installed)
+				fragment.Body += "\n\nSchema-v1 compatibility launcher: `" + strings.Replace(fragment.Teaches[0], launcher, installed, 1) + "`."
+			} else {
+				fragment.Body += "\n\nSchema-v1 compatibility launcher: `" + fragment.Teaches[0] + "`."
+			}
 		}
 		out = append(out, fragment)
 	}

@@ -41,6 +41,41 @@ func TestEnsureInstallsSkillLaunchersExecutable(t *testing.T) {
 	}
 }
 
+func TestEnsureRepairsExistingSkillLauncherMode(t *testing.T) {
+	p := paths.New(t.TempDir())
+	const version = "0.33.0"
+	if err := Ensure(p, version); err != nil {
+		t.Fatal(err)
+	}
+	root := p.CurrentVersionStoreDir(version)
+	launcher := filepath.Join(root, "skills", "loop", "scripts", "loop.sh")
+	nonLauncher := filepath.Join(root, "skills", "loop", "SKILL.md")
+	if err := os.Chmod(launcher, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(nonLauncher, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Ensure(p, version); err != nil {
+		t.Fatal(err)
+	}
+	launcherInfo, err := os.Stat(launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := launcherInfo.Mode().Perm(); got != 0o700 {
+		t.Fatalf("repaired launcher mode = %o, want 700", got)
+	}
+	nonLauncherInfo, err := os.Stat(nonLauncher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := nonLauncherInfo.Mode().Perm(); got != 0o640 {
+		t.Fatalf("non-launcher mode = %o, want preserved 640", got)
+	}
+}
+
 func TestEnsureRejectsConflictingExistingVersion(t *testing.T) {
 	p := paths.New(t.TempDir())
 	dir := p.CurrentVersionStoreDir("0.33.0")
