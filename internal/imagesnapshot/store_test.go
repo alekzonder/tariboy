@@ -137,6 +137,33 @@ func TestFreezePreservesOwnerExecutableMode(t *testing.T) {
 	}
 }
 
+func TestFreezeDisambiguatesFileBoundaries(t *testing.T) {
+	root := t.TempDir()
+	first := t.TempDir()
+	second := t.TempDir()
+	if err := os.WriteFile(filepath.Join(first, "a"), []byte("x\x00b\x00600\x00y"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(second, "a"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(second, "b"), []byte("y"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Root: root}
+	one, err := store.Freeze(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := store.Freeze(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one.SourceDigest == two.SourceDigest {
+		t.Fatalf("distinct trees shared digest %s", one.SourceDigest)
+	}
+}
+
 func TestCaptureStoresAndLooksUpGitProvenanceByImageDigest(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))

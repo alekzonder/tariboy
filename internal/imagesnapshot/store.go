@@ -130,7 +130,6 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 		if f.mode.Perm()&0o100 != 0 {
 			mode = 0o700
 		}
-		fmt.Fprintf(h, "%s\x00%o\x00", f.rel, mode.Perm())
 		dst := filepath.Join(stage, filepath.FromSlash(f.rel))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 			return FrozenSource{}, err
@@ -144,7 +143,8 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 			in.Close()
 			return FrozenSource{}, err
 		}
-		_, copyErr := io.Copy(io.MultiWriter(out, h), in)
+		fileHash := sha256.New()
+		_, copyErr := io.Copy(io.MultiWriter(out, fileHash), in)
 		closeOutErr := out.Close()
 		closeInErr := in.Close()
 		if copyErr != nil {
@@ -156,7 +156,8 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 		if closeInErr != nil {
 			return FrozenSource{}, closeInErr
 		}
-		_, _ = h.Write([]byte{0})
+		fmt.Fprintf(h, "%s\x00%o\x00", f.rel, mode.Perm())
+		_, _ = h.Write(fileHash.Sum(nil))
 	}
 	digest := "sha256:" + hex.EncodeToString(h.Sum(nil))
 	relativeDir := strings.TrimPrefix(digest, "sha256:")

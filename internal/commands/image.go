@@ -149,6 +149,18 @@ func imageBuild() registry.Command {
 						}
 						previousDigest = previous.Digest
 					}
+					rollback := func() error {
+						if hadRef {
+							return store.RestoreMutable(ref, previousDigest, wasMutable)
+						}
+						return store.Remove(ref)
+					}
+					rollbackPublished := func(code string, cause error) error {
+						if rollbackErr := rollback(); rollbackErr != nil {
+							return api.UserError{Code: code, Msg: fmt.Sprintf("%v; rollback image: %v", cause, rollbackErr)}
+						}
+						return api.UserError{Code: code, Msg: cause.Error()}
+					}
 					var man image.Manifest
 					if i == 0 {
 						if parsed.Version == 2 {
@@ -160,23 +172,22 @@ func imageBuild() registry.Command {
 								image.WithMutableRef(),
 							)
 						}
-						if err == nil {
-							sourceArchive, err = store.ArchiveBytes(ref)
+						if err != nil {
+							return api.UserError{Code: "build_failed", Msg: err.Error()}
+						}
+						sourceArchive, err = store.ArchiveBytes(ref)
+						if err != nil {
+							return rollbackPublished("build_failed", err)
 						}
 					} else {
 						_, err = store.RetagMutableArchive(refs[0], ref, sourceArchive)
-						if err == nil {
-							man, err = store.Inspect(ref)
+						if err != nil {
+							return api.UserError{Code: "build_failed", Msg: err.Error()}
 						}
-					}
-					if err != nil {
-						return api.UserError{Code: "build_failed", Msg: err.Error()}
-					}
-					rollback := func() error {
-						if hadRef {
-							return store.RestoreMutable(ref, previousDigest, wasMutable)
+						man, err = store.Inspect(ref)
+						if err != nil {
+							return rollbackPublished("build_failed", err)
 						}
-						return store.Remove(ref)
 					}
 					if c.Store != nil {
 						tx, beginErr := c.Store.DB.BeginTx(context.Background(), nil)
@@ -192,10 +203,7 @@ func imageBuild() registry.Command {
 							metadataErr = tx.Commit()
 						}
 						if metadataErr != nil {
-							if rollbackErr := rollback(); rollbackErr != nil {
-								return api.UserError{Code: "provenance_failed", Msg: fmt.Sprintf("%v; rollback image: %v", metadataErr, rollbackErr)}
-							}
-							return api.UserError{Code: "provenance_failed", Msg: metadataErr.Error()}
+							return rollbackPublished("provenance_failed", metadataErr)
 						}
 					}
 					results = append(results, map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)})
