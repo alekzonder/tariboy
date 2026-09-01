@@ -120,6 +120,23 @@ func TestFreezeKeepsOneSourceGeneration(t *testing.T) {
 	}
 }
 
+func TestFreezePreservesOwnerExecutableMode(t *testing.T) {
+	root := t.TempDir()
+	source := t.TempDir()
+	path := filepath.Join(source, "run.sh")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := (Store{Root: root}).Freeze(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(root, frozen.RelativeDir, "run.sh"))
+	if err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("frozen mode = %v, %v; want 0700", info.Mode(), err)
+	}
+}
+
 func TestCaptureStoresAndLooksUpGitProvenanceByImageDigest(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))

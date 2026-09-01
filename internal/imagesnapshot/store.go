@@ -40,7 +40,7 @@ type Store struct {
 type file struct {
 	rel  string
 	path string
-	size int64
+	mode os.FileMode
 }
 
 type executor interface {
@@ -106,75 +106,62 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 		if entryInfo.Size() > imagesource.MaxFileSize {
 			return fmt.Errorf("image snapshot: file too large %s", rel)
 		}
-		files = append(files, file{rel: filepath.ToSlash(rel), path: path, size: entryInfo.Size()})
+		files = append(files, file{rel: filepath.ToSlash(rel), path: path, mode: entryInfo.Mode()})
 		return nil
 	})
 	if err != nil {
 		return FrozenSource{}, err
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].rel < files[j].rel })
-	h := sha256.New()
-	for _, f := range files {
-		fmt.Fprintf(h, "%s\x00%d\x00", f.rel, f.size)
-		in, err := os.Open(f.path)
-		if err != nil {
-			return FrozenSource{}, err
-		}
-		_, copyErr := io.Copy(h, in)
-		closeErr := in.Close()
-		if copyErr != nil {
-			return FrozenSource{}, copyErr
-		}
-		if closeErr != nil {
-			return FrozenSource{}, closeErr
-		}
-	}
-	digest := "sha256:" + hex.EncodeToString(h.Sum(nil))
-	relativeDir := strings.TrimPrefix(digest, "sha256:")
 	if err := os.MkdirAll(s.Root, 0o700); err != nil {
 		return FrozenSource{}, err
 	}
 	if err := os.Chmod(s.Root, 0o700); err != nil {
 		return FrozenSource{}, err
 	}
-	target := filepath.Join(s.Root, relativeDir)
-	if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
-		stage, err := os.MkdirTemp(s.Root, ".staging-")
+	stage, err := os.MkdirTemp(s.Root, ".staging-")
+	if err != nil {
+		return FrozenSource{}, err
+	}
+	defer os.RemoveAll(stage)
+	h := sha256.New()
+	for _, f := range files {
+		mode := os.FileMode(0o600)
+		if f.mode.Perm()&0o100 != 0 {
+			mode = 0o700
+		}
+		fmt.Fprintf(h, "%s\x00%o\x00", f.rel, mode.Perm())
+		dst := filepath.Join(stage, filepath.FromSlash(f.rel))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			return FrozenSource{}, err
+		}
+		in, err := os.Open(f.path)
 		if err != nil {
 			return FrozenSource{}, err
 		}
-		defer os.RemoveAll(stage)
-		for _, f := range files {
-			dst := filepath.Join(stage, filepath.FromSlash(f.rel))
-			if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-				return FrozenSource{}, err
-			}
-			in, err := os.Open(f.path)
-			if err != nil {
-				return FrozenSource{}, err
-			}
-			out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-			if err != nil {
-				in.Close()
-				return FrozenSource{}, err
-			}
-			_, copyErr := io.Copy(out, in)
-			closeOutErr := out.Close()
-			closeInErr := in.Close()
-			if copyErr != nil {
-				return FrozenSource{}, copyErr
-			}
-			if closeOutErr != nil {
-				return FrozenSource{}, closeOutErr
-			}
-			if closeInErr != nil {
-				return FrozenSource{}, closeInErr
-			}
-		}
-		if err := os.Rename(stage, target); err != nil && !errors.Is(err, fs.ErrExist) {
+		out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+		if err != nil {
+			in.Close()
 			return FrozenSource{}, err
 		}
-	} else if err != nil {
+		_, copyErr := io.Copy(io.MultiWriter(out, h), in)
+		closeOutErr := out.Close()
+		closeInErr := in.Close()
+		if copyErr != nil {
+			return FrozenSource{}, copyErr
+		}
+		if closeOutErr != nil {
+			return FrozenSource{}, closeOutErr
+		}
+		if closeInErr != nil {
+			return FrozenSource{}, closeInErr
+		}
+		_, _ = h.Write([]byte{0})
+	}
+	digest := "sha256:" + hex.EncodeToString(h.Sum(nil))
+	relativeDir := strings.TrimPrefix(digest, "sha256:")
+	target := filepath.Join(s.Root, relativeDir)
+	if err := os.Rename(stage, target); err != nil && !errors.Is(err, fs.ErrExist) {
 		return FrozenSource{}, err
 	}
 	return FrozenSource{SourceDigest: digest, RelativeDir: relativeDir}, nil

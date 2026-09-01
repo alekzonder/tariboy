@@ -298,6 +298,40 @@ func TestImageBuildRestoresExistingRefAndMetadataWhenProvenanceFails(t *testing.
 	}
 }
 
+func TestImageBuildRestoresImmutableRefWhenProvenanceFails(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	ref := image.Ref{Name: "imported", Tag: "v1"}
+	file, err := imagefile.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := image.Build(file, ref, imageStore(c), time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imageStore(c).IsMutable(ref) {
+		t.Fatal("seed ref is mutable")
+	}
+	if _, err := imageSnapshotStore(c).Capture(context.Background(), ref.String(), first.Digest, ref.Name, src); err != nil {
+		t.Fatal(err)
+	}
+	if err := (imageprovenance.Store{DB: c.Store.DB}).Upsert(imageprovenance.Record{Ref: ref.String(), Digest: first.Digest, SourceCWD: src, BuiltAt: first.BuiltAt}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Store.DB.Exec(`CREATE TRIGGER reject_imported_provenance BEFORE INSERT ON image_provenance BEGIN SELECT RAISE(FAIL, 'blocked'); END`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+	if err == nil {
+		t.Fatal("rebuild succeeded despite provenance failure")
+	}
+	current, err := imageStore(c).Inspect(ref)
+	if err != nil || current.Digest != first.Digest || imageStore(c).IsMutable(ref) {
+		t.Fatalf("restored ref = %#v, %v, mutable=%v", current, err, imageStore(c).IsMutable(ref))
+	}
+}
+
 func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)

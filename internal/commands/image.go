@@ -136,9 +136,11 @@ func imageBuild() registry.Command {
 					}
 				}
 				results := make([]map[string]any, 0, len(refs))
-				for _, ref := range refs {
-					store := imageStore(c)
+				store := imageStore(c)
+				var sourceArchive []byte
+				for i, ref := range refs {
 					hadRef := store.Exists(ref)
+					wasMutable := hadRef && store.IsMutable(ref)
 					previousDigest := ""
 					if hadRef {
 						previous, inspectErr := store.Inspect(ref)
@@ -148,21 +150,31 @@ func imageBuild() registry.Command {
 						previousDigest = previous.Digest
 					}
 					var man image.Manifest
-					if parsed.Version == 2 {
-						man, err = image.BuildV2Mutable(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, store, clock, resolver)
+					if i == 0 {
+						if parsed.Version == 2 {
+							man, err = image.BuildV2Mutable(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, store, clock, resolver)
+						} else {
+							man, err = image.Build(parsed.V1, ref, store, clock,
+								image.WithExternalPlugins(resolver),
+								image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
+								image.WithMutableRef(),
+							)
+						}
+						if err == nil {
+							sourceArchive, err = store.ArchiveBytes(ref)
+						}
 					} else {
-						man, err = image.Build(parsed.V1, ref, store, clock,
-							image.WithExternalPlugins(resolver),
-							image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
-							image.WithMutableRef(),
-						)
+						_, err = store.RetagMutableArchive(refs[0], ref, sourceArchive)
+						if err == nil {
+							man, err = store.Inspect(ref)
+						}
 					}
 					if err != nil {
 						return api.UserError{Code: "build_failed", Msg: err.Error()}
 					}
 					rollback := func() error {
 						if hadRef {
-							return store.RestoreMutable(ref, previousDigest)
+							return store.RestoreMutable(ref, previousDigest, wasMutable)
 						}
 						return store.Remove(ref)
 					}

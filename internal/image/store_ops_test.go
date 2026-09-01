@@ -75,6 +75,26 @@ func TestStoreRemoveAndUnpack(t *testing.T) {
 	}
 }
 
+func TestRetagMutableArchiveReusesPayload(t *testing.T) {
+	store := &Store{Dir: t.TempDir()}
+	source := Ref{Name: "reviewer", Tag: "latest"}
+	seed(t, store, source.Name)
+	archive, err := store.ArchiveBytes(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := Ref{Name: "reviewer", Tag: "v2"}
+	if _, err := store.RetagMutableArchive(source, target, archive); err != nil {
+		t.Fatal(err)
+	}
+	if !store.IsMutable(target) {
+		t.Fatal("retagged authoring ref is not mutable")
+	}
+	if got, err := store.RenderPrompt(target); err != nil || !strings.Contains(got, "BODY reviewer") {
+		t.Fatalf("retagged payload = %q, %v", got, err)
+	}
+}
+
 func TestBuildNeverOverwritesAnExistingRef(t *testing.T) {
 	st := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "app", Tag: "latest"}

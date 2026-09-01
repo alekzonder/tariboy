@@ -182,42 +182,45 @@ func (s *Store) Remove(ref Ref) error {
 	return nil
 }
 
-// RestoreMutable returns a moved mutable ref to one of its retained digests
-// without removing any retained generations.
-func (s *Store) RestoreMutable(ref Ref, digest string) error {
+// RestoreMutable returns a moved ref to one of its retained digests and prior
+// mutable state without removing retained mutable generations.
+func (s *Store) RestoreMutable(ref Ref, digest string, wasMutable bool) error {
 	mutablePublishMu.Lock()
 	defer mutablePublishMu.Unlock()
 	current, err := s.Inspect(ref)
 	if err != nil {
 		return err
 	}
-	if current.Digest == digest {
-		return nil
+	if current.Digest != digest {
+		history := s.pinnedMutablePath(ref, digest)
+		if _, err := ValidateArchive(history, ref); err != nil {
+			return fmt.Errorf("restore mutable image %s@%s: %w", ref.String(), digest, err)
+		}
+		tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".restore-*.tmp")
+		if err != nil {
+			return err
+		}
+		tmpName := tmp.Name()
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		defer os.Remove(tmpName)
+		if err := os.Remove(tmpName); err != nil {
+			return err
+		}
+		if err := os.Link(history, tmpName); err != nil {
+			return err
+		}
+		if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
+			return err
+		}
+		if err := writeDigestCache(s.digestPath(ref), digest); err != nil {
+			_ = os.Remove(s.digestPath(ref))
+		}
 	}
-	history := s.pinnedMutablePath(ref, digest)
-	if _, err := ValidateArchive(history, ref); err != nil {
-		return fmt.Errorf("restore mutable image %s@%s: %w", ref.String(), digest, err)
-	}
-	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".restore-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	defer os.Remove(tmpName)
-	if err := os.Remove(tmpName); err != nil {
-		return err
-	}
-	if err := os.Link(history, tmpName); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
-		return err
-	}
-	if err := writeDigestCache(s.digestPath(ref), digest); err != nil {
-		_ = os.Remove(s.digestPath(ref))
+	if !wasMutable {
+		_ = os.Remove(s.mutablePath(ref))
+		_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
 	}
 	return nil
 }

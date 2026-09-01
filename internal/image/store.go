@@ -109,6 +109,16 @@ func (s *Store) InstallPortableArchive(ref Ref, archive []byte) error {
 // ref by rewriting only manifest identity. Prompt/plugin payload bytes and their
 // declared order are preserved; the resulting archive has its own digest.
 func (s *Store) RetagPortableArchive(source, target Ref, archive []byte) (string, error) {
+	return s.retagPortableArchive(source, target, archive, false)
+}
+
+// RetagMutableArchive rewrites only manifest identity while publishing the
+// target through the ordinary mutable authoring path.
+func (s *Store) RetagMutableArchive(source, target Ref, archive []byte) (string, error) {
+	return s.retagPortableArchive(source, target, archive, true)
+}
+
+func (s *Store) retagPortableArchive(source, target Ref, archive []byte, mutable bool) (string, error) {
 	if IsReserved(target) {
 		return "", fmt.Errorf("portable install cannot replace reserved ref: %s", target.String())
 	}
@@ -116,20 +126,6 @@ func (s *Store) RetagPortableArchive(source, target Ref, archive []byte) (string
 		return "", fmt.Errorf("validate imported image: %w", err)
 	}
 	if err := os.MkdirAll(s.refDir(target), 0o700); err != nil {
-		return "", err
-	}
-	sourceFile, err := os.CreateTemp(s.refDir(target), target.Tag+".source-*.tmp")
-	if err != nil {
-		return "", err
-	}
-	sourceName := sourceFile.Name()
-	defer os.Remove(sourceName)
-	defer sourceFile.Close()
-	if _, err := sourceFile.Write(archive); err != nil {
-		sourceFile.Close()
-		return "", err
-	}
-	if err := sourceFile.Close(); err != nil {
 		return "", err
 	}
 	in, err := gzip.NewReader(bytes.NewReader(archive))
@@ -204,6 +200,9 @@ func (s *Store) RetagPortableArchive(source, target Ref, archive []byte) (string
 	}
 	if _, err := validatePortableArchive(retagged, target); err != nil {
 		return "", fmt.Errorf("validate retagged image: %w", err)
+	}
+	if mutable {
+		return s.publishArchive(target, tmpName, true)
 	}
 	if err := os.Link(tmpName, s.tarPath(target)); err != nil {
 		if errors.Is(err, os.ErrExist) {
