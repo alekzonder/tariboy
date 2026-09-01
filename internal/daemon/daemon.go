@@ -29,6 +29,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/improvement"
 	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/loop"
@@ -275,6 +276,11 @@ func Run(ctx context.Context, o Options) error {
 		Store: st, Bus: channelBus, Clock: time.Now, Log: log,
 	})
 	imgStore := &image.Store{Dir: p.ImagesDir()}
+	if err := image.WithPublicationGate(func() error {
+		return imgStore.RecoverMutablePublications((imageprovenance.Store{DB: st.DB}).IsCommitted)
+	}); err != nil {
+		return fmt.Errorf("recover image publications: %w", err)
+	}
 	if err := image.EnsureBare(imgStore, time.Now); err != nil {
 		log.Error("seed bare image", "err", err)
 	}

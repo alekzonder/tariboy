@@ -122,82 +122,135 @@ func imageBuild() registry.Command {
 			}
 			builtAt := time.Now()
 			clock := func() time.Time { return builtAt }
-			var result any
-			err = image.WithPublicationGate(func() error {
-				if c.Store != nil {
-					for _, ref := range refs {
-						var releases int
-						if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM image_releases WHERE image_ref=?`, ref.String()).Scan(&releases); err != nil {
-							return api.UserError{Code: "build_failed", Msg: err.Error()}
-						}
-						if releases != 0 {
-							return api.UserError{Code: "immutable_release", Msg: "image " + ref.String() + " is a controlled release", Status: http.StatusConflict}
-						}
+			if c.Store == nil {
+				return nil, api.UserError{Code: "build_failed", Msg: "image metadata store is unavailable"}
+			}
+			stageRoot, err := os.MkdirTemp(c.BaseDir, ".image-build-")
+			if err != nil {
+				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
+			}
+			defer os.RemoveAll(stageRoot)
+			stagedStore := &image.Store{Dir: filepath.Join(stageRoot, "images")}
+			type stagedImage struct {
+				ref      image.Ref
+				manifest image.Manifest
+				archive  []byte
+			}
+			staged := make([]stagedImage, 0, len(refs))
+			var sourceArchive []byte
+			for i, ref := range refs {
+				var man image.Manifest
+				if i == 0 {
+					if parsed.Version == 2 {
+						man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, stagedStore, clock, resolver)
+					} else {
+						man, err = image.Build(parsed.V1, ref, stagedStore, clock,
+							image.WithExternalPlugins(resolver),
+							image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
+						)
+					}
+					if err == nil {
+						sourceArchive, err = stagedStore.ArchiveBytes(ref)
+					}
+				} else {
+					_, err = stagedStore.RetagPortableArchive(refs[0], ref, sourceArchive)
+					if err == nil {
+						man, err = stagedStore.Inspect(ref)
 					}
 				}
-				results := make([]map[string]any, 0, len(refs))
+				if err != nil {
+					return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
+				}
+				archive, err := stagedStore.ArchiveBytes(ref)
+				if err != nil {
+					return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
+				}
+				staged = append(staged, stagedImage{ref: ref, manifest: man, archive: archive})
+			}
+			var result any
+			err = image.WithPublicationGate(func() error {
 				store := imageStore(c)
-				var sourceArchive []byte
-				for i, ref := range refs {
-					hadRef := store.Exists(ref)
-					wasMutable := hadRef && store.IsMutable(ref)
-					previousDigest := ""
-					if hadRef {
-						previous, inspectErr := store.Inspect(ref)
+				provenanceStore := imageprovenance.Store{DB: c.Store.DB}
+				if err := store.RecoverMutablePublications(provenanceStore.IsCommitted); err != nil {
+					return api.UserError{Code: "build_failed", Msg: err.Error()}
+				}
+				legacy := make(map[string]bool, len(refs))
+				for _, ref := range refs {
+					var releases int
+					if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM image_releases WHERE image_ref=?`, ref.String()).Scan(&releases); err != nil {
+						return api.UserError{Code: "build_failed", Msg: err.Error()}
+					}
+					if releases != 0 {
+						return api.UserError{Code: "immutable_release", Msg: "image " + ref.String() + " is a controlled release", Status: http.StatusConflict}
+					}
+					if store.Exists(ref) && !store.IsMutable(ref) {
+						current, inspectErr := store.Inspect(ref)
 						if inspectErr != nil {
 							return api.UserError{Code: "build_failed", Msg: inspectErr.Error()}
 						}
-						previousDigest = previous.Digest
+						record, found, provenanceErr := provenanceStore.Get(ref.String())
+						if provenanceErr != nil {
+							return api.UserError{Code: "build_failed", Msg: provenanceErr.Error()}
+						}
+						snapshot, snapFound, snapshotErr := snapshotStore.Lookup(context.Background(), ref.String())
+						if snapshotErr != nil {
+							return api.UserError{Code: "build_failed", Msg: snapshotErr.Error()}
+						}
+						if !found || !snapFound || record.Digest != current.Digest || snapshot.ImageDigest != current.Digest {
+							return api.UserError{Code: "immutable_ref", Msg: "image " + ref.String() + " is immutable", Status: http.StatusConflict}
+						}
+						legacy[ref.String()] = true
 					}
-					rollback := func() error {
-						if hadRef {
-							return store.RestoreMutable(ref, previousDigest, wasMutable)
-						}
-						return store.Remove(ref)
+				}
+				candidates := make([]image.PublicationCandidate, 0, len(staged))
+				for _, candidate := range staged {
+					candidates = append(candidates, image.PublicationCandidate{Ref: candidate.ref, Digest: candidate.manifest.Digest})
+				}
+				publication, err := store.BeginMutablePublication(candidates)
+				if err != nil {
+					return api.UserError{Code: "build_failed", Msg: err.Error()}
+				}
+				rollback := func(code string, cause error) error {
+					if rollbackErr := publication.Rollback(); rollbackErr != nil {
+						return api.UserError{Code: code, Msg: fmt.Sprintf("%v; rollback images: %v", cause, rollbackErr)}
 					}
-					rollbackPublished := func(code string, cause error) error {
-						if rollbackErr := rollback(); rollbackErr != nil {
-							return api.UserError{Code: code, Msg: fmt.Sprintf("%v; rollback image: %v", cause, rollbackErr)}
-						}
-						return api.UserError{Code: code, Msg: cause.Error()}
-					}
-					var man image.Manifest
-					if i == 0 {
-						if parsed.Version == 2 {
-							man, sourceArchive, err = image.BuildV2MutableArchive(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, store, clock, resolver)
-						} else {
-							man, sourceArchive, err = image.BuildMutableArchive(parsed.V1, ref, store, clock,
-								image.WithExternalPlugins(resolver),
-								image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
-							)
-						}
-						if err != nil {
-							return api.UserError{Code: "build_failed", Msg: err.Error()}
-						}
-					} else {
-						man, err = store.RetagMutableArchiveManifest(refs[0], ref, sourceArchive)
-						if err != nil {
-							return api.UserError{Code: "build_failed", Msg: err.Error()}
+					return api.UserError{Code: code, Msg: cause.Error()}
+				}
+				for _, candidate := range staged {
+					if legacy[candidate.ref.String()] {
+						if err := store.MarkMutable(candidate.ref); err != nil {
+							return rollback("build_failed", err)
 						}
 					}
-					if c.Store != nil {
-						tx, beginErr := c.Store.DB.BeginTx(context.Background(), nil)
-						metadataErr := beginErr
-						if metadataErr == nil {
-							defer tx.Rollback()
-							_, metadataErr = snapshotStore.CaptureFrozenTx(context.Background(), tx, ref.String(), man.Digest, name, frozen, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit})
-						}
-						if metadataErr == nil {
-							metadataErr = (imageprovenance.Store{DB: c.Store.DB}).UpsertTx(tx, imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt})
-						}
-						if metadataErr == nil {
-							metadataErr = tx.Commit()
-						}
-						if metadataErr != nil {
-							return rollbackPublished("provenance_failed", metadataErr)
-						}
+					published, err := store.InstallMutableArchive(candidate.ref, candidate.archive)
+					if err != nil {
+						return rollback("build_failed", err)
+					}
+					if published.Digest != candidate.manifest.Digest {
+						return rollback("build_failed", fmt.Errorf("published image %s digest changed", candidate.ref.String()))
+					}
+				}
+				results := make([]map[string]any, 0, len(refs))
+				tx, err := c.Store.DB.BeginTx(context.Background(), nil)
+				if err != nil {
+					return rollback("provenance_failed", err)
+				}
+				defer tx.Rollback()
+				for _, candidate := range staged {
+					man := candidate.manifest
+					if _, err := snapshotStore.CaptureFrozenTx(context.Background(), tx, candidate.ref.String(), man.Digest, name, frozen, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
+						return rollback("provenance_failed", err)
+					}
+					if err := provenanceStore.UpsertTx(tx, imageprovenance.Record{Ref: candidate.ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
+						return rollback("provenance_failed", err)
 					}
 					results = append(results, map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)})
+				}
+				if err := tx.Commit(); err != nil {
+					return rollback("provenance_failed", err)
+				}
+				if err := publication.Complete(); err != nil {
+					return api.UserError{Code: "build_failed", Msg: err.Error()}
 				}
 				if len(results) == 1 {
 					result = results[0]
@@ -596,29 +649,34 @@ func imageRm() registry.Command {
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP:    &registry.HTTPRoute{Method: "DELETE", Path: "/api/images/{ref}"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
-			if err != nil {
-				return nil, err
-			}
-			if image.IsReserved(ref) {
-				return nil, api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd"}
-			}
-			if c.Store != nil {
-				var users int
-				if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM agents WHERE image_ref=? OR pending_image_ref=?`, ref.String(), ref.String()).Scan(&users); err != nil {
-					return nil, err
+			var result any
+			err := image.WithPublicationGate(func() error {
+				ref, err := parseImageRef(p)
+				if err != nil {
+					return err
 				}
-				if users > 0 {
-					return nil, api.UserError{Code: "image_in_use", Msg: "image " + ref.String() + " is active or pending for an agent", Status: http.StatusConflict}
+				if image.IsReserved(ref) {
+					return api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd"}
 				}
-			}
-			if err := imageStore(c).Remove(ref); err != nil {
-				return nil, api.UserError{Code: "not_found", Msg: err.Error()}
-			}
-			if c.Store != nil {
-				_ = (imageprovenance.Store{DB: c.Store.DB}).Delete(ref.String())
-			}
-			return map[string]any{"removed": ref.String()}, nil
+				if c.Store != nil {
+					var users int
+					if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM agents WHERE image_ref=? OR pending_image_ref=?`, ref.String(), ref.String()).Scan(&users); err != nil {
+						return err
+					}
+					if users > 0 {
+						return api.UserError{Code: "image_in_use", Msg: "image " + ref.String() + " is active or pending for an agent", Status: http.StatusConflict}
+					}
+				}
+				if err := imageStore(c).Remove(ref); err != nil {
+					return api.UserError{Code: "not_found", Msg: err.Error()}
+				}
+				if c.Store != nil {
+					_ = (imageprovenance.Store{DB: c.Store.DB}).Delete(ref.String())
+				}
+				result = map[string]any{"removed": ref.String()}
+				return nil
+			})
+			return result, err
 		},
 	}
 }

@@ -124,6 +124,125 @@ func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
 	}
 }
 
+func TestMutableActivationWaitsForPublicationRollback(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte("first"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec := &imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}
+	first, err := image.BuildV2Mutable(spec, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: first.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte("uncommitted candidate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	published := make(chan error, 1)
+	release := make(chan struct{})
+	locked := make(chan error, 1)
+	go func() {
+		locked <- image.WithPublicationGate(func() error {
+			_, buildErr := image.BuildV2Mutable(spec, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+			published <- buildErr
+			if buildErr != nil {
+				return buildErr
+			}
+			<-release
+			return images.RestoreMutable(ref, first.Digest, true)
+		})
+	}()
+	if err := <-published; err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.activatePendingImage(&ag)
+		done <- err
+	}()
+	returnedEarly := false
+	select {
+	case err := <-done:
+		returnedEarly = true
+		if err != nil {
+			t.Errorf("activation returned early with error: %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if !returnedEarly {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	stored, err := as.Get(ag.Name)
+	if returnedEarly || err != nil || stored.ImageDigest != first.Digest || ag.ImageDigest != first.Digest {
+		t.Fatalf("activation crossed rollback: early=%v stored=%+v in_memory=%+v err=%v", returnedEarly, stored, ag, err)
+	}
+}
+
+func TestImmutableRecoveryClearsEmptyAssignmentError(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	ref := image.Ref{Name: "reviewer", Tag: "v1"}
+	manifest, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: manifest.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	if recorded, err := as.SetPendingImageErrorIfEmpty(ag.Name, "interrupted swap"); err != nil || !recorded {
+		t.Fatalf("record pending error = %v, %v", recorded, err)
+	}
+	backup := filepath.Join(l.Root, ".image-backup")
+	if err := os.Rename(l.ImageDir(), backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := images.Unpack(ref, l.ImageDir()); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	if _, err := m.activatePendingImage(&ag); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := as.PendingImage(ag.Name)
+	if err != nil || pending.Error != "" {
+		t.Fatalf("recovered immutable pending=%+v err=%v", pending, err)
+	}
+}
+
 func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))

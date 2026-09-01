@@ -161,6 +161,14 @@ func TestHelpAndOpenAPI(t *testing.T) {
 	}
 }
 
+func TestOpenAPIRepeatableArgIsArray(t *testing.T) {
+	schema := openAPIArgSchema(registry.Arg{Name: "tag", Type: registry.String, Repeatable: true, Help: "target tags"})
+	items, _ := schema["items"].(map[string]any)
+	if schema["type"] != "array" || items["type"] != "string" {
+		t.Fatalf("repeatable schema = %#v, want string array", schema)
+	}
+}
+
 func TestDispatchMergesPathValue(t *testing.T) {
 	reg := registry.New()
 	reg.Register(registry.Command{

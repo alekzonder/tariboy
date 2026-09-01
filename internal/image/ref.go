@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	ErrExists   = errors.New("image ref already exists")
-	ErrReserved = errors.New("image ref is daemon-managed")
+	ErrExists    = errors.New("image ref already exists")
+	ErrImmutable = errors.New("image ref is immutable")
+	ErrReserved  = errors.New("image ref is daemon-managed")
 )
 
 var refPart = regexp.MustCompile(`^[a-z0-9._-]+$`)

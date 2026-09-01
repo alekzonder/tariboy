@@ -725,6 +725,16 @@ func (m *Manager) recordStaleAdoption(l agentdir.Layout, li agentdir.LiveIterati
 }
 
 func (m *Manager) Run(spec registry.RunSpec) (string, error) {
+	var name string
+	err := image.WithPublicationGate(func() error {
+		var err error
+		name, err = m.run(spec)
+		return err
+	})
+	return name, err
+}
+
+func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	ref, err := image.ParseRef(spec.ImageRef)
 	if err != nil {
 		return "", err
@@ -2023,6 +2033,10 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 // are updated to the new image). An empty imageRef keeps the agent's current
 // image.
 func (m *Manager) Reprovision(name, imageRef string) error {
+	return image.WithPublicationGate(func() error { return m.reprovision(name, imageRef) })
+}
+
+func (m *Manager) reprovision(name, imageRef string) error {
 	ag, err := m.cfg.Store.Get(name)
 	if err != nil {
 		return err

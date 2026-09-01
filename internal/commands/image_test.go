@@ -2,11 +2,13 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -164,6 +166,100 @@ func TestImageBuildRebuildsMutableTag(t *testing.T) {
 	}
 }
 
+func TestImageBuildRejectsImportedAndRetaggedRefs(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		seed func(*testing.T, *image.Store, image.Ref) string
+	}{
+		{name: "import", seed: func(t *testing.T, target *image.Store, ref image.Ref) string {
+			t.Helper()
+			source := &image.Store{Dir: t.TempDir()}
+			parsed, err := imagefile.Parse(writeExample(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifest, err := image.Build(parsed, ref, source, time.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			archive, err := source.ArchiveBytes(ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := target.InstallPortableArchive(ref, archive); err != nil {
+				t.Fatal(err)
+			}
+			return manifest.Digest
+		}},
+		{name: "retag", seed: func(t *testing.T, target *image.Store, ref image.Ref) string {
+			t.Helper()
+			sourceStore := &image.Store{Dir: t.TempDir()}
+			sourceRef := image.Ref{Name: "portable-source", Tag: "v1"}
+			parsed, err := imagefile.Parse(writeExample(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := image.Build(parsed, sourceRef, sourceStore, time.Now); err != nil {
+				t.Fatal(err)
+			}
+			archive, err := sourceStore.ArchiveBytes(sourceRef)
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest, err := target.RetagPortableArchive(sourceRef, ref, archive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return digest
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c := localCtx(t)
+			ref := image.Ref{Name: test.name + "ed", Tag: "v1"}
+			before := test.seed(t, imageStore(c), ref)
+			_, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": writeExample(t)})
+			var userErr api.UserError
+			if !errors.As(err, &userErr) || userErr.Code != "immutable_ref" {
+				t.Fatalf("build collision error = %#v, want immutable_ref", err)
+			}
+			current, inspectErr := imageStore(c).Inspect(ref)
+			if inspectErr != nil || current.Digest != before || imageStore(c).IsMutable(ref) {
+				t.Fatalf("collision changed ref: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
+			}
+		})
+	}
+}
+
+func TestImageBuildMigratesLegacyOrdinaryRefWithMatchingProvenance(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	ref := image.Ref{Name: "legacy", Tag: "latest"}
+	parsed, err := imagefile.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := image.Build(parsed, ref, imageStore(c), time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := imageSnapshotStore(c).Capture(context.Background(), ref.String(), first.Digest, ref.Name, src); err != nil {
+		t.Fatal(err)
+	}
+	if err := (imageprovenance.Store{DB: c.Store.DB}).Upsert(imageprovenance.Record{Ref: ref.String(), Digest: first.Digest, SourceCWD: src, BuiltAt: first.BuiltAt}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("legacy rebuild"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.(map[string]any)["digest"] == first.Digest || !imageStore(c).IsMutable(ref) {
+		t.Fatalf("legacy ref was not migrated: %#v", result)
+	}
+}
+
 func TestImageBuildMultipleTags(t *testing.T) {
 	c := localCtx(t)
 	result, err := cmdHandler(t, "image.build")(c, registry.Params{
@@ -180,6 +276,151 @@ func TestImageBuildMultipleTags(t *testing.T) {
 		if !imageStore(c).Exists(image.Ref{Name: "reviewer", Tag: tag}) {
 			t.Fatalf("reviewer:%s was not published", tag)
 		}
+	}
+}
+
+type persistedImageBuildState struct {
+	files          map[string]string
+	snapshotDigest string
+	provenance     imageprovenance.Record
+	provenanceOK   bool
+}
+
+func persistedImageState(t *testing.T, c *registry.Ctx, refs ...image.Ref) persistedImageBuildState {
+	t.Helper()
+	files := map[string]string{}
+	root := imageStore(c).Dir
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			t.Fatal(err)
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			t.Fatal(relErr)
+		}
+		files[filepath.ToSlash(rel)] = string(data)
+		return nil
+	})
+	state := persistedImageBuildState{files: files}
+	if len(refs) == 1 {
+		_ = c.Store.DB.QueryRow(`SELECT image_digest FROM image_source_snapshots WHERE image_ref=?`, refs[0].String()).Scan(&state.snapshotDigest)
+		state.provenance, state.provenanceOK, _ = (imageprovenance.Store{DB: c.Store.DB}).Get(refs[0].String())
+	}
+	return state
+}
+
+func TestImageBuildRollsBackEveryTagWhenSecondMetadataWriteFails(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "new", true: "existing"}[existing], func(t *testing.T) {
+			c := localCtx(t)
+			src := writeExample(t)
+			refs := []image.Ref{{Name: "reviewer", Tag: "latest"}, {Name: "reviewer", Tag: "v2"}}
+			if existing {
+				if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": []string{"latest", "v2"}, "path": src}); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("updated batch"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			beforeFiles := persistedImageState(t, c).files
+			beforeMetadata := []persistedImageBuildState{persistedImageState(t, c, refs[0]), persistedImageState(t, c, refs[1])}
+			if _, err := c.Store.DB.Exec(`CREATE TRIGGER reject_second_tag_provenance BEFORE INSERT ON image_provenance WHEN NEW.ref='reviewer:v2' BEGIN SELECT RAISE(FAIL, 'blocked'); END`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": []string{"latest", "v2"}, "path": src}); err == nil {
+				t.Fatal("multi-tag build succeeded despite second metadata failure")
+			}
+			afterFiles := persistedImageState(t, c).files
+			afterMetadata := []persistedImageBuildState{persistedImageState(t, c, refs[0]), persistedImageState(t, c, refs[1])}
+			for i := range beforeMetadata {
+				beforeMetadata[i].files = nil
+				afterMetadata[i].files = nil
+			}
+			if !reflect.DeepEqual(afterFiles, beforeFiles) || !reflect.DeepEqual(afterMetadata, beforeMetadata) {
+				t.Fatalf("batch rollback mismatch\nfiles before=%v\nfiles after=%v\nmetadata before=%#v\nmetadata after=%#v", beforeFiles, afterFiles, beforeMetadata, afterMetadata)
+			}
+		})
+	}
+}
+
+func writeMutablePublicationJournal(t *testing.T, store *image.Store, ref image.Ref, candidate, previous string, hadRef, wasMutable bool) string {
+	t.Helper()
+	dir := filepath.Join(store.Dir, ".publications")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	journal := map[string]any{"entries": []map[string]any{{
+		"ref": ref.String(), "candidate_digest": candidate, "previous_digest": previous,
+		"had_ref": hadRef, "was_mutable": wasMutable, "history_existed": false,
+	}}}
+	data, err := json.Marshal(journal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "crashed.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestImageBuildRecoversInterruptedPublicationFromCommittedMetadata(t *testing.T) {
+	for _, committed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "rollback", true: "finalize"}[committed], func(t *testing.T) {
+			c := localCtx(t)
+			src := writeExample(t)
+			ref := image.Ref{Name: "reviewer", Tag: "latest"}
+			firstResult, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+			if err != nil {
+				t.Fatal(err)
+			}
+			first := firstResult.(map[string]any)["digest"].(string)
+			if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("interrupted candidate"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			parsed, err := imagefile.Parse(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			candidate, err := image.Build(parsed, ref, imageStore(c), time.Now, image.WithMutableRef())
+			if err != nil {
+				t.Fatal(err)
+			}
+			journal := writeMutablePublicationJournal(t, imageStore(c), ref, candidate.Digest, first, true, true)
+			if committed {
+				if _, err := c.Store.DB.Exec(`UPDATE image_source_snapshots SET image_digest=? WHERE image_ref=?`, candidate.Digest, ref.String()); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := c.Store.DB.Exec(`UPDATE image_provenance SET digest=? WHERE ref=?`, candidate.Digest, ref.String()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "other", "tag": "latest", "path": writeExample(t)}); err != nil {
+				t.Fatal(err)
+			}
+			current, err := imageStore(c).Inspect(ref)
+			want := first
+			if committed {
+				want = candidate.Digest
+			}
+			if err != nil || current.Digest != want {
+				t.Fatalf("recovered digest=%s err=%v want=%s", current.Digest, err, want)
+			}
+			if _, err := os.Stat(journal); !os.IsNotExist(err) {
+				t.Fatalf("publication journal survived recovery: %v", err)
+			}
+		})
 	}
 }
 
@@ -254,6 +495,115 @@ func TestImageBuildWaitsForPublicationGate(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	firstResult, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := firstResult.(map[string]any)["digest"].(string)
+	if err := agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: "other:latest", ImageDigest: "other"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("uncommitted candidate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := imagefile.Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published := make(chan error, 1)
+	release := make(chan struct{})
+	locked := make(chan error, 1)
+	go func() {
+		locked <- image.WithPublicationGate(func() error {
+			_, buildErr := image.Build(parsed, ref, imageStore(c), time.Now, image.WithMutableRef())
+			published <- buildErr
+			if buildErr != nil {
+				return buildErr
+			}
+			<-release
+			return imageStore(c).RestoreMutable(ref, first, true)
+		})
+	}()
+	if err := <-published; err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := cmdHandler(t, "agent.image.set")(c, registry.Params{"name": "worker", "image": ref.String()})
+		done <- err
+	}()
+	returnedEarly := false
+	select {
+	case err := <-done:
+		returnedEarly = true
+		if err != nil {
+			t.Errorf("assignment returned early with error: %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if !returnedEarly {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending, err := agent.NewStore(c.Store).PendingImage("worker")
+	if returnedEarly || err != nil || pending.Ref != ref.String() || pending.Digest != first {
+		t.Fatalf("assignment crossed rollback: early=%v pending=%+v err=%v want digest=%s", returnedEarly, pending, err, first)
+	}
+}
+
+func TestImageRemoveWaitsForCommittedAssignment(t *testing.T) {
+	c := localCtx(t)
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": writeExample(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := result.(map[string]any)["digest"].(string)
+	entered := make(chan struct{})
+	commitAssignment := make(chan struct{})
+	locked := make(chan error, 1)
+	go func() {
+		locked <- image.WithPublicationGate(func() error {
+			close(entered)
+			<-commitAssignment
+			return agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: digest})
+		})
+	}()
+	<-entered
+	done := make(chan error, 1)
+	go func() {
+		_, err := cmdHandler(t, "image.rm")(c, registry.Params{"ref": ref.String()})
+		done <- err
+	}()
+	returnedEarly := false
+	var removeErr error
+	select {
+	case removeErr = <-done:
+		returnedEarly = true
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(commitAssignment)
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if !returnedEarly {
+		removeErr = <-done
+	}
+	var userErr api.UserError
+	if returnedEarly || !errors.As(removeErr, &userErr) || userErr.Code != "image_in_use" || !imageStore(c).Exists(ref) {
+		t.Fatalf("remove crossed assignment commit: early=%v err=%#v exists=%v", returnedEarly, removeErr, imageStore(c).Exists(ref))
 	}
 }
 

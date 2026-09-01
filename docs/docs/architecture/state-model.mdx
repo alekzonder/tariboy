@@ -104,6 +104,16 @@ model, effort, environment,
 CWD, context, workdir, messages, history, group, and subscriptions are not image
 assignment fields.
 
+An ordinary multi-tag build stages every complete archive before publication,
+writes an owner-only batch journal, advances the refs, and commits every source
+snapshot and provenance row in one SQLite transaction. Any synchronous failure
+rolls back the whole ref stack. On daemon startup, a surviving journal is
+finalized only when both authoritative metadata rows name every candidate
+digest; otherwise every moved ref is restored before agents or clients can use
+it. One publication gate spans ref-to-digest assignment, automatic activation,
+initial provisioning, reprovisioning, controlled rollout staging, import, and
+removal, so none can persist an uncommitted generation.
+
 Controlled improvement adds durable task-level Judge subjects, structured
 proposals, append-only approvals, immutable image releases, and rollout rows.
 A proposal revision hash covers its citations, repository/base commit, file

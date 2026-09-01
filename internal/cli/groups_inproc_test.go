@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/client"
-	"github.com/alekzonder/tariboy/internal/commands"
-	"github.com/alekzonder/tariboy/internal/registry"
 )
 
 func mustCall(t *testing.T, c *client.Client, method, route string, body any) map[string]any {
@@ -36,31 +34,16 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
-// buildStubImage calls the image.build handler against the daemon's base dir,
-// producing stub:latest.
-func buildStubImage(t *testing.T, base string) {
-	t.Helper()
-	local := &registry.Ctx{BaseDir: base}
-	reg := commands.BuildRegistry()
-	cmd, ok := reg.Get("image.build")
-	if !ok {
-		t.Fatal("image.build command missing")
-	}
-	if _, err := cmd.Handler(local, registry.Params{
-		"tag": "stub:latest", "path": filepath.Join(repoRoot(t), "internal", "builtinimages", "source"),
-	}); err != nil {
-		t.Fatalf("build stub image: %v", err)
-	}
-}
-
 func TestGroupCommandsProvisionSubscriptions(t *testing.T) {
-	base, _, c := startDaemon(t)
+	_, _, c := startDaemon(t)
 
 	// Create a group with a lead.
 	mustCall(t, c, "POST", "/api/groups", map[string]any{"name": "research", "lead": "scout"})
 
-	// Build the image the group agents run (CLI-local), then run two members.
-	buildStubImage(t, base)
+	// Build the image the group agents run, then run two members.
+	mustCall(t, c, "POST", "/api/images/build", map[string]any{
+		"name": "stub", "tag": "latest", "path": filepath.Join(repoRoot(t), "internal", "builtinimages", "source"),
+	})
 	mustCall(t, c, "POST", "/api/agents", map[string]any{
 		"image": "stub:latest", "name": "scout", "group": "research", "loop": false})
 	mustCall(t, c, "POST", "/api/agents", map[string]any{

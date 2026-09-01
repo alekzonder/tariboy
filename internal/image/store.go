@@ -12,11 +12,36 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
 // Store is an on-disk image store rooted at Dir (paths.ImagesDir()).
 type Store struct{ Dir string }
+
+type PublicationCandidate struct {
+	Ref    Ref
+	Digest string
+}
+
+type publicationEntry struct {
+	Ref             string `json:"ref"`
+	CandidateDigest string `json:"candidate_digest"`
+	PreviousDigest  string `json:"previous_digest"`
+	HadRef          bool   `json:"had_ref"`
+	WasMutable      bool   `json:"was_mutable"`
+	HistoryExisted  bool   `json:"history_existed"`
+}
+
+type publicationJournal struct {
+	Entries []publicationEntry `json:"entries"`
+}
+
+type MutablePublication struct {
+	store   *Store
+	path    string
+	journal publicationJournal
+}
 
 // ponytail: global lock, use per-ref locks if mutable image publication becomes a bottleneck.
 var mutablePublishMu sync.Mutex
@@ -30,6 +55,190 @@ func WithPublicationGate(fn func() error) error {
 	publicationGate.Lock()
 	defer publicationGate.Unlock()
 	return fn()
+}
+
+func (s *Store) publicationsDir() string { return filepath.Join(s.Dir, ".publications") }
+
+// BeginMutablePublication writes the recovery intent before any ref moves.
+func (s *Store) BeginMutablePublication(candidates []PublicationCandidate) (*MutablePublication, error) {
+	journal := publicationJournal{Entries: make([]publicationEntry, 0, len(candidates))}
+	seen := make(map[string]bool, len(candidates))
+	for _, candidate := range candidates {
+		if seen[candidate.Ref.String()] || len(candidate.Digest) != sha256.Size*2 {
+			return nil, errors.New("invalid mutable publication candidate")
+		}
+		seen[candidate.Ref.String()] = true
+		entry := publicationEntry{Ref: candidate.Ref.String(), CandidateDigest: candidate.Digest}
+		if s.Exists(candidate.Ref) {
+			current, err := s.Inspect(candidate.Ref)
+			if err != nil {
+				return nil, err
+			}
+			entry.HadRef, entry.WasMutable, entry.PreviousDigest = true, s.IsMutable(candidate.Ref), current.Digest
+			_, err = os.Stat(s.pinnedMutablePath(candidate.Ref, current.Digest))
+			entry.HistoryExisted = err == nil
+			if err != nil && !os.IsNotExist(err) {
+				return nil, err
+			}
+		}
+		journal.Entries = append(journal.Entries, entry)
+	}
+	if err := os.MkdirAll(s.publicationsDir(), 0o700); err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(journal)
+	if err != nil {
+		return nil, err
+	}
+	tmp, err := os.CreateTemp(s.publicationsDir(), ".publication-*.tmp")
+	if err != nil {
+		return nil, err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, err
+	}
+	path := strings.TrimSuffix(tmpName, ".tmp") + ".json"
+	if err := os.Rename(tmpName, path); err != nil {
+		return nil, err
+	}
+	if err := syncDirectory(s.publicationsDir()); err != nil {
+		return nil, err
+	}
+	return &MutablePublication{store: s, path: path, journal: journal}, nil
+}
+
+func (p *MutablePublication) Complete() error {
+	if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return syncDirectory(filepath.Dir(p.path))
+}
+
+func (p *MutablePublication) Rollback() error {
+	var rollbackErrors []error
+	for i := len(p.journal.Entries) - 1; i >= 0; i-- {
+		if err := p.store.restorePublicationEntry(p.journal.Entries[i]); err != nil {
+			rollbackErrors = append(rollbackErrors, err)
+		}
+	}
+	if len(rollbackErrors) == 0 {
+		return p.Complete()
+	}
+	return errors.Join(rollbackErrors...)
+}
+
+func (s *Store) restorePublicationEntry(entry publicationEntry) error {
+	ref, err := ParseRef(entry.Ref)
+	if err != nil {
+		return err
+	}
+	if !entry.HadRef {
+		if !s.Exists(ref) {
+			_ = os.Remove(s.digestPath(ref))
+			_ = os.Remove(s.mutablePath(ref))
+			_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
+			_ = os.Remove(s.refDir(ref))
+			return syncDirectory(s.Dir)
+		}
+		current, err := s.Inspect(ref)
+		if err != nil {
+			return err
+		}
+		if current.Digest != entry.CandidateDigest {
+			return fmt.Errorf("recover mutable image %s: unexpected digest %s", ref.String(), current.Digest)
+		}
+		return s.Remove(ref)
+	}
+	current, err := s.Inspect(ref)
+	if err != nil {
+		return err
+	}
+	if current.Digest != entry.PreviousDigest {
+		if current.Digest != entry.CandidateDigest {
+			return fmt.Errorf("recover mutable image %s: unexpected digest %s", ref.String(), current.Digest)
+		}
+		if err := s.RestoreMutable(ref, entry.PreviousDigest, entry.WasMutable); err != nil {
+			return err
+		}
+	} else if !entry.WasMutable {
+		_ = os.Remove(s.mutablePath(ref))
+	}
+	if entry.WasMutable && !entry.HistoryExisted {
+		_ = os.Remove(s.pinnedMutablePath(ref, entry.PreviousDigest))
+	}
+	if !entry.WasMutable {
+		_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
+	}
+	return nil
+}
+
+// RecoverMutablePublications rolls incomplete batches back unless both
+// authoritative metadata rows committed every candidate digest.
+func (s *Store) RecoverMutablePublications(committed func(string, string) (bool, error)) error {
+	entries, err := os.ReadDir(s.publicationsDir())
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(s.publicationsDir(), entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var journal publicationJournal
+		if err := json.Unmarshal(data, &journal); err != nil || len(journal.Entries) == 0 {
+			return fmt.Errorf("invalid mutable publication journal %s", entry.Name())
+		}
+		publication := &MutablePublication{store: s, path: path, journal: journal}
+		allCommitted := true
+		for _, item := range journal.Entries {
+			ok, err := committed(item.Ref, item.CandidateDigest)
+			if err != nil {
+				return err
+			}
+			allCommitted = allCommitted && ok
+		}
+		if !allCommitted {
+			if err := publication.Rollback(); err != nil {
+				return err
+			}
+			continue
+		}
+		for _, item := range journal.Entries {
+			ref, err := ParseRef(item.Ref)
+			if err != nil {
+				return err
+			}
+			current, err := s.Inspect(ref)
+			if err != nil || current.Digest != item.CandidateDigest || !s.IsMutable(ref) {
+				return fmt.Errorf("committed mutable image %s@%s is unavailable", item.Ref, item.CandidateDigest)
+			}
+		}
+		if err := publication.Complete(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) refDir(ref Ref) string     { return filepath.Join(s.Dir, ref.Name) }
@@ -61,6 +270,62 @@ func (s *Store) ArchiveBytes(ref Ref) ([]byte, error) {
 		return nil, fmt.Errorf("image %s not found", ref.String())
 	}
 	return os.ReadFile(s.tarPath(ref))
+}
+
+// MarkMutable authorizes migration of a legacy ordinary-build ref after its
+// caller has verified authoritative build provenance.
+func (s *Store) MarkMutable(ref Ref) error {
+	if IsReserved(ref) {
+		return fmt.Errorf("%w: %s", ErrReserved, ref.String())
+	}
+	if s.IsMutable(ref) {
+		return nil
+	}
+	if _, err := s.Inspect(ref); err != nil {
+		return err
+	}
+	if err := writeMutableMarker(s.mutablePath(ref)); err != nil {
+		return err
+	}
+	return syncDirectory(s.refDir(ref))
+}
+
+// InstallMutableArchive publishes already-validated authoring bytes.
+func (s *Store) InstallMutableArchive(ref Ref, archive []byte) (Manifest, error) {
+	manifest, err := validatePortableArchive(archive, ref)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
+		return Manifest{}, err
+	}
+	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".publish-*.tmp")
+	if err != nil {
+		return Manifest{}, err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return Manifest{}, err
+	}
+	if _, err := tmp.Write(archive); err != nil {
+		tmp.Close()
+		return Manifest{}, err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return Manifest{}, err
+	}
+	if err := tmp.Close(); err != nil {
+		return Manifest{}, err
+	}
+	digest, err := s.publishArchive(ref, tmpName, true, nil)
+	if err != nil {
+		return Manifest{}, err
+	}
+	manifest.Digest = digest
+	return manifest, nil
 }
 
 // InstallPortableArchive publishes a validated runnable archive without
@@ -246,11 +511,9 @@ func (s *Store) Inspect(ref Ref) (Manifest, error) {
 	return inspectArchive(s.tarPath(ref), ref)
 }
 
-// InspectPinned resolves the immutable archive identity assigned to an agent.
-// Ordinary refs are immutable and therefore must still match the current
-// archive. Daemon-managed refs may advance during an upgrade, so their prior
-// validated bytes are retained by digest and remain available to existing
-// agents until those agents are explicitly assigned another image.
+// InspectPinned resolves the exact archive identity assigned to an agent.
+// Managed and ordinary mutable refs retain prior validated generations by
+// digest; immutable refs must still match their current archive.
 func (s *Store) InspectPinned(ref Ref, digest string) (Manifest, error) {
 	if len(digest) != sha256.Size*2 {
 		return Manifest{}, errors.New("invalid pinned image digest")
@@ -503,12 +766,18 @@ func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool, archiveOut
 	} else {
 		mutablePublishMu.Lock()
 		defer mutablePublishMu.Unlock()
+		if s.Exists(ref) && !s.IsMutable(ref) {
+			return "", fmt.Errorf("%w: %s", ErrImmutable, ref.String())
+		}
 		markerCreated := false
 		if !s.IsMutable(ref) {
 			if err := writeMutableMarker(s.mutablePath(ref)); err != nil {
 				return "", fmt.Errorf("mark mutable image %s: %w", ref.String(), err)
 			}
 			markerCreated = true
+			if err := syncDirectory(s.refDir(ref)); err != nil {
+				return "", err
+			}
 		}
 		defer func() {
 			if markerCreated {
@@ -527,9 +796,15 @@ func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool, archiveOut
 			if err := os.Link(s.tarPath(ref), historyPath); err != nil && !errors.Is(err, os.ErrExist) {
 				return "", fmt.Errorf("preserve mutable image %s@%s: %w", ref.String(), current.Digest, err)
 			}
+			if err := syncDirectory(filepath.Dir(historyPath)); err != nil {
+				return "", err
+			}
 		}
 		if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
 			return "", fmt.Errorf("publish mutable image %s: %w", ref.String(), err)
+		}
+		if err := syncDirectory(s.refDir(ref)); err != nil {
+			return "", err
 		}
 		markerCreated = false
 	}
@@ -565,6 +840,15 @@ func writeMutableMarker(path string) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+func syncDirectory(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func writeDigestCache(path, digest string) error {

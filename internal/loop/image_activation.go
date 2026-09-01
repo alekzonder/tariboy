@@ -25,6 +25,16 @@ type activatedImage struct {
 }
 
 func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) {
+	var activated activatedImage
+	err := image.WithPublicationGate(func() error {
+		var err error
+		activated, err = m.activatePendingImageLocked(ag)
+		return err
+	})
+	return activated, err
+}
+
+func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, error) {
 	l := agentdir.New(m.cfg.AgentsDir, ag.Name)
 	if err := os.MkdirAll(l.Root, 0o700); err != nil {
 		return activatedImage{}, err
@@ -37,13 +47,14 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 	if err != nil {
 		return activatedImage{}, err
 	}
+	var current image.Manifest
 	if pending.Ref == "" {
 		activeRef, err := image.ParseRef(ag.ImageRef)
 		if err != nil {
 			return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
 		}
 		if m.cfg.ImgStore.IsMutable(activeRef) {
-			current, err := m.cfg.ImgStore.Inspect(activeRef)
+			current, err = m.cfg.ImgStore.Inspect(activeRef)
 			if err != nil {
 				recorded, recordErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
 				if recordErr != nil {
@@ -69,16 +80,17 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 						return activatedImage{}, err
 					}
 				}
-			} else if pending.Error != "" {
-				cleared, err := m.cfg.Store.ClearPendingImageErrorIfEmpty(ag.Name)
+			}
+		}
+		if pending.Ref == "" && pending.Error != "" {
+			cleared, err := m.cfg.Store.ClearPendingImageErrorIfEmpty(ag.Name)
+			if err != nil {
+				return activatedImage{}, err
+			}
+			if !cleared {
+				pending, err = m.cfg.Store.PendingImage(ag.Name)
 				if err != nil {
 					return activatedImage{}, err
-				}
-				if !cleared {
-					pending, err = m.cfg.Store.PendingImage(ag.Name)
-					if err != nil {
-						return activatedImage{}, err
-					}
 				}
 			}
 		}
@@ -92,9 +104,12 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 		if err != nil {
 			return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
 		}
-		manifest, err := m.cfg.ImgStore.InspectPinned(activeRef, ag.ImageDigest)
-		if err != nil {
-			return activatedImage{}, err
+		manifest := current
+		if manifest.Digest == "" {
+			manifest, err = m.cfg.ImgStore.InspectPinned(activeRef, ag.ImageDigest)
+			if err != nil {
+				return activatedImage{}, err
+			}
 		}
 		skills, err := m.prepareImageSkillBridge(*ag, manifest, l.ImageDir())
 		if err != nil {

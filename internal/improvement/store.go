@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/image"
 	storedb "github.com/alekzonder/tariboy/internal/store"
 	"github.com/google/uuid"
 )
@@ -379,6 +380,16 @@ func scanRollout(row interface{ Scan(...any) error }) (Rollout, error) {
 }
 
 func (s *Store) StageSingleRollout(ctx context.Context, releaseID, agentName, hash string) (Rollout, error) {
+	var rollout Rollout
+	err := image.WithPublicationGate(func() error {
+		var err error
+		rollout, err = s.stageSingleRollout(ctx, releaseID, agentName, hash)
+		return err
+	})
+	return rollout, err
+}
+
+func (s *Store) stageSingleRollout(ctx context.Context, releaseID, agentName, hash string) (Rollout, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Rollout{}, err
@@ -436,6 +447,16 @@ func (s *Store) StageSingleRollout(ctx context.Context, releaseID, agentName, ha
 }
 
 func (s *Store) StageRollback(ctx context.Context, rolloutID string) (Rollout, error) {
+	var rollout Rollout
+	err := image.WithPublicationGate(func() error {
+		var err error
+		rollout, err = s.stageRollback(ctx, rolloutID)
+		return err
+	})
+	return rollout, err
+}
+
+func (s *Store) stageRollback(ctx context.Context, rolloutID string) (Rollout, error) {
 	columns := `id,release_id,target_agent,prior_image_ref,prior_image_digest,image_ref,image_digest,status,created_at,completed_at,rollback_of`
 	if existing, err := scanRollout(s.db.QueryRowContext(ctx, `SELECT `+columns+` FROM image_rollouts WHERE rollback_of=?`, rolloutID)); err == nil {
 		return existing, nil

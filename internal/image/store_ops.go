@@ -179,7 +179,7 @@ func (s *Store) Remove(ref Ref) error {
 	_ = os.Remove(s.mutablePath(ref))
 	_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
 	_ = os.Remove(s.refDir(ref)) // best-effort: drops the dir when it becomes empty
-	return nil
+	return syncDirectory(s.Dir)
 }
 
 // RestoreMutable returns a moved ref to one of its retained digests and prior
@@ -212,6 +212,9 @@ func (s *Store) RestoreMutable(ref Ref, digest string, wasMutable bool) error {
 			return err
 		}
 		if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
+			return err
+		}
+		if err := syncDirectory(s.refDir(ref)); err != nil {
 			return err
 		}
 		if err := writeDigestCache(s.digestPath(ref), digest); err != nil {

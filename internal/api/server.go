@@ -728,6 +728,9 @@ func openAPIArgSchema(arg registry.Arg) map[string]any {
 	} else if arg.Type == registry.Int {
 		typ = "integer"
 	}
+	if arg.Repeatable {
+		return map[string]any{"type": "array", "items": map[string]any{"type": typ}, "description": arg.Help}
+	}
 	return map[string]any{"type": typ, "description": arg.Help}
 }
 

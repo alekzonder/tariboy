@@ -340,7 +340,7 @@ func TestBuildMutableArchiveReturnsPublishedBytes(t *testing.T) {
 	}
 }
 
-func TestBuildMutableMigrationKeepsCurrentWhenMarkerWriteFails(t *testing.T) {
+func TestBuildMutableRejectsUnmarkedExistingRef(t *testing.T) {
 	source := t.TempDir()
 	prompt := promptFile(t, source, "prompt.md", "immutable generation")
 	store := &Store{Dir: t.TempDir()}
@@ -353,20 +353,28 @@ func TestBuildMutableMigrationKeepsCurrentWhenMarkerWriteFails(t *testing.T) {
 	if err := os.WriteFile(prompt, []byte("mutable generation"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(store.mutablePath(ref), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := Build(imageSpec, ref, store, fixedClock(), WithMutableRef()); err == nil {
-		t.Fatal("mutable migration succeeded despite marker write failure")
-	}
-	if err := os.Remove(store.mutablePath(ref)); err != nil {
-		t.Fatal(err)
+		t.Fatal("mutable build replaced an unmarked immutable ref")
 	}
 	if current, err := store.Inspect(ref); err != nil || current.Digest != first.Digest {
 		t.Fatalf("current generation = %#v, %v", current, err)
 	}
+	if store.IsMutable(ref) {
+		t.Fatal("rejected immutable ref was marked mutable")
+	}
 	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
 		t.Fatalf("pinned immutable generation = %#v, %v", pinned, err)
+	}
+}
+
+func TestBuildMutableRejectsReservedRef(t *testing.T) {
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "basic", Tag: "latest"}
+	if _, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Dir: t.TempDir()}, ref, store, fixedClock(), WithMutableRef()); err == nil {
+		t.Fatal("mutable build accepted daemon-managed ref")
+	}
+	if store.Exists(ref) || store.IsMutable(ref) {
+		t.Fatal("rejected reserved ref left publication state")
 	}
 }
 

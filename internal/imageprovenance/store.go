@@ -51,3 +51,13 @@ func (s Store) Delete(ref string) error {
 	_, err := s.DB.Exec(`DELETE FROM image_provenance WHERE ref=?`, ref)
 	return err
 }
+
+// IsCommitted requires the provenance and source-snapshot rows written by the
+// ordinary build's single metadata transaction to agree on one generation.
+func (s Store) IsCommitted(ref, digest string) (bool, error) {
+	var committed bool
+	err := s.DB.QueryRow(`SELECT EXISTS(
+		SELECT 1 FROM image_provenance p JOIN image_source_snapshots s ON s.image_ref=p.ref AND s.image_digest=p.digest
+		WHERE p.ref=? AND p.digest=?)`, ref, digest).Scan(&committed)
+	return committed, err
+}

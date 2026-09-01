@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/google/uuid"
@@ -335,64 +336,73 @@ func (s *Store) saveAutomationTx(ctx context.Context, tx *sql.Tx, canonical, sch
 }
 
 func (s *AutomationService) Apply(ctx context.Context, raw []byte) (AutomationApplyResult, error) {
-	validated := s.Validate(ctx, raw)
-	if len(validated.Diagnostics) > 0 {
-		return AutomationApplyResult{}, fmt.Errorf("judge automation: %s: %s", validated.Diagnostics[0].Path, validated.Diagnostics[0].Message)
-	}
-	parsed := AutomationValidation{Config: validated.Config}
-	tx, err := s.store.db.BeginTx(ctx, nil)
-	if err != nil {
-		return AutomationApplyResult{}, err
-	}
-	defer tx.Rollback()
-	var oldSchedule string
-	_ = tx.QueryRowContext(ctx, `SELECT schedule_id FROM judge_automation_state WHERE singleton=1`).Scan(&oldSchedule)
-	if oldSchedule != "" {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM schedules WHERE id=?`, oldSchedule); err != nil {
-			return AutomationApplyResult{}, err
+	var result AutomationApplyResult
+	var roles []string
+	err := image.WithPublicationGate(func() error {
+		validated := s.Validate(ctx, raw)
+		if len(validated.Diagnostics) > 0 {
+			return fmt.Errorf("judge automation: %s: %s", validated.Diagnostics[0].Path, validated.Diagnostics[0].Message)
 		}
-	}
-	now := s.now().UTC().Format(time.RFC3339Nano)
-	for _, queue := range []struct{ prefix, name, responsible string }{
-		{"JUDGE", "Judge", parsed.Config.Judge.Lead},
-		{"IMPROVE", "Improve", ""},
-	} {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO task_queues(prefix,name,description,responsible_agent,next_number,revision,created_at,updated_at) VALUES(?,?,?, ?,1,1,?,?) ON CONFLICT(prefix) DO UPDATE SET responsible_agent=excluded.responsible_agent,revision=task_queues.revision+1,updated_at=excluded.updated_at`, queue.prefix, queue.name, "", queue.responsible, now, now); err != nil {
-			return AutomationApplyResult{}, err
-		}
-	}
-	revision, err := s.store.saveAutomationTx(ctx, tx, validated.CanonicalJSON, "")
-	if err != nil {
-		return AutomationApplyResult{}, err
-	}
-	var sch schedule.Schedule
-	if parsed.Config.Enabled {
-		message, _ := json.Marshal(map[string]any{"type": "judge.review.requested", "data": map[string]any{"config_revision": revision.Revision}})
-		sch, err = s.schedules.AddTx(tx, schedule.Schedule{Agent: parsed.Config.Judge.Lead, Kind: "cron", Spec: parsed.Config.Schedule.Spec, Channel: "agent:" + parsed.Config.Judge.Lead + ":inbox", MessageTemplate: string(message)})
+		parsed := AutomationValidation{Config: validated.Config}
+		tx, err := s.store.db.BeginTx(ctx, nil)
 		if err != nil {
-			return AutomationApplyResult{}, err
+			return err
 		}
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE judge_automation_state SET schedule_id=? WHERE singleton=1`, sch.ID); err != nil {
-		return AutomationApplyResult{}, err
-	}
-	roles := append([]string{parsed.Config.Judge.Lead}, parsed.Config.Judge.Workers...)
-	imageDigest := ""
-	if s.validator.ImageDigest != nil {
-		imageDigest, err = s.validator.ImageDigest(parsed.Config.Judge.ImageRef)
+		defer tx.Rollback()
+		var oldSchedule string
+		_ = tx.QueryRowContext(ctx, `SELECT schedule_id FROM judge_automation_state WHERE singleton=1`).Scan(&oldSchedule)
+		if oldSchedule != "" {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM schedules WHERE id=?`, oldSchedule); err != nil {
+				return err
+			}
+		}
+		now := s.now().UTC().Format(time.RFC3339Nano)
+		for _, queue := range []struct{ prefix, name, responsible string }{
+			{"JUDGE", "Judge", parsed.Config.Judge.Lead},
+			{"IMPROVE", "Improve", ""},
+		} {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO task_queues(prefix,name,description,responsible_agent,next_number,revision,created_at,updated_at) VALUES(?,?,?, ?,1,1,?,?) ON CONFLICT(prefix) DO UPDATE SET responsible_agent=excluded.responsible_agent,revision=task_queues.revision+1,updated_at=excluded.updated_at`, queue.prefix, queue.name, "", queue.responsible, now, now); err != nil {
+				return err
+			}
+		}
+		revision, err := s.store.saveAutomationTx(ctx, tx, validated.CanonicalJSON, "")
 		if err != nil {
-			return AutomationApplyResult{}, err
+			return err
 		}
-	}
-	for _, name := range roles {
-		if _, err := tx.ExecContext(ctx, `UPDATE agents SET enabled=1,loop_enabled=1,max_idle_iterations=0,
-			pending_image_ref=CASE WHEN ?='' THEN pending_image_ref ELSE ? END,
-			pending_image_digest=CASE WHEN ?='' THEN pending_image_digest ELSE ? END,
-			pending_image_error=CASE WHEN ?='' THEN pending_image_error ELSE '' END WHERE name=?`, imageDigest, parsed.Config.Judge.ImageRef, imageDigest, imageDigest, imageDigest, name); err != nil {
-			return AutomationApplyResult{}, err
+		var sch schedule.Schedule
+		if parsed.Config.Enabled {
+			message, _ := json.Marshal(map[string]any{"type": "judge.review.requested", "data": map[string]any{"config_revision": revision.Revision}})
+			sch, err = s.schedules.AddTx(tx, schedule.Schedule{Agent: parsed.Config.Judge.Lead, Kind: "cron", Spec: parsed.Config.Schedule.Spec, Channel: "agent:" + parsed.Config.Judge.Lead + ":inbox", MessageTemplate: string(message)})
+			if err != nil {
+				return err
+			}
 		}
-	}
-	if err := tx.Commit(); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE judge_automation_state SET schedule_id=? WHERE singleton=1`, sch.ID); err != nil {
+			return err
+		}
+		roles = append([]string{parsed.Config.Judge.Lead}, parsed.Config.Judge.Workers...)
+		imageDigest := ""
+		if s.validator.ImageDigest != nil {
+			imageDigest, err = s.validator.ImageDigest(parsed.Config.Judge.ImageRef)
+			if err != nil {
+				return err
+			}
+		}
+		for _, name := range roles {
+			if _, err := tx.ExecContext(ctx, `UPDATE agents SET enabled=1,loop_enabled=1,max_idle_iterations=0,
+				pending_image_ref=CASE WHEN ?='' THEN pending_image_ref ELSE ? END,
+				pending_image_digest=CASE WHEN ?='' THEN pending_image_digest ELSE ? END,
+				pending_image_error=CASE WHEN ?='' THEN pending_image_error ELSE '' END WHERE name=?`, imageDigest, parsed.Config.Judge.ImageRef, imageDigest, imageDigest, imageDigest, name); err != nil {
+				return err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		result = AutomationApplyResult{Revision: revision, Schedule: sch}
+		return nil
+	})
+	if err != nil {
 		return AutomationApplyResult{}, err
 	}
 	if s.activate != nil {
@@ -400,7 +410,7 @@ func (s *AutomationService) Apply(ctx context.Context, raw []byte) (AutomationAp
 			return AutomationApplyResult{}, fmt.Errorf("judge automation: activate configured agents: %w", err)
 		}
 	}
-	return AutomationApplyResult{Revision: revision, Schedule: sch}, nil
+	return result, nil
 }
 
 func (s *AutomationService) RunOnce(ctx context.Context, limit int) (schedule.Schedule, error) {

@@ -164,6 +164,16 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 }
 
 func (s Service) Apply(ctx context.Context, importID, refOverride string) (Result, error) {
+	var result Result
+	err := image.WithPublicationGate(func() error {
+		var err error
+		result, err = s.apply(ctx, importID, refOverride)
+		return err
+	})
+	return result, err
+}
+
+func (s Service) apply(ctx context.Context, importID, refOverride string) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}

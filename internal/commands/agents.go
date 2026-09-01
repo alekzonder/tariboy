@@ -57,22 +57,27 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, er
 
 func agentImageSet() registry.Command {
 	return registry.Command{Path: "agent.image.set", Summary: "Select an image for the agent's next iteration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "image", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		name := str(p, "name")
-		if _, err := getAgent(c, name); err != nil {
-			return nil, err
-		}
-		ref, err := image.ParseRef(str(p, "image"))
-		if err != nil {
-			return nil, api.UserError{Code: "bad_ref", Msg: err.Error(), Status: http.StatusBadRequest}
-		}
-		manifest, err := imageStore(c).Inspect(ref)
-		if err != nil {
-			return nil, api.UserError{Code: "image_not_found", Msg: err.Error(), Status: http.StatusNotFound}
-		}
-		if err := agentStore(c).SetPendingImage(name, ref.String(), manifest.Digest); err != nil {
-			return nil, err
-		}
-		return agentImageStatusValue(c, name)
+		var result any
+		err := image.WithPublicationGate(func() error {
+			name := str(p, "name")
+			if _, err := getAgent(c, name); err != nil {
+				return err
+			}
+			ref, err := image.ParseRef(str(p, "image"))
+			if err != nil {
+				return api.UserError{Code: "bad_ref", Msg: err.Error(), Status: http.StatusBadRequest}
+			}
+			manifest, err := imageStore(c).Inspect(ref)
+			if err != nil {
+				return api.UserError{Code: "image_not_found", Msg: err.Error(), Status: http.StatusNotFound}
+			}
+			if err := agentStore(c).SetPendingImage(name, ref.String(), manifest.Digest); err != nil {
+				return err
+			}
+			result, err = agentImageStatusValue(c, name)
+			return err
+		})
+		return result, err
 	}}
 }
 
