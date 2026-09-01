@@ -58,6 +58,150 @@ func TestActiveImageLaunchRejectsDigestDifferentFromPinnedAgentIdentity(t *testi
 	}
 }
 
+func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	source := t.TempDir()
+	build := func(body string) image.Manifest {
+		if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := image.BuildV2Mutable(&imagefile.V2{
+			SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}},
+		}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return manifest
+	}
+	first := build("first")
+	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: first.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	second := build("second")
+	if second.Digest == first.Digest {
+		t.Fatal("test setup did not replace the mutable ref")
+	}
+	stored, err := as.Get(ag.Name)
+	if err != nil || stored.ImageDigest != first.Digest {
+		t.Fatalf("agent changed before launch gate: %+v err=%v", stored, err)
+	}
+	localDigest, err := os.ReadFile(filepath.Join(l.ImageDir(), ".image-digest"))
+	if err != nil || strings.TrimSpace(string(localDigest)) != first.Digest {
+		t.Fatalf("unpacked image changed before launch gate: %q err=%v", localDigest, err)
+	}
+	recorder := &captureRecorder{}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true", AuditFor: func(string) Recorder { return recorder }}}
+	if _, err := m.activatePendingImage(&ag); err != nil {
+		t.Fatal(err)
+	}
+	if ag.ImageDigest != second.Digest {
+		t.Fatalf("activated digest=%s want %s", ag.ImageDigest, second.Digest)
+	}
+	stored, err = as.Get(ag.Name)
+	if err != nil || stored.ImageDigest != second.Digest {
+		t.Fatalf("stored activated digest=%s err=%v want %s", stored.ImageDigest, err, second.Digest)
+	}
+	if _, err := images.InspectPinned(ref, first.Digest); err != nil {
+		t.Fatalf("old mutable digest is not pinned-readable: %v", err)
+	}
+	events := recorder.snapshot()
+	if len(events) != 1 || events[0].data["old_digest"] != first.Digest || events[0].data["new_digest"] != second.Digest {
+		t.Fatalf("activation audit=%#v", events)
+	}
+}
+
+func TestImmutableRefRemainsPinned(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	ref := image.Ref{Name: "immutable", Tag: "v1"}
+	manifest, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: manifest.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	if _, err := m.activatePendingImage(&ag); err != nil {
+		t.Fatal(err)
+	}
+	if ag.ImageDigest != manifest.Digest {
+		t.Fatalf("immutable ref advanced to %s", ag.ImageDigest)
+	}
+}
+
+func TestExplicitPendingImageBeatsMutableRefresh(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	mutableRef := image.Ref{Name: "reviewer", Tag: "latest"}
+	source := t.TempDir()
+	buildMutable := func(body string) image.Manifest {
+		if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, mutableRef, images, time.Now, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return manifest
+	}
+	first := buildMutable("first")
+	explicitRef := image.Ref{Name: "explicit", Tag: "v1"}
+	explicit, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2}, imagefile.ResolveRoots{}, explicitRef, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: mutableRef.String(), ImageDigest: first.Digest}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, mutableRef, "/bin/true"); err != nil {
+		t.Fatal(err)
+	}
+	_ = buildMutable("second")
+	if err := as.SetPendingImage(ag.Name, explicitRef.String(), explicit.Digest); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	if _, err := m.activatePendingImage(&ag); err != nil {
+		t.Fatal(err)
+	}
+	if ag.ImageRef != explicitRef.String() || ag.ImageDigest != explicit.Digest {
+		t.Fatalf("explicit pending assignment lost to mutable refresh: %+v", ag)
+	}
+}
+
 func (r *imageBoundaryRunner) Run(_ context.Context, ag agent.Agent, _, _, _ string) (Outcome, error) {
 	r.calls <- imageBoundaryCall{ref: ag.ImageRef, digest: ag.ImageDigest}
 	if ag.ImageRef == "image-a:latest" {

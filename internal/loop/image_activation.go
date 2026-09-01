@@ -42,6 +42,32 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 		if err != nil {
 			return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
 		}
+		if m.cfg.ImgStore.IsMutable(activeRef) {
+			current, err := m.cfg.ImgStore.Inspect(activeRef)
+			if err != nil {
+				return activatedImage{}, err
+			}
+			if current.Digest != ag.ImageDigest {
+				won, err := m.cfg.Store.SetPendingImageIfEmpty(ag.Name, activeRef.String(), current.Digest)
+				if err != nil {
+					return activatedImage{}, err
+				}
+				if won {
+					pending = agent.ImageAssignment{Ref: activeRef.String(), Digest: current.Digest}
+				} else {
+					pending, err = m.cfg.Store.PendingImage(ag.Name)
+					if err != nil {
+						return activatedImage{}, err
+					}
+				}
+			}
+		}
+	}
+	if pending.Ref == "" {
+		activeRef, err := image.ParseRef(ag.ImageRef)
+		if err != nil {
+			return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
+		}
 		manifest, err := m.cfg.ImgStore.InspectPinned(activeRef, ag.ImageDigest)
 		if err != nil {
 			return activatedImage{}, err

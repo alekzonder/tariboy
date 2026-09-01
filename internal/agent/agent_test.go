@@ -20,6 +20,23 @@ func openStore(t *testing.T) *Store {
 	return NewStore(s)
 }
 
+func TestSetPendingImageIfEmptyPreservesExistingAssignment(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(sampleAgent()); err != nil {
+		t.Fatal(err)
+	}
+	if won, err := st.SetPendingImageIfEmpty("smoke", "first:latest", "first-digest"); err != nil || !won {
+		t.Fatalf("first pending assignment won=%t err=%v", won, err)
+	}
+	if won, err := st.SetPendingImageIfEmpty("smoke", "second:latest", "second-digest"); err != nil || won {
+		t.Fatalf("second pending assignment won=%t err=%v", won, err)
+	}
+	pending, err := st.PendingImage("smoke")
+	if err != nil || pending.Ref != "first:latest" || pending.Digest != "first-digest" {
+		t.Fatalf("pending assignment=%+v err=%v", pending, err)
+	}
+}
+
 func TestPurgeAgentDataRollsBackAllRowsWhenADeleteFails(t *testing.T) {
 	st := openStore(t)
 	const name = "purge-me"
