@@ -69,6 +69,17 @@ func (m *Manager) activatePendingImage(ag *agent.Agent) (activatedImage, error) 
 						return activatedImage{}, err
 					}
 				}
+			} else if pending.Error != "" {
+				cleared, err := m.cfg.Store.ClearPendingImageErrorIfEmpty(ag.Name)
+				if err != nil {
+					return activatedImage{}, err
+				}
+				if !cleared {
+					pending, err = m.cfg.Store.PendingImage(ag.Name)
+					if err != nil {
+						return activatedImage{}, err
+					}
+				}
 			}
 		}
 	}

@@ -49,14 +49,24 @@ func TestSetPendingImageErrorIfEmptyKeepsExplicitAssignment(t *testing.T) {
 	if err != nil || pending.Ref != "" || pending.Digest != "" || pending.Error != "image discovery failed" {
 		t.Fatalf("empty pending error=%+v err=%v", pending, err)
 	}
+	if cleared, err := st.ClearPendingImageErrorIfEmpty("smoke"); err != nil || !cleared {
+		t.Fatalf("empty pending error cleared=%t err=%v", cleared, err)
+	}
+	pending, err = st.PendingImage("smoke")
+	if err != nil || pending.Ref != "" || pending.Digest != "" || pending.Error != "" {
+		t.Fatalf("cleared empty pending=%+v err=%v", pending, err)
+	}
 	if err := st.SetPendingImage("smoke", "explicit:latest", "explicit-digest"); err != nil {
 		t.Fatal(err)
 	}
-	if recorded, err := st.SetPendingImageErrorIfEmpty("smoke", "late discovery failure"); err != nil || recorded {
-		t.Fatalf("explicit pending error recorded=%t err=%v", recorded, err)
+	if err := st.SetPendingImageError("smoke", "explicit failure"); err != nil {
+		t.Fatal(err)
+	}
+	if cleared, err := st.ClearPendingImageErrorIfEmpty("smoke"); err != nil || cleared {
+		t.Fatalf("explicit pending error cleared=%t err=%v", cleared, err)
 	}
 	pending, err = st.PendingImage("smoke")
-	if err != nil || pending.Ref != "explicit:latest" || pending.Digest != "explicit-digest" || pending.Error != "" {
+	if err != nil || pending.Ref != "explicit:latest" || pending.Digest != "explicit-digest" || pending.Error != "explicit failure" {
 		t.Fatalf("explicit pending=%+v err=%v", pending, err)
 	}
 }

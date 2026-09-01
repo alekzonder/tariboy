@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -149,6 +150,10 @@ func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
 		t.Fatal(err)
 	}
+	archive, err := images.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Remove(filepath.Join(images.Dir, ref.Name, ref.Tag+".tar.gz")); err != nil {
 		t.Fatal(err)
 	}
@@ -167,6 +172,16 @@ func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	localDigest, err := os.ReadFile(filepath.Join(l.ImageDir(), ".image-digest"))
 	if err != nil || strings.TrimSpace(string(localDigest)) != first.Digest {
 		t.Fatalf("active bytes changed after discovery failure: %q err=%v", localDigest, err)
+	}
+	if err := os.WriteFile(filepath.Join(images.Dir, ref.Name, ref.Tag+".tar.gz"), archive, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.activatePendingImage(&ag); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = as.PendingImage(ag.Name)
+	if err != nil || pending.Ref != "" || pending.Digest != "" || pending.Error != "" {
+		t.Fatalf("successful unchanged retry pending=%+v err=%v", pending, err)
 	}
 }
 
@@ -269,27 +284,48 @@ func TestMutableRefreshLosesToExplicitPendingDuringStaging(t *testing.T) {
 	}
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var enteredOnce, releaseOnce sync.Once
 	recorder := &captureRecorder{}
 	m := &Manager{cfg: ManagerConfig{
 		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true", AuditFor: func(string) Recorder { return recorder },
 		ExternalPlugins: func(string) (plugincaps.ResolvedPlugin, error) {
-			close(entered)
+			enteredOnce.Do(func() { close(entered) })
 			<-release
 			return plugincaps.ResolvedPlugin{Installed: true}, nil
 		},
 	}}
 	done := make(chan error, 1)
+	finished := make(chan struct{})
+	releaseResolver := func() { releaseOnce.Do(func() { close(release) }) }
 	go func() {
+		defer close(finished)
 		_, err := m.activatePendingImage(&ag)
 		done <- err
 	}()
-	<-entered
+	t.Cleanup(func() {
+		releaseResolver()
+		select {
+		case <-finished:
+		case <-time.After(2 * time.Second):
+			t.Error("blocked activation did not finish")
+		}
+	})
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("automatic activation did not reach plugin validation")
+	}
 	if err := as.SetPendingImage(ag.Name, explicitRef.String(), explicit.Digest); err != nil {
 		t.Fatal(err)
 	}
-	close(release)
-	if err := <-done; err == nil {
-		t.Fatal("automatic activation won after explicit pending replacement")
+	releaseResolver()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("automatic activation won after explicit pending replacement")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("automatic activation did not finish after explicit replacement")
 	}
 	stored, err := as.Get(ag.Name)
 	if err != nil || stored.ImageDigest != first.Digest {
