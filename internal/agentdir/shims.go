@@ -22,10 +22,9 @@ func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
 	if err := RequirePython3(); err != nil {
 		return err
 	}
-	toolsScript := filepath.Join(skillsDir, "agent-tools", "scripts", "tools.py")
-	doneScript := filepath.Join(skillsDir, "loop", "scripts", "loop.py")
-	tasksScript := filepath.Join(skillsDir, "tasks", "scripts", "tasks.py")
-	required := []string{toolsScript}
+	doneScript := filepath.Join(skillsDir, "loop", "scripts", "loop.sh")
+	tasksScript := filepath.Join(skillsDir, "tasks", "scripts", "tasks.sh")
+	var required []string
 	if hasCapability(a.Plugins, "loop") {
 		required = append(required, doneScript)
 	}
@@ -33,16 +32,16 @@ func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
 		required = append(required, tasksScript)
 	}
 	for _, path := range required {
-		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
 			return fmt.Errorf("skill script unavailable: %s", path)
 		}
 	}
-	if err := writeShim(l, "tools", fmt.Sprintf("#!/usr/bin/env bash\nexec python3 -B %q \"$@\"\n", toolsScript)); err != nil {
+	if err := removeManagedLegacyToolsShim(l); err != nil {
 		return err
 	}
 	donePath := filepath.Join(l.BinDir(), "i-am-done")
 	if hasCapability(a.Plugins, "loop") {
-		if err := writeShim(l, "i-am-done", fmt.Sprintf("#!/usr/bin/env bash\nexec python3 -B %q done \"$@\"\n", doneScript)); err != nil {
+		if err := writeShim(l, "i-am-done", fmt.Sprintf("#!/usr/bin/env bash\nexec %q done \"$@\"\n", doneScript)); err != nil {
 			return err
 		}
 	} else if err := os.Remove(donePath); err != nil && !os.IsNotExist(err) {
@@ -50,10 +49,34 @@ func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
 	}
 	tasksPath := filepath.Join(l.BinDir(), "tasks")
 	if hasCapability(a.Plugins, "tasks") {
-		return writeShim(l, "tasks", fmt.Sprintf("#!/usr/bin/env bash\nexec python3 -B %q \"$@\"\n", tasksScript))
+		return writeShim(l, "tasks", fmt.Sprintf("#!/usr/bin/env bash\nexec %q \"$@\"\n", tasksScript))
 	}
 	if err := os.Remove(tasksPath); err != nil && !os.IsNotExist(err) {
 		return err
+	}
+	return nil
+}
+
+// removeManagedLegacyToolsShim removes only the regular-file dispatcher shim
+// written by pre-TARI-41 releases. A user-owned bin/tools remains untouched.
+func removeManagedLegacyToolsShim(l Layout) error {
+	path := filepath.Join(l.BinDir(), "tools")
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return nil
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if bytes.Contains(body, []byte("agent-tools/scripts/tools.py")) && bytes.Contains(body, []byte("exec python3")) {
+		return os.Remove(path)
 	}
 	return nil
 }

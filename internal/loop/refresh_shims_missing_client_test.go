@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,34 +12,40 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 )
 
-// SUPER-224 made daemon startup rewrite *every* agent's shims, so a skills
-// directory without the dispatcher turns one start into a fleet-wide breakage that only
-// surfaces at exec time inside an iteration. A missing client must leave the
-// existing shims byte-for-byte alone: a working old shim beats a certainly
-// dead new one. Startup itself still succeeds.
-func TestRefreshShimsKeepsShimsWhenDispatcherIsMissing(t *testing.T) {
+// Missing required direct scripts skip only the affected agent; a stale shim is
+// safer than replacing it with a dead one, and another agent may still refresh.
+func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 	var logs bytes.Buffer
 	m.cfg.Log = slog.New(slog.NewTextHandler(&logs, nil))
-	gone := t.TempDir()
-	m.cfg.SkillsDir = gone
+	m.cfg.SkillsDir = testSkillsDir(t)
+	if err := os.Remove(filepath.Join(m.cfg.SkillsDir, "loop", "scripts", "loop.sh")); err != nil {
+		t.Fatal(err)
+	}
 
-	a := agent.Agent{
+	stale := agent.Agent{
 		Name: "stale", ImageRef: "basic:latest", HarnessType: "stub",
 		Enabled: false, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
 	}
-	if err := as.Create(a); err != nil {
-		t.Fatal(err)
+	healthy := agent.Agent{
+		Name: "healthy", ImageRef: "basic:latest", HarnessType: "stub",
+		Enabled: false, LoopEnabled: false, Plugins: []string{"tasks"},
 	}
-	l := writeStaleShims(t, agentsDir, a.Name)
+	for _, a := range []agent.Agent{stale, healthy} {
+		if err := as.Create(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := writeStaleShims(t, agentsDir, stale.Name)
 	before := map[string][]byte{}
 	for _, f := range []string{"tools", "i-am-done", "tasks"} {
 		before[f] = []byte(readShim(t, l, f))
 	}
+	lHealthy := writeStaleShims(t, agentsDir, healthy.Name)
 
 	if err := m.StartAll(context.Background()); err != nil {
-		t.Fatalf("StartAll failed over a missing tools dispatcher: %v", err)
+		t.Fatalf("StartAll failed over a missing direct skill script: %v", err)
 	}
 
 	for f, want := range before {
@@ -46,14 +53,20 @@ func TestRefreshShimsKeepsShimsWhenDispatcherIsMissing(t *testing.T) {
 			t.Fatalf("%s/%s was rewritten against a missing client:\nbefore: %s\nafter:  %s", l.Name, f, want, got)
 		}
 	}
-	if !strings.Contains(logs.String(), gone) {
-		t.Fatalf("missing skills directory was not logged with its path %q: %s", gone, logs.String())
+	if got := readShim(t, lHealthy, "tasks"); !strings.Contains(got, filepath.Join(m.cfg.SkillsDir, "tasks/scripts/tasks.sh")) {
+		t.Fatalf("healthy agent did not refresh against its direct script: %s", got)
+	}
+	if _, err := os.Stat(filepath.Join(lHealthy.BinDir(), "tools")); !os.IsNotExist(err) {
+		t.Fatalf("healthy agent kept managed legacy tools shim: %v", err)
+	}
+	if !strings.Contains(logs.String(), stale.Name) {
+		t.Fatalf("missing direct script was not logged with its agent name: %s", logs.String())
 	}
 }
 
-// The guard above must not disable the SUPER-224 fix itself: when the client is
-// there, a stale shim is still repointed at it.
-func TestRefreshShimsRewritesShimsWhenDispatcherExists(t *testing.T) {
+// Direct scripts, not the removed central dispatcher, are the startup
+// prerequisite for a stale shim refresh.
+func TestRefreshShimsRewritesShimsWithDirectScripts(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 	live := testSkillsDir(t)
@@ -72,15 +85,18 @@ func TestRefreshShimsRewritesShimsWhenDispatcherExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, f := range []string{"tools", "i-am-done", "tasks"} {
+	for _, f := range []string{"i-am-done", "tasks"} {
 		got := readShim(t, l, f)
 		if strings.Contains(got, "0.21.6") {
 			t.Fatalf("%s/%s still pinned to the provisioning release: %s", l.Name, f, got)
 		}
 		if !strings.Contains(got, filepath.Join(live, map[string]string{
-			"tools": "agent-tools/scripts/tools.py", "i-am-done": "loop/scripts/loop.py", "tasks": "tasks/scripts/tasks.py",
+			"i-am-done": "loop/scripts/loop.sh", "tasks": "tasks/scripts/tasks.sh",
 		}[f])) {
 			t.Fatalf("%s/%s does not exec a script from %q: %s", l.Name, f, live, got)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
+		t.Fatalf("managed legacy tools shim survived refresh: %v", err)
 	}
 }

@@ -460,9 +460,29 @@ func buildBasic(t *testing.T, st *image.Store) {
 	os.WriteFile(filepath.Join(src, "task.md"), []byte("BODY"), 0o600)
 	im := &imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "context"}},
 		Prompts: []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}}, Dir: src}
-	if _, err := image.Build(im, image.Ref{Name: "basic", Tag: "latest"}, st, time.Now); err != nil {
+	if _, err := image.Build(im, image.Ref{Name: "basic", Tag: "latest"}, st, time.Now, image.WithBuiltinStoreRoot(legacyPromptStore(t))); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func legacyPromptStore(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for name, body := range map[string]string{
+		"whoami/prompt.md":   "whoami",
+		"messages/prompt.md": "messages",
+		"context/prompt.md":  "context",
+		"loop/finish.md":     "finish",
+	} {
+		path := filepath.Join(root, "skills", filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
 }
 
 func pinBasicImage(t *testing.T, m *Manager, ag *agent.Agent) {
@@ -536,9 +556,8 @@ func testSkillsDir(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	for _, path := range []string{
-		"agent-tools/scripts/tools.py",
-		"loop/scripts/loop.py",
-		"tasks/scripts/tasks.py",
+		"loop/scripts/loop.sh",
+		"tasks/scripts/tasks.sh",
 	} {
 		path = filepath.Join(root, filepath.FromSlash(path))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -2814,8 +2833,8 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.ImageDir(), "PROMPT.md")); err != nil {
 		t.Fatalf("reprovision did not re-unpack the image: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); err != nil {
-		t.Fatalf("reprovision did not rewrite bin shims: %v", err)
+	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
+		t.Fatalf("reprovision restored the removed central tools shim: %v", err)
 	}
 	// New image recorded on the row.
 	got, _ := as.Get(name)
@@ -2842,7 +2861,7 @@ func buildBasic2(t *testing.T, st *image.Store) {
 	os.WriteFile(filepath.Join(src, "task.md"), []byte("BODY2"), 0o600)
 	im := &imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "context"}},
 		Prompts: []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}}, Dir: src}
-	if _, err := image.Build(im, image.Ref{Name: "basic2", Tag: "latest"}, st, time.Now); err != nil {
+	if _, err := image.Build(im, image.Ref{Name: "basic2", Tag: "latest"}, st, time.Now, image.WithBuiltinStoreRoot(legacyPromptStore(t))); err != nil {
 		t.Fatal(err)
 	}
 }

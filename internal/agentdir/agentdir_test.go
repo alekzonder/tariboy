@@ -25,9 +25,29 @@ func buildImage(t *testing.T, st *image.Store, name string) {
 		Dir:           src,
 	}
 	if _, err := image.Build(im, image.Ref{Name: name, Tag: "latest"}, st,
-		func() (t2 time.Time) { return }); err != nil {
+		func() (t2 time.Time) { return }, image.WithBuiltinStoreRoot(legacyPromptStore(t))); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func legacyPromptStore(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for name, body := range map[string]string{
+		"whoami/prompt.md":   "whoami",
+		"messages/prompt.md": "messages",
+		"context/prompt.md":  "context",
+		"loop/finish.md":     "finish",
+	} {
+		path := filepath.Join(root, "skills", filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
 }
 
 func TestProvisionAndLayout(t *testing.T) {
@@ -49,13 +69,16 @@ func TestProvisionAndLayout(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.Root, "config.json")); !os.IsNotExist(err) {
 		t.Fatalf("config.json should not exist after Provision, stat err=%v", err)
 	}
-	// bin shims exist and are executable and reference the skill script
-	tools, err := os.ReadFile(filepath.Join(l.BinDir(), "tools"))
+	// bin shims exist and are executable and reference the owning skill script.
+	done, err := os.ReadFile(filepath.Join(l.BinDir(), "i-am-done"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(tools), filepath.Join(skills, "agent-tools/scripts/tools.py")) {
-		t.Fatalf("tools shim does not exec the tools skill script: %s", tools)
+	if !strings.Contains(string(done), filepath.Join(skills, "loop/scripts/loop.sh")) {
+		t.Fatalf("i-am-done shim does not exec the loop skill script: %s", done)
+	}
+	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
+		t.Fatalf("central tools shim exists: %v", err)
 	}
 	info, _ := os.Stat(filepath.Join(l.BinDir(), "i-am-done"))
 	if info.Mode().Perm()&0o100 == 0 {
@@ -147,7 +170,7 @@ func TestProvisionReconcilesConditionalTasksShim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), filepath.Join(skills, "tasks/scripts/tasks.py")) ||
+	if !strings.Contains(string(raw), filepath.Join(skills, "tasks/scripts/tasks.sh")) ||
 		!strings.Contains(string(raw), `"$@"`) {
 		t.Fatalf("tasks shim = %q", raw)
 	}

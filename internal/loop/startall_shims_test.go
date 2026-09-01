@@ -13,16 +13,18 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 )
 
-// writeStaleShims fakes an agent dir provisioned by an older daemon: the bin
-// shims are pinned to a release path that no longer exists.
+// writeStaleShims fakes an agent dir provisioned by an older daemon.
 func writeStaleShims(t *testing.T, agentsDir, name string) agentdir.Layout {
 	t.Helper()
 	l := agentdir.New(agentsDir, name)
 	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"tools", "i-am-done", "tasks"} {
-		body := "#!/usr/bin/env bash\nexec python3 \"/opt/tariboy/0.21.6/skills/agent-tools/scripts/tools.py\" \"$@\"\n"
+	for f, body := range map[string]string{
+		"tools":     "#!/usr/bin/env bash\nexec python3 -B \"/opt/tariboy/0.21.6/skills/agent-tools/scripts/tools.py\" \"$@\"\n",
+		"i-am-done": "#!/usr/bin/env bash\nexec \"/opt/tariboy/0.21.6/skills/loop/scripts/loop.sh\" done \"$@\"\n",
+		"tasks":     "#!/usr/bin/env bash\nexec \"/opt/tariboy/0.21.6/skills/tasks/scripts/tasks.sh\" \"$@\"\n",
+	} {
 		if err := os.WriteFile(filepath.Join(l.BinDir(), f), []byte(body), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -39,9 +41,8 @@ func readShim(t *testing.T, l agentdir.Layout, name string) string {
 	return string(raw)
 }
 
-// The frozen-client bug (SUPER-224): a daemon upgrade left every agent execing
-// the tools binary of whatever release provisioned it. StartAll must repoint
-// them at the running daemon's client — including agents that are disabled.
+// Startup repoints every direct skill shim and removes the obsolete managed
+// dispatcher, including for disabled agents.
 func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
@@ -67,7 +68,7 @@ func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
 	}
 
 	for _, l := range []agentdir.Layout{lOn, lOff} {
-		for _, f := range []string{"tools", "i-am-done", "tasks"} {
+		for _, f := range []string{"i-am-done", "tasks"} {
 			got := readShim(t, l, f)
 			if strings.Contains(got, "0.21.6") {
 				t.Fatalf("%s/%s still pinned to the provisioning release: %s", l.Name, f, got)
@@ -75,6 +76,9 @@ func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
 			if !strings.Contains(got, m.cfg.SkillsDir) {
 				t.Fatalf("%s/%s does not exec a live skill script from %q: %s", l.Name, f, m.cfg.SkillsDir, got)
 			}
+		}
+		if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
+			t.Fatalf("%s kept managed legacy tools shim: %v", l.Name, err)
 		}
 	}
 }
@@ -139,7 +143,7 @@ func TestStartAllSurvivesOneUnwritableAgentDir(t *testing.T) {
 	if err := m.StartAll(context.Background()); err != nil {
 		t.Fatalf("StartAll failed because of one bad agent dir: %v", err)
 	}
-	if got := readShim(t, lFine, "tools"); !strings.Contains(got, m.cfg.SkillsDir) {
+	if got := readShim(t, lFine, "i-am-done"); !strings.Contains(got, m.cfg.SkillsDir) {
 		t.Fatalf("healthy agent was skipped after the broken one: %s", got)
 	}
 	if !strings.Contains(logs.String(), "broken") {

@@ -310,18 +310,9 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 // must find a working client then. One unwritable agent dir is logged and
 // skipped: daemon startup is not a place to die over a single directory.
 //
-// A missing tools dispatcher aborts the whole pass before any shim is
-// touched: the path is the same for every agent, so writing it would only
-// replace each agent's working (if stale) client with one that is certainly
-// dead, and the breakage would not surface until an exec inside an iteration.
-// Startup still succeeds — losing the refresh is not worth refusing to run.
+// Each agent validates its own capability-owned direct scripts before changing
+// its shims, so a missing script skips that agent without blocking the fleet.
 func (m *Manager) refreshShims(agents []agent.Agent) {
-	dispatcher := filepath.Join(m.cfg.SkillsDir, "agent-tools", "scripts", "tools.py")
-	if _, err := os.Stat(dispatcher); err != nil {
-		m.cfg.Log.Error("skip agent shim refresh: skill scripts are unavailable",
-			"skills_dir", m.cfg.SkillsDir, "err", err)
-		return
-	}
 	for _, a := range agents {
 		l := agentdir.New(m.cfg.AgentsDir, a.Name)
 		if err := agentdir.WriteShims(l, a, m.cfg.SkillsDir); err != nil {

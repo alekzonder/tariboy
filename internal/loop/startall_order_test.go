@@ -15,7 +15,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/script"
 )
 
-// fifoShim replaces an agent's tools shim with a named pipe, so the shim
+// fifoShim replaces an agent's direct loop shim with a named pipe, so the shim
 // refresh for that agent blocks until the test opens the other end. It is the
 // lever that makes StartAll's ordering observable: whatever the daemon does
 // after the refresh cannot happen while this agent is being refreshed.
@@ -25,7 +25,7 @@ func fifoShim(t *testing.T, agentsDir, name string) string {
 	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(l.BinDir(), "tools")
+	path := filepath.Join(l.BinDir(), "i-am-done")
 	if err := syscall.Mkfifo(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func waitForFile(path string, d time.Duration) bool {
 // the agent's bin dir to PATH — so a script already due at daemon start is the
 // one client call that can still hit a frozen shim.
 //
-// "blocker" sorts before "worker" (Store.List is ORDER BY name), and its tools
+// "blocker" sorts before "worker" (Store.List is ORDER BY name), and its loop
 // shim is a pipe, so refreshShims parks there with "worker" still stale. If the
 // supervisor is started first, its due script runs during that window and copies
 // the stale shim; with the refresh first, the supervisor cannot start until the
@@ -92,11 +92,11 @@ func TestStartAllRefreshesShimsBeforeScriptSupervisorStarts(t *testing.T) {
 	fifo := fifoShim(t, agentsDir, "blocker")
 	lWorker := writeStaleShims(t, agentsDir, "worker")
 
-	// The due script records the shim its own PATH would resolve `tools` to.
+	// The due script records the direct loop shim before its refresh.
 	snapshot := filepath.Join(workdir, "seen-shim")
 	_, rec, err := st.CreateOnce("worker", script.CreateOnce{
 		Name: "due", Description: "test",
-		Command: "cat " + filepath.Join(lWorker.BinDir(), "tools") + " > " + snapshot,
+		Command: "cat " + filepath.Join(lWorker.BinDir(), "i-am-done") + " > " + snapshot,
 	})
 	if err != nil {
 		t.Fatal(err)
