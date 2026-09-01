@@ -55,9 +55,9 @@ Ordinary operator `tariboy image build` refs are mutable: rebuilding a tag,
 including `latest`, replaces it only after validation and retains the prior
 archive by digest for active and pending assignments. Repeat `--tag` to publish
 several refs from one parsed source; each result has its own ref and digest,
-while image bytes, source provenance, and build time are shared. Duplicate tags
-are rejected. A single tag and an omitted tag remain supported; omission means
-`latest`.
+while frozen static image content, source provenance, and build time are
+shared. Duplicate tags are rejected. A single tag and an omitted tag remain
+supported; omission means `latest`.
 
 Imports and retagged runnable artifacts, registry artifacts, reserved `basic`
 and `bare` refs, and controlled-improvement releases remain immutable.
