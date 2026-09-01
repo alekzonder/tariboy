@@ -53,7 +53,7 @@ func TestSchemaV1FragmentsResolveDirectSkillInstructions(t *testing.T) {
 }
 
 func TestSchemaV1FragmentsRenderRunnableInstalledLaunchers(t *testing.T) {
-	p := paths.New(t.TempDir())
+	p := paths.New(filepath.Join(t.TempDir(), "base dir;quote's"))
 	const productVersion = "0.33.0"
 	if err := storeassets.Ensure(p, productVersion); err != nil {
 		t.Fatal(err)
@@ -70,9 +70,6 @@ func TestSchemaV1FragmentsRenderRunnableInstalledLaunchers(t *testing.T) {
 	for _, fragment := range resolved {
 		launcher := strings.Fields(fragment.Teaches[0])[0]
 		installed := filepath.Join(storeRoot, "skills", fragment.Plugin, filepath.FromSlash(launcher))
-		if !strings.Contains(fragment.Body, installed) {
-			t.Errorf("%s schema-v1 instructions omit installed launcher %q:\n%s", fragment.Plugin, installed, fragment.Body)
-		}
 		info, err := os.Stat(installed)
 		if err != nil {
 			t.Errorf("%s installed launcher: %v", fragment.Plugin, err)
@@ -81,14 +78,42 @@ func TestSchemaV1FragmentsRenderRunnableInstalledLaunchers(t *testing.T) {
 		if info.Mode().Perm()&0o111 == 0 {
 			t.Errorf("%s installed launcher mode = %o, want executable", fragment.Plugin, info.Mode().Perm())
 		}
+		const marker = "Schema-v1 compatibility launcher: `"
+		start := strings.LastIndex(fragment.Body, marker)
+		if start < 0 {
+			t.Errorf("%s schema-v1 instructions omit compatibility launcher:\n%s", fragment.Plugin, fragment.Body)
+			continue
+		}
+		command := fragment.Body[start+len(marker):]
+		end := strings.Index(command, "`.")
+		if end < 0 {
+			t.Errorf("%s compatibility launcher is malformed: %q", fragment.Plugin, command)
+			continue
+		}
+		if fragment.Plugin == "whoami" {
+			runSchemaV1CommandToSocketPreflight(t, "whoami compatibility launcher", command[:end])
+			inlineBody := fragment.Body[:start]
+			inlineStart := strings.Index(inlineBody, "`")
+			if inlineStart < 0 {
+				t.Fatalf("whoami inline launcher is malformed: %q", inlineBody)
+			}
+			inlineEnd := strings.Index(inlineBody[inlineStart+1:], "`")
+			if inlineEnd < 0 {
+				t.Fatalf("whoami inline launcher is malformed: %q", inlineBody)
+			}
+			inline := inlineBody[inlineStart+1 : inlineStart+1+inlineEnd]
+			runSchemaV1CommandToSocketPreflight(t, "whoami inline launcher", inline)
+		}
 	}
+}
 
-	whoami := filepath.Join(storeRoot, "skills", "whoami", "scripts", "whoami.sh")
-	cmd := exec.Command(whoami)
+func runSchemaV1CommandToSocketPreflight(t *testing.T, name, command string) {
+	t.Helper()
+	cmd := exec.Command("/bin/sh", "-c", command)
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	output, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(output), "TARIBOY_TOOLS_SOCKET") {
-		t.Fatalf("run rendered whoami launcher: output=%q err=%v", output, err)
+		t.Errorf("run rendered %s %q: output=%q err=%v", name, command, output, err)
 	}
 }
 

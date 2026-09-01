@@ -169,6 +169,13 @@ func readFragment(root, name string) ([]byte, error) {
 	return body, err
 }
 
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
 func selectFragments(plugins []string, tail bool, storeRoot string) ([]Fragment, error) {
 	var out []Fragment
 	for _, metadata := range fragments {
@@ -189,8 +196,9 @@ func selectFragments(plugins []string, tail bool, storeRoot string) ([]Fragment,
 					return nil, fmt.Errorf("resolve Store root: %w", err)
 				}
 				installed := filepath.Join(root, filepath.Dir(fragment.Path), filepath.FromSlash(launcher))
-				fragment.Body = strings.ReplaceAll(fragment.Body, launcher, installed)
-				fragment.Body += "\n\nSchema-v1 compatibility launcher: `" + strings.Replace(fragment.Teaches[0], launcher, installed, 1) + "`."
+				quoted := shellQuote(installed)
+				fragment.Body = strings.ReplaceAll(fragment.Body, launcher, quoted)
+				fragment.Body += "\n\nSchema-v1 compatibility launcher: `" + strings.Replace(fragment.Teaches[0], launcher, quoted, 1) + "`."
 			} else {
 				fragment.Body += "\n\nSchema-v1 compatibility launcher: `" + fragment.Teaches[0] + "`."
 			}
