@@ -1,6 +1,6 @@
 ---
 title: Images
-description: Build immutable plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
+description: Build plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
 sidebar:
   label: Overview
   icon: layers
@@ -37,6 +37,7 @@ The equivalent operator command is:
 ```bash
 tariboy image validate --path ./reviewer-image --name reviewer --tag v3
 tariboy image build --path ./reviewer-image --name reviewer --tag v3
+tariboy image build --path ./reviewer-image --name reviewer --tag latest --tag v4
 tariboy image build --path ./reviewer-image --name reviewer --tag v4 \
   --repository-id agent-images --git-commit 91ab820
 tariboy image ls
@@ -50,8 +51,16 @@ working directory.
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
 
-Image refs are immutable. Change the tag when changed source content must be
-published as another image.
+Ordinary operator `tariboy image build` refs are mutable: rebuilding a tag,
+including `latest`, replaces it only after validation and retains the prior
+archive by digest for active and pending assignments. Repeat `--tag` to publish
+several refs from one parsed source; each result has its own ref and digest,
+while image bytes, source provenance, and build time are shared. Duplicate tags
+are rejected. A single tag and an omitted tag remain supported; omission means
+`latest`.
+
+Imports and retagged runnable artifacts, registry artifacts, reserved `basic`
+and `bare` refs, and controlled-improvement releases remain immutable.
 
 ## Schema version 2
 
@@ -176,6 +185,11 @@ cancelled before activation.
 The built-image list shows agent names separately under **Current** and
 **Pending**, so an operator can see both active use and assignments waiting for
 their next launch gate. An image in either list cannot be removed.
+
+When an agent's active ordinary build ref moves to a new digest, Tariboy detects
+it only at that same next launch gate. An explicit pending assignment takes
+priority; otherwise the changed digest follows the normal pending staging and
+promotion path. The running iteration remains on its pinned digest.
 
 ## Import and export
 

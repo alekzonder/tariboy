@@ -110,9 +110,14 @@ Build and inspect one with:
 
 ```bash
 tariboy image validate --path ./reviewer-image --name reviewer --tag v1
-tariboy image build --path ./reviewer-image --name reviewer --tag v1
+tariboy image build --path ./reviewer-image --name reviewer --tag latest --tag v1
 tariboy image template reviewer:v1
 ```
+
+An ordinary operator `tariboy image build` may rebuild a tag, including
+`latest`. The prior digest is retained for active and pending agents, while
+each requested tag reports its own ref and digest. Imports and retagged runnable
+artifacts remain immutable.
 
 The Images workspace can export/import runnable artifacts, assign a built image
 to an existing agent for its next iteration, and open the original source CWD

@@ -164,13 +164,16 @@ Capabilities gate tools and shims, but do not contribute prompt text
 automatically. Every static instruction is an explicit `prompts` file entry.
 Schema-v1 images retain the historical core union and fragment behavior.
 
-Before each iteration's prompt or message preparation, the launch gate checks
-for a pending image assignment. It stages and validates the new artifact,
-prepares and verifies any native skill bridge, reconciles image-owned shims,
-atomically promotes the DB assignment, and records
+Before each iteration's prompt or message preparation, the launch gate first
+honors a pending image assignment. Without one, it checks whether the active
+ordinary mutable-build ref now resolves to a different digest and stages that
+digest as pending. It then validates the new artifact, prepares and verifies
+any native skill bridge, reconciles image-owned shims, atomically promotes the
+DB assignment, and records
 the iteration's image ref, digest, and template hash. A running iteration is
 never interrupted. Backup and staging markers make an interrupted swap
 recoverable without changing durable agent state.
-Recovery compares the pinned digest, not only the ref. For daemon-managed refs,
-both inspection and staging resolve the exact retained digest recorded on the
-agent, including assignments that were pending when the daemon was upgraded.
+Recovery compares the pinned digest, not only the ref. For daemon-managed and
+ordinary mutable-build refs, both inspection and staging resolve the exact
+retained digest recorded on the agent, including assignments that were pending
+when the daemon was upgraded or the ordinary ref was rebuilt.

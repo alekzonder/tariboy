@@ -97,8 +97,9 @@ The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
 already-promoted image digest matches the row. Each unpacked image carries a
 daemon-owned digest marker, so two generations of a managed ref such as
-`basic:latest` cannot be confused. Managed archive generations are retained by
-digest so active and pending assignments survive a daemon upgrade. Harness,
+`basic:latest` cannot be confused. Managed and ordinary mutable-build archive
+generations are retained by digest, so active and pending assignments survive a
+daemon upgrade or a rebuilt ordinary ref. Harness,
 model, effort, environment,
 CWD, context, workdir, messages, history, group, and subscriptions are not image
 assignment fields.
