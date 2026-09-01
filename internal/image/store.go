@@ -21,6 +21,17 @@ type Store struct{ Dir string }
 // ponytail: global lock, use per-ref locks if mutable image publication becomes a bottleneck.
 var mutablePublishMu sync.Mutex
 
+// ponytail: global lock, use per-ref locks if controlled image publication becomes a bottleneck.
+var publicationGate sync.Mutex
+
+// WithPublicationGate prevents ordinary mutable authoring from racing a
+// controlled release's immutable archive and release record.
+func WithPublicationGate(fn func() error) error {
+	publicationGate.Lock()
+	defer publicationGate.Unlock()
+	return fn()
+}
+
 func (s *Store) refDir(ref Ref) string     { return filepath.Join(s.Dir, ref.Name) }
 func (s *Store) tarPath(ref Ref) string    { return filepath.Join(s.Dir, ref.Name, ref.Tag+".tar.gz") }
 func (s *Store) digestPath(ref Ref) string { return filepath.Join(s.Dir, ref.Name, ref.Tag+".digest") }

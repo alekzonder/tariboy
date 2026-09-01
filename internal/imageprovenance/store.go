@@ -16,7 +16,19 @@ type Record struct {
 type Store struct{ DB *sql.DB }
 
 func (s Store) Upsert(record Record) error {
-	_, err := s.DB.Exec(`INSERT INTO image_provenance(ref,digest,source_cwd,built_at) VALUES(?,?,?,?)
+	return upsert(s.DB, record)
+}
+
+func (s Store) UpsertTx(tx *sql.Tx, record Record) error {
+	return upsert(tx, record)
+}
+
+type executor interface {
+	Exec(string, ...any) (sql.Result, error)
+}
+
+func upsert(exec executor, record Record) error {
+	_, err := exec.Exec(`INSERT INTO image_provenance(ref,digest,source_cwd,built_at) VALUES(?,?,?,?)
 		ON CONFLICT(ref) DO UPDATE SET digest=excluded.digest, source_cwd=excluded.source_cwd, built_at=excluded.built_at`, record.Ref, record.Digest, record.SourceCWD, record.BuiltAt)
 	return err
 }

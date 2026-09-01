@@ -65,6 +65,38 @@ func TestPublisherRejectsLatestAndUnapprovedProposal(t *testing.T) {
 	}
 }
 
+func TestPublisherWaitsForPublicationGate(t *testing.T) {
+	publisher := NewPublisher(PublisherConfig{})
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	locked := make(chan error, 1)
+	go func() {
+		locked <- image.WithPublicationGate(func() error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	done := make(chan error, 1)
+	go func() {
+		_, err := publisher.Build(context.Background(), BuildRequest{})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("publisher ignored publication gate: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err == nil {
+		t.Fatal("invalid release request was accepted")
+	}
+}
+
 func TestPublisherRejectsMutableStoreInput(t *testing.T) {
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills: []\nprompts:\n  - file: $CURRENT_VERSION_STORE/skills/messages/prompt.md\n"), 0o644); err != nil {

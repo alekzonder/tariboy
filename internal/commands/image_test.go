@@ -225,6 +225,79 @@ func TestImageBuildRejectsReleaseRef(t *testing.T) {
 	}
 }
 
+func TestImageBuildWaitsForPublicationGate(t *testing.T) {
+	c := localCtx(t)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	locked := make(chan error, 1)
+	go func() {
+		locked <- image.WithPublicationGate(func() error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	done := make(chan error, 1)
+	go func() {
+		_, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": writeExample(t)})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("build ignored publication gate: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImageBuildRestoresExistingRefAndMetadataWhenProvenanceFails(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	first, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDigest := first.(map[string]any)["digest"].(string)
+	previousSnapshot, ok, err := imageSnapshotStore(c).Lookup(context.Background(), ref.String())
+	if err != nil || !ok {
+		t.Fatalf("previous snapshot = %#v, %v, %v", previousSnapshot, ok, err)
+	}
+	previousProvenance, ok, err := (imageprovenance.Store{DB: c.Store.DB}).Get(ref.String())
+	if err != nil || !ok {
+		t.Fatalf("previous provenance = %#v, %v, %v", previousProvenance, ok, err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("UPDATED TEST AGENT"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Store.DB.Exec(`CREATE TRIGGER reject_image_provenance BEFORE INSERT ON image_provenance BEGIN SELECT RAISE(FAIL, 'blocked'); END`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+	if err == nil {
+		t.Fatal("rebuild succeeded despite provenance failure")
+	}
+	current, err := imageStore(c).Inspect(ref)
+	if err != nil || current.Digest != firstDigest {
+		t.Fatalf("current = %#v, %v; want %s", current, err, firstDigest)
+	}
+	snapshot, ok, err := imageSnapshotStore(c).Lookup(context.Background(), ref.String())
+	if err != nil || !ok || snapshot != previousSnapshot {
+		t.Fatalf("snapshot = %#v, %v, %v; want %#v", snapshot, ok, err, previousSnapshot)
+	}
+	provenance, ok, err := (imageprovenance.Store{DB: c.Store.DB}).Get(ref.String())
+	if err != nil || !ok || provenance.Ref != previousProvenance.Ref || provenance.Digest != previousProvenance.Digest || provenance.SourceCWD != previousProvenance.SourceCWD || provenance.BuiltAt != previousProvenance.BuiltAt {
+		t.Fatalf("provenance = %#v, %v, %v; want %#v", provenance, ok, err, previousProvenance)
+	}
+}
+
 func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)

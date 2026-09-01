@@ -182,6 +182,46 @@ func (s *Store) Remove(ref Ref) error {
 	return nil
 }
 
+// RestoreMutable returns a moved mutable ref to one of its retained digests
+// without removing any retained generations.
+func (s *Store) RestoreMutable(ref Ref, digest string) error {
+	mutablePublishMu.Lock()
+	defer mutablePublishMu.Unlock()
+	current, err := s.Inspect(ref)
+	if err != nil {
+		return err
+	}
+	if current.Digest == digest {
+		return nil
+	}
+	history := s.pinnedMutablePath(ref, digest)
+	if _, err := ValidateArchive(history, ref); err != nil {
+		return fmt.Errorf("restore mutable image %s@%s: %w", ref.String(), digest, err)
+	}
+	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".restore-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	defer os.Remove(tmpName)
+	if err := os.Remove(tmpName); err != nil {
+		return err
+	}
+	if err := os.Link(history, tmpName); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
+		return err
+	}
+	if err := writeDigestCache(s.digestPath(ref), digest); err != nil {
+		_ = os.Remove(s.digestPath(ref))
+	}
+	return nil
+}
+
 func (s *Store) Unpack(ref Ref, destDir string) error {
 	if !s.Exists(ref) {
 		return fmt.Errorf("image %s not found", ref.String())

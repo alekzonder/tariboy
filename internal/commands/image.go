@@ -15,6 +15,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
+	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/imagesource"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
@@ -85,24 +86,25 @@ func imageBuild() registry.Command {
 				seen[ref.String()] = true
 				refs = append(refs, ref)
 			}
-			if c.Store != nil {
-				for _, ref := range refs {
-					var releases int
-					if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM image_releases WHERE image_ref=?`, ref.String()).Scan(&releases); err != nil {
-						return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-					}
-					if releases != 0 {
-						return nil, api.UserError{Code: "immutable_release", Msg: "image " + ref.String() + " is a controlled release", Status: http.StatusConflict}
-					}
-				}
-			}
-			parsed, err := imagefile.ParseAny(path)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
-			}
 			sourceCWD, sourceErr := canonicalSourceDir(path)
 			if sourceErr != nil {
 				return nil, api.UserError{Code: "bad_source_path", Msg: sourceErr.Error(), Status: http.StatusBadRequest}
+			}
+			snapshotStore := &imagesnapshot.Store{Root: filepath.Join(c.BaseDir, "image-source-snapshots"), Clock: time.Now}
+			if c.Store != nil {
+				snapshotStore.DB = c.Store.DB
+			}
+			frozen, err := snapshotStore.Freeze(sourceCWD)
+			if err != nil {
+				return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
+			}
+			frozenDir, err := snapshotStore.OpenFrozen(frozen)
+			if err != nil {
+				return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
+			}
+			parsed, err := imagefile.ParseAny(frozenDir)
+			if err != nil {
+				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
 			}
 			layout := paths.Paths{Base: c.BaseDir}
 			pluginsDir := layout.PluginsDir()
@@ -113,10 +115,6 @@ func imageBuild() registry.Command {
 				} else {
 					resolver = plugins.ResolveInstalledMetadata(pluginsDir)
 				}
-				productVersion := c.Version
-				if productVersion == "" {
-					productVersion = version.Version
-				}
 			}
 			productVersion := c.Version
 			if productVersion == "" {
@@ -124,45 +122,83 @@ func imageBuild() registry.Command {
 			}
 			builtAt := time.Now()
 			clock := func() time.Time { return builtAt }
-			results := make([]map[string]any, 0, len(refs))
-			for _, ref := range refs {
-				hadRef := imageStore(c).Exists(ref)
-				var man image.Manifest
-				if parsed.Version == 2 {
-					man, err = image.BuildV2Mutable(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, imageStore(c), clock, resolver)
-				} else {
-					man, err = image.Build(parsed.V1, ref, imageStore(c), clock,
-						image.WithExternalPlugins(resolver),
-						image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
-						image.WithMutableRef(),
-					)
-				}
-				if err != nil {
-					return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-				}
+			var result any
+			err = image.WithPublicationGate(func() error {
 				if c.Store != nil {
-					if _, err := imageSnapshotStore(c).CaptureWithProvenance(context.Background(), ref.String(), man.Digest, name, sourceCWD, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
-						if !hadRef {
-							_ = imageStore(c).Remove(ref)
+					for _, ref := range refs {
+						var releases int
+						if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM image_releases WHERE image_ref=?`, ref.String()).Scan(&releases); err != nil {
+							return api.UserError{Code: "build_failed", Msg: err.Error()}
 						}
-						return nil, api.UserError{Code: "provenance_failed", Msg: err.Error()}
-					}
-					if err := (imageprovenance.Store{DB: c.Store.DB}).Upsert(imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
-						if !hadRef {
-							_, _ = c.Store.DB.Exec(`DELETE FROM image_source_snapshots WHERE image_ref=?`, ref.String())
-							if removeErr := imageStore(c).Remove(ref); removeErr != nil {
-								return nil, api.UserError{Code: "provenance_failed", Msg: fmt.Sprintf("%v; rollback image: %v", err, removeErr)}
-							}
+						if releases != 0 {
+							return api.UserError{Code: "immutable_release", Msg: "image " + ref.String() + " is a controlled release", Status: http.StatusConflict}
 						}
-						return nil, api.UserError{Code: "provenance_failed", Msg: err.Error()}
 					}
 				}
-				results = append(results, map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)})
+				results := make([]map[string]any, 0, len(refs))
+				for _, ref := range refs {
+					store := imageStore(c)
+					hadRef := store.Exists(ref)
+					previousDigest := ""
+					if hadRef {
+						previous, inspectErr := store.Inspect(ref)
+						if inspectErr != nil {
+							return api.UserError{Code: "build_failed", Msg: inspectErr.Error()}
+						}
+						previousDigest = previous.Digest
+					}
+					var man image.Manifest
+					if parsed.Version == 2 {
+						man, err = image.BuildV2Mutable(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, store, clock, resolver)
+					} else {
+						man, err = image.Build(parsed.V1, ref, store, clock,
+							image.WithExternalPlugins(resolver),
+							image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
+							image.WithMutableRef(),
+						)
+					}
+					if err != nil {
+						return api.UserError{Code: "build_failed", Msg: err.Error()}
+					}
+					rollback := func() error {
+						if hadRef {
+							return store.RestoreMutable(ref, previousDigest)
+						}
+						return store.Remove(ref)
+					}
+					if c.Store != nil {
+						tx, beginErr := c.Store.DB.BeginTx(context.Background(), nil)
+						metadataErr := beginErr
+						if metadataErr == nil {
+							defer tx.Rollback()
+							_, metadataErr = snapshotStore.CaptureFrozenTx(context.Background(), tx, ref.String(), man.Digest, name, frozen, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit})
+						}
+						if metadataErr == nil {
+							metadataErr = (imageprovenance.Store{DB: c.Store.DB}).UpsertTx(tx, imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt})
+						}
+						if metadataErr == nil {
+							metadataErr = tx.Commit()
+						}
+						if metadataErr != nil {
+							if rollbackErr := rollback(); rollbackErr != nil {
+								return api.UserError{Code: "provenance_failed", Msg: fmt.Sprintf("%v; rollback image: %v", metadataErr, rollbackErr)}
+							}
+							return api.UserError{Code: "provenance_failed", Msg: metadataErr.Error()}
+						}
+					}
+					results = append(results, map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)})
+				}
+				if len(results) == 1 {
+					result = results[0]
+				} else {
+					result = map[string]any{"images": results}
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, err
 			}
-			if len(results) == 1 {
-				return results[0], nil
-			}
-			return map[string]any{"images": results}, nil
+			return result, nil
 		},
 	}
 }

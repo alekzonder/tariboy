@@ -99,6 +99,27 @@ func TestCaptureRejectsUnsafeEntriesWithoutPublishing(t *testing.T) {
 	}
 }
 
+func TestFreezeKeepsOneSourceGeneration(t *testing.T) {
+	root := t.TempDir()
+	source := t.TempDir()
+	path := filepath.Join(source, "prompt.md")
+	if err := os.WriteFile(path, []byte("first"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := Store{Root: root}
+	frozen, err := store.Freeze(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("second"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, frozen.RelativeDir, "prompt.md"))
+	if err != nil || string(data) != "first" {
+		t.Fatalf("frozen prompt = %q, %v", data, err)
+	}
+}
+
 func TestCaptureStoresAndLooksUpGitProvenanceByImageDigest(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))

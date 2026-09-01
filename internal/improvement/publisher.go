@@ -40,6 +40,16 @@ func NewPublisher(config PublisherConfig) *Publisher {
 }
 
 func (p *Publisher) Build(ctx context.Context, request BuildRequest) (Release, error) {
+	var release Release
+	err := image.WithPublicationGate(func() error {
+		var err error
+		release, err = p.build(ctx, request)
+		return err
+	})
+	return release, err
+}
+
+func (p *Publisher) build(ctx context.Context, request BuildRequest) (Release, error) {
 	ref, err := image.ParseRef(request.ImageRef)
 	if err != nil || ref.Tag == "latest" || p.config.Store == nil || p.config.Images == nil || p.config.Snapshots == nil {
 		return Release{}, fmt.Errorf("invalid immutable release request")
