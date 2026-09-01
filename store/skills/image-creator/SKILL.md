@@ -5,13 +5,13 @@ description: Use when creating or revising a Tariboy agent image from a Tariboyf
 
 # Agent Image Authoring
 
-The Python script lives inside this skill directory under `scripts/` and calls
-the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+This skill's `scripts/image_creator.sh` launcher lives inside this skill
+directory and calls the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
 
 Create a schema-v2 `Tariboyfile.yaml` with explicit ordered plugins, packaged
 skills, prompt files, and runtime placeholders. Build with:
 
-`tools image build --name <name> [--tag <tag>] --path <source-dir>`
+`scripts/image_creator.sh build --name <name> [--tag <tag>] --path <source-dir>`
 
 For reproducible production images, vendor shared prompt dependencies, record
 them in `tariboy.lock.yaml`, use an immutable tag, and avoid absolute,

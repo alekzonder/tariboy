@@ -5,4 +5,8 @@ description: Use when an agent needs the configured Tariboy workdir path for a c
 
 # Workdir
 
-The `workdir:` path in the current prompt is available for scripts and files outside the current directory. Pass an absolute path from it after `--` to `tools script run` or `tools script schedule`.
+The `workdir:` path in the current prompt is available for scripts and files
+outside the current directory. The sibling Scripts skill's
+`../scripts/scripts/scripts.sh` launcher lives inside that skill directory;
+pass an absolute path from `workdir:` after `--` to its `run` or `schedule`
+command.

@@ -5,17 +5,18 @@ description: Use when a local command must continue beyond the current Tariboy i
 
 # Durable Scripts
 
-The Python script lives inside this skill directory under `scripts/` and calls
-the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+This skill's `scripts/scripts.sh` launcher lives inside this skill directory
+and calls the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
 
-Run once with `tools script run <name> -- <command>`. Queue it exactly once,
+Run once with `scripts/scripts.sh run <name> -- <command>`. Queue it exactly once,
 finish the iteration, and consume the later `script.result` message instead of
 waiting in the current iteration.
 
-Run repeatedly with `tools script schedule <name> --every <seconds> -- <command>`.
+Run repeatedly with `scripts/scripts.sh schedule <name> --every <seconds> -- <command>`.
 Runs never overlap. `--quiet-exit CODE` records that exit without waking the
 agent; other nonzero exits remain failures.
 
-Inspect with `tools script ls`, `tools script runs`, and `tools script logs`.
+Inspect with `scripts/scripts.sh ls`, `scripts/scripts.sh runs`, and
+`scripts/scripts.sh logs`.
 Use `rerun`, `cancel`, or `rm` for lifecycle control. A schedule cancellation
 also stops its active run; cancelling one run leaves its schedule intact.

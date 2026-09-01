@@ -25,7 +25,7 @@ COMMANDS = {
 
 
 class StoreSkillsTest(unittest.TestCase):
-    def run_script(self, relative, args, result):
+    def run_script(self, relative, args, result, version="0.46.0", envelope=None):
         class Handler(socketserver.StreamRequestHandler):
             def handle(handler):
                 request_line = handler.rfile.readline().decode()
@@ -35,8 +35,8 @@ class StoreSkillsTest(unittest.TestCase):
                     headers[name.lower()] = value.strip()
                 length = int(headers.get("content-length", 0))
                 server.request = (request_line.split()[:2], handler.rfile.read(length))
-                body = json.dumps({"ok": True, "result": result}).encode()
-                handler.wfile.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" + f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+                body = json.dumps(envelope or {"ok": True, "result": result}).encode()
+                handler.wfile.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" + f"Content-Length: {len(body)}\r\nX-Tariboy-Version: {version}\r\n\r\n".encode() + body)
 
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "agent.sock")
@@ -65,6 +65,21 @@ class StoreSkillsTest(unittest.TestCase):
                 self.assertNotIn("agent-tools", source)
                 self.assertNotIn("from client import", source)
                 self.assertNotIn("sys.path.insert", source)
+
+    def test_skill_instructions_use_owning_direct_entrypoints(self):
+        expected = {
+            "messages": "scripts/messages.sh",
+            "schedule": "scripts/schedule.sh",
+            "scripts": "scripts/scripts.sh",
+            "image-creator": "scripts/image_creator.sh",
+            "tasks": "scripts/tasks.sh",
+            "workdir": "scripts/scripts.sh",
+        }
+        for skill, entrypoint in expected.items():
+            with self.subTest(skill=skill):
+                text = (ROOT / skill / "SKILL.md").read_text()
+                self.assertIn(entrypoint, text)
+                self.assertNotIn("tools ", text)
 
     def test_direct_entrypoint_reports_missing_socket(self):
         env = dict(os.environ)
@@ -114,6 +129,35 @@ class StoreSkillsTest(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(process.stdout, "handoff\n")
         self.assertEqual(request[0], ["GET", "/tools/context/get"])
+
+    def test_direct_entrypoint_preserves_daemon_errors_and_plain_output(self):
+        process, request = self.run_script(
+            "status/scripts/status.sh", [], {},
+            envelope={"ok": False, "error": {"code": "plugin_disabled", "message": "status disabled"}},
+        )
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(process.stderr, "status disabled\n")
+        self.assertEqual(request[0], ["GET", "/tools/status"])
+
+        process, _ = self.run_script(
+            "status/scripts/status.sh", [], {"enabled": True, "items": ["a", "b"], "missing": None}
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(process.stdout, "enabled: true\nitems: [a b]\nmissing: <nil>\n")
+
+    def test_direct_entrypoint_warns_on_version_mismatch(self):
+        process, _ = self.run_script(
+            "whoami/scripts/whoami.sh", [], {"agent": "alice"}, version="0.47.0"
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertIn("client version 0.46.0 does not match daemon version 0.47.0", process.stderr)
+        self.assertIn("client_version: 0.46.0", process.stdout)
+
+    def test_direct_entrypoint_rejects_unknown_flags_before_request(self):
+        process, request = self.run_script("loop/scripts/loop.sh", ["done", "--bogus"], {})
+        self.assertEqual(process.returncode, 2)
+        self.assertIn("unknown flag --bogus", process.stderr)
+        self.assertIsNone(request)
 
     def test_workdir_is_an_instruction_only_skill(self):
         skill = ROOT / "workdir" / "SKILL.md"
