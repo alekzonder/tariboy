@@ -20,12 +20,24 @@ type Store struct{ Dir string }
 func (s *Store) refDir(ref Ref) string     { return filepath.Join(s.Dir, ref.Name) }
 func (s *Store) tarPath(ref Ref) string    { return filepath.Join(s.Dir, ref.Name, ref.Tag+".tar.gz") }
 func (s *Store) digestPath(ref Ref) string { return filepath.Join(s.Dir, ref.Name, ref.Tag+".digest") }
+func (s *Store) mutablePath(ref Ref) string {
+	return filepath.Join(s.Dir, ref.Name, ref.Tag+".mutable")
+}
 func (s *Store) pinnedManagedPath(ref Ref, digest string) string {
 	return filepath.Join(s.Dir, ".managed", ref.Name, ref.Tag, digest+".tar.gz")
+}
+func (s *Store) pinnedMutablePath(ref Ref, digest string) string {
+	return filepath.Join(s.Dir, ".mutable", ref.Name, ref.Tag, digest+".tar.gz")
 }
 
 func (s *Store) Exists(ref Ref) bool {
 	_, err := os.Stat(s.tarPath(ref))
+	return err == nil
+}
+
+// IsMutable reports whether ref was published through the mutable authoring path.
+func (s *Store) IsMutable(ref Ref) bool {
+	_, err := os.Stat(s.mutablePath(ref))
 	return err == nil
 }
 
@@ -219,15 +231,21 @@ func (s *Store) InspectPinned(ref Ref, digest string) (Manifest, error) {
 	if current, err := s.Inspect(ref); err == nil && current.Digest == digest {
 		return current, nil
 	}
-	if !IsReserved(ref) {
+	if !IsReserved(ref) && !s.IsMutable(ref) {
 		return Manifest{}, fmt.Errorf("image %s digest does not match pinned identity", ref.String())
 	}
-	pinned, err := inspectArchive(s.pinnedManagedPath(ref, digest), ref)
+	historyPath := s.pinnedManagedPath(ref, digest)
+	kind := "managed"
+	if !IsReserved(ref) {
+		historyPath = s.pinnedMutablePath(ref, digest)
+		kind = "mutable"
+	}
+	pinned, err := inspectArchive(historyPath, ref)
 	if err != nil {
-		return Manifest{}, fmt.Errorf("pinned managed image %s@%s is unavailable: %w", ref.String(), digest, err)
+		return Manifest{}, fmt.Errorf("pinned %s image %s@%s is unavailable: %w", kind, ref.String(), digest, err)
 	}
 	if pinned.Digest != digest {
-		return Manifest{}, fmt.Errorf("managed image %s history digest mismatch", ref.String())
+		return Manifest{}, fmt.Errorf("%s image %s history digest mismatch", kind, ref.String())
 	}
 	return pinned, nil
 }
@@ -356,12 +374,9 @@ func readFileFromTar(archive, want string) ([]byte, error) {
 	return nil, fmt.Errorf("%s not found in %s", want, archive)
 }
 
-// writeArchive builds the tar.gz in a temporary file and publishes it with a
-// no-clobber hard link. A ref is immutable once published. The digest sidecar
-// is best-effort because Inspect derives the authoritative digest from the
-// archive bytes; failing to cache it must not turn a successful immutable
-// publish into a misleading failed build.
-func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, skillDirs []string) (string, error) {
+// writeArchive builds the tar.gz in a temporary file. publishArchive keeps the
+// immutable no-clobber default and optionally advances a marked mutable ref.
+func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, skillDirs []string, mutable bool) (string, error) {
 	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
 		return "", err
 	}
@@ -372,8 +387,7 @@ func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, s
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName) // no-op once renamed
 
-	hasher := sha256.New()
-	gz := gzip.NewWriter(io.MultiWriter(tmp, hasher))
+	gz := gzip.NewWriter(tmp)
 	tw := tar.NewWriter(gz)
 
 	manJSON, err := json.MarshalIndent(man, "", "  ")
@@ -431,17 +445,49 @@ func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, s
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
-	digest := hex.EncodeToString(hasher.Sum(nil))
-	if err := os.Link(tmpName, s.tarPath(ref)); err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return "", fmt.Errorf("%w: %s", ErrExists, ref.String())
-		}
-		return "", fmt.Errorf("publish image %s: %w", ref.String(), err)
+	return s.publishArchive(ref, tmpName, mutable)
+}
+
+func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool) (string, error) {
+	if mutable && IsReserved(ref) {
+		return "", fmt.Errorf("%w: %s", ErrReserved, ref.String())
 	}
-	if err := writeDigestCache(s.digestPath(ref), digest); err != nil {
+	manifest, err := ValidateArchive(tmpName, ref)
+	if err != nil {
+		return "", fmt.Errorf("validate image %s: %w", ref.String(), err)
+	}
+	if !mutable {
+		if err := os.Link(tmpName, s.tarPath(ref)); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				return "", fmt.Errorf("%w: %s", ErrExists, ref.String())
+			}
+			return "", fmt.Errorf("publish image %s: %w", ref.String(), err)
+		}
+	} else {
+		if s.Exists(ref) {
+			current, err := s.Inspect(ref)
+			if err != nil {
+				return "", fmt.Errorf("inspect current mutable image %s: %w", ref.String(), err)
+			}
+			historyPath := s.pinnedMutablePath(ref, current.Digest)
+			if err := os.MkdirAll(filepath.Dir(historyPath), 0o700); err != nil {
+				return "", err
+			}
+			if err := os.Link(s.tarPath(ref), historyPath); err != nil && !errors.Is(err, os.ErrExist) {
+				return "", fmt.Errorf("preserve mutable image %s@%s: %w", ref.String(), current.Digest, err)
+			}
+		}
+		if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
+			return "", fmt.Errorf("publish mutable image %s: %w", ref.String(), err)
+		}
+		if err := os.WriteFile(s.mutablePath(ref), []byte("mutable\n"), 0o600); err != nil {
+			return "", fmt.Errorf("mark mutable image %s: %w", ref.String(), err)
+		}
+	}
+	if err := writeDigestCache(s.digestPath(ref), manifest.Digest); err != nil {
 		_ = os.Remove(s.digestPath(ref))
 	}
-	return digest, nil
+	return manifest.Digest, nil
 }
 
 func writeDigestCache(path, digest string) error {

@@ -176,6 +176,8 @@ func (s *Store) Remove(ref Ref) error {
 		return err
 	}
 	_ = os.Remove(s.digestPath(ref))
+	_ = os.Remove(s.mutablePath(ref))
+	_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
 	_ = os.Remove(s.refDir(ref)) // best-effort: drops the dir when it becomes empty
 	return nil
 }
@@ -197,7 +199,11 @@ func (s *Store) UnpackPinned(ref Ref, digest, destDir string) error {
 	}
 	archivePath := s.tarPath(ref)
 	if current, currentErr := s.Inspect(ref); currentErr != nil || current.Digest != manifest.Digest {
-		archivePath = s.pinnedManagedPath(ref, digest)
+		if IsReserved(ref) {
+			archivePath = s.pinnedManagedPath(ref, digest)
+		} else {
+			archivePath = s.pinnedMutablePath(ref, digest)
+		}
 	}
 	return unpackArchive(archivePath, ref, destDir)
 }

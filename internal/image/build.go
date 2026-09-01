@@ -22,6 +22,7 @@ func sha256hex(b []byte) string {
 type buildOpts struct {
 	externalPlugins  plugincaps.ExternalResolver
 	builtinStoreRoot string
+	mutableRef       bool
 }
 
 // WithBuiltinStoreRoot makes legacy schema-v1 prompt fragments load from the
@@ -36,6 +37,11 @@ type BuildOption func(*buildOpts)
 // WithExternalPlugins wires installed-manifest and optional prompt resolution.
 func WithExternalPlugins(f plugincaps.ExternalResolver) BuildOption {
 	return func(o *buildOpts) { o.externalPlugins = f }
+}
+
+// WithMutableRef publishes an ordinary authoring ref that may later advance.
+func WithMutableRef() BuildOption {
+	return func(o *buildOpts) { o.mutableRef = true }
 }
 
 func Build(imgFile *imagefile.Imagefile, ref Ref, store *Store, clock func() time.Time, options ...BuildOption) (Manifest, error) {
@@ -305,7 +311,7 @@ func Build(imgFile *imagefile.Imagefile, ref Ref, store *Store, clock func() tim
 		Evals:           evals,
 		Layers:          layers,
 	}
-	digest, err := store.writeArchive(ref, man, prompt, tail, body, imgFile.Skills)
+	digest, err := store.writeArchive(ref, man, prompt, tail, body, imgFile.Skills, opts.mutableRef)
 	if err != nil {
 		return Manifest{}, err
 	}

@@ -281,6 +281,42 @@ func TestBuildErrors(t *testing.T) {
 	}
 }
 
+func TestBuildMutableRetainsPinnedGeneration(t *testing.T) {
+	source := t.TempDir()
+	prompt := promptFile(t, source, "prompt.md", "first generation")
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "reviewer", Tag: "latest"}
+	imagefile := &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}
+
+	first, err := Build(imagefile, ref, store, fixedClock(), WithMutableRef())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !store.IsMutable(ref) {
+		t.Fatal("mutable build did not mark ref")
+	}
+	if err := os.WriteFile(prompt, []byte("second generation"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Build(imagefile, ref, store, fixedClock(), WithMutableRef())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Digest == second.Digest {
+		t.Fatal("mutable rebuild did not change digest")
+	}
+	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
+		t.Fatalf("inspect pinned generation = %#v, %v", pinned, err)
+	}
+	dest := t.TempDir()
+	if err := store.UnpackPinned(ref, first.Digest, dest); err != nil {
+		t.Fatal(err)
+	}
+	if body, err := os.ReadFile(filepath.Join(dest, "BODY.md")); err != nil || string(body) != "first generation" {
+		t.Fatalf("unpacked pinned body = %q, %v", body, err)
+	}
+}
+
 // readMember is a test helper reading one file out of an image tarball.
 func readMember(t *testing.T, s *Store, ref Ref, name string) string {
 	t.Helper()

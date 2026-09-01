@@ -402,6 +402,45 @@ func TestBuildV2AddsNoImplicitContent(t *testing.T) {
 	}
 }
 
+func TestBuildV2MutableRetainsPinnedGeneration(t *testing.T) {
+	source := t.TempDir()
+	prompt := filepath.Join(source, "prompt.md")
+	if err := os.WriteFile(prompt, []byte("first generation"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "reviewer", Tag: "latest"}
+	src := &imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}
+
+	first, err := BuildV2Mutable(src, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !store.IsMutable(ref) {
+		t.Fatal("mutable build did not mark ref")
+	}
+	if err := os.WriteFile(prompt, []byte("second generation"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	second, err := BuildV2Mutable(src, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Digest == second.Digest {
+		t.Fatal("mutable rebuild did not change digest")
+	}
+	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
+		t.Fatalf("inspect pinned generation = %#v, %v", pinned, err)
+	}
+	dest := t.TempDir()
+	if err := store.UnpackPinned(ref, first.Digest, dest); err != nil {
+		t.Fatal(err)
+	}
+	if body, err := os.ReadFile(filepath.Join(dest, "prompt", "layers", "000-prompt.md")); err != nil || string(body) != "first generation" {
+		t.Fatalf("unpacked pinned layer = %q, %v", body, err)
+	}
+}
+
 func TestPortableV2ArchiveRejectsUnmanifestedHarnessSkills(t *testing.T) {
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "p.md"), []byte("safe"), 0o600); err != nil {
