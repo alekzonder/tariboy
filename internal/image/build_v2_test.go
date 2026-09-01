@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -438,6 +439,23 @@ func TestBuildV2MutableRetainsPinnedGeneration(t *testing.T) {
 	}
 	if body, err := os.ReadFile(filepath.Join(dest, "prompt", "layers", "000-prompt.md")); err != nil || string(body) != "first generation" {
 		t.Fatalf("unpacked pinned layer = %q, %v", body, err)
+	}
+}
+
+func TestBuildV2MutableArchiveReturnsPublishedBytes(t *testing.T) {
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "reviewer", Tag: "latest"}
+
+	manifest, archive, err := BuildV2MutableArchive(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, err := store.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(archive, published) || manifest.Digest != fmt.Sprintf("%x", sha256.Sum256(archive)) {
+		t.Fatalf("returned archive does not match published %s", manifest.Digest)
 	}
 }
 

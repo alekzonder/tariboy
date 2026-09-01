@@ -126,15 +126,23 @@ func ValidateV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver plugin
 }
 
 func BuildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, error) {
-	return buildV2(src, roots, ref, store, clock, resolver, false)
+	return buildV2(src, roots, ref, store, clock, resolver, false, nil)
 }
 
 // BuildV2Mutable publishes a schema-v2 ordinary authoring ref that may later advance.
 func BuildV2Mutable(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, error) {
-	return buildV2(src, roots, ref, store, clock, resolver, true)
+	return buildV2(src, roots, ref, store, clock, resolver, true, nil)
 }
 
-func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver, mutable bool) (Manifest, error) {
+// BuildV2MutableArchive publishes a mutable schema-v2 image and returns the
+// validated archive bytes used for that publication.
+func BuildV2MutableArchive(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, []byte, error) {
+	var archive []byte
+	manifest, err := buildV2(src, roots, ref, store, clock, resolver, true, &archive)
+	return manifest, archive, err
+}
+
+func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver, mutable bool, archiveOut *[]byte) (Manifest, error) {
 	prepared, err := prepareV2(src, roots, resolver)
 	if err != nil {
 		return Manifest{}, err
@@ -146,7 +154,7 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	if manifest.Skills == nil {
 		manifest.Skills = []ManifestSkill{}
 	}
-	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, mutable)
+	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, mutable, archiveOut)
 	if err != nil {
 		return Manifest{}, err
 	}
@@ -154,7 +162,7 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	return manifest, nil
 }
 
-func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, mutable bool) (string, error) {
+func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, mutable bool, archiveOut *[]byte) (string, error) {
 	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
 		return "", err
 	}
@@ -225,5 +233,5 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
-	return s.publishArchive(ref, tmpName, mutable)
+	return s.publishArchive(ref, tmpName, mutable, archiveOut)
 }

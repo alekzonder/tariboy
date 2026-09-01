@@ -1,6 +1,8 @@
 package image
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -316,6 +318,25 @@ func TestBuildMutableRetainsPinnedGeneration(t *testing.T) {
 	}
 	if body, err := os.ReadFile(filepath.Join(dest, "BODY.md")); err != nil || string(body) != "first generation" {
 		t.Fatalf("unpacked pinned body = %q, %v", body, err)
+	}
+}
+
+func TestBuildMutableArchiveReturnsPublishedBytes(t *testing.T) {
+	source := t.TempDir()
+	prompt := promptFile(t, source, "prompt.md", "published bytes")
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "reviewer", Tag: "latest"}
+
+	manifest, archive, err := BuildMutableArchive(&imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, store, fixedClock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, err := store.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(archive, published) || manifest.Digest != fmt.Sprintf("%x", sha256.Sum256(archive)) {
+		t.Fatalf("returned archive does not match published %s", manifest.Digest)
 	}
 }
 

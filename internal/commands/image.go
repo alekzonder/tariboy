@@ -164,29 +164,20 @@ func imageBuild() registry.Command {
 					var man image.Manifest
 					if i == 0 {
 						if parsed.Version == 2 {
-							man, err = image.BuildV2Mutable(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, store, clock, resolver)
+							man, sourceArchive, err = image.BuildV2MutableArchive(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, store, clock, resolver)
 						} else {
-							man, err = image.Build(parsed.V1, ref, store, clock,
+							man, sourceArchive, err = image.BuildMutableArchive(parsed.V1, ref, store, clock,
 								image.WithExternalPlugins(resolver),
 								image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
-								image.WithMutableRef(),
 							)
 						}
 						if err != nil {
 							return api.UserError{Code: "build_failed", Msg: err.Error()}
 						}
-						sourceArchive, err = store.ArchiveBytes(ref)
-						if err != nil {
-							return rollbackPublished("build_failed", err)
-						}
 					} else {
-						_, err = store.RetagMutableArchive(refs[0], ref, sourceArchive)
+						man, err = store.RetagMutableArchiveManifest(refs[0], ref, sourceArchive)
 						if err != nil {
 							return api.UserError{Code: "build_failed", Msg: err.Error()}
-						}
-						man, err = store.Inspect(ref)
-						if err != nil {
-							return rollbackPublished("build_failed", err)
 						}
 					}
 					if c.Store != nil {

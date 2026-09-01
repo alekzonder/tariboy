@@ -84,8 +84,16 @@ func TestRetagMutableArchiveReusesPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := Ref{Name: "reviewer", Tag: "v2"}
-	if _, err := store.RetagMutableArchive(source, target, archive); err != nil {
+	manifest, err := store.RetagMutableArchiveManifest(source, target, archive)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if manifest.Name != target.Name || manifest.Tag != target.Tag || manifest.Digest == "" {
+		t.Fatalf("retagged manifest = %#v", manifest)
+	}
+	published, err := store.Inspect(target)
+	if err != nil || manifest.Digest != published.Digest {
+		t.Fatalf("returned manifest digest = %q, published = %#v, %v", manifest.Digest, published, err)
 	}
 	if !store.IsMutable(target) {
 		t.Fatal("retagged authoring ref is not mutable")

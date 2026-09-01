@@ -109,16 +109,24 @@ func (s *Store) InstallPortableArchive(ref Ref, archive []byte) error {
 // ref by rewriting only manifest identity. Prompt/plugin payload bytes and their
 // declared order are preserved; the resulting archive has its own digest.
 func (s *Store) RetagPortableArchive(source, target Ref, archive []byte) (string, error) {
-	return s.retagPortableArchive(source, target, archive, false)
+	return s.retagPortableArchive(source, target, archive, false, nil)
 }
 
 // RetagMutableArchive rewrites only manifest identity while publishing the
 // target through the ordinary mutable authoring path.
 func (s *Store) RetagMutableArchive(source, target Ref, archive []byte) (string, error) {
-	return s.retagPortableArchive(source, target, archive, true)
+	return s.retagPortableArchive(source, target, archive, true, nil)
 }
 
-func (s *Store) retagPortableArchive(source, target Ref, archive []byte, mutable bool) (string, error) {
+// RetagMutableArchiveManifest also returns the validated manifest used for
+// publication, avoiding a fallible read after the target ref has moved.
+func (s *Store) RetagMutableArchiveManifest(source, target Ref, archive []byte) (Manifest, error) {
+	var manifest Manifest
+	_, err := s.retagPortableArchive(source, target, archive, true, &manifest)
+	return manifest, err
+}
+
+func (s *Store) retagPortableArchive(source, target Ref, archive []byte, mutable bool, manifestOut *Manifest) (string, error) {
 	if IsReserved(target) {
 		return "", fmt.Errorf("portable install cannot replace reserved ref: %s", target.String())
 	}
@@ -198,11 +206,19 @@ func (s *Store) retagPortableArchive(source, target Ref, archive []byte, mutable
 	if err != nil {
 		return "", err
 	}
-	if _, err := validatePortableArchive(retagged, target); err != nil {
+	manifest, err := validatePortableArchive(retagged, target)
+	if err != nil {
 		return "", fmt.Errorf("validate retagged image: %w", err)
 	}
 	if mutable {
-		return s.publishArchive(target, tmpName, true)
+		digest, err := s.publishArchive(target, tmpName, true, nil)
+		if err != nil {
+			return "", err
+		}
+		if manifestOut != nil {
+			*manifestOut = manifest
+		}
+		return digest, nil
 	}
 	if err := os.Link(tmpName, s.tarPath(target)); err != nil {
 		if errors.Is(err, os.ErrExist) {
@@ -390,7 +406,7 @@ func readFileFromTar(archive, want string) ([]byte, error) {
 
 // writeArchive builds the tar.gz in a temporary file. publishArchive keeps the
 // immutable no-clobber default and optionally advances a marked mutable ref.
-func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, skillDirs []string, mutable bool) (string, error) {
+func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, skillDirs []string, mutable bool, archiveOut *[]byte) (string, error) {
 	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
 		return "", err
 	}
@@ -459,16 +475,23 @@ func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, s
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
-	return s.publishArchive(ref, tmpName, mutable)
+	return s.publishArchive(ref, tmpName, mutable, archiveOut)
 }
 
-func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool) (string, error) {
+func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool, archiveOut *[]byte) (string, error) {
 	if mutable && IsReserved(ref) {
 		return "", fmt.Errorf("%w: %s", ErrReserved, ref.String())
 	}
 	manifest, err := ValidateArchive(tmpName, ref)
 	if err != nil {
 		return "", fmt.Errorf("validate image %s: %w", ref.String(), err)
+	}
+	var archive []byte
+	if archiveOut != nil {
+		archive, err = os.ReadFile(tmpName)
+		if err != nil {
+			return "", err
+		}
 	}
 	if !mutable {
 		if err := os.Link(tmpName, s.tarPath(ref)); err != nil {
@@ -512,6 +535,9 @@ func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool) (string, e
 	}
 	if err := writeDigestCache(s.digestPath(ref), manifest.Digest); err != nil {
 		_ = os.Remove(s.digestPath(ref))
+	}
+	if archiveOut != nil {
+		*archiveOut = archive
 	}
 	return manifest.Digest, nil
 }
