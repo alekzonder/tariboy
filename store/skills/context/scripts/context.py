@@ -53,7 +53,7 @@ def main(method, route, body=None, text_key=None, cli_args=(), allowed_flags=())
 if __name__ == "__main__":
     args = sys.argv[1:]
     if args in (["-h"], ["--help"]):
-        print("usage: context.sh <get|set <text...>> [--json]")
+        print("usage: context.sh get | set <text...> [--json]")
         raise SystemExit(0)
     if "--json" in args:
         os.environ["TARIBOY_TOOLS_JSON"] = "1"

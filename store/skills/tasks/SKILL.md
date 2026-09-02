@@ -24,7 +24,10 @@ A comment is not a blocking question.
 
 For workflow-managed work, begin with `scripts/tasks.sh work next` and
 `scripts/tasks.sh work show <assignment>`. Treat its packet as the complete authority:
-use only declared actions, tools, outcomes, and channel patterns. Add artifacts,
-ask assignment-scoped questions, observe through `scripts/tasks.sh observe`,
-and complete with an allowed outcome. Raw channel subscriptions and undeclared
-direct or group messages remain denied. Never invent another principal's identity.
+use only declared actions, tools, outcomes, and channel patterns. Add artifacts
+with `scripts/tasks.sh artifacts add <assignment>`, inspect assignment questions
+with `scripts/tasks.sh questions <assignment>`, answer with
+`scripts/tasks.sh answer <question>`, and subscribe with
+`scripts/tasks.sh observe subscribe <assignment> <pattern>`. Complete with an
+allowed outcome. Raw channel subscriptions and undeclared direct or group
+messages remain denied. Never invent another principal's identity.

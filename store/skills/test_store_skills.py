@@ -124,6 +124,19 @@ class StoreSkillsTest(unittest.TestCase):
                 self.assertIn("usage:", result.stdout)
                 self.assertEqual(result.stderr, "")
 
+    def test_context_help_describes_get_and_set(self):
+        env = dict(os.environ)
+        env.pop("TARIBOY_TOOLS_SOCKET", None)
+        result = subprocess.run(
+            [ROOT / "context/scripts/context.sh", "--help"],
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "usage: context.sh get | set <text...> [--json]\n")
+        self.assertEqual(result.stderr, "")
+
     def test_store_skills_have_no_duplicate_prompt_files(self):
         self.assertEqual(list(ROOT.glob("*/prompt.md")), [])
 
