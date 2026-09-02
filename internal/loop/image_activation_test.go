@@ -104,7 +104,7 @@ func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
 		t.Fatalf("unpacked image changed before launch gate: %q err=%v", localDigest, err)
 	}
 	recorder := &captureRecorder{}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true", AuditFor: func(string) Recorder { return recorder }}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills"), AuditFor: func(string) Recorder { return recorder }}}
 	if _, err := m.activatePendingImage(&ag); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestMutableActivationWaitsForPublicationRollback(t *testing.T) {
 	if err := <-published; err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills")}}
 	done := make(chan error, 1)
 	go func() {
 		_, err := m.activatePendingImage(&ag)
@@ -233,7 +233,7 @@ func TestImmutableRecoveryClearsEmptyAssignmentError(t *testing.T) {
 	if err := images.Unpack(ref, l.ImageDir()); err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills")}}
 	if _, err := m.activatePendingImage(&ag); err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	if err := os.Remove(filepath.Join(images.Dir, ref.Name, ref.Tag+".tar.gz")); err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills")}}
 	if _, err := m.activatePendingImage(&ag); err == nil {
 		t.Fatal("mutable discovery failure did not fail activation")
 	}
@@ -346,7 +346,7 @@ func TestRecoveredSwapShimFailureRecordsPendingImageError(t *testing.T) {
 	if err := os.WriteFile(l.BinDir(), []byte("blocked"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills")}}
 	if _, err := m.activatePendingImage(&ag); err == nil {
 		t.Fatal("recovered swap shim failure did not fail activation")
 	}
@@ -406,7 +406,7 @@ func TestMutableRefreshLosesToExplicitPendingDuringStaging(t *testing.T) {
 	var enteredOnce, releaseOnce sync.Once
 	recorder := &captureRecorder{}
 	m := &Manager{cfg: ManagerConfig{
-		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true", AuditFor: func(string) Recorder { return recorder },
+		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills"), AuditFor: func(string) Recorder { return recorder },
 		ExternalPlugins: func(string) (plugincaps.ResolvedPlugin, error) {
 			enteredOnce.Do(func() { close(entered) })
 			<-release
@@ -495,7 +495,7 @@ func TestImmutableRefRemainsPinned(t *testing.T) {
 	if err := agentdir.Provision(l, ag, images, ref, "/bin/true"); err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills")}}
 	if _, err := m.activatePendingImage(&ag); err != nil {
 		t.Fatal(err)
 	}
@@ -543,7 +543,7 @@ func TestExplicitPendingImageBeatsMutableRefresh(t *testing.T) {
 	if err := as.SetPendingImage(ag.Name, explicitRef.String(), explicit.Digest); err != nil {
 		t.Fatal(err)
 	}
-	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, ToolsBin: "/bin/true"}}
+	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: filepath.Join(base, "skills")}}
 	if _, err := m.activatePendingImage(&ag); err != nil {
 		t.Fatal(err)
 	}
