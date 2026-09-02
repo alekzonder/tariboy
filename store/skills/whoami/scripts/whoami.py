@@ -92,6 +92,9 @@ def execute(action):
 
 
 def main(method, route, body=None, text_key=None, cli_args=(), allowed_flags=()):
+    if len(cli_args) == 1 and cli_args[0] in {"-h", "--help"}:
+        print("usage: whoami.sh [--json]")
+        return 0
     if "--json" in cli_args:
         os.environ["TARIBOY_TOOLS_JSON"] = "1"
         cli_args = tuple(arg for arg in cli_args if arg != "--json")

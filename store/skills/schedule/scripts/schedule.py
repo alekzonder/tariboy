@@ -77,4 +77,7 @@ def run(args):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] in (["-h"], ["--help"]):
+        print("usage: schedule.sh <add|ls|cancel> ... [--json]")
+        raise SystemExit(0)
     raise SystemExit(execute(lambda: run(sys.argv[1:])))

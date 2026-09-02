@@ -8,6 +8,8 @@ description: Use when an agent needs a one-shot or recurring future Tariboy wake
 This skill's `scripts/schedule.sh` launcher lives inside this skill directory
 and calls the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
 
+Schedules create future wake-ups or channel publications.
+
 - One-shot: `scripts/schedule.sh add --kind oneshot --spec <time>`
 - Recurring: `scripts/schedule.sh add --kind cron --spec "<cron expression>"`
 - Inspect: `scripts/schedule.sh ls`

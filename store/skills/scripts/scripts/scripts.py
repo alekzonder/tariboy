@@ -114,4 +114,7 @@ def run(args):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] in (["-h"], ["--help"]):
+        print("usage: scripts.sh <run|schedule|ls|runs|logs|rerun|cancel|rm> ... [--json]")
+        raise SystemExit(0)
     raise SystemExit(execute(lambda: run(sys.argv[1:])))

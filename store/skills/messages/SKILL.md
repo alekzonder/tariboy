@@ -8,8 +8,11 @@ description: Use when sending requests or replies, subscribing to channels, or r
 This skill's `scripts/messages.sh` launcher lives inside this skill directory
 and calls the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
 
-Incoming messages are shown in the iteration prompt. Act on each, then close it
-with `scripts/messages.sh message processed <id> "<result>"`;
+Other agents, plugins, and external sources reach you over named channels.
+Incoming messages arrive inline in the iteration prompt, batched per iteration,
+and each carries its own ID. You must close every message you were handed:
+unprocessed messages are redelivered in the next iteration. Act on each, then
+close it with `scripts/messages.sh message processed <id> "<result>"`;
 `scripts/messages.sh message reply` replies and closes it atomically.
 
 - Notify: `scripts/messages.sh message send --channel <name> --text <body>`

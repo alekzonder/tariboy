@@ -190,4 +190,7 @@ def run(args):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] in (["-h"], ["--help"]):
+        print("usage: judge.sh <automation|iterations|run|work|summary|evidence|analysis|improvement> <command> ... [--json]")
+        raise SystemExit(0)
     raise SystemExit(execute(lambda: run(sys.argv[1:])))

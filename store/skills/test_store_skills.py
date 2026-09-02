@@ -108,6 +108,25 @@ class StoreSkillsTest(unittest.TestCase):
             "tools: TARIBOY_TOOLS_SOCKET is not set (are you running inside an agent?)\n",
         )
 
+    def test_each_executable_skill_supports_top_level_help(self):
+        env = dict(os.environ)
+        env.pop("TARIBOY_TOOLS_SOCKET", None)
+        for skill, command in COMMANDS.items():
+            with self.subTest(skill=skill):
+                result = subprocess.run(
+                    [ROOT / skill / "scripts" / f"{command}.sh", "--help"],
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(result.stdout)
+                self.assertIn("usage:", result.stdout)
+                self.assertEqual(result.stderr, "")
+
+    def test_store_skills_have_no_duplicate_prompt_files(self):
+        self.assertEqual(list(ROOT.glob("*/prompt.md")), [])
+
     def test_direct_entrypoints_preserve_representative_routes_and_payloads(self):
         cases = [
             ("whoami/scripts/whoami.sh", [], "GET", "/tools/whoami", None),

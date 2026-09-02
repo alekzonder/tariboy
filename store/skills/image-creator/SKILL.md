@@ -13,6 +13,8 @@ skills, prompt files, and runtime placeholders. Build with:
 
 `scripts/image_creator.sh build --name <name> [--tag <tag>] --path <source-dir>`
 
+The built image is stored on this host and can then be selected for an agent.
+
 For reproducible production images, vendor shared prompt dependencies, record
 them in `tariboy.lock.yaml`, use an immutable tag, and avoid absolute,
 `$STORE`, or `$CURRENT_VERSION_STORE` inputs. Local source paths use `./`.

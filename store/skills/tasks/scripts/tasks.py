@@ -250,6 +250,9 @@ def run(args):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if args in (["-h"], ["--help"]):
+        print("usage: tasks.sh <mine|ready|show|create|update|assign|comment|ask|move|block|relate|done|work|artifacts|questions|answer|observe> ... [--json]")
+        raise SystemExit(0)
     if "--json" in args:
         os.environ["TARIBOY_TOOLS_JSON"] = "1"
         args = [arg for arg in args if arg != "--json"]

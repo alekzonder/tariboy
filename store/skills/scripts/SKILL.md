@@ -17,6 +17,7 @@ Runs never overlap. `--quiet-exit CODE` records that exit without waking the
 agent; other nonzero exits remain failures.
 
 Inspect with `scripts/scripts.sh ls`, `scripts/scripts.sh runs`, and
-`scripts/scripts.sh logs`.
-Use `rerun`, `cancel`, or `rm` for lifecycle control. A schedule cancellation
-also stops its active run; cancelling one run leaves its schedule intact.
+`scripts/scripts.sh logs`; use `scripts/scripts.sh rerun`,
+`scripts/scripts.sh cancel`, or `scripts/scripts.sh rm` for lifecycle control.
+A schedule cancellation also stops its active run; cancelling one run leaves
+its schedule intact.
