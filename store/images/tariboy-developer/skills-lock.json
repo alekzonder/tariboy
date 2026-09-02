@@ -25,6 +25,11 @@
       "skillPath": "skills/finishing-a-development-branch/SKILL.md",
       "computedHash": "4f571e7befb8b0946d9d7770232c818812412e9ab1dfb811f847edfba1fc6275"
     },
+    "github-pr-workflow": {
+      "source": ".",
+      "sourceType": "local",
+      "computedHash": "a04399bbb34ceb4311b9a7eda7c26b56c1c488f67410383d9c9c3b89f19583f3"
+    },
     "receiving-code-review": {
       "source": "obra/superpowers",
       "sourceType": "github",
