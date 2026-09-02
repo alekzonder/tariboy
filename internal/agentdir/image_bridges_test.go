@@ -95,6 +95,7 @@ func TestImageBridgeDirRejectsUnsafeSegments(t *testing.T) {
 
 func TestPrepareImageBridgeCopiesSkillsAndGeneratedFilesOwnerOnly(t *testing.T) {
 	source, expected := bridgeFixture(t)
+	expected[0].ClientVersion = "0.45.2"
 	l := New(t.TempDir(), "worker")
 	finalDir, err := l.ImageBridgeDir(strings.Repeat("b", 64), "1", "claude")
 	if err != nil {
@@ -124,6 +125,17 @@ func TestPrepareImageBridgeCopiesSkillsAndGeneratedFilesOwnerOnly(t *testing.T) 
 	info, err := os.Stat(finalDir)
 	if err != nil || info.Mode().Perm() != 0o700 {
 		t.Fatalf("bridge dir mode = %#o, %v", info.Mode().Perm(), err)
+	}
+	body, err := os.ReadFile(filepath.Join(finalDir, "bridge-manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest BridgeManifest
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got := manifest.Skills[0].ClientVersion; got != "0.45.2" {
+		t.Fatalf("bridge client version = %q, want producing Store version", got)
 	}
 }
 

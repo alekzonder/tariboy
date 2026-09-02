@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -19,9 +18,6 @@ import (
 // therefore calls this for every stored agent at startup, on top of
 // create/reprovision. Writing is skipped when the bytes already match.
 func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
-	if err := RequirePython3(); err != nil {
-		return err
-	}
 	doneScript := filepath.Join(skillsDir, "loop", "scripts", "loop.sh")
 	tasksScript := filepath.Join(skillsDir, "tasks", "scripts", "tasks.sh")
 	var required []string
@@ -82,20 +78,22 @@ func removeManagedLegacyToolsShim(l Layout) error {
 }
 
 func isManagedLegacyToolsShim(body []byte) bool {
-	const prefix = "#!/usr/bin/env bash\nexec python3 -B \""
-	const suffix = "/agent-tools/scripts/tools.py\" \"$@\"\n"
-	if !bytes.HasPrefix(body, []byte(prefix)) || !bytes.HasSuffix(body, []byte(suffix)) {
+	const (
+		pythonPrefix = "#!/usr/bin/env bash\nexec python3 -B \""
+		pythonSuffix = "/agent-tools/scripts/tools.py\" \"$@\"\n"
+		goPrefix     = "#!/usr/bin/env bash\nexec \""
+		goSuffix     = "\" \"$@\"\n"
+	)
+	if bytes.HasPrefix(body, []byte(pythonPrefix)) && bytes.HasSuffix(body, []byte(pythonSuffix)) {
+		root := body[len(pythonPrefix) : len(body)-len(pythonSuffix)]
+		return filepath.IsAbs(string(root)) && !bytes.ContainsAny(root, "\r\n\\\"")
+	}
+	if !bytes.HasPrefix(body, []byte(goPrefix)) || !bytes.HasSuffix(body, []byte(goSuffix)) {
 		return false
 	}
-	root := body[len(prefix) : len(body)-len(suffix)]
-	return filepath.IsAbs(string(root)) && !bytes.ContainsAny(root, "\r\n\\\"")
-}
-
-func RequirePython3() error {
-	if _, err := exec.LookPath("python3"); err != nil {
-		return fmt.Errorf("python3 is required for agent tool scripts: %w", err)
-	}
-	return nil
+	executable := body[len(goPrefix) : len(body)-len(goSuffix)]
+	return filepath.IsAbs(string(executable)) && filepath.Base(string(executable)) == "tariboy-tools" &&
+		!bytes.ContainsAny(executable, "\r\n\\\"")
 }
 
 // writeShim writes body to <bin>/name unless that is already its content.

@@ -43,9 +43,11 @@ fails the daemon stays available with the inherited `PATH` and logs one stable
 warning naming only the class of failure — never the path or shell startup
 output.
 Before each iteration, Tariboy checks the selected harness executable using
-the final agent environment. An agent's explicit `PATH` overrides the daemon
-baseline; non-bare images then prepend their agent bin directory, while bare
-images do not.
+the final agent environment. For non-bare images it resolves `python3` from the
+same environment and passes that absolute interpreter to skill launchers. An
+agent's explicit `PATH` overrides the daemon baseline and therefore must retain
+both prerequisites; non-bare images then prepend their agent bin directory,
+while bare images do not.
 
 ## Add and provision
 

@@ -66,11 +66,13 @@ intentional override. Non-bare images prepend the agent bin directory after the
 override; bare images omit that prefix and otherwise keep the daemon baseline.
 
 Before starting the shim, the runner checks the adapter's actual executable
-against this final environment. A missing or non-executable harness fails
-preparation through the normal `harness_error` path with the executable name,
-without including environment values, prompts, secrets, working directories,
-or user files. This preflight improves the diagnosis but cannot remove the
-normal race in which an executable disappears before process launch.
+against this final environment. For a non-bare image it also resolves `python3`
+there and supplies that absolute interpreter path to the packaged skill
+launchers. A missing or non-executable harness or Python interpreter fails
+preparation through the normal `harness_error` path without including
+environment values, prompts, secrets, working directories, or user files. This
+preflight improves the diagnosis but cannot remove the normal race in which an
+executable disappears before process launch.
 
 For a schema-v2 image with skills, the launch gate prepares
 `agents/<agent>/image-bridges/<image-digest>/<adapter-contract>/<harness>` before
@@ -136,7 +138,7 @@ Schema-v2 agents receive exactly the plugins declared by their image, including
 an empty list. No core union is implicit. The familiar built-in capabilities
 are:
 
-- **whoami** — identity: which agent, image, cwd, and current iteration.
+- **whoami** — identity: which agent, cwd, current iteration, and client/daemon versions.
 - **loop** — iteration control: signal done, start/stop the loop.
 - **messages** — publish to and receive from channels.
 

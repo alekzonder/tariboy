@@ -241,7 +241,8 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 		sort.Slice(files, func(i, j int) bool { return files[i].RelativePath < files[j].RelativePath })
 		prepared := agentskills.Prepared{Metadata: agentskills.Metadata{
 			Name: skill.Name, Description: skill.Description, Source: skill.Source, Category: skill.Category,
-			ArchiveRoot: skill.ArchiveRoot, FileCount: skill.FileCount, Size: skill.Size, TreeSHA256: skill.TreeSHA256,
+			ClientVersion: skill.ClientVersion,
+			ArchiveRoot:   skill.ArchiveRoot, FileCount: skill.FileCount, Size: skill.Size, TreeSHA256: skill.TreeSHA256,
 		}, Files: files}
 		if err := agentskills.ValidatePrepared(prepared); err != nil {
 			return fmt.Errorf("invalid schema-v2 skill %q: %w", skill.Name, err)

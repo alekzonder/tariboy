@@ -21,7 +21,7 @@ func writeStaleShims(t *testing.T, agentsDir, name string) agentdir.Layout {
 		t.Fatal(err)
 	}
 	for f, body := range map[string]string{
-		"tools":     "#!/usr/bin/env bash\nexec python3 -B \"/opt/tariboy/0.21.6/skills/agent-tools/scripts/tools.py\" \"$@\"\n",
+		"tools":     "#!/usr/bin/env bash\nexec \"/opt/tariboy/0.21.6/tariboy-tools\" \"$@\"\n",
 		"i-am-done": "#!/usr/bin/env bash\nexec \"/opt/tariboy/0.21.6/skills/loop/scripts/loop.sh\" done \"$@\"\n",
 		"tasks":     "#!/usr/bin/env bash\nexec \"/opt/tariboy/0.21.6/skills/tasks/scripts/tasks.sh\" \"$@\"\n",
 	} {
@@ -83,7 +83,7 @@ func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
 	}
 }
 
-func TestStartAllDoesNotStartPersistedAgentsWithoutPython3(t *testing.T) {
+func TestStartAllDefersPython3CheckToIterationEnvironment(t *testing.T) {
 	runner := &fakeRunner{}
 	m, as, agentsDir, _ := newManager(t, runner)
 	t.Cleanup(m.Shutdown)
@@ -97,15 +97,14 @@ func TestStartAllDoesNotStartPersistedAgentsWithoutPython3(t *testing.T) {
 	writeStaleShims(t, agentsDir, a.Name)
 	t.Setenv("PATH", t.TempDir())
 
-	err := m.StartAll(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "python3") {
-		t.Fatalf("StartAll error = %v, want missing python3", err)
+	if err := m.StartAll(context.Background()); err != nil {
+		t.Fatalf("StartAll used daemon PATH for Python preflight: %v", err)
 	}
 	m.mu.Lock()
 	_, started := m.runs[a.Name]
 	m.mu.Unlock()
-	if started {
-		t.Fatal("persisted agent started without python3")
+	if !started {
+		t.Fatal("persisted agent did not reach its iteration-time preflight")
 	}
 }
 

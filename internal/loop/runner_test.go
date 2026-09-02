@@ -137,7 +137,7 @@ func TestFormatMessages(t *testing.T) {
 	// no longer auto-acks the batch.
 	for _, want := range []string{
 		"# Messages", "deploy.requested", "agent:alice", "ship it", "env", "note", "fyi",
-		"m1", "m2", `tools message processed <id> "<what you did / result>"`,
+		"m1", "m2", `scripts/messages.sh message processed <id> "<what you did / result>"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("FormatMessages missing %q:\n%s", want, out)
@@ -947,6 +947,7 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 				t.Fatal(err)
 			}
 			writeHarnessExecutable(t, filepath.Join(binDir, tc.harnessType))
+			writeHarnessExecutable(t, filepath.Join(binDir, "python3"))
 			home := filepath.Join(base, "home")
 			cwd := filepath.Join(home, "project")
 			if err := os.MkdirAll(cwd, 0o700); err != nil {
@@ -1484,6 +1485,7 @@ func TestHarnessPreflightUsesAgentEffectivePath(t *testing.T) {
 	t.Setenv("PATH", baseline)
 	agentBin := t.TempDir()
 	writeHarnessExecutable(t, filepath.Join(agentBin, "claude"))
+	writeHarnessExecutable(t, filepath.Join(agentBin, "python3"))
 	r, ag, l, spawner := newHarnessPreflightRunner(t, false, map[string]string{"PATH": agentBin})
 
 	if _, err := r.Run(context.Background(), ag, "manual", "path-agent-1", ""); err != nil {
@@ -1495,6 +1497,26 @@ func TestHarnessPreflightUsesAgentEffectivePath(t *testing.T) {
 	if got := environmentValue(spawner.env, "PATH"); got != l.BinDir()+":"+agentBin {
 		t.Fatalf("effective PATH = %q, want %q", got, l.BinDir()+":"+agentBin)
 	}
+	if got := environmentValue(spawner.env, "TARIBOY_PYTHON3"); got != filepath.Join(agentBin, "python3") {
+		t.Fatalf("TARIBOY_PYTHON3 = %q, want resolved absolute interpreter", got)
+	}
+}
+
+func TestPythonPreflightRejectsAgentPathWithHarnessButNoPython(t *testing.T) {
+	daemonPath := t.TempDir()
+	writeHarnessExecutable(t, filepath.Join(daemonPath, "python3"))
+	t.Setenv("PATH", daemonPath)
+	agentPath := t.TempDir()
+	writeHarnessExecutable(t, filepath.Join(agentPath, "claude"))
+	r, ag, _, spawner := newHarnessPreflightRunner(t, false, map[string]string{"PATH": agentPath})
+
+	_, err := r.Run(context.Background(), ag, "manual", "path-agent-1", "")
+	if err == nil || !strings.Contains(err.Error(), "python3") {
+		t.Fatalf("iteration accepted an effective PATH without Python: %v", err)
+	}
+	if spawner.starts != 0 {
+		t.Fatalf("shim starts = %d, want 0", spawner.starts)
+	}
 }
 
 func TestHarnessPreflightResolvesRelativePathFromIterationCwd(t *testing.T) {
@@ -1505,6 +1527,7 @@ func TestHarnessPreflightResolvesRelativePathFromIterationCwd(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeHarnessExecutable(t, filepath.Join(relativeBin, "claude"))
+	writeHarnessExecutable(t, filepath.Join(relativeBin, "python3"))
 	r, ag, _, spawner := newHarnessPreflightRunner(t, false, map[string]string{"PATH": "relative-bin"})
 	ag.Cwd = cwd
 
@@ -1579,6 +1602,7 @@ func TestHarnessPreflightFailureRevokesProxyTokenBeforeSpawn(t *testing.T) {
 
 func TestHarnessPreflightSearchesAgentBin(t *testing.T) {
 	baseline := t.TempDir()
+	writeHarnessExecutable(t, filepath.Join(baseline, "python3"))
 	t.Setenv("PATH", baseline)
 	r, ag, l, spawner := newHarnessPreflightRunner(t, false, nil)
 	if err := os.MkdirAll(l.BinDir(), 0o755); err != nil {

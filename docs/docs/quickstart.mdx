@@ -14,7 +14,7 @@ Allow ten minutes after the DMG is available.
 - macOS 12 or newer on Apple Silicon;
 - a verified `Tariboy_0.46.1_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
-- a writable `~/.local` and `flock` on that remote host;
+- a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
 
 ## 1. Install
@@ -59,9 +59,9 @@ ssh-agent, `known_hosts`, and interactive authentication work as they do in a
 terminal.
 
 Run preflight. Review the detected platform, architecture, disk, `flock`,
-`tmux`, and harnesses. Choose **Install** when the host reports Linux x86_64 and
-the required install prerequisites are green. Provisioning ends by opening a
-loopback-forwarding tunnel and checking daemon health.
+`python3`, `tmux`, and harnesses. Choose **Install** when the host reports Linux
+x86_64 and the required install prerequisites are green. Provisioning ends by
+opening a loopback-forwarding tunnel and checking daemon health.
 
 For local-only use, keep the default Local host and continue.
 

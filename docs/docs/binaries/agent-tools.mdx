@@ -11,7 +11,9 @@ Run **inside** an agent from the applicable packaged skill directory. Each
 Only `tasks` and `i-am-done` also have PATH compatibility shims. The scripts
 talk to the identity-bound per-agent socket selected by
 `$TARIBOY_TOOLS_SOCKET`; the daemon derives the agent identity server-side.
-`python3` must be available on the host running the agent.
+For non-bare iterations, `python3` is resolved to an absolute path from the
+final agent environment before the harness starts. An explicit agent `PATH`
+must therefore include it.
 
 | Tool | Purpose |
 | --- | --- |

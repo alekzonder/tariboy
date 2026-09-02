@@ -34,7 +34,7 @@ func Generate(sourceDir, outputDir, daemonVersion string) error {
 	if parsed.Version != 2 {
 		return fmt.Errorf("basic image must use schema_version 2")
 	}
-	if _, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{CurrentVersionStore: storeAssets, Store: storeAssets}, ref, store, time.Now, nil); err != nil {
+	if _, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{CurrentVersionStore: storeAssets, CurrentStoreVersion: daemonVersion, Store: storeAssets}, ref, store, time.Now, nil); err != nil {
 		return fmt.Errorf("build basic image: %w", err)
 	}
 	if err := os.MkdirAll(outputDir, 0o700); err != nil {

@@ -10,7 +10,20 @@ class UsageError(Exception): pass
 class UnixHTTPConnection(http.client.HTTPConnection):
     def __init__(self, path): super().__init__("localhost"); self.path = path
     def connect(self): self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); self.sock.connect(self.path)
-def client_version(): return os.environ.get("TARIBOY_CLIENT_VERSION") or Path(__file__).resolve().parents[3].name
+def client_version():
+    version = os.environ.get("TARIBOY_CLIENT_VERSION")
+    if version:
+        return version
+    script = Path(__file__).resolve()
+    try:
+        skills = json.loads((script.parents[3] / "bridge-manifest.json").read_text()).get("skills", [])
+    except (OSError, json.JSONDecodeError):
+        skills = []
+    for skill in skills:
+        version = skill.get("client_version") if isinstance(skill, dict) and skill.get("name") == script.parents[1].name else None
+        if isinstance(version, str) and version:
+            return version
+    return script.parents[3].name
 def call(method, route, body=None):
     c = UnixHTTPConnection(os.environ["TARIBOY_TOOLS_SOCKET"]); c.request(method, route, None if method == "GET" else json.dumps(body or {}).encode(), {"Content-Type": "application/json"}); r = c.getresponse(); daemon = r.getheader("X-Tariboy-Version", ""); envelope = json.load(r); c.close(); version = client_version()
     if daemon and daemon != version: print(f"warning: client version {version} does not match daemon version {daemon}; this client ({sys.argv[0]}) may not know the daemon's newer flags", file=sys.stderr)
@@ -65,7 +78,8 @@ def create(args, scheduled):
         raise UsageError(f"tools script {action}: NAME [options] -- COMMAND required")
     separator = args.index("--", 2)
     name = args[1]
-    flags, pos = parse_flags(args[:separator], 2, {"description", "every", "quiet-exit"})
+    allowed = {"description", "every", "quiet-exit"} if scheduled else {"description"}
+    flags, pos = parse_flags(args[:separator], 2, allowed)
     if pos:
         raise UsageError(f'tools script {action}: unexpected argument "{pos[0]}" before --')
     command = " ".join(args[separator + 1:])

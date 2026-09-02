@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import json
+import shutil
 import socketserver
 import subprocess
 import tempfile
@@ -26,7 +27,15 @@ COMMANDS = {
 
 
 class StoreSkillsTest(unittest.TestCase):
-    def run_script(self, relative, args, result, version="0.46.0", envelope=None):
+    def run_script(
+        self,
+        relative,
+        args,
+        result,
+        version="0.46.0",
+        envelope=None,
+        client_version="0.46.0",
+    ):
         class Handler(socketserver.StreamRequestHandler):
             def handle(handler):
                 request_line = handler.rfile.readline().decode()
@@ -54,9 +63,14 @@ class StoreSkillsTest(unittest.TestCase):
             thread = threading.Thread(target=serve)
             thread.start()
             try:
+                env = dict(os.environ, TARIBOY_TOOLS_SOCKET=path)
+                if client_version is None:
+                    env.pop("TARIBOY_CLIENT_VERSION", None)
+                else:
+                    env["TARIBOY_CLIENT_VERSION"] = client_version
                 process = subprocess.run(
                     [ROOT / relative, *args],
-                    env=dict(os.environ, TARIBOY_TOOLS_SOCKET=path, TARIBOY_CLIENT_VERSION="0.46.0"),
+                    env=env,
                     text=True,
                     capture_output=True,
                 )
@@ -123,6 +137,25 @@ class StoreSkillsTest(unittest.TestCase):
                 self.assertTrue(result.stdout)
                 self.assertIn("usage:", result.stdout)
                 self.assertEqual(result.stderr, "")
+
+    def test_launcher_uses_resolved_python_interpreter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_python = Path(tmp) / "python3"
+            fake_python.write_text("#!/bin/sh\nexit 91\n")
+            fake_python.chmod(0o700)
+            env = dict(
+                os.environ,
+                PATH=tmp + os.pathsep + os.environ["PATH"],
+                TARIBOY_PYTHON3=os.path.realpath(os.sys.executable),
+            )
+            result = subprocess.run(
+                [ROOT / "whoami/scripts/whoami.sh", "--help"],
+                env=env,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("usage:", result.stdout)
 
     def test_context_help_describes_get_and_set(self):
         env = dict(os.environ)
@@ -200,11 +233,89 @@ class StoreSkillsTest(unittest.TestCase):
         self.assertIn("client version 0.46.0 does not match daemon version 0.47.0", process.stderr)
         self.assertIn("client_version: 0.46.0", process.stdout)
 
+    def test_bridge_copy_uses_producing_store_version_without_env_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bridge = (
+                Path(tmp)
+                / "agents/alice/image-bridges"
+                / ("a" * 64)
+                / "2/codex"
+            )
+            skill = bridge / "skills/whoami"
+            shutil.copytree(ROOT / "whoami", skill)
+            (bridge / "bridge-manifest.json").write_text(
+                json.dumps(
+                    {"skills": [{"name": "whoami", "client_version": "0.45.2"}]}
+                )
+            )
+            process, request = self.run_script(
+                skill / "scripts/whoami.sh",
+                [],
+                {"agent": "alice"},
+                version="0.47.0",
+                client_version=None,
+            )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(request[0], ["GET", "/tools/whoami"])
+        self.assertIn(
+            "client version 0.45.2 does not match daemon version 0.47.0",
+            process.stderr,
+        )
+        self.assertIn("client_version: 0.45.2", process.stdout)
+
     def test_direct_entrypoint_rejects_unknown_flags_before_request(self):
         process, request = self.run_script("loop/scripts/loop.sh", ["done", "--bogus"], {})
         self.assertEqual(process.returncode, 2)
         self.assertIn("unknown flag --bogus", process.stderr)
         self.assertIsNone(request)
+
+    def test_scripts_run_rejects_schedule_only_flags_before_request(self):
+        for flag in ("--every=60", "--quiet-exit=0"):
+            with self.subTest(flag=flag):
+                process, request = self.run_script(
+                    "scripts/scripts/scripts.sh",
+                    ["run", "once", flag, "--", "echo", "done"],
+                    {},
+                )
+                self.assertEqual(process.returncode, 2)
+                self.assertIn("unknown flag", process.stderr)
+                self.assertIsNone(request)
+
+    def test_flexible_task_ask_rejects_workflow_flags_before_request(self):
+        workflow_flags = (
+            "--question=ignored",
+            "--context=context",
+            "--blocking-scope=task",
+            "--anchor=checkpoint",
+            "--suggested-answer=yes",
+            "--options=yes,no",
+            "--artifacts=1",
+            "--task-revision=2",
+            "--assignment-revision=3",
+        )
+        for flag in workflow_flags:
+            with self.subTest(flag=flag):
+                process, request = self.run_script(
+                    "tasks/scripts/tasks.sh",
+                    ["ask", "TARI-41", "user:alice", "Choose", flag],
+                    {},
+                )
+                self.assertEqual(process.returncode, 2)
+                self.assertIn("workflow", process.stderr)
+                self.assertIsNone(request)
+
+    def test_current_task_rejects_ambiguous_arguments_before_request(self):
+        for args in (
+            ["TARI-41", "TARI-42"],
+            ["TARI-41", "--clear"],
+            ["--clear=true"],
+        ):
+            with self.subTest(args=args):
+                process, request = self.run_script(
+                    "current-task/scripts/current_task.sh", args, {}
+                )
+                self.assertEqual(process.returncode, 2)
+                self.assertIsNone(request)
 
     def test_socket_server_stops_when_launch_raises(self):
         with patch("subprocess.run", side_effect=RuntimeError("launch failed")):

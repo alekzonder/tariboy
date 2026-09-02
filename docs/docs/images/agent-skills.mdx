@@ -197,12 +197,15 @@ execute bit is set are normalized to `0700`. Directories use `0700`.
 
 ## Manifest and portability
 
-The image manifest and **Skills** tab expose these fields in declaration order:
+The image manifest records these fields in declaration order. The **Skills**
+tab displays the descriptive and integrity fields; runtime bridge provenance
+remains in the manifest:
 
 | Field | Meaning |
 | --- | --- |
 | `name`, `description` | Validated `SKILL.md` identity |
 | `source`, `category` | Original declaration and resolved source class |
+| `client_version` | Producing Store version for a skill sourced from `$CURRENT_VERSION_STORE` |
 | `archive_root` | Canonical `skills/<name>` location in the image |
 | `file_count`, `size` | Validated aggregate contents |
 | `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |

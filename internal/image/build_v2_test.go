@@ -225,6 +225,26 @@ func TestBuildV2PackagesCanonicalSkillsAndModes(t *testing.T) {
 	}
 }
 
+func TestBuildV2PreservesCurrentStoreSkillClientVersion(t *testing.T) {
+	currentStore := t.TempDir()
+	writeTestSkill(t, filepath.Join(currentStore, "skills"), "whoami")
+	src := &imagefile.V2{
+		SchemaVersion: 2,
+		Dir:           t.TempDir(),
+		Skills:        []imagefile.SkillEntry{{Dir: "$CURRENT_VERSION_STORE/skills/whoami"}},
+	}
+	manifest, err := BuildV2(src, imagefile.ResolveRoots{
+		CurrentVersionStore: currentStore,
+		CurrentStoreVersion: "0.45.2",
+	}, Ref{Name: "versioned", Tag: "latest"}, &Store{Dir: t.TempDir()}, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := manifest.Skills[0].ClientVersion; got != "0.45.2" {
+		t.Fatalf("client version = %q, want producing Store version", got)
+	}
+}
+
 func TestBuildV2SkillBytesChangeTreeAndImageDigests(t *testing.T) {
 	source := t.TempDir()
 	skillDir := writeTestSkill(t, filepath.Join(source, "skills"), "digest-skill")

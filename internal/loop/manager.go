@@ -337,11 +337,6 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(agents) > 0 {
-		if err := agentdir.RequirePython3(); err != nil {
-			return err
-		}
-	}
 	// Repoint every agent's bin shims at this daemon's client before anything
 	// can run: they were written once at provision time with an absolute path
 	// to the then-current release, so an upgraded daemon would otherwise keep
@@ -2495,7 +2490,7 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 			}
 		}
 		man, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{
-			Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(version.Version), Plugins: pluginsDir,
+			Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(version.Version), CurrentStoreVersion: version.Version, Plugins: pluginsDir,
 		}, ref, imgStore, time.Now, resolver)
 		if err != nil {
 			return nil, err

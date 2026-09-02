@@ -61,7 +61,7 @@ func AssemblePrompt(p PromptParts) string {
 // it is processed — Pending's attempts++/DLQ-after-5 and the loop-hot HasPending
 // behaviour then give re-prompt-until-processed semantics for free.
 const messageProcessedInstruction = `When you have handled a message you MUST run:
-    tools message processed <id> "<what you did / result>"
+    scripts/messages.sh message processed <id> "<what you did / result>"
 Both arguments are mandatory. Handling can be: doing the work, filing a task
 (name it in the result), or replying (a reply auto-processes the message).`
 
@@ -890,6 +890,22 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			r.cfg.Proxy.RevokeToken(proxyToken)
 		}
 		return fail(fmt.Errorf("harness executable %q not found", adapter.Type()))
+	}
+	if !bare {
+		python3, err := harness.FindExecutable("python3", env, cwd)
+		if err != nil {
+			if proxyToken != "" {
+				r.cfg.Proxy.RevokeToken(proxyToken)
+			}
+			return fail(errors.New("python3 is required in the iteration environment for agent tool scripts"))
+		}
+		env, err = mergeSkillLaunchEnv(env, []string{"TARIBOY_PYTHON3=" + python3})
+		if err != nil {
+			if proxyToken != "" {
+				r.cfg.Proxy.RevokeToken(proxyToken)
+			}
+			return fail(err)
+		}
 	}
 
 	// Compose the shim command.

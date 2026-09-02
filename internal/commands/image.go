@@ -142,7 +142,7 @@ func imageBuild() registry.Command {
 				var man image.Manifest
 				if i == 0 {
 					if parsed.Version == 2 {
-						man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: pluginsDir}, ref, stagedStore, clock, resolver)
+						man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), CurrentStoreVersion: productVersion, Plugins: pluginsDir}, ref, stagedStore, clock, resolver)
 					} else {
 						man, err = image.Build(parsed.V1, ref, stagedStore, clock,
 							image.WithExternalPlugins(resolver),
@@ -330,7 +330,7 @@ func imageValidate() registry.Command {
 					pluginStore = plugins.NewStore(c.Store, time.Now)
 				}
 				validated, validateErr := image.ValidateV2Detailed(parsed.V2, imagefile.ResolveRoots{
-					Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), Plugins: layout.PluginsDir(),
+					Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), CurrentStoreVersion: productVersion, Plugins: layout.PluginsDir(),
 				}, func() plugincaps.ExternalResolver {
 					if pluginStore != nil {
 						return plugins.ResolveEnabledInstalledMetadata(layout.PluginsDir(), pluginStore)

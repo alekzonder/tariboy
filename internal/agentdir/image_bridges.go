@@ -50,12 +50,13 @@ type BridgePlan struct {
 }
 
 type bridgeSkill struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	ArchiveRoot string `json:"archive_root"`
-	FileCount   int    `json:"file_count"`
-	Size        int64  `json:"size"`
-	TreeSHA256  string `json:"tree_sha256"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	ClientVersion string `json:"client_version,omitempty"`
+	ArchiveRoot   string `json:"archive_root"`
+	FileCount     int    `json:"file_count"`
+	Size          int64  `json:"size"`
+	TreeSHA256    string `json:"tree_sha256"`
 }
 
 type bridgeFileRecord struct {
@@ -101,7 +102,8 @@ func expectedBridgeSkills(expected []image.ManifestSkill) []bridgeSkill {
 	for _, skill := range expected {
 		out = append(out, bridgeSkill{
 			Name: skill.Name, Description: skill.Description, ArchiveRoot: skill.ArchiveRoot,
-			FileCount: skill.FileCount, Size: skill.Size, TreeSHA256: skill.TreeSHA256,
+			ClientVersion: skill.ClientVersion,
+			FileCount:     skill.FileCount, Size: skill.Size, TreeSHA256: skill.TreeSHA256,
 		})
 	}
 	return out

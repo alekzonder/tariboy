@@ -27,14 +27,15 @@ const (
 )
 
 type Metadata struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Source      string `json:"source"`
-	Category    string `json:"category"`
-	ArchiveRoot string `json:"archive_root"`
-	FileCount   int    `json:"file_count"`
-	Size        int64  `json:"size"`
-	TreeSHA256  string `json:"tree_sha256"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Source        string `json:"source"`
+	Category      string `json:"category"`
+	ClientVersion string `json:"client_version,omitempty"`
+	ArchiveRoot   string `json:"archive_root"`
+	FileCount     int    `json:"file_count"`
+	Size          int64  `json:"size"`
+	TreeSHA256    string `json:"tree_sha256"`
 }
 
 type File struct {

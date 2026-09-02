@@ -103,17 +103,16 @@ func TestWriteShimsDispatchesDirectlyToOwningSkillScripts(t *testing.T) {
 	}
 }
 
-func TestWriteShimsRequiresPython3BeforeWriting(t *testing.T) {
+func TestWriteShimsDefersPython3CheckToIterationEnvironment(t *testing.T) {
 	l := binDirFor(t)
 	skills := skillScriptsFor(t)
 	t.Setenv("PATH", t.TempDir())
 
-	err := WriteShims(l, agent.Agent{Name: "worker"}, skills)
-	if err == nil || !strings.Contains(err.Error(), "python3") {
-		t.Fatalf("WriteShims error = %v, want missing python3", err)
+	if err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop"}}, skills); err != nil {
+		t.Fatalf("WriteShims used daemon PATH for Python preflight: %v", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(l.BinDir(), "i-am-done")); !os.IsNotExist(statErr) {
-		t.Fatalf("i-am-done shim was written without python3: %v", statErr)
+	if _, err := os.Stat(filepath.Join(l.BinDir(), "i-am-done")); err != nil {
+		t.Fatalf("i-am-done shim was not written: %v", err)
 	}
 }
 
@@ -138,7 +137,7 @@ func TestWriteShimsRepointsDirectSkillShimsAndRemovesManagedTools(t *testing.T) 
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}
 	stale := "/home/u/.tariboy/store/versions/0.21.6/skills"
 	for name, body := range map[string]string{
-		"tools":     "#!/usr/bin/env bash\nexec python3 -B \"" + stale + "/agent-tools/scripts/tools.py\" \"$@\"\n",
+		"tools":     "#!/usr/bin/env bash\nexec \"/opt/tariboy/0.21.6/tariboy-tools\" \"$@\"\n",
 		"i-am-done": "#!/usr/bin/env bash\nexec \"" + stale + "/loop/scripts/loop.sh\" done \"$@\"\n",
 		"tasks":     "#!/usr/bin/env bash\nexec \"" + stale + "/tasks/scripts/tasks.sh\" \"$@\"\n",
 	} {
@@ -206,6 +205,22 @@ func TestWriteShimsKeepsCustomWrapperThatMentionsLegacyDispatcher(t *testing.T) 
 	l := binDirFor(t)
 	tools := filepath.Join(l.BinDir(), "tools")
 	body := "#!/usr/bin/env bash\n# exec python3 agent-tools/scripts/tools.py through a custom wrapper\nexec python3 -B /custom/tools.py \"$@\"\n"
+	if err := os.WriteFile(tools, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteShims(l, agent.Agent{Name: "worker"}, skillScriptsFor(t)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(tools)
+	if err != nil || string(got) != body {
+		t.Fatalf("custom tools wrapper changed: %q err=%v", got, err)
+	}
+}
+
+func TestWriteShimsKeepsCustomWrapperAroundLegacyGoClient(t *testing.T) {
+	l := binDirFor(t)
+	tools := filepath.Join(l.BinDir(), "tools")
+	body := "#!/usr/bin/env bash\necho invoking legacy client >&2\nexec \"/opt/tariboy/0.21.6/tariboy-tools\" \"$@\"\n"
 	if err := os.WriteFile(tools, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}

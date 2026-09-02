@@ -23,7 +23,19 @@ class UnixHTTPConnection(http.client.HTTPConnection):
 
 
 def client_version():
-    return os.environ.get("TARIBOY_CLIENT_VERSION") or Path(__file__).resolve().parents[3].name
+    version = os.environ.get("TARIBOY_CLIENT_VERSION")
+    if version:
+        return version
+    script = Path(__file__).resolve()
+    try:
+        skills = json.loads((script.parents[3] / "bridge-manifest.json").read_text()).get("skills", [])
+    except (OSError, json.JSONDecodeError):
+        skills = []
+    for skill in skills:
+        version = skill.get("client_version") if isinstance(skill, dict) and skill.get("name") == script.parents[1].name else None
+        if isinstance(version, str) and version:
+            return version
+    return script.parents[3].name
 
 
 def call(method, route, body=None):

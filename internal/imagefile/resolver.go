@@ -15,6 +15,7 @@ const maxPromptFileSize = 4 << 20
 type ResolveRoots struct {
 	Store               string
 	CurrentVersionStore string
+	CurrentStoreVersion string
 	Plugins             string
 }
 
