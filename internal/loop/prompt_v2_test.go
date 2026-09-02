@@ -53,7 +53,7 @@ func TestRenderPromptTemplateUsesDeclaredOrderOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "A\n\nID\n\nB\n\nCTX\n\nworkdir: /var/lib/tariboy/agents/worker/workdir\n\nRUN\n"; got != want {
+	if want := "A\n\nUse the `whoami` skill for this runtime data.\n\nID\n\nB\n\nUse the `context` skill for this runtime data.\n\n# Agent Context\n\nCTX\n\nUse the `workdir` skill for this runtime data.\n\nworkdir: /var/lib/tariboy/agents/worker/workdir\n\nRUN\n"; got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}
 }
@@ -64,6 +64,36 @@ func TestRenderPromptTemplateEmptyHasNoImplicitHeaderOrTail(t *testing.T) {
 	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{})
 	if err != nil || got != "" {
 		t.Fatalf("prompt = %q, %v", got, err)
+	}
+}
+
+func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
+	tests := []struct {
+		runtime string
+		value   RuntimePromptValues
+		want    string
+	}{
+		{"identity", RuntimePromptValues{Identity: "identity data"}, "Use the `whoami` skill for this runtime data.\n\nidentity data\n"},
+		{"workdir", RuntimePromptValues{Workdir: "workdir data"}, "Use the `workdir` skill for this runtime data.\n\nworkdir data\n"},
+		{"context", RuntimePromptValues{Context: "context data"}, "Use the `context` skill for this runtime data.\n\n# Agent Context\n\ncontext data\n"},
+		{"messages", RuntimePromptValues{Messages: "message data"}, "Use the `messages` skill for this runtime data.\n\nmessage data\n"},
+		{"awaiting-replies", RuntimePromptValues{AwaitingReplies: "reply data"}, "Use the `messages` skill for this runtime data.\n\nreply data\n"},
+		{"user-prompt", RuntimePromptValues{UserPrompt: "user prompt"}, "user prompt\n"},
+		{"one-shot", RuntimePromptValues{OneShot: "one shot"}, "one shot\n"},
+		{"context", RuntimePromptValues{Context: "\n"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.runtime, func(t *testing.T) {
+			template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{{Kind: "runtime", Runtime: tt.runtime}}}
+			template.SHA256 = promptTemplateSHA(t, template)
+			got, err := RenderPromptTemplate(template, t.TempDir(), tt.value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("prompt = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

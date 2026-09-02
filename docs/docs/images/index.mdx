@@ -137,19 +137,22 @@ Runtime entries remain visible placeholders inside the immutable image. Before
 every iteration, the runner replaces them with current values at their declared
 positions:
 
-| Placeholder | Value at iteration start |
-| --- | --- |
-| `identity` | Current agent name, active image ref and digest, CWD, and iteration identity |
-| `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD |
-| `context` | Durable agent context |
-| `messages` | Messages delivered to this iteration |
-| `awaiting-replies` | Outstanding request state |
-| `user-prompt` | The agent's standing prompt |
-| `one-shot` | A prompt supplied for this single execution |
+| Placeholder | Value at iteration start | Skill named in the rendered instruction |
+| --- | --- | --- |
+| `identity` | Current agent name, active image ref and digest, CWD, and iteration identity | `whoami` |
+| `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
+| `context` | Durable agent context | `context` |
+| `messages` | Messages delivered to this iteration | `messages` |
+| `awaiting-replies` | Outstanding request state | `messages` |
+| `user-prompt` | The agent's standing prompt | none; this is task input |
+| `one-shot` | A prompt supplied for this single execution | none; this is task input |
 
-Each singleton placeholder may appear at most once. Empty runtime values add no
-text. The **Template** tab shows static paths, categories, sizes, hashes, and
-runtime markers in their exact order without draining messages.
+Each non-empty skill-owned runtime value is preceded by a short instruction to
+use that skill; the instruction names the skill without embedding an installation
+path. Context data also starts with `# Agent Context`. Each singleton placeholder
+may appear at most once. Empty runtime values add no text. The **Template** tab
+shows static paths, categories, sizes, hashes, and runtime markers in their exact
+order without draining messages.
 
 ## Store and external plugins
 

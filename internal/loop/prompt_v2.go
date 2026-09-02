@@ -66,6 +66,10 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 		"user-prompt": values.UserPrompt, "one-shot": values.OneShot,
 		"workdir": values.Workdir,
 	}
+	runtimeSkills := map[string]string{
+		"identity": "whoami", "workdir": "workdir", "context": "context",
+		"messages": "messages", "awaiting-replies": "messages",
+	}
 	root, err := filepath.Abs(imageDir)
 	if err != nil {
 		return "", err
@@ -79,7 +83,13 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 			if !ok {
 				return "", fmt.Errorf("template entry %d: unknown runtime placeholder %q", i, entry.Runtime)
 			}
-			body = value
+			body = strings.TrimRight(value, "\n")
+			if entry.Runtime == "context" && body != "" {
+				body = "# Agent Context\n\n" + body
+			}
+			if skill := runtimeSkills[entry.Runtime]; skill != "" && body != "" {
+				body = fmt.Sprintf("Use the `%s` skill for this runtime data.\n\n%s", skill, body)
+			}
 		case "file":
 			if filepath.IsAbs(entry.ArchivePath) {
 				return "", fmt.Errorf("template entry %d: unsafe absolute layer path", i)
