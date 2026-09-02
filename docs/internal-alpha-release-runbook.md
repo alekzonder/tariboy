@@ -1,6 +1,6 @@
 # Tariboy internal alpha release runbook
 
-Release: `0.46.0`
+Release: `0.46.1`
 
 ## Ownership
 
@@ -61,8 +61,8 @@ and DMG bundles, verifies signatures, runs the isolated desktop smoke test, and
 stages:
 
 ```text
-dist/releases/0.46.0/
-  Tariboy_0.46.0_aarch64.dmg
+dist/releases/0.46.1/
+  Tariboy_0.46.1_aarch64.dmg
   SHA256SUMS
   release.json
 ```
@@ -75,7 +75,7 @@ and artifact checks are unchanged.
 Re-run the independent gate:
 
 ```bash
-scripts/check-alpha-artifacts.sh dist/releases/0.46.0
+scripts/check-alpha-artifacts.sh dist/releases/0.46.1
 ```
 
 ## Two-person review
