@@ -48,8 +48,18 @@ func (s Store) Get(ref string) (Record, bool, error) {
 }
 
 func (s Store) Delete(ref string) error {
-	_, err := s.DB.Exec(`DELETE FROM image_provenance WHERE ref=?`, ref)
-	return err
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM image_provenance WHERE ref=?`, ref); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM image_source_snapshots WHERE image_ref=?`, ref); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // IsCommitted requires the provenance and source-snapshot rows written by the

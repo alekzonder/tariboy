@@ -110,9 +110,14 @@ snapshot and provenance row in one SQLite transaction. Any synchronous failure
 rolls back the whole ref stack. On daemon startup, a surviving journal is
 finalized only when both authoritative metadata rows name every candidate
 digest; otherwise every moved ref is restored before agents or clients can use
-it. One publication gate spans ref-to-digest assignment, automatic activation,
-initial provisioning, reprovisioning, controlled rollout staging, import, and
-removal, so none can persist an uncommitted generation.
+it. Removing a ref or installing a new immutable import deletes the paired
+ordinary-build authority rows transactionally before filesystem visibility, so
+matching bytes from an older lifecycle cannot authorize mutable replacement.
+One publication gate spans ordinary, editable-source, team-import,
+agent-authored, compose, and controlled-release publication plus assignment,
+activation, provisioning, reprovisioning, import, and removal, so none can
+persist an uncommitted generation. Compose publishes through the daemon rather
+than writing its image store from the client process.
 
 Controlled improvement adds durable task-level Judge subjects, structured
 proposals, append-only approvals, immutable image releases, and rollout rows.

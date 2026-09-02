@@ -5,15 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/alekzonder/tariboy/internal/image"
 )
 
-// TestBuildBuildsDeclaredImages proves compose `build` actually builds the
-// images declared under the file's `images:` map in-process (image.Build /
-// imagefile.Parse against the shared images dir), the same mechanism Up uses
-// for its build step — not a daemon route. No Caller calls are made.
-func TestBuildBuildsDeclaredImages(t *testing.T) {
+func TestBuildPublishesDeclaredImagesThroughDaemon(t *testing.T) {
 	workdir := t.TempDir()
 	ctxDir := filepath.Join(workdir, "analyst")
 	if err := os.MkdirAll(ctxDir, 0o755); err != nil {
@@ -35,39 +29,14 @@ func TestBuildBuildsDeclaredImages(t *testing.T) {
 		t.Fatalf("build: %v", err)
 	}
 
-	store := &image.Store{Dir: imagesDir}
-	ref, err := image.ParseRef("analyst:latest")
-	if err != nil {
-		t.Fatal(err)
+	if countCalls(fc, "POST /api/images/build") != 1 {
+		t.Fatalf("build did not publish through daemon: %v", fc.calls)
 	}
-	if !store.Exists(ref) {
-		t.Fatal("build did not produce the declared image in the store")
+	body, ok := bodyFor(fc, "POST /api/images/build").(map[string]any)
+	if !ok || body["name"] != "analyst" || body["tag"] != "latest" || body["path"] != ctxDir {
+		t.Fatalf("image build body = %#v", body)
 	}
-	if len(fc.calls) != 0 {
-		t.Fatalf("build is CLI-local; it must not call the daemon, got: %v", fc.calls)
-	}
-}
-
-func TestBuildDispatchesSchemaV2Images(t *testing.T) {
-	workdir := t.TempDir()
-	ctxDir := filepath.Join(workdir, "analyst")
-	if err := os.MkdirAll(ctxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(ctxDir, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts: []\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	imagesDir := t.TempDir()
-	r := NewRunner(newFake(), imagesDir, workdir, io.Discard)
-	f, err := Parse([]byte(goodYAML))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := r.Build(f); err != nil {
-		t.Fatal(err)
-	}
-	manifest, err := (&image.Store{Dir: imagesDir}).Inspect(image.Ref{Name: "analyst", Tag: "latest"})
-	if err != nil || manifest.SchemaVersion != 2 {
-		t.Fatalf("manifest = %#v, %v", manifest, err)
+	if entries, err := os.ReadDir(imagesDir); err != nil || len(entries) != 0 {
+		t.Fatalf("compose wrote shared image store directly: entries=%v err=%v", entries, err)
 	}
 }

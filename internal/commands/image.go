@@ -667,11 +667,13 @@ func imageRm() registry.Command {
 						return api.UserError{Code: "image_in_use", Msg: "image " + ref.String() + " is active or pending for an agent", Status: http.StatusConflict}
 					}
 				}
+				if c.Store != nil {
+					if err := (imageprovenance.Store{DB: c.Store.DB}).Delete(ref.String()); err != nil {
+						return err
+					}
+				}
 				if err := imageStore(c).Remove(ref); err != nil {
 					return api.UserError{Code: "not_found", Msg: err.Error()}
-				}
-				if c.Store != nil {
-					_ = (imageprovenance.Store{DB: c.Store.DB}).Delete(ref.String())
 				}
 				result = map[string]any{"removed": ref.String()}
 				return nil

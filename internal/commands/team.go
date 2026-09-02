@@ -183,6 +183,12 @@ func teamImportYAML() registry.Command {
 }
 
 func applyTeamImage(c *registry.Ctx, preview teamportable.Preview, planned teamportable.Image, reuseSource bool, onSourceReady func()) error {
+	return image.WithPublicationGate(func() error {
+		return applyTeamImageLocked(c, preview, planned, reuseSource, onSourceReady)
+	})
+}
+
+func applyTeamImageLocked(c *registry.Ctx, preview teamportable.Preview, planned teamportable.Image, reuseSource bool, onSourceReady func()) error {
 	ref, err := image.ParseRef(planned.Ref)
 	if err != nil || image.IsReserved(ref) {
 		return api.UserError{Code: "bad_ref", Msg: "invalid image ref " + planned.Ref}

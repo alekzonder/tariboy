@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
@@ -213,6 +214,11 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 	body, err := os.ReadFile(filepath.Join(stage, "image.tar.gz"))
 	if err != nil {
 		return Result{}, err
+	}
+	if !targetExists && s.Snapshots != nil && s.Snapshots.DB != nil {
+		if err := (imageprovenance.Store{DB: s.Snapshots.DB}).Delete(target.String()); err != nil {
+			return Result{}, err
+		}
 	}
 	if target.String() != preview.Ref {
 		source, parseErr := image.ParseRef(preview.Ref)

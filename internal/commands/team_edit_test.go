@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/compose"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -155,5 +156,54 @@ func TestApplyTeamImageBuildsTwoRefsFromOneImportedSource(t *testing.T) {
 	}
 	if err := applyTeamImage(c, preview, teamportable.Image{Ref: "shared:v3", SourceName: "shared", SourceDigest: "sha256:wrong"}, true, func() {}); err == nil {
 		t.Fatal("accepted staged source whose digest did not match archive metadata")
+	}
+}
+
+func TestApplyTeamImageWaitsForPublicationGate(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	source := filepath.Join(base, "team-imports", "id", "images", "shared")
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snapshots := imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}
+	seed, err := snapshots.Capture(context.Background(), "seed:v1", "seed-built", "seed", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &registry.Ctx{Store: db, BaseDir: base}
+	preview := teamportable.Preview{StagedDir: filepath.Join(base, "team-imports", "id")}
+	planned := teamportable.Image{Ref: "shared:v1", SourceName: "shared", SourceDigest: seed.SourceDigest}
+	entered, release, locked := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		locked <- image.WithPublicationGate(func() error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	done := make(chan error, 1)
+	go func() { done <- applyTeamImage(c, preview, planned, false, func() {}) }()
+	select {
+	case err := <-done:
+		close(release)
+		<-locked
+		t.Fatalf("team publisher ignored publication gate: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

@@ -285,35 +285,40 @@ func imageSourceBuild() registry.Command {
 			var manifest image.Manifest
 			var parseErr error
 			store := imageStore(c)
-			record, err := sources.RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
-				imgFile, err := imagefile.Parse(dir)
-				if err != nil {
-					parseErr = err
-					return imagesource.BuildRecord{}, err
-				}
-				layout := paths.Paths{Base: c.BaseDir}
-				pluginsDir := layout.PluginsDir()
-				manifest, err = image.Build(
-					imgFile,
-					ref,
-					store,
-					time.Now,
-					image.WithExternalPlugins(plugins.ResolveInstalled(pluginsDir)),
-					image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(version.Version)),
-				)
-				if err != nil {
-					return imagesource.BuildRecord{}, err
-				}
-				if _, err := imageSnapshotStore(c).CaptureWithProvenance(
-					context.Background(), ref.String(), manifest.Digest, name, dir, source.Provenance,
-				); err != nil {
-					return imagesource.BuildRecord{}, err
-				}
-				return imagesource.BuildRecord{
-					Ref: ref.String(), Digest: manifest.Digest, BuiltAt: manifest.BuiltAt,
-				}, nil
-			}, func() error {
-				return store.Remove(ref)
+			var record imagesource.BuildRecord
+			err = image.WithPublicationGate(func() error {
+				var err error
+				record, err = sources.RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
+					imgFile, err := imagefile.Parse(dir)
+					if err != nil {
+						parseErr = err
+						return imagesource.BuildRecord{}, err
+					}
+					layout := paths.Paths{Base: c.BaseDir}
+					pluginsDir := layout.PluginsDir()
+					manifest, err = image.Build(
+						imgFile,
+						ref,
+						store,
+						time.Now,
+						image.WithExternalPlugins(plugins.ResolveInstalled(pluginsDir)),
+						image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(version.Version)),
+					)
+					if err != nil {
+						return imagesource.BuildRecord{}, err
+					}
+					if _, err := imageSnapshotStore(c).CaptureWithProvenance(
+						context.Background(), ref.String(), manifest.Digest, name, dir, source.Provenance,
+					); err != nil {
+						return imagesource.BuildRecord{}, err
+					}
+					return imagesource.BuildRecord{
+						Ref: ref.String(), Digest: manifest.Digest, BuiltAt: manifest.BuiltAt,
+					}, nil
+				}, func() error {
+					return store.Remove(ref)
+				})
+				return err
 			})
 			if err != nil {
 				if parseErr != nil {

@@ -2454,6 +2454,16 @@ func (m *Manager) toolsLoopControl(name, action string) (agent.Agent, error) {
 // commands/image.go does, so a base `from:` image on this host resolves and the
 // result is runnable via `agent run`.
 func buildImageForAgent(imgStore *image.Store, workdir, name, tag, path string) (map[string]any, error) {
+	var result map[string]any
+	err := image.WithPublicationGate(func() error {
+		var err error
+		result, err = buildImageForAgentLocked(imgStore, workdir, name, tag, path)
+		return err
+	})
+	return result, err
+}
+
+func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path string) (map[string]any, error) {
 	if tag == "" {
 		tag = "latest"
 	}

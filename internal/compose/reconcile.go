@@ -12,12 +12,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/client"
-	"github.com/alekzonder/tariboy/internal/image"
-	"github.com/alekzonder/tariboy/internal/imagefile"
-	"github.com/alekzonder/tariboy/internal/paths"
-	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/tasks"
-	"github.com/alekzonder/tariboy/internal/version"
 )
 
 // Caller is the daemon HTTP client surface the reconciler drives (satisfied by
@@ -26,19 +21,16 @@ type Caller interface {
 	Call(method, route string, body any) (json.RawMessage, error)
 }
 
-// Runner converges a compose File against a live daemon. imagesDir + workdir
-// support compose's local image build step; everything else goes through the
-// Caller.
+// Runner converges a compose File against a live daemon.
 type Runner struct {
 	call      Caller
-	imagesDir string // <base>/images for local image.Build
 	workdir   string // compose-file dir, to resolve relative image contexts
 	out       io.Writer
-	skipBuild bool // test seam: skip the local image build
+	skipBuild bool // test seam: skip the image build
 }
 
-func NewRunner(call Caller, imagesDir, workdir string, out io.Writer) *Runner {
-	return &Runner{call: call, imagesDir: imagesDir, workdir: workdir, out: out}
+func NewRunner(call Caller, _ string, workdir string, out io.Writer) *Runner {
+	return &Runner{call: call, workdir: workdir, out: out}
 }
 
 func (r *Runner) logf(format string, a ...any) {
@@ -549,41 +541,20 @@ func (r *Runner) Down(f File, volumes bool) error {
 	return nil
 }
 
-// Build builds every declared image locally. No-op when the file declares no
-// images or the test seam is set.
+// Build publishes every declared image through the daemon. No-op when the file
+// declares no images or the test seam is set.
 func (r *Runner) Build(f File) error {
 	if r.skipBuild {
 		return nil
 	}
-	store := &image.Store{Dir: r.imagesDir}
-	// <base>/plugins is the sibling of <base>/images (see internal/paths).
-	baseDir := filepath.Dir(r.imagesDir)
-	externalPlugins := image.WithExternalPlugins(plugins.ResolveInstalled(filepath.Join(baseDir, "plugins")))
-	builtinPrompts := image.WithBuiltinStoreRoot(filepath.Join(baseDir, "store", "versions", version.Version))
 	for _, name := range sortedKeys(f.Images) {
 		spec := f.Images[name]
-		ref, err := image.ParseRef(name + ":latest")
-		if err != nil {
-			return err
-		}
 		ctx := spec.Context
 		if !filepath.IsAbs(ctx) {
 			ctx = filepath.Join(r.workdir, ctx)
 		}
-		parsed, err := imagefile.ParseAny(ctx)
-		if err != nil {
-			return fmt.Errorf("image %s: %w", name, err)
-		}
 		r.logf("building image %s:latest", name)
-		if parsed.Version == 2 {
-			layout := paths.Paths{Base: baseDir}
-			_, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{
-				Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(version.Version), Plugins: layout.PluginsDir(),
-			}, ref, store, time.Now, plugins.ResolveInstalledMetadata(layout.PluginsDir()))
-		} else {
-			_, err = image.Build(parsed.V1, ref, store, time.Now, externalPlugins, builtinPrompts)
-		}
-		if err != nil {
+		if _, err := r.call.Call("POST", "/api/images/build", map[string]any{"name": name, "tag": "latest", "path": ctx}); err != nil {
 			return fmt.Errorf("build image %s: %w", name, err)
 		}
 	}

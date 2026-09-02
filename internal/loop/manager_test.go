@@ -2317,6 +2317,46 @@ func TestBuildImageForAgentConfinesPath(t *testing.T) {
 	}
 }
 
+func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
+	workdir := t.TempDir()
+	source := filepath.Join(workdir, "authored")
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := &image.Store{Dir: filepath.Join(t.TempDir(), "images")}
+	entered, release, locked := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		locked <- image.WithPublicationGate(func() error {
+			close(entered)
+			<-release
+			return nil
+		})
+	}()
+	<-entered
+	done := make(chan error, 1)
+	go func() {
+		_, err := buildImageForAgent(store, workdir, "authored", "latest", "authored")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		close(release)
+		<-locked
+		t.Fatalf("agent-authored publisher ignored publication gate: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-locked; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestBuildImageForAgentConfinesReferencedPaths locks in the M15 Critical fix:
 // confineToWorkdir clamps only the Tariboyfile's OWN dir, but the file paths
 // REFERENCED inside it (skills:/prompts:/evals:) must also be confined to the

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/imageportable"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/registry"
 	storedb "github.com/alekzonder/tariboy/internal/store"
@@ -227,6 +229,46 @@ func TestImageBuildRejectsImportedAndRetaggedRefs(t *testing.T) {
 				t.Fatalf("collision changed ref: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
 			}
 		})
+	}
+}
+
+func TestImageBuildRejectsImmutableImportAfterMutableRefRemoval(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src}); err != nil {
+		t.Fatal(err)
+	}
+	portable := imageportable.Service{
+		Snapshots: imageSnapshotStore(c), BaseDir: c.BaseDir,
+		StagingRoot: filepath.Join(c.BaseDir, "image-imports"),
+	}
+	var artifact bytes.Buffer
+	if err := portable.Export(context.Background(), ref.String(), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	if err := imageStore(c).Remove(ref); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := portable.Preview(context.Background(), bytes.NewReader(artifact.Bytes()), int64(artifact.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported, err := portable.Apply(context.Background(), preview.ImportID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("new ordinary lifecycle"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+	var userErr api.UserError
+	if !errors.As(err, &userErr) || userErr.Code != "immutable_ref" {
+		t.Fatalf("build collision error = %#v, want immutable_ref", err)
+	}
+	current, inspectErr := imageStore(c).Inspect(ref)
+	if inspectErr != nil || current.Digest != imported.Digest || imageStore(c).IsMutable(ref) {
+		t.Fatalf("immutable import changed: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
 	}
 }
 

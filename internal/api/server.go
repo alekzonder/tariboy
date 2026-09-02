@@ -20,7 +20,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/auditexport"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/imageportable"
-	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -327,9 +326,6 @@ func (s *Server) serveImageImportApply(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		WriteErr(w, http.StatusConflict, "image_import_failed", err.Error())
 		return
-	}
-	if !result.Reused && s.cctx.Store != nil {
-		_ = (imageprovenance.Store{DB: s.cctx.Store.DB}).Delete(result.Ref)
 	}
 	WriteOK(w, result)
 }
