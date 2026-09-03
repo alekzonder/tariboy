@@ -76,8 +76,8 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 		{"identity", RuntimePromptValues{Identity: "identity data"}, "Use the `whoami` skill for this runtime data.\n\nidentity data\n"},
 		{"workdir", RuntimePromptValues{Workdir: "workdir data"}, "Use the `workdir` skill for this runtime data.\n\nworkdir data\n"},
 		{"context", RuntimePromptValues{Context: "context data"}, "Use the `context` skill for this runtime data.\n\n# Agent Context\n\ncontext data\n"},
-		{"messages", RuntimePromptValues{Messages: "message data"}, "Use the `messages` skill for this runtime data.\n\nmessage data\n"},
-		{"awaiting-replies", RuntimePromptValues{AwaitingReplies: "reply data"}, "Use the `messages` skill for this runtime data.\n\nreply data\n"},
+		{"messages", RuntimePromptValues{Messages: "message data"}, "Use the `messages` skill for this runtime data.\n\n# Messages\n\nmessage data\n"},
+		{"awaiting-replies", RuntimePromptValues{AwaitingReplies: "reply data"}, "Use the `messages` skill for this runtime data.\n\n# Messages\n\nreply data\n"},
 		{"user-prompt", RuntimePromptValues{UserPrompt: "user prompt"}, "user prompt\n"},
 		{"one-shot", RuntimePromptValues{OneShot: "one shot"}, "one shot\n"},
 		{"context", RuntimePromptValues{Context: "\n"}, ""},
@@ -94,6 +94,23 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 				t.Fatalf("prompt = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRenderPromptTemplateGroupsMessagesAndAwaitingReplies(t *testing.T) {
+	template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{
+		{Kind: "runtime", Runtime: "messages"},
+		{Kind: "runtime", Runtime: "awaiting-replies"},
+	}}
+	template.SHA256 = promptTemplateSHA(t, template)
+	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{
+		Messages: "# Messages\nmessage data", AwaitingReplies: "# Awaiting replies\nreply data",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Use the `messages` skill for this runtime data.\n\n# Messages\nmessage data\n\n# Awaiting replies\nreply data\n"; got != want {
+		t.Fatalf("prompt = %q, want %q", got, want)
 	}
 }
 

@@ -60,9 +60,21 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 	if err := image.ValidatePromptTemplate(template); err != nil {
 		return "", err
 	}
+	messages := strings.TrimRight(values.Messages, "\n")
+	awaitingReplies := strings.TrimRight(values.AwaitingReplies, "\n")
+	for _, entry := range template.Entries {
+		if entry.Kind == "runtime" && entry.Runtime == "messages" {
+			if messages != "" && awaitingReplies != "" {
+				messages += "\n\n"
+			}
+			messages += awaitingReplies
+			awaitingReplies = ""
+			break
+		}
+	}
 	runtime := map[string]string{
 		"identity": values.Identity, "context": values.Context,
-		"messages": values.Messages, "awaiting-replies": values.AwaitingReplies,
+		"messages": messages, "awaiting-replies": awaitingReplies,
 		"user-prompt": values.UserPrompt, "one-shot": values.OneShot,
 		"workdir": values.Workdir,
 	}
@@ -84,8 +96,15 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 				return "", fmt.Errorf("template entry %d: unknown runtime placeholder %q", i, entry.Runtime)
 			}
 			body = strings.TrimRight(value, "\n")
-			if entry.Runtime == "context" && body != "" {
-				body = "# Agent Context\n\n" + body
+			if body != "" {
+				switch entry.Runtime {
+				case "context":
+					body = "# Agent Context\n\n" + body
+				case "messages", "awaiting-replies":
+					if body != "# Messages" && !strings.HasPrefix(body, "# Messages\n") {
+						body = "# Messages\n\n" + body
+					}
+				}
 			}
 			if skill := runtimeSkills[entry.Runtime]; skill != "" && body != "" {
 				body = fmt.Sprintf("Use the `%s` skill for this runtime data.\n\n%s", skill, body)

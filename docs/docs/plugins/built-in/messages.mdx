@@ -45,7 +45,7 @@ scripts/messages.sh channel subscribe issue-provider:issues \
 
 ## Prompt integration
 
-Package the skill and use both runtime inbox markers:
+Package the skill and use the messages runtime marker:
 
 ```yaml Tariboyfile.yaml
 plugins:
@@ -54,11 +54,12 @@ skills:
   - dir: $CURRENT_VERSION_STORE/skills/messages
 prompts:
   - runtime: messages
-  - runtime: awaiting-replies
 ```
 
-The runtime entries are snapshots for the current iteration. The database and
-bus remain authoritative for delivery state.
+The runtime entry renders one `# Messages` group containing the current inbox
+batch and outstanding request state. The database and bus remain authoritative
+for delivery state. The older `awaiting-replies` marker remains accepted for
+compatibility with existing built images.
 
 ## Managed workflow restrictions
 

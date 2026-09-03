@@ -142,17 +142,19 @@ positions:
 | `identity` | Current agent name, active image ref and digest, CWD, and iteration identity | `whoami` |
 | `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
 | `context` | Durable agent context | `context` |
-| `messages` | Messages delivered to this iteration | `messages` |
-| `awaiting-replies` | Outstanding request state | `messages` |
+| `messages` | Messages delivered to this iteration and outstanding request state | `messages` |
+| `awaiting-replies` | Compatibility marker for outstanding request state when `messages` is absent | `messages` |
 | `user-prompt` | The agent's standing prompt | none; this is task input |
 | `one-shot` | A prompt supplied for this single execution | none; this is task input |
 
 Each non-empty skill-owned runtime value is preceded by a short instruction to
 use that skill; the instruction names the skill without embedding an installation
-path. Context data also starts with `# Agent Context`. Each singleton placeholder
-may appear at most once. Empty runtime values add no text. The **Template** tab
-shows static paths, categories, sizes, hashes, and runtime markers in their exact
-order without draining messages.
+path. Context data starts with `# Agent Context`, and messages plus outstanding
+replies form one `# Messages` group. New templates declare only `messages`;
+existing templates that also declare `awaiting-replies` keep working without a
+second section. Each singleton placeholder may appear at most once. Empty runtime
+values add no text. The **Template** tab shows static paths, categories, sizes,
+hashes, and runtime markers in their exact order without draining messages.
 
 ## Store and external plugins
 
