@@ -160,8 +160,17 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 		FROM agents WHERE name=?`, agent).Scan(&enabled, &loopEnabled, &goalEnabled, &timeoutS, &current); err != nil {
 		return Goal{}, tasks.Task{}, err
 	}
+	if !goalEnabled {
+		if _, err := tx.Exec(`UPDATE agents SET current_goal_task_key='' WHERE name=?`, agent); err != nil {
+			return Goal{}, tasks.Task{}, err
+		}
+		return Goal{}, tasks.Task{}, nil
+	}
+	if !enabled || !loopEnabled {
+		return Goal{}, tasks.Task{}, nil
+	}
 
-	if enabled && loopEnabled && goalEnabled && current != "" {
+	if current != "" {
 		task, waitAt, err := readGoalTask(tx, current, agent)
 		if err != nil && err != sql.ErrNoRows {
 			return Goal{}, tasks.Task{}, err
@@ -178,9 +187,8 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 	}
 
 	selected := ""
-	if enabled && loopEnabled && goalEnabled {
-		var revision int64
-		err := tx.QueryRow(`
+	var revision int64
+	err := tx.QueryRow(`
 			SELECT t.task_key, t.revision
 			FROM tasks t
 			WHERE t.assignee='agent:' || ?
@@ -190,9 +198,8 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			         CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
 			         t.created_at, t.task_key
 			LIMIT 1`, agent).Scan(&selected, &revision)
-		if err != nil && err != sql.ErrNoRows {
-			return Goal{}, tasks.Task{}, err
-		}
+	if err != nil && err != sql.ErrNoRows {
+		return Goal{}, tasks.Task{}, err
 	}
 
 	if _, err := tx.Exec(`UPDATE agents SET current_goal_task_key=? WHERE name=?`, selected, agent); err != nil {

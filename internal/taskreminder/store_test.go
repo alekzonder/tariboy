@@ -96,10 +96,6 @@ func TestReconcileAgentReleasesInvalidStickyGoal(t *testing.T) {
 		{name: "goal_disabled", mutate: func(t *testing.T, s *Store) {
 			execGoalSQL(t, s, `UPDATE agents SET goal_enabled=0 WHERE name='worker'`)
 		}},
-		{name: "loop_disabled", mutate: func(t *testing.T, s *Store) {
-			execGoalSQL(t, s, `UPDATE agents SET loop_enabled=0 WHERE name='worker'`)
-		}},
-		{name: "agent_disabled", mutate: func(t *testing.T, s *Store) { execGoalSQL(t, s, `UPDATE agents SET enabled=0 WHERE name='worker'`) }},
 	}
 
 	for _, tt := range tests {
@@ -117,6 +113,43 @@ func TestReconcileAgentReleasesInvalidStickyGoal(t *testing.T) {
 				t.Fatalf("goal=%#v err=%v, want key %q", goal, err, tt.want)
 			}
 			assertStoredGoal(t, s, tt.want)
+		})
+	}
+}
+
+func TestReconcileAgentPreservesStickyGoalWhileAgentCannotRun(t *testing.T) {
+	tests := []struct {
+		name     string
+		disable  string
+		reenable string
+	}{
+		{name: "agent_disabled", disable: `UPDATE agents SET enabled=0 WHERE name='worker'`, reenable: `UPDATE agents SET enabled=1 WHERE name='worker'`},
+		{name: "loop_disabled", disable: `UPDATE agents SET loop_enabled=0 WHERE name='worker'`, reenable: `UPDATE agents SET loop_enabled=1 WHERE name='worker'`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := goalStore(t, goalNow)
+			seedTask(t, s, "T-1", "agent:worker", "P0", "in_progress", "2026-09-01T00:00:00Z")
+			seedTask(t, s, "T-2", "agent:worker", "P1", "in_progress", "2026-09-02T00:00:00Z")
+			if goal, err := s.ReconcileAgent("worker", goalNow); err != nil || goal.TaskKey != "T-1" {
+				t.Fatalf("initial goal=%#v err=%v", goal, err)
+			}
+
+			execGoalSQL(t, s, tt.disable)
+			goal, err := s.ReconcileAgent("worker", goalNow)
+			if err != nil || goal.TaskKey != "" {
+				t.Fatalf("disabled goal=%#v err=%v", goal, err)
+			}
+			assertStoredGoal(t, s, "T-1")
+
+			updateTask(t, s, "T-1", "status", "done")
+			execGoalSQL(t, s, tt.reenable)
+			goal, err = s.ReconcileAgent("worker", goalNow)
+			if err != nil || goal.TaskKey != "T-2" {
+				t.Fatalf("re-enabled goal=%#v err=%v", goal, err)
+			}
+			assertStoredGoal(t, s, "T-2")
 		})
 	}
 }
@@ -186,7 +219,13 @@ func TestCurrentReturnsAuthoritativeSelectedTask(t *testing.T) {
 	if err != nil || ok || task.Key != "" {
 		t.Fatalf("Current disabled: task=%#v ok=%t err=%v", task, ok, err)
 	}
-	assertStoredGoal(t, s, "")
+	assertStoredGoal(t, s, "T-2")
+
+	execGoalSQL(t, s, `UPDATE agents SET loop_enabled=1 WHERE name='worker'`)
+	task, ok, err = s.Current("worker", goalNow)
+	if err != nil || !ok || task.Key != "T-2" {
+		t.Fatalf("Current re-enabled: task=%#v ok=%t err=%v", task, ok, err)
+	}
 }
 
 type goalTask struct {
