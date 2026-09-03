@@ -1150,6 +1150,46 @@ esac
 	assertSafeCodexShimLog(t, dir)
 }
 
+func TestTmuxShimKillTerminatesPaneProcessGroup(t *testing.T) {
+	cmd := exec.Command("/bin/sh", "-c", "trap '' TERM HUP INT; while :; do sleep 1; done")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	exited := false
+	defer func() {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if exited {
+			return
+		}
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+		}
+	}()
+
+	old := execCommand
+	execCommand = func(_ string, args ...string) *exec.Cmd {
+		if len(args) > 0 && args[0] == "list-panes" {
+			return exec.Command("/bin/echo", strconv.Itoa(cmd.Process.Pid))
+		}
+		return exec.Command("/bin/true")
+	}
+	defer func() { execCommand = old }()
+
+	if err := (&tmuxShim{session: "managed"}).Kill(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+		exited = true
+	case <-time.After(3 * time.Second):
+		t.Fatal("tmux pane process group survived Kill")
+	}
+}
+
 func TestRunTmuxPreservesHarnessExit(t *testing.T) {
 	binDir := t.TempDir()
 	fakeTmux := filepath.Join(binDir, "tmux")
@@ -1181,6 +1221,9 @@ pipe-pane)
 	fi
 	;;
 set-option)
+	;;
+list-panes)
+	printf '999999\n'
 	;;
 kill-window)
 	;;

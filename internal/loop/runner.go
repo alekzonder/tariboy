@@ -416,7 +416,7 @@ func tmuxHasSession(session string) bool {
 
 // tmuxKillSession is the production KillTmuxSession.
 func tmuxKillSession(session string) error {
-	return exec.Command("tmux", "kill-session", "-t", session).Run()
+	return shim.KillTmuxSession(session)
 }
 
 // SessionBlocked reports whether launching an iteration for ag would collide with

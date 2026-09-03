@@ -326,7 +326,7 @@ func runTmux(o Options, sample time.Duration) error {
 		s.mu.Lock()
 		s.terminationReason = "hard_timeout"
 		s.mu.Unlock()
-		_ = execCommand("tmux", "kill-session", "-t", o.TmuxSession).Run()
+		_ = KillTmuxSession(o.TmuxSession)
 	})
 	defer s.watchdog.Stop()
 
@@ -614,7 +614,35 @@ func (s *tmuxShim) Status() StatusResult {
 }
 
 func (s *tmuxShim) Kill() error {
-	return execCommand("tmux", "kill-session", "-t", s.session).Run()
+	return KillTmuxSession(s.session)
+}
+
+// KillTmuxSession kills every managed pane process group before removing the
+// tmux session. tmux kill-session alone can leave the pane command alive after
+// its PTY is deleted when another session keeps the shared tmux server running.
+func KillTmuxSession(session string) error {
+	output, err := execCommand("tmux", "list-panes", "-s", "-t", session, "-F", "#{pane_pid}").Output()
+	if err != nil {
+		return err
+	}
+	fields := strings.Fields(string(output))
+	if len(fields) == 0 {
+		return errors.New("tmux session has no panes")
+	}
+	for _, field := range fields {
+		pid, err := strconv.Atoi(field)
+		if err != nil || pid <= 1 {
+			return errors.New("tmux pane has invalid pid")
+		}
+		if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			return err
+		}
+	}
+	if err := execCommand("tmux", "kill-session", "-t", session).Run(); err != nil &&
+		execCommand("tmux", "has-session", "-t", session).Run() == nil {
+		return err
+	}
+	return nil
 }
 
 // Resize retargets ALL live PTYs of in-progress web attaches for this
