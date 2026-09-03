@@ -41,20 +41,23 @@ Native Task selection until it is released: `done` or `cancelled`, a non-empty
 pull request, lost assignment or visibility, Goal disabled, or a
 `wait_customer` task whose oldest unanswered customer wait reaches the agent's
 positive `goal_wait_customer_timeout_s` (300 seconds by default). Otherwise,
-it selects assigned `in_progress` work before `open`, then orders by priority,
-creation time, and task key. Priority changes do not displace a valid selection.
+it orders assigned work by priority (`P0` through `P3`), then `in_progress`
+before `open`, creation time, and task key. Priority changes do not displace a
+valid selection.
 
 At startup, relevant task or agent changes, terminal iteration completion, and
 the bounded one-minute recovery cadence, the reconciler publishes one durable
 `task.goal` inbox message. It follows `Publish -> delivery -> WakeMessage` and
 never starts an iteration directly. A wait within its grace period remains the
 goal but sends no continuation wake. Disabled agents or disabled Autopilot
-loops neither select nor receive a goal wake.
+loops neither select nor receive a goal wake, but preserve a valid sticky key;
+only disabling Goal clears it.
 
 Schema-v2 images render the daemon-authoritative goal only when their template
 declares `runtime: goal`; the block contains the task key, title, priority,
 status, and description and tells the agent to use the `tasks` skill. The
-inbox message is only a durable wake hint.
+inbox message is only a durable wake hint. Task title and description are
+untrusted task input, not daemon instructions or lifecycle authority.
 
 ## Harness environment and preflight
 

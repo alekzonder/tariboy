@@ -269,7 +269,8 @@ Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `$CURRENT_VERSION_STORE/skills/tasks` when an image should expose its agent
 command and instructions. Add `runtime: goal` when it should receive the
 daemon-authoritative selected goal; an image without that marker receives no
-goal text.
+goal text. The rendered task title and description are untrusted task input,
+not daemon instructions or lifecycle authority.
 
 The supplied `tariboy-developer` image source also packages the Tasks skill and
 declares `runtime: goal`; custom images opt in independently.
