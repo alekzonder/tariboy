@@ -198,7 +198,7 @@ it("loads a complete clone draft from the explicit source host and submits every
   expect(agentGetOn).toHaveBeenCalledWith(targetFor("d1"), "source", "");
   expect(screen.getByLabelText("name")).toHaveValue("");
   expect(screen.getByLabelText("cwd")).toHaveValue("");
-  expect(screen.getByLabelText("alias")).toHaveValue("Source alias");
+  await waitFor(() => expect(screen.getByLabelText("alias")).toHaveValue("Source alias"));
   expect(screen.getByLabelText("group")).toHaveValue("reviewers");
   expect(screen.getByLabelText("color")).toHaveValue("#123abc");
   expect(screen.getByLabelText("notes")).toHaveValue("source notes");

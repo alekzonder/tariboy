@@ -413,11 +413,13 @@ describe("CustomerQuestionNotifications", () => {
     model.snapshots.set("remote-1", [notification()])
     renderCoordinator()
     await expectAttention('["remote-1","alice"]')
+    await waitFor(() => expect(model.sockets.has("remote-1")).toBe(true))
 
     vi.useFakeTimers()
     try {
       model.failures.add("remote-1")
       await hint("remote-1")
+      await vi.waitFor(() => expect(model.sockets.has("remote-1")).toBe(false))
       model.snapshots.set("remote-1", [
         notification(),
         notification({ id: "notification-2", requesting_principal: "agent:bob", task_key: "ASK-2" }),

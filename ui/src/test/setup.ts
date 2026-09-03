@@ -1,4 +1,13 @@
 import "@testing-library/jest-dom"
+import { TransformStream as NodeTransformStream } from "node:stream/web"
+
+if (typeof globalThis.TransformStream === "undefined") {
+  Object.defineProperty(globalThis, "TransformStream", {
+    configurable: true,
+    writable: true,
+    value: NodeTransformStream,
+  })
+}
 
 // Radix UI popovers/menus (DropdownMenu, Select) probe APIs that jsdom does not
 // implement. Without these shims, opening a menu in a test throws.

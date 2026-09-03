@@ -21,7 +21,7 @@ DESKTOP_INSTALL_UI_DEPS ?= 1
 
 export CGO_ENABLED=0
 
-.PHONY: build build-basic-image install uninstall setup check full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build build-basic-image install uninstall setup check backend-check frontend-check full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build-basic-image:
 	$(GO) run ./internal/builtinimages/generate -source internal/builtinimages/source -output internal/builtinimages/generated -version $(VERSION)
@@ -427,17 +427,16 @@ desktop-alpha:
 desktop-smoke:
 	./scripts/desktop-smoke.sh
 
-# ---- one-command entry points: `check` (fast) and `full-check` (heavy) ----
+# ---- one-command entry points: split fast checks and `full-check` (heavy) ----
 #
 # The checks in this project are many and live in three places: Make targets, npm
-# scripts under ui/ and docs/, and standalone scripts under scripts/. Nobody can
-# hold that list in their head, so these two targets are the list. They COMPOSE
-# the existing targets, they do not replace them: every brick above stays exactly
-# as it is and stays callable on its own.
+# scripts under ui/ and docs/, and standalone scripts under scripts/.
+# `backend-check` and `frontend-check` split the fast list; `check` composes both.
+# They do not replace the existing targets: every brick above stays callable.
 #
-# `check` is the fast one and is safe to run in a shared working tree: it only
-# reads. It never rewrites files (`fmt` is deliberately NOT part of it —
-# fmt-check is), never installs node modules, and never writes into $(BINDIR).
+# The fast checks are safe to run in a shared working tree: they only read. They
+# never rewrite files (`fmt` is deliberately NOT part of them — fmt-check is),
+# never install node modules, and never write into $(BINDIR).
 # `full-check` is the heavy one: it builds, runs the e2e scripts, full-smoke, the
 # browser suites and the desktop gates.
 #
@@ -449,7 +448,7 @@ desktop-smoke:
 # -j` jobserver; these entry points are sequential by design, so nothing is lost.
 SUBMAKE := $(MAKE) --no-print-directory
 
-# The single mechanism behind both targets. run_step NAME CMD runs CMD in a
+# The single mechanism behind these targets. run_step NAME CMD runs CMD in a
 # subshell, times it, and records ok/FAIL — it never aborts the run, because one
 # pass has to surface gofmt drift AND a ui type error at once, not one per pass.
 # summarize prints the table and owns the exit status. There is no fail-fast flag
@@ -484,18 +483,28 @@ summarize() { \
 }
 endef
 
-check:
+backend-check:
 	@$(STEP_RUNNER); \
 	run_step "fmt-check"    '$(SUBMAKE) fmt-check'; \
 	run_step "vet"          '$(SUBMAKE) vet'; \
 	run_step "test"         '$(SUBMAKE) test'; \
 	run_step "store-skills" 'PYTHONDONTWRITEBYTECODE=1 python3 store/skills/test_store_skills.py'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \
+	summarize backend-check
+
+frontend-check:
+	@$(STEP_RUNNER); \
 	run_step "ui-typecheck" 'need_node_modules ui && cd ui && npx tsc -b'; \
 	run_step "ui-lint"      'need_node_modules ui && cd ui && npm run lint'; \
 	run_step "ui-test"      'need_node_modules ui && cd ui && npm test'; \
 	run_step "ui-branding"  'need_node_modules ui && cd ui && npm run branding:check'; \
 	run_step "docs"         'need_node_modules docs && cd docs && npm run doctor && npm run build && ../scripts/docs-build-contract-test.sh'; \
+	summarize frontend-check
+
+check:
+	@$(STEP_RUNNER); \
+	run_step "backend-check"  '$(SUBMAKE) backend-check'; \
+	run_step "frontend-check" '$(SUBMAKE) frontend-check'; \
 	summarize check
 
 # The desktop tail of `full-check` is one step per host, not two, and that is
