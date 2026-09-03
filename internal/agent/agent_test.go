@@ -262,6 +262,58 @@ func sampleAgent() Agent {
 	}
 }
 
+func TestGoalDefaultsAndDisableClearsSelection(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(Agent{Name: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	ag, err := st.Get("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ag.GoalEnabled || ag.GoalWaitCustomerTimeoutS != 300 || ag.CurrentGoalTaskKey != "" {
+		t.Fatalf("goal defaults: %#v", ag)
+	}
+	if err := st.SetCurrentGoal("worker", "TARI-43"); err != nil {
+		t.Fatal(err)
+	}
+	ag.GoalEnabled = false
+	if err := st.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	ag, err = st.Get("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ag.CurrentGoalTaskKey != "" {
+		t.Fatalf("stale goal %q", ag.CurrentGoalTaskKey)
+	}
+}
+
+func TestGoalTimeoutValidationPreservesStoredValue(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(Agent{Name: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, timeout := range []int{0, -1} {
+		ag, err := st.Get("worker")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ag.GoalWaitCustomerTimeoutS = timeout
+		if err := st.Update(ag); err == nil || err.Error() != "invalid_goal_wait_customer_timeout" {
+			t.Fatalf("Update timeout %d error = %v", timeout, err)
+		}
+		ag, err = st.Get("worker")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ag.GoalWaitCustomerTimeoutS != 300 {
+			t.Fatalf("timeout after rejected %d = %d, want 300", timeout, ag.GoalWaitCustomerTimeoutS)
+		}
+	}
+}
+
 // Catches the single-row create insert omitting the idle-stop threshold while
 // later update/read paths continue to support it.
 func TestCreatePersistsMaximumIdleIterations(t *testing.T) {

@@ -35,6 +35,8 @@ func ValidateCwd(path string) error {
 
 var ErrNotFound = errors.New("not found")
 
+var ErrInvalidGoalWaitCustomerTimeout = errors.New("invalid_goal_wait_customer_timeout")
+
 // ErrTimeoutNotExtendable means an iteration is not the live, unexpired,
 // extendable timeout snapshot. Callers map it to a conflict rather than
 // treating it as a database failure.
@@ -64,6 +66,11 @@ type Agent struct {
 	Effort      string
 	Interactive bool
 	LoopEnabled bool
+	GoalEnabled bool
+	// GoalWaitCustomerTimeoutS is the grace period before a customer-waiting
+	// task stops owning this agent's goal. CurrentGoalTaskKey is daemon-owned.
+	GoalWaitCustomerTimeoutS int
+	CurrentGoalTaskKey       string
 	// Enabled is the master on/off switch for the whole agent, sitting above
 	// LoopEnabled. When false the agent is fully inert (no loop iterations,
 	// channels, interactive session, or boot reconcile) regardless of
@@ -347,20 +354,31 @@ func (s *Store) Create(a Agent) error {
 	if a.MessagesMaxQueue == 0 {
 		a.MessagesMaxQueue = 1000
 	}
+	if a.GoalWaitCustomerTimeoutS == 0 {
+		a.GoalEnabled = true
+		a.GoalWaitCustomerTimeoutS = 300
+	}
+	if a.GoalWaitCustomerTimeoutS < 1 {
+		return ErrInvalidGoalWaitCustomerTimeout
+	}
 	_, err = s.db.Exec(`INSERT INTO agents
 		(name, image_ref, image_digest, error_reason, cwd, harness_type, model, effort,
 		 interactive, loop_enabled, enabled, interval_s, timeout_s, hard_timeout_s,
 		 on_timeout, on_error, user_prompt, env, plugins, messages_batch, messages_max_queue, "group", alias, notes, color,
-		 max_idle_iterations)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 max_idle_iterations, goal_enabled, goal_wait_customer_timeout_s, current_goal_task_key)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`,
 		a.Name, a.ImageRef, a.ImageDigest, a.ErrorReason, a.Cwd, a.HarnessType, a.Model, a.Effort,
 		b2i(a.Interactive), b2i(a.LoopEnabled), b2i(a.Enabled), a.IntervalS, a.TimeoutS, a.HardTimeoutS,
 		a.OnTimeout, a.OnError, a.UserPrompt, string(env), string(plugins),
-		a.MessagesBatch, a.MessagesMaxQueue, a.Group, a.Alias, a.Notes, a.Color, a.MaxIdleIterations)
+		a.MessagesBatch, a.MessagesMaxQueue, a.Group, a.Alias, a.Notes, a.Color, a.MaxIdleIterations,
+		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS)
 	return err
 }
 
 func (s *Store) Update(a Agent) error {
+	if a.GoalWaitCustomerTimeoutS < 1 {
+		return ErrInvalidGoalWaitCustomerTimeout
+	}
 	env, _ := json.Marshal(a.Env)
 	if a.Env == nil {
 		env = []byte("{}")
@@ -373,11 +391,22 @@ func (s *Store) Update(a Agent) error {
 		cwd=?, harness_type=?, model=?, effort=?,
 		interactive=?, loop_enabled=?, enabled=?, interval_s=?, timeout_s=?, hard_timeout_s=?,
 		on_timeout=?, on_error=?, user_prompt=?, env=?, plugins=?,
-		messages_batch=?, messages_max_queue=?, max_idle_iterations=? WHERE name=?`,
+		messages_batch=?, messages_max_queue=?, max_idle_iterations=?,
+		goal_enabled=?, goal_wait_customer_timeout_s=?,
+		current_goal_task_key=CASE WHEN ? THEN current_goal_task_key ELSE '' END WHERE name=?`,
 		a.Cwd, a.HarnessType, a.Model, a.Effort,
 		b2i(a.Interactive), b2i(a.LoopEnabled), b2i(a.Enabled), a.IntervalS, a.TimeoutS, a.HardTimeoutS,
 		a.OnTimeout, a.OnError, a.UserPrompt, string(env), string(plugins),
-		a.MessagesBatch, a.MessagesMaxQueue, a.MaxIdleIterations, a.Name)
+		a.MessagesBatch, a.MessagesMaxQueue, a.MaxIdleIterations,
+		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS, b2i(a.GoalEnabled), a.Name)
+	if err != nil {
+		return err
+	}
+	return affected(res)
+}
+
+func (s *Store) SetCurrentGoal(name, key string) error {
+	res, err := s.db.Exec(`UPDATE agents SET current_goal_task_key=? WHERE name=? AND goal_enabled=1`, key, name)
 	if err != nil {
 		return err
 	}
@@ -511,7 +540,8 @@ func (s *Store) Get(name string) (Agent, error) {
 	row := s.db.QueryRow(`SELECT name, image_ref, image_digest, created_at, error_reason, cwd,
 		harness_type, model, effort, interactive, loop_enabled, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
-		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations
+		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
+		goal_enabled, goal_wait_customer_timeout_s, current_goal_task_key
 		FROM agents WHERE name=?`, name)
 	return scanAgent(row)
 }
@@ -520,7 +550,8 @@ func (s *Store) List() ([]Agent, error) {
 	rows, err := s.db.Query(`SELECT name, image_ref, image_digest, created_at, error_reason, cwd,
 		harness_type, model, effort, interactive, loop_enabled, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
-		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations
+		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
+		goal_enabled, goal_wait_customer_timeout_s, current_goal_task_key
 		FROM agents ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -621,7 +652,8 @@ func (s *Store) ListByGroup(group string) ([]Agent, error) {
 	rows, err := s.db.Query(`SELECT name, image_ref, image_digest, created_at, error_reason, cwd,
 		harness_type, model, effort, interactive, loop_enabled, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
-		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations
+		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
+		goal_enabled, goal_wait_customer_timeout_s, current_goal_task_key
 		FROM agents WHERE "group"=? ORDER BY name`, group)
 	if err != nil {
 		return nil, err
@@ -914,13 +946,13 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanAgent(row scanner) (Agent, error) {
 	var a Agent
-	var interactive, loopEnabled, enabled int
+	var interactive, loopEnabled, enabled, goalEnabled int
 	var env, plugins string
 	err := row.Scan(&a.Name, &a.ImageRef, &a.ImageDigest, &a.CreatedAt, &a.ErrorReason, &a.Cwd,
 		&a.HarnessType, &a.Model, &a.Effort, &interactive, &loopEnabled, &enabled, &a.IntervalS,
 		&a.TimeoutS, &a.HardTimeoutS, &a.OnTimeout, &a.OnError, &a.UserPrompt, &env, &plugins,
 		&a.MessagesBatch, &a.MessagesMaxQueue, &a.Group, &a.StatusMessage, &a.StatusUpdated, &a.Alias, &a.Notes, &a.Color,
-		&a.MaxIdleIterations)
+		&a.MaxIdleIterations, &goalEnabled, &a.GoalWaitCustomerTimeoutS, &a.CurrentGoalTaskKey)
 	if err == sql.ErrNoRows {
 		return Agent{}, ErrNotFound
 	}
@@ -930,6 +962,7 @@ func scanAgent(row scanner) (Agent, error) {
 	a.Interactive = interactive != 0
 	a.LoopEnabled = loopEnabled != 0
 	a.Enabled = enabled != 0
+	a.GoalEnabled = goalEnabled != 0
 	if err := json.Unmarshal([]byte(env), &a.Env); err != nil {
 		return Agent{}, fmt.Errorf("decode env of %s: %w", a.Name, err)
 	}
