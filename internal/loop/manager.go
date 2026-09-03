@@ -1328,6 +1328,7 @@ func (m *Manager) Restart(name string) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.signalGoals()
 	m.mu.Lock()
 	if _, ok := m.adopting[name]; ok {
 		if ag.Interactive {
@@ -1403,6 +1404,9 @@ func (m *Manager) recoverStaleKill(name, id string, rt *runtime, l agentdir.Layo
 	case !committed:
 		// Already terminal: the socket must not outlive a committed status.
 		_ = os.Remove(l.ShimSock())
+	}
+	if committed {
+		m.iterationCompleted(name, id)
 	}
 	m.mu.Lock()
 	if m.runs[name] == rt && rt.engine.CurrentIterationID() == id {
@@ -2092,6 +2096,7 @@ func (m *Manager) reprovision(name, imageRef string) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.signalGoals()
 	return m.start(ag)
 }
 

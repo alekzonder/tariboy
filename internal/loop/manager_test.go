@@ -599,6 +599,49 @@ func TestStartSignalsGoalReconcilerWhileIterationIsAdopting(t *testing.T) {
 	}
 }
 
+func TestSetLoopEnabledSignalsGoalReconcilerAfterPersistence(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	var enabled []bool
+	m.cfg.GoalSignal = func() {
+		ag, err := as.Get("worker")
+		if err == nil {
+			enabled = append(enabled, ag.LoopEnabled)
+		}
+	}
+
+	if err := m.SetLoopEnabled("worker", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(enabled) != 1 || !enabled[0] {
+		t.Fatalf("loop-enabled states at goal signals = %v, want [true]", enabled)
+	}
+}
+
+func TestRestartSignalsGoalReconcilerAfterReenableDuringAdoption(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
+	var enabled []bool
+	m.cfg.GoalSignal = func() {
+		ag, err := as.Get("worker")
+		if err == nil {
+			enabled = append(enabled, ag.Enabled)
+		}
+	}
+
+	if err := m.Restart("worker"); err != nil {
+		t.Fatal(err)
+	}
+	if len(enabled) != 2 || enabled[0] || !enabled[1] {
+		t.Fatalf("enabled states at goal signals = %v, want [false true]", enabled)
+	}
+}
+
 // Removing the own-inbox subscription from Manager.Run must make this fail:
 // a standalone agent would persist successfully but task publication would
 // create no delivery for it.
@@ -1150,6 +1193,15 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 	var releaseOnce sync.Once
 	releaseRunner := func() { releaseOnce.Do(func() { close(r.release) }) }
 	m, as, agentsDir, _ := newManager(t, r)
+	completed := make(chan string, 2)
+	m.cfg.IterationCompleted = func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			completed <- "lookup error: " + err.Error()
+			return
+		}
+		completed <- agentName + "/" + iterationID + "/" + it.Status
+	}
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -1183,8 +1235,21 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 	if err := m.Kill("smoke"); err != nil {
 		t.Fatalf("recover stale kill: %v", err)
 	}
+	select {
+	case got := <-completed:
+		if want := "smoke/" + id + "/harness_error"; got != want {
+			t.Fatalf("completion = %q, want %q", got, want)
+		}
+	default:
+		t.Fatal("stale-kill terminal commit did not signal goal completion")
+	}
 	if err := m.Kill("smoke"); err != nil {
 		t.Fatalf("repeated stale kill: %v", err)
+	}
+	select {
+	case got := <-completed:
+		t.Fatalf("repeated stale kill emitted duplicate completion %q", got)
+	default:
 	}
 	// Both Kill calls above have observed the recovery path; let the cancelled
 	// iteration finish unwinding so the polls below can see it close.
@@ -1228,6 +1293,11 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 	if err := m.Kill("smoke"); err == nil || !strings.Contains(err.Error(), "has no running iteration") {
 		t.Fatalf("Kill after recovered iteration unwound = %v, want no-running-iteration error", err)
 	}
+	select {
+	case got := <-completed:
+		t.Fatalf("recovered iteration unwind emitted duplicate completion %q", got)
+	default:
+	}
 	if err := m.Stop("smoke"); err != nil {
 		t.Fatal(err)
 	}
@@ -1250,6 +1320,14 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("subsequent iteration did not reach runner")
+	}
+	// The engine launches this next iteration only after every defer from the
+	// recovered one has run, making this an exact (non-timing-based) duplicate
+	// check for the stale-kill/unwind handoff.
+	select {
+	case got := <-completed:
+		t.Fatalf("recovered iteration emitted duplicate completion before next launch: %q", got)
+	default:
 	}
 }
 
@@ -2884,9 +2962,19 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	if _, err := os.Stat(l.ImageDir()); !os.IsNotExist(err) {
 		t.Fatalf("preserve remove kept the image tree (err=%v)", err)
 	}
+	var goalStates []string
+	m.cfg.GoalSignal = func() {
+		ag, err := as.Get(name)
+		if err == nil {
+			goalStates = append(goalStates, fmt.Sprintf("enabled=%v loop=%v", ag.Enabled, ag.LoopEnabled))
+		}
+	}
 
 	if err := m.Reprovision(name, "basic2:latest"); err != nil {
 		t.Fatalf("reprovision: %v", err)
+	}
+	if len(goalStates) != 1 || goalStates[0] != "enabled=true loop=true" {
+		t.Fatalf("states at reprovision goal signals = %v, want [enabled=true loop=true]", goalStates)
 	}
 	// Tree re-unpacked, shims rewritten.
 	if _, err := os.Stat(filepath.Join(l.ImageDir(), "PROMPT.md")); err != nil {

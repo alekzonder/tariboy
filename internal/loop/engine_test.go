@@ -418,6 +418,46 @@ func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
 	}
 }
 
+func TestRunOnceGoalIterationCompletedSkipsRejectedTerminalStatus(t *testing.T) {
+	raw, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	as := agent.NewStore(raw)
+	ag := baseAgent()
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.DB.Exec(`CREATE TRIGGER reject_terminal_iteration_update
+		BEFORE UPDATE OF status ON iterations
+		WHEN OLD.status = 'running' AND NEW.status != 'running'
+		BEGIN
+			SELECT RAISE(FAIL, 'terminal write rejected');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	clk := func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
+	e := NewEngine(ag, as, r, slog.New(slog.NewTextHandler(io.Discard, nil)), clk)
+	calls := 0
+	e.SetIterationCompleted(func(string, string) { calls++ })
+
+	if got := e.runOnce(context.Background(), "manual", ""); got != TickCompletedWaiting {
+		t.Fatalf("runOnce = %q, want completed_waiting", got)
+	}
+	if calls != 0 {
+		t.Fatalf("completion calls = %d, want 0 after rejected terminal status", calls)
+	}
+	it, err := as.GetIteration(ag.Name, r.seen[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Status != "running" {
+		t.Fatalf("iteration status = %q, want running after rejected terminal status", it.Status)
+	}
+}
+
 // TestRunOnceOnIterationCloseHarnessErrorAndTimeout verifies the close hook
 // fires exactly once for terminal non-done outcomes too: harness_error (via a
 // runner error, the runErr early-return path in runOnce) and timeout (via
@@ -1120,6 +1160,37 @@ func TestRunOnceManualFailsOnSessionConflict(t *testing.T) {
 	}
 	if len(events) != 1 || events[0] != "iteration_failed:tmux_session_exists" {
 		t.Fatalf("audit = %v", events)
+	}
+}
+
+func TestRunOnceManualSessionConflictSignalsGoalAfterFailedRow(t *testing.T) {
+	r := &blockingRunner{}
+	ag := baseAgent()
+	ag.Interactive = true
+	e, as := newEngine(t, ag, r)
+	var calls []string
+	e.SetIterationCompleted(func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			calls = append(calls, "lookup error: "+err.Error())
+			return
+		}
+		calls = append(calls, agentName+"/"+iterationID+"/"+it.Status)
+	})
+
+	if got := e.runOnce(context.Background(), "manual", ""); got != TickError {
+		t.Fatalf("runOnce = %q, want tick_error", got)
+	}
+	its, err := as.ListIterations(ag.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(its) != 1 {
+		t.Fatalf("iterations = %+v, want one failed row", its)
+	}
+	want := ag.Name + "/" + its[0].ID + "/failed"
+	if len(calls) != 1 || calls[0] != want {
+		t.Fatalf("completion calls = %v, want [%s]", calls, want)
 	}
 }
 

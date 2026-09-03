@@ -556,6 +556,9 @@ func (e *Engine) runOnceGuarded(
 				e.recordAudit("iteration_failed", "system", id,
 					map[string]any{"reason": "tmux_session_exists"})
 				e.emitIteration(id, trigger, "failed", "finish")
+				if e.iterationCompleted != nil {
+					e.iterationCompleted(e.ag.Name, id)
+				}
 				return TickError
 			}
 			e.log.Info("loop iteration skipped: tmux session still alive", "agent", e.ag.Name)
@@ -622,8 +625,10 @@ func (e *Engine) runOnceGuarded(
 	))
 	defer span.End()
 
-	// Fires after every terminal outcome below (harness_error included), but not
-	// after a restart handoff: the adopted shim still owns that iteration.
+	// Fires after every closed runner below (harness_error included), but not
+	// after a restart handoff: the adopted shim still owns that iteration. Goal
+	// completion is signaled separately by the component that successfully
+	// commits the terminal row.
 	detached := false
 	defer func() {
 		if detached {
@@ -631,9 +636,6 @@ func (e *Engine) runOnceGuarded(
 		}
 		if e.onClose != nil {
 			e.onClose(e.ag.Name, id)
-		}
-		if e.iterationCompleted != nil {
-			e.iterationCompleted(e.ag.Name, id)
 		}
 	}()
 
@@ -658,7 +660,11 @@ func (e *Engine) runOnceGuarded(
 		if current, err := e.store.GetIteration(e.ag.Name, id); err == nil && current.Status == "running" {
 			current.Status = "harness_error"
 			current.EndedAt = end
-			_ = e.store.UpdateIteration(current)
+			if err := e.store.UpdateIteration(current); err != nil {
+				e.log.Error("update iteration", "agent", e.ag.Name, "id", id, "err", err)
+			} else if e.iterationCompleted != nil {
+				e.iterationCompleted(e.ag.Name, id)
+			}
 		}
 		e.finishSpan(span, spanStart, id, "harness_error", 0, 0)
 		return TickError
@@ -673,7 +679,9 @@ func (e *Engine) runOnceGuarded(
 	it.ExitCode = &ec
 	it.CPUMs = &cpu
 	it.MemPeakKB = &mem
+	terminalPersisted := true
 	if err := e.store.UpdateIteration(it); err != nil {
+		terminalPersisted = false
 		e.log.Error("update iteration", "agent", e.ag.Name, "id", id, "err", err)
 	}
 	if outcome.DoneFlag {
@@ -695,7 +703,11 @@ func (e *Engine) runOnceGuarded(
 	e.recordAudit("iteration_finished", "system", id, map[string]any{"status": outcome.Status})
 
 	e.finishSpan(span, spanStart, id, outcome.Status, outcome.CPUMs, outcome.MemPeakKB)
-	return e.applyPolicy(outcome)
+	result := e.applyPolicy(outcome)
+	if terminalPersisted && e.iterationCompleted != nil {
+		e.iterationCompleted(e.ag.Name, id)
+	}
+	return result
 }
 
 // finishSpan sets the terminal attributes/status on the iteration span and
