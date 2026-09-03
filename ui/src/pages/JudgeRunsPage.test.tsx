@@ -193,3 +193,62 @@ it("ignores create completion from the previously selected server", async () => 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("https://first.example/api/groups/judges/assign", expect.objectContaining({ method: "POST" })));
   expect(screen.getByRole("button", { name: "Create judges team" })).toBeInTheDocument();
 });
+
+it("keeps an in-flight create busy across same-server descriptor refreshes", async () => {
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  let finishCreate!: (value: Response) => void;
+  const pendingCreate = new Promise<Response>((resolve) => { finishCreate = resolve; });
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/api/groups") && init?.method === "POST") return pendingCreate;
+    if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [], count: 0 } }));
+    if (url.includes("/api/groups/judges/assign")) return Promise.resolve(response({ ok: true, result: { assigned: true } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const first = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "secret" };
+  const refreshed = { ...first };
+  const view = (target: typeof first) => <MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>;
+  const { rerender } = render(view(first));
+  fireEvent.click(await screen.findByRole("button", { name: "Create judges team" }));
+
+  rerender(view(refreshed));
+
+  expect(await screen.findByRole("button", { name: "Create judges team" })).toBeDisabled();
+  finishCreate(response({ ok: true, result: { name: "judges" } }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Create judges team" })).not.toBeInTheDocument());
+});
+
+it("ignores Apply completion from the previously selected server", async () => {
+  const firstCanonical = JSON.stringify({ judge: { lead: "first-lead", workers: ["first-one", "first-two"] } });
+  const secondCanonical = JSON.stringify({ judge: { lead: "second-lead", workers: ["second-one", "second-two"] } });
+  let finishApply!: (value: Response) => void;
+  const pendingApply = new Promise<Response>((resolve) => { finishApply = resolve; });
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "https://first.example/api/judge-automation" && init?.method === "PUT") return pendingApply;
+    if (url.endsWith("/api/judge-automation")) {
+      const canonical = url.startsWith("https://first.example") ? firstCanonical : secondCanonical;
+      return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    }
+    if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [], count: 0 } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const first = { id: "first", label: "First", baseURL: "https://first.example", token: "secret" };
+  const second = { id: "second", label: "Second", baseURL: "https://second.example", token: "secret" };
+  const view = (target: typeof first) => <MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>;
+  const { rerender } = render(view(first));
+  await waitFor(() => expect(screen.getByLabelText("Judge automation JSON")).toHaveValue(firstCanonical));
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+  rerender(view(second));
+  await waitFor(() => expect(screen.getByLabelText("Judge automation JSON")).toHaveValue(secondCanonical));
+  await act(async () => {
+    finishApply(response({ ok: true, result: { revision: { revision: 2, hash: "h2", canonical_json: firstCanonical, created_at: "later" } } }));
+    await pendingApply;
+  });
+
+  expect(screen.getByLabelText("Judge automation JSON")).toHaveValue(secondCanonical);
+});

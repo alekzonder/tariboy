@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,9 +26,10 @@ function modelFor(run: JudgeRun): string {
 
 export default function JudgeRunsPage() {
 	const target = useOutletContext<ApiTarget>();
-	const resolvedTarget = resolveTarget(target);
-	const currentTarget = useRef(resolvedTarget);
-	currentTarget.current = resolvedTarget;
+	return <JudgeRunsPageForTarget key={resolveTarget(target)?.id ?? ""} target={target} />;
+}
+
+function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
 	const listRuns = useCallback(() => listJudgeRunsOn(target), [target]);
 	const { data, error } = usePolling(listRuns, 5000);
 	const runs = data?.runs ?? [];
@@ -41,7 +42,6 @@ export default function JudgeRunsPage() {
 
 	useEffect(() => {
 		let current = true;
-		setConfig(""); setSaved(""); setDiagnostics([]); setConfigError(""); setBusy(false); setJudgesExists(null);
 		void getJudgeAutomation(target).then((state) => {
 			if (!current) return;
 			const raw = state.revision?.canonical_json ?? "";
@@ -78,11 +78,11 @@ export default function JudgeRunsPage() {
 		setBusy(true); setConfigError("");
 		try {
 			const judge = (JSON.parse(saved) as { judge: { lead: string; workers: string[] } }).judge;
-			await apiOn(resolvedTarget, "POST", "/api/groups", { name: "judges", lead: judge.lead });
-			for (const agent of [judge.lead, ...judge.workers]) await apiOn(resolvedTarget, "POST", "/api/groups/judges/assign", { agent });
-			if (currentTarget.current === resolvedTarget) setJudgesExists(true);
-		} catch (cause) { if (currentTarget.current === resolvedTarget) setConfigError((cause as Error).message); }
-		finally { if (currentTarget.current === resolvedTarget) setBusy(false); }
+			await apiOn(resolveTarget(target), "POST", "/api/groups", { name: "judges", lead: judge.lead });
+			for (const agent of [judge.lead, ...judge.workers]) await apiOn(resolveTarget(target), "POST", "/api/groups/judges/assign", { agent });
+			setJudgesExists(true);
+		} catch (cause) { setConfigError((cause as Error).message); }
+		finally { setBusy(false); }
 	};
 
   return (
