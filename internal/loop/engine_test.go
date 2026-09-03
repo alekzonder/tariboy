@@ -397,6 +397,27 @@ func TestRunOnceOnIterationCloseDone(t *testing.T) {
 	}
 }
 
+func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	e, as := newEngine(t, baseAgent(), r)
+
+	var calls []string
+	e.SetIterationCompleted(func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls = append(calls, agentName+"/"+iterationID+"/"+it.Status)
+	})
+
+	if got := e.runOnce(context.Background(), "interval", ""); got != TickCompletedWaiting {
+		t.Fatalf("runOnce = %q", got)
+	}
+	if want := "smoke/" + r.seen[0] + "/done"; len(calls) != 1 || calls[0] != want {
+		t.Fatalf("completion calls = %v, want [%s]", calls, want)
+	}
+}
+
 // TestRunOnceOnIterationCloseHarnessErrorAndTimeout verifies the close hook
 // fires exactly once for terminal non-done outcomes too: harness_error (via a
 // runner error, the runErr early-return path in runOnce) and timeout (via

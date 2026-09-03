@@ -324,45 +324,12 @@ func execGoalSQL(t *testing.T, s *Store, query string) {
 	}
 }
 
-func openReminderStore(t *testing.T) *basestore.Store {
+func openGoalStore(t *testing.T) *basestore.Store {
 	t.Helper()
-	base, err := basestore.Open(filepath.Join(t.TempDir(), "reminders.db"))
+	base, err := basestore.Open(filepath.Join(t.TempDir(), "goals.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = base.Close() })
 	return base
-}
-
-func insertReminderAgent(t *testing.T, base *basestore.Store, name string, enabled, loopEnabled bool, interval int, createdAt string) {
-	t.Helper()
-	if _, err := base.DB.Exec(`INSERT INTO agents(name,image_ref,created_at,enabled,loop_enabled,interval_s) VALUES (?,?,?,?,?,?)`, name, "basic:latest", createdAt, enabled, loopEnabled, interval); err != nil {
-		t.Fatalf("insert agent %s: %v", name, err)
-	}
-}
-
-func insertReminderTask(t *testing.T, base *basestore.Store, key, agent, status, at string) {
-	t.Helper()
-	if _, err := base.DB.Exec(`INSERT OR IGNORE INTO task_queues(prefix,name,created_at,updated_at) VALUES ('REM','Reminders',?,?)`, at, at); err != nil {
-		t.Fatalf("insert queue: %v", err)
-	}
-	if _, err := base.DB.Exec(`INSERT INTO tasks(task_key,queue_prefix,title,status,author,customer,assignee,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`, key, "REM", key, status, "user:customer", "user:customer", "agent:"+agent, at, at); err != nil {
-		t.Fatalf("insert task %s: %v", key, err)
-	}
-}
-
-func insertReminderIteration(t *testing.T, base *basestore.Store, id, agent, status, endedAt string) {
-	t.Helper()
-	if _, err := base.DB.Exec(`INSERT INTO iterations(id,agent,trigger,status,started_at,ended_at) VALUES (?,?,?,?,?,?)`, id, agent, "manual", status, "2026-08-21T09:30:00Z", endedAt); err != nil {
-		t.Fatalf("insert iteration %s: %v", id, err)
-	}
-}
-
-func mustReminderTime(t *testing.T, raw string) time.Time {
-	t.Helper()
-	value, err := time.Parse(time.RFC3339, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return value
 }

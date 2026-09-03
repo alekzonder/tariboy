@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -153,6 +152,30 @@ func TestOrdinaryPublishDoesNotSynchronouslyWriteWorkflowStateOrChangeLegacyDeli
 	}
 }
 
+func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "tasks.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	service := tasks.NewService(st.DB, "customer", time.Now)
+	actor := tasks.CustomerActor("customer")
+	if _, err := service.CreateQueue(context.Background(), actor, tasks.CreateQueueInput{Prefix: "GOAL", Name: "Goals"}); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	service.SetGoalSignal(func() { calls++ })
+
+	if _, err := service.CreateTask(context.Background(), actor, tasks.CreateTaskInput{
+		Queue: "GOAL", Title: "Wake worker", Assignee: "agent:worker",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("goal signals = %d, want 1", calls)
+	}
+}
+
 // Removing daemon-start reconciliation must make this fail: the legacy agent
 // would still have no durable delivery lane after restart.
 func TestReconcileAgentInboxesRepairsExistingAgentsIdempotently(t *testing.T) {
@@ -265,7 +288,7 @@ func TestRunServesAndShutsDown(t *testing.T) {
 	}
 }
 
-func TestRunTaskReminderInitialScanUsesPublishHookAndStops(t *testing.T) {
+func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("TARIBOY_RUNTIME_DIR", t.TempDir())
 	stubHarness := filepath.Join(t.TempDir(), "stub-harness")
@@ -284,12 +307,9 @@ func TestRunTaskReminderInitialScanUsesPublishHookAndStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := seed.ConfigSet("task_reminder", `{"enabled":true,"idle_threshold_s":1}`); err != nil {
-		t.Fatal(err)
-	}
 	worker := agent.Agent{
 		Name: "worker", ImageRef: "basic:latest", ImageDigest: manifest.Digest, HarnessType: "stub", Cwd: t.TempDir(),
-		Enabled: true, LoopEnabled: true, Plugins: []string{"context"},
+		Enabled: true, LoopEnabled: true, GoalEnabled: true, Plugins: []string{"context"},
 	}
 	if err := agent.NewStore(seed).Create(worker); err != nil {
 		t.Fatal(err)
@@ -305,12 +325,12 @@ func TestRunTaskReminderInitialScanUsesPublishHookAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := seed.DB.Exec(`INSERT INTO task_queues(prefix,name,created_at,updated_at)
-		VALUES ('REM','Reminders','2020-01-01T00:00:00Z','2020-01-01T00:00:00Z')`); err != nil {
+		VALUES ('GOAL','Goals','2020-01-01T00:00:00Z','2020-01-01T00:00:00Z')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := seed.DB.Exec(`INSERT INTO tasks(
 		task_key,queue_prefix,title,status,author,customer,assignee,created_at,updated_at)
-		VALUES ('REM-1','REM','Reminder','open','user:customer','user:customer','agent:worker',
+		VALUES ('GOAL-1','GOAL','Goal','open','user:customer','user:customer','agent:worker',
 		'2020-01-01T00:00:00Z','2020-01-01T00:00:00Z')`); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +361,7 @@ func TestRunTaskReminderInitialScanUsesPublishHookAndStops(t *testing.T) {
 		case <-time.After(10 * time.Second):
 			t.Fatal("daemon did not stop after reminder wake timeout")
 		}
-		t.Fatal("task reminder initial scan did not publish through the wake hook")
+		t.Fatal("task goal initial scan did not publish through the wake hook")
 	}
 
 	cancel()
@@ -361,30 +381,26 @@ func TestRunTaskReminderInitialScanUsesPublishHookAndStops(t *testing.T) {
 	defer reopened.Close()
 	var channel, typ, source, data, idempotencyKey string
 	if err := reopened.DB.QueryRow(`SELECT channel,type,source,data,idempotency_key
-		FROM messages WHERE type='task.reminder'`).Scan(&channel, &typ, &source, &data, &idempotencyKey); err != nil {
+		FROM messages WHERE idempotency_key='task-goal:worker:GOAL-1:1:'`).Scan(&channel, &typ, &source, &data, &idempotencyKey); err != nil {
 		t.Fatal(err)
 	}
-	if channel != "agent:worker:inbox" || typ != "task.reminder" || source != "tasks" || idempotencyKey == "" {
-		t.Fatalf("reminder = channel:%q type:%q source:%q idempotency:%q", channel, typ, source, idempotencyKey)
+	if channel != "agent:worker:inbox" || typ != "task.goal" || source != "tasks" || idempotencyKey != "task-goal:worker:GOAL-1:1:" {
+		t.Fatalf("goal = channel:%q type:%q source:%q idempotency:%q", channel, typ, source, idempotencyKey)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload["reason"] != "assigned-work-idle" || payload["idle_threshold_s"] != float64(1) ||
-		!reflect.DeepEqual(payload["task_keys"], []any{"REM-1"}) {
+	if payload["reason"] != "selected" || payload["task_key"] != "GOAL-1" {
 		t.Fatalf("payload = %#v", payload)
 	}
-	var deliveries, marked int
+	var deliveries int
 	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM deliveries d
-		JOIN messages m ON m.id=d.message_id WHERE m.type='task.reminder'`).Scan(&deliveries); err != nil {
+		JOIN messages m ON m.id=d.message_id WHERE m.type='task.goal'`).Scan(&deliveries); err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.DB.QueryRow(`SELECT COUNT(*) FROM task_reminders WHERE agent='worker'`).Scan(&marked); err != nil {
-		t.Fatal(err)
-	}
-	if deliveries != 1 || marked != 1 {
-		t.Fatalf("durable route = deliveries:%d marked:%d, want 1/1", deliveries, marked)
+	if deliveries != 2 {
+		t.Fatalf("durable deliveries = %d, want startup and terminal continuation", deliveries)
 	}
 }
 

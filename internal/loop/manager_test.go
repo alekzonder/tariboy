@@ -570,6 +570,35 @@ func testSkillsDir(t *testing.T) string {
 	return root
 }
 
+func TestRefreshLoopConfigSignalsGoalReconciler(t *testing.T) {
+	m, _, _, _ := newManager(t, &fakeRunner{})
+	calls := 0
+	m.cfg.GoalSignal = func() { calls++ }
+
+	m.RefreshLoopConfig("worker")
+
+	if calls != 1 {
+		t.Fatalf("goal signals = %d, want 1", calls)
+	}
+}
+
+func TestStartSignalsGoalReconcilerWhileIterationIsAdopting(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
+	calls := 0
+	m.cfg.GoalSignal = func() { calls++ }
+
+	if err := m.Start("worker"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("goal signals = %d, want 1", calls)
+	}
+}
+
 // Removing the own-inbox subscription from Manager.Run must make this fail:
 // a standalone agent would persist successfully but task publication would
 // create no delivery for it.
@@ -1590,6 +1619,36 @@ func TestRecordAdoptedPreservesPersistedTimeoutAndHardWatchdogReason(t *testing.
 	}
 	if it.Status != "timeout" || it.TimeoutDeadline == nil || it.TimeoutExtensions != 0 {
 		t.Fatalf("adopted hard timeout lost persisted state: %+v", it)
+	}
+}
+
+func TestRecordAdoptedSignalsGoalCompletionAfterFinalStatus(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub"}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	id := "smoke-adopted-goal"
+	if err := as.CreateIteration(agent.Iteration{ID: id, Agent: ag.Name, Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	m.cfg.IterationCompleted = func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = agentName + "/" + iterationID + "/" + it.Status
+	}
+	l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
+	if err := l.EnsureIteration(id); err != nil {
+		t.Fatal(err)
+	}
+
+	m.recordAdopted(l, agentdir.LiveIteration{Agent: ag.Name, ID: id}, shim.IterationResult{ExitCode: 0})
+
+	if got != "smoke/smoke-adopted-goal/no_i_am_done" {
+		t.Fatalf("completion = %q", got)
 	}
 }
 

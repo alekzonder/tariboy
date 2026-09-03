@@ -107,6 +107,10 @@ type ManagerConfig struct {
 	// final status is persisted. The daemon wires this to gzip the AI-proxy
 	// transcript (spec §9/§12) without loop importing aiproxy directly.
 	OnIterationClose func(agent, iterationID string)
+	// GoalSignal coalesces agent configuration changes into a goal scan.
+	GoalSignal func()
+	// IterationCompleted requests the next goal wake after terminal persistence.
+	IterationCompleted func(agent, iterationID string)
 	// ProvidedChannels returns provider-declared channels drawn from installed
 	// plugin manifests, so `tools sources` can list and annotate provider
 	// channels even before their channel row exists (spec §6.1). Wired by the
@@ -238,6 +242,18 @@ func NewManager(cfg ManagerConfig) *Manager {
 		restarting: map[string]bool{}, staleKills: map[string]string{},
 		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
 		scriptsWake: make(chan struct{}, 1), scriptRuns: map[string]*exec.Cmd{}, scriptCancels: map[string]bool{},
+	}
+}
+
+func (m *Manager) signalGoals() {
+	if m.cfg.GoalSignal != nil {
+		m.cfg.GoalSignal()
+	}
+}
+
+func (m *Manager) iterationCompleted(agentName, iterationID string) {
+	if m.cfg.IterationCompleted != nil {
+		m.cfg.IterationCompleted(agentName, iterationID)
 	}
 }
 
@@ -696,6 +712,7 @@ func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, re
 	if m.cfg.Proxy != nil {
 		m.cfg.Proxy.RevokeIteration(li.ID)
 	}
+	m.iterationCompleted(li.Agent, li.ID)
 	m.cfg.Log.Info("adopted live iteration", "agent", li.Agent, "id", li.ID, "status", status)
 }
 
@@ -718,6 +735,9 @@ func (m *Manager) recordStaleAdoption(l agentdir.Layout, li agentdir.LiveIterati
 	}
 	if committed && m.cfg.Proxy != nil {
 		m.cfg.Proxy.RevokeIteration(li.ID)
+	}
+	if committed {
+		m.iterationCompleted(li.Agent, li.ID)
 	}
 	m.cfg.Log.Warn("adopted iteration abandoned: shim not responding", "agent", li.Agent, "id", li.ID)
 }
@@ -1165,6 +1185,7 @@ func (m *Manager) start(ag agent.Agent) error {
 			m.cfg.OnIterationClose(agentName, iterationID)
 		}
 	})
+	engine.SetIterationCompleted(m.iterationCompleted)
 
 	// Bind the per-agent tools socket SYNCHRONOUSLY before launching the loop.
 	// The harness reaches the daemon (loop done, context, messages, ...) only
@@ -1225,6 +1246,7 @@ func (m *Manager) Start(name string) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.signalGoals()
 	if err := m.start(ag); err != nil {
 		if errors.Is(err, errIterationAdopting) {
 			return nil
@@ -1262,6 +1284,7 @@ func (m *Manager) Stop(name string) error {
 		rt.engine.Wake(WakeStop)
 	}
 	m.mu.Unlock()
+	m.signalGoals()
 	_ = m.Kill(name)
 	return nil
 }
@@ -1284,6 +1307,7 @@ func (m *Manager) SetLoopEnabled(name string, enabled bool) error {
 // RefreshLoopConfig asks a live engine to discard its timer and reload the
 // persisted settings. A stopped or not-yet-started agent has nothing to wake.
 func (m *Manager) RefreshLoopConfig(name string) {
+	m.signalGoals()
 	m.mu.Lock()
 	rt := m.runs[name]
 	m.mu.Unlock()

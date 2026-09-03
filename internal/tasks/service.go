@@ -21,6 +21,7 @@ type Service struct {
 	customer                                 string
 	clock                                    func() time.Time
 	hub                                      *Hub
+	goalSignal                               func()
 	workflowIngressEnabled                   atomic.Bool
 	workflowIngressAfterTargetCount          func()
 	workflowActivationAfterWriterReservation func()
@@ -48,9 +49,14 @@ func (s *Service) CustomerLogin() string { return s.customer }
 
 func (s *Service) SetHub(hub *Hub) { s.hub = hub }
 
+func (s *Service) SetGoalSignal(signal func()) { s.goalSignal = signal }
+
 func (s *Service) signal() {
 	if s.hub != nil {
 		s.hub.Nudge()
+	}
+	if s.goalSignal != nil {
+		s.goalSignal()
 	}
 }
 

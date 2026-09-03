@@ -126,6 +126,7 @@ type Engine struct {
 	emit                func(events.Event)
 	audit               func(typ, source, iterationID string, data map[string]any)
 	onClose             func(agent, iterationID string)
+	iterationCompleted  func(agent, iterationID string)
 	evals               EvalRunner
 	beforeLaunch        func(*agent.Agent) (activatedImage, error)
 
@@ -240,6 +241,12 @@ func (e *Engine) recordAudit(typ, source, iterationID string, data map[string]an
 // contract of the installed function itself — the engine does not inspect or
 // retry errors from it.
 func (e *Engine) SetOnIterationClose(fn func(agent, iterationID string)) { e.onClose = fn }
+
+// SetIterationCompleted installs the durable continuation hook used after a
+// terminal iteration row is finalized. Nil disables it.
+func (e *Engine) SetIterationCompleted(fn func(agent, iterationID string)) {
+	e.iterationCompleted = fn
+}
 
 func (e *Engine) emitIteration(id, trigger, status, phase string) {
 	if e.emit == nil {
@@ -619,8 +626,14 @@ func (e *Engine) runOnceGuarded(
 	// after a restart handoff: the adopted shim still owns that iteration.
 	detached := false
 	defer func() {
-		if !detached && e.onClose != nil {
+		if detached {
+			return
+		}
+		if e.onClose != nil {
 			e.onClose(e.ag.Name, id)
+		}
+		if e.iterationCompleted != nil {
+			e.iterationCompleted(e.ag.Name, id)
 		}
 	}()
 
