@@ -1,5 +1,7 @@
 package commands
 
+import "github.com/alekzonder/tariboy/internal/tasks"
+
 func schemaRef(name string) map[string]any {
 	return map[string]any{"$ref": "#/components/schemas/" + name}
 }
@@ -25,6 +27,7 @@ func taskOpenAPISchemas() map[string]map[string]any {
 	integer := map[string]any{"type": "integer"}
 	boolean := map[string]any{"type": "boolean"}
 	free := map[string]any{"type": "object", "additionalProperties": true}
+	status := map[string]any{"type": "string", "enum": []string{tasks.StatusOpen, tasks.StatusInProgress, tasks.StatusWaitCustomer, tasks.StatusDone, tasks.StatusCancelled}}
 	return map[string]map[string]any{
 		"WorkflowDefinition": objectSchema([]string{"name", "version", "initial_status", "statuses"}, map[string]any{
 			"name": str, "version": integer, "initial_status": str, "statuses": arrayOf("WorkflowStatus"),
@@ -44,7 +47,7 @@ func taskOpenAPISchemas() map[string]map[string]any {
 		"WorkflowValidationResult":  objectSchema([]string{"items", "count", "valid"}, map[string]any{"items": arrayOf("WorkflowValidationError"), "count": integer, "valid": boolean}),
 		"QueueWorkflowBinding":      objectSchema([]string{"queue", "workflow_version_id", "revision", "bound_by", "bound_at"}, map[string]any{"queue": str, "workflow_version_id": integer, "workflow_name": str, "workflow_version": integer, "revision": integer, "bound_by": str, "bound_at": str}),
 		"AgentPool":                 objectSchema([]string{"id", "queue", "name", "agents", "revision", "created_at", "updated_at"}, map[string]any{"id": integer, "queue": str, "name": str, "agents": stringArray(), "revision": integer, "created_at": str, "updated_at": str}),
-		"Task":                      objectSchema([]string{"key", "queue", "title", "status", "revision"}, map[string]any{"key": str, "queue": str, "title": str, "description": str, "status": str, "revision": integer, "workflow_version_id": integer, "workflow_status": str, "workflow_revision": integer}),
+		"Task":                      objectSchema([]string{"key", "queue", "title", "status", "revision"}, map[string]any{"key": str, "queue": str, "title": str, "description": str, "status": status, "pull_request": str, "revision": integer, "workflow_version_id": integer, "workflow_status": str, "workflow_revision": integer}),
 		"StatusExecution":           objectSchema([]string{"id", "task_key", "workflow_version_id", "status", "sequence", "state", "task_revision", "created_at"}, map[string]any{"id": integer, "task_key": str, "workflow_version_id": integer, "status": str, "sequence": integer, "state": str, "transition_to": str, "task_revision": integer, "created_at": str, "completed_at": str}),
 		"RequirementExecution":      objectSchema([]string{"id", "status_execution_id", "requirement_id", "pool", "dispatch", "optional", "pool_snapshot", "inputs", "produces", "outcomes", "state", "created_at"}, map[string]any{"id": integer, "status_execution_id": integer, "requirement_id": str, "pool": str, "dispatch": str, "optional": boolean, "pool_snapshot": stringArray(), "inputs": stringArray(), "produces": stringArray(), "outcomes": stringArray(), "state": str, "created_at": str, "completed_at": str}),
 		"Assignment":                objectSchema([]string{"id", "requirement_execution_id", "attempt", "state", "revision", "created_at", "updated_at"}, map[string]any{"id": integer, "requirement_execution_id": integer, "agent": str, "attempt": integer, "state": str, "lease_owner": str, "lease_expires_at": str, "revision": integer, "outcome": str, "created_at": str, "updated_at": str, "completed_at": str}),

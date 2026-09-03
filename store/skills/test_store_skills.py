@@ -304,6 +304,21 @@ class StoreSkillsTest(unittest.TestCase):
                 self.assertIn("workflow", process.stderr)
                 self.assertIsNone(request)
 
+    def test_tasks_update_pull_request(self):
+        for value in ("https://github.com/o/r/pull/7", ""):
+            with self.subTest(value=value):
+                process, request = self.run_script(
+                    "tasks/scripts/tasks.sh",
+                    ["update", "TARI-43", "--revision", "2", f"--pull-request={value}"],
+                    {},
+                )
+                self.assertEqual(process.returncode, 0, process.stderr)
+                self.assertEqual(request[0], ["POST", "/tools/tasks/update"])
+                self.assertEqual(
+                    json.loads(request[1]),
+                    {"key": "TARI-43", "revision": "2", "pull_request": value},
+                )
+
     def test_current_task_rejects_ambiguous_arguments_before_request(self):
         for args in (
             ["TARI-41", "TARI-42"],

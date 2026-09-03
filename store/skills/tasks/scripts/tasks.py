@@ -97,7 +97,7 @@ def parse(args):
         "ready": {"queue", "limit", "idempotency-key", "claim"},
         "show": set(),
         "create": {"queue", "parent", "title", "description", "assignee", "group", "priority", "idempotency-key"},
-        "update": {"title", "description", "status", "assignee", "manual-block-reason", "priority", "revision"},
+        "update": {"title", "description", "status", "pull-request", "assignee", "manual-block-reason", "priority", "revision"},
         "assign": {"revision"},
         "comment": {"body", "idempotency-key"},
         "ask": {"question", "context", "blocking-scope", "anchor", "suggested-answer", "options", "artifacts", *COMMON_WORK},
@@ -187,9 +187,10 @@ def parse(args):
             raise UsageError("tasks create: --queue or --parent is required")
     elif action == "update":
         payload["key"] = require_pos(pos, "update")
-        for flag in allowed[action] - {"manual-block-reason"}:
+        for flag in allowed[action] - {"manual-block-reason", "pull-request"}:
             copy(payload, flags, flag)
         copy(payload, flags, "manual-block-reason", present=True)
+        copy(payload, flags, "pull-request", present=True)
     elif action == "assign":
         payload["key"] = require_pos(pos, "assign")
         payload["assignee"] = require_pos(pos, "assign", 1, "assignee")

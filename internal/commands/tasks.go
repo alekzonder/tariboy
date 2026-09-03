@@ -92,6 +92,7 @@ func taskCommands() []registry.Command {
 					Title:             optionalStringParam(p, "title"),
 					Description:       optionalStringParam(p, "description"),
 					Status:            optionalStringParam(p, "status"),
+					PullRequest:       optionalStringParam(p, "pull_request"),
 					Assignee:          optionalStringParam(p, "assignee"),
 					ManualBlockReason: optionalStringParam(p, "manual_block_reason"),
 					Priority:          optionalPriorityParam(p, "priority"),
@@ -328,6 +329,19 @@ func taskHTTPArgs(path string) []registry.Arg {
 			{Name: "description", Help: "Queue description"},
 			{Name: "owners", Help: "Comma-separated owner agents"},
 			{Name: "responsible_agent", Flag: "responsible-agent", Help: "Responsible agent"},
+		}
+	case "tasks.update":
+		return []registry.Arg{
+			{Name: "title", Help: "Task title"},
+			{Name: "description", Help: "Task description"},
+			{Name: "status", Help: "Task status", Schema: map[string]any{
+				"type": "string", "enum": []string{tasks.StatusOpen, tasks.StatusInProgress, tasks.StatusWaitCustomer, tasks.StatusDone, tasks.StatusCancelled},
+			}},
+			{Name: "pull_request", Flag: "pull-request", Help: "Canonical pull request URL (empty clears it)"},
+			{Name: "assignee", Help: "Task assignee"},
+			{Name: "manual_block_reason", Flag: "manual-block-reason", Help: "Manual block reason"},
+			{Name: "priority", Help: "Task priority"},
+			{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"},
 		}
 	case "tasks.workflows.create":
 		return []registry.Arg{{Name: "definition", Required: true, Help: "Versioned workflow definition", Schema: schemaRef("WorkflowDefinition")}}
