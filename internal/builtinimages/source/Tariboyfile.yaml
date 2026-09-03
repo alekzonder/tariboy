@@ -22,7 +22,6 @@ skills:
 prompts:
   - runtime: identity
   - runtime: messages
-  - runtime: awaiting-replies
   - runtime: context
   - runtime: workdir
   - runtime: user-prompt

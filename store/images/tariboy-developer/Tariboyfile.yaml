@@ -41,7 +41,6 @@ prompts:
   - runtime: identity
   - runtime: context
   - runtime: messages
-  - runtime: awaiting-replies
   - runtime: workdir
   - file: ./instructions.md
   - runtime: user-prompt
