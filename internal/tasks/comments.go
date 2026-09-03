@@ -86,12 +86,32 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 		}
 		created = append(created, wait)
 	}
+	customerWaits, err := openWaitsForPrincipal(ctx, tx, task, task.Customer)
+	if err != nil {
+		return CommentResult{}, err
+	}
+	previousStatus := task.Status
+	assignedAgentQuestion := task.Assignee == actor.Principal && !actor.IsCustomer &&
+		containsPrincipal(created, task.Customer) && task.Status != StatusDone && task.Status != StatusCancelled
+	lastCustomerWaitResolved := task.Status == StatusWaitCustomer && len(customerWaits) == 0
+	switch {
+	case assignedAgentQuestion:
+		task.Status = StatusWaitCustomer
+	case lastCustomerWaitResolved:
+		task.Status = StatusInProgress
+	}
 	task.Revision++
 	task.UpdatedAt = now
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE tasks SET revision = revision + 1, updated_at = ? WHERE id = ?`,
-		now, task.ID); err != nil {
+		`UPDATE tasks SET status = ?, revision = revision + 1, updated_at = ? WHERE id = ?`,
+		task.Status, now, task.ID); err != nil {
 		return CommentResult{}, err
+	}
+	if task.Status != previousStatus {
+		if _, err := appendEventTx(ctx, tx, task, "task.updated", actor,
+			map[string]any{"status": task.Status, "pull_request": task.PullRequest, "assignee": task.Assignee, "priority": task.Priority}, now); err != nil {
+			return CommentResult{}, err
+		}
 	}
 	sequence, err := appendEventTx(ctx, tx, task, "task.comment_added", actor,
 		map[string]any{
@@ -267,4 +287,13 @@ func waitPrincipals(waits []WaitingFor) []string {
 		out = append(out, wait.ExpectedPrincipal)
 	}
 	return out
+}
+
+func containsPrincipal(waits []WaitingFor, principal string) bool {
+	for _, wait := range waits {
+		if wait.ExpectedPrincipal == principal {
+			return true
+		}
+	}
+	return false
 }
