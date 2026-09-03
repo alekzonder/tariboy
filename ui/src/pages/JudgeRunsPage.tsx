@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,9 @@ function modelFor(run: JudgeRun): string {
 
 export default function JudgeRunsPage() {
 	const target = useOutletContext<ApiTarget>();
+	const resolvedTarget = resolveTarget(target);
+	const currentTarget = useRef(resolvedTarget);
+	currentTarget.current = resolvedTarget;
 	const listRuns = useCallback(() => listJudgeRunsOn(target), [target]);
 	const { data, error } = usePolling(listRuns, 5000);
 	const runs = data?.runs ?? [];
@@ -38,6 +41,7 @@ export default function JudgeRunsPage() {
 
 	useEffect(() => {
 		let current = true;
+		setConfig(""); setSaved(""); setDiagnostics([]); setConfigError(""); setBusy(false); setJudgesExists(null);
 		void getJudgeAutomation(target).then((state) => {
 			if (!current) return;
 			const raw = state.revision?.canonical_json ?? "";
@@ -74,11 +78,11 @@ export default function JudgeRunsPage() {
 		setBusy(true); setConfigError("");
 		try {
 			const judge = (JSON.parse(saved) as { judge: { lead: string; workers: string[] } }).judge;
-			await apiOn(resolveTarget(target), "POST", "/api/groups", { name: "judges", lead: judge.lead });
-			for (const agent of [judge.lead, ...judge.workers]) await apiOn(resolveTarget(target), "POST", "/api/groups/judges/assign", { agent });
-			setJudgesExists(true);
-		} catch (cause) { setConfigError((cause as Error).message); }
-		finally { setBusy(false); }
+			await apiOn(resolvedTarget, "POST", "/api/groups", { name: "judges", lead: judge.lead });
+			for (const agent of [judge.lead, ...judge.workers]) await apiOn(resolvedTarget, "POST", "/api/groups/judges/assign", { agent });
+			if (currentTarget.current === resolvedTarget) setJudgesExists(true);
+		} catch (cause) { if (currentTarget.current === resolvedTarget) setConfigError((cause as Error).message); }
+		finally { if (currentTarget.current === resolvedTarget) setBusy(false); }
 	};
 
   return (
@@ -91,7 +95,7 @@ export default function JudgeRunsPage() {
 		<div><h2 className="font-medium">Automation configuration</h2><p className="text-sm text-muted-foreground">Raw JSON validated and applied by the selected tariboyd.</p></div>
 		<label className="block space-y-1 text-sm"><span>Judge automation JSON</span><Textarea className="min-h-72 font-mono text-xs" value={config} onChange={(event) => setConfig(event.target.value)} spellCheck={false} /></label>
 		{diagnostics.length > 0 && <ul role="alert" className="space-y-1 text-sm text-destructive">{diagnostics.map((item) => <li key={`${item.path}:${item.message}`}><code>{item.path}</code>: {item.message}</li>)}</ul>}
-		{configError && <p className="text-sm text-destructive">{configError}</p>}
+		{configError && <p role="alert" className="text-sm text-destructive">{configError}</p>}
 		<div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => void validate()}>Validate</Button><Button type="button" disabled={busy} onClick={() => void apply()}>Apply</Button><Button type="button" variant="outline" disabled={busy} onClick={() => void runOnce()}>Run once</Button><Button type="button" variant="ghost" disabled={busy || config === saved} onClick={() => { setConfig(saved); setDiagnostics([]); }}>Reset</Button>{saved && judgesExists === false && <Button type="button" variant="outline" disabled={busy} onClick={() => void createJudges()}>Create judges team</Button>}</div>
 	  </section>
       {error && <p role="alert" className="rounded border border-destructive/40 px-3 py-2 text-sm text-destructive">Could not load judge runs: {error.message}</p>}

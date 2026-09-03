@@ -56,7 +56,7 @@ it("shows empty and error states", async () => {
 
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ ok: false, error: { code: "offline", message: "offline" } }, false)));
   render(<MemoryRouter><JudgeRunsPage /></MemoryRouter>);
-  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not load judge runs: offline"));
+  expect(await screen.findByText("Could not load judge runs: offline")).toHaveAttribute("role", "alert");
 });
 
 it("stops polling when unmounted", async () => {
@@ -141,4 +141,55 @@ it("creates the missing judges team from the selected server's automation config
     ["https://remote.example/api/groups/judges/assign", { agent: "judge-one" }],
     ["https://remote.example/api/groups/judges/assign", { agent: "judge-two" }],
   ]);
+});
+
+it("hides the stale create button while a newly selected server loads", async () => {
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  let resolveRemote!: (value: Response) => void;
+  const remoteAutomation = new Promise<Response>((resolve) => { resolveRemote = resolve; });
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://second.example/api/judge-automation") return remoteAutomation;
+    if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [], count: 0 } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const first = { id: "first", label: "First", baseURL: "https://first.example", token: "secret" };
+  const second = { id: "second", label: "Second", baseURL: "https://second.example", token: "secret" };
+  const view = (target: typeof first) => <MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>;
+  const { rerender } = render(view(first));
+  expect(await screen.findByRole("button", { name: "Create judges team" })).toBeInTheDocument();
+
+  rerender(view(second));
+
+  expect(screen.queryByRole("button", { name: "Create judges team" })).not.toBeInTheDocument();
+  resolveRemote(response({ ok: true, result: { configured: false } }));
+});
+
+it("ignores create completion from the previously selected server", async () => {
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  let finishCreate!: (value: Response) => void;
+  const pendingCreate = new Promise<Response>((resolve) => { finishCreate = resolve; });
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "https://first.example/api/groups" && init?.method === "POST") return pendingCreate;
+    if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [], count: 0 } }));
+    if (url.includes("/api/groups/judges/assign")) return Promise.resolve(response({ ok: true, result: { assigned: true } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const first = { id: "first", label: "First", baseURL: "https://first.example", token: "secret" };
+  const second = { id: "second", label: "Second", baseURL: "https://second.example", token: "secret" };
+  const view = (target: typeof first) => <MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>;
+  const { rerender } = render(view(first));
+  fireEvent.click(await screen.findByRole("button", { name: "Create judges team" }));
+
+  rerender(view(second));
+  expect(await screen.findByRole("button", { name: "Create judges team" })).toBeInTheDocument();
+  finishCreate(response({ ok: true, result: { name: "judges" } }));
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("https://first.example/api/groups/judges/assign", expect.objectContaining({ method: "POST" })));
+  expect(screen.getByRole("button", { name: "Create judges team" })).toBeInTheDocument();
 });
