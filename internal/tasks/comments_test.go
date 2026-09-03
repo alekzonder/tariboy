@@ -274,6 +274,28 @@ func TestCustomerAnswerTransitionsWithOtherWaitRemaining(t *testing.T) {
 	}
 }
 
+func TestUnrelatedCommentDoesNotResumeManualWaitCustomer(t *testing.T) {
+	svc, task := assignedTask(t, "worker", StatusWaitCustomer)
+	ctx := context.Background()
+	before, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
+		Body: "work continues elsewhere",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertTaskStatus(t, svc, task.Key, StatusWaitCustomer)
+	after, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before)+1 || after[len(after)-1].Kind != "task.comment_added" {
+		t.Fatalf("event tail after unrelated comment = %#v", after[len(before):])
+	}
+}
+
 func TestCustomerWaitStatusNonTransitions(t *testing.T) {
 	tests := []struct {
 		name                string

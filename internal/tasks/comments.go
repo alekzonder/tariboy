@@ -93,7 +93,8 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 	previousStatus := task.Status
 	assignedAgentQuestion := task.Assignee == actor.Principal && !actor.IsCustomer &&
 		containsPrincipal(created, task.Customer) && task.Status != StatusDone && task.Status != StatusCancelled
-	lastCustomerWaitResolved := task.Status == StatusWaitCustomer && len(customerWaits) == 0
+	lastCustomerWaitResolved := task.Status == StatusWaitCustomer &&
+		containsPrincipal(resolved, task.Customer) && len(customerWaits) == 0
 	switch {
 	case assignedAgentQuestion:
 		task.Status = StatusWaitCustomer
