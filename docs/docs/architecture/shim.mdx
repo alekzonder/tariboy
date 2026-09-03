@@ -16,11 +16,25 @@ iteration under a watchdog**. The daemon hands it:
 
 Everything after `--` is the harness command it supervises.
 
-For tmux-backed interactive iterations, the shim uses a fixed `/bin/sh`
-wrapper that preserves the harness argv, captures its real exit status, writes
-the numeric value to an owner-private temporary file, and atomically renames it
-within the iteration's private logs directory. After the tmux session ends,
-the shim validates and removes that transient status file before writing
+For tmux-backed interactive iterations, the pane command is a hidden supervisor
+mode of the same shim binary. That supervisor starts one directly owned harness
+process group and places it in the pane terminal's foreground before exec, so
+stdin and terminal-generated signals go to the harness rather than the
+supervisor. It then waits as the group's only reaper, using `SIGCHLD` and
+`Wait4(WNOHANG)` without polling tmux or starting helper subprocesses.
+
+The supervisor also catches the `SIGHUP` tmux sends when a pane is destroyed.
+It checks for an already-exited child first. If the child is still unreaped, the
+supervisor force-kills only that owned process group, whose numeric identity is
+still pinned by its unreaped leader, and then reaps it. It never discovers a
+pane PID from tmux and never signals a process after reaping its leader. The
+supervisor does not restore terminal foreground ownership because it performs
+no further terminal I/O and exits immediately after recording the result.
+
+On every exit path the supervisor captures the harness's real numeric status,
+writes it to an owner-private temporary file, and atomically renames it within
+the iteration's private logs directory. After the tmux session ends, the outer
+shim validates and removes that transient status file before writing
 `result.json`. A non-zero harness status is preserved; a missing, malformed, or
 unreadable status becomes unknown failure (`-1`), never success. Timeout and
 explicit termination reasons still take precedence. The status file is not in
@@ -39,7 +53,10 @@ options, user tmux configuration, or unrelated sessions.
 
 Separating the watchdog from the daemon means a runaway or hung iteration can be
 killed (`tariboy agent kill`) without touching the daemon or other agents. The
-shim isn't a subcommand CLI — it has exactly one job.
+outer shim matches the managed session's full name before using tmux's exact
+session target. An absent server or session is already stopped; other tmux
+operational errors remain visible to the caller. The shim isn't a subcommand
+CLI — it has exactly one job.
 
 It also makes daemon upgrades non-destructive. `tariboyd` cancellation does
 not signal the shim or its harness. The old loop observer detaches while the

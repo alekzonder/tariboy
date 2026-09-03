@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 )
 
 const userHZ = 100 // Linux USER_HZ; cpu_ms = ticks * 1000 / userHZ.
@@ -656,23 +657,36 @@ func tmuxCommandError(action string, err error, output []byte) error {
 // RunTmuxSupervisor owns one harness process until it is reaped. Keeping the
 // process-group leader unreaped makes its group identity stable until this
 // owner either observes normal exit or terminates the group itself.
-func RunTmuxSupervisor(session, statusPath string, argv []string) error {
+func RunTmuxSupervisor(_ string, statusPath string, argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("tmux supervisor requires a harness command")
 	}
 	hup := make(chan os.Signal, 1)
+	childExited := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
+	signal.Notify(childExited, syscall.SIGCHLD)
 	defer signal.Stop(hup)
+	defer signal.Stop(childExited)
 
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdinFD := int(os.Stdin.Fd())
+	if _, err := unix.IoctlGetInt(stdinFD, unix.TIOCGPGRP); err == nil {
+		// Foreground performs setpgid and TIOCSPGRP in the child before exec,
+		// closing the race where an interactive harness reads before a parent-side
+		// tcsetpgrp. The supervisor never reads the terminal again, so no restore is
+		// needed before it writes status and exits.
+		cmd.SysProcAttr.Foreground = true
+		cmd.SysProcAttr.Ctty = stdinFD
+	} else if !errors.Is(err, unix.ENOTTY) {
+		return fmt.Errorf("inspect harness terminal: %w", err)
+	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start harness: %w", err)
 	}
 	pid := cmd.Process.Pid
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
+	hupReceived := false
 
 	for {
 		var status syscall.WaitStatus
@@ -686,9 +700,7 @@ func RunTmuxSupervisor(session, statusPath string, argv []string) error {
 		if waited == pid {
 			return writeTmuxExitStatus(statusPath, waitStatusExitCode(status))
 		}
-
-		exists, err := tmuxSessionExists(session)
-		if err == nil && !exists {
+		if hupReceived {
 			killErr := syscall.Kill(-pid, syscall.SIGKILL)
 			if errors.Is(killErr, syscall.ESRCH) {
 				killErr = nil
@@ -701,13 +713,16 @@ func RunTmuxSupervisor(session, statusPath string, argv []string) error {
 			}
 			if err != nil {
 				err = fmt.Errorf("reap harness: %w", err)
+			} else if waited != pid {
+				err = errors.New("reap harness: wait returned without child")
 			}
 			return errors.Join(killErr, err, writeTmuxExitStatus(statusPath, waitStatusExitCode(status)))
 		}
 
 		select {
-		case <-ticker.C:
 		case <-hup:
+			hupReceived = true
+		case <-childExited:
 		}
 	}
 }
