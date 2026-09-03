@@ -12,8 +12,10 @@ const RECENT = Array.from({ length: 50 }, (_, i) =>
 const OLDER = [mk(40, "harness_output", { line: "a" }), mk(50, "iteration_started", { trigger: "manual" })];
 
 let calls: string[] = [];
+let recent = RECENT;
 beforeEach(() => {
   calls = [];
+  recent = RECENT;
   vi.stubGlobal("EventSource", class { addEventListener() {} removeEventListener() {} close() {} } as unknown as typeof EventSource);
   vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
     calls.push(url);
@@ -23,7 +25,7 @@ beforeEach(() => {
     else if (url.includes("q=boom")) result = { events: [mk(3, "harness_output", { line: "boom" })], capped: false };
     else if (url.includes("before=")) result = { events: OLDER };
     else if (url.includes("since=")) result = { events: [] };
-    else result = { events: RECENT }; // initial recent-50
+    else result = { events: recent };
     return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
   }));
 });
@@ -56,6 +58,7 @@ describe("FullAuditLog (paged)", () => {
   });
 
   it("filters by type server-side and shows only the matches", async () => {
+    recent = [RECENT[0]];
     renderLog();
     await waitFor(() => expect(screen.getByText("done")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Filter by type"), { target: { value: "status" } });
@@ -68,6 +71,7 @@ describe("FullAuditLog (paged)", () => {
   });
 
   it("full-text search composes across fields and clears back to the live view", async () => {
+    recent = [RECENT[0]];
     renderLog();
     await waitFor(() => expect(screen.getByText("done")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Search text"), { target: { value: "boom" } });

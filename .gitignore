@@ -33,6 +33,8 @@ internal/builtingroups/generated/*
 # same target.
 desktop/dist/
 ui/dist/
+ui/.cache/
+ui/.eslintcache
 desktop/src-tauri/target/
 ui/test-results/
 ui/test-results-desktop/

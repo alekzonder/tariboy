@@ -135,18 +135,25 @@ change in the Desktop app requires the loop/shim, Web UI, and Desktop/SSH rows.
 
 ## Build and verification matrix
 
-Two targets are the entry points, and they compose everything below:
+Use the smallest fast entry point that covers the change; the aggregate and
+heavy targets compose them:
 
 ```bash
-make check       # fast, read-only, minutes
-make full-check  # heavy, tens of minutes, includes check
+make backend-check   # Go, Store skills, and smoke contracts
+make frontend-check  # UI and documentation
+make check           # both fast checks
+make full-check      # heavy, tens of minutes, includes check
 ```
 
-`make check` is safe to run often in a shared working tree: it only reads. It
-never rewrites files, never installs node modules, never writes into `bin/`,
-and does not dirty `git status`. Its steps are
-`fmt-check`, `vet`, `test`, `ui-typecheck`, `ui-lint`,
-`ui-test`, `ui-branding`, and `docs`.
+Run `make backend-check` for backend-only changes and `make frontend-check` for
+frontend- or documentation-only changes. Run `make check` for mixed changes or
+when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
+the Store skill tests, and smoke contracts. The frontend target runs UI
+typecheck, lint, unit tests, branding, and the documentation checks. All three
+are read-only: they never install dependencies, write into `bin/`, or dirty
+`git status`. Each step reports its result and duration as it finishes.
+Successful command output is suppressed; failed steps print their command and
+complete diagnostics, and every run ends with a compact summary.
 
 `make full-check` is the full set of checks that run unattended on a developer
 machine, not every check in the repository. It runs `check`, then `build`, the
@@ -154,13 +161,14 @@ four core E2E scripts, `full-smoke`, the two Playwright browser suites, and one
 desktop step for the host: `desktop-e2e` on Linux x86_64, `desktop` plus
 `desktop-smoke` on macOS arm64, and the version and lock gates alone elsewhere.
 
-Neither target stops at the first failure. Each step is timed and recorded, and
-the run ends with a summary table naming every step that failed, so one pass
-surfaces gofmt drift and a UI type error together.
+The check targets do not stop at the first failure. Each step is timed and
+recorded, and the run ends with a summary table naming every step that failed,
+so one aggregate pass surfaces gofmt drift and a UI type error together.
 
-Both targets require `ui/node_modules` and `docs/node_modules` to exist; run
-`npm ci` in those directories once, as described below. Neither target installs
-them, because installing would rewrite a shared working tree.
+`frontend-check`, `check`, and `full-check` require `ui/node_modules` and
+`docs/node_modules` to exist; run `npm ci` in those directories once, as
+described below. These targets do not install them, because installing would
+rewrite a shared working tree.
 
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
@@ -169,10 +177,10 @@ data), and `scripts/check-alpha-artifacts.sh` is a release gate that takes a
 release directory as its argument. The Rust host tests are outside both targets
 as well; see [Rust desktop host](#rust-desktop-host).
 
-The individual targets are unchanged and remain callable on their own, so
-running `make vet` or `make e2e` while iterating is still legitimate. Use the
-smallest relevant check while iterating, then `make check`, and `make full-check`
-when the diff reaches e2e, packaging, or desktop behavior.
+The individual targets remain callable on their own, so running `make vet` or
+`make e2e` while iterating is still legitimate. Use the smallest relevant
+check, `make check` for mixed changes, and `make full-check` when the diff
+reaches e2e, packaging, or desktop behavior.
 
 ## Cleaning the working tree
 
@@ -191,8 +199,8 @@ git clean -ndx
 
 ### Go control plane and plugins
 
-`make check` covers this subsystem with `fmt-check`, `vet`, and `test`. To run
-one of them from the repository root while iterating:
+`make backend-check` covers this subsystem with `fmt-check`, `vet`, and `test`.
+To run one of them from the repository root while iterating:
 
 ```bash
 make vet
@@ -205,7 +213,7 @@ fixture embedded in an npm dependency is not Tariboy source and must not extend
 the Go quality gate.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
-`make check`; run `make fmt` yourself when it reports drift.
+`backend-check`; run `make fmt` yourself when it reports drift.
 
 `make build` produces the core binaries. It is not part of `check`, which
 writes nothing into `bin/`, and it is the first build step of `full-check`. It

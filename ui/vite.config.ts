@@ -20,6 +20,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    pool: "vmThreads",
+    reporters: ["agent"],
     setupFiles: ["./src/test/setup.ts"],
   },
 });

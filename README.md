@@ -220,18 +220,21 @@ make setup
 The script installs project-local skills only; it does not modify global skill
 installations.
 
-There are two verification entry points, and they are the whole list:
+Use the verification entry point matching the changed area:
 
 ```bash
-make check       # fast, read-only, minutes
-make full-check  # heavy, tens of minutes, includes check
+make backend-check   # Go, Store skills, and smoke contracts
+make frontend-check  # UI and documentation
+make check           # both fast checks
+make full-check      # heavy, tens of minutes, includes check
 ```
 
-`make check` runs `fmt-check`, `go vet`, the Go unit tests, the UI typecheck,
-lint, unit tests and branding check, and the documentation
-`doctor` plus `build`. It is safe to run often in a shared working tree: it
-only reads. It never rewrites files (`make fmt` is deliberately not part of
-it), never installs node modules, and never writes into `bin/`.
+Run `backend-check` for backend-only changes, `frontend-check` for frontend- or
+documentation-only changes, and `check` for mixed or unclear changes. These
+targets are read-only: they never rewrite files (`make fmt` is deliberately not
+part of them), install node modules, or write into `bin/`. Each step reports its
+result and duration as it finishes, while noisy command output is suppressed on
+success and printed in full only on failure. A compact summary ends the run.
 
 `make full-check` is everything that runs unattended on a developer machine:
 `check` first, then `make build`, the four core E2E scripts, `full-smoke`, the
@@ -253,9 +256,8 @@ run them directly when changing `desktop/src-tauri`:
 (cd desktop/src-tauri && cargo test && cargo clippy --all-targets -- -D warnings)
 ```
 
-The individual targets these two compose are unchanged and still callable on
-their own, so `make vet` or `make e2e` remains a legitimate way to run one
-check while iterating.
+The individual targets remain callable on their own, so `make vet` or
+`make e2e` remains a legitimate way to run one check while iterating.
 
 Never test a daemon or agent against the live `~/.tariboy`,
 `~/.tariboyd`, or `127.0.0.1:9990`; use the isolated targets and environment
