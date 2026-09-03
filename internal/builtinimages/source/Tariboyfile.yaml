@@ -21,6 +21,7 @@ skills:
   - dir: $CURRENT_VERSION_STORE/skills/tasks
 prompts:
   - runtime: identity
+  - runtime: goal
   - runtime: messages
   - runtime: context
   - runtime: workdir

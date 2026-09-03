@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 func ReadPromptTemplate(imageDir, trustedSHA string) (image.PromptTemplate, error) {
@@ -32,6 +33,7 @@ func ReadPromptTemplate(imageDir, trustedSHA string) (image.PromptTemplate, erro
 
 type RuntimePromptValues struct {
 	Identity        string
+	Goal            string
 	Workdir         string
 	Context         string
 	Messages        string
@@ -46,6 +48,11 @@ func FormatRuntimeIdentity(agentName, imageRef, imageDigest, cwd, iterationID st
 		lines = append(lines, "iteration: "+iterationID)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func FormatRuntimeGoal(task tasks.Task) string {
+	return fmt.Sprintf("# Agent Goal\n\nkey: %s\ntitle: %s\npriority: %s\nstatus: %s\ndescription: %s",
+		task.Key, task.Title, task.Priority, task.Status, task.Description)
 }
 
 func FormatRuntimeWorkdir(path string) (string, error) {
@@ -73,13 +80,13 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 		}
 	}
 	runtime := map[string]string{
-		"identity": values.Identity, "context": values.Context,
+		"identity": values.Identity, "goal": values.Goal, "context": values.Context,
 		"messages": messages, "awaiting-replies": awaitingReplies,
 		"user-prompt": values.UserPrompt, "one-shot": values.OneShot,
 		"workdir": values.Workdir,
 	}
 	runtimeSkills := map[string]string{
-		"identity": "whoami", "workdir": "workdir", "context": "context",
+		"identity": "whoami", "goal": "tasks", "workdir": "workdir", "context": "context",
 		"messages": "messages", "awaiting-replies": "messages",
 	}
 	root, err := filepath.Abs(imageDir)

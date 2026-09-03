@@ -34,7 +34,25 @@ import (
 	"github.com/alekzonder/tariboy/internal/scriptnotify"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
+
+func TestManagerPassesCurrentGoalToRunner(t *testing.T) {
+	want := tasks.Task{Key: "TARI-43"}
+	m := &Manager{cfg: ManagerConfig{
+		CurrentGoal: func(agentName string, _ time.Time) (tasks.Task, bool, error) {
+			if agentName != "alice" {
+				t.Fatalf("agent = %q", agentName)
+			}
+			return want, true, nil
+		},
+	}}
+	runner := m.runnerFor(agent.Agent{}).(*ShimRunner)
+	got, ok, err := runner.cfg.CurrentGoal("alice", time.Time{})
+	if err != nil || !ok || got != want {
+		t.Fatalf("CurrentGoal = %#v, %v, %v", got, ok, err)
+	}
+}
 
 func TestShutdownDoesNotHoldManagerLockWhileDrainingHTTP(t *testing.T) {
 	entered := make(chan struct{})

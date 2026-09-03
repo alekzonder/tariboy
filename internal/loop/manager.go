@@ -111,6 +111,7 @@ type ManagerConfig struct {
 	GoalSignal func()
 	// IterationCompleted requests the next goal wake after terminal persistence.
 	IterationCompleted func(agent, iterationID string)
+	CurrentGoal        func(string, time.Time) (tasks.Task, bool, error)
 	// ProvidedChannels returns provider-declared channels drawn from installed
 	// plugin manifests, so `tools sources` can list and annotate provider
 	// channels even before their channel row exists (spec §6.1). Wired by the
@@ -318,6 +319,7 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, ShimBin: m.cfg.ShimBin,
 		ImgStore: m.cfg.ImgStore, Store: m.cfg.Store, Spawner: m.cfg.Spawner, Clock: m.cfg.Clock,
 		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Bus: m.cfg.Bus, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
+		CurrentGoal: m.cfg.CurrentGoal,
 	})
 }
 

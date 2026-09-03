@@ -275,6 +275,7 @@ func Run(ctx context.Context, o Options) error {
 	goalReconciler := taskreminder.NewReconciler(taskreminder.ReconcilerConfig{
 		Store: st, Bus: channelBus, Clock: time.Now, Log: log,
 	})
+	currentGoal := taskreminder.NewStore(st).Current
 	taskService.SetGoalSignal(goalReconciler.Signal)
 	imgStore := &image.Store{Dir: p.ImagesDir()}
 	if err := image.WithPublicationGate(func() error {
@@ -619,6 +620,7 @@ func Run(ctx context.Context, o Options) error {
 		OnIterationClose:   onIterationClose,
 		GoalSignal:         goalReconciler.Signal,
 		IterationCompleted: goalReconciler.IterationCompleted,
+		CurrentGoal:        currentGoal,
 		// ProvidedChannels feeds the Messages skill provider-declared channels
 		// from installed plugin manifests (spec §6.1), read fresh per call so a
 		// newly installed provider is annotated without a restart.
