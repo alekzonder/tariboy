@@ -302,6 +302,8 @@ export interface CreateAgentSpec {
   user_prompt?: string;
   messages_batch?: number;
   messages_max_queue?: number;
+  goal_enabled?: boolean;
+  goal_wait_customer_timeout_s?: number;
   group?: string;
   alias?: string;
   notes?: string;

@@ -39,6 +39,7 @@ const view: AgentView = {
   harness: "claude", model: "sonnet", effort: "medium", interactive: false,
   loop_enabled: true, interval_s: 60, timeout_s: 300, hard_timeout_s: 600, max_idle_iterations: 0,
   on_timeout: "skip", on_error: "skip", user_prompt: "", env: {}, plugins: [], group: null,
+  goal_enabled: true, goal_wait_customer_timeout_s: 300, current_goal_task_key: "",
   alias: "", notes: "",
 };
 const status: AgentStatus = { name: "foo", state: "running", loop_enabled: true, iterations: 1, last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "" };

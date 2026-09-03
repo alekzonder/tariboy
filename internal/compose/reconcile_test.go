@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -238,6 +239,21 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 		name := route[len("/api/agents/") : len(route)-len("/loop/max-idle")]
 		if a := f.agents[name]; a != nil {
 			a["max_idle_iterations"] = body.(map[string]any)["value"]
+		}
+		return mustJSON(map[string]any{"name": name}), nil
+	case method == "POST" && strings.HasSuffix(route, "/goal-enabled"):
+		name := route[len("/api/agents/") : len(route)-len("/goal-enabled")]
+		if a := f.agents[name]; a != nil {
+			a["goal_enabled"] = body.(map[string]any)["enabled"]
+			if a["goal_enabled"] == false {
+				a["current_goal_task_key"] = ""
+			}
+		}
+		return mustJSON(map[string]any{"name": name}), nil
+	case method == "POST" && strings.HasSuffix(route, "/goal-wait-customer-timeout"):
+		name := route[len("/api/agents/") : len(route)-len("/goal-wait-customer-timeout")]
+		if a := f.agents[name]; a != nil {
+			a["goal_wait_customer_timeout_s"] = body.(map[string]any)["seconds"]
 		}
 		return mustJSON(map[string]any{"name": name}), nil
 	case method == "POST" && (strings.HasSuffix(route, "/loop/enable") || strings.HasSuffix(route, "/loop/disable")):
@@ -520,6 +536,49 @@ agents:
 	}
 	if body["interactive"] != true {
 		t.Fatalf("interactive not forwarded: %#v", body)
+	}
+}
+
+func TestUpCreatesAndConvergesGoalSettings(t *testing.T) {
+	off := false
+	f := File{Version: 1, Agents: map[string]AgentSpec{
+		"worker": {Image: "basic:latest", Goal: &GoalSpec{Enabled: &off, WaitCustomerTimeout: "2m"}},
+	}}
+	fc := newFake()
+	r := NewRunner(fc, "", "", io.Discard)
+	upNoBuild(t, r, f)
+	create := bodyFor(fc, "POST /api/agents").(map[string]any)
+	if create["goal_enabled"] != false || create["goal_wait_customer_timeout_s"] != 120 {
+		t.Fatalf("create body = %#v", create)
+	}
+
+	fc.calls, fc.bodies = nil, nil
+	on := true
+	f.Agents["worker"] = AgentSpec{Image: "basic:latest", Goal: &GoalSpec{Enabled: &on, WaitCustomerTimeout: "3m"}}
+	upNoBuild(t, r, f)
+	if got := bodyFor(fc, "POST /api/agents/worker/goal-enabled"); !reflect.DeepEqual(got, map[string]any{"enabled": true}) {
+		t.Fatalf("goal-enabled body = %#v", got)
+	}
+	if got := bodyFor(fc, "POST /api/agents/worker/goal-wait-customer-timeout"); !reflect.DeepEqual(got, map[string]any{"seconds": 180}) {
+		t.Fatalf("goal timeout body = %#v", got)
+	}
+}
+
+func TestUpOmittedGoalSettingsPreserveCurrentValues(t *testing.T) {
+	fc := newFake()
+	fc.agents["worker"] = map[string]any{
+		"name": "worker", "state": "running", "image": "basic:latest", "group": "", "cwd": "",
+		"goal_enabled": false, "goal_wait_customer_timeout_s": 17, "current_goal_task_key": "TARI-43",
+	}
+	r := NewRunner(fc, "", "", io.Discard)
+	upNoBuild(t, r, File{Version: 1, Agents: map[string]AgentSpec{"worker": {Image: "basic:latest"}}})
+	for _, call := range fc.calls {
+		if strings.Contains(call, "/goal-") {
+			t.Fatalf("omitted Goal field mutated daemon state: %v", fc.calls)
+		}
+	}
+	if fc.agents["worker"]["goal_enabled"] != false || fc.agents["worker"]["goal_wait_customer_timeout_s"] != 17 || fc.agents["worker"]["current_goal_task_key"] != "TARI-43" {
+		t.Fatalf("Goal state changed: %#v", fc.agents["worker"])
 	}
 }
 

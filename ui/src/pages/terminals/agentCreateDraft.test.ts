@@ -30,6 +30,9 @@ const source = {
   alias: "Clone",
   notes: "all fields",
   color: "#123abc",
+  goal_enabled: false,
+  goal_wait_customer_timeout_s: 120,
+  current_goal_task_key: "TARI-43",
 } satisfies AgentView;
 
 describe("newAgentDraft", () => {
@@ -59,6 +62,8 @@ describe("newAgentDraft", () => {
       alias: "",
       notes: "",
       color: "",
+      goalEnabled: true,
+      goalWaitCustomerTimeoutS: "300",
     });
   });
 });
@@ -90,10 +95,12 @@ describe("cloneAgentDraft", () => {
       alias: "Clone",
       notes: "all fields",
       color: "#123abc",
+      goalEnabled: false,
+      goalWaitCustomerTimeoutS: "120",
     });
   });
 
-  it.each(["configured_cwd", "messages_batch", "messages_max_queue"] as const)(
+  it.each(["configured_cwd", "messages_batch", "messages_max_queue", "goal_enabled", "goal_wait_customer_timeout_s"] as const)(
     "requires current daemon projection field %s",
     (field) => {
       const incomplete = { ...source } as Record<string, unknown>;

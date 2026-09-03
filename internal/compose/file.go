@@ -60,6 +60,7 @@ type AgentSpec struct {
 	Env     map[string]string `yaml:"env"`
 	Plugins []string          `yaml:"plugins"`
 	Budget  *BudgetSpec       `yaml:"budget"`
+	Goal    *GoalSpec         `yaml:"goal"`
 	// Timeout is the soft iteration timeout as a Go duration string ("60m",
 	// "2h", "90s"); a unit is required. Empty means no override (the daemon
 	// default). It maps to the agent's timeout_s and, since the hard timeout
@@ -136,6 +137,25 @@ type LoopSpec struct {
 	// "unset" (nil, leave the daemon default) is distinct from an explicit 0,
 	// which means the feature is disabled. Negative is rejected by Validate.
 	MaxIdleIterations *int `yaml:"max_idle_iterations"`
+}
+
+type GoalSpec struct {
+	Enabled             *bool  `yaml:"enabled"`
+	WaitCustomerTimeout string `yaml:"wait_customer_timeout"`
+}
+
+func (a AgentSpec) goalWaitCustomerTimeoutSeconds() (int, bool, error) {
+	if a.Goal == nil || a.Goal.WaitCustomerTimeout == "" {
+		return 0, false, nil
+	}
+	d, err := time.ParseDuration(a.Goal.WaitCustomerTimeout)
+	if err != nil {
+		return 0, true, fmt.Errorf("invalid goal wait_customer_timeout %q: %w", a.Goal.WaitCustomerTimeout, err)
+	}
+	if d <= 0 || d%time.Second != 0 {
+		return 0, true, fmt.Errorf("goal wait_customer_timeout %q must be a positive whole number of seconds", a.Goal.WaitCustomerTimeout)
+	}
+	return int(d / time.Second), true, nil
 }
 
 // parseDurationSeconds parses a Go duration string to whole seconds. Empty
@@ -306,6 +326,9 @@ func (f File) Validate() error {
 			}
 		}
 		if _, err := a.effectiveTimeoutSeconds(); err != nil {
+			return fmt.Errorf("agent %q %w", name, err)
+		}
+		if _, _, err := a.goalWaitCustomerTimeoutSeconds(); err != nil {
 			return fmt.Errorf("agent %q %w", name, err)
 		}
 		if a.Loop != nil {

@@ -705,7 +705,7 @@ func TestRunDoesNotInjectRetiredCapabilityEnvironment(t *testing.T) {
 func TestRunPersistsCompleteConfiguration(t *testing.T) {
 	m, store, _, _ := newManager(t, &fakeRunner{})
 	cwd := t.TempDir()
-	_, err := m.Run(registry.RunSpec{
+	spec := registry.RunSpec{
 		ImageRef: "basic:latest", Name: "clone", Cwd: cwd,
 		Harness: "codex", Model: "gpt-5", Effort: "high",
 		Interactive: true, Loop: false,
@@ -714,7 +714,11 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 		UserPrompt: "standing prompt", Env: map[string]string{"CSV": "a,b"},
 		Plugins: []string{"context"}, MessagesBatch: 8, MessagesMaxQueue: 900,
 		Alias: "Clone", Notes: "all fields", Color: "#123abc",
-	})
+	}
+	enabled := false
+	spec.GoalEnabled = &enabled
+	spec.GoalWaitCustomerTimeoutS = 120
+	_, err := m.Run(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +733,8 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 		got.UserPrompt != "standing prompt" || got.Env["CSV"] != "a,b" ||
 		strings.Join(got.Plugins, ",") != "whoami,loop,messages,context" ||
 		got.MessagesBatch != 8 || got.MessagesMaxQueue != 900 ||
-		got.Alias != "Clone" || got.Notes != "all fields" || got.Color != "#123abc" {
+		got.Alias != "Clone" || got.Notes != "all fields" || got.Color != "#123abc" ||
+		got.GoalEnabled || got.GoalWaitCustomerTimeoutS != 120 {
 		t.Fatalf("persisted agent = %#v", got)
 	}
 }

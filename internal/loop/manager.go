@@ -829,6 +829,14 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	if messagesMaxQueue == 0 {
 		messagesMaxQueue = 1000
 	}
+	goalEnabled := true
+	if spec.GoalEnabled != nil {
+		goalEnabled = *spec.GoalEnabled
+	}
+	goalWaitCustomerTimeoutS := spec.GoalWaitCustomerTimeoutS
+	if goalWaitCustomerTimeoutS == 0 {
+		goalWaitCustomerTimeoutS = 300
+	}
 	ag := agent.Agent{
 		Name: name, ImageRef: ref.String(), ImageDigest: man.Digest,
 		Cwd: spec.Cwd, HarnessType: harnessType,
@@ -839,6 +847,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 		UserPrompt: spec.UserPrompt,
 		Env:        env, Plugins: resolvedPlugins,
 		MessagesBatch: messagesBatch, MessagesMaxQueue: messagesMaxQueue,
+		GoalEnabled: goalEnabled, GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS,
 		Alias: spec.Alias, Notes: spec.Notes, Color: spec.Color,
 	}
 	if ref == image.BareRef {

@@ -331,6 +331,7 @@ function CreateAgentDialogForm({
     let maxIdleIterations: number;
     let messagesBatch: number;
     let messagesMaxQueue: number;
+    let goalWaitCustomerTimeoutS: number;
     try {
       env = parseEnvironment(draft.envText);
       intervalS = integerField(draft.intervalS, "Interval seconds", 0);
@@ -339,6 +340,7 @@ function CreateAgentDialogForm({
       maxIdleIterations = integerField(draft.maxIdleIterations, "Maximum idle iterations", 0);
       messagesBatch = integerField(draft.messagesBatch, "Message batch size", 1);
       messagesMaxQueue = integerField(draft.messagesMaxQueue, "Maximum queued messages", 1);
+      goalWaitCustomerTimeoutS = integerField(draft.goalWaitCustomerTimeoutS, "Wait customer timeout seconds", 1);
     } catch (error) {
       setFormError(errorMessage(error));
       return;
@@ -362,6 +364,8 @@ function CreateAgentDialogForm({
       user_prompt: draft.userPrompt,
       messages_batch: messagesBatch,
       messages_max_queue: messagesMaxQueue,
+      goal_enabled: draft.goalEnabled,
+      goal_wait_customer_timeout_s: goalWaitCustomerTimeoutS,
       group: draft.group.trim(),
       alias: draft.alias,
       notes: draft.notes,
@@ -516,6 +520,8 @@ function CreateAgentDialogForm({
               <NumberField label="message batch size" id="create-agent-message-batch" value={draft.messagesBatch} onChange={(value) => updateDraft("messagesBatch", value)} disabled={formDisabled} min={1} />
               <NumberField label="maximum queued messages" id="create-agent-message-queue" value={draft.messagesMaxQueue} onChange={(value) => updateDraft("messagesMaxQueue", value)} disabled={formDisabled} min={1} />
             </div>
+            <SwitchRow label="Goal" id="create-agent-goal" checked={draft.goalEnabled} onCheckedChange={(value) => updateDraft("goalEnabled", value)} disabled={formDisabled} help="Select and deliver the agent's current Native Task goal." />
+            <NumberField label="wait customer timeout seconds" id="create-agent-goal-wait-customer-timeout" value={draft.goalWaitCustomerTimeoutS} onChange={(value) => updateDraft("goalWaitCustomerTimeoutS", value)} disabled={formDisabled} min={1} />
             <Field label="standing user prompt" id="create-agent-user-prompt"><Textarea id="create-agent-user-prompt" aria-label="standing user prompt" value={draft.userPrompt} onChange={(event) => updateDraft("userPrompt", event.target.value)} disabled={formDisabled} /></Field>
           </section>
 

@@ -30,6 +30,7 @@ type fakeControl struct {
 	extendID      string
 	live          string // LiveState return; defaults to "idle"
 	loopUpdates   []bool
+	refreshed     []string
 }
 
 func (f *fakeControl) Run(s registry.RunSpec) (string, error) {
@@ -84,7 +85,7 @@ func (f *fakeControl) SetLoopEnabled(name string, enabled bool) error {
 	a.LoopEnabled = enabled
 	return f.agents.Update(a)
 }
-func (f *fakeControl) RefreshLoopConfig(string) {}
+func (f *fakeControl) RefreshLoopConfig(name string) { f.refreshed = append(f.refreshed, name) }
 
 func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
 	t.Helper()
@@ -154,6 +155,7 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	goalEnabled := true
 	want := registry.RunSpec{
 		ImageRef: "basic:latest", Name: "clone", Cwd: cwd,
 		Harness: "codex", Model: "gpt-5", Effort: "high", Interactive: true,
@@ -163,11 +165,122 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7,
 		UserPrompt:    "keep commas, equals=a=b, and\nnewlines",
 		MessagesBatch: 8, MessagesMaxQueue: 900,
+		GoalEnabled: &goalEnabled, GoalWaitCustomerTimeoutS: 300,
 		Group: "reviewers", Alias: "Clone", Notes: "all fields", Color: "#123abc",
 	}
 	if !reflect.DeepEqual(fc.ran, want) {
 		t.Fatalf("RunSpec mismatch:\nwant: %#v\n got: %#v", want, fc.ran)
 	}
+}
+
+// Catches the create surface accepting Goal settings without carrying them to
+// the manager or returning the canonical create projection.
+func TestAgentGoalSettingsRoundTrip(t *testing.T) {
+	c, _, fc := ctxWithStore(t)
+	result, err := h(t, "agent.run")(c, registry.Params{
+		"image": "basic:latest", "name": "worker",
+		"goal_enabled": false, "goal_wait_customer_timeout_s": float64(120),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.(map[string]any)
+	if got["goal_enabled"] != false || got["goal_wait_customer_timeout_s"] != 120 {
+		t.Fatalf("create result = %#v", got)
+	}
+	if fc.ran.GoalEnabled == nil || *fc.ran.GoalEnabled || fc.ran.GoalWaitCustomerTimeoutS != 120 {
+		t.Fatalf("RunSpec did not carry Goal settings: %#v", fc.ran)
+	}
+}
+
+// Catches Goal updates bypassing Store.Update (which owns sticky-key clearing)
+// or failing to use the existing configuration refresh/goal signal hook.
+func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
+	c, agents, fc := ctxWithStore(t)
+	if err := agents.Create(agent.Agent{Name: "worker", GoalEnabled: true, GoalWaitCustomerTimeoutS: 300}); err != nil {
+		t.Fatal(err)
+	}
+	if err := agents.SetCurrentGoal("worker", "TARI-43"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := h(t, "agent.goal-enabled")(c, registry.Params{"name": "worker", "enabled": false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.(map[string]any)
+	if got["goal_enabled"] != false || got["goal_wait_customer_timeout_s"] != 300 {
+		t.Fatalf("update result = %#v", got)
+	}
+	if _, editable := got["current_goal_task_key"]; editable {
+		t.Fatalf("update exposed daemon-owned key: %#v", got)
+	}
+	stored, err := agents.Get("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.GoalEnabled || stored.CurrentGoalTaskKey != "" {
+		t.Fatalf("disabled Goal = %#v", stored)
+	}
+	if !reflect.DeepEqual(fc.refreshed, []string{"worker"}) {
+		t.Fatalf("configuration refreshes = %v", fc.refreshed)
+	}
+
+	if _, err := h(t, "agent.goal-wait-customer-timeout")(c, registry.Params{"name": "worker", "seconds": float64(120)}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = agents.Get("worker")
+	if err != nil || stored.GoalWaitCustomerTimeoutS != 120 {
+		t.Fatalf("stored timeout = %#v err=%v", stored, err)
+	}
+	if len(fc.refreshed) != 2 {
+		t.Fatalf("configuration refreshes = %v", fc.refreshed)
+	}
+
+	for _, params := range []registry.Params{
+		{"name": "worker", "seconds": float64(0)},
+		{"name": "worker"},
+	} {
+		if _, err := h(t, "agent.goal-wait-customer-timeout")(c, params); !isCode(err, "bad_goal_wait_customer_timeout") {
+			t.Fatalf("invalid timeout error = %v", err)
+		}
+	}
+	if len(fc.refreshed) != 2 {
+		t.Fatalf("rejected update signaled Goal: %v", fc.refreshed)
+	}
+}
+
+// Catches inspect/list omitting either editable Goal setting or the read-only
+// daemon-owned sticky key.
+func TestAgentGoalSettingsInspectAndListProjection(t *testing.T) {
+	c, agents, _ := ctxWithStore(t)
+	if err := agents.Create(agent.Agent{Name: "worker", GoalEnabled: true, GoalWaitCustomerTimeoutS: 120}); err != nil {
+		t.Fatal(err)
+	}
+	if err := agents.SetCurrentGoal("worker", "TARI-43"); err != nil {
+		t.Fatal(err)
+	}
+	inspect, err := h(t, "agent.inspect")(c, registry.Params{"name": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps, err := h(t, "agent.ps")(c, registry.Params{})
+	for _, got := range []map[string]any{
+		inspect.(map[string]any),
+		mustAgentRows(t, ps, err)[0],
+	} {
+		if got["goal_enabled"] != true || got["goal_wait_customer_timeout_s"] != 120 || got["current_goal_task_key"] != "TARI-43" {
+			t.Fatalf("Goal projection = %#v", got)
+		}
+	}
+}
+
+func mustAgentRows(t *testing.T, value any, err error) []map[string]any {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return value.(map[string]any)["agents"].([]map[string]any)
 }
 
 // Each case catches a malformed clone request reaching provisioning or

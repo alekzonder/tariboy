@@ -37,6 +37,8 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, agentPs())
 	mustRegister(r, agentStatus())
 	mustRegister(r, agentInspect())
+	mustRegister(r, agentGoalEnabled())
+	mustRegister(r, agentGoalWaitCustomerTimeout())
 	mustRegister(r, agentLifecycle("agent.stop", "Stop an agent's loop (current iteration lives)", "stop"))
 	mustRegister(r, agentLifecycle("agent.start", "Start (enable) an agent's loop", "start"))
 	mustRegister(r, agentLifecycle("agent.restart", "Restart an agent and run one iteration now", "restart"))

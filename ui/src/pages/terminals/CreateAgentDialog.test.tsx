@@ -111,6 +111,9 @@ const cloneSource: AgentView = {
   alias: "Source alias",
   notes: "source notes",
   color: "#123abc",
+  goal_enabled: false,
+  goal_wait_customer_timeout_s: 120,
+  current_goal_task_key: "TARI-43",
 };
 
 const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
@@ -136,6 +139,8 @@ const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
   alias: "",
   notes: "",
   color: "",
+  goal_enabled: true,
+  goal_wait_customer_timeout_s: 300,
   ...overrides,
 });
 
@@ -216,6 +221,8 @@ it("loads a complete clone draft from the explicit source host and submits every
   expect(screen.getByLabelText("standing user prompt")).toHaveValue("standing prompt");
   expect(screen.getByLabelText("message batch size")).toHaveValue(8);
   expect(screen.getByLabelText("maximum queued messages")).toHaveValue(900);
+  expect(screen.getByRole("switch", { name: "Goal" })).not.toBeChecked();
+  expect(screen.getByLabelText("wait customer timeout seconds")).toHaveValue(120);
   expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
   expect(screen.getByRole("switch", { name: "Autopilot" })).not.toBeChecked();
   expect(screen.getByRole("switch", { name: "Start now" })).not.toBeChecked();
@@ -250,6 +257,8 @@ it("loads a complete clone draft from the explicit source host and submits every
     alias: "Source alias",
     notes: "source notes",
     color: "#123abc",
+    goal_enabled: false,
+    goal_wait_customer_timeout_s: 120,
   }, targetFor("d1"));
   expect(startAgent).not.toHaveBeenCalled();
   expect(onCreated).toHaveBeenCalledWith("d1", "created");
