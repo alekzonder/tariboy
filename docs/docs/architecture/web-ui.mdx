@@ -152,7 +152,9 @@ JSON textarea. Validate, Apply, and Run once send unchanged text or the existing
 one-shot request to `tariboyd`; JSON
 Pointer diagnostics and canonical applied JSON come back from the daemon.
 Unsaved text stays only in component state, and Reset restores the last applied
-revision.
+revision. When that selected daemon has no `judges` group, the page offers to
+create it from the applied document's Judge lead and two workers. Creation and
+member assignment use that same explicit daemon target.
 
 Tasks uses one reusable three-region workspace at `/servers/:hostId/tasks` and
 inside each Agent tab. The server route shows every task visible on that host;
