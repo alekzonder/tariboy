@@ -17,6 +17,7 @@ async function taskFromAPI(request: APIRequestContext, key: string) {
     status: string;
     assignee: string;
     manual_block_reason: string;
+    pull_request: string;
   };
 }
 
@@ -136,7 +137,7 @@ test("Tasks production workspace publishes and selects a workflow version", asyn
   await assertNoLoadFailedToast(page)
 })
 
-test("Tasks production workspace persists PATCH saves and exercises the full tree workflow", async ({
+test("Tasks production workspace persists PATCH saves, release fields, and the full tree workflow", async ({
   page,
   request,
 }) => {
@@ -192,19 +193,42 @@ test("Tasks production workspace persists PATCH saves and exercises the full tre
     assignee: "worker-e2e",
     manual_block_reason: "waiting on E2E fixture",
   });
-  await expect(page.getByText("Task updated", { exact: true })).toBeVisible();
+  await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
   await expect(page.getByTestId("task-row-TEST-1")).toContainText("Root task updated");
   await expect(page.getByTestId("task-row-TEST-1")).toContainText("blocked");
   await expect(page.getByTestId("task-row-TEST-1")).toContainText("worker-e2e");
   await assertNoLoadFailedToast(page);
 
+  await detail.getByLabel("Status").selectOption("wait_customer");
+  await detail.getByLabel("Pull request URL").fill("https://github.com/acme/tariboy/pull/43");
+  await detail.getByRole("button", { name: "Save task" }).click();
+  await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
+  expect(await taskFromAPI(request, "TEST-1")).toMatchObject({
+    status: "wait_customer",
+    pull_request: "https://github.com/acme/tariboy/pull/43",
+  });
+
+  await page.reload();
+  await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
+  await expect(detail.getByLabel("Status")).toHaveValue("wait_customer");
+  await expect(detail.getByLabel("Pull request URL")).toHaveValue("https://github.com/acme/tariboy/pull/43");
+  await detail.getByLabel("Pull request URL").fill("");
+  await detail.getByRole("button", { name: "Save task" }).click();
+  await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
+
+  await page.reload();
+  await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
+  await expect(detail.getByLabel("Status")).toHaveValue("wait_customer");
+  await expect(detail.getByLabel("Pull request URL")).toHaveValue("");
+
   const saved = await taskFromAPI(request, "TEST-1");
   expect(saved).toMatchObject({
     title: "Root task updated",
     description: "Edited from the production Tasks form",
-    status: "in_progress",
+    status: "wait_customer",
     assignee: "agent:worker-e2e",
     manual_block_reason: "waiting on E2E fixture",
+    pull_request: "",
   });
 
   await detail.getByLabel("Ask", { exact: true }).selectOption({ index: 1 });
