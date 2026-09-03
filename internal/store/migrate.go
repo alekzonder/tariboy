@@ -45,11 +45,11 @@ func (s *Store) migrate() error {
 }
 
 func (s *Store) applyMigration(name, body string) (resultErr error) {
-	// Migration 0025 rebuilds tasks, which has populated inbound foreign keys.
+	// Task table rebuilds have populated inbound foreign keys.
 	// SQLite cannot drop that parent table while enforcement is enabled, even
 	// with deferred checks. Disable enforcement outside the transaction, then
 	// validate the rebuilt graph before allowing it to commit.
-	rebuildTasks := name == "0025_task_priority.sql"
+	rebuildTasks := name == "0025_task_priority.sql" || name == "0037_agent_goals.sql"
 	if rebuildTasks {
 		if _, err := s.DB.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
 			return fmt.Errorf("migration %s disable foreign keys: %w", name, err)

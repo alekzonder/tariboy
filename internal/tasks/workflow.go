@@ -9,7 +9,7 @@ import (
 
 func validStatus(status string) bool {
 	switch status {
-	case StatusOpen, StatusInProgress, StatusDone, StatusCancelled:
+	case StatusOpen, StatusInProgress, StatusWaitCustomer, StatusDone, StatusCancelled:
 		return true
 	default:
 		return false
@@ -66,6 +66,12 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 	if in.Description != nil {
 		task.Description = strings.TrimSpace(*in.Description)
 	}
+	if in.PullRequest != nil {
+		task.PullRequest, err = NormalizePullRequest(*in.PullRequest)
+		if err != nil {
+			return Task{}, err
+		}
+	}
 	if in.Assignee != nil {
 		task.Assignee = normalizeAssignee(*in.Assignee)
 	}
@@ -105,15 +111,15 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tasks
-		SET title = ?, description = ?, status = ?, assignee = ?, priority = ?,
+		SET title = ?, description = ?, status = ?, pull_request = ?, assignee = ?, priority = ?,
 		    manual_block_reason = ?, revision = ?, updated_at = ?, completed_at = ?
 		WHERE id = ?`,
-		task.Title, task.Description, task.Status, task.Assignee, task.Priority,
+		task.Title, task.Description, task.Status, task.PullRequest, task.Assignee, task.Priority,
 		task.ManualBlockReason, task.Revision, now, task.CompletedAt, task.ID); err != nil {
 		return Task{}, err
 	}
 	sequence, err := appendEventTx(ctx, tx, task, "task.updated", actor,
-		map[string]any{"status": task.Status, "assignee": task.Assignee, "priority": task.Priority}, now)
+		map[string]any{"status": task.Status, "pull_request": task.PullRequest, "assignee": task.Assignee, "priority": task.Priority}, now)
 	if err != nil {
 		return Task{}, err
 	}

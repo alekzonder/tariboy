@@ -232,10 +232,10 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	}
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tasks(
-			task_key, queue_prefix, parent_id, position, priority, title, description, status,
+			task_key, queue_prefix, parent_id, position, priority, title, description, status, pull_request,
 			author, customer, group_name, assignee,
 			workflow_version_id, workflow_status, workflow_revision, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		key, queue, parentID, position, priority, in.Title, strings.TrimSpace(in.Description),
 		actor.Principal, customer, group, normalizeAssignee(in.Assignee),
 		workflowVersionID, workflowStatus, workflowRevision, now, now)
@@ -262,7 +262,7 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	if filed {
 		task.Access, task.Filed = "", true
 	}
-	payload := map[string]any{"key": key, "parent_key": parentKey, "priority": priority}
+	payload := map[string]any{"key": key, "parent_key": parentKey, "priority": priority, "pull_request": task.PullRequest}
 	if managed {
 		payload["workflow_version"] = task.WorkflowVersion
 		payload["workflow_status"] = task.WorkflowStatus
@@ -456,7 +456,7 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 	}
 	switch statusView {
 	case "active":
-		query += ` AND t.status IN ('open', 'in_progress')`
+		query += ` AND t.status IN ('open', 'in_progress', 'wait_customer')`
 	case "closed":
 		query += ` AND t.status = 'done'`
 	}

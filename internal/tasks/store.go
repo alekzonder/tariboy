@@ -6,7 +6,7 @@ import (
 
 const taskSelect = `
 SELECT t.id, t.task_key, t.queue_prefix, COALESCE(p.task_key, ''),
-       t.position, t.priority, t.title, t.description, t.status, t.author, t.customer,
+       t.position, t.priority, t.title, t.description, t.status, t.pull_request, t.author, t.customer,
        t.group_name, t.assignee, t.manual_block_reason,
        EXISTS (
          SELECT 1
@@ -32,7 +32,7 @@ func scanTask(row rowScanner) (Task, error) {
 	var blocked bool
 	err := row.Scan(
 		&t.ID, &t.Key, &t.Queue, &t.ParentKey,
-		&t.Position, &t.Priority, &t.Title, &t.Description, &t.Status, &t.Author, &t.Customer,
+		&t.Position, &t.Priority, &t.Title, &t.Description, &t.Status, &t.PullRequest, &t.Author, &t.Customer,
 		&t.Group, &t.Assignee, &t.ManualBlockReason, &blocked,
 		&t.WorkflowVersionID, &t.WorkflowVersion, &t.WorkflowStatus, &t.WorkflowRevision,
 		&t.Revision, &t.CreatedAt, &t.UpdatedAt, &t.CompletedAt,

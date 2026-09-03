@@ -5,20 +5,20 @@ import (
 	"testing"
 )
 
-func TestManagedTaskRejectsLegacyLifecycleButAllowsContentPriorityAndComments(t *testing.T) {
+func TestManagedTaskPullRequestPreservesLifecycleConstraints(t *testing.T) {
 	definition := claimOneDefinition()
 	svc, operator, task := runtimeWorkflowTask(t, definition, map[string][]string{
 		"developers": {"dev-a"},
 	})
 	ctx := context.Background()
-	title, description, priority := "renamed", "updated details", PriorityP1
+	title, description, pullRequest, priority := "renamed", "updated details", "https://example.test/pull/1", PriorityP1
 	updated, err := svc.UpdateTask(ctx, operator, task.Key, UpdateTaskInput{
-		Title: &title, Description: &description, Priority: &priority, Revision: task.Revision,
+		Title: &title, Description: &description, PullRequest: &pullRequest, Priority: &priority, Revision: task.Revision,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Title != title || updated.Description != description || updated.Priority != priority ||
+	if updated.Title != title || updated.Description != description || updated.PullRequest != pullRequest || updated.Priority != priority ||
 		updated.WorkflowStatus != task.WorkflowStatus || updated.WorkflowRevision != task.WorkflowRevision {
 		t.Fatalf("managed content update = %#v; want content-only change", updated)
 	}
