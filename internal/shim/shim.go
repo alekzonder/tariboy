@@ -25,6 +25,7 @@ const userHZ = 100 // Linux USER_HZ; cpu_ms = ticks * 1000 / userHZ.
 const (
 	tmuxExitStatusFilename  = "harness.exit-status"
 	defaultTmuxHistoryLimit = 10000
+	TmuxSupervisorMode      = "__tmux-supervisor"
 )
 
 var (
@@ -281,7 +282,11 @@ func runTmux(o Options, sample time.Duration) error {
 	if err := os.Remove(statusPath); err != nil && !os.IsNotExist(err) {
 		return errors.New("prepare tmux exit status")
 	}
-	cmdStr := shellJoin(tmuxHarnessCommand(o.HarnessArgv, statusPath))
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve shim executable: %w", err)
+	}
+	cmdStr := shellJoin(tmuxSupervisorCommand(executable, o.TmuxSession, statusPath, o.HarnessArgv))
 	logShim(o.IterationDir, "launch tmux agent=%s iteration=%s session=%s argv=%q", o.Agent, o.IterationID, o.TmuxSession, redactHarnessArgv(o.HarnessArgv))
 	bootstrapWindowID, err := execCommand("tmux", tmuxBootstrapSessionArgs(o.TmuxSession, os.Environ())...).Output()
 	if err != nil {
@@ -536,26 +541,9 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
-func tmuxHarnessCommand(argv []string, statusPath string) []string {
-	const script = `umask 077
-status_path=$1
-shift
-status_tmp=$status_path.tmp.$$
-cleanup_status_tmp() {
-	/bin/rm -f "$status_tmp" 2>/dev/null
-}
-trap cleanup_status_tmp EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
-"$@"
-status=$?
-if { printf '%s\n' "$status" > "$status_tmp"; } 2>/dev/null; then
-	/bin/mv -f "$status_tmp" "$status_path" 2>/dev/null || :
-fi
-exit "$status"`
-	wrapper := []string{"/bin/sh", "-c", script, "tariboy-tmux-harness", statusPath}
-	return append(wrapper, argv...)
+func tmuxSupervisorCommand(executable, session, statusPath string, argv []string) []string {
+	command := []string{executable, TmuxSupervisorMode, session, statusPath, "--"}
+	return append(command, argv...)
 }
 
 func readTmuxExitStatus(path string) (int, error) {
@@ -617,122 +605,127 @@ func (s *tmuxShim) Kill() error {
 	return KillTmuxSession(s.session)
 }
 
-// KillTmuxSession kills every managed pane process group before removing the
-// tmux session. tmux kill-session alone can leave the pane command alive after
-// its PTY is deleted when another session keeps the shared tmux server running.
+// KillTmuxSession removes exactly session. The pane supervisor owns harness
+// termination; this process never looks up or signals a reusable pane PID.
 func KillTmuxSession(session string) error {
-	target := "=" + session
-	exists, err := tmuxSessionExists(target)
+	exists, err := tmuxSessionExists(session)
 	if err != nil {
 		return fmt.Errorf("check tmux session: %w", err)
 	}
 	if !exists {
 		return nil
 	}
+	output, err := execCommand("tmux", "kill-session", "-t", "="+session).CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	stillExists, checkErr := tmuxSessionExists(session)
+	if checkErr != nil {
+		return errors.Join(tmuxCommandError("kill session", err, output), fmt.Errorf("recheck tmux session: %w", checkErr))
+	}
+	if !stillExists {
+		return nil
+	}
+	return tmuxCommandError("kill session", err, output)
+}
 
-	output, err := execCommand("tmux", "list-panes", "-s", "-t", target, "-F", "#{pane_pid}").Output()
+func tmuxSessionExists(session string) (bool, error) {
+	output, err := execCommand("tmux", "list-sessions", "-F", "#{session_name}").CombinedOutput()
 	if err != nil {
-		stillExists, checkErr := tmuxSessionExists(target)
-		if checkErr != nil {
-			return errors.Join(fmt.Errorf("list tmux panes: %w", err), fmt.Errorf("recheck tmux session: %w", checkErr))
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && strings.HasPrefix(strings.TrimSpace(string(output)), "no server running on ") {
+			return false, nil
 		}
-		if !stillExists {
-			return nil
-		}
-		return errors.Join(fmt.Errorf("list tmux panes: %w", err), killTmuxSessionExact(target))
+		return false, tmuxCommandError("list sessions", err, output)
 	}
-
-	fields := strings.Fields(string(output))
-	var errs []error
-	if len(fields) == 0 {
-		errs = append(errs, errors.New("tmux session has no panes"))
+	for _, listed := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if listed == session {
+			return true, nil
+		}
 	}
+	return false, nil
+}
 
-	currentPGID := syscall.Getpgrp()
-	groups := make(map[int][]int)
-	seenPIDs := make(map[int]struct{})
-	for _, field := range fields {
-		pid, err := strconv.Atoi(field)
-		if err != nil || pid <= 1 {
-			errs = append(errs, fmt.Errorf("tmux pane has invalid pid %q", field))
-			continue
-		}
-		if _, duplicate := seenPIDs[pid]; duplicate {
-			continue
-		}
-		seenPIDs[pid] = struct{}{}
+func tmuxCommandError(action string, err error, output []byte) error {
+	if detail := strings.TrimSpace(string(output)); detail != "" {
+		return fmt.Errorf("tmux %s: %w: %s", action, err, detail)
+	}
+	return fmt.Errorf("tmux %s: %w", action, err)
+}
 
-		pgid, err := syscall.Getpgid(pid)
-		if errors.Is(err, syscall.ESRCH) {
+// RunTmuxSupervisor owns one harness process until it is reaped. Keeping the
+// process-group leader unreaped makes its group identity stable until this
+// owner either observes normal exit or terminates the group itself.
+func RunTmuxSupervisor(session, statusPath string, argv []string) error {
+	if len(argv) == 0 {
+		return errors.New("tmux supervisor requires a harness command")
+	}
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start harness: %w", err)
+	}
+	pid := cmd.Process.Pid
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		var status syscall.WaitStatus
+		waited, err := syscall.Wait4(pid, &status, syscall.WNOHANG, nil)
+		if errors.Is(err, syscall.EINTR) {
 			continue
 		}
 		if err != nil {
-			errs = append(errs, fmt.Errorf("get process group for tmux pane %d: %w", pid, err))
-			continue
+			return fmt.Errorf("wait harness: %w", err)
 		}
-		if pgid <= 1 || pgid == currentPGID {
-			errs = append(errs, fmt.Errorf("tmux pane %d has unsafe process group %d", pid, pgid))
-			continue
+		if waited == pid {
+			return writeTmuxExitStatus(statusPath, waitStatusExitCode(status))
 		}
-		groups[pgid] = append(groups[pgid], pid)
-	}
 
-	// Revalidate every candidate before sending any signal. A pane may exit or
-	// its PID may be reused between list-panes and Getpgid.
-	safeGroups := make(map[int]struct{})
-	for pgid, pids := range groups {
-		for _, pid := range pids {
-			current, err := syscall.Getpgid(pid)
-			if errors.Is(err, syscall.ESRCH) {
-				continue
+		exists, err := tmuxSessionExists(session)
+		if err == nil && !exists {
+			killErr := syscall.Kill(-pid, syscall.SIGKILL)
+			if errors.Is(killErr, syscall.ESRCH) {
+				killErr = nil
+			}
+			for {
+				waited, err = syscall.Wait4(pid, &status, 0, nil)
+				if !errors.Is(err, syscall.EINTR) {
+					break
+				}
 			}
 			if err != nil {
-				errs = append(errs, fmt.Errorf("revalidate process group for tmux pane %d: %w", pid, err))
-				continue
+				err = fmt.Errorf("reap harness: %w", err)
 			}
-			if current != pgid {
-				errs = append(errs, fmt.Errorf("tmux pane %d changed process group from %d to %d", pid, pgid, current))
-				continue
-			}
-			safeGroups[pgid] = struct{}{}
+			return errors.Join(killErr, err, writeTmuxExitStatus(statusPath, waitStatusExitCode(status)))
+		}
+
+		select {
+		case <-ticker.C:
+		case <-hup:
 		}
 	}
-	for pgid := range safeGroups {
-		if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			errs = append(errs, fmt.Errorf("kill tmux pane process group %d: %w", pgid, err))
-		}
-	}
-	if err := killTmuxSessionExact(target); err != nil {
-		errs = append(errs, err)
-	}
-	return errors.Join(errs...)
 }
 
-func tmuxSessionExists(target string) (bool, error) {
-	err := execCommand("tmux", "has-session", "-t", target).Run()
-	if err == nil {
-		return true, nil
+func waitStatusExitCode(status syscall.WaitStatus) int {
+	if status.Signaled() {
+		return 128 + int(status.Signal())
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return false, nil
-	}
-	return false, err
+	return status.ExitStatus()
 }
 
-func killTmuxSessionExact(target string) error {
-	err := execCommand("tmux", "kill-session", "-t", target).Run()
-	if err == nil {
-		return nil
+func writeTmuxExitStatus(path string, status int) error {
+	tmp := path + ".tmp." + strconv.Itoa(os.Getpid())
+	defer os.Remove(tmp)
+	if err := os.WriteFile(tmp, []byte(strconv.Itoa(status)+"\n"), 0o600); err != nil {
+		return err
 	}
-	exists, checkErr := tmuxSessionExists(target)
-	if checkErr != nil {
-		return errors.Join(fmt.Errorf("kill tmux session: %w", err), fmt.Errorf("recheck tmux session: %w", checkErr))
-	}
-	if !exists {
-		return nil
-	}
-	return fmt.Errorf("kill tmux session: %w", err)
+	return os.Rename(tmp, path)
 }
 
 // Resize retargets ALL live PTYs of in-progress web attaches for this
