@@ -38,6 +38,10 @@ subscribes to `group:<g>:inbox`. Group members can share a working directory.
 Native Tasks stays daemon-owned and applies live group membership when checking
 task visibility.
 
+The Judge page can create the fixed `judges` group when it is missing. It uses
+the selected server's applied automation configuration for the group lead and
+assigns that lead plus both configured workers as members.
+
 ## Historical group Usage
 
 Group membership for AI Usage is intentionally historical rather than live.

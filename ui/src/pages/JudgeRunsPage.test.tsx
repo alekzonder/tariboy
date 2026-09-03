@@ -115,3 +115,30 @@ it("queues an automation run from the selected Judge UI", async () => {
 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("https://remote.example/api/judge-automation/run-once", expect.objectContaining({ method: "POST" })));
 });
+
+it("creates the missing judges team from the selected server's automation config", async () => {
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  let created = false;
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    if (url.endsWith("/api/groups") && init?.method === "POST") { created = true; return Promise.resolve(response({ ok: true, result: { name: "judges" } })); }
+    if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: created ? [{ name: "judges", lead: "judge-lead", members: 3 }] : [], count: created ? 1 : 0 } }));
+    if (url.includes("/api/groups/judges/assign")) return Promise.resolve(response({ ok: true, result: { assigned: true } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "secret" };
+  render(<MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Create judges team" }));
+
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Create judges team" })).not.toBeInTheDocument());
+  const writes = fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
+  expect(writes.map(([url, init]) => [url, JSON.parse(String(init?.body))])).toEqual([
+    ["https://remote.example/api/groups", { name: "judges", lead: "judge-lead" }],
+    ["https://remote.example/api/groups/judges/assign", { agent: "judge-lead" }],
+    ["https://remote.example/api/groups/judges/assign", { agent: "judge-one" }],
+    ["https://remote.example/api/groups/judges/assign", { agent: "judge-two" }],
+  ]);
+});
