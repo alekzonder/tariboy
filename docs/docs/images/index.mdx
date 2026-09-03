@@ -140,6 +140,7 @@ positions:
 | Placeholder | Value at iteration start | Skill named in the rendered instruction |
 | --- | --- | --- |
 | `identity` | Current agent name, active image ref and digest, CWD, and iteration identity | `whoami` |
+| `goal` | Daemon-selected Native Task key, title, priority, status, and description | `tasks` |
 | `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
 | `context` | Durable agent context | `context` |
 | `messages` | Messages delivered to this iteration and outstanding request state | `messages` |
@@ -256,7 +257,8 @@ for this operation, not source backup or persistent state.
   terminal-only behavior is runtime policy.
 - `basic:latest` explicitly declares every plugin, packaged Store skill,
   runtime placeholder, and mandatory finish prompt it uses, including the
-  instruction-only `workdir` plugin, its skill, and `runtime: workdir`. New agents receive the
+  instruction-only `workdir` plugin, its skill, `runtime: workdir`, and
+  `runtime: goal`. New agents receive the
   current managed generation. A daemon upgrade may advance this managed ref,
   while active agents and pending assignments continue resolving their pinned
   pre-upgrade digest until the operator selects another image.
@@ -265,4 +267,9 @@ for this operation, not source backup or persistent state.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `$CURRENT_VERSION_STORE/skills/tasks` when an image should expose its agent
-command and instructions.
+command and instructions. Add `runtime: goal` when it should receive the
+daemon-authoritative selected goal; an image without that marker receives no
+goal text.
+
+The supplied `tariboy-developer` image source also packages the Tasks skill and
+declares `runtime: goal`; custom images opt in independently.

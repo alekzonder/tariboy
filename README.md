@@ -31,7 +31,7 @@ The product model is deliberately progressive:
    compose YAML; runnable image artifacts are transferred separately from their
    original build directories.
 
-The first alpha focuses on the first four steps. Advanced channels, plugins,
+The first alpha focuses on the first five steps. Advanced channels, plugins,
 groups, AI-proxy policy, budgets, and audit remain available, but they are not
 required to get value from the desktop app.
 
@@ -51,8 +51,10 @@ hosts reachable through the user's existing SSH configuration.
    artifact. A required name and optional tag (`latest` by default) identify
    the immutable result.
 4. In **Agents**, create an agent, choose harness/model/effort from the visible
-   Runtime presets (or type custom model/effort values), and choose Interactive
-   and Autopilot independently.
+   Runtime presets (or type custom model/effort values), choose Interactive
+   and Autopilot independently, and leave Goal enabled unless the agent should
+   not select assigned task work. Goal's customer-wait grace period defaults to
+   300 seconds.
 5. Open the selected server's **Tasks** to create a queue and a priority-ordered
    task tree. Each agent
    also has the same Tasks workspace scoped to its visible work. Priorities run
@@ -78,7 +80,8 @@ cannot be rebuilt or edited.
 is activated. Existing agents and pending assignments stay pinned to their
 previous digest until explicitly changed, even when the managed ref advances.
 It enables context, status, scripts, legacy current-task usage
-attribution, and native Tasks; it also tells new agents where their managed
+attribution, and native Tasks; its prompt also renders the selected Agent Goal.
+It tells new agents where their managed
 workdir is, even when they run in another CWD. Provider integrations remain
 opt-in.
 
@@ -95,7 +98,7 @@ list, optional packaged Agent Skills, and an ordered `prompts` template. Prompt
 files and skill directories can come from
 `$STORE`, `$CURRENT_VERSION_STORE`, `$PLUGINS`, the original source directory,
 or an absolute operator path. Runtime placeholders such as `identity`,
-`workdir`, `messages`, and `context` stay in the image template and are
+`goal`, `workdir`, `messages`, and `context` stay in the image template and are
 replaced with current values before every iteration; runtime identity includes
 the active image ref and digest, while workdir names the absolute managed
 `agents/<agent>/workdir` path. Harness, model, effort, environment,

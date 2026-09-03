@@ -36,6 +36,11 @@ one complete stopped agent row. Environment is a string-valued JSON object,
 schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
 read-only. Bare images force Interactive on and Autopilot off.
 
+Agent creation, clone, and **Configuration** carry the per-agent Goal settings:
+an enabled-by-default switch and a positive whole-second customer-wait timeout
+(300 by default). Configuration shows the daemon-selected goal key read-only.
+The former server-global policy screen is not part of Settings.
+
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
 Clone loads the source inspect projection from that agent's explicit host,
 leaves the unique name blank, and prefills every persisted agent-row
@@ -166,6 +171,8 @@ drag reordering stays within the task's P0-P3 priority bucket, while dropping
 inside a task reparents it without changing priority. Compact priority markers
 appear in the tree and the right panel edits priority alongside the other task
 fields, comments, mentions, and answer waits.
+Task Detail also offers `Wait customer` status and an editable Pull request URL;
+both use the existing optimistic revision and explicit-host request path.
 On desktop-width layouts, keyboard- and pointer-accessible separators resize
 the left task navigation and right task-detail panels. Arrow keys move a
 separator, Shift increases the step, Home and double-click restore its default,

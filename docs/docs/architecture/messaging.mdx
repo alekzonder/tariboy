@@ -47,8 +47,8 @@ Channel name prefixes: `agent`, `group`, `user`, `chat`. Well-known shapes:
 - `chat:telegram:<agent>` — one bundled Telegram forum topic mapped to an agent,
 - `user:<name>` — user-facing channel.
 
-Native Tasks publishes `task.assigned`, `task.question`, `task.answered`, and
-`task.triage`. Agent recipients use their existing inbox channel and customer
+Native Tasks publishes `task.assigned`, `task.question`, `task.answered`,
+`task.triage`, and daemon-owned `task.goal`. Agent recipients use their existing inbox channel and customer
 recipients use `user:<login>`. Mentions and unresolved-answer state remain in
 the task itself; the channel message is the delivery mechanism, not the source
 of truth.
@@ -60,29 +60,15 @@ existing channel-sink outbox, so bus persistence, wake coalescing,
 acknowledgement, redelivery, and DLQ behavior remain authoritative; Telegram
 does not introduce a second agent-delivery path.
 
-## Idle task reminders
+## Agent goal delivery
 
-The daemon's `task_reminder` policy is off by default. When the key is absent,
-the effective policy is `{enabled:false,idle_threshold_s:300}`; the threshold is
-a positive integral number of seconds. When enabled, it applies to every
-Autopilot cadence, including `interval_s=0`.
-
-A daemon-owned reconciler considers only agents that are master-enabled and
-have an enabled loop, have one or more open Native Tasks assigned to their
-agent principal, and have been idle for at least the configured threshold. It
-uses the latest durable completed-iteration/activity boundary. It publishes at
-most one reminder for the same per-agent generation, whose fingerprint covers
-the sorted assigned-open task keys and that boundary. A changed assignment set
-or a later completed iteration creates a new generation; the persisted
-fingerprint also prevents a daemon restart from resending an unchanged one.
-
-Each reminder is an ordinary `task.reminder` publication to
-`agent:<name>:inbox`, with source `tasks`, reason `assigned-work-idle`, the
-threshold in seconds, and the task-key list. It follows
-`Publish -> delivery -> WakeMessage`: the reconciler never starts an iteration
-directly, and disabled loops leave the delivery queued. A reminder neither
-claims, assigns, nor transitions a Native Task; an eventual iteration still
-uses the task store as the authority for work.
+The per-agent Goal reconciler publishes `task.goal` to
+`agent:<name>:inbox` with the selected task key and `selected` or
+`iteration_completed` reason. Its idempotency key includes the agent, task key,
+task revision, and terminal iteration identity, so recovery and repeated scans
+do not duplicate a generation. Delivery remains strictly
+`Publish -> delivery -> WakeMessage`; the reconciler never starts an iteration
+directly. Disabled agents or disabled loops receive no new goal wake.
 
 An agent's unfiltered subscription to its own inbox is protected system state.
 Agent creation provisions it, and daemon startup reconciles all persisted

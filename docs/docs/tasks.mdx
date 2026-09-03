@@ -23,8 +23,10 @@ retain the flexible model described below.
 
 Every task belongs to a queue and receives an immutable queue key such as
 `TEST-1`. A task records its author, customer, assignee, optional group,
-status, priority, block reason, parent, ordered siblings, comments,
-dependencies, and principals whose answers are still required. Priority is one
+status, priority, pull request URL, block reason, parent, ordered siblings,
+comments, dependencies, and principals whose answers are still required. A pull
+request is an optional normalized absolute `http` or `https` URL without
+embedded credentials; an empty value clears it. Priority is one
 of `P0` Critical, `P1` High, `P2` Normal (the default), or `P3` Low. Root and
 nested sibling sets sort by priority, then manual position, then task key.
 
@@ -53,6 +55,12 @@ Workflow-managed tasks are excluded from this legacy ready/claim path. Their
 assignments, leases one to a running agent iteration, and advances only through
 declared outcomes. See [Configurable task workflows](/docs/task-workflows) for
 work packets, artifacts, questions, and observations.
+
+Flexible tasks use `open`, `in_progress`, `wait_customer`, `done`, or
+`cancelled` status. When the assigned agent asks the task customer a question,
+the same comment transaction moves a non-terminal task to `wait_customer`.
+The last customer answer returns it to `in_progress`, unless an operator made an
+intervening status change. Questions for another principal do not change status.
 
 ## Filing a task into a queue
 
@@ -99,6 +107,12 @@ mentioned principal's next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.
 
+An enabled agent normally follows one sticky assigned task as its Goal. It
+releases that selection when the task is done, cancelled, has a pull request,
+loses assignment or visibility, or remains in `wait_customer` beyond the
+agent's configured grace period. The goal is daemon-owned and read-only to the
+agent; see [Agents and the iteration loop](/docs/architecture/iteration-loop).
+
 Assignment, question, answer, and queue-triage events enter a transactional
 outbox and publish through the existing channels/messages bus. Agent
 notifications target its inbox channel; customer notifications target
@@ -126,7 +140,7 @@ component with `scope_agent` fixed to that agent. The layout is Tree-first:
   customer-authored questions do not add an agent dot. Both indicators clear
   when the notification is read or dismissed;
 - right: persistent detail, priority, assignment, status, block reason,
-  comments, and open answer requests.
+  pull request URL, comments, and open answer requests.
 
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
@@ -203,6 +217,7 @@ tasks create --queue TEST --title "Investigate failure" --priority P1
 tasks create --parent TEST-12 --title "Add regression test"
 tasks assign TEST-12 worker
 tasks update TEST-12 --priority P0
+tasks update TEST-12 --pull-request https://example.com/org/repo/pull/42
 tasks comment TEST-12 "Found the boundary"
 tasks ask TEST-12 user:login "Which behavior should win?"
 tasks move TEST-12 --parent TEST-3
