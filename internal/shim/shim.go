@@ -621,28 +621,118 @@ func (s *tmuxShim) Kill() error {
 // tmux session. tmux kill-session alone can leave the pane command alive after
 // its PTY is deleted when another session keeps the shared tmux server running.
 func KillTmuxSession(session string) error {
-	output, err := execCommand("tmux", "list-panes", "-s", "-t", session, "-F", "#{pane_pid}").Output()
+	target := "=" + session
+	exists, err := tmuxSessionExists(target)
 	if err != nil {
-		return err
+		return fmt.Errorf("check tmux session: %w", err)
 	}
+	if !exists {
+		return nil
+	}
+
+	output, err := execCommand("tmux", "list-panes", "-s", "-t", target, "-F", "#{pane_pid}").Output()
+	if err != nil {
+		stillExists, checkErr := tmuxSessionExists(target)
+		if checkErr != nil {
+			return errors.Join(fmt.Errorf("list tmux panes: %w", err), fmt.Errorf("recheck tmux session: %w", checkErr))
+		}
+		if !stillExists {
+			return nil
+		}
+		return errors.Join(fmt.Errorf("list tmux panes: %w", err), killTmuxSessionExact(target))
+	}
+
 	fields := strings.Fields(string(output))
+	var errs []error
 	if len(fields) == 0 {
-		return errors.New("tmux session has no panes")
+		errs = append(errs, errors.New("tmux session has no panes"))
 	}
+
+	currentPGID := syscall.Getpgrp()
+	groups := make(map[int][]int)
+	seenPIDs := make(map[int]struct{})
 	for _, field := range fields {
 		pid, err := strconv.Atoi(field)
 		if err != nil || pid <= 1 {
-			return errors.New("tmux pane has invalid pid")
+			errs = append(errs, fmt.Errorf("tmux pane has invalid pid %q", field))
+			continue
 		}
-		if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-			return err
+		if _, duplicate := seenPIDs[pid]; duplicate {
+			continue
+		}
+		seenPIDs[pid] = struct{}{}
+
+		pgid, err := syscall.Getpgid(pid)
+		if errors.Is(err, syscall.ESRCH) {
+			continue
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("get process group for tmux pane %d: %w", pid, err))
+			continue
+		}
+		if pgid <= 1 || pgid == currentPGID {
+			errs = append(errs, fmt.Errorf("tmux pane %d has unsafe process group %d", pid, pgid))
+			continue
+		}
+		groups[pgid] = append(groups[pgid], pid)
+	}
+
+	// Revalidate every candidate before sending any signal. A pane may exit or
+	// its PID may be reused between list-panes and Getpgid.
+	safeGroups := make(map[int]struct{})
+	for pgid, pids := range groups {
+		for _, pid := range pids {
+			current, err := syscall.Getpgid(pid)
+			if errors.Is(err, syscall.ESRCH) {
+				continue
+			}
+			if err != nil {
+				errs = append(errs, fmt.Errorf("revalidate process group for tmux pane %d: %w", pid, err))
+				continue
+			}
+			if current != pgid {
+				errs = append(errs, fmt.Errorf("tmux pane %d changed process group from %d to %d", pid, pgid, current))
+				continue
+			}
+			safeGroups[pgid] = struct{}{}
 		}
 	}
-	if err := execCommand("tmux", "kill-session", "-t", session).Run(); err != nil &&
-		execCommand("tmux", "has-session", "-t", session).Run() == nil {
-		return err
+	for pgid := range safeGroups {
+		if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			errs = append(errs, fmt.Errorf("kill tmux pane process group %d: %w", pgid, err))
+		}
 	}
-	return nil
+	if err := killTmuxSessionExact(target); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+func tmuxSessionExists(target string) (bool, error) {
+	err := execCommand("tmux", "has-session", "-t", target).Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return false, nil
+	}
+	return false, err
+}
+
+func killTmuxSessionExact(target string) error {
+	err := execCommand("tmux", "kill-session", "-t", target).Run()
+	if err == nil {
+		return nil
+	}
+	exists, checkErr := tmuxSessionExists(target)
+	if checkErr != nil {
+		return errors.Join(fmt.Errorf("kill tmux session: %w", err), fmt.Errorf("recheck tmux session: %w", checkErr))
+	}
+	if !exists {
+		return nil
+	}
+	return fmt.Errorf("kill tmux session: %w", err)
 }
 
 // Resize retargets ALL live PTYs of in-progress web attaches for this

@@ -1150,43 +1150,106 @@ esac
 	assertSafeCodexShimLog(t, dir)
 }
 
-func TestTmuxShimKillTerminatesPaneProcessGroup(t *testing.T) {
-	cmd := exec.Command("/bin/sh", "-c", "trap '' TERM HUP INT; while :; do sleep 1; done")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+func TestKillTmuxSessionTerminatesAllPanesAndPreservesPrefixedSession(t *testing.T) {
+	tmux, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skip("tmux unavailable")
+	}
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", t.TempDir())
+
+	dir := t.TempDir()
+	script := filepath.Join(dir, "owned-pane.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$$\" > \"$1\"\ntrap '' TERM HUP INT\nwhile :; do sleep 1; done\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	exited := false
-	defer func() {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		if exited {
-			return
-		}
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-		}
-	}()
-
-	old := execCommand
-	execCommand = func(_ string, args ...string) *exec.Cmd {
-		if len(args) > 0 && args[0] == "list-panes" {
-			return exec.Command("/bin/echo", strconv.Itoa(cmd.Process.Pid))
-		}
-		return exec.Command("/bin/true")
+	managed, decoy := "shim-kill", "shim-kill-decoy"
+	markers := []string{filepath.Join(dir, "managed-1"), filepath.Join(dir, "managed-2"), filepath.Join(dir, "decoy")}
+	runTmux := func(args ...string) error { return exec.Command(tmux, args...).Run() }
+	start := func(args []string, marker string) error {
+		return runTmux(append(args, shellJoin([]string{script, marker}))...)
 	}
-	defer func() { execCommand = old }()
-
-	if err := (&tmuxShim{session: "managed"}).Kill(); err != nil {
+	readPID := func(marker string) (int, bool) {
+		data, err := os.ReadFile(marker)
+		if err != nil {
+			return 0, false
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		return pid, err == nil && pid > 1
+	}
+	pids := make([]int, len(markers))
+	t.Cleanup(func() {
+		for i, pid := range pids {
+			if pid == 0 {
+				pid, _ = readPID(markers[i])
+			}
+			if pid <= 1 {
+				continue
+			}
+			if syscall.Kill(pid, 0) != nil {
+				continue
+			}
+			command, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+			if err != nil || !strings.Contains(string(command), script) || !strings.Contains(string(command), markers[i]) {
+				continue
+			}
+			pgid, err := syscall.Getpgid(pid)
+			if err != nil || pgid <= 1 || pgid == syscall.Getpgrp() {
+				continue
+			}
+			command, err = exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+			currentPGID, pgidErr := syscall.Getpgid(pid)
+			if err == nil && pgidErr == nil && currentPGID == pgid && strings.Contains(string(command), script) && strings.Contains(string(command), markers[i]) {
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		}
+		_ = runTmux("kill-session", "-t", "="+managed)
+		_ = runTmux("kill-session", "-t", "="+decoy)
+	})
+	if err := start([]string{"new-session", "-d", "-s", managed}, markers[0]); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-done:
-		exited = true
-	case <-time.After(3 * time.Second):
-		t.Fatal("tmux pane process group survived Kill")
+	if err := start([]string{"split-window", "-d", "-t", "=" + managed + ":"}, markers[1]); err != nil {
+		t.Fatal(err)
+	}
+	if err := start([]string{"new-session", "-d", "-s", decoy}, markers[2]); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, marker := range markers {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if pid, ok := readPID(marker); ok {
+				pids[i] = pid
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if pids[i] == 0 {
+			t.Fatalf("pane did not write owned marker %s", marker)
+		}
+	}
+
+	if err := KillTmuxSession(managed); err != nil {
+		t.Fatal(err)
+	}
+	for i, pid := range pids[:2] {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) && syscall.Kill(pid, 0) == nil {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if syscall.Kill(pid, 0) == nil {
+			t.Fatalf("managed pane %d process %d survived Kill", i, pid)
+		}
+	}
+	if err := KillTmuxSession(managed); err != nil {
+		t.Fatalf("second Kill of absent exact session: %v", err)
+	}
+	if err := runTmux("has-session", "-t", "="+decoy); err != nil {
+		t.Fatal("Kill of absent managed session removed prefixed decoy")
+	}
+	if err := syscall.Kill(pids[2], 0); err != nil {
+		t.Fatal("prefixed decoy pane process was killed")
 	}
 }
 
