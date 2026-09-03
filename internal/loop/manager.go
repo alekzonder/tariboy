@@ -640,7 +640,8 @@ var errIterationLookup = errors.New("read iteration")
 
 // finalizeIteration commits a terminal status for one running iteration and
 // drops its shim.sock as a single all-or-nothing step. It reports whether the
-// terminal status was committed.
+// terminal status was committed and whether the row was already terminal
+// before cleanup began.
 //
 // Two facts pull the order in opposite directions. The iteration's status is
 // what every observer polls, so the socket must be gone *before* the terminal
@@ -657,17 +658,21 @@ var errIterationLookup = errors.New("read iteration")
 // The removal stays inside the "still running" guard: the shim socket is
 // per-agent, not per-iteration, so once this iteration is terminal the file at
 // that path may already belong to the agent's next iteration.
-func (m *Manager) finalizeIteration(l agentdir.Layout, agentName, id string, apply func(*agent.Iteration)) (bool, error) {
+func (m *Manager) finalizeIteration(
+	l agentdir.Layout,
+	agentName, id string,
+	apply func(*agent.Iteration),
+) (committed, terminalBeforeCleanup bool, err error) {
 	it, err := m.iterations().GetIteration(agentName, id)
 	if err != nil {
-		return false, fmt.Errorf("%w: %v", errIterationLookup, err)
+		return false, false, fmt.Errorf("%w: %v", errIterationLookup, err)
 	}
 	if it.Status != "running" {
-		return false, nil
+		return false, true, nil
 	}
 	apply(&it)
 	_ = os.Remove(l.ShimSock())
-	committed, err := m.iterations().FinalizeRunningIteration(it)
+	committed, err = m.iterations().FinalizeRunningIteration(it)
 	if err != nil {
 		// Roll the marker back so adoption can retry this iteration. A plain
 		// file is enough: ListLive only stats the path, adoption's probe of a
@@ -679,9 +684,9 @@ func (m *Manager) finalizeIteration(l agentdir.Layout, agentName, id string, app
 			m.cfg.Log.Error("restore shim.sock marker after failed terminal status",
 				"agent", agentName, "id", id, "err", cerr)
 		}
-		return false, err
+		return false, false, err
 	}
-	return committed, nil
+	return committed, false, nil
 }
 
 // terminalHarnessError shapes an iteration into the harness_error outcome used
@@ -696,7 +701,7 @@ func (m *Manager) terminalHarnessError(it *agent.Iteration) {
 // recordAdopted persists a completed adopted iteration from its result.json.
 func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, res shim.IterationResult) {
 	status := ""
-	committed, err := m.finalizeIteration(l, li.Agent, li.ID, func(it *agent.Iteration) {
+	committed, _, err := m.finalizeIteration(l, li.Agent, li.ID, func(it *agent.Iteration) {
 		ec, cpu, mem := res.ExitCode, res.CPUMs, res.MemPeakKB
 		it.Status = Classify(res.ExitCode, it.DoneFlag, it.TimeoutTriggeredAt != nil, res.TerminationReason == "hard_timeout")
 		it.EndedAt = m.cfg.Clock().Format(time.RFC3339)
@@ -721,9 +726,9 @@ func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, re
 // without ever writing result.json (harness_error, exit_code=-1) and removes the
 // stale shim.sock so reattach cannot spin on it forever.
 func (m *Manager) recordStaleAdoption(l agentdir.Layout, li agentdir.LiveIteration) {
-	committed, err := m.finalizeIteration(l, li.Agent, li.ID, m.terminalHarnessError)
+	committed, terminalBeforeCleanup, err := m.finalizeIteration(l, li.Agent, li.ID, m.terminalHarnessError)
 	switch {
-	case err == nil && !committed:
+	case err == nil && terminalBeforeCleanup:
 		// Already terminal, yet ListLive still offered this iteration — so the
 		// socket outlived a committed status. Drop it (as this function always
 		// did) or reattach spins on it forever. Safe here specifically because
@@ -1396,13 +1401,13 @@ func (m *Manager) recoverStaleKill(name, id string, rt *runtime, l agentdir.Layo
 	// state everywhere: status still "running" and the shim.sock marker on disk
 	// for a later adoption to retry. Before, this path alone kept the socket by
 	// never reaching the removal, while the adoption paths dropped it.
-	committed, err := m.finalizeIteration(l, name, id, m.terminalHarnessError)
+	committed, terminalBeforeCleanup, err := m.finalizeIteration(l, name, id, m.terminalHarnessError)
 	switch {
 	case errors.Is(err, errIterationLookup):
 		return fmt.Errorf("kill shim for %q: %w", name, rpcErr)
 	case err != nil:
 		return fmt.Errorf("recover stale shim for %q: %w", name, err)
-	case !committed:
+	case terminalBeforeCleanup:
 		// Already terminal: the socket must not outlive a committed status.
 		_ = os.Remove(l.ShimSock())
 	}
