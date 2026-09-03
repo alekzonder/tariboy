@@ -501,6 +501,46 @@ func TestIterations(t *testing.T) {
 	}
 }
 
+func TestFinalizeRunningIterationOnlyFirstTerminalWriterCommits(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(sampleAgent()); err != nil {
+		t.Fatal(err)
+	}
+	original := Iteration{ID: "race", Agent: "smoke", Trigger: "manual", Status: "running"}
+	if err := st.CreateIteration(original); err != nil {
+		t.Fatal(err)
+	}
+
+	winnerExit := -1
+	winner := original
+	winner.Status = "harness_error"
+	winner.EndedAt = "2026-09-03T19:00:00Z"
+	winner.ExitCode = &winnerExit
+	committed, err := st.FinalizeRunningIteration(winner)
+	if err != nil || !committed {
+		t.Fatalf("first finalize committed=%v err=%v, want true/nil", committed, err)
+	}
+
+	loserExit, loserCPU, loserMem := 0, 17, 23
+	loser := original
+	loser.Status = "done"
+	loser.EndedAt = "2026-09-03T19:00:01Z"
+	loser.ExitCode, loser.CPUMs, loser.MemPeakKB = &loserExit, &loserCPU, &loserMem
+	committed, err = st.FinalizeRunningIteration(loser)
+	if err != nil || committed {
+		t.Fatalf("second finalize committed=%v err=%v, want false/nil", committed, err)
+	}
+
+	got, err := st.GetIteration("smoke", original.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != winner.Status || got.EndedAt != winner.EndedAt || got.ExitCode == nil || *got.ExitCode != winnerExit ||
+		got.CPUMs != nil || got.MemPeakKB != nil {
+		t.Fatalf("losing finalize changed winner: %+v", got)
+	}
+}
+
 func TestSecrets(t *testing.T) {
 	st := openStore(t)
 	if err := st.Create(sampleAgent()); err != nil {

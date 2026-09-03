@@ -32,17 +32,20 @@ func (s *stubIterationStore) GetIteration(agentName, id string) (agent.Iteration
 	return s.it, nil
 }
 
-func (s *stubIterationStore) UpdateIteration(it agent.Iteration) error {
+func (s *stubIterationStore) FinalizeRunningIteration(it agent.Iteration) (bool, error) {
 	s.updates++
 	_, err := os.Stat(s.sockPath)
 	s.sockAtCommit = err == nil
 	s.attemptedStat = it.Status
 	if s.updateErr != nil {
-		return s.updateErr
+		return false, s.updateErr
+	}
+	if s.it.Status != "running" {
+		return false, nil
 	}
 	s.it = it
 	s.committedStat = it.Status
-	return nil
+	return true, nil
 }
 
 // finalizeFixture wires a manager whose finalization store is the stub, plus a
@@ -100,7 +103,7 @@ func TestFinalizeIterationRemovesSocketBeforeCommittingTerminalStatus(t *testing
 				t.Fatalf("%s = %v, want nil", p.name, err)
 			}
 			if st.updates != 1 {
-				t.Fatalf("UpdateIteration calls = %d, want 1", st.updates)
+				t.Fatalf("FinalizeRunningIteration calls = %d, want 1", st.updates)
 			}
 			if st.committedStat == "running" || st.committedStat == "" {
 				t.Fatalf("committed status = %q, want terminal", st.committedStat)
@@ -137,7 +140,7 @@ func TestFinalizeIterationKeepsSocketWhenTerminalStatusIsRejected(t *testing.T) 
 				}
 			}
 			if st.updates != 1 {
-				t.Fatalf("UpdateIteration calls = %d, want 1", st.updates)
+				t.Fatalf("FinalizeRunningIteration calls = %d, want 1", st.updates)
 			}
 			if st.attemptedStat == "running" || st.attemptedStat == "" {
 				t.Fatalf("attempted status = %q, want terminal", st.attemptedStat)

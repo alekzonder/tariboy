@@ -618,12 +618,12 @@ func (m *Manager) adopt(ctx context.Context, li agentdir.LiveIteration) <-chan s
 }
 
 // iterationStore is the narrow slice of *agent.Store that terminal-status
-// finalization needs. It exists so a failing UpdateIteration can be injected
+// finalization needs. It exists so a failing terminal CAS can be injected
 // (ManagerConfig.iterationStore); every other call site keeps using the
 // concrete store.
 type iterationStore interface {
 	GetIteration(agentName, id string) (agent.Iteration, error)
-	UpdateIteration(it agent.Iteration) error
+	FinalizeRunningIteration(it agent.Iteration) (bool, error)
 }
 
 // iterations returns the store used for terminal-status finalization.
@@ -667,7 +667,8 @@ func (m *Manager) finalizeIteration(l agentdir.Layout, agentName, id string, app
 	}
 	apply(&it)
 	_ = os.Remove(l.ShimSock())
-	if err := m.iterations().UpdateIteration(it); err != nil {
+	committed, err := m.iterations().FinalizeRunningIteration(it)
+	if err != nil {
 		// Roll the marker back so adoption can retry this iteration. A plain
 		// file is enough: ListLive only stats the path, adoption's probe of a
 		// non-socket fails exactly like a dead shim, and every shim removes a
@@ -680,7 +681,7 @@ func (m *Manager) finalizeIteration(l agentdir.Layout, agentName, id string, app
 		}
 		return false, err
 	}
-	return true, nil
+	return committed, nil
 }
 
 // terminalHarnessError shapes an iteration into the harness_error outcome used

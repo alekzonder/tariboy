@@ -657,12 +657,12 @@ func (e *Engine) runOnceGuarded(
 		// A manager-side stale-shim recovery may have finalized this row while
 		// the runner was unwinding its cancelled context. Do not erase that
 		// durable terminal detail (notably its synthetic exit code).
-		if current, err := e.store.GetIteration(e.ag.Name, id); err == nil && current.Status == "running" {
+		if current, err := e.store.GetIteration(e.ag.Name, id); err == nil {
 			current.Status = "harness_error"
 			current.EndedAt = end
-			if err := e.store.UpdateIteration(current); err != nil {
+			if committed, err := e.store.FinalizeRunningIteration(current); err != nil {
 				e.log.Error("update iteration", "agent", e.ag.Name, "id", id, "err", err)
-			} else if e.iterationCompleted != nil {
+			} else if committed && e.iterationCompleted != nil {
 				e.iterationCompleted(e.ag.Name, id)
 			}
 		}
@@ -679,12 +679,11 @@ func (e *Engine) runOnceGuarded(
 	it.ExitCode = &ec
 	it.CPUMs = &cpu
 	it.MemPeakKB = &mem
-	terminalPersisted := true
-	if err := e.store.UpdateIteration(it); err != nil {
-		terminalPersisted = false
+	terminalPersisted, err := e.store.FinalizeRunningIteration(it)
+	if err != nil {
 		e.log.Error("update iteration", "agent", e.ag.Name, "id", id, "err", err)
 	}
-	if outcome.DoneFlag {
+	if terminalPersisted && outcome.DoneFlag {
 		// done_flag is owned exclusively by SetIterationDone (spec §5.2).
 		// outcome.Productive was read from the DB, so an `--idle` declaration made
 		// via the API during the iteration is preserved rather than overwritten.

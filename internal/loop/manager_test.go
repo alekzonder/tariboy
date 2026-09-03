@@ -724,7 +724,8 @@ type killBlockingRunner struct {
 	// the engine goroutine that unwinds it. Most users of this runner leave it
 	// unset, and receiving from a nil channel blocks forever, so Run must skip
 	// the receive entirely when it is nil.
-	release chan struct{}
+	release           chan struct{}
+	returnAfterCancel *Outcome
 }
 
 func (r *killBlockingRunner) Run(ctx context.Context, _ agent.Agent, _ string, id string, _ string) (Outcome, error) {
@@ -732,6 +733,12 @@ func (r *killBlockingRunner) Run(ctx context.Context, _ agent.Agent, _ string, i
 	<-ctx.Done()
 	if r.release != nil {
 		<-r.release
+	}
+	// ShimRunner can still find and classify result.json after cancellation.
+	// Model that normal return so stale-kill recovery races the real terminal
+	// result path instead of only the simpler ctx.Err path.
+	if r.returnAfterCancel != nil {
+		return *r.returnAfterCancel, nil
 	}
 	return Outcome{}, ctx.Err()
 }
@@ -1188,8 +1195,11 @@ func TestManagerAttachAndResizeForwardToLiveShim(t *testing.T) {
 	}
 }
 
-func TestManagerKillRecoversMissingShim(t *testing.T) {
-	r := &killBlockingRunner{started: make(chan string, 2), release: make(chan struct{})}
+func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
+	r := &killBlockingRunner{
+		started: make(chan string, 2), release: make(chan struct{}),
+		returnAfterCancel: &Outcome{Status: "done", DoneFlag: true, ExitCode: 0, CPUMs: 17, MemPeakKB: 23},
+	}
 	var releaseOnce sync.Once
 	releaseRunner := func() { releaseOnce.Do(func() { close(r.release) }) }
 	m, as, agentsDir, _ := newManager(t, r)
@@ -1328,6 +1338,13 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 	case got := <-completed:
 		t.Fatalf("recovered iteration emitted duplicate completion before next launch: %q", got)
 	default:
+	}
+	it, err := as.GetIteration("smoke", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Status != "harness_error" || it.ExitCode == nil || *it.ExitCode != -1 || it.DoneFlag || it.CPUMs != nil || it.MemPeakKB != nil {
+		t.Fatalf("cancelled runner overwrote stale-kill winner: %+v", it)
 	}
 }
 

@@ -808,6 +808,20 @@ func (s *Store) UpdateIteration(it Iteration) error {
 	return affected(res)
 }
 
+// FinalizeRunningIteration atomically changes one running iteration to the
+// supplied terminal result. It reports false without changing the row when
+// another terminal writer has already won.
+func (s *Store) FinalizeRunningIteration(it Iteration) (bool, error) {
+	res, err := s.db.Exec(`UPDATE iterations SET status=?, ended_at=?, exit_code=?,
+		cpu_ms=?, mem_peak_kb=? WHERE id=? AND agent=? AND status='running'`,
+		it.Status, it.EndedAt, it.ExitCode, it.CPUMs, it.MemPeakKB, it.ID, it.Agent)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // SetIterationDone flips done_flag and records whether the iteration was
 // productive. productive=false is written only when the agent self-declared the
 // pass idle (`i-am-done --idle`); a plain done passes productive=true.
