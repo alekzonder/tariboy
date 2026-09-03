@@ -126,7 +126,7 @@ func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T)
 		t.Fatal(err)
 	}
 	prompt := res.(map[string]any)["prompt"].(string)
-	if !strings.Contains(prompt, "STATIC") || !strings.Contains(prompt, "[runtime: messages]") || !strings.Contains(prompt, "[runtime: awaiting-replies]") || !strings.Contains(prompt, "USER") {
+	if !strings.Contains(prompt, "STATIC") || !strings.Contains(prompt, "[runtime: messages]") || strings.Contains(prompt, "[runtime: awaiting-replies]") || !strings.Contains(prompt, "USER") {
 		t.Fatalf("prompt = %q", prompt)
 	}
 	if strings.Count(prompt, "Use the `messages` skill") != 1 || strings.Count(prompt, "# Messages") != 1 {
