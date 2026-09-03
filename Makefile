@@ -21,7 +21,7 @@ DESKTOP_INSTALL_UI_DEPS ?= 1
 
 export CGO_ENABLED=0
 
-.PHONY: build build-basic-image install uninstall setup check backend-check frontend-check full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build build-basic-image install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build-basic-image:
 	$(GO) run ./internal/builtinimages/generate -source internal/builtinimages/source -output internal/builtinimages/generated -version $(VERSION)
@@ -74,6 +74,7 @@ test:
 smoke-contract-test:
 	./scripts/tariboy-smoke-contract-test.sh
 	./scripts/tariboy-branding-contract-test.sh
+	bash ./scripts/check-output-contract-test.sh
 	./scripts/make-clean-contract-test.sh
 	./scripts/server-install-contract-test.sh
 	./scripts/publish-docs-contract-test.sh
@@ -456,7 +457,10 @@ SUBMAKE := $(MAKE) --no-print-directory
 # eval (rather than sh -c) is what keeps need_node_modules visible inside it.
 define STEP_RUNNER
 set +e; \
-rows=""; failed=0; \
+rows=""; failed=0; __step=0; \
+__output_dir=$$(mktemp -d "$${TMPDIR:-/tmp}/tariboy-check.XXXXXXXX") || exit 1; \
+trap 'rm -rf -- "$$__output_dir"' EXIT; \
+trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM; \
 need_node_modules() { \
 	if [ ! -d "$$1/node_modules" ]; then \
 		echo "$$1/node_modules is missing, run: cd $$1 && npm ci" >&2; \
@@ -464,19 +468,39 @@ need_node_modules() { \
 	fi; \
 }; \
 run_step() { \
+	__step=$$((__step + 1)); \
+	__output="$$__output_dir/$$__step.log"; \
+	printf '==> %-28s ' "$$1"; \
+	__start=$$(date +%s); \
+	( eval "$$2" ) >"$$__output" 2>&1; \
+	__code=$$?; \
+	__secs=$$(( $$(date +%s) - $$__start )); \
+	if [ "$$__code" -eq 0 ]; then \
+		__st=ok; printf 'ok   %5ss\n' "$$__secs"; \
+	else \
+		__st=FAIL; failed=1; \
+		printf 'FAIL %5ss\n' "$$__secs"; \
+		printf '\n--- %s diagnostics ---\ncommand: %s\n' "$$1" "$$2"; \
+		cat "$$__output"; \
+	fi; \
+	rm -f -- "$$__output"; \
+	rows="$$rows$$(printf '%-28s %-4s %5ss' "$$1" "$$__st" "$$__secs")\n"; \
+}; \
+run_group() { \
 	printf '\n==> %s\n' "$$1"; \
 	__start=$$(date +%s); \
 	( eval "$$2" ); \
 	__code=$$?; \
 	__secs=$$(( $$(date +%s) - $$__start )); \
 	if [ "$$__code" -eq 0 ]; then __st=ok; else __st=FAIL; failed=1; fi; \
+	printf '==> %s result: %s (%ss)\n' "$$1" "$$__st" "$$__secs"; \
 	rows="$$rows$$(printf '%-28s %-4s %5ss' "$$1" "$$__st" "$$__secs")\n"; \
 }; \
 summarize() { \
 	printf '\n==> %s summary\n' "$$1"; \
 	printf '%b' "$$rows"; \
 	if [ "$$failed" -ne 0 ]; then \
-		printf '%s FAILED\n' "$$1" >&2; \
+		printf '%s FAILED\n' "$$1"; \
 		exit 1; \
 	fi; \
 	printf '%s ok\n' "$$1"; \
@@ -503,9 +527,16 @@ frontend-check:
 
 check:
 	@$(STEP_RUNNER); \
-	run_step "backend-check"  '$(SUBMAKE) backend-check'; \
-	run_step "frontend-check" '$(SUBMAKE) frontend-check'; \
+	run_group "backend-check"  '$(SUBMAKE) backend-check'; \
+	run_group "frontend-check" '$(SUBMAKE) frontend-check'; \
 	summarize check
+
+check-output-contract-fixture:
+	@$(STEP_RUNNER); \
+	run_step "success-step" 'echo SUCCESS_DETAIL'; \
+	run_step "failure-step" 'echo FAILURE_DETAIL; exit 7'; \
+	run_step "after-step" 'echo AFTER_DETAIL'; \
+	summarize check-output-contract-fixture
 
 # The desktop tail of `full-check` is one step per host, not two, and that is
 # deliberate. desktop-e2e depends on desktop-e2e-build, which depends on

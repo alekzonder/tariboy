@@ -569,8 +569,10 @@ describe("TerminalsPage", () => {
 
     const label = (await screen.findByLabelText("label")) as HTMLInputElement;
     const url = screen.getByLabelText("base URL") as HTMLInputElement;
-    expect(label.value).toBe("prod");
-    expect(url.value).toBe("http://127.0.0.1:9992");
+    await waitFor(() => {
+      expect(label).toHaveValue("prod");
+      expect(url).toHaveValue("http://127.0.0.1:9992");
+    });
 
     fireEvent.change(label, { target: { value: "prod-renamed" } });
     fireEvent.change(url, { target: { value: "http://127.0.0.1:9993/" } });

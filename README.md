@@ -232,7 +232,9 @@ make full-check      # heavy, tens of minutes, includes check
 Run `backend-check` for backend-only changes, `frontend-check` for frontend- or
 documentation-only changes, and `check` for mixed or unclear changes. These
 targets are read-only: they never rewrite files (`make fmt` is deliberately not
-part of them), install node modules, or write into `bin/`.
+part of them), install node modules, or write into `bin/`. Each step reports its
+result and duration as it finishes, while noisy command output is suppressed on
+success and printed in full only on failure. A compact summary ends the run.
 
 `make full-check` is everything that runs unattended on a developer machine:
 `check` first, then `make build`, the four core E2E scripts, `full-smoke`, the

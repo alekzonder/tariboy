@@ -151,7 +151,9 @@ when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
 the Store skill tests, and smoke contracts. The frontend target runs UI
 typecheck, lint, unit tests, branding, and the documentation checks. All three
 are read-only: they never install dependencies, write into `bin/`, or dirty
-`git status`.
+`git status`. Each step reports its result and duration as it finishes.
+Successful command output is suppressed; failed steps print their command and
+complete diagnostics, and every run ends with a compact summary.
 
 `make full-check` is the full set of checks that run unattended on a developer
 machine, not every check in the repository. It runs `check`, then `build`, the
