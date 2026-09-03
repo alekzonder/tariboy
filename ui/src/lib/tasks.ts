@@ -1,6 +1,6 @@
 import { apiOn, resolveTarget, type ApiTarget } from "./api"
 
-export type TaskStatus = "open" | "in_progress" | "done" | "cancelled"
+export type TaskStatus = "open" | "in_progress" | "wait_customer" | "done" | "cancelled"
 export type TaskStatusView = "active" | "closed" | "all"
 export type TaskAccess = "write" | "respond" | "context"
 export type TaskPriority = "P0" | "P1" | "P2" | "P3"
@@ -26,6 +26,7 @@ export interface Task {
   title: string
   description: string
   status: TaskStatus
+  pull_request?: string
   author: string
   customer: string
   group: string
@@ -332,6 +333,7 @@ export interface UpdateTaskInput {
   title?: string
   description?: string
   status?: TaskStatus
+  pull_request?: string
   assignee?: string
   manual_block_reason?: string
   priority?: TaskPriority

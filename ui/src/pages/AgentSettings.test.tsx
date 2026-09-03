@@ -2,6 +2,7 @@ import { it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { AgentNameContext } from "@/lib/agent";
+import type { Daemon } from "@/lib/daemons";
 import AgentSettings from "./AgentSettings";
 
 vi.mock("sonner", () => ({
@@ -18,10 +19,11 @@ const view = {
   model: "", effort: "", interactive: false, loop_enabled: true, interval_s: 30, timeout_s: 60,
   hard_timeout_s: 120, on_timeout: "restart", on_error: "restart", max_idle_iterations: 0,
   user_prompt: "hi", env: {}, plugins: [], group: null,
+  goal_enabled: true, goal_wait_customer_timeout_s: 300, current_goal_task_key: "",
   alias: "", notes: "",
 };
 
-type Call = { path: string; method?: string; body: unknown };
+type Call = { path: string; method?: string; body: unknown; headers?: HeadersInit };
 
 // An accepted write is visible to the next read, exactly as a real daemon
 // behaves — otherwise a reload would "reconcile" acknowledged values back to
@@ -52,7 +54,7 @@ function stubFetch(
   const server: Record<string, unknown> = { ...view, ...(opts?.view ?? {}) };
   vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
-    if (init?.method) calls.push({ path, method: init.method, body });
+    if (init?.method) calls.push({ path, method: init.method, body, headers: init.headers });
     if (init?.method === "POST" && opts?.fail?.(path)) {
       return Promise.resolve({
         ok: false, status: 400,
@@ -62,6 +64,10 @@ function stubFetch(
     if (init?.method === "POST") {
       const key = Object.keys(SERVER_FIELD).find((suffix) => path.endsWith(suffix));
       if (key) server[SERVER_FIELD[key]] = (body as { value: unknown }).value;
+      if (path.endsWith("/goal-enabled")) server.goal_enabled = (body as { enabled: boolean }).enabled;
+      if (path.endsWith("/goal-wait-customer-timeout")) {
+        server.goal_wait_customer_timeout_s = (body as { seconds: number }).seconds;
+      }
       opts?.apply?.(server, path, body);
     }
     let result: unknown = server;
@@ -74,12 +80,98 @@ function stubFetch(
   }));
 }
 
-const renderPage = () =>
-  render(<AgentNameContext.Provider value="alpha"><AgentSettings /></AgentNameContext.Provider>);
+const renderPage = (target?: Daemon | null) => render(
+  <AgentNameContext.Provider value="alpha">
+    <AgentSettings target={target} />
+  </AgentNameContext.Provider>,
+);
 
 // posts narrows a recorded call list to the writes, which is what the batched
 // save contract is stated in: which fields were sent, and in which order.
 const posts = (calls: Call[]) => calls.filter((c) => c.method === "POST").map((c) => c.path);
+
+it("saves Goal settings serially on the explicit host", async () => {
+  const target: Daemon = {
+    id: "remote", label: "Remote", baseURL: "https://remote.test", token: "secret",
+  };
+  const calls: Call[] = [];
+  stubFetch(calls, { view: { current_goal_task_key: "TARI-43" } });
+  renderPage(target);
+
+  const enabled = await screen.findByRole("switch", { name: "Enable Goal" });
+  fireEvent.click(enabled);
+  fireEvent.change(screen.getByLabelText("Wait customer timeout seconds"), { target: { value: "120" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save Goal settings" }));
+
+  await waitFor(() => expect(posts(calls)).toEqual([
+    "https://remote.test/api/agents/alpha/goal-enabled",
+    "https://remote.test/api/agents/alpha/goal-wait-customer-timeout",
+  ]));
+  expect(calls.filter((call) => call.method === "POST").map((call) => call.body)).toEqual([
+    { enabled: false },
+    { seconds: 120 },
+  ]);
+  expect((calls.find((call) => call.method === "POST")?.headers as Record<string, string>).Authorization)
+    .toBe("Bearer secret");
+});
+
+it.each(["0", "1.5"])("rejects Goal timeout %s before saving", async (value) => {
+  const calls: Call[] = [];
+  stubFetch(calls);
+  renderPage();
+
+  const timeout = await screen.findByLabelText("Wait customer timeout seconds");
+  fireEvent.change(timeout, { target: { value } });
+  fireEvent.click(screen.getByRole("button", { name: "Save Goal settings" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Enter a positive whole number of seconds.");
+  expect(posts(calls)).toEqual([]);
+});
+
+it("discards a Goal timeout edit back to the loaded value", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls);
+  renderPage();
+
+  const timeout = await screen.findByLabelText("Wait customer timeout seconds");
+  fireEvent.change(timeout, { target: { value: "120" } });
+  fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+
+  expect(timeout).toHaveValue(300);
+  expect(screen.queryByRole("button", { name: "Save Goal settings" })).not.toBeInTheDocument();
+  expect(posts(calls)).toEqual([]);
+});
+
+it("keeps only the failed Goal field dirty after the second save fails", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls, { fail: (path) => path.endsWith("/goal-wait-customer-timeout") });
+  render(<AgentNameContext.Provider value="alpha"><AgentSettings /></AgentNameContext.Provider>);
+
+  fireEvent.click(await screen.findByRole("switch", { name: "Enable Goal" }));
+  const timeout = screen.getByLabelText("Wait customer timeout seconds");
+  fireEvent.change(timeout, { target: { value: "120" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save Goal settings" }));
+
+  expect(await screen.findByText("Some changes were not saved. Review the highlighted fields and try again."))
+    .toBeInTheDocument();
+  expect(posts(calls)).toEqual([
+    "/api/agents/alpha/goal-enabled",
+    "/api/agents/alpha/goal-wait-customer-timeout",
+  ]);
+  expect(screen.getByRole("switch", { name: "Enable Goal" })).toHaveAttribute("aria-checked", "false");
+  expect(timeout).toHaveAttribute("aria-invalid", "true");
+  fireEvent.change(timeout, { target: { value: "300" } });
+  expect(screen.queryByRole("button", { name: "Save Goal settings" })).not.toBeInTheDocument();
+});
+
+it("renders the current Goal task key in a disabled input", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls, { view: { current_goal_task_key: "TARI-43" } });
+  renderPage();
+
+  expect(await screen.findByLabelText("Current goal task")).toHaveValue("TARI-43");
+  expect(screen.getByLabelText("Current goal task")).toBeDisabled();
+});
 
 it("edits a loop interval via POST loop/interval", async () => {
   const calls: Call[] = [];
@@ -384,7 +476,7 @@ it("renders one section per row in the design's order, with no second column", a
   const { container } = renderPage();
 
   await screen.findByLabelText("Interval");
-  const order = ["Loop", "Runtime", "Secrets (write-only)", "Retention and cleanup"]
+  const order = ["Goal", "Loop", "Runtime", "Secrets (write-only)", "Retention and cleanup"]
     .map((t) => screen.getByText(t));
   for (let i = 0; i + 1 < order.length; i++) {
     // DOM order is visual order, so Tab moves through the sections as read.

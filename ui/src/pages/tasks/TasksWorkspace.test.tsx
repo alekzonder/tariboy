@@ -81,6 +81,7 @@ const root: Task = {
   title: "Ship native tasks",
   description: "Central work system",
   status: "in_progress",
+  pull_request: "",
   author: "user:owner",
   customer: "user:owner",
   group: "",
@@ -405,7 +406,7 @@ describe("TasksWorkspace", () => {
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Managed title" } })
     await userEvent.click(screen.getByRole("button", { name: "Save task" }))
     expect(api.updateTask).toHaveBeenCalledWith("TEST-1", {
-      title: "Managed title", description: managed.description, priority: managed.priority, revision: managed.revision,
+      title: "Managed title", description: managed.description, pull_request: "", priority: managed.priority, revision: managed.revision,
     }, undefined)
   })
 
@@ -690,6 +691,39 @@ describe("TasksWorkspace", () => {
       expect.objectContaining({ priority: "P1", revision: 2 }),
       undefined,
     )
+  })
+
+  it("saves wait-customer and set/clear pull request edits with loaded revisions on the explicit host", async () => {
+    const target = {
+      id: "remote", label: "Remote", baseURL: "https://remote.test", token: "secret",
+    }
+    api.updateTask.mockImplementation((_key: string, input: Partial<Task>) => Promise.resolve({
+      ...root,
+      ...input,
+      revision: Number(input.revision) + 1,
+    }))
+    render(<TasksWorkspace target={target} />)
+
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.selectOptions(await screen.findByLabelText("Status"), "wait_customer")
+    await userEvent.type(screen.getByLabelText("Pull request URL"), "https://example.test/pull/7")
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+
+    expect(api.updateTask).toHaveBeenNthCalledWith(1, "TEST-1", expect.objectContaining({
+      status: "wait_customer",
+      pull_request: "https://example.test/pull/7",
+      revision: 2,
+    }), target)
+    const pullRequest = await screen.findByLabelText("Pull request URL")
+    expect(pullRequest).toHaveValue("https://example.test/pull/7")
+    await userEvent.clear(pullRequest)
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+
+    expect(api.updateTask).toHaveBeenNthCalledWith(2, "TEST-1", expect.objectContaining({
+      status: "wait_customer",
+      pull_request: "",
+      revision: 3,
+    }), target)
   })
 
   it("shows the loading placeholder only until the initial task tree arrives", async () => {
