@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
@@ -46,7 +46,10 @@ beforeEach(() => {
     status_updated: "",
   });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe("AgentWorkspace", () => {
   it("renders configured budget rows when an older daemon omits exhausted periods", async () => {
@@ -122,6 +125,7 @@ describe("AgentWorkspace", () => {
   });
 
   it("retries effective cwd inspection after a transient failure", async () => {
+    vi.useFakeTimers();
     let inspections = 0;
     vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
       if (action !== "") {
@@ -148,11 +152,11 @@ describe("AgentWorkspace", () => {
       </DaemonProvider>,
     );
 
-    await waitFor(() => expect(inspections).toBe(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(inspections).toBe(1);
     expect(screen.getByTestId("agent-cwd")).toHaveTextContent("…");
-    await waitFor(() => expect(screen.getByTestId("agent-cwd")).toHaveTextContent("/managed/worker"), {
-      timeout: 4_500,
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(screen.getByTestId("agent-cwd")).toHaveTextContent("/managed/worker");
     expect(inspections).toBeGreaterThanOrEqual(2);
   });
 

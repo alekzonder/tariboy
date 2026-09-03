@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import DaemonsPage from "./DaemonsPage";
@@ -27,11 +27,11 @@ describe("DaemonsPage", () => {
   it("adds a daemon; token input is masked and never rendered back", async () => {
     renderPage();
     await userEvent.click(screen.getByRole("button", { name: /add host/i }));
-    await userEvent.type(screen.getByLabelText(/label/i), "prod");
-    await userEvent.type(screen.getByLabelText(/base url/i), "https://prod:8765");
+    fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "prod" } });
+    fireEvent.change(screen.getByLabelText(/base url/i), { target: { value: "https://prod:8765" } });
     const tokenInput = screen.getByLabelText(/token/i) as HTMLInputElement;
     expect(tokenInput.type).toBe("password");
-    await userEvent.type(tokenInput, "sup3rsecret");
+    fireEvent.change(tokenInput, { target: { value: "sup3rsecret" } });
     await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
 
     await waitFor(() => expect(screen.getByText("prod")).toBeInTheDocument());
@@ -45,9 +45,9 @@ describe("DaemonsPage", () => {
   it("removes a daemon", async () => {
     renderPage();
     await userEvent.click(screen.getByRole("button", { name: /add host/i }));
-    await userEvent.type(screen.getByLabelText(/label/i), "a");
-    await userEvent.type(screen.getByLabelText(/base url/i), "https://a:1");
-    await userEvent.type(screen.getByLabelText(/token/i), "ta");
+    fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "a" } });
+    fireEvent.change(screen.getByLabelText(/base url/i), { target: { value: "https://a:1" } });
+    fireEvent.change(screen.getByLabelText(/token/i), { target: { value: "ta" } });
     await userEvent.click(screen.getByRole("button", { name: /^add$/i }));
     await waitFor(() => expect(screen.getByText("a")).toBeInTheDocument());
 

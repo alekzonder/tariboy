@@ -402,8 +402,7 @@ describe("TasksWorkspace", () => {
     expect(screen.queryByLabelText("Status")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Assignee")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Manual block reason")).not.toBeInTheDocument()
-    await userEvent.clear(screen.getByLabelText("Title"))
-    await userEvent.type(screen.getByLabelText("Title"), "Managed title")
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Managed title" } })
     await userEvent.click(screen.getByRole("button", { name: "Save task" }))
     expect(api.updateTask).toHaveBeenCalledWith("TEST-1", {
       title: "Managed title", description: managed.description, priority: managed.priority, revision: managed.revision,
@@ -425,8 +424,8 @@ describe("TasksWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Activate workflow" }))
     expect(api.activateQueueWorkflow).toHaveBeenCalledWith("TEST", 8, 3, expect.any(String), undefined)
 
-    await userEvent.type(screen.getByLabelText("Pool name TEST"), "developers")
-    await userEvent.type(screen.getByLabelText("Pool agents TEST"), "dev-a, dev-b")
+    fireEvent.change(screen.getByLabelText("Pool name TEST"), { target: { value: "developers" } })
+    fireEvent.change(screen.getByLabelText("Pool agents TEST"), { target: { value: "dev-a, dev-b" } })
     await userEvent.click(screen.getByRole("button", { name: "Save pool" }))
     expect(api.rebindAgentPool).toHaveBeenCalledWith("TEST", "developers", ["dev-a", "dev-b"], 2, expect.any(String), undefined)
   })
@@ -450,8 +449,8 @@ describe("TasksWorkspace", () => {
     api.rebindAgentPool
       .mockRejectedValueOnce(Object.assign(new Error("revision conflict"), { status: 409 }))
       .mockResolvedValueOnce({ id: 4, queue: "TEST", name: "developers", agents: ["dev-a", "dev-b"], revision: 7, created_at: root.created_at, updated_at: root.updated_at })
-    await userEvent.type(screen.getByLabelText("Pool name TEST"), "developers")
-    await userEvent.type(screen.getByLabelText("Pool agents TEST"), "dev-a, dev-b")
+    fireEvent.change(screen.getByLabelText("Pool name TEST"), { target: { value: "developers" } })
+    fireEvent.change(screen.getByLabelText("Pool agents TEST"), { target: { value: "dev-a, dev-b" } })
     await userEvent.click(screen.getByRole("button", { name: "Save pool" }))
     expect(await screen.findByText(/Configuration changed elsewhere/)).toBeInTheDocument()
     expect(api.listAgentPools).toHaveBeenCalledTimes(3)
@@ -985,7 +984,7 @@ describe("TasksWorkspace", () => {
     await screen.findByText("Ship native tasks")
 
     await userEvent.click(screen.getByRole("button", { name: "New task" }))
-    await userEvent.type(screen.getByLabelText("Task title"), "New root")
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } })
     await userEvent.click(screen.getByRole("button", { name: "Create task" }))
     expect(api.createTask).toHaveBeenCalledWith(
       expect.objectContaining({ queue: "TEST", title: "New root", parent_key: "" }),
@@ -993,7 +992,7 @@ describe("TasksWorkspace", () => {
     )
 
     await userEvent.click(screen.getByRole("button", { name: "Add child to TEST-1" }))
-    await userEvent.type(screen.getByLabelText("Task title"), "Child work")
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Child work" } })
     await userEvent.click(screen.getByRole("button", { name: "Create task" }))
     expect(api.createTask).toHaveBeenLastCalledWith(
       expect.objectContaining({ parent_key: "TEST-1", title: "Child work" }),
@@ -1007,8 +1006,7 @@ describe("TasksWorkspace", () => {
     await screen.findByRole("heading", { name: "TEST-1" })
 
     const assignee = screen.getByLabelText("Assignee")
-    await userEvent.clear(assignee)
-    await userEvent.type(assignee, "freelance-reviewer")
+    fireEvent.change(assignee, { target: { value: "freelance-reviewer" } })
     await userEvent.click(screen.getByRole("button", { name: "Save task" }))
     expect(api.updateTask).toHaveBeenCalledWith(
       "TEST-1",
@@ -1017,7 +1015,7 @@ describe("TasksWorkspace", () => {
     )
 
     await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner")
-    await userEvent.type(screen.getByLabelText("Comment"), "Which release?")
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Which release?" } })
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
     expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
@@ -1033,7 +1031,7 @@ describe("TasksWorkspace", () => {
     await screen.findByRole("heading", { name: "TEST-1" })
 
     await userEvent.selectOptions(screen.getByLabelText("Ask"), "worker")
-    await userEvent.type(screen.getByLabelText("Comment"), "Can you verify?")
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
 
     expect(api.addTaskComment).toHaveBeenCalledWith(
@@ -1096,16 +1094,15 @@ describe("TasksWorkspace", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Queues" }))
     await userEvent.click(screen.getByRole("button", { name: "New queue" }))
-    await userEvent.type(screen.getByLabelText("Queue prefix"), "OPS")
-    await userEvent.type(screen.getByLabelText("New queue name"), "Operations")
+    fireEvent.change(screen.getByLabelText("Queue prefix"), { target: { value: "OPS" } })
+    fireEvent.change(screen.getByLabelText("New queue name"), { target: { value: "Operations" } })
     await userEvent.click(screen.getByRole("button", { name: "Create queue" }))
     expect(api.createTaskQueue).toHaveBeenCalledWith(
       expect.objectContaining({ prefix: "OPS", name: "Operations" }),
       undefined,
     )
 
-    await userEvent.clear(screen.getByLabelText("Queue name TEST"))
-    await userEvent.type(screen.getByLabelText("Queue name TEST"), "Tests updated")
+    fireEvent.change(screen.getByLabelText("Queue name TEST"), { target: { value: "Tests updated" } })
     await userEvent.click(screen.getByRole("button", { name: "Save TEST" }))
     expect(api.updateTaskQueue).toHaveBeenCalledWith(
       "TEST",

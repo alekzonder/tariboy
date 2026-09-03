@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import TerminalsPage from "./TerminalsPage";
@@ -119,6 +119,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function renderAt(path: string, attention: ReadonlySet<string> = new Set()) {
@@ -168,6 +169,7 @@ async function openManageMenu(): Promise<void> {
 
 describe("TerminalsPage", () => {
   it("retains the selected agent shell when its next aggregate refresh is unavailable", async () => {
+    vi.useFakeTimers();
     const remote = await addDaemon({ label: "prod", baseURL: "http://127.0.0.1:19992", token: "tok" });
     let state: "ready" | "unavailable" | "recovered" = "ready";
     vi.mocked(fetchAllAgents).mockImplementation(async () => [{
@@ -180,12 +182,12 @@ describe("TerminalsPage", () => {
     }]);
 
     renderAt(`/agents/${remote.id}/worker/console`);
-    expect(await screen.findByRole("heading", { name: "worker" })).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("heading", { name: "worker" })).toBeInTheDocument();
 
     state = "unavailable";
-    await waitFor(() => expect(vi.mocked(fetchAllAgents).mock.calls.length).toBeGreaterThan(1), {
-      timeout: 4_500,
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(vi.mocked(fetchAllAgents).mock.calls.length).toBeGreaterThan(1);
 
     expect(screen.getByRole("heading", { name: "worker" })).toBeInTheDocument();
     expect(screen.getByText(/temporarily unavailable/i)).toHaveAttribute("role", "status");
@@ -193,9 +195,8 @@ describe("TerminalsPage", () => {
     expect(screen.getByRole("button", { name: "Open worker" })).toBeDisabled();
 
     state = "recovered";
-    await waitFor(() => expect(vi.mocked(fetchAllAgents).mock.calls.length).toBeGreaterThan(2), {
-      timeout: 4_500,
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(vi.mocked(fetchAllAgents).mock.calls.length).toBeGreaterThan(2);
     expect(screen.getByRole("heading", { name: "worker" })).toBeInTheDocument();
     expect(screen.getByText("worker:v2")).toBeInTheDocument();
     expect(screen.queryByText(/temporarily unavailable/i)).toBeNull();
