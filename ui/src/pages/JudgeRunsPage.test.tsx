@@ -100,6 +100,24 @@ it("edits raw automation JSON and renders daemon validation diagnostics", async 
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/judge-automation"), expect.objectContaining({ method: "PUT", body: expect.stringContaining("config_json") })));
 });
 
+it("offers to create the judges team immediately after applying its first configuration", async () => {
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"], image_ref: "llm-as-judge:latest" } });
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/api/judge-automation") && init?.method === "PUT") return Promise.resolve(response({ ok: true, result: { revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: false } }));
+    if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [], count: 0 } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<MemoryRouter><JudgeRunsPage /></MemoryRouter>);
+
+  fireEvent.change(await screen.findByLabelText("Judge automation JSON"), { target: { value: canonical } });
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+  expect(await screen.findByRole("button", { name: "Create judges team" })).toBeInTheDocument();
+});
+
 it("queues an automation run from the selected Judge UI", async () => {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
@@ -117,13 +135,14 @@ it("queues an automation run from the selected Judge UI", async () => {
 });
 
 it("creates the missing judges team from the selected server's automation config", async () => {
-  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"], image_ref: "llm-as-judge:latest" } });
   let created = false;
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
     if (url.endsWith("/api/groups") && init?.method === "POST") { created = true; return Promise.resolve(response({ ok: true, result: { name: "judges" } })); }
     if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: created ? [{ name: "judges", lead: "judge-lead", members: 3 }] : [], count: created ? 1 : 0 } }));
+    if (url.endsWith("/api/agents")) return Promise.resolve(response({ ok: true, result: { agents: [{ name: "judge-lead" }, { name: "judge-one" }, { name: "judge-two" }], count: 3 } }));
     if (url.includes("/api/groups/judges/assign")) return Promise.resolve(response({ ok: true, result: { assigned: true } }));
     return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
   });
@@ -143,8 +162,41 @@ it("creates the missing judges team from the selected server's automation config
   ]);
 });
 
+it("repairs an incomplete judges team and creates its missing agents", async () => {
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"], image_ref: "llm-as-judge:latest" } });
+  const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/api/judge-automation") && init?.method === "PUT") return Promise.resolve(response({ ok: true, result: { revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
+    if (url.endsWith("/api/groups/judges")) return Promise.resolve(response({ ok: true, result: { name: "judges", lead: "judge-lead", members: ["judge-lead"] } }));
+    if (url.endsWith("/api/groups") && init?.method === "POST") return Promise.resolve(response({ ok: true, result: { name: "judges" } }));
+    if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [{ name: "judges", lead: "judge-lead", members: 1 }], count: 1 } }));
+    if (url.endsWith("/api/agents") && init?.method === "POST") return Promise.resolve(response({ ok: true, result: { state: "stopped" } }));
+    if (url.endsWith("/api/agents")) return Promise.resolve(response({ ok: true, result: { agents: [{ name: "judge-lead" }], count: 1 } }));
+    if (url.includes("/api/groups/judges/assign")) return Promise.resolve(response({ ok: true, result: { assigned: true } }));
+    return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "secret" };
+  render(<MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Create judges team" }));
+
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Create judges team" })).not.toBeInTheDocument());
+  const writes = fetchMock.mock.calls.filter(([, init]) => ["POST", "PUT"].includes(String(init?.method)));
+  expect(writes.map(([url, init]) => [url, JSON.parse(String(init?.body))])).toEqual([
+    ["https://remote.example/api/agents", { image: "llm-as-judge:latest", name: "judge-one" }],
+    ["https://remote.example/api/agents", { image: "llm-as-judge:latest", name: "judge-two" }],
+    ["https://remote.example/api/judge-automation", { config_json: canonical }],
+    ["https://remote.example/api/groups", { name: "judges", lead: "judge-lead" }],
+    ["https://remote.example/api/groups/judges/assign", { agent: "judge-lead" }],
+    ["https://remote.example/api/groups/judges/assign", { agent: "judge-one" }],
+    ["https://remote.example/api/groups/judges/assign", { agent: "judge-two" }],
+  ]);
+});
+
 it("hides the stale create button while a newly selected server loads", async () => {
-  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"], image_ref: "llm-as-judge:latest" } });
   let resolveRemote!: (value: Response) => void;
   const remoteAutomation = new Promise<Response>((resolve) => { resolveRemote = resolve; });
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
@@ -168,7 +220,7 @@ it("hides the stale create button while a newly selected server loads", async ()
 });
 
 it("ignores create completion from the previously selected server", async () => {
-  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"], image_ref: "llm-as-judge:latest" } });
   let finishCreate!: (value: Response) => void;
   const pendingCreate = new Promise<Response>((resolve) => { finishCreate = resolve; });
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -176,6 +228,7 @@ it("ignores create completion from the previously selected server", async () => 
     if (url === "https://first.example/api/groups" && init?.method === "POST") return pendingCreate;
     if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
     if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [], count: 0 } }));
+    if (url.endsWith("/api/agents")) return Promise.resolve(response({ ok: true, result: { agents: [{ name: "judge-lead" }, { name: "judge-one" }, { name: "judge-two" }], count: 3 } }));
     if (url.includes("/api/groups/judges/assign")) return Promise.resolve(response({ ok: true, result: { assigned: true } }));
     return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
   });
@@ -195,7 +248,7 @@ it("ignores create completion from the previously selected server", async () => 
 });
 
 it("keeps an in-flight create busy across same-server descriptor refreshes", async () => {
-  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"] } });
+  const canonical = JSON.stringify({ judge: { lead: "judge-lead", workers: ["judge-one", "judge-two"], image_ref: "llm-as-judge:latest" } });
   let finishCreate!: (value: Response) => void;
   const pendingCreate = new Promise<Response>((resolve) => { finishCreate = resolve; });
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -203,6 +256,7 @@ it("keeps an in-flight create busy across same-server descriptor refreshes", asy
     if (url.endsWith("/api/groups") && init?.method === "POST") return pendingCreate;
     if (url.endsWith("/api/judge-automation")) return Promise.resolve(response({ ok: true, result: { configured: true, revision: { revision: 1, hash: "h", canonical_json: canonical, created_at: "now" } } }));
     if (url.endsWith("/api/groups")) return Promise.resolve(response({ ok: true, result: { groups: [], count: 0 } }));
+    if (url.endsWith("/api/agents")) return Promise.resolve(response({ ok: true, result: { agents: [{ name: "judge-lead" }, { name: "judge-one" }, { name: "judge-two" }], count: 3 } }));
     if (url.includes("/api/groups/judges/assign")) return Promise.resolve(response({ ok: true, result: { assigned: true } }));
     return Promise.resolve(response({ ok: true, result: { count: 0, runs: [] } }));
   });
