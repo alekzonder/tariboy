@@ -14,7 +14,7 @@ describe("AuditExportActions", () => {
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     vi.stubGlobal("fetch", vi.fn((url: string) => {
       if (url.includes("format=markdown")) return Promise.resolve(new Response("# Audit log\n\nCommand — rg --files", { status: 200 }));
-      return Promise.resolve(new Response(new Blob(["zip"]), { status: 200, headers: { "Content-Type": "application/zip" } }));
+      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["zip"])) } as Response);
     }));
     vi.stubGlobal("URL", { ...URL, createObjectURL: vi.fn(() => "blob:audit"), revokeObjectURL: vi.fn() });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
@@ -44,9 +44,6 @@ describe("AuditExportActions", () => {
       "/api/agents/alice/audit-export",
       expect.objectContaining({ method: "GET" }),
     ));
-    await waitFor(
-      () => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled(),
-      { timeout: 5000 },
-    );
+    await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled());
   });
 });
