@@ -1,4 +1,4 @@
-package taskreminder
+package taskgoal
 
 import (
 	"context"
@@ -12,22 +12,42 @@ import (
 
 var goalNow = time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 
-func TestReconcileAgentSelectsAndKeepsStickyGoal(t *testing.T) {
+func TestReconcileAgentPreemptsStickyGoalForHigherPriority(t *testing.T) {
 	s := goalStore(t, goalNow)
-	seedTask(t, s, "T-1", "agent:worker", "P1", "open", "2026-09-01T00:00:00Z")
-	seedTask(t, s, "T-2", "agent:worker", "P1", "in_progress", "2026-09-02T00:00:00Z")
+	seedTask(t, s, "T-2", "agent:worker", "P2", "in_progress", "2026-09-02T00:00:00Z")
 
 	goal, err := s.ReconcileAgent("worker", goalNow)
 	if err != nil || goal.TaskKey != "T-2" || goal.Reason != "selected" || goal.Waiting {
 		t.Fatalf("goal=%#v err=%v", goal, err)
 	}
 
-	seedTask(t, s, "T-0", "agent:worker", "P0", "in_progress", "2026-08-01T00:00:00Z")
+	seedTask(t, s, "T-1", "agent:worker", "P1", "open", "2026-09-01T00:00:00Z")
 	goal, err = s.ReconcileAgent("worker", goalNow)
-	if err != nil || goal.TaskKey != "T-2" {
+	if err != nil || goal.TaskKey != "T-1" {
+		t.Fatalf("preempted goal=%#v err=%v", goal, err)
+	}
+	assertStoredGoal(t, s, "T-1")
+}
+
+func TestReconcileAgentKeepsStickyGoalForEqualOrLowerPriority(t *testing.T) {
+	s := goalStore(t, goalNow)
+	seedTask(t, s, "T-1", "agent:worker", "P1", "open", "2026-09-02T00:00:00Z")
+	if goal, err := s.ReconcileAgent("worker", goalNow); err != nil || goal.TaskKey != "T-1" {
+		t.Fatalf("initial goal=%#v err=%v", goal, err)
+	}
+
+	seedTask(t, s, "T-2", "agent:worker", "P1", "in_progress", "2026-09-01T00:00:00Z")
+	goal, err := s.ReconcileAgent("worker", goalNow)
+	if err != nil || goal.TaskKey != "T-1" {
 		t.Fatalf("sticky goal=%#v err=%v", goal, err)
 	}
-	assertStoredGoal(t, s, "T-2")
+
+	seedTask(t, s, "T-3", "agent:worker", "P2", "in_progress", "2026-08-01T00:00:00Z")
+	goal, err = s.ReconcileAgent("worker", goalNow)
+	if err != nil || goal.TaskKey != "T-1" {
+		t.Fatalf("sticky goal with lower priority candidate=%#v err=%v", goal, err)
+	}
+	assertStoredGoal(t, s, "T-1")
 }
 
 func TestReconcileAgentOrdersCandidates(t *testing.T) {

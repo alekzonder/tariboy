@@ -1,4 +1,4 @@
-package taskreminder
+package taskgoal
 
 import (
 	"context"

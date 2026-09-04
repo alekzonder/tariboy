@@ -1,4 +1,4 @@
-package taskreminder
+package taskgoal
 
 import (
 	"database/sql"
@@ -116,7 +116,18 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			if err != nil {
 				return Goal{}, tasks.Task{}, err
 			}
+			var higherPriority bool
 			if valid {
+				err = tx.QueryRow(`SELECT EXISTS(
+					SELECT 1 FROM tasks
+					WHERE assignee='agent:' || ? AND pull_request=''
+					  AND status IN ('in_progress','open') AND priority < ?
+				)`, agent, task.Priority).Scan(&higherPriority)
+			}
+			if err != nil {
+				return Goal{}, tasks.Task{}, err
+			}
+			if valid && !higherPriority {
 				return Goal{Agent: agent, TaskKey: task.Key, Revision: task.Revision, Reason: "selected", Waiting: waiting}, task, nil
 			}
 		}
