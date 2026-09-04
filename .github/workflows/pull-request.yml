@@ -37,5 +37,13 @@ jobs:
         run: npm ci
         working-directory: docs
 
+      # Loop tests use a fake spawner but still validate the selected harness exists.
+      - name: Provide Codex test harness
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexit 0\n' > "$RUNNER_TEMP/bin/codex"
+          chmod +x "$RUNNER_TEMP/bin/codex"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
       - name: Run checks
         run: make check

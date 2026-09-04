@@ -76,6 +76,7 @@ func TestPullRequestsRunMakeCheckWithLockedDependencies(t *testing.T) {
 		{uses: "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020"},
 		{run: "npm ci", workingDirectory: "ui"},
 		{run: "npm ci", workingDirectory: "docs"},
+		{run: "mkdir -p \"$RUNNER_TEMP/bin\"\nprintf '#!/bin/sh\\nexit 0\\n' > \"$RUNNER_TEMP/bin/codex\"\nchmod +x \"$RUNNER_TEMP/bin/codex\"\necho \"$RUNNER_TEMP/bin\" >> \"$GITHUB_PATH\"\n"},
 		{run: "make check"},
 	}
 	if len(job.Steps) != len(wantSteps) {
