@@ -515,6 +515,7 @@ func agentGoalDeliveryCooldown() registry.Command {
 		if err := agentStore(c).Update(a); err != nil {
 			return nil, err
 		}
+		refreshAgentGoal(c, a.Name)
 		return agentGoalSettingsView(a), nil
 	}}
 }
