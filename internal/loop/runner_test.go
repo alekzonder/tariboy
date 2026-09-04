@@ -713,6 +713,11 @@ func TestShimRunnerTerminatesSpawnThatRacesStoppedIteration(t *testing.T) {
 func TestRunRedactsCodexProxyAndInheritedOpenAIKeyFromLaunchRecords(t *testing.T) {
 	const providerKey = "real-provider-key-for-test"
 	t.Setenv("OPENAI_API_KEY", providerKey)
+	binDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
 	r, ag, _, _ := newRunnerForProxyTest(t, binder)

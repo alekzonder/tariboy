@@ -563,6 +563,11 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 		oauthCredential = "oauth-integration-secret"
 		accountID       = "acct-integration-secret"
 	)
+	binDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	type upstreamCall struct {
 		path          string
 		authorization string
