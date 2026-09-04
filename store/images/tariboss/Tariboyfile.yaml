@@ -1,0 +1,27 @@
+schema_version: 2
+
+plugins:
+  - name: whoami
+  - name: messages
+  - name: context
+  - name: status
+  - name: workdir
+  - name: loop
+
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/whoami
+  - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: $CURRENT_VERSION_STORE/skills/context
+  - dir: $CURRENT_VERSION_STORE/skills/status
+  - dir: $CURRENT_VERSION_STORE/skills/workdir
+  - dir: $CURRENT_VERSION_STORE/skills/loop
+
+prompts:
+  - runtime: identity
+  - runtime: messages
+  - runtime: context
+  - runtime: workdir
+  - file: ./instructions.md
+  - runtime: user-prompt
+  - runtime: one-shot
+  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md
