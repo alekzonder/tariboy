@@ -40,6 +40,12 @@ var (
 // Defaults to exec.Command; production behaviour is unchanged.
 var execCommand = exec.Command
 
+var (
+	waitTmuxChildExit = waitChildExit
+	killTmuxGroup     = syscall.Kill
+	reapTmuxChild     = syscall.Wait4
+)
+
 // activePTYs maps a tmux session to the SET of live ptmx of its in-progress
 // web attaches, so the separate `resize` control dial (a different
 // connection dispatched to tmuxShim.Resize) can find and pty.Setsize them.
@@ -657,12 +663,12 @@ func tmuxCommandError(action string, err error, output []byte) error {
 // RunTmuxSupervisor owns one harness process until it is reaped. Keeping the
 // process-group leader unreaped makes its group identity stable until this
 // owner either observes normal exit or terminates the group itself.
-func RunTmuxSupervisor(_ string, statusPath string, argv []string) error {
+func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error) {
 	if len(argv) == 0 {
 		return errors.New("tmux supervisor requires a harness command")
 	}
 	events := make(chan os.Signal, 1)
-	signal.Notify(events, syscall.SIGHUP, syscall.SIGCHLD)
+	signal.Notify(events, syscall.SIGHUP)
 	defer signal.Stop(events)
 
 	cmd := exec.Command(argv[0], argv[1:]...)
@@ -683,21 +689,56 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) error {
 		return fmt.Errorf("start harness: %w", err)
 	}
 	pid := cmd.Process.Pid
+	reaped := false
+	defer func() {
+		if retErr == nil || reaped {
+			return
+		}
+		if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("final harness cleanup: %w", err))
+		}
+	}()
 
 	// Hidden supervisor mode starts no other child before or after cmd.Start.
-	// Notify is active first, so the first HUP or SIGCHLD leaves pid as our
-	// unreaped group leader. Even a forged SIGCHLD can only end that owned group
-	// early; it cannot turn this signal into a post-reap numeric-PID lookup.
-	<-events
-	killErr := syscall.Kill(-pid, syscall.SIGKILL)
-	if errors.Is(killErr, syscall.ESRCH) {
-		killErr = nil
+	exited := make(chan error, 1)
+	go func() { exited <- waitTmuxChildExit(pid) }()
+	select {
+	case err := <-exited:
+		if err != nil {
+			return fmt.Errorf("observe harness exit: %w", err)
+		}
+	case <-events:
+		if err := signalTmuxGroup(pid, syscall.SIGTERM); err != nil {
+			return fmt.Errorf("terminate harness: %w", err)
+		}
+		select {
+		case err := <-exited:
+			if err != nil {
+				return fmt.Errorf("observe harness exit after SIGTERM: %w", err)
+			}
+		case <-time.After(2 * time.Second):
+			if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
+				return fmt.Errorf("kill harness: %w", err)
+			}
+			select {
+			case err := <-exited:
+				if err != nil {
+					return fmt.Errorf("observe harness exit after SIGKILL: %w", err)
+				}
+			case <-time.After(2 * time.Second):
+				return errors.New("observe harness exit after SIGKILL: deadline exceeded")
+			}
+		}
+	}
+
+	if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
+		return fmt.Errorf("clean up harness group: %w", err)
 	}
 	var status syscall.WaitStatus
 	var waited int
 	var err error
 	for {
-		waited, err = syscall.Wait4(pid, &status, 0, nil)
+		waited, err = reapTmuxChild(pid, &status, 0, nil)
 		if !errors.Is(err, syscall.EINTR) {
 			break
 		}
@@ -707,7 +748,19 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) error {
 	} else if waited != pid {
 		err = errors.New("reap harness: wait returned without child")
 	}
-	return errors.Join(killErr, err, writeTmuxExitStatus(statusPath, waitStatusExitCode(status)))
+	if err != nil {
+		return err
+	}
+	reaped = true
+	return writeTmuxExitStatus(statusPath, waitStatusExitCode(status))
+}
+
+func signalTmuxGroup(pid int, signal syscall.Signal) error {
+	err := killTmuxGroup(-pid, signal)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return err
 }
 
 func waitStatusExitCode(status syscall.WaitStatus) int {
