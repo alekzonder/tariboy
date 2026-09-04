@@ -132,7 +132,7 @@ def run(args):
         flags, pos = parse_flags(args, 2, {"text", "type", "data"})
         if not pos:
             raise UsageError("tools message reply: <id> is required")
-        body = {"id": pos[0], "text": flags.get("text", ""), "type": flags.get("type", "")}
+        body = {"id": pos[0], "text": flags.get("text", " ".join(pos[1:])), "type": flags.get("type", "")}
         if "data" in flags:
             body["data"] = json_value(flags, "data", "message reply")
         return send("POST", "/tools/message/reply", body)

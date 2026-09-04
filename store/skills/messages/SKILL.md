@@ -13,7 +13,7 @@ Incoming messages arrive inline in the iteration prompt, batched per iteration,
 and each carries its own ID. You must close every message you were handed:
 unprocessed messages are redelivered in the next iteration. Act on each, then
 close it with `scripts/messages.sh message processed <id> "<result>"`;
-`scripts/messages.sh message reply` replies and closes it atomically.
+`scripts/messages.sh message reply <id> "<body>"` replies and closes it atomically.
 
 - Notify: `scripts/messages.sh message send --channel <name> --text <body>`
 - Request a reply: `scripts/messages.sh request --channel <name> --text <body> [--deadline 5m]`
