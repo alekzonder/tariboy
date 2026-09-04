@@ -37,8 +37,9 @@ schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
 read-only. Bare images force Interactive on and Autopilot off.
 
 Agent creation, clone, and **Configuration** carry the per-agent Goal settings:
-an enabled-by-default switch and a positive whole-second customer-wait timeout
-(300 by default). Configuration shows the daemon-selected goal key read-only.
+an enabled-by-default switch, a positive whole-second customer-wait timeout
+(300 by default), and a positive Goal delivery cooldown (60 seconds by
+default). Configuration shows the daemon-selected goal key read-only.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.

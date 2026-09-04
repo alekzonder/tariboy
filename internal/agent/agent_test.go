@@ -335,6 +335,24 @@ func TestUpdateEnabledAgentPreservesDaemonOwnedCurrentGoal(t *testing.T) {
 	}
 }
 
+func TestGoalDeliveryCooldownDefaultsAndValidates(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(Agent{Name: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Get("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GoalDeliveryCooldownS != 60 || got.LastGoalDeliveryAt != "" {
+		t.Fatalf("goal delivery defaults = %#v", got)
+	}
+	got.GoalDeliveryCooldownS = 0
+	if err := st.Update(got); err == nil {
+		t.Fatal("Update accepted zero goal delivery cooldown")
+	}
+}
+
 func TestGoalTimeoutValidationPreservesStoredValue(t *testing.T) {
 	st := openStore(t)
 	if err := st.Create(Agent{Name: "worker"}); err != nil {

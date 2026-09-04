@@ -115,6 +115,11 @@ func (r *Runner) Up(f File) error {
 				} else if set {
 					body["goal_wait_customer_timeout_s"] = seconds
 				}
+				if seconds, set, err := a.goalDeliveryCooldownSeconds(); err != nil {
+					return fmt.Errorf("agent %s goal: %w", name, err)
+				} else if set {
+					body["goal_delivery_cooldown_s"] = seconds
+				}
 			}
 			if _, err := r.call.Call("POST", "/api/agents", body); err != nil {
 				return fmt.Errorf("create agent %s: %w", name, err)
@@ -227,6 +232,15 @@ func (r *Runner) convergeGoal(name string, a AgentSpec, cur map[string]any) erro
 	if set && fmt.Sprintf("%v", cur["goal_wait_customer_timeout_s"]) != fmt.Sprintf("%d", seconds) {
 		if _, err := r.call.Call("POST", "/api/agents/"+name+"/goal-wait-customer-timeout", map[string]any{"seconds": seconds}); err != nil {
 			return fmt.Errorf("set goal wait customer timeout %s: %w", name, err)
+		}
+	}
+	seconds, set, err = a.goalDeliveryCooldownSeconds()
+	if err != nil {
+		return fmt.Errorf("agent %s goal: %w", name, err)
+	}
+	if set && fmt.Sprintf("%v", cur["goal_delivery_cooldown_s"]) != fmt.Sprintf("%d", seconds) {
+		if _, err := r.call.Call("POST", "/api/agents/"+name+"/goal-delivery-cooldown", map[string]any{"seconds": seconds}); err != nil {
+			return fmt.Errorf("set goal delivery cooldown %s: %w", name, err)
 		}
 	}
 	return nil
