@@ -39,11 +39,11 @@ skills:
 
 prompts:
   - runtime: identity
+  - runtime: one-shot
+  - runtime: messages
   - runtime: goal
   - runtime: context
-  - runtime: messages
   - runtime: workdir
   - file: ./instructions.md
   - runtime: user-prompt
-  - runtime: one-shot
   - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md

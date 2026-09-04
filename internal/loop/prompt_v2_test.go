@@ -40,7 +40,7 @@ func TestRenderPromptTemplateGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "Use the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\n"
+	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\n"
 	if got != want {
 		t.Fatalf("got %q", got)
 	}
@@ -59,7 +59,7 @@ func TestRenderPromptTemplateGoalPreservesDescriptionLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "Use the `tasks` skill for this runtime data.\n\n" + goal + "\n"
+	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n" + goal + "\n"
 	if got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}
@@ -103,7 +103,7 @@ func TestRenderPromptTemplateUsesDeclaredOrderOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "A\n\nUse the `whoami` skill for this runtime data.\n\nID\n\nB\n\nUse the `context` skill for this runtime data.\n\n# Agent Context\n\nCTX\n\nUse the `workdir` skill for this runtime data.\n\nworkdir: /var/lib/tariboy/agents/worker/workdir\n\nRUN\n"; got != want {
+	if want := "A\n\n# [runtime: identity]\n\nUse the `whoami` skill for this runtime data.\n\nID\n\nB\n\n# [runtime: context]\n\nUse the `context` skill for this runtime data.\n\n# Agent Context\n\nCTX\n\n# [runtime: workdir]\n\nUse the `workdir` skill for this runtime data.\n\nworkdir: /var/lib/tariboy/agents/worker/workdir\n\n# [runtime: one-shot]\n\nRUN\n"; got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}
 }
@@ -123,13 +123,14 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 		value   RuntimePromptValues
 		want    string
 	}{
-		{"identity", RuntimePromptValues{Identity: "identity data"}, "Use the `whoami` skill for this runtime data.\n\nidentity data\n"},
-		{"workdir", RuntimePromptValues{Workdir: "workdir data"}, "Use the `workdir` skill for this runtime data.\n\nworkdir data\n"},
-		{"context", RuntimePromptValues{Context: "context data"}, "Use the `context` skill for this runtime data.\n\n# Agent Context\n\ncontext data\n"},
-		{"messages", RuntimePromptValues{Messages: "message data"}, "Use the `messages` skill for this runtime data.\n\n# Messages\n\nmessage data\n"},
-		{"awaiting-replies", RuntimePromptValues{AwaitingReplies: "reply data"}, "Use the `messages` skill for this runtime data.\n\n# Messages\n\nreply data\n"},
-		{"user-prompt", RuntimePromptValues{UserPrompt: "user prompt"}, "user prompt\n"},
-		{"one-shot", RuntimePromptValues{OneShot: "one shot"}, "one shot\n"},
+		{"identity", RuntimePromptValues{Identity: "identity data"}, "# [runtime: identity]\n\nUse the `whoami` skill for this runtime data.\n\nidentity data\n"},
+		{"goal", RuntimePromptValues{Goal: "goal data"}, "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\ngoal data\n"},
+		{"workdir", RuntimePromptValues{Workdir: "workdir data"}, "# [runtime: workdir]\n\nUse the `workdir` skill for this runtime data.\n\nworkdir data\n"},
+		{"context", RuntimePromptValues{Context: "context data"}, "# [runtime: context]\n\nUse the `context` skill for this runtime data.\n\n# Agent Context\n\ncontext data\n"},
+		{"messages", RuntimePromptValues{Messages: "message data"}, "# [runtime: messages]\n\nUse the `messages` skill for this runtime data.\n\n# Messages\n\nmessage data\n"},
+		{"awaiting-replies", RuntimePromptValues{AwaitingReplies: "reply data"}, "# [runtime: awaiting-replies]\n\nUse the `messages` skill for this runtime data.\n\n# Messages\n\nreply data\n"},
+		{"user-prompt", RuntimePromptValues{UserPrompt: "user prompt"}, "# [runtime: user-prompt]\n\nuser prompt\n"},
+		{"one-shot", RuntimePromptValues{OneShot: "one shot"}, "# [runtime: one-shot]\n\none shot\n"},
 		{"context", RuntimePromptValues{Context: "\n"}, ""},
 	}
 	for _, tt := range tests {
@@ -159,7 +160,7 @@ func TestRenderPromptTemplateGroupsMessagesAndAwaitingReplies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "Use the `messages` skill for this runtime data.\n\n# Messages\nmessage data\n\n# Awaiting replies\nreply data\n"; got != want {
+	if want := "# [runtime: messages]\n\nUse the `messages` skill for this runtime data.\n\n# Messages\nmessage data\n\n# Awaiting replies\nreply data\n"; got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}
 }

@@ -1209,7 +1209,7 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "Use the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
+	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
 	if got := string(body); got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}

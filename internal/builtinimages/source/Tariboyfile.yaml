@@ -21,10 +21,10 @@ skills:
   - dir: $CURRENT_VERSION_STORE/skills/tasks
 prompts:
   - runtime: identity
-  - runtime: goal
+  - runtime: one-shot
   - runtime: messages
+  - runtime: goal
   - runtime: context
   - runtime: workdir
   - runtime: user-prompt
-  - runtime: one-shot
   - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md

@@ -90,13 +90,13 @@ skills:
   - dir: $PLUGINS/jira/2.5.0/skills/triage
 prompts:
   - runtime: identity
+  - runtime: one-shot
   - runtime: messages
   - file: $PLUGINS/jira/2.5.0/prompts/reviewer.md
   - runtime: context
   - runtime: workdir
   - file: ./task.md
   - runtime: user-prompt
-  - runtime: one-shot
   - file: /srv/tariboy/prompts/finish.md
 ```
 
@@ -148,12 +148,14 @@ positions:
 | `user-prompt` | The agent's standing prompt | none; this is task input |
 | `one-shot` | A prompt supplied for this single execution | none; this is task input |
 
-Each non-empty skill-owned runtime value is preceded by a short instruction to
-use that skill; the instruction names the skill without embedding an installation
-path. Context data starts with `# Agent Context`, and messages plus outstanding
-replies form one `# Messages` group. New templates declare only `messages`;
-existing templates that also declare `awaiting-replies` keep working without a
-second section. Each singleton placeholder may appear at most once. Empty runtime
+Each non-empty runtime value starts with `# [runtime: <name>]`. For skill-owned
+values, the short instruction to use that skill follows the heading and names
+the skill without embedding an installation path. Context data then starts with
+`# Agent Context`, and messages plus outstanding replies form one `# Messages`
+group. New templates declare only `messages`; existing templates that also
+declare `awaiting-replies` keep working without a second section. The supplied
+templates order actionable values as `one-shot`, `messages`, then `goal` when
+present. Each singleton placeholder may appear at most once. Empty runtime
 values add no text. The **Template** tab shows static paths, categories, sizes,
 hashes, and runtime markers in their exact order without draining messages.
 
