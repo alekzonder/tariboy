@@ -169,6 +169,34 @@ func TestUpdateTaskAcceptsWaitCustomer(t *testing.T) {
 	}
 }
 
+func TestUpdateTaskPullRequestMovesAssignedTaskToWaitCustomer(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	actor := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, actor, CreateQueueInput{Prefix: "PRWAIT", Name: "PR waits"})
+	task, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "PRWAIT", Title: "ship", Assignee: "agent:worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "https://example.test/org/repo/pull/1"
+	updated, err := svc.UpdateTask(ctx, actor, task.Key, UpdateTaskInput{PullRequest: &url, Revision: task.Revision})
+	if err != nil || updated.Status != StatusWaitCustomer {
+		t.Fatalf("updated = %#v, %v", updated, err)
+	}
+}
+
+func TestCreateTaskPullRequestMovesAssignedTaskToWaitCustomer(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	actor := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, actor, CreateQueueInput{Prefix: "PRCREATE", Name: "PR creates"})
+	url := "https://example.test/org/repo/pull/1"
+	task, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "PRCREATE", Title: "ship", Assignee: "agent:worker", PullRequest: url})
+	if err != nil || task.Status != StatusWaitCustomer {
+		t.Fatalf("created = %#v, %v", task, err)
+	}
+}
+
 func TestCreateTaskAllocatesPermanentQueueKeyAndInheritsQueue(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

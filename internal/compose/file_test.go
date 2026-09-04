@@ -339,12 +339,13 @@ agents:
     goal:
       enabled: false
       wait_customer_timeout: 5m
+      delivery_cooldown: 1m
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
 	goal := f.Agents["worker"].Goal
-	if goal == nil || goal.Enabled == nil || *goal.Enabled || goal.WaitCustomerTimeout != "5m" {
+	if goal == nil || goal.Enabled == nil || *goal.Enabled || goal.WaitCustomerTimeout != "5m" || goal.DeliveryCooldown != "1m" {
 		t.Fatalf("Goal = %#v", goal)
 	}
 	seconds, set, err := f.Agents["worker"].goalWaitCustomerTimeoutSeconds()
@@ -353,6 +354,10 @@ agents:
 	}
 	if err := f.Validate(); err != nil {
 		t.Fatalf("valid Goal rejected: %v", err)
+	}
+	cooldown, set, err := f.Agents["worker"].goalDeliveryCooldownSeconds()
+	if err != nil || !set || cooldown != 60 {
+		t.Fatalf("goal cooldown = %d set=%t err=%v", cooldown, set, err)
 	}
 }
 
@@ -365,6 +370,17 @@ func TestGoalDurationRejectsZeroFractionalAndInvalidValues(t *testing.T) {
 			}
 			if err := f.Validate(); err == nil {
 				t.Fatalf("Goal duration %q was accepted", value)
+			}
+		})
+	}
+	for _, value := range []string{"0s", "1500ms", "5", "-1s"} {
+		t.Run("cooldown-"+value, func(t *testing.T) {
+			f, err := Parse([]byte("version: 1\nagents:\n  worker:\n    image: basic:latest\n    goal:\n      delivery_cooldown: " + value + "\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := f.Validate(); err == nil {
+				t.Fatalf("Goal cooldown %q was accepted", value)
 			}
 		})
 	}

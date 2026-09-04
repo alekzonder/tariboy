@@ -232,6 +232,11 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	}
 	now := s.now()
 	key := fmt.Sprintf("%s-%d", queue, next)
+	assignee := normalizeAssignee(in.Assignee)
+	status := StatusOpen
+	if pullRequest != "" && strings.HasPrefix(assignee, "agent:") {
+		status = StatusWaitCustomer
+	}
 	var workflowVersionID any
 	var workflowStatus any
 	var workflowRevision any
@@ -245,9 +250,9 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 			task_key, queue_prefix, parent_id, position, priority, title, description, status, pull_request,
 			author, customer, group_name, assignee,
 			workflow_version_id, workflow_status, workflow_revision, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		key, queue, parentID, position, priority, in.Title, strings.TrimSpace(in.Description),
-		pullRequest, actor.Principal, customer, group, normalizeAssignee(in.Assignee),
+		status, pullRequest, actor.Principal, customer, group, assignee,
 		workflowVersionID, workflowStatus, workflowRevision, now, now)
 	if err != nil {
 		return Task{}, err
@@ -258,9 +263,9 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	}
 	task := Task{
 		ID: taskID, Key: key, Queue: queue, ParentKey: parentKey, Position: position, Priority: priority,
-		Title: in.Title, Description: strings.TrimSpace(in.Description), Status: StatusOpen, PullRequest: pullRequest,
+		Title: in.Title, Description: strings.TrimSpace(in.Description), Status: status, PullRequest: pullRequest,
 		Author: actor.Principal, Customer: customer, Group: group,
-		Assignee: normalizeAssignee(in.Assignee), Revision: 1, CreatedAt: now, UpdatedAt: now,
+		Assignee: assignee, Revision: 1, CreatedAt: now, UpdatedAt: now,
 		Access: "write",
 	}
 	if managed {

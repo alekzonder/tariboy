@@ -51,8 +51,12 @@ func FormatRuntimeIdentity(agentName, imageRef, imageDigest, cwd, iterationID st
 }
 
 func FormatRuntimeGoal(task tasks.Task) string {
-	return fmt.Sprintf("# Agent Goal\n\nkey: %s\ntitle: %s\npriority: %s\nstatus: %s\ndescription: %s",
+	return fmt.Sprintf("# Agent Goal\n\nA selected task is active work: complete it through its Native Task workflow. If it is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nkey: %s\ntitle: %s\npriority: %s\nstatus: %s\ndescription: %s",
 		task.Key, task.Title, task.Priority, task.Status, task.Description)
+}
+
+func FormatRuntimeGoalGuidance() string {
+	return "# Agent Goal\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself."
 }
 
 func FormatRuntimeWorkdir(path string) (string, error) {

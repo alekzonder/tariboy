@@ -188,6 +188,7 @@ type RunSpec struct {
 	MessagesMaxQueue         int
 	GoalEnabled              *bool
 	GoalWaitCustomerTimeoutS int
+	GoalDeliveryCooldownS    int
 	Group                    string
 	Alias                    string
 	Notes                    string

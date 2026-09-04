@@ -2,11 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useAgentName } from "@/lib/agent";
 import {
-  agentGetOn, agentPostOn, getActiveDaemon, type ApiTarget,
+  agentGetOn,
+  agentPostOn,
+  getActiveDaemon,
+  type ApiTarget,
 } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
 import type { AgentView } from "@/lib/types";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,8 +36,16 @@ const HARNESS_OPTIONS = ["claude", "codex", "opencode"] as const;
 // in the Settings page shares the same vertical rhythm. The control row keeps
 // the input and its Set button as direct siblings — tests and CSS both rely on
 // that grouping.
-function Field({ label, htmlFor, hint, children }: {
-  label: string; htmlFor?: string; hint?: ReactNode; children: ReactNode;
+function Field({
+  label,
+  htmlFor,
+  hint,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  hint?: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
@@ -48,7 +65,8 @@ const selectClass =
 
 const NEXT_ITERATION = "Takes effect on the next iteration.";
 const NEXT_START_SECTION = "Restart the agent yourself when you're ready.";
-const NEXT_START_FIELD = "Saved immediately. Takes effect the next time the agent starts.";
+const NEXT_START_FIELD =
+  "Saved immediately. Takes effect the next time the agent starts.";
 
 // ---- Batched section drafts -------------------------------------------------
 //
@@ -91,76 +109,146 @@ const normalizeInt = (min?: number) => (raw: string) => {
 };
 const normalizeStr = (raw: string) => raw.trim();
 
-const loopInt = (field: string, min?: number): Pick<SectionField, "normalize" | "submit"> => ({
+const loopInt = (
+  field: string,
+  min?: number,
+): Pick<SectionField, "normalize" | "submit"> => ({
   normalize: normalizeInt(min),
-  submit: (target, name, value) => agentPostOn(target, name, `loop/${field}`, { value: Number(value) }),
+  submit: (target, name, value) =>
+    agentPostOn(target, name, `loop/${field}`, { value: Number(value) }),
 });
-const loopStr = (field: string): Pick<SectionField, "normalize" | "submit"> => ({
+const loopStr = (
+  field: string,
+): Pick<SectionField, "normalize" | "submit"> => ({
   normalize: normalizeStr,
-  submit: (target, name, value) => agentPostOn(target, name, `loop/${field}`, { value }),
+  submit: (target, name, value) =>
+    agentPostOn(target, name, `loop/${field}`, { value }),
 });
 
 const LOOP_FIELDS: readonly SectionField[] = [
   {
-    key: "interval", label: "Interval", helper: `Seconds. ${NEXT_ITERATION}`,
-    read: (v) => String(v.interval_s), ...loopInt("interval"),
+    key: "interval",
+    label: "Interval",
+    helper: `Seconds. ${NEXT_ITERATION}`,
+    read: (v) => String(v.interval_s),
+    ...loopInt("interval"),
   },
   {
-    key: "timeout", label: "Timeout", helper: `Seconds. ${NEXT_ITERATION}`,
-    read: (v) => String(v.timeout_s), ...loopInt("timeout"),
+    key: "timeout",
+    label: "Timeout",
+    helper: `Seconds. ${NEXT_ITERATION}`,
+    read: (v) => String(v.timeout_s),
+    ...loopInt("timeout"),
   },
   {
-    key: "hard-timeout", label: "Hard timeout", helper: `Seconds. ${NEXT_ITERATION}`,
-    read: (v) => String(v.hard_timeout_s), ...loopInt("hard-timeout"),
+    key: "hard-timeout",
+    label: "Hard timeout",
+    helper: `Seconds. ${NEXT_ITERATION}`,
+    read: (v) => String(v.hard_timeout_s),
+    ...loopInt("hard-timeout"),
   },
   {
-    key: "on-timeout", label: "On timeout", helper: NEXT_ITERATION, options: ["restart", "stop"],
-    read: (v) => v.on_timeout || "restart", ...loopStr("on-timeout"),
+    key: "on-timeout",
+    label: "On timeout",
+    helper: NEXT_ITERATION,
+    options: ["restart", "stop"],
+    read: (v) => v.on_timeout || "restart",
+    ...loopStr("on-timeout"),
   },
   {
-    key: "on-error", label: "On error", helper: NEXT_ITERATION, options: ["restart", "stop"],
-    read: (v) => v.on_error || "restart", ...loopStr("on-error"),
+    key: "on-error",
+    label: "On error",
+    helper: NEXT_ITERATION,
+    options: ["restart", "stop"],
+    read: (v) => v.on_error || "restart",
+    ...loopStr("on-error"),
   },
   {
-    key: "max-idle", label: "Maximum idle iterations", helper: `0 means never. ${NEXT_ITERATION}`,
-    numeric: true, read: (v) => String(v.max_idle_iterations ?? 0), ...loopInt("max-idle", 0),
+    key: "max-idle",
+    label: "Maximum idle iterations",
+    helper: `0 means never. ${NEXT_ITERATION}`,
+    numeric: true,
+    read: (v) => String(v.max_idle_iterations ?? 0),
+    ...loopInt("max-idle", 0),
   },
 ];
 
 const RUNTIME_FIELDS: readonly SectionField[] = [
   {
-    key: "model", label: "Model", helper: NEXT_ITERATION,
-    read: (v) => v.model || "", normalize: normalizeStr,
-    submit: (target, name, value) => agentPostOn(target, name, "model", { value }),
+    key: "model",
+    label: "Model",
+    helper: NEXT_ITERATION,
+    read: (v) => v.model || "",
+    normalize: normalizeStr,
+    submit: (target, name, value) =>
+      agentPostOn(target, name, "model", { value }),
   },
   {
-    key: "effort", label: "Effort", helper: NEXT_ITERATION,
-    read: (v) => v.effort || "", normalize: normalizeStr,
-    submit: (target, name, value) => agentPostOn(target, name, "effort", { value }),
+    key: "effort",
+    label: "Effort",
+    helper: NEXT_ITERATION,
+    read: (v) => v.effort || "",
+    normalize: normalizeStr,
+    submit: (target, name, value) =>
+      agentPostOn(target, name, "effort", { value }),
   },
 ];
 
 const POSITIVE_INTEGER = "Enter a positive whole number of seconds.";
 const GOAL_FIELDS: readonly SectionField[] = [
   {
-    key: "goal-enabled", label: "Enable Goal",
-    helper: "Select and deliver this agent's current Native Task goal.", toggle: true,
-    read: (v) => String(v.goal_enabled), normalize: normalizeStr,
-    submit: (target, name, value) => agentPostOn(target, name, "goal-enabled", { enabled: value === "true" }),
+    key: "goal-enabled",
+    label: "Enable Goal",
+    helper: "Select and deliver this agent's current Native Task goal.",
+    toggle: true,
+    read: (v) => String(v.goal_enabled),
+    normalize: normalizeStr,
+    submit: (target, name, value) =>
+      agentPostOn(target, name, "goal-enabled", { enabled: value === "true" }),
   },
   {
-    key: "goal-wait-customer-timeout", label: "Wait customer timeout seconds",
-    helper: "Use a positive whole number of seconds.", numeric: true, minimum: 1,
-    read: (v) => String(v.goal_wait_customer_timeout_s), normalize: normalizeStr,
-    validate: (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? "" : POSITIVE_INTEGER,
-    submit: (target, name, value) => agentPostOn(target, name, "goal-wait-customer-timeout", { seconds: Number(value) }),
+    key: "goal-wait-customer-timeout",
+    label: "Wait customer timeout seconds",
+    helper: "Use a positive whole number of seconds.",
+    numeric: true,
+    minimum: 1,
+    read: (v) => String(v.goal_wait_customer_timeout_s),
+    normalize: normalizeStr,
+    validate: (value) =>
+      Number.isInteger(Number(value)) && Number(value) > 0
+        ? ""
+        : POSITIVE_INTEGER,
+    submit: (target, name, value) =>
+      agentPostOn(target, name, "goal-wait-customer-timeout", {
+        seconds: Number(value),
+      }),
+  },
+  {
+    key: "goal-delivery-cooldown",
+    label: "Goal delivery cooldown seconds",
+    helper: "Wait before sending another unprocessed Goal message.",
+    numeric: true,
+    minimum: 1,
+    read: (v) => String(v.goal_delivery_cooldown_s),
+    normalize: normalizeStr,
+    validate: (value) =>
+      Number.isInteger(Number(value)) && Number(value) > 0
+        ? ""
+        : POSITIVE_INTEGER,
+    submit: (target, name, value) =>
+      agentPostOn(target, name, "goal-delivery-cooldown", {
+        seconds: Number(value),
+      }),
   },
 ];
 
-const PARTIAL_FAILURE = "Some changes were not saved. Review the highlighted fields and try again.";
+const PARTIAL_FAILURE =
+  "Some changes were not saved. Review the highlighted fields and try again.";
 
 function readSection(fields: readonly SectionField[], view: AgentView): Values {
-  return Object.fromEntries(fields.map((f) => [f.key, f.normalize(f.read(view))]));
+  return Object.fromEntries(
+    fields.map((f) => [f.key, f.normalize(f.read(view))]),
+  );
 }
 
 interface SectionDraft {
@@ -202,7 +290,9 @@ function useSectionDraft(
     fields.map((f) => [f.key, drafts[f.key] ?? baseline[f.key]]),
   );
   const dirtyKeys = fields
-    .filter((f) => f.key in drafts && f.normalize(drafts[f.key]) !== baseline[f.key])
+    .filter(
+      (f) => f.key in drafts && f.normalize(drafts[f.key]) !== baseline[f.key],
+    )
     .map((f) => f.key);
 
   const setField = useCallback((key: string, value: string) => {
@@ -276,12 +366,28 @@ function useSectionDraft(
     setSaving(false);
   };
 
-  return { draft, dirtyKeys, saving, error, fieldErrors, notice, setField, save, discard };
+  return {
+    draft,
+    dirtyKeys,
+    saving,
+    error,
+    fieldErrors,
+    notice,
+    setField,
+    save,
+    discard,
+  };
 }
 
 // One control plus its label, timing helper and — when a save left it behind —
 // the server's reason, wired to the control through aria-describedby.
-function DraftField({ field, section }: { field: SectionField; section: SectionDraft }) {
+function DraftField({
+  field,
+  section,
+}: {
+  field: SectionField;
+  section: SectionDraft;
+}) {
   const value = section.draft[field.key] ?? "";
   const fieldError = section.fieldErrors[field.key] ?? "";
   const describedBy = `${field.key}-help${fieldError ? ` ${field.key}-error` : ""}`;
@@ -290,49 +396,104 @@ function DraftField({ field, section }: { field: SectionField; section: SectionD
       <Label htmlFor={field.key}>{field.label}</Label>
       {field.options ? (
         <select
-          id={field.key} value={value} className={selectClass}
-          aria-describedby={describedBy} aria-invalid={fieldError ? true : undefined}
+          id={field.key}
+          value={value}
+          className={selectClass}
+          aria-describedby={describedBy}
+          aria-invalid={fieldError ? true : undefined}
           onChange={(e) => section.setField(field.key, e.target.value)}
         >
-          {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
+          {field.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
         </select>
       ) : field.toggle ? (
         <Switch
-          id={field.key} checked={value === "true"}
-          aria-describedby={describedBy} aria-invalid={fieldError ? true : undefined}
-          onCheckedChange={(checked) => section.setField(field.key, String(checked))}
+          id={field.key}
+          checked={value === "true"}
+          aria-describedby={describedBy}
+          aria-invalid={fieldError ? true : undefined}
+          onCheckedChange={(checked) =>
+            section.setField(field.key, String(checked))
+          }
         />
       ) : (
         <Input
-          id={field.key} value={value} className="h-9"
-          type={field.numeric ? "number" : undefined} min={field.numeric ? field.minimum ?? 0 : undefined}
-          aria-describedby={describedBy} aria-invalid={fieldError ? true : undefined}
+          id={field.key}
+          value={value}
+          className="h-9"
+          type={field.numeric ? "number" : undefined}
+          min={field.numeric ? (field.minimum ?? 0) : undefined}
+          aria-describedby={describedBy}
+          aria-invalid={fieldError ? true : undefined}
           onChange={(e) => section.setField(field.key, e.target.value)}
         />
       )}
       {fieldError && (
-        <p id={`${field.key}-error`} role="alert" className="text-xs text-destructive">{fieldError}</p>
+        <p
+          id={`${field.key}-error`}
+          role="alert"
+          className="text-xs text-destructive"
+        >
+          {fieldError}
+        </p>
       )}
-      <p id={`${field.key}-help`} className="text-xs text-muted-foreground">{field.helper}</p>
+      <p id={`${field.key}-help`} className="text-xs text-muted-foreground">
+        {field.helper}
+      </p>
     </div>
   );
 }
 
 // The footer is the section's only commit point, and it exists only while there
 // is something to commit.
-function DraftFooter({ section, saveLabel }: { section: SectionDraft; saveLabel: string }) {
+function DraftFooter({
+  section,
+  saveLabel,
+}: {
+  section: SectionDraft;
+  saveLabel: string;
+}) {
   return (
     <>
-      {section.error && <p role="alert" className="text-xs text-destructive">{section.error}</p>}
-      <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{section.notice}</p>
+      {section.error && (
+        <p role="alert" className="text-xs text-destructive">
+          {section.error}
+        </p>
+      )}
+      <p
+        role="status"
+        aria-live="polite"
+        className="text-xs text-muted-foreground"
+      >
+        {section.notice}
+      </p>
       {section.dirtyKeys.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-          <p role="status" aria-live="assertive" className="text-xs text-muted-foreground">Unsaved changes</p>
-          <Button size="sm" variant="secondary" className="h-9" disabled={section.saving}
-            onClick={section.discard}>
+          <p
+            role="status"
+            aria-live="assertive"
+            className="text-xs text-muted-foreground"
+          >
+            Unsaved changes
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-9"
+            disabled={section.saving}
+            onClick={section.discard}
+          >
             Discard changes
           </Button>
-          <Button size="sm" className="h-9" disabled={section.saving} onClick={() => void section.save()}>
+          <Button
+            size="sm"
+            className="h-9"
+            disabled={section.saving}
+            onClick={() => void section.save()}
+          >
             {saveLabel}
           </Button>
         </div>
@@ -341,17 +502,34 @@ function DraftFooter({ section, saveLabel }: { section: SectionDraft; saveLabel:
   );
 }
 
-function LoopEditor({ name, view, reload, target }: {
-  name: string; view: AgentView; reload: () => Promise<AgentView | null>; target: ApiTarget;
+function LoopEditor({
+  name,
+  view,
+  reload,
+  target,
+}: {
+  name: string;
+  view: AgentView;
+  reload: () => Promise<AgentView | null>;
+  target: ApiTarget;
 }) {
-  const section = useSectionDraft(target, name, view, LOOP_FIELDS, reload, "Loop settings saved");
+  const section = useSectionDraft(
+    target,
+    name,
+    view,
+    LOOP_FIELDS,
+    reload,
+    "Loop settings saved",
+  );
   const [interval, timeout, hard, onTimeout, onError, maxIdle] = LOOP_FIELDS;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Loop</CardTitle>
-        <CardDescription>Choose when this agent runs and how it recovers.</CardDescription>
+        <CardDescription>
+          Choose when this agent runs and how it recovers.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Loop enable/disable is NOT here: it lives in the Configuration page's
@@ -379,25 +557,47 @@ function LoopEditor({ name, view, reload, target }: {
   );
 }
 
-function GoalEditor({ name, view, reload, target }: {
-  name: string; view: AgentView; reload: () => Promise<AgentView | null>; target: ApiTarget;
+function GoalEditor({
+  name,
+  view,
+  reload,
+  target,
+}: {
+  name: string;
+  view: AgentView;
+  reload: () => Promise<AgentView | null>;
+  target: ApiTarget;
 }) {
-  const section = useSectionDraft(target, name, view, GOAL_FIELDS, reload, "Goal settings saved");
-  const [enabled, timeout] = GOAL_FIELDS;
+  const section = useSectionDraft(
+    target,
+    name,
+    view,
+    GOAL_FIELDS,
+    reload,
+    "Goal settings saved",
+  );
+  const [enabled, timeout, cooldown] = GOAL_FIELDS;
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Goal</CardTitle>
-        <CardDescription>Choose whether this agent follows one sticky Native Task goal.</CardDescription>
+        <CardDescription>
+          Choose whether this agent follows one sticky Native Task goal.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <DraftField field={enabled} section={section} />
           <DraftField field={timeout} section={section} />
+          <DraftField field={cooldown} section={section} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="current-goal-task">Current goal task</Label>
-          <Input id="current-goal-task" value={view.current_goal_task_key || "No current goal"} disabled />
+          <Input
+            id="current-goal-task"
+            value={view.current_goal_task_key || "No current goal"}
+            disabled
+          />
         </div>
         <DraftFooter section={section} saveLabel="Save Goal settings" />
       </CardContent>
@@ -405,17 +605,34 @@ function GoalEditor({ name, view, reload, target }: {
   );
 }
 
-function RuntimeConfigEditor({ name, view, reload, target }: {
-  name: string; view: AgentView; reload: () => Promise<AgentView | null>; target: ApiTarget;
+function RuntimeConfigEditor({
+  name,
+  view,
+  reload,
+  target,
+}: {
+  name: string;
+  view: AgentView;
+  reload: () => Promise<AgentView | null>;
+  target: ApiTarget;
 }) {
-  const section = useSectionDraft(target, name, view, RUNTIME_FIELDS, reload, "Runtime settings saved");
+  const section = useSectionDraft(
+    target,
+    name,
+    view,
+    RUNTIME_FIELDS,
+    reload,
+    "Runtime settings saved",
+  );
   const [model, effort] = RUNTIME_FIELDS;
 
   // Options the dropdown renders: the operator subset, plus the agent's current
   // harness if it falls outside that subset (e.g. a test agent already on
   // 'stub'). This keeps the select from showing blank for an out-of-list value
   // without ever offering that value as a fresh choice.
-  const harnessOptions = (HARNESS_OPTIONS as readonly string[]).includes(view.harness)
+  const harnessOptions = (HARNESS_OPTIONS as readonly string[]).includes(
+    view.harness,
+  )
     ? (HARNESS_OPTIONS as readonly string[])
     : [...HARNESS_OPTIONS, view.harness];
 
@@ -433,7 +650,9 @@ function RuntimeConfigEditor({ name, view, reload, target }: {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Runtime</CardTitle>
-        <CardDescription>Choose the model and effort for future iterations.</CardDescription>
+        <CardDescription>
+          Choose the model and effort for future iterations.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -445,24 +664,50 @@ function RuntimeConfigEditor({ name, view, reload, target }: {
 
         {/* Harness and interactive stay OUT of the batch: each keeps its own
             immediate persistence request and takes effect on the next start. */}
-        <section aria-labelledby="next-start-settings" className="space-y-4 border-t pt-4">
+        <section
+          aria-labelledby="next-start-settings"
+          className="space-y-4 border-t pt-4"
+        >
           <div className="space-y-1">
-            <h3 id="next-start-settings" className="text-sm font-medium">Next-start settings</h3>
-            <p className="text-xs text-muted-foreground">{NEXT_START_SECTION}</p>
+            <h3 id="next-start-settings" className="text-sm font-medium">
+              Next-start settings
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {NEXT_START_SECTION}
+            </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Harness" htmlFor="harness" hint={NEXT_START_FIELD}>
-              <select id="harness" value={view.harness} className={selectClass}
-                onChange={(e) => { if (e.target.value !== view.harness) void applyHarness(e.target.value); }}>
-                {harnessOptions.map((h) => <option key={h} value={h}>{h}</option>)}
+              <select
+                id="harness"
+                value={view.harness}
+                className={selectClass}
+                onChange={(e) => {
+                  if (e.target.value !== view.harness)
+                    void applyHarness(e.target.value);
+                }}
+              >
+                {harnessOptions.map((h) => (
+                  <option key={h} value={h}>
+                    {h}
+                  </option>
+                ))}
               </select>
             </Field>
             <div className="space-y-1.5">
               <div className="flex items-center gap-3 pt-1.5">
-                <Switch id="interactive" checked={view.interactive} onCheckedChange={(value) => void applyInteractive(value)} />
-                <Label htmlFor="interactive" className="cursor-pointer">Interactive (tmux TUI)</Label>
+                <Switch
+                  id="interactive"
+                  checked={view.interactive}
+                  onCheckedChange={(value) => void applyInteractive(value)}
+                />
+                <Label htmlFor="interactive" className="cursor-pointer">
+                  Interactive (tmux TUI)
+                </Label>
               </div>
-              <p className="text-xs text-muted-foreground">{NEXT_START_FIELD}</p>
+              <p className="text-xs text-muted-foreground">
+                {NEXT_START_FIELD}
+              </p>
             </div>
           </div>
         </section>
@@ -471,7 +716,11 @@ function RuntimeConfigEditor({ name, view, reload, target }: {
   );
 }
 
-export default function AgentSettings({ target = getActiveDaemon() }: { target?: ApiTarget }) {
+export default function AgentSettings({
+  target = getActiveDaemon(),
+}: {
+  target?: ApiTarget;
+}) {
   const name = useAgentName();
   const [view, setView] = useState<AgentView | null>(null);
   // reload resolves with the reloaded view so a section can reconcile its
@@ -489,7 +738,9 @@ export default function AgentSettings({ target = getActiveDaemon() }: { target?:
   }, [name, target]);
   // Deferred a microtask so the initial load is not a synchronous setState
   // inside the effect (the same pattern the Configuration tab uses).
-  useEffect(() => { void Promise.resolve().then(reload); }, [reload]);
+  useEffect(() => {
+    void Promise.resolve().then(reload);
+  }, [reload]);
   if (!view) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   return (
@@ -503,7 +754,12 @@ export default function AgentSettings({ target = getActiveDaemon() }: { target?:
       {/* No remount key here: a reload must reconcile the Runtime draft rather
           than throw it away, which is what a key would do to a field whose save
           failed. */}
-      <RuntimeConfigEditor name={name} view={view} reload={reload} target={target} />
+      <RuntimeConfigEditor
+        name={name}
+        view={view}
+        reload={reload}
+        target={target}
+      />
       <SecretsPanel name={name} />
       <RetentionPanel name={name} />
     </div>

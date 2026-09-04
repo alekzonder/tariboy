@@ -165,7 +165,7 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7,
 		UserPrompt:    "keep commas, equals=a=b, and\nnewlines",
 		MessagesBatch: 8, MessagesMaxQueue: 900,
-		GoalEnabled: &goalEnabled, GoalWaitCustomerTimeoutS: 300,
+		GoalEnabled: &goalEnabled, GoalWaitCustomerTimeoutS: 300, GoalDeliveryCooldownS: 60,
 		Group: "reviewers", Alias: "Clone", Notes: "all fields", Color: "#123abc",
 	}
 	if !reflect.DeepEqual(fc.ran, want) {

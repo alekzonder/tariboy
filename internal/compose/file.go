@@ -142,6 +142,7 @@ type LoopSpec struct {
 type GoalSpec struct {
 	Enabled             *bool  `yaml:"enabled"`
 	WaitCustomerTimeout string `yaml:"wait_customer_timeout"`
+	DeliveryCooldown    string `yaml:"delivery_cooldown"`
 }
 
 func (a AgentSpec) goalWaitCustomerTimeoutSeconds() (int, bool, error) {
@@ -154,6 +155,20 @@ func (a AgentSpec) goalWaitCustomerTimeoutSeconds() (int, bool, error) {
 	}
 	if d <= 0 || d%time.Second != 0 {
 		return 0, true, fmt.Errorf("goal wait_customer_timeout %q must be a positive whole number of seconds", a.Goal.WaitCustomerTimeout)
+	}
+	return int(d / time.Second), true, nil
+}
+
+func (a AgentSpec) goalDeliveryCooldownSeconds() (int, bool, error) {
+	if a.Goal == nil || a.Goal.DeliveryCooldown == "" {
+		return 0, false, nil
+	}
+	d, err := time.ParseDuration(a.Goal.DeliveryCooldown)
+	if err != nil {
+		return 0, true, fmt.Errorf("invalid goal delivery_cooldown %q: %w", a.Goal.DeliveryCooldown, err)
+	}
+	if d <= 0 || d%time.Second != 0 {
+		return 0, true, fmt.Errorf("goal delivery_cooldown %q must be a positive whole number of seconds", a.Goal.DeliveryCooldown)
 	}
 	return int(d / time.Second), true, nil
 }
@@ -329,6 +344,9 @@ func (f File) Validate() error {
 			return fmt.Errorf("agent %q %w", name, err)
 		}
 		if _, _, err := a.goalWaitCustomerTimeoutSeconds(); err != nil {
+			return fmt.Errorf("agent %q %w", name, err)
+		}
+		if _, _, err := a.goalDeliveryCooldownSeconds(); err != nil {
 			return fmt.Errorf("agent %q %w", name, err)
 		}
 		if a.Loop != nil {

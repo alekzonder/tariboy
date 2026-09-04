@@ -172,7 +172,9 @@ Native Task assignment and mention notifications use this same path; they do
 not call a Tasks-specific runner or poller. A disabled loop keeps the delivery
 pending until it is enabled or started manually. The per-agent Goal reconciler
 uses it too: it publishes `task.goal` only while the agent and Autopilot are
-enabled. That message is a durable wake hint, not a task mutation or a direct
+enabled. An unprocessed Goal delivery suppresses another publication; a
+positive per-agent cooldown then suppresses rapid repeats (60 seconds by
+default). That message is a durable wake hint, not a task mutation or a direct
 iteration start.
 
 ### Workflow-owned channel use

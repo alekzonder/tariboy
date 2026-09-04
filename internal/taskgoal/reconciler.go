@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -35,6 +36,7 @@ type Reconciler struct {
 	interval time.Duration
 	log      *slog.Logger
 	signals  chan struct{}
+	mu       sync.Mutex
 }
 
 func NewReconciler(config ReconcilerConfig) *Reconciler {
@@ -73,6 +75,8 @@ func (r *Reconciler) IterationCompleted(agentName, iterationID string) {
 // Empty agentName scans every agent; failures are joined so later agents still
 // receive their wake.
 func (r *Reconciler) Reconcile(ctx context.Context, agentName, iterationID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -102,6 +106,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, agentName, iterationID strin
 		if goal.TaskKey == "" || goal.Waiting {
 			continue
 		}
+		allowed, err := r.store.GoalDeliveryAllowed(name, r.clock().UTC())
+		if err != nil {
+			failures = append(failures, fmt.Errorf("check task goal delivery for %s: %w", name, err))
+			continue
+		}
+		if !allowed {
+			continue
+		}
 		generation := iterationID
 		if generation == "" {
 			generation, err = r.latestTerminalIteration(name)
@@ -114,6 +126,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, agentName, iterationID strin
 		}
 		if _, err := r.bus.Publish(goalMessage(goal, generation)); err != nil {
 			failures = append(failures, fmt.Errorf("publish task goal for %s: %w", name, err))
+		} else if err := r.store.MarkGoalDelivered(name, r.clock().UTC()); err != nil {
+			failures = append(failures, fmt.Errorf("record task goal delivery for %s: %w", name, err))
 		}
 	}
 	return errors.Join(failures...)
