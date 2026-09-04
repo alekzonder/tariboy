@@ -760,15 +760,18 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 				return fail(err)
 			}
 			goal := ""
-			if r.cfg.CurrentGoal != nil && slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
+			hasGoalRuntime := slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
 				return entry.Kind == "runtime" && entry.Runtime == "goal"
-			}) {
+			})
+			if r.cfg.CurrentGoal != nil && (hasGoalRuntime || slices.Contains(ag.Plugins, "tasks")) {
 				task, ok, err := r.cfg.CurrentGoal(ag.Name, r.cfg.Clock().UTC())
 				if err != nil {
 					return fail(fmt.Errorf("read current agent goal: %w", err))
 				}
 				if ok {
 					goal = FormatRuntimeGoal(task)
+				} else {
+					goal = FormatRuntimeGoalGuidance()
 				}
 			}
 			prompt, err = RenderPromptTemplate(template, l.ImageDir(), RuntimePromptValues{
@@ -779,6 +782,9 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			})
 			if err != nil {
 				return fail(err)
+			}
+			if goal != "" && !hasGoalRuntime {
+				prompt += "\n\n# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n" + goal + "\n"
 			}
 		} else {
 			imagePrompt, err := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT.md"))

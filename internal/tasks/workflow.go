@@ -101,6 +101,9 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 			}
 		}
 	}
+	if task.PullRequest != "" && strings.HasPrefix(task.Assignee, "agent:") && task.Status != StatusDone && task.Status != StatusCancelled {
+		task.Status = StatusWaitCustomer
+	}
 	now := s.now()
 	task.Revision++
 	task.UpdatedAt = now

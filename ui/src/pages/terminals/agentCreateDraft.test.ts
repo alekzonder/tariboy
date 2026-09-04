@@ -32,6 +32,7 @@ const source = {
   color: "#123abc",
   goal_enabled: false,
   goal_wait_customer_timeout_s: 120,
+  goal_delivery_cooldown_s: 60,
   current_goal_task_key: "TARI-43",
 } satisfies AgentView;
 
@@ -64,6 +65,7 @@ describe("newAgentDraft", () => {
       color: "",
       goalEnabled: true,
       goalWaitCustomerTimeoutS: "300",
+      goalDeliveryCooldownS: "60",
     });
   });
 });
@@ -87,7 +89,7 @@ describe("cloneAgentDraft", () => {
       onError: "restart",
       maxIdleIterations: "7",
       userPrompt: "standing",
-      envText: "{\n  \"CSV\": \"a,b\",\n  \"EQ\": \"a=b\",\n  \"LINES\": \"one\\ntwo\"\n}",
+      envText: '{\n  "CSV": "a,b",\n  "EQ": "a=b",\n  "LINES": "one\\ntwo"\n}',
       plugins: ["context", "custom"],
       messagesBatch: "8",
       messagesMaxQueue: "900",
@@ -97,17 +99,22 @@ describe("cloneAgentDraft", () => {
       color: "#123abc",
       goalEnabled: false,
       goalWaitCustomerTimeoutS: "120",
+      goalDeliveryCooldownS: "60",
     });
   });
 
-  it.each(["configured_cwd", "messages_batch", "messages_max_queue", "goal_enabled", "goal_wait_customer_timeout_s"] as const)(
-    "requires current daemon projection field %s",
-    (field) => {
-      const incomplete = { ...source } as Record<string, unknown>;
-      delete incomplete[field];
-      expect(() => cloneAgentDraft(incomplete as unknown as AgentView)).toThrow(
-        /update.*host.*complete clone/i,
-      );
-    },
-  );
+  it.each([
+    "configured_cwd",
+    "messages_batch",
+    "messages_max_queue",
+    "goal_enabled",
+    "goal_wait_customer_timeout_s",
+    "goal_delivery_cooldown_s",
+  ] as const)("requires current daemon projection field %s", (field) => {
+    const incomplete = { ...source } as Record<string, unknown>;
+    delete incomplete[field];
+    expect(() => cloneAgentDraft(incomplete as unknown as AgentView)).toThrow(
+      /update.*host.*complete clone/i,
+    );
+  });
 });

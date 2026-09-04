@@ -837,6 +837,10 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	if goalWaitCustomerTimeoutS == 0 {
 		goalWaitCustomerTimeoutS = 300
 	}
+	goalDeliveryCooldownS := spec.GoalDeliveryCooldownS
+	if goalDeliveryCooldownS == 0 {
+		goalDeliveryCooldownS = 60
+	}
 	ag := agent.Agent{
 		Name: name, ImageRef: ref.String(), ImageDigest: man.Digest,
 		Cwd: spec.Cwd, HarnessType: harnessType,
@@ -847,7 +851,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 		UserPrompt: spec.UserPrompt,
 		Env:        env, Plugins: resolvedPlugins,
 		MessagesBatch: messagesBatch, MessagesMaxQueue: messagesMaxQueue,
-		GoalEnabled: goalEnabled, GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS,
+		GoalEnabled: goalEnabled, GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS, GoalDeliveryCooldownS: goalDeliveryCooldownS,
 		Alias: spec.Alias, Notes: spec.Notes, Color: spec.Color,
 	}
 	if ref == image.BareRef {
