@@ -20,16 +20,20 @@ For tmux-backed interactive iterations, the pane command is a hidden supervisor
 mode of the same shim binary. That supervisor starts one directly owned harness
 process group and places it in the pane terminal's foreground before exec, so
 stdin and terminal-generated signals go to the harness rather than the
-supervisor. It then waits as the group's only reaper, using `SIGCHLD` and
-`Wait4(WNOHANG)` without polling tmux or starting helper subprocesses.
+supervisor. It registers `SIGHUP` and `SIGCHLD` before starting that single
+direct child and is the sole reaper of the direct harness leader. It does not
+poll tmux, start helper subprocesses, or reap arbitrary descendants.
 
 The supervisor also catches the `SIGHUP` tmux sends when a pane is destroyed.
-It checks for an already-exited child first. If the child is still unreaped, the
-supervisor force-kills only that owned process group, whose numeric identity is
-still pinned by its unreaped leader, and then reaps it. It never discovers a
-pane PID from tmux and never signals a process after reaping its leader. The
-supervisor does not restore terminal foreground ownership because it performs
-no further terminal I/O and exits immediately after recording the result.
+On the first `SIGHUP` or `SIGCHLD`, it force-kills only the owned process group
+while its direct leader is still unreaped and pins that numeric group identity,
+then reaps the leader once with a blocking `Wait4`. An already empty group is
+not an error. A normal leader exit keeps its original status while the
+pre-reap group kill removes any lingering descendants; a teardown that reaches
+the supervisor first records forced termination. The supervisor never
+discovers a pane PID from tmux or signals a process after reaping its leader.
+It does not restore terminal foreground ownership because it performs no
+further terminal I/O and exits immediately after recording the result.
 
 On every exit path the supervisor captures the harness's real numeric status,
 writes it to an owner-private temporary file, and atomically renames it within

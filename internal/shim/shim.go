@@ -661,12 +661,9 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("tmux supervisor requires a harness command")
 	}
-	hup := make(chan os.Signal, 1)
-	childExited := make(chan os.Signal, 1)
-	signal.Notify(hup, syscall.SIGHUP)
-	signal.Notify(childExited, syscall.SIGCHLD)
-	defer signal.Stop(hup)
-	defer signal.Stop(childExited)
+	events := make(chan os.Signal, 1)
+	signal.Notify(events, syscall.SIGHUP, syscall.SIGCHLD)
+	defer signal.Stop(events)
 
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -686,45 +683,31 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) error {
 		return fmt.Errorf("start harness: %w", err)
 	}
 	pid := cmd.Process.Pid
-	hupReceived := false
 
+	// Hidden supervisor mode starts no other child before or after cmd.Start.
+	// Notify is active first, so the first HUP or SIGCHLD leaves pid as our
+	// unreaped group leader. Even a forged SIGCHLD can only end that owned group
+	// early; it cannot turn this signal into a post-reap numeric-PID lookup.
+	<-events
+	killErr := syscall.Kill(-pid, syscall.SIGKILL)
+	if errors.Is(killErr, syscall.ESRCH) {
+		killErr = nil
+	}
+	var status syscall.WaitStatus
+	var waited int
+	var err error
 	for {
-		var status syscall.WaitStatus
-		waited, err := syscall.Wait4(pid, &status, syscall.WNOHANG, nil)
-		if errors.Is(err, syscall.EINTR) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("wait harness: %w", err)
-		}
-		if waited == pid {
-			return writeTmuxExitStatus(statusPath, waitStatusExitCode(status))
-		}
-		if hupReceived {
-			killErr := syscall.Kill(-pid, syscall.SIGKILL)
-			if errors.Is(killErr, syscall.ESRCH) {
-				killErr = nil
-			}
-			for {
-				waited, err = syscall.Wait4(pid, &status, 0, nil)
-				if !errors.Is(err, syscall.EINTR) {
-					break
-				}
-			}
-			if err != nil {
-				err = fmt.Errorf("reap harness: %w", err)
-			} else if waited != pid {
-				err = errors.New("reap harness: wait returned without child")
-			}
-			return errors.Join(killErr, err, writeTmuxExitStatus(statusPath, waitStatusExitCode(status)))
-		}
-
-		select {
-		case <-hup:
-			hupReceived = true
-		case <-childExited:
+		waited, err = syscall.Wait4(pid, &status, 0, nil)
+		if !errors.Is(err, syscall.EINTR) {
+			break
 		}
 	}
+	if err != nil {
+		err = fmt.Errorf("reap harness: %w", err)
+	} else if waited != pid {
+		err = errors.New("reap harness: wait returned without child")
+	}
+	return errors.Join(killErr, err, writeTmuxExitStatus(statusPath, waitStatusExitCode(status)))
 }
 
 func waitStatusExitCode(status syscall.WaitStatus) int {

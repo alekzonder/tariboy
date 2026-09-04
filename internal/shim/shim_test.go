@@ -780,17 +780,11 @@ func TestRunTmuxSupervisorPreservesExitAndArgv(t *testing.T) {
 	}
 }
 
-func TestRunTmuxSupervisorReapsExitedHarnessBeforeHandlingHUP(t *testing.T) {
+func TestRunTmuxSupervisorPreservesExitedHarnessStatusAndKillsDescendant(t *testing.T) {
 	dir := t.TempDir()
-	binDir := t.TempDir()
-	fakeTmux := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(fakeTmux, []byte("#!/bin/sh\n[ \"$1\" = list-sessions ] && printf 'supervised\\n'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	harness := filepath.Join(dir, "race-harness.sh")
 	if err := os.WriteFile(harness, []byte(`#!/bin/sh
 /bin/sh -c 'printf '\''%s\n'\'' "$$" > "$1"; trap '\'''\'' HUP INT TERM; /bin/sleep 0.3; printf survived > "$2"' child "$3" "$4" &
-printf '%s\n' "$$" > "$5"
 printf ready > "$1"
 while [ ! -e "$2" ]; do /bin/sleep 0.01; done
 exit 23
@@ -800,11 +794,9 @@ exit 23
 	readyPath := filepath.Join(dir, "ready")
 	releasePath := filepath.Join(dir, "release")
 	childPIDPath := filepath.Join(dir, "child.pid")
-	leaderPIDPath := filepath.Join(dir, "leader.pid")
 	survivedPath := filepath.Join(dir, "survived")
 	statusPath := filepath.Join(dir, "status")
-	cmd := exec.Command(os.Args[0], TmuxSupervisorMode, "supervised", statusPath, "--", harness, readyPath, releasePath, childPIDPath, survivedPath, leaderPIDPath)
-	cmd.Env = envWithOverride(os.Environ(), "PATH", binDir)
+	cmd := exec.Command(os.Args[0], TmuxSupervisorMode, "supervised", statusPath, "--", harness, readyPath, releasePath, childPIDPath, survivedPath)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -839,37 +831,21 @@ exit 23
 	if _, err := os.Stat(readyPath); err != nil {
 		t.Fatal("harness did not become ready")
 	}
-	if err := cmd.Process.Signal(syscall.SIGSTOP); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(20 * time.Millisecond)
-	if err := cmd.Process.Signal(syscall.SIGHUP); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(releasePath, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	leaderData, err := os.ReadFile(leaderPIDPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	leaderPID, err := strconv.Atoi(strings.TrimSpace(string(leaderData)))
-	if err != nil || leaderPID <= 1 {
-		t.Fatalf("invalid harness leader pid %q", leaderData)
-	}
-	zombie := false
+	childPID := 0
 	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		state, err := exec.Command("ps", "-p", strconv.Itoa(leaderPID), "-o", "stat=").Output()
-		if err == nil && strings.HasPrefix(strings.TrimSpace(string(state)), "Z") {
-			zombie = true
-			break
+		data, err := os.ReadFile(childPIDPath)
+		if err == nil {
+			childPID, err = strconv.Atoi(strings.TrimSpace(string(data)))
+			if err == nil && childPID > 1 {
+				break
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if !zombie {
-		t.Fatal("harness leader did not exit while its supervisor was stopped")
+	if childPID <= 1 {
+		t.Fatal("descendant did not write a valid pid")
 	}
-	if err := cmd.Process.Signal(syscall.SIGCONT); err != nil {
+	if err := os.WriteFile(releasePath, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -885,13 +861,15 @@ exit 23
 	if err != nil || string(data) != "23\n" {
 		t.Fatalf("status = %q, error = %v; want 23", data, err)
 	}
-	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); {
-		if _, err := os.Stat(survivedPath); err == nil {
-			return
-		}
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline) && syscall.Kill(childPID, 0) == nil; {
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("HUP handling signaled the exited harness's still-live process group")
+	if syscall.Kill(childPID, 0) == nil {
+		t.Fatal("descendant survived the leader's SIGCHLD")
+	}
+	if _, err := os.Stat(survivedPath); !os.IsNotExist(err) {
+		t.Fatalf("descendant completed instead of being killed: %v", err)
+	}
 }
 
 func TestReadTmuxExitStatus(t *testing.T) {
