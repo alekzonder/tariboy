@@ -558,7 +558,7 @@ func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
 	}
 }
 
-func TestTaskUpdateAcceptsPullRequestAndWaitCustomer(t *testing.T) {
+func TestTaskCreateAndUpdateAcceptPullRequestAndWaitCustomer(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -575,11 +575,21 @@ func TestTaskUpdateAcceptsPullRequestAndWaitCustomer(t *testing.T) {
 	if _, err := svc.CreateQueue(t.Context(), actor, tasks.CreateQueueInput{Prefix: "PR", Name: "Pull requests"}); err != nil {
 		t.Fatal(err)
 	}
-	created, err := svc.CreateTask(t.Context(), actor, tasks.CreateTaskInput{Queue: "PR", Title: "Expose PR"})
-	if err != nil {
+	status, env := taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks", map[string]any{
+			"queue": "PR", "title": "Expose PR", "pull_request": " HTTPS://Example.test/o/r/pull/6 ",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create task = %d/%+v", status, env)
+	}
+	var created tasks.Task
+	if err := json.Unmarshal(env.Result, &created); err != nil {
 		t.Fatal(err)
 	}
-	status, env := taskRequest(t, httpServer.Client(), http.MethodPatch,
+	if created.PullRequest != "https://example.test/o/r/pull/6" {
+		t.Fatalf("created task = %#v", created)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPatch,
 		httpServer.URL+"/api/tasks/"+created.Key, map[string]any{
 			"pull_request": "https://github.com/o/r/pull/7",
 			"status":       tasks.StatusWaitCustomer,
@@ -597,7 +607,7 @@ func TestTaskUpdateAcceptsPullRequestAndWaitCustomer(t *testing.T) {
 	}
 }
 
-func TestTaskOpenAPIExposesPullRequestAndWaitCustomer(t *testing.T) {
+func TestTaskOpenAPIExposesCreateAndUpdatePullRequestAndWaitCustomer(t *testing.T) {
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	httpServer := httptest.NewServer(server.Handler())
 	t.Cleanup(httpServer.Close)
@@ -621,6 +631,12 @@ func TestTaskOpenAPIExposesPullRequestAndWaitCustomer(t *testing.T) {
 	properties := document.Result.Components.Schemas["Task"]["properties"].(map[string]any)
 	if properties["pull_request"] == nil {
 		t.Fatalf("Task schema properties = %#v", properties)
+	}
+	create := document.Result.Paths["/api/tasks"]["post"].(map[string]any)
+	createBody := create["requestBody"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	createProperties := createBody["properties"].(map[string]any)
+	if createProperties["pull_request"] == nil {
+		t.Fatalf("task create properties = %#v", createProperties)
 	}
 	update := document.Result.Paths["/api/tasks/{key}"]["patch"].(map[string]any)
 	body := update["requestBody"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)

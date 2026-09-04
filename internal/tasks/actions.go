@@ -187,7 +187,7 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 		return s.CreateTask(ctx, actor, CreateTaskInput{
 			Queue: actionString(body, "queue"), ParentKey: actionString(body, "parent_key"),
 			Title: actionString(body, "title"), Description: actionString(body, "description"),
-			Assignee: actionString(body, "assignee"), Group: actionString(body, "group"),
+			PullRequest: actionString(body, "pull_request"), Assignee: actionString(body, "assignee"), Group: actionString(body, "group"),
 			Priority:       Priority(actionString(body, "priority")),
 			IdempotencyKey: actionString(body, "idempotency_key"),
 		})

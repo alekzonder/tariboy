@@ -1165,7 +1165,7 @@ exit 23
 		time.Sleep(10 * time.Millisecond)
 	}
 	if syscall.Kill(childPID, 0) == nil {
-		t.Fatal("descendant survived the leader's SIGCHLD")
+		t.Fatal("descendant survived supervisor cleanup after leader exit")
 	}
 	if _, err := os.Stat(survivedPath); !os.IsNotExist(err) {
 		t.Fatalf("descendant completed instead of being killed: %v", err)

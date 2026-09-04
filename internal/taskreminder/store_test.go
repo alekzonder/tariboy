@@ -1,11 +1,13 @@
 package taskreminder
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
 
 	basestore "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 var goalNow = time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
@@ -191,6 +193,50 @@ func TestReconcileAgentAppliesCustomerWaitBoundary(t *testing.T) {
 			}
 			assertStoredGoal(t, s, tt.wantKey)
 		})
+	}
+}
+
+func TestRepeatedCustomerQuestionKeepsOldestWaitGraceBoundary(t *testing.T) {
+	base := openGoalStore(t)
+	goals := NewStore(base)
+	askedAt := goalNow.Add(-300 * time.Second)
+	now := askedAt
+	seedAgent(t, goals, "worker", askedAt.Add(-time.Hour))
+	svc := tasks.NewService(base.DB, "customer", func() time.Time { return now })
+	actor := tasks.CustomerActor("customer")
+	if _, err := svc.CreateQueue(context.Background(), actor, tasks.CreateQueueInput{Prefix: "GOAL", Name: "Tasks"}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := svc.CreateTask(context.Background(), actor, tasks.CreateTaskInput{Queue: "GOAL", Title: "decision", Assignee: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := tasks.StatusInProgress
+	task, err = svc.UpdateTask(context.Background(), actor, task.Key, tasks.UpdateTaskInput{Status: &status, Revision: task.Revision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if goal, err := goals.ReconcileAgent("worker", now); err != nil || goal.TaskKey != task.Key {
+		t.Fatalf("initial goal = %#v, %v", goal, err)
+	}
+	first, err := svc.AddComment(context.Background(), tasks.AgentActor("worker"), task.Key, tasks.AddCommentInput{Body: "@user:customer first question"})
+	if err != nil || len(first.CreatedWaits) != 1 {
+		t.Fatalf("first question = %#v, %v", first, err)
+	}
+
+	now = askedAt.Add(299 * time.Second)
+	second, err := svc.AddComment(context.Background(), tasks.AgentActor("worker"), task.Key, tasks.AddCommentInput{Body: "@user:customer follow-up"})
+	if err != nil || len(second.CreatedWaits) != 1 {
+		t.Fatalf("second question = %#v, %v", second, err)
+	}
+	wait := second.CreatedWaits[0]
+	if wait.ID != first.CreatedWaits[0].ID || wait.RequestedAt != askedAt.Format(time.RFC3339Nano) || wait.RequestingCommentID == first.CreatedWaits[0].RequestingCommentID {
+		t.Fatalf("updated wait = %#v, first = %#v", wait, first.CreatedWaits[0])
+	}
+
+	goal, err := goals.ReconcileAgent("worker", askedAt.Add(300*time.Second))
+	if err != nil || goal.TaskKey != "" || goal.Waiting {
+		t.Fatalf("goal at original grace boundary = %#v, %v", goal, err)
 	}
 }
 

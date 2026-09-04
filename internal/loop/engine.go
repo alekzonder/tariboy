@@ -682,8 +682,12 @@ func (e *Engine) runOnceGuarded(
 	terminalPersisted, err := e.store.FinalizeRunningIteration(it)
 	if err != nil {
 		e.log.Error("update iteration", "agent", e.ag.Name, "id", id, "err", err)
+		return TickSkipped
 	}
-	if terminalPersisted && outcome.DoneFlag {
+	if !terminalPersisted {
+		return TickSkipped
+	}
+	if outcome.DoneFlag {
 		// done_flag is owned exclusively by SetIterationDone (spec §5.2).
 		// outcome.Productive was read from the DB, so an `--idle` declaration made
 		// via the API during the iteration is preserved rather than overwritten.
@@ -703,7 +707,7 @@ func (e *Engine) runOnceGuarded(
 
 	e.finishSpan(span, spanStart, id, outcome.Status, outcome.CPUMs, outcome.MemPeakKB)
 	result := e.applyPolicy(outcome)
-	if terminalPersisted && e.iterationCompleted != nil {
+	if e.iterationCompleted != nil {
 		e.iterationCompleted(e.ag.Name, id)
 	}
 	return result

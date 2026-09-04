@@ -232,6 +232,7 @@ type CreateTaskInput struct {
 	ParentKey      string   `json:"parent_key"`
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
+	PullRequest    string   `json:"pull_request"`
 	Assignee       string   `json:"assignee"`
 	Group          string   `json:"group"`
 	Priority       Priority `json:"priority"`

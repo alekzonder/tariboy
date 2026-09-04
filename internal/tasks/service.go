@@ -147,6 +147,10 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	if err != nil {
 		return Task{}, err
 	}
+	pullRequest, err := NormalizePullRequest(in.PullRequest)
+	if err != nil {
+		return Task{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Task{}, err
@@ -241,9 +245,9 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 			task_key, queue_prefix, parent_id, position, priority, title, description, status, pull_request,
 			author, customer, group_name, assignee,
 			workflow_version_id, workflow_status, workflow_revision, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		key, queue, parentID, position, priority, in.Title, strings.TrimSpace(in.Description),
-		actor.Principal, customer, group, normalizeAssignee(in.Assignee),
+		pullRequest, actor.Principal, customer, group, normalizeAssignee(in.Assignee),
 		workflowVersionID, workflowStatus, workflowRevision, now, now)
 	if err != nil {
 		return Task{}, err
@@ -254,7 +258,7 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	}
 	task := Task{
 		ID: taskID, Key: key, Queue: queue, ParentKey: parentKey, Position: position, Priority: priority,
-		Title: in.Title, Description: strings.TrimSpace(in.Description), Status: StatusOpen,
+		Title: in.Title, Description: strings.TrimSpace(in.Description), Status: StatusOpen, PullRequest: pullRequest,
 		Author: actor.Principal, Customer: customer, Group: group,
 		Assignee: normalizeAssignee(in.Assignee), Revision: 1, CreatedAt: now, UpdatedAt: now,
 		Access: "write",

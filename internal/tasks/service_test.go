@@ -34,6 +34,53 @@ func TestNormalizePullRequest(t *testing.T) {
 	}
 }
 
+func TestCreateTaskPullRequestValidatesPersistsAndReplays(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	actor := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, actor, CreateQueueInput{Prefix: "PULL", Name: "Pull requests"})
+
+	created, err := svc.CreateTask(ctx, actor, CreateTaskInput{
+		Queue: "PULL", Title: "ship", PullRequest: " HTTPS://Example.test/org/repo/pull/1 ", IdempotencyKey: "create-pr",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.PullRequest != "https://example.test/org/repo/pull/1" {
+		t.Fatalf("created pull request = %q", created.PullRequest)
+	}
+	detail, err := svc.GetTask(ctx, actor, created.Key)
+	if err != nil || detail.Task.PullRequest != created.PullRequest {
+		t.Fatalf("persisted task = %#v, %v", detail.Task, err)
+	}
+	events, err := svc.ListEvents(ctx, actor, created.Key, 0, 20)
+	if err != nil || len(events) != 1 || events[0].Payload["pull_request"] != created.PullRequest {
+		t.Fatalf("created events = %#v, %v", events, err)
+	}
+
+	replayed, err := svc.CreateTask(ctx, actor, CreateTaskInput{
+		Queue: "PULL", Title: "ignored", PullRequest: "https://example.test/other", IdempotencyKey: "create-pr",
+	})
+	if err != nil || replayed.Key != created.Key || replayed.PullRequest != created.PullRequest {
+		t.Fatalf("replayed task = %#v, %v", replayed, err)
+	}
+	if _, err := svc.CreateTask(ctx, actor, CreateTaskInput{
+		Queue: "PULL", Title: "invalid", PullRequest: "https://user@example.test/pull/2",
+	}); ErrorCode(err) != "invalid_pull_request" {
+		t.Fatalf("invalid pull request error = %v", err)
+	}
+	var taskCount, eventCount int
+	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix = 'PULL'`).Scan(&taskCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_events WHERE task_id = ?`, created.ID).Scan(&eventCount); err != nil {
+		t.Fatal(err)
+	}
+	if taskCount != 1 || eventCount != 1 {
+		t.Fatalf("tasks/events = %d/%d, want 1/1", taskCount, eventCount)
+	}
+}
+
 func TestUpdateTaskPullRequestUsesRevisionAndEvents(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

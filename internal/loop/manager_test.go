@@ -24,6 +24,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
+	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -1221,11 +1222,22 @@ func TestManagerAttachAndResizeForwardToLiveShim(t *testing.T) {
 func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 	r := &killBlockingRunner{
 		started: make(chan string, 2), release: make(chan struct{}),
-		returnAfterCancel: &Outcome{Status: "done", DoneFlag: true, ExitCode: 0, CPUMs: 17, MemPeakKB: 23},
+		returnAfterCancel: &Outcome{Status: "timeout", DoneFlag: true, ExitCode: 0, CPUMs: 17, MemPeakKB: 23},
 	}
 	var releaseOnce sync.Once
 	releaseRunner := func() { releaseOnce.Do(func() { close(r.release) }) }
 	m, as, agentsDir, _ := newManager(t, r)
+	evals := &countingEvalRunner{}
+	m.cfg.Evals = evals
+	var finishEvents, closes atomic.Int32
+	m.cfg.Emit = func(event events.Event) {
+		if event.Type == "iteration" && event.Data["phase"] == "finish" {
+			finishEvents.Add(1)
+		}
+	}
+	recorder := &captureRecorder{}
+	m.cfg.AuditFor = func(string) Recorder { return recorder }
+	m.cfg.OnIterationClose = func(string, string) { closes.Add(1) }
 	completed := make(chan string, 2)
 	m.cfg.IterationCompleted = func(agentName, iterationID string) {
 		it, err := as.GetIteration(agentName, iterationID)
@@ -1235,7 +1247,7 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 		}
 		completed <- agentName + "/" + iterationID + "/" + it.Status
 	}
-	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true, OnTimeout: "stop"}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Shutdown)
@@ -1331,6 +1343,17 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 		t.Fatalf("recovered iteration unwind emitted duplicate completion %q", got)
 	default:
 	}
+	finishedAudits := 0
+	for _, event := range recorder.snapshot() {
+		if event.typ == "iteration_finished" {
+			finishedAudits++
+		}
+	}
+	stored, err := as.Get("smoke")
+	if err != nil || evals.calls.Load() != 0 || finishEvents.Load() != 0 || finishedAudits != 0 || closes.Load() != 1 || !stored.LoopEnabled || stored.ErrorReason != "" {
+		t.Fatalf("losing engine side effects: evals=%d finish_events=%d finish_audits=%d closes=%d agent=%#v err=%v",
+			evals.calls.Load(), finishEvents.Load(), finishedAudits, closes.Load(), stored, err)
+	}
 	if err := m.Stop("smoke"); err != nil {
 		t.Fatal(err)
 	}
@@ -1362,7 +1385,7 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 		t.Fatalf("recovered iteration emitted duplicate completion before next launch: %q", got)
 	default:
 	}
-	it, err := as.GetIteration("smoke", id)
+	it, err = as.GetIteration("smoke", id)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -96,7 +96,7 @@ def parse(args):
         "mine": {"queue", "status", "assignee", "text", "waiting-for"},
         "ready": {"queue", "limit", "idempotency-key", "claim"},
         "show": set(),
-        "create": {"queue", "parent", "title", "description", "assignee", "group", "priority", "idempotency-key"},
+        "create": {"queue", "parent", "title", "description", "pull-request", "assignee", "group", "priority", "idempotency-key"},
         "update": {"title", "description", "status", "pull-request", "assignee", "manual-block-reason", "priority", "revision"},
         "assign": {"revision"},
         "comment": {"body", "idempotency-key"},

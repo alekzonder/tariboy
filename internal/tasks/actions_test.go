@@ -357,7 +357,7 @@ func TestAgentActionAppliesPriority(t *testing.T) {
 	}
 }
 
-func TestAgentActionUpdatePreservesPullRequestAndWaitCustomer(t *testing.T) {
+func TestAgentActionCreateAndUpdatePreservePullRequestAndWaitCustomer(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := AgentActor("alice")
@@ -366,11 +366,17 @@ func TestAgentActionUpdatePreservesPullRequestAndWaitCustomer(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	created, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "PR", Title: "Expose PR"})
+	result, err := svc.AgentAction(ctx, actor, "create", map[string]any{
+		"queue": "PR", "title": "Expose PR", "pull_request": " HTTPS://Example.test/o/r/pull/6 ",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := svc.AgentAction(ctx, actor, "update", map[string]any{
+	created := result.(Task)
+	if created.PullRequest != "https://example.test/o/r/pull/6" {
+		t.Fatalf("created task = %#v", created)
+	}
+	result, err = svc.AgentAction(ctx, actor, "update", map[string]any{
 		"key": created.Key, "pull_request": "https://github.com/o/r/pull/7", "status": StatusWaitCustomer,
 	})
 	if err != nil {

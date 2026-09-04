@@ -323,6 +323,7 @@ export interface CreateTaskInput {
   parent_key?: string
   title: string
   description?: string
+  pull_request?: string
   assignee?: string
   group?: string
   priority?: TaskPriority

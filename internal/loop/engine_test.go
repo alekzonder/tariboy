@@ -27,6 +27,10 @@ type fakeRunner struct {
 	seen     []string // iteration ids
 }
 
+type countingEvalRunner struct{ calls atomic.Int32 }
+
+func (r *countingEvalRunner) RunEvals(agent.Agent, string, string) { r.calls.Add(1) }
+
 func (f *fakeRunner) Run(_ context.Context, _ agent.Agent, _, id, _ string) (Outcome, error) {
 	o := f.outcomes[min(f.calls, len(f.outcomes)-1)]
 	f.seen = append(f.seen, id)
@@ -418,7 +422,7 @@ func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
 	}
 }
 
-func TestRunOnceGoalIterationCompletedSkipsRejectedTerminalStatus(t *testing.T) {
+func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
 	raw, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -437,24 +441,35 @@ func TestRunOnceGoalIterationCompletedSkipsRejectedTerminalStatus(t *testing.T) 
 		END`); err != nil {
 		t.Fatal(err)
 	}
-	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	r := &fakeRunner{outcomes: []Outcome{{Status: "harness_error", DoneFlag: true}}}
 	clk := func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
+	ag.OnError = "stop"
 	e := NewEngine(ag, as, r, slog.New(slog.NewTextHandler(io.Discard, nil)), clk)
-	calls := 0
-	e.SetIterationCompleted(func(string, string) { calls++ })
+	evals := &countingEvalRunner{}
+	e.evals = evals
+	var phases, audits []string
+	e.SetEmit(func(event events.Event) { phases = append(phases, event.Data["phase"].(string)) })
+	e.SetAudit(func(typ, _, _ string, _ map[string]any) { audits = append(audits, typ) })
+	closes, completions := 0, 0
+	e.SetOnIterationClose(func(string, string) { closes++ })
+	e.SetIterationCompleted(func(string, string) { completions++ })
 
-	if got := e.runOnce(context.Background(), "manual", ""); got != TickCompletedWaiting {
-		t.Fatalf("runOnce = %q, want completed_waiting", got)
+	if got := e.runOnce(context.Background(), "manual", ""); got != TickSkipped {
+		t.Fatalf("runOnce = %q, want skipped", got)
 	}
-	if calls != 0 {
-		t.Fatalf("completion calls = %d, want 0 after rejected terminal status", calls)
+	if evals.calls.Load() != 0 || len(phases) != 1 || phases[0] != "start" || len(audits) != 1 || audits[0] != "iteration_started" || closes != 1 || completions != 0 {
+		t.Fatalf("evals/phases/audits/closes/completions = %d/%v/%v/%d/%d", evals.calls.Load(), phases, audits, closes, completions)
 	}
 	it, err := as.GetIteration(ag.Name, r.seen[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if it.Status != "running" {
-		t.Fatalf("iteration status = %q, want running after rejected terminal status", it.Status)
+	if it.Status != "running" || it.DoneFlag {
+		t.Fatalf("iteration after rejected terminal status = %#v", it)
+	}
+	stored, err := as.Get(ag.Name)
+	if err != nil || !stored.LoopEnabled || stored.ErrorReason != "" {
+		t.Fatalf("agent after rejected terminal status = %#v, %v", stored, err)
 	}
 }
 

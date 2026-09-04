@@ -91,9 +91,9 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 		return CommentResult{}, err
 	}
 	previousStatus := task.Status
-	assignedAgentQuestion := task.Assignee == actor.Principal && !actor.IsCustomer &&
+	assignedAgentQuestion := task.WorkflowVersionID == 0 && task.Assignee == actor.Principal && !actor.IsCustomer &&
 		containsPrincipal(created, task.Customer) && task.Status != StatusDone && task.Status != StatusCancelled
-	lastCustomerWaitResolved := task.Status == StatusWaitCustomer &&
+	lastCustomerWaitResolved := task.WorkflowVersionID == 0 && task.Status == StatusWaitCustomer &&
 		containsPrincipal(resolved, task.Customer) && len(customerWaits) == 0
 	switch {
 	case assignedAgentQuestion:
@@ -184,9 +184,9 @@ func upsertWait(
 ) (WaitingFor, error) {
 	result, err := tx.ExecContext(ctx, `
 		UPDATE task_waiting_for
-		SET requesting_principal = ?, requesting_comment_id = ?, requested_at = ?
+		SET requesting_principal = ?, requesting_comment_id = ?
 		WHERE task_id = ? AND expected_principal = ? AND resolved_at = ''`,
-		requester, commentID, now, task.ID, expected)
+		requester, commentID, task.ID, expected)
 	if err != nil {
 		return WaitingFor{}, err
 	}

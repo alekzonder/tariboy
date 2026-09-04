@@ -319,6 +319,28 @@ class StoreSkillsTest(unittest.TestCase):
                     {"key": "TARI-43", "revision": "2", "pull_request": value},
                 )
 
+    def test_tasks_create_pull_request(self):
+        process, request = self.run_script(
+            "tasks/scripts/tasks.sh",
+            [
+                "create",
+                "--queue=TARI",
+                "--title=Ship it",
+                "--pull-request=https://github.com/o/r/pull/7",
+            ],
+            {},
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(request[0], ["POST", "/tools/tasks/create"])
+        self.assertEqual(
+            json.loads(request[1]),
+            {
+                "queue": "TARI",
+                "title": "Ship it",
+                "pull_request": "https://github.com/o/r/pull/7",
+            },
+        )
+
     def test_current_task_rejects_ambiguous_arguments_before_request(self):
         for args in (
             ["TARI-41", "TARI-42"],

@@ -290,6 +290,51 @@ func TestGoalDefaultsAndDisableClearsSelection(t *testing.T) {
 	}
 }
 
+func TestSetCurrentGoalRejectsDisabledAgent(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(Agent{Name: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	ag, err := st.Get("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.GoalEnabled = false
+	if err := st.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetCurrentGoal("worker", "TARI-43"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("SetCurrentGoal on disabled agent = %v, want ErrNotFound", err)
+	}
+	got, err := st.Get("worker")
+	if err != nil || got.CurrentGoalTaskKey != "" {
+		t.Fatalf("disabled agent goal = %q, %v", got.CurrentGoalTaskKey, err)
+	}
+}
+
+func TestUpdateEnabledAgentPreservesDaemonOwnedCurrentGoal(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(Agent{Name: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetCurrentGoal("worker", "TARI-43"); err != nil {
+		t.Fatal(err)
+	}
+	ag, err := st.Get("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.UserPrompt = "broad update"
+	ag.CurrentGoalTaskKey = "caller-owned"
+	if err := st.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Get("worker")
+	if err != nil || got.UserPrompt != ag.UserPrompt || got.CurrentGoalTaskKey != "TARI-43" {
+		t.Fatalf("updated agent = %#v, %v", got, err)
+	}
+}
+
 func TestGoalTimeoutValidationPreservesStoredValue(t *testing.T) {
 	st := openStore(t)
 	if err := st.Create(Agent{Name: "worker"}); err != nil {
