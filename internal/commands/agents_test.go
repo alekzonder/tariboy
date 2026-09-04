@@ -236,6 +236,16 @@ func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
 	if len(fc.refreshed) != 2 {
 		t.Fatalf("configuration refreshes = %v", fc.refreshed)
 	}
+	if _, err := h(t, "agent.goal-delivery-cooldown")(c, registry.Params{"name": "worker", "seconds": float64(120)}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = agents.Get("worker")
+	if err != nil || stored.GoalDeliveryCooldownS != 120 {
+		t.Fatalf("stored cooldown = %#v err=%v", stored, err)
+	}
+	if len(fc.refreshed) != 3 {
+		t.Fatalf("configuration refreshes = %v", fc.refreshed)
+	}
 
 	for _, params := range []registry.Params{
 		{"name": "worker", "seconds": float64(0)},
@@ -245,7 +255,7 @@ func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
 			t.Fatalf("invalid timeout error = %v", err)
 		}
 	}
-	if len(fc.refreshed) != 2 {
+	if len(fc.refreshed) != 3 {
 		t.Fatalf("rejected update signaled Goal: %v", fc.refreshed)
 	}
 }

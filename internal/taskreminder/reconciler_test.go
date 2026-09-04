@@ -187,6 +187,25 @@ func TestReconcilerSuppressesUnprocessedGoalDelivery(t *testing.T) {
 	onlyGoalMessage(t, messageBus, "worker")
 }
 
+func TestReconcilerSuppressesDeadLetteredGoalDelivery(t *testing.T) {
+	now := goalNow
+	_, messageBus, base := seededGoalReconciler(t)
+	r := NewReconciler(ReconcilerConfig{Store: base, Bus: messageBus, Clock: func() time.Time { return now }})
+	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
+		t.Fatal(err)
+	}
+	for range 6 { // maxAttempts plus the delivery that crosses into DLQ.
+		if _, err := messageBus.Pending("worker", 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now = now.Add(time.Minute)
+	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
+		t.Fatal(err)
+	}
+	onlyGoalMessage(t, messageBus, "worker")
+}
+
 func TestReconcilerDeliversAgainAfterProcessedCooldown(t *testing.T) {
 	now := goalNow
 	_, messageBus, base := seededGoalReconciler(t)
