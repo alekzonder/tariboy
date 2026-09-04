@@ -195,7 +195,7 @@ func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "Use the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: GOAL-1\ntitle: Render goal\npriority: P1\nstatus: open\ndescription: line one\nline two\n"
+	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: GOAL-1\ntitle: Render goal\npriority: P1\nstatus: open\ndescription: line one\nline two\n"
 	if got := res.(map[string]any)["prompt"].(string); got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}

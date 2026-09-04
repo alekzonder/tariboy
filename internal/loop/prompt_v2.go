@@ -113,8 +113,13 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 					}
 				}
 			}
-			if skill := runtimeSkills[entry.Runtime]; skill != "" && body != "" {
-				body = fmt.Sprintf("Use the `%s` skill for this runtime data.\n\n%s", skill, body)
+			if body != "" {
+				heading := "# [runtime: " + entry.Runtime + "]"
+				if skill := runtimeSkills[entry.Runtime]; skill != "" {
+					body = fmt.Sprintf("%s\n\nUse the `%s` skill for this runtime data.\n\n%s", heading, skill, body)
+				} else {
+					body = heading + "\n\n" + body
+				}
 			}
 		case "file":
 			if filepath.IsAbs(entry.ArchivePath) {

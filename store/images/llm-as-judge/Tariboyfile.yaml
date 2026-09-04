@@ -26,10 +26,10 @@ skills:
 
 prompts:
   - runtime: identity
+  - runtime: one-shot
   - runtime: messages
   - runtime: context
   - runtime: workdir
   - file: ./instructions.md
   - runtime: user-prompt
-  - runtime: one-shot
   - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md
