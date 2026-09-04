@@ -109,9 +109,10 @@ customer.
 
 An enabled agent normally follows one sticky assigned task as its Goal. It
 releases that selection when the task is done, cancelled, has a pull request,
-loses assignment or visibility, or remains in `wait_customer` beyond the
-agent's configured grace period. The goal is daemon-owned and read-only to the
-agent; see [Agents and the iteration loop](/docs/architecture/iteration-loop).
+loses assignment or visibility, remains in `wait_customer` beyond the agent's
+configured grace period, or eligible assigned work has a strictly higher
+priority. The goal is daemon-owned and read-only to the agent; see [Agents and
+the iteration loop](/docs/architecture/iteration-loop).
 
 Assignment, question, answer, and queue-triage events enter a transactional
 outbox and publish through the existing channels/messages bus. Agent

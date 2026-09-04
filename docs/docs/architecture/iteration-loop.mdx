@@ -38,12 +38,12 @@ completion, exits, or reaches an enforced deadline.
 
 Goal is per-agent and enabled by default. The reconciler retains one assigned
 Native Task selection until it is released: `done` or `cancelled`, a non-empty
-pull request, lost assignment or visibility, Goal disabled, or a
-`wait_customer` task whose oldest unanswered customer wait reaches the agent's
-positive `goal_wait_customer_timeout_s` (300 seconds by default). Otherwise,
-it orders assigned work by priority (`P0` through `P3`), then `in_progress`
-before `open`, creation time, and task key. Priority changes do not displace a
-valid selection.
+pull request, lost assignment or visibility, Goal disabled, a `wait_customer`
+task whose oldest unanswered customer wait reaches the agent's positive
+`goal_wait_customer_timeout_s` (300 seconds by default), or eligible assigned
+work with a strictly higher priority. It orders replacements by priority (`P0`
+through `P3`), then `in_progress` before `open`, creation time, and task key.
+Equal-priority work does not displace a valid selection.
 
 At startup, relevant task or agent changes, terminal iteration completion, and
 the bounded one-minute recovery cadence, the reconciler publishes one durable

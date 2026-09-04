@@ -43,8 +43,8 @@ import (
 	"github.com/alekzonder/tariboy/internal/scriptnotify"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/supportbundle"
+	"github.com/alekzonder/tariboy/internal/taskgoal"
 	"github.com/alekzonder/tariboy/internal/tasknotify"
-	"github.com/alekzonder/tariboy/internal/taskreminder"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telegramplugin"
 	"github.com/alekzonder/tariboy/internal/telemetry"
@@ -272,10 +272,10 @@ func Run(ctx context.Context, o Options) error {
 	taskHub := tasks.NewHub(taskService)
 	taskService.SetHub(taskHub)
 	taskPublisher := tasknotify.New(st.DB, channelBus, time.Now, log)
-	goalReconciler := taskreminder.NewReconciler(taskreminder.ReconcilerConfig{
+	goalReconciler := taskgoal.NewReconciler(taskgoal.ReconcilerConfig{
 		Store: st, Bus: channelBus, Clock: time.Now, Log: log,
 	})
-	currentGoal := taskreminder.NewStore(st).Current
+	currentGoal := taskgoal.NewStore(st).Current
 	taskService.SetGoalSignal(goalReconciler.Signal)
 	imgStore := &image.Store{Dir: p.ImagesDir()}
 	if err := image.WithPublicationGate(func() error {

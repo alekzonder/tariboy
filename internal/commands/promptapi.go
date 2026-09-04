@@ -12,7 +12,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/taskreminder"
+	"github.com/alekzonder/tariboy/internal/taskgoal"
 )
 
 func contextGet() registry.Command {
@@ -127,7 +127,7 @@ func promptGet() registry.Command {
 				if slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
 					return entry.Kind == "runtime" && entry.Runtime == "goal"
 				}) {
-					if task, ok, err := taskreminder.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
+					if task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
 						return nil, err
 					} else if ok {
 						goal = loop.FormatRuntimeGoal(task)
