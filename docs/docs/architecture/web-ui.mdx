@@ -36,6 +36,10 @@ one complete stopped agent row. Environment is a string-valued JSON object,
 schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
 read-only. Bare images force Interactive on and Autopilot off.
 
+Ordinary creation defaults the soft iteration timeout to 7,200 seconds (2
+hours) and the hard timeout to 10,800 seconds (3 hours). Clone mode continues
+to copy both timeout values from the source agent.
+
 Agent creation, clone, and **Configuration** carry the per-agent Goal settings:
 an enabled-by-default switch and a positive whole-second customer-wait timeout
 (300 by default). Configuration shows the daemon-selected goal key read-only.
