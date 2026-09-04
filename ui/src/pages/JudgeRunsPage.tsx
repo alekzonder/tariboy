@@ -38,7 +38,16 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
 	const [diagnostics, setDiagnostics] = useState<JudgeAutomationDiagnostic[]>([]);
 	const [configError, setConfigError] = useState("");
 	const [busy, setBusy] = useState(false);
-	const [judgesExists, setJudgesExists] = useState<boolean | null>(null);
+	const [judgesReady, setJudgesReady] = useState<boolean | null>(null);
+	const judgeTeamReady = useCallback(async (raw: string) => {
+		if (!raw) return null;
+		const judge = (JSON.parse(raw) as { judge: { lead: string; workers: string[] } }).judge;
+		const result = await apiOn<{ groups: Array<{ name: string }> }>(resolveTarget(target), "GET", "/api/groups");
+		if (!result.groups.some((group) => group.name === "judges")) return false;
+		const group = await apiOn<{ lead: string; members: string[] }>(resolveTarget(target), "GET", "/api/groups/judges");
+		const expected = [judge.lead, ...judge.workers];
+		return group.lead === judge.lead && expected.every((name) => group.members.includes(name));
+	}, [target]);
 
 	useEffect(() => {
 		let current = true;
@@ -47,12 +56,12 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
 			const raw = state.revision?.canonical_json ?? "";
 			setConfig(raw);
 			setSaved(raw);
-			return apiOn<{ groups: Array<{ name: string }> }>(resolveTarget(target), "GET", "/api/groups");
+			return judgeTeamReady(raw);
 		}).then((result) => {
-			if (current && result) setJudgesExists(result.groups.some((group) => group.name === "judges"));
+			if (current && result !== undefined) setJudgesReady(result);
 		}).catch((cause) => { if (current) setConfigError((cause as Error).message); });
 		return () => { current = false; };
-	}, [target]);
+	}, [judgeTeamReady, target]);
 
 	const validate = async () => {
 		setBusy(true); setConfigError("");
@@ -65,6 +74,7 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
 		try {
 			const result = await applyJudgeAutomation(target, config);
 			setConfig(result.revision.canonical_json); setSaved(result.revision.canonical_json); setDiagnostics([]);
+			setJudgesReady(await judgeTeamReady(result.revision.canonical_json));
 		} catch (cause) { setConfigError((cause as Error).message); }
 		finally { setBusy(false); }
 	};
@@ -77,10 +87,20 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
 	const createJudges = async () => {
 		setBusy(true); setConfigError("");
 		try {
-			const judge = (JSON.parse(saved) as { judge: { lead: string; workers: string[] } }).judge;
+			const judge = (JSON.parse(saved) as { judge: { lead: string; workers: string[]; image_ref: string } }).judge;
+			const roles = [judge.lead, ...judge.workers];
+			const agents = await apiOn<{ agents: Array<{ name: string }> }>(resolveTarget(target), "GET", "/api/agents");
+			const existing = new Set(agents.agents.map((agent) => agent.name));
+			let created = false;
+			for (const name of roles) {
+				if (existing.has(name)) continue;
+				await apiOn(resolveTarget(target), "POST", "/api/agents", { image: judge.image_ref, name });
+				created = true;
+			}
+			if (created) await applyJudgeAutomation(target, saved);
 			await apiOn(resolveTarget(target), "POST", "/api/groups", { name: "judges", lead: judge.lead });
-			for (const agent of [judge.lead, ...judge.workers]) await apiOn(resolveTarget(target), "POST", "/api/groups/judges/assign", { agent });
-			setJudgesExists(true);
+			for (const agent of roles) await apiOn(resolveTarget(target), "POST", "/api/groups/judges/assign", { agent });
+			setJudgesReady(true);
 		} catch (cause) { setConfigError((cause as Error).message); }
 		finally { setBusy(false); }
 	};
@@ -96,7 +116,7 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
 		<label className="block space-y-1 text-sm"><span>Judge automation JSON</span><Textarea className="min-h-72 font-mono text-xs" value={config} onChange={(event) => setConfig(event.target.value)} spellCheck={false} /></label>
 		{diagnostics.length > 0 && <ul role="alert" className="space-y-1 text-sm text-destructive">{diagnostics.map((item) => <li key={`${item.path}:${item.message}`}><code>{item.path}</code>: {item.message}</li>)}</ul>}
 		{configError && <p role="alert" className="text-sm text-destructive">{configError}</p>}
-		<div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => void validate()}>Validate</Button><Button type="button" disabled={busy} onClick={() => void apply()}>Apply</Button><Button type="button" variant="outline" disabled={busy} onClick={() => void runOnce()}>Run once</Button><Button type="button" variant="ghost" disabled={busy || config === saved} onClick={() => { setConfig(saved); setDiagnostics([]); }}>Reset</Button>{saved && judgesExists === false && <Button type="button" variant="outline" disabled={busy} onClick={() => void createJudges()}>Create judges team</Button>}</div>
+		<div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => void validate()}>Validate</Button><Button type="button" disabled={busy} onClick={() => void apply()}>Apply</Button><Button type="button" variant="outline" disabled={busy} onClick={() => void runOnce()}>Run once</Button><Button type="button" variant="ghost" disabled={busy || config === saved} onClick={() => { setConfig(saved); setDiagnostics([]); }}>Reset</Button>{saved && judgesReady === false && <Button type="button" variant="outline" disabled={busy} onClick={() => void createJudges()}>Create judges team</Button>}</div>
 	  </section>
       {error && <p role="alert" className="rounded border border-destructive/40 px-3 py-2 text-sm text-destructive">Could not load judge runs: {error.message}</p>}
       <div className="overflow-x-auto rounded border">
