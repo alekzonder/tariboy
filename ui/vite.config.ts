@@ -24,6 +24,5 @@ export default defineConfig({
     pool: "vmThreads",
     reporters: ["agent"],
     setupFiles: ["./src/test/setup.ts"],
-    testTimeout: 10_000,
   },
 });

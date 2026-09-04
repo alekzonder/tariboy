@@ -73,7 +73,7 @@ it("exports from the route host instead of the active daemon", async () => {
       ] } }), { status: 200 }));
     }
     if (path === "https://source/api/images/reviewer%3Av3/export") {
-      return Promise.resolve(new Response(new Blob(["archive"]), { status: 200 }));
+      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["archive"])) } as Response);
     }
     return Promise.reject(new Error(`unexpected request ${path}`));
   });
@@ -86,10 +86,7 @@ it("exports from the route host instead of the active daemon", async () => {
   render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
-  await waitFor(
-    () => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"),
-    { timeout: 5000 },
-  );
+  await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));
   expect(fetchMock).toHaveBeenCalledWith(
     "https://source/api/images/reviewer%3Av3/export",
     expect.objectContaining({ method: "GET" }),
@@ -260,7 +257,7 @@ it("downloads the runnable bundle and confirms the saved portable filename", asy
       ] } }), { status: 200 }));
     }
     if (path === "/api/images/reviewer%3Av3/export") {
-      return Promise.resolve(new Response(new Blob(["archive"]), { status: 200 }));
+      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(["archive"])) } as Response);
     }
     return Promise.reject(new Error(`unexpected request ${path}`));
   });
@@ -273,10 +270,7 @@ it("downloads the runnable bundle and confirms the saved portable filename", asy
   render(<MemoryRouter><BuiltImages hostId="" /></MemoryRouter>);
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
-  await waitFor(
-    () => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"),
-    { timeout: 5000 },
-  );
+  await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));
   expect(success).toHaveBeenCalledWith(
     "image reviewer:v3 saved to file reviewer-v3.tariboy-image.tar.gz",
   );
