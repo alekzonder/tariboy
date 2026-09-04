@@ -74,6 +74,7 @@ test:
 smoke-contract-test:
 	./scripts/tariboy-smoke-contract-test.sh
 	./scripts/tariboy-branding-contract-test.sh
+	./scripts/image-build-wrappers-contract-test.sh
 	bash ./scripts/check-output-contract-test.sh
 	./scripts/make-clean-contract-test.sh
 	./scripts/server-install-contract-test.sh
