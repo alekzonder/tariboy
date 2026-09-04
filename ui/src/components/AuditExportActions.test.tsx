@@ -44,6 +44,9 @@ describe("AuditExportActions", () => {
       "/api/agents/alice/audit-export",
       expect.objectContaining({ method: "GET" }),
     ));
-    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+    await waitFor(
+      () => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled(),
+      { timeout: 5000 },
+    );
   });
 });
