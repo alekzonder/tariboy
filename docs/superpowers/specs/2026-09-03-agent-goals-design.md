@@ -221,6 +221,36 @@ All daemon and agent tests use isolated `TARIBOY_BASE_DIR` and
 touch the live daemon or live data. Generated Desktop output remains unstaged;
 rebuild committed Store UI only if shared source changes affect it.
 
+## Shim supervisor lifecycle
+
+Final Desktop verification exposed a pre-existing process-group leak in the
+tmux harness cleanup path. The hidden supervisor remains a mode of the existing
+shim process; no daemon service, helper process, protocol, dependency, or
+operator setting is added.
+
+The shim starts the harness as the direct leader of an owned foreground process
+group and keeps that leader unreaped until cleanup is complete. A platform
+observer reports only actual child exit: Linux uses
+`waitid(P_PID, pid, WEXITED|WNOWAIT)` and macOS uses
+`kqueue` `EVFILT_PROC|NOTE_EXIT`. `SIGSTOP`, `SIGCONT`, and unrelated or forged
+`SIGCHLD` notifications do not end supervision or produce an exit status.
+
+On natural exit, the shim first sends `SIGKILL` to the still-pinned process
+group to remove lingering descendants, then reaps the direct leader exactly
+once and atomically records its real exit status. On tmux `SIGHUP`, the shim
+sends `SIGTERM` to the group and waits up to two seconds for confirmed leader
+exit; if needed it sends `SIGKILL` and waits a further two seconds. It then uses
+the same kill-before-reap path, preserving a cooperative harness exit code or
+recording signal exit `137` after forced termination. `ESRCH` means the group
+is already empty and is not an error.
+
+Observer, signal, reap, or deadline failures are bounded and return an error.
+They do not write the transient status file, so the outer shim retains its
+existing fail-closed result of unknown failure (`-1`) instead of inventing
+success from an uninitialized wait status. Error paths make a best-effort
+`SIGKILL` cleanup but never block indefinitely waiting for an unconfirmed
+child state.
+
 ## Test strategy
 
 Use focused TDD slices for:
@@ -239,6 +269,9 @@ Use focused TDD slices for:
   the `basic` and `tariboy-developer` image declarations;
 - React Configuration and Task Detail behavior, production Desktop Playwright,
   and `tauri-driver` coverage required for UI changes.
+- shim stop/continue handling, natural exit with lingering descendants,
+  cooperative and forced tmux teardown, bounded observer/signal/reap failures,
+  Linux Desktop cleanup, and Darwin compilation of the native exit observer.
 
 Final branch verification is `make full-check`, plus focused Rust tests only if
 the native host changes, followed by `git diff --check` and complete diff

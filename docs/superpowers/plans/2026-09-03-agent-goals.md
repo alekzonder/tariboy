@@ -730,6 +730,10 @@ git commit -m "docs: describe agent goals"
 
 ### Task 12: Complete branch verification and hold for merge approval
 
+The first `make full-check` run exposed the tmux supervisor lifecycle defect
+described in the spec. Complete Task 13 before rerunning this task from Step 1;
+the earlier failed run is diagnostic evidence, not final verification.
+
 **Files:**
 - Inspect: all changes from `main...HEAD`
 - Do not modify version pins or generated Desktop output.
@@ -765,3 +769,125 @@ Post the commits, full-check result, review result, and branch name. Ask the cus
 - [ ] **Step 5: After explicit approval only, finish local integration**
 
 Use `superpowers:finishing-a-development-branch`: merge `tari-43-agent-goals` into local `main`, run the distinct post-merge `make full-check`, remove the worktree and local branch, post the consolidated final Native Task comment, run `tasks done TARI-43`, and remove TARI-43 from durable context. If approval is not present, do none of these actions.
+
+### Task 13: Make the existing shim supervisor observe real child exit
+
+**Files:**
+- Create: `internal/shim/child_exit_linux.go`
+- Create: `internal/shim/child_exit_darwin.go`
+- Modify: `internal/shim/shim.go`
+- Modify: `internal/shim/shim_test.go`
+- Modify: `docs/docs/architecture/shim.mdx`
+
+**Interfaces:**
+- Produces: `waitChildExit(pid int) error`, implemented with Linux
+  `waitid(P_PID, pid, WEXITED|WNOWAIT)` and Darwin
+  `kqueue` `EVFILT_PROC|NOTE_EXIT`; neither implementation reaps the child.
+- Consumes: the existing `RunTmuxSupervisor`, owned foreground process group,
+  transient tmux status file, and `golang.org/x/sys/unix` dependency.
+
+- [ ] **Step 1: Write the failing stop/continue regression test**
+
+Start `RunTmuxSupervisor` around a harness that records its PID, traps `TERM`,
+and exits `23` only after a release file appears. Send `SIGSTOP` and `SIGCONT`
+to the harness leader, assert that the supervisor remains running and writes no
+status, create the release file, then assert successful completion and exact
+status `23`.
+
+```go
+func TestRunTmuxSupervisorIgnoresStoppedHarness(t *testing.T) {
+	// Start the supervised harness and read its PID marker.
+	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil { t.Fatal(err) }
+	if err := syscall.Kill(pid, syscall.SIGCONT); err != nil { t.Fatal(err) }
+	select {
+	case err := <-done:
+		t.Fatalf("supervisor treated stop/continue as exit: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if _, err := os.Stat(statusPath); !os.IsNotExist(err) {
+		t.Fatalf("status written before exit: %v", err)
+	}
+	if err := os.WriteFile(releasePath, nil, 0o600); err != nil { t.Fatal(err) }
+	if err := <-done; err != nil { t.Fatal(err) }
+	if got := readSupervisorStatus(t, statusPath); got != 23 { t.Fatalf("status = %d, want 23", got) }
+}
+```
+
+- [ ] **Step 2: Run the regression test and observe the current failure**
+
+Run: `go test ./internal/shim -run TestRunTmuxSupervisorIgnoresStoppedHarness -count=1`
+
+Expected: FAIL because the first `SIGCHLD` notification currently triggers
+group termination and records `137` instead of waiting for real exit `23`.
+
+- [ ] **Step 3: Add focused lifecycle and failure tests**
+
+Keep the existing HUP and natural-status coverage, and add table-driven cases
+for: natural leader exit with a lingering descendant; HUP with a
+`TERM`-cooperative leader; HUP with a `TERM`-ignoring leader that requires
+`SIGKILL`; observer failure; group-signal failure; reap failure; and expiry of
+each bounded wait. Inject only the three syscall seams used by the supervisor.
+Every operational failure must return promptly and leave the status path
+absent.
+
+```go
+var (
+	waitTmuxChildExit = waitChildExit
+	killTmuxGroup = syscall.Kill
+	reapTmuxChild = syscall.Wait4
+)
+```
+
+- [ ] **Step 4: Implement the two native observers**
+
+In `child_exit_linux.go`, retry `unix.Waitid` on `EINTR` and use only
+`unix.WEXITED|unix.WNOWAIT`, so stop/continue events are excluded and the
+leader remains unreaped. In `child_exit_darwin.go`, create one kqueue, register
+the direct PID with `EVFILT_PROC`, `EV_ADD|EV_ONESHOT`, and `NOTE_EXIT`, wait
+through `EINTR`, validate the returned event, and close the queue on return.
+Do not add a goroutine, polling loop, helper executable, or dependency in these
+platform files.
+
+- [ ] **Step 5: Replace signal-driven exit with bounded shim-owned teardown**
+
+`RunTmuxSupervisor` listens only for `SIGHUP` and runs `waitChildExit` in its
+single observer goroutine. Natural exit performs group `SIGKILL` before the
+sole blocking reap. HUP performs `SIGTERM`, waits two seconds for confirmed
+exit, escalates to `SIGKILL`, and waits at most two more seconds. Treat `ESRCH`
+as success. Join operational errors, attempt best-effort final `SIGKILL`, and
+write the status file only when exit observation, cleanup, and the exact
+`Wait4(pid, ...)` reap all succeed.
+
+- [ ] **Step 6: Run focused tests and platform compilation**
+
+Run: `go test ./internal/shim -count=1`
+
+Run: `GOOS=darwin GOARCH=arm64 go test ./internal/shim -run '^$'`
+
+Expected: PASS; the Linux suite proves the lifecycle behavior and the Darwin
+compile proves the kqueue backend remains buildable.
+
+- [ ] **Step 7: Update the shim architecture contract**
+
+Replace the first-`SIGCHLD` wording with the real-exit observer, bounded
+`TERM`→`KILL` teardown, kill-before-reap ordering, `ESRCH` handling, and
+fail-closed missing-status behavior. Keep the document explicit that this is
+the existing shim process and no helper process is started.
+
+- [ ] **Step 8: Run the isolated Desktop regression**
+
+Run: `. "$HOME/.cargo/env" && make desktop-e2e DESKTOP_E2E_ARGS="tests/desktop/customer-question-notification.pw.ts"`
+
+Expected: PASS with fixture-owned base/runtime/listener state and no surviving
+harness descendant after agent kill.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add internal/shim/child_exit_linux.go internal/shim/child_exit_darwin.go internal/shim/shim.go internal/shim/shim_test.go docs/docs/architecture/shim.mdx
+git commit -m "fix(shim): observe harness exit safely"
+```
+
+After this task passes its review gate, return to Task 12 Step 1. Do not merge
+the branch without the separate explicit customer approval recorded on
+TARI-43.
