@@ -589,11 +589,23 @@ def normalize_body_items(
 ) -> tuple[list[dict[str, Any]], dict[int, str]]:
     metadata = []
     bodies: dict[int, str] = {}
+    seen_ids: set[int] = set()
     for value in values:
         item = require_dict(value, kind)
         object_id = integer_field(item, "id", kind)
-        if object_id in bodies:
+        if object_id in seen_ids:
             fail(f"GitHub returned duplicate {kind} IDs")
+        seen_ids.add(object_id)
+        if (
+            kind == "review"
+            and item.get("state") == "PENDING"
+            and "submitted_at" in item
+            and item["submitted_at"] is None
+        ):
+            integer_field(item, "id", kind)
+            body_field(item, "body", kind)
+            nonempty_text_field(item, "commit_id", kind)
+            continue
         timestamp = nonempty_text_field(item, timestamp_key, kind)
         body = body_field(item, "body", kind)
         entry: dict[str, Any] = {"id": object_id, timestamp_key: timestamp}

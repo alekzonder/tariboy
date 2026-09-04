@@ -557,6 +557,30 @@ class GitHubPRWorkflowTests(unittest.TestCase):
         self.assertEqual(review_fact["commit_id"], "reviewed-commit")
         self.assertEqual(review_fact["body"], "changes requested")
 
+    def test_monitor_ignores_pending_review_without_submitted_at(self):
+        review = {
+            "id": 3,
+            "submitted_at": None,
+            "body": "unfinished draft review",
+            "state": "PENDING",
+            "commit_id": "reviewed-commit",
+        }
+        with tempfile.TemporaryDirectory() as state_dir, FakeCurl(
+            monitor_responses(reviews=[review])
+        ) as curl:
+            result = self.run_utility(
+                "monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            snapshot = json.loads(
+                (Path(state_dir) / "pr-31.json").read_text(encoding="utf-8")
+            )
+        self.assertFalse(
+            any(fact["kind"] == "untrusted_review" for fact in json.loads(result.stdout)["facts"])
+        )
+        self.assertNotIn(review["body"], result.stdout)
+        self.assertEqual(snapshot["reviews"], [])
+
     def test_monitor_rejects_incomplete_comment_and_review_objects_without_advancing_state(self):
         cases = [
             ("issue body missing", 3, [{"id": 1, "updated_at": "2026-08-21T12:00:00Z"}]),
@@ -566,6 +590,13 @@ class GitHubPRWorkflowTests(unittest.TestCase):
             ("review body missing", 5, [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "state": "COMMENTED", "commit_id": "abc123"}]),
             ("review state missing", 5, [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "body": "body", "commit_id": "abc123"}]),
             ("review commit null", 5, [{"id": 3, "submitted_at": "2026-08-21T12:00:00Z", "body": "body", "state": "COMMENTED", "commit_id": None}]),
+            ("pending review id invalid", 5, [{"id": None, "submitted_at": None, "body": "body", "state": "PENDING", "commit_id": "abc123"}]),
+            ("pending review body missing", 5, [{"id": 3, "submitted_at": None, "state": "PENDING", "commit_id": "abc123"}]),
+            ("pending review commit null", 5, [{"id": 3, "submitted_at": None, "body": "body", "state": "PENDING", "commit_id": None}]),
+            ("pending review duplicate id", 5, [
+                {"id": 3, "submitted_at": None, "body": "first", "state": "PENDING", "commit_id": "abc123"},
+                {"id": 3, "submitted_at": None, "body": "second", "state": "PENDING", "commit_id": "abc123"},
+            ]),
         ]
         for name, endpoint_index, objects in cases:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as state_dir, FakeCurl(monitor_responses()) as curl:
@@ -577,7 +608,7 @@ class GitHubPRWorkflowTests(unittest.TestCase):
                 curl.set_responses(responses)
                 result = self.run_utility("monitor", "--repo", REPO, "--pr", "31", "--state-dir", state_dir, curl=curl)
                 self.assertEqual(initial.returncode, 0, initial.stderr)
-                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode, 1)
                 self.assertNotIn("Traceback", result.stderr)
                 self.assertEqual(snapshot.read_bytes(), before)
                 self.assertEqual(list(Path(state_dir).glob("*.tmp")), [])
