@@ -111,8 +111,8 @@ it("saves Goal settings serially on the explicit host", async () => {
     { enabled: false },
     { seconds: 120 },
   ]);
-  expect((calls.find((call) => call.method === "POST")?.headers as Record<string, string>).Authorization)
-    .toBe("Bearer secret");
+  expect(calls.find((call) => call.method === "POST")?.headers)
+    .toMatchObject({ Authorization: "Bearer secret" });
 });
 
 it.each(["0", "1.5"])("rejects Goal timeout %s before saving", async (value) => {
