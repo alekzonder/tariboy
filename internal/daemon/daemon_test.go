@@ -399,8 +399,8 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 		JOIN messages m ON m.id=d.message_id WHERE m.type='task.goal'`).Scan(&deliveries); err != nil {
 		t.Fatal(err)
 	}
-	if deliveries != 2 {
-		t.Fatalf("durable deliveries = %d, want startup and terminal continuation", deliveries)
+	if deliveries != 1 {
+		t.Fatalf("durable deliveries = %d, want one unprocessed Goal delivery", deliveries)
 	}
 }
 

@@ -40,7 +40,7 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, er
 		"timeout_s": a.TimeoutS, "hard_timeout_s": a.HardTimeoutS, "on_timeout": a.OnTimeout,
 		"on_error": a.OnError, "user_prompt": a.UserPrompt, "env": a.Env, "plugins": a.Plugins,
 		"messages_batch": a.MessagesBatch, "messages_max_queue": a.MessagesMaxQueue,
-		"goal_enabled": a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS,
+		"goal_enabled": a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS,
 		"current_goal_task_key": a.CurrentGoalTaskKey,
 		"group":                 a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
 		"max_idle_iterations": a.MaxIdleIterations,
@@ -264,6 +264,7 @@ func agentRun() registry.Command {
 			{Name: "messages_max_queue", Type: registry.Int, Help: "maximum queued messages"},
 			{Name: "goal_enabled", Flag: "goal-enabled", Type: registry.Bool, Default: true, Help: "enable Native Task goal selection (default true)"},
 			{Name: "goal_wait_customer_timeout_s", Flag: "goal-wait-customer-timeout-s", Type: registry.Int, Default: 300, Help: "customer-wait grace period in whole seconds (default 300)"},
+			{Name: "goal_delivery_cooldown_s", Flag: "goal-delivery-cooldown-s", Type: registry.Int, Default: 60, Help: "minimum seconds between Goal deliveries (default 60)"},
 			{Name: "alias", Type: registry.String, Help: "display alias"},
 			{Name: "notes", Type: registry.String, Help: "operator notes"},
 			{Name: "color", Type: registry.String, Help: "agent accent color as #rrggbb"},
@@ -287,6 +288,14 @@ func agentRun() registry.Command {
 			if _, present := p["goal_wait_customer_timeout_s"]; present {
 				var err error
 				goalWaitCustomerTimeoutS, err = agentIntParam(p, "goal_wait_customer_timeout_s", "bad_goal_wait_customer_timeout", 1)
+				if err != nil {
+					return nil, err
+				}
+			}
+			goalDeliveryCooldownS := 60
+			if _, present := p["goal_delivery_cooldown_s"]; present {
+				var err error
+				goalDeliveryCooldownS, err = agentIntParam(p, "goal_delivery_cooldown_s", "bad_goal_delivery_cooldown", 1)
 				if err != nil {
 					return nil, err
 				}
@@ -358,6 +367,7 @@ func agentRun() registry.Command {
 				MessagesMaxQueue:         messagesMaxQueue,
 				GoalEnabled:              &goalEnabled,
 				GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS,
+				GoalDeliveryCooldownS:    goalDeliveryCooldownS,
 				Group:                    str(p, "group"), Alias: str(p, "alias"), Notes: str(p, "notes"),
 				Color: strings.ToLower(color),
 			}
@@ -381,7 +391,7 @@ func agentRun() registry.Command {
 			}
 			state, _ := c.Control.LiveState(name)
 			return map[string]any{"name": name, "state": state,
-				"goal_enabled": goalEnabled, "goal_wait_customer_timeout_s": goalWaitCustomerTimeoutS}, nil
+				"goal_enabled": goalEnabled, "goal_wait_customer_timeout_s": goalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": goalDeliveryCooldownS}, nil
 		},
 	}
 }
@@ -407,7 +417,7 @@ func agentPs() registry.Command {
 					"interval_s": a.IntervalS, "on_timeout": a.OnTimeout, "on_error": a.OnError,
 					"max_idle_iterations": a.MaxIdleIterations,
 					"interactive":         a.Interactive,
-					"goal_enabled":        a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS,
+					"goal_enabled":        a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS,
 					"current_goal_task_key": a.CurrentGoalTaskKey,
 				}
 				if budget, err := agentBudgetView(c, a.Name); err != nil {
@@ -425,7 +435,7 @@ func agentPs() registry.Command {
 
 func agentGoalSettingsView(a agent.Agent) map[string]any {
 	return map[string]any{"name": a.Name, "goal_enabled": a.GoalEnabled,
-		"goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS}
+		"goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS}
 }
 
 func refreshAgentGoal(c *registry.Ctx, name string) {
@@ -489,6 +499,25 @@ func agentGoalWaitCustomerTimeout() registry.Command {
 			return agentGoalSettingsView(a), nil
 		},
 	}
+}
+
+func agentGoalDeliveryCooldown() registry.Command {
+	return registry.Command{Path: "agent.goal-delivery-cooldown", Summary: "Set the Goal delivery cooldown", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "seconds", Type: registry.Int, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-delivery-cooldown"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		a, err := getAgent(c, str(p, "name"))
+		if err != nil {
+			return nil, err
+		}
+		seconds, err := agentIntParam(p, "seconds", "bad_goal_delivery_cooldown", 1)
+		if err != nil {
+			return nil, err
+		}
+		a.GoalDeliveryCooldownS = seconds
+		if err := agentStore(c).Update(a); err != nil {
+			return nil, err
+		}
+		refreshAgentGoal(c, a.Name)
+		return agentGoalSettingsView(a), nil
+	}}
 }
 
 func agentStatus() registry.Command {

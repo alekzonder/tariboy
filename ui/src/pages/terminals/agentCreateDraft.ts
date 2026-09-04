@@ -25,6 +25,7 @@ export interface AgentCreateDraft {
   messagesMaxQueue: string;
   goalEnabled: boolean;
   goalWaitCustomerTimeoutS: string;
+  goalDeliveryCooldownS: string;
   group: string;
   alias: string;
   notes: string;
@@ -55,6 +56,7 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     messagesMaxQueue: "1000",
     goalEnabled: true,
     goalWaitCustomerTimeoutS: "300",
+    goalDeliveryCooldownS: "60",
     group: "",
     alias: "",
     notes: "",
@@ -64,11 +66,12 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
 
 export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
   if (
-    source.configured_cwd === undefined
-    || source.messages_batch === undefined
-    || source.messages_max_queue === undefined
-    || source.goal_enabled === undefined
-    || source.goal_wait_customer_timeout_s === undefined
+    source.configured_cwd === undefined ||
+    source.messages_batch === undefined ||
+    source.messages_max_queue === undefined ||
+    source.goal_enabled === undefined ||
+    source.goal_wait_customer_timeout_s === undefined ||
+    source.goal_delivery_cooldown_s === undefined
   ) {
     throw new Error("Update the source host before making a complete clone");
   }
@@ -95,6 +98,7 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     messagesMaxQueue: String(source.messages_max_queue),
     goalEnabled: source.goal_enabled,
     goalWaitCustomerTimeoutS: String(source.goal_wait_customer_timeout_s),
+    goalDeliveryCooldownS: String(source.goal_delivery_cooldown_s),
     group: source.group ?? "",
     alias: source.alias,
     notes: source.notes,

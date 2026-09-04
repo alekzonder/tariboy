@@ -1070,7 +1070,7 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 	}
 }
 
-func TestRunnerSchemaV2RendersManagedWorkdirDistinctFromCWD(t *testing.T) {
+func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T) {
 	base := t.TempDir()
 	db, err := store.Open(filepath.Join(base, "state.db"))
 	if err != nil {
@@ -1081,7 +1081,7 @@ func TestRunnerSchemaV2RendersManagedWorkdirDistinctFromCWD(t *testing.T) {
 	externalCwd := t.TempDir()
 	ag := agent.Agent{
 		Name: "alice", ImageRef: "img:latest", ImageDigest: "digest",
-		HarnessType: "stub", Cwd: externalCwd,
+		HarnessType: "stub", Cwd: externalCwd, Plugins: []string{"tasks"},
 	}
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
@@ -1125,7 +1125,6 @@ func TestRunnerSchemaV2RendersManagedWorkdirDistinctFromCWD(t *testing.T) {
 		AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim",
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		CurrentGoal: func(string, time.Time) (tasks.Task, bool, error) {
-			t.Fatal("read goal for template without runtime: goal")
 			return tasks.Task{}, false, nil
 		},
 	})
@@ -1137,7 +1136,7 @@ func TestRunnerSchemaV2RendersManagedWorkdirDistinctFromCWD(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompt := string(body)
-	for _, want := range []string{"cwd: " + externalCwd, "workdir: " + l.Workdir()} {
+	for _, want := range []string{"cwd: " + externalCwd, "workdir: " + l.Workdir(), "# Agent Goal", "wait for the customer answer"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
 		}
@@ -1209,7 +1208,7 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
+	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nA selected task is active work: complete it through its Native Task workflow. If it is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
 	if got := string(body); got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}

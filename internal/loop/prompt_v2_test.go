@@ -70,9 +70,18 @@ func TestFormatRuntimeGoalPreservesLiteralTaskText(t *testing.T) {
 		Key: "TARI-43", Title: "Render goal", Priority: tasks.PriorityP1,
 		Status: tasks.StatusInProgress, Description: "line one\nline two",
 	})
-	want := "# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two"
+	want := "# Agent Goal\n\nA selected task is active work: complete it through its Native Task workflow. If it is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two"
 	if got != want {
 		t.Fatalf("goal = %q, want %q", got, want)
+	}
+}
+
+func TestFormatRuntimeGoalExplainsCustomerAndPRHandoffs(t *testing.T) {
+	got := FormatRuntimeGoal(tasks.Task{Key: "TARI-43", Status: tasks.StatusWaitCustomer})
+	for _, want := range []string{"wait for the customer answer", "Pull request", "Wait customer"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("goal missing %q: %s", want, got)
+		}
 	}
 }
 

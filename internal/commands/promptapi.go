@@ -124,13 +124,16 @@ func promptGet() registry.Command {
 					return nil, err
 				}
 				goal := ""
-				if slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
+				hasGoalRuntime := slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
 					return entry.Kind == "runtime" && entry.Runtime == "goal"
-				}) {
+				})
+				if hasGoalRuntime || slices.Contains(a.Plugins, "tasks") {
 					if task, ok, err := taskreminder.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
 						return nil, err
 					} else if ok {
 						goal = loop.FormatRuntimeGoal(task)
+					} else {
+						goal = loop.FormatRuntimeGoalGuidance()
 					}
 				}
 				prompt, err = loop.RenderPromptTemplate(template, l.ImageDir(), loop.RuntimePromptValues{
@@ -139,6 +142,9 @@ func promptGet() registry.Command {
 				})
 				if err != nil {
 					return nil, err
+				}
+				if goal != "" && !hasGoalRuntime {
+					prompt += "\n\n# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n" + goal + "\n"
 				}
 				layers = template.Entries
 			} else {

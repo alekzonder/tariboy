@@ -35,14 +35,43 @@ class SpyES {
 }
 
 const view: AgentView = {
-  name: "foo", image: "img", digest: "sha256:x", state: "running", cwd: "/",
-  harness: "claude", model: "sonnet", effort: "medium", interactive: false,
-  loop_enabled: true, interval_s: 60, timeout_s: 300, hard_timeout_s: 600, max_idle_iterations: 0,
-  on_timeout: "skip", on_error: "skip", user_prompt: "", env: {}, plugins: [], group: null,
-  goal_enabled: true, goal_wait_customer_timeout_s: 300, current_goal_task_key: "",
-  alias: "", notes: "",
+  name: "foo",
+  image: "img",
+  digest: "sha256:x",
+  state: "running",
+  cwd: "/",
+  harness: "claude",
+  model: "sonnet",
+  effort: "medium",
+  interactive: false,
+  loop_enabled: true,
+  interval_s: 60,
+  timeout_s: 300,
+  hard_timeout_s: 600,
+  max_idle_iterations: 0,
+  on_timeout: "skip",
+  on_error: "skip",
+  user_prompt: "",
+  env: {},
+  plugins: [],
+  group: null,
+  goal_enabled: true,
+  goal_wait_customer_timeout_s: 300,
+  goal_delivery_cooldown_s: 60,
+  current_goal_task_key: "",
+  alias: "",
+  notes: "",
 };
-const status: AgentStatus = { name: "foo", state: "running", loop_enabled: true, iterations: 1, last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "" };
+const status: AgentStatus = {
+  name: "foo",
+  state: "running",
+  loop_enabled: true,
+  iterations: 1,
+  last_iteration: null,
+  last_iteration_id: null,
+  status_message: "",
+  status_updated: "",
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -59,7 +88,8 @@ beforeEach(() => {
       let result: unknown;
       if (u.includes("/status/history")) result = { events: [], count: 0 };
       else if (u.endsWith("/status")) result = status;
-      else if (u.includes("/subscriptions") || u.includes("/channels")) result = { channels: [] };
+      else if (u.includes("/subscriptions") || u.includes("/channels"))
+        result = { channels: [] };
       else if (u.includes("/logs")) result = { events: [] };
       else if (u.includes("/alias")) result = { name: "foo", alias: "" };
       else if (u.includes("/notes")) result = { name: "foo", notes: "" };
@@ -77,7 +107,11 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("AgentOverview re-targets its live SSE stream on a real host switch", () => {
   it("re-opens the SSE stream against the newly-selected daemon after switching via HostSwitcher/context (not the direct setActiveDaemon bypass)", async () => {
-    await addDaemon({ label: "prod", baseURL: "https://prod:8765", token: "tp" });
+    await addDaemon({
+      label: "prod",
+      baseURL: "https://prod:8765",
+      token: "tp",
+    });
 
     // Mirrors App.tsx's structure exactly: AgentOverview and HostSwitcher are
     // both plain (stable) children of DaemonProvider — App.tsx does not make
@@ -97,7 +131,9 @@ describe("AgentOverview re-targets its live SSE stream on a real host switch", (
     );
 
     await waitFor(() => expect(SpyES.urls.length).toBeGreaterThan(0));
-    expect(SpyES.urls[0]).toBe("/api/agents/foo/events?types=iteration%2Caudit");
+    expect(SpyES.urls[0]).toBe(
+      "/api/agents/foo/events?types=iteration%2Caudit",
+    );
 
     // Switch the active daemon the way a real user does: through HostSwitcher,
     // which calls the DaemonProvider context's select() — NOT api.ts's

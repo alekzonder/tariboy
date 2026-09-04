@@ -173,6 +173,65 @@ func TestReconcilerSignalDoesNotBlockAndRunStops(t *testing.T) {
 	}
 }
 
+func TestReconcilerSuppressesUnprocessedGoalDelivery(t *testing.T) {
+	r, messageBus, _ := seededGoalReconciler(t)
+	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := messageBus.Pending("worker", 10); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
+		t.Fatal(err)
+	}
+	onlyGoalMessage(t, messageBus, "worker")
+}
+
+func TestReconcilerSuppressesDeadLetteredGoalDelivery(t *testing.T) {
+	now := goalNow
+	_, messageBus, base := seededGoalReconciler(t)
+	r := NewReconciler(ReconcilerConfig{Store: base, Bus: messageBus, Clock: func() time.Time { return now }})
+	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
+		t.Fatal(err)
+	}
+	for range 6 { // maxAttempts plus the delivery that crosses into DLQ.
+		if _, err := messageBus.Pending("worker", 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now = now.Add(time.Minute)
+	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
+		t.Fatal(err)
+	}
+	onlyGoalMessage(t, messageBus, "worker")
+}
+
+func TestReconcilerDeliversAgainAfterProcessedCooldown(t *testing.T) {
+	now := goalNow
+	_, messageBus, base := seededGoalReconciler(t)
+	r := NewReconciler(ReconcilerConfig{Store: base, Bus: messageBus, Clock: func() time.Time { return now }})
+	if err := r.Reconcile(context.Background(), "worker", ""); err != nil {
+		t.Fatal(err)
+	}
+	first := onlyGoalMessage(t, messageBus, "worker")
+	if _, err := messageBus.MarkProcessed("worker", first.ID, "handled"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
+		t.Fatal(err)
+	}
+	if messages, err := messageBus.MessagesSince(bus.InboxChannel("worker"), "", 10); err != nil || len(messages) != 1 {
+		t.Fatalf("messages before cooldown = %#v, %v", messages, err)
+	}
+	now = now.Add(time.Minute)
+	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
+		t.Fatal(err)
+	}
+	if messages, err := messageBus.MessagesSince(bus.InboxChannel("worker"), "", 10); err != nil || len(messages) != 2 {
+		t.Fatalf("messages after cooldown = %#v, %v", messages, err)
+	}
+}
+
 func seededGoalReconciler(t *testing.T) (*Reconciler, *bus.Bus, *basestore.Store) {
 	t.Helper()
 	base := openGoalStore(t)
