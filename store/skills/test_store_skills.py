@@ -194,6 +194,19 @@ class StoreSkillsTest(unittest.TestCase):
                 self.assertEqual(request[0], [method, route])
                 self.assertEqual(request[1], b"" if body is None else json.dumps(body).encode())
 
+    def test_message_reply_accepts_positional_text(self):
+        process, request = self.run_script(
+            "messages/scripts/messages.sh",
+            ["message", "reply", "m-1", "delivered", "status"],
+            {},
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(request[0], ["POST", "/tools/message/reply"])
+        self.assertEqual(
+            json.loads(request[1]),
+            {"id": "m-1", "text": "delivered status", "type": ""},
+        )
+
     def test_direct_entrypoint_preserves_json_output(self):
         process, request = self.run_script(
             "whoami/scripts/whoami.sh", ["--json"], {"agent": "alice"}
