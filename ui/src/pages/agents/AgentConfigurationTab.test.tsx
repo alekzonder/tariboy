@@ -2,11 +2,19 @@ import { afterEach, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { MemoryRouter } from "react-router-dom";
+import type { Daemon } from "@/lib/daemons";
 import type { AgentStatus, AgentView } from "@/lib/types";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 
 vi.mock("@/pages/AgentSettings", () => ({
-  default: () => <div data-testid="agent-settings" />,
+  default: ({ target }: { target?: Daemon | null }) => (
+    <div
+      data-testid="agent-settings"
+      data-target-id={target?.id ?? ""}
+      data-target-base-url={target?.baseURL ?? ""}
+      data-target-token={target?.token ?? ""}
+    />
+  ),
 }));
 
 afterEach(() => vi.restoreAllMocks());
@@ -39,6 +47,9 @@ const stopped: AgentView = {
   user_prompt: "",
   env: {},
   plugins: [],
+  goal_enabled: true,
+  goal_wait_customer_timeout_s: 300,
+  current_goal_task_key: "",
   group: null,
   alias: "",
   notes: "",
@@ -63,6 +74,22 @@ function renderConfiguration(refresh = vi.fn()) {
   );
   return { ...view, refresh };
 }
+
+it("passes the route's remote request target to Agent settings", async () => {
+  vi.stubGlobal("fetch", vi.fn((url: string) => {
+    if (url.includes("/api/fs/list")) {
+      return response({ path: "/srv", parent: "/", entries: [] });
+    }
+    return response(stopped);
+  }));
+
+  renderConfiguration();
+
+  await screen.findByTestId("master-switch-state");
+  expect(screen.getByTestId("agent-settings")).toHaveAttribute("data-target-id", "remote-1");
+  expect(screen.getByTestId("agent-settings")).toHaveAttribute("data-target-base-url", "https://remote.example");
+  expect(screen.getByTestId("agent-settings")).toHaveAttribute("data-target-token", "secret");
+});
 
 it("shows both run flags with their controls and the explanation line", async () => {
   vi.stubGlobal("fetch", vi.fn((url: string) => {

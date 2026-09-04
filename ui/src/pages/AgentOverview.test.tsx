@@ -19,6 +19,7 @@ function mkView(interactive: boolean): AgentView {
     harness: "claude", model: "sonnet", effort: "medium", interactive,
     loop_enabled: true, interval_s: 60, timeout_s: 300, hard_timeout_s: 600, max_idle_iterations: 0,
     on_timeout: "skip", on_error: "skip", user_prompt: "", env: {}, plugins: [], group: null,
+    goal_enabled: true, goal_wait_customer_timeout_s: 300, current_goal_task_key: "",
     alias: "", notes: "",
   };
 }

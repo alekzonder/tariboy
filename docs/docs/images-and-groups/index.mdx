@@ -22,7 +22,8 @@ See [Images](/docs/images) for the complete schema and path roots.
 The daemon provides two reserved images:
 
 - **basic** — the daemon-provided general-purpose default (context, status,
-  managed-workdir instructions, scripts, current-task, and native Tasks). It
+  managed-workdir instructions, scripts, current-task, native Tasks, and
+  `runtime: goal`). It
   deliberately excludes all external provider integrations. Every
   packaged daemon installs or refreshes `basic:latest` when its version is
   activated.

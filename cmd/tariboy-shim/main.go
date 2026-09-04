@@ -11,6 +11,14 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 6 && os.Args[1] == shim.TmuxSupervisorMode && os.Args[4] == "--" {
+		if err := shim.RunTmuxSupervisor(os.Args[2], os.Args[3], os.Args[5:]); err != nil {
+			fmt.Fprintln(os.Stderr, "tariboy-shim supervisor:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	fs := flag.NewFlagSet("tariboy-shim", flag.ExitOnError)
 	iterDir := fs.String("iteration-dir", "", "iteration directory (holds logs/, result.json, shim.sock)")
 	agent := fs.String("agent", "", "agent name")

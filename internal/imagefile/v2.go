@@ -11,7 +11,7 @@ import (
 )
 
 var runtimePromptNames = map[string]bool{
-	"identity": true, "context": true, "messages": true,
+	"identity": true, "goal": true, "context": true, "messages": true,
 	"awaiting-replies": true, "user-prompt": true, "one-shot": true,
 	"workdir": true,
 }

@@ -56,7 +56,7 @@ func ValidatePromptTemplate(template PromptTemplate) error {
 	}
 	seenRuntime := map[string]bool{}
 	seenLayers := map[string]bool{}
-	validRuntime := map[string]bool{"identity": true, "context": true, "messages": true, "awaiting-replies": true, "user-prompt": true, "one-shot": true, "workdir": true}
+	validRuntime := map[string]bool{"identity": true, "goal": true, "context": true, "messages": true, "awaiting-replies": true, "user-prompt": true, "one-shot": true, "workdir": true}
 	for i, entry := range template.Entries {
 		switch entry.Kind {
 		case "runtime":

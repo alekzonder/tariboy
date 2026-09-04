@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -9,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/store"
 )
@@ -82,53 +80,6 @@ func TestDaemonConfigSetValidates(t *testing.T) {
 	cmd, _ := reg.Get("daemon.config.set")
 	if _, err := cmd.Handler(c, registry.Params{"value": "x"}); err == nil {
 		t.Fatal("missing key accepted")
-	}
-}
-
-func TestDaemonConfigSetTaskReminderNormalizesPolicy(t *testing.T) {
-	c := ctx(t)
-	got := call(t, c, "daemon.config.set", registry.Params{
-		"key": "task_reminder", "value": ` { "idle_threshold_s" : 120, "enabled" : true } `,
-	})
-	if got["value"] != `{"enabled":true,"idle_threshold_s":120}` {
-		t.Fatalf("normalized value = %v", got["value"])
-	}
-	stored, ok, err := c.Store.ConfigGet("task_reminder")
-	if err != nil || !ok {
-		t.Fatalf("ConfigGet task_reminder = %q, %v, %v", stored, ok, err)
-	}
-	if stored != `{"enabled":true,"idle_threshold_s":120}` {
-		t.Fatalf("stored value = %q", stored)
-	}
-}
-
-func TestDaemonConfigSetTaskReminderRejectsInvalidPolicyWithoutOverwriting(t *testing.T) {
-	c := ctx(t)
-	call(t, c, "daemon.config.set", registry.Params{
-		"key": "task_reminder", "value": `{"enabled":true,"idle_threshold_s":120}`,
-	})
-	reg := BuildRegistry()
-	cmd, _ := reg.Get("daemon.config.set")
-	for _, value := range []string{
-		`{`,
-		`{"enabled":"true","idle_threshold_s":300}`,
-		`{"enabled":true,"idle_threshold_s":1.5}`,
-		`{"enabled":true,"idle_threshold_s":0}`,
-	} {
-		t.Run(value, func(t *testing.T) {
-			_, err := cmd.Handler(c, registry.Params{"key": "task_reminder", "value": value})
-			var userErr api.UserError
-			if !errors.As(err, &userErr) || userErr.Code != "bad_task_reminder" {
-				t.Fatalf("error = %v, want bad_task_reminder", err)
-			}
-			stored, ok, getErr := c.Store.ConfigGet("task_reminder")
-			if getErr != nil || !ok {
-				t.Fatalf("ConfigGet task_reminder = %q, %v, %v", stored, ok, getErr)
-			}
-			if stored != `{"enabled":true,"idle_threshold_s":120}` {
-				t.Fatalf("invalid value overwrote stored policy: %q", stored)
-			}
-		})
 	}
 }
 

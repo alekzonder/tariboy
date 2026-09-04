@@ -30,6 +30,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 func TestAssemblePromptOrder(t *testing.T) {
@@ -1123,6 +1124,10 @@ func TestRunnerSchemaV2RendersManagedWorkdirDistinctFromCWD(t *testing.T) {
 	r := NewShimRunner(RunnerConfig{
 		AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim",
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		CurrentGoal: func(string, time.Time) (tasks.Task, bool, error) {
+			t.Fatal("read goal for template without runtime: goal")
+			return tasks.Task{}, false, nil
+		},
 	})
 	if _, err := r.prepare(context.Background(), otel.Tracer("test"), ag, l, iterID, ""); err != nil {
 		t.Fatal(err)
@@ -1139,6 +1144,74 @@ func TestRunnerSchemaV2RendersManagedWorkdirDistinctFromCWD(t *testing.T) {
 	}
 	if strings.Contains(prompt, "workdir: "+externalCwd) {
 		t.Fatalf("prompt used effective CWD as managed workdir:\n%s", prompt)
+	}
+}
+
+func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
+	base := t.TempDir()
+	db, err := store.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	ag := agent.Agent{Name: "alice", ImageRef: "img:latest", ImageDigest: "digest", HarnessType: "stub"}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	entries := []image.TemplateEntry{{Kind: "runtime", Runtime: "goal"}}
+	templateSHA, err := image.PromptTemplateHash(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	iterID := "alice-1"
+	if err := as.CreateIteration(agent.Iteration{
+		ID: iterID, Agent: ag.Name, Trigger: "manual", Status: "running",
+		ImageRef: ag.ImageRef, ImageDigest: ag.ImageDigest, PromptTemplateSHA256: templateSHA,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	agentsDir := filepath.Join(base, "agents")
+	l := agentdir.New(agentsDir, ag.Name)
+	if err := l.EnsureIteration(iterID); err != nil {
+		t.Fatal(err)
+	}
+	promptDir := filepath.Join(l.ImageDir(), "prompt")
+	if err := os.MkdirAll(promptDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	templateBody, err := json.Marshal(image.PromptTemplate{SchemaVersion: 2, Entries: entries, SHA256: templateSHA})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(promptDir, "template.json"), templateBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	r := NewShimRunner(RunnerConfig{
+		AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim", Clock: func() time.Time { return now },
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		CurrentGoal: func(agentName string, at time.Time) (tasks.Task, bool, error) {
+			if agentName != "alice" || !at.Equal(now) {
+				t.Fatalf("CurrentGoal(%q, %s)", agentName, at)
+			}
+			return tasks.Task{
+				Key: "TARI-43", Title: "Render goal", Priority: tasks.PriorityP1,
+				Status: tasks.StatusInProgress, Description: "line one\nline two",
+			}, true, nil
+		},
+	})
+	if _, err := r.prepare(context.Background(), otel.Tracer("test"), ag, l, iterID, ""); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(l.PromptPath(iterID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Use the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
+	if got := string(body); got != want {
+		t.Fatalf("prompt = %q, want %q", got, want)
 	}
 }
 

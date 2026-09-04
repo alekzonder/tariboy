@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 func imageSHA(body string) string {
@@ -24,6 +25,55 @@ func promptTemplateSHA(t *testing.T, template image.PromptTemplate) string {
 		t.Fatal(err)
 	}
 	return got
+}
+
+func runtimeTemplate(t *testing.T, name string) image.PromptTemplate {
+	t.Helper()
+	template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{{Kind: "runtime", Runtime: name}}}
+	template.SHA256 = promptTemplateSHA(t, template)
+	return template
+}
+
+func TestRenderPromptTemplateGoal(t *testing.T) {
+	template := runtimeTemplate(t, "goal")
+	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{Goal: "# Agent Goal\n\nkey: TARI-43"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Use the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\n"
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRenderPromptTemplateEmptyGoalHasNoOutput(t *testing.T) {
+	got, err := RenderPromptTemplate(runtimeTemplate(t, "goal"), t.TempDir(), RuntimePromptValues{})
+	if err != nil || got != "" {
+		t.Fatalf("prompt = %q, %v", got, err)
+	}
+}
+
+func TestRenderPromptTemplateGoalPreservesDescriptionLines(t *testing.T) {
+	goal := "# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two"
+	got, err := RenderPromptTemplate(runtimeTemplate(t, "goal"), t.TempDir(), RuntimePromptValues{Goal: goal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Use the `tasks` skill for this runtime data.\n\n" + goal + "\n"
+	if got != want {
+		t.Fatalf("prompt = %q, want %q", got, want)
+	}
+}
+
+func TestFormatRuntimeGoalPreservesLiteralTaskText(t *testing.T) {
+	got := FormatRuntimeGoal(tasks.Task{
+		Key: "TARI-43", Title: "Render goal", Priority: tasks.PriorityP1,
+		Status: tasks.StatusInProgress, Description: "line one\nline two",
+	})
+	want := "# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two"
+	if got != want {
+		t.Fatalf("goal = %q, want %q", got, want)
+	}
 }
 
 func TestRenderPromptTemplateUsesDeclaredOrderOnly(t *testing.T) {

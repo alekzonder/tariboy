@@ -50,6 +50,7 @@ export default function TaskDetail({
   onSave: (input: {
     title: string
     description: string
+    pull_request: string
     status?: TaskStatus
     assignee?: string
     manual_block_reason?: string
@@ -64,6 +65,7 @@ export default function TaskDetail({
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
   const [status, setStatus] = useState<TaskStatus>(task.status)
+  const [pullRequest, setPullRequest] = useState(task.pull_request ?? "")
   const [priority, setPriority] = useState<TaskPriority>(task.priority)
   const [assignee, setAssignee] = useState(task.assignee)
   const [blockReason, setBlockReason] = useState(task.manual_block_reason)
@@ -90,6 +92,7 @@ export default function TaskDetail({
       await onSave({
         title: title.trim(),
         description,
+        pull_request: pullRequest.trim(),
         priority,
         ...(managed ? {} : {
           status,
@@ -130,6 +133,7 @@ export default function TaskDetail({
                 <select value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)}>
                   <option value="open">Open</option>
                   <option value="in_progress">In progress</option>
+                  <option value="wait_customer">Wait customer</option>
                   <option value="done">Done</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
@@ -149,6 +153,7 @@ export default function TaskDetail({
                 </datalist>
               </label>}
             </div>
+            <label>Pull request URL<Input value={pullRequest} onChange={(event) => setPullRequest(event.target.value)} /></label>
             {!managed && <label>Manual block reason<Input value={blockReason} onChange={(event) => setBlockReason(event.target.value)} /></label>}
             <button type="button" className="task-primary-action" disabled={saving || !title.trim()} onClick={() => void save()}>
               Save task

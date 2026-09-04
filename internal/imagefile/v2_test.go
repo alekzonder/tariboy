@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -118,5 +119,20 @@ func TestParseAnyPreservesV1(t *testing.T) {
 	parsed, err := ParseAny(writeV2Source(t, "schema_version: 1\n"))
 	if err != nil || parsed.Version != 1 || parsed.V1 == nil || parsed.V2 != nil {
 		t.Fatalf("ParseAny = %#v, %v", parsed, err)
+	}
+}
+
+func TestParseV2GoalRuntime(t *testing.T) {
+	parsed, err := ParseV2(writeV2Source(t, "schema_version: 2\nplugins: []\nprompts: [{runtime: goal}]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []PromptEntry{{Runtime: "goal"}}; !reflect.DeepEqual(parsed.Prompts, want) {
+		t.Fatalf("prompts = %#v, want %#v", parsed.Prompts, want)
+	}
+
+	_, err = ParseV2(writeV2Source(t, "schema_version: 2\nplugins: []\nprompts: [{runtime: goal}, {runtime: goal}]\n"))
+	if err == nil || !strings.Contains(err.Error(), `duplicate runtime placeholder "goal"`) {
+		t.Fatalf("duplicate goal error = %v", err)
 	}
 }

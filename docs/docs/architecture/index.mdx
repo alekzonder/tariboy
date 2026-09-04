@@ -14,8 +14,8 @@ sidebar:
 - the **agent lifecycle** — create, start/stop the loop, run iterations, reap;
 - the **message bus** — channels, subscriptions, deliveries;
 - **native Tasks** — queues, recursive task trees, comments, dependencies,
-  immutable queue workflow versions, assignment leases, events, and durable
-  notification/workflow outboxes;
+  per-agent sticky goal selection, immutable queue workflow versions, assignment
+  leases, events, and durable notification/workflow outboxes;
 - the **SQLite store** — `tariboyd.db`, all durable state;
 - the **plugin supervisor** — spawns, health-checks, and restarts plugins;
 - the **AI proxy** — every LLM call flows through it;
@@ -139,7 +139,7 @@ listener, or receives a non-loopback HTTP address. A shim refresh failure is
 logged for its agent without preventing unrelated agents from starting.
 
 In steady state it runs the schedule publisher, task-workflow outbox publisher,
-workflow question and observation reconcilers, AI ingestion, the daily pricing
+the per-agent goal reconciler, workflow question and observation reconcilers, AI ingestion, the daily pricing
 catalog worker, policy/budget cache refresh, post-iteration evaluations,
 LLM-as-judge runner, retention pruner, loop engines, and plugin supervisors.
 Shutdown stops the proxy first, then cancels and awaits the pricing worker and

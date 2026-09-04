@@ -5,14 +5,16 @@ package tasks
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
 const (
-	StatusOpen       = "open"
-	StatusInProgress = "in_progress"
-	StatusDone       = "done"
-	StatusCancelled  = "cancelled"
+	StatusOpen         = "open"
+	StatusInProgress   = "in_progress"
+	StatusWaitCustomer = "wait_customer"
+	StatusDone         = "done"
+	StatusCancelled    = "cancelled"
 )
 
 type Priority string
@@ -34,6 +36,19 @@ func NormalizePriority(priority Priority) (Priority, error) {
 	default:
 		return "", domainError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
 	}
+}
+
+func NormalizePullRequest(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || (!strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https")) || u.Host == "" || u.User != nil {
+		return "", domainError(http.StatusBadRequest, "invalid_pull_request", "pull request must be an absolute http or https URL without credentials")
+	}
+	u.Scheme, u.Host = strings.ToLower(u.Scheme), strings.ToLower(u.Host)
+	return u.String(), nil
 }
 
 type Actor struct {
@@ -119,6 +134,7 @@ type Task struct {
 	Title             string   `json:"title"`
 	Description       string   `json:"description"`
 	Status            string   `json:"status"`
+	PullRequest       string   `json:"pull_request"`
 	Author            string   `json:"author"`
 	Customer          string   `json:"customer"`
 	Group             string   `json:"group"`
@@ -216,6 +232,7 @@ type CreateTaskInput struct {
 	ParentKey      string   `json:"parent_key"`
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
+	PullRequest    string   `json:"pull_request"`
 	Assignee       string   `json:"assignee"`
 	Group          string   `json:"group"`
 	Priority       Priority `json:"priority"`
@@ -258,6 +275,7 @@ type UpdateTaskInput struct {
 	Title             *string   `json:"title"`
 	Description       *string   `json:"description"`
 	Status            *string   `json:"status"`
+	PullRequest       *string   `json:"pull_request"`
 	Assignee          *string   `json:"assignee"`
 	ManualBlockReason *string   `json:"manual_block_reason"`
 	Priority          *Priority `json:"priority"`

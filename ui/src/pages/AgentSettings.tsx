@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useAgentName } from "@/lib/agent";
 import {
-  agentGet, agentPost,
-  setAgentModel, setAgentEffort, setAgentInteractive, setAgentHarness,
+  agentGetOn, agentPostOn, getActiveDaemon, type ApiTarget,
 } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
 import type { AgentView } from "@/lib/types";
@@ -70,11 +69,14 @@ interface SectionField {
   helper: string;
   options?: readonly string[];
   numeric?: boolean;
+  minimum?: number;
+  toggle?: boolean;
   read: (view: AgentView) => string;
   // normalize maps raw input text to the value that is compared against the
   // baseline AND sent to the server, so "30" and " 30 " are the same edit.
   normalize: (raw: string) => string;
-  submit: (name: string, value: string) => Promise<unknown>;
+  validate?: (value: string) => string;
+  submit: (target: ApiTarget, name: string, value: string) => Promise<unknown>;
 }
 
 type Values = Record<string, string>;
@@ -91,11 +93,11 @@ const normalizeStr = (raw: string) => raw.trim();
 
 const loopInt = (field: string, min?: number): Pick<SectionField, "normalize" | "submit"> => ({
   normalize: normalizeInt(min),
-  submit: (name, value) => agentPost(name, `loop/${field}`, { value: Number(value) }),
+  submit: (target, name, value) => agentPostOn(target, name, `loop/${field}`, { value: Number(value) }),
 });
 const loopStr = (field: string): Pick<SectionField, "normalize" | "submit"> => ({
   normalize: normalizeStr,
-  submit: (name, value) => agentPost(name, `loop/${field}`, { value }),
+  submit: (target, name, value) => agentPostOn(target, name, `loop/${field}`, { value }),
 });
 
 const LOOP_FIELDS: readonly SectionField[] = [
@@ -129,12 +131,29 @@ const RUNTIME_FIELDS: readonly SectionField[] = [
   {
     key: "model", label: "Model", helper: NEXT_ITERATION,
     read: (v) => v.model || "", normalize: normalizeStr,
-    submit: (name, value) => setAgentModel(name, value),
+    submit: (target, name, value) => agentPostOn(target, name, "model", { value }),
   },
   {
     key: "effort", label: "Effort", helper: NEXT_ITERATION,
     read: (v) => v.effort || "", normalize: normalizeStr,
-    submit: (name, value) => setAgentEffort(name, value),
+    submit: (target, name, value) => agentPostOn(target, name, "effort", { value }),
+  },
+];
+
+const POSITIVE_INTEGER = "Enter a positive whole number of seconds.";
+const GOAL_FIELDS: readonly SectionField[] = [
+  {
+    key: "goal-enabled", label: "Enable Goal",
+    helper: "Select and deliver this agent's current Native Task goal.", toggle: true,
+    read: (v) => String(v.goal_enabled), normalize: normalizeStr,
+    submit: (target, name, value) => agentPostOn(target, name, "goal-enabled", { enabled: value === "true" }),
+  },
+  {
+    key: "goal-wait-customer-timeout", label: "Wait customer timeout seconds",
+    helper: "Use a positive whole number of seconds.", numeric: true, minimum: 1,
+    read: (v) => String(v.goal_wait_customer_timeout_s), normalize: normalizeStr,
+    validate: (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? "" : POSITIVE_INTEGER,
+    submit: (target, name, value) => agentPostOn(target, name, "goal-wait-customer-timeout", { seconds: Number(value) }),
   },
 ];
 
@@ -165,6 +184,7 @@ interface SectionDraft {
 // a partial failure keeps the failed and unattempted drafts while the
 // acknowledged ones adopt the canonical, possibly renormalized, values.
 function useSectionDraft(
+  target: ApiTarget,
   name: string,
   view: AgentView,
   fields: readonly SectionField[],
@@ -187,6 +207,13 @@ function useSectionDraft(
 
   const setField = useCallback((key: string, value: string) => {
     setNotice("");
+    setError("");
+    setFieldErrors((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     setDrafts((prev) => ({ ...prev, [key]: value }));
   }, []);
 
@@ -199,6 +226,17 @@ function useSectionDraft(
 
   const save = async () => {
     if (saving || dirtyKeys.length === 0) return;
+    for (const f of fields) {
+      if (!dirtyKeys.includes(f.key)) continue;
+      const validation = f.validate?.(f.normalize(drafts[f.key])) ?? "";
+      if (validation) {
+        setError("");
+        setFieldErrors({ [f.key]: validation });
+        setNotice("");
+        document.getElementById(f.key)?.focus();
+        return;
+      }
+    }
     setSaving(true);
     setError("");
     setFieldErrors({});
@@ -209,7 +247,7 @@ function useSectionDraft(
     for (const f of fields) {
       if (!dirtyKeys.includes(f.key)) continue;
       try {
-        await f.submit(name, f.normalize(drafts[f.key]));
+        await f.submit(target, name, f.normalize(drafts[f.key]));
         acknowledged.push(f.key);
       } catch (cause) {
         // Stop here: every field after this one stays an unsent dirty draft.
@@ -258,10 +296,16 @@ function DraftField({ field, section }: { field: SectionField; section: SectionD
         >
           {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
+      ) : field.toggle ? (
+        <Switch
+          id={field.key} checked={value === "true"}
+          aria-describedby={describedBy} aria-invalid={fieldError ? true : undefined}
+          onCheckedChange={(checked) => section.setField(field.key, String(checked))}
+        />
       ) : (
         <Input
           id={field.key} value={value} className="h-9"
-          type={field.numeric ? "number" : undefined} min={field.numeric ? 0 : undefined}
+          type={field.numeric ? "number" : undefined} min={field.numeric ? field.minimum ?? 0 : undefined}
           aria-describedby={describedBy} aria-invalid={fieldError ? true : undefined}
           onChange={(e) => section.setField(field.key, e.target.value)}
         />
@@ -297,10 +341,10 @@ function DraftFooter({ section, saveLabel }: { section: SectionDraft; saveLabel:
   );
 }
 
-function LoopEditor({ name, view, reload }: {
-  name: string; view: AgentView; reload: () => Promise<AgentView | null>;
+function LoopEditor({ name, view, reload, target }: {
+  name: string; view: AgentView; reload: () => Promise<AgentView | null>; target: ApiTarget;
 }) {
-  const section = useSectionDraft(name, view, LOOP_FIELDS, reload, "Loop settings saved");
+  const section = useSectionDraft(target, name, view, LOOP_FIELDS, reload, "Loop settings saved");
   const [interval, timeout, hard, onTimeout, onError, maxIdle] = LOOP_FIELDS;
 
   return (
@@ -335,10 +379,36 @@ function LoopEditor({ name, view, reload }: {
   );
 }
 
-function RuntimeConfigEditor({ name, view, reload }: {
-  name: string; view: AgentView; reload: () => Promise<AgentView | null>;
+function GoalEditor({ name, view, reload, target }: {
+  name: string; view: AgentView; reload: () => Promise<AgentView | null>; target: ApiTarget;
 }) {
-  const section = useSectionDraft(name, view, RUNTIME_FIELDS, reload, "Runtime settings saved");
+  const section = useSectionDraft(target, name, view, GOAL_FIELDS, reload, "Goal settings saved");
+  const [enabled, timeout] = GOAL_FIELDS;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Goal</CardTitle>
+        <CardDescription>Choose whether this agent follows one sticky Native Task goal.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <DraftField field={enabled} section={section} />
+          <DraftField field={timeout} section={section} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="current-goal-task">Current goal task</Label>
+          <Input id="current-goal-task" value={view.current_goal_task_key || "No current goal"} disabled />
+        </div>
+        <DraftFooter section={section} saveLabel="Save Goal settings" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function RuntimeConfigEditor({ name, view, reload, target }: {
+  name: string; view: AgentView; reload: () => Promise<AgentView | null>; target: ApiTarget;
+}) {
+  const section = useSectionDraft(target, name, view, RUNTIME_FIELDS, reload, "Runtime settings saved");
   const [model, effort] = RUNTIME_FIELDS;
 
   // Options the dropdown renders: the operator subset, plus the agent's current
@@ -351,12 +421,12 @@ function RuntimeConfigEditor({ name, view, reload }: {
 
   const applyInteractive = (value: boolean) =>
     guard("interactive", async () => {
-      await setAgentInteractive(name, value);
+      await agentPostOn(target, name, "interactive", { value });
     }).then(reload);
 
   const applyHarness = (value: string) =>
     guard("harness", async () => {
-      await setAgentHarness(name, value);
+      await agentPostOn(target, name, "harness", { value });
     }).then(reload);
 
   return (
@@ -401,7 +471,7 @@ function RuntimeConfigEditor({ name, view, reload }: {
   );
 }
 
-export default function AgentSettings() {
+export default function AgentSettings({ target = getActiveDaemon() }: { target?: ApiTarget }) {
   const name = useAgentName();
   const [view, setView] = useState<AgentView | null>(null);
   // reload resolves with the reloaded view so a section can reconcile its
@@ -409,14 +479,14 @@ export default function AgentSettings() {
   const reload = useCallback(async (): Promise<AgentView | null> => {
     if (!name) return null;
     try {
-      const next = await agentGet<AgentView>(name, "");
+      const next = await agentGetOn<AgentView>(target, name, "");
       setView(next);
       return next;
     } catch {
       setView(null);
       return null;
     }
-  }, [name]);
+  }, [name, target]);
   // Deferred a microtask so the initial load is not a synchronous setState
   // inside the effect (the same pattern the Configuration tab uses).
   useEffect(() => { void Promise.resolve().then(reload); }, [reload]);
@@ -428,11 +498,12 @@ export default function AgentSettings() {
     // max-w-5xl cap already applies from the Configuration tab wrapper, so no
     // second cap is introduced here.
     <div className="space-y-4">
-      <LoopEditor name={name} view={view} reload={reload} />
+      <GoalEditor name={name} view={view} reload={reload} target={target} />
+      <LoopEditor name={name} view={view} reload={reload} target={target} />
       {/* No remount key here: a reload must reconcile the Runtime draft rather
           than throw it away, which is what a key would do to a field whose save
           failed. */}
-      <RuntimeConfigEditor name={name} view={view} reload={reload} />
+      <RuntimeConfigEditor name={name} view={view} reload={reload} target={target} />
       <SecretsPanel name={name} />
       <RetentionPanel name={name} />
     </div>

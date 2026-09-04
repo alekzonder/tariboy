@@ -231,52 +231,6 @@ export const agentDeleteOn = <T>(target: ApiTarget, name: string, opts?: { force
 export const getDaemonStatus = () => apiGet<DaemonStatus>("/api/daemon/status");
 export const listAgents = () => apiGet<{ agents: AgentSummary[]; count: number }>("/api/agents");
 
-export interface TaskReminderPolicy {
-  enabled: boolean;
-  idle_threshold_s: number;
-}
-
-export const defaultTaskReminderPolicy: TaskReminderPolicy = {
-  enabled: false,
-  idle_threshold_s: 300,
-};
-
-function taskReminderPolicy(value: unknown): TaskReminderPolicy {
-  if (typeof value !== "string") return defaultTaskReminderPolicy;
-  try {
-    const parsed = JSON.parse(value) as Partial<TaskReminderPolicy>;
-    if (
-      typeof parsed.enabled === "boolean"
-      && typeof parsed.idle_threshold_s === "number"
-      && Number.isInteger(parsed.idle_threshold_s)
-      && parsed.idle_threshold_s > 0
-    ) {
-      return { enabled: parsed.enabled, idle_threshold_s: parsed.idle_threshold_s };
-    }
-  } catch {
-    // The daemon treats invalid persisted values as disabled too.
-  }
-  return defaultTaskReminderPolicy;
-}
-
-export async function getTaskReminderPolicyOn(target: ApiTarget): Promise<TaskReminderPolicy> {
-  const config = await apiOn<Record<string, unknown>>(
-    resolveTarget(target), "GET", "/api/daemon/config",
-  );
-  return taskReminderPolicy(config.task_reminder);
-}
-
-export async function setTaskReminderPolicyOn(
-  target: ApiTarget,
-  policy: TaskReminderPolicy,
-): Promise<TaskReminderPolicy> {
-  const result = await apiOn<{ value?: unknown }>(resolveTarget(target), "POST", "/api/daemon/config", {
-    key: "task_reminder",
-    value: JSON.stringify(policy),
-  });
-  return taskReminderPolicy(result.value);
-}
-
 // ---- Agent creation (create forms; POST /api/agents = agent.run) ----
 // The daemon keeps legacy scalar env/plugins forms for CLI and older callers,
 // while the complete Desktop dialog uses structured values so commas, equals
@@ -302,6 +256,8 @@ export interface CreateAgentSpec {
   user_prompt?: string;
   messages_batch?: number;
   messages_max_queue?: number;
+  goal_enabled?: boolean;
+  goal_wait_customer_timeout_s?: number;
   group?: string;
   alias?: string;
   notes?: string;

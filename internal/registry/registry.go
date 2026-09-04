@@ -167,29 +167,31 @@ type PolicyRefresher interface {
 
 // RunSpec is the create+start request for an agent service.
 type RunSpec struct {
-	ImageRef          string
-	Name              string
-	Cwd               string
-	Harness           string
-	Model             string
-	Effort            string
-	Interactive       bool
-	Env               map[string]string
-	Plugins           []string
-	Loop              bool
-	IntervalS         int
-	TimeoutS          int
-	HardTimeoutS      int
-	OnTimeout         string
-	OnError           string
-	MaxIdleIterations int
-	UserPrompt        string
-	MessagesBatch     int
-	MessagesMaxQueue  int
-	Group             string
-	Alias             string
-	Notes             string
-	Color             string
+	ImageRef                 string
+	Name                     string
+	Cwd                      string
+	Harness                  string
+	Model                    string
+	Effort                   string
+	Interactive              bool
+	Env                      map[string]string
+	Plugins                  []string
+	Loop                     bool
+	IntervalS                int
+	TimeoutS                 int
+	HardTimeoutS             int
+	OnTimeout                string
+	OnError                  string
+	MaxIdleIterations        int
+	UserPrompt               string
+	MessagesBatch            int
+	MessagesMaxQueue         int
+	GoalEnabled              *bool
+	GoalWaitCustomerTimeoutS int
+	Group                    string
+	Alias                    string
+	Notes                    string
+	Color                    string
 }
 
 // ServiceControl is the daemon-side agent lifecycle, implemented by loop.Manager

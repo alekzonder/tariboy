@@ -28,8 +28,7 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("link", { name: "General" }))
       .toHaveAttribute("href", "/servers/remote-1/settings");
-    expect(screen.getByRole("link", { name: "Task reminders" }))
-      .toHaveAttribute("href", "/servers/remote-1/settings/task-reminders");
+    expect(screen.queryByRole("link", { name: "Task reminders" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Advanced" }))
       .toHaveAttribute("href", "/servers/remote-1/settings/advanced");
     expect(screen.getByRole("link", { name: "Usage" }))

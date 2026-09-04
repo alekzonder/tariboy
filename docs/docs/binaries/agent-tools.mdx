@@ -34,6 +34,11 @@ Agents whose image contains `plugins: [{name: tasks}]` also get the bare
 capability-gated, identity-bound socket adapter; task/comment authorship is
 always the current agent. See [Native Tasks](/docs/tasks) for the command flow.
 
+Goal selection is not an agent command: `tariboyd` selects and persists one
+sticky assigned task per enabled agent. An image that declares `runtime: goal`
+receives that task as prompt context and should use the `tasks` command to read
+the authoritative task state.
+
 In a workflow-managed queue, `tasks work next` returns a leased work packet;
 `tasks artifacts`, workflow-form `tasks ask`/`answer`, `tasks observe`, and
 `tasks work complete` are the only execution path. The active packet also makes

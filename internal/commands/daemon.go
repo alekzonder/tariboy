@@ -9,7 +9,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/improvement"
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/taskreminder"
 )
 
 func BuildRegistry() *registry.Registry {
@@ -38,6 +37,8 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, agentPs())
 	mustRegister(r, agentStatus())
 	mustRegister(r, agentInspect())
+	mustRegister(r, agentGoalEnabled())
+	mustRegister(r, agentGoalWaitCustomerTimeout())
 	mustRegister(r, agentLifecycle("agent.stop", "Stop an agent's loop (current iteration lives)", "stop"))
 	mustRegister(r, agentLifecycle("agent.start", "Start (enable) an agent's loop", "start"))
 	mustRegister(r, agentLifecycle("agent.restart", "Restart an agent and run one iteration now", "restart"))
@@ -324,17 +325,6 @@ func daemonConfigSet() registry.Command {
 			value, _ := p["value"].(string)
 			if key == "" {
 				return nil, api.UserError{Code: "missing_key", Msg: "key is required"}
-			}
-			if key == "task_reminder" {
-				policy, err := taskreminder.ParsePolicy(value)
-				if err != nil {
-					return nil, api.UserError{Code: "bad_task_reminder", Msg: err.Error()}
-				}
-				normalized, err := json.Marshal(policy)
-				if err != nil {
-					return nil, err
-				}
-				value = string(normalized)
 			}
 			if err := c.Store.ConfigSet(key, value); err != nil {
 				return nil, err

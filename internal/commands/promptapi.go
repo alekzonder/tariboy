@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/taskreminder"
 )
 
 func contextGet() registry.Command {
@@ -120,8 +123,18 @@ func promptGet() registry.Command {
 				if err := json.Unmarshal(data, &template); err != nil {
 					return nil, err
 				}
+				goal := ""
+				if slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
+					return entry.Kind == "runtime" && entry.Runtime == "goal"
+				}) {
+					if task, ok, err := taskreminder.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
+						return nil, err
+					} else if ok {
+						goal = loop.FormatRuntimeGoal(task)
+					}
+				}
 				prompt, err = loop.RenderPromptTemplate(template, l.ImageDir(), loop.RuntimePromptValues{
-					Identity: loop.FormatRuntimeIdentity(a.Name, a.ImageRef, a.ImageDigest, cwd, ""), Context: string(contextText),
+					Identity: loop.FormatRuntimeIdentity(a.Name, a.ImageRef, a.ImageDigest, cwd, ""), Goal: goal, Context: string(contextText),
 					Messages: "[runtime: messages]", UserPrompt: a.UserPrompt, OneShot: "[runtime: one-shot]",
 				})
 				if err != nil {

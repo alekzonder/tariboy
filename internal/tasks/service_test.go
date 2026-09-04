@@ -22,6 +22,153 @@ func newTestService(t *testing.T) *Service {
 	})
 }
 
+func TestNormalizePullRequest(t *testing.T) {
+	for _, bad := range []string{"github.com/o/r/pull/1", "ftp://example.test/1", "https://u:p@example.test/1"} {
+		if _, err := NormalizePullRequest(bad); ErrorCode(err) != "invalid_pull_request" {
+			t.Fatalf("%q: %v", bad, err)
+		}
+	}
+	got, err := NormalizePullRequest(" HTTPS://Example.test/pull/1 ")
+	if err != nil || got != "https://example.test/pull/1" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestCreateTaskPullRequestValidatesPersistsAndReplays(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	actor := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, actor, CreateQueueInput{Prefix: "PULL", Name: "Pull requests"})
+
+	created, err := svc.CreateTask(ctx, actor, CreateTaskInput{
+		Queue: "PULL", Title: "ship", PullRequest: " HTTPS://Example.test/org/repo/pull/1 ", IdempotencyKey: "create-pr",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.PullRequest != "https://example.test/org/repo/pull/1" {
+		t.Fatalf("created pull request = %q", created.PullRequest)
+	}
+	detail, err := svc.GetTask(ctx, actor, created.Key)
+	if err != nil || detail.Task.PullRequest != created.PullRequest {
+		t.Fatalf("persisted task = %#v, %v", detail.Task, err)
+	}
+	events, err := svc.ListEvents(ctx, actor, created.Key, 0, 20)
+	if err != nil || len(events) != 1 || events[0].Payload["pull_request"] != created.PullRequest {
+		t.Fatalf("created events = %#v, %v", events, err)
+	}
+
+	replayed, err := svc.CreateTask(ctx, actor, CreateTaskInput{
+		Queue: "PULL", Title: "ignored", PullRequest: "https://example.test/other", IdempotencyKey: "create-pr",
+	})
+	if err != nil || replayed.Key != created.Key || replayed.PullRequest != created.PullRequest {
+		t.Fatalf("replayed task = %#v, %v", replayed, err)
+	}
+	if _, err := svc.CreateTask(ctx, actor, CreateTaskInput{
+		Queue: "PULL", Title: "invalid", PullRequest: "https://user@example.test/pull/2",
+	}); ErrorCode(err) != "invalid_pull_request" {
+		t.Fatalf("invalid pull request error = %v", err)
+	}
+	var taskCount, eventCount int
+	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix = 'PULL'`).Scan(&taskCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_events WHERE task_id = ?`, created.ID).Scan(&eventCount); err != nil {
+		t.Fatal(err)
+	}
+	if taskCount != 1 || eventCount != 1 {
+		t.Fatalf("tasks/events = %d/%d, want 1/1", taskCount, eventCount)
+	}
+}
+
+func TestUpdateTaskPullRequestUsesRevisionAndEvents(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	actor := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, actor, CreateQueueInput{Prefix: "PULL", Name: "Pull requests"})
+	task, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "PULL", Title: "ship"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pullRequest := " HTTPS://Example.test/org/repo/pull/1 "
+	updated, err := svc.UpdateTask(ctx, actor, task.Key, UpdateTaskInput{
+		PullRequest: &pullRequest, Revision: task.Revision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.PullRequest != "https://example.test/org/repo/pull/1" || updated.Revision != task.Revision+1 {
+		t.Fatalf("set pull request = %q revision %d", updated.PullRequest, updated.Revision)
+	}
+	events, err := svc.ListEvents(ctx, actor, task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := events[len(events)-1]
+	if last.Kind != "task.updated" || last.Payload["pull_request"] != updated.PullRequest {
+		t.Fatalf("updated event = %#v", last)
+	}
+
+	empty := ""
+	cleared, err := svc.UpdateTask(ctx, actor, task.Key, UpdateTaskInput{
+		PullRequest: &empty, Revision: updated.Revision,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.PullRequest != "" || cleared.Revision != updated.Revision+1 {
+		t.Fatalf("cleared pull request = %q revision %d", cleared.PullRequest, cleared.Revision)
+	}
+	events, err = svc.ListEvents(ctx, actor, task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last = events[len(events)-1]
+	if last.Kind != "task.updated" || last.Payload["pull_request"] != "" {
+		t.Fatalf("cleared event = %#v", last)
+	}
+	eventCount := len(events)
+
+	invalid := "github.com/org/repo/pull/2"
+	if _, err := svc.UpdateTask(ctx, actor, task.Key, UpdateTaskInput{
+		PullRequest: &invalid, Revision: cleared.Revision,
+	}); ErrorCode(err) != "invalid_pull_request" {
+		t.Fatalf("invalid pull request error = %v", err)
+	}
+	unchanged, err := svc.GetTask(ctx, actor, task.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Task.PullRequest != "" || unchanged.Task.Revision != cleared.Revision {
+		t.Fatalf("task mutated after invalid pull request = %#v", unchanged.Task)
+	}
+	events, err = svc.ListEvents(ctx, actor, task.Key, 0, 20)
+	if err != nil || len(events) != eventCount {
+		t.Fatalf("events after invalid pull request = %d, %v; want %d", len(events), err, eventCount)
+	}
+}
+
+func TestUpdateTaskAcceptsWaitCustomer(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	actor := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, actor, CreateQueueInput{Prefix: "WAIT", Name: "Waits"})
+	task, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "WAIT", Title: "choose"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := StatusWaitCustomer
+	updated, err := svc.UpdateTask(ctx, actor, task.Key, UpdateTaskInput{Status: &status, Revision: task.Revision})
+	if err != nil || updated.Status != StatusWaitCustomer || updated.Revision != task.Revision+1 {
+		t.Fatalf("wait_customer update = %#v, %v", updated, err)
+	}
+	active, err := svc.ListTasks(ctx, actor, ListFilter{})
+	if err != nil || len(active.Tasks) != 1 || active.Tasks[0].Key != task.Key {
+		t.Fatalf("active tasks after wait_customer = %#v, %v", active.Tasks, err)
+	}
+}
+
 func TestCreateTaskAllocatesPermanentQueueKeyAndInheritsQueue(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

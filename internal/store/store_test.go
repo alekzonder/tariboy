@@ -31,6 +31,62 @@ func TestOpenMigrates(t *testing.T) {
 	}
 }
 
+func TestAgentGoalsMigrationPreservesTasksAndAddsReleaseFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agent-goals-upgrade.db")
+	db := createDatabaseBeforeMigration(t, path, "0037_agent_goals.sql")
+	if _, err := db.Exec(`
+		INSERT INTO agents(name,image_ref) VALUES ('worker','basic:latest');
+		INSERT INTO task_queues(prefix,name,created_at,updated_at)
+		VALUES ('TEST','Tests','2026-09-03T00:00:00Z','2026-09-03T00:00:00Z');
+		INSERT INTO task_workflow_versions(id,name,version,definition,state,created_at,updated_at)
+		VALUES (1,'delivery',1,'{}','published','2026-09-03T00:00:00Z','2026-09-03T00:00:00Z');
+		INSERT INTO tasks(
+			id,task_key,queue_prefix,title,status,author,customer,
+			workflow_version_id,workflow_status,workflow_revision,created_at,updated_at
+		) VALUES (
+			1,'TEST-1','TEST','ship','open','agent:worker','user:customer',
+			1,'build',4,'2026-09-03T00:00:00Z','2026-09-03T00:00:00Z'
+		);
+		INSERT INTO task_events(event_id,task_id,queue_prefix,kind,actor,task_revision,created_at)
+		VALUES ('event-1',1,'TEST','task.created','agent:worker',1,'2026-09-03T00:00:00Z');
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+
+	var status, pullRequest, workflowStatus string
+	var workflowVersionID, workflowRevision int64
+	if err := upgraded.DB.QueryRow(`
+		SELECT status,pull_request,workflow_version_id,workflow_status,workflow_revision
+		FROM tasks WHERE task_key='TEST-1'`,
+	).Scan(&status, &pullRequest, &workflowVersionID, &workflowStatus, &workflowRevision); err != nil {
+		t.Fatal(err)
+	}
+	if status != "open" || pullRequest != "" || workflowVersionID != 1 || workflowStatus != "build" || workflowRevision != 4 {
+		t.Fatalf("migrated task = %q %q %d %q %d", status, pullRequest, workflowVersionID, workflowStatus, workflowRevision)
+	}
+	var eventTaskID int64
+	if err := upgraded.DB.QueryRow(`SELECT task_id FROM task_events WHERE event_id='event-1'`).Scan(&eventTaskID); err != nil || eventTaskID != 1 {
+		t.Fatalf("inbound task event = %d, %v", eventTaskID, err)
+	}
+	var goalEnabled, timeout int
+	var currentKey string
+	if err := upgraded.DB.QueryRow(`
+		SELECT goal_enabled,goal_wait_customer_timeout_s,current_goal_task_key
+		FROM agents WHERE name='worker'`,
+	).Scan(&goalEnabled, &timeout, &currentKey); err != nil || goalEnabled != 1 || timeout != 300 || currentKey != "" {
+		t.Fatalf("agent goal defaults = %d %d %q, %v", goalEnabled, timeout, currentKey, err)
+	}
+}
+
 func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "script-runs-upgrade.db")
 	db := createDatabaseBeforeMigration(t, path, "0034_script_runs_and_outbox.sql")

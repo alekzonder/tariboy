@@ -172,3 +172,273 @@ func TestAddCommentIdempotencyReplaysWithoutDuplicateWaitOrRevision(t *testing.T
 		t.Fatalf("comments/waits/revision = %d/%d/%d, want 1/1/2", comments, waits, revision)
 	}
 }
+
+func TestAssignedAgentCustomerQuestionTransitionsToWaitCustomer(t *testing.T) {
+	svc, task := assignedTask(t, "worker", StatusInProgress)
+	ctx := context.Background()
+	result, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
+		Body: "@user:customer choose one", IdempotencyKey: "ask-1",
+	})
+	if err != nil || len(result.CreatedWaits) != 1 {
+		t.Fatalf("add comment = %#v, %v", result, err)
+	}
+	detail := assertTaskStatus(t, svc, task.Key, StatusWaitCustomer)
+	if detail.Task.Revision != task.Revision+1 {
+		t.Fatalf("revision = %d; want %d", detail.Task.Revision, task.Revision+1)
+	}
+	events, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, commented := events[len(events)-2], events[len(events)-1]
+	if updated.Kind != "task.updated" || updated.TaskRevision != detail.Task.Revision ||
+		updated.Payload["status"] != StatusWaitCustomer {
+		t.Fatalf("updated event = %#v", updated)
+	}
+	if commented.Kind != "task.comment_added" || commented.TaskRevision != detail.Task.Revision ||
+		updated.Sequence >= commented.Sequence {
+		t.Fatalf("comment event = %#v after %#v", commented, updated)
+	}
+	var outboxSequence int64
+	if err := svc.db.QueryRow(`
+		SELECT event_sequence FROM task_notification_outbox
+		WHERE message_type = 'task.question'`).Scan(&outboxSequence); err != nil {
+		t.Fatal(err)
+	}
+	if outboxSequence != commented.Sequence {
+		t.Fatalf("question outbox sequence = %d; want comment event %d", outboxSequence, commented.Sequence)
+	}
+
+	if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
+		Body: "different retry body", IdempotencyKey: "ask-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	replayed := assertTaskStatus(t, svc, task.Key, StatusWaitCustomer)
+	replayedEvents, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.Task.Revision != detail.Task.Revision || len(replayedEvents) != len(events) {
+		t.Fatalf("replay revision/events = %d/%d; want %d/%d",
+			replayed.Task.Revision, len(replayedEvents), detail.Task.Revision, len(events))
+	}
+}
+
+func TestFinalCustomerAnswerReturnsWaitCustomerToInProgress(t *testing.T) {
+	svc, task := assignedTask(t, "worker", StatusInProgress)
+	ctx := context.Background()
+	if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
+		Body: "@user:customer first", IdempotencyKey: "ask-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.AddComment(ctx, CustomerActor("customer"), task.Key, AddCommentInput{
+		Body: "answered", IdempotencyKey: "answer-1",
+	})
+	if err != nil || len(result.ResolvedWaits) != 1 {
+		t.Fatalf("answer = %#v, %v", result, err)
+	}
+	detail := assertTaskStatus(t, svc, task.Key, StatusInProgress)
+	if detail.Task.Revision != task.Revision+2 {
+		t.Fatalf("revision = %d; want %d", detail.Task.Revision, task.Revision+2)
+	}
+	events, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, commented := events[len(events)-2], events[len(events)-1]
+	if updated.Kind != "task.updated" || updated.Payload["status"] != StatusInProgress ||
+		commented.Kind != "task.comment_added" || updated.TaskRevision != detail.Task.Revision ||
+		commented.TaskRevision != detail.Task.Revision || updated.Sequence >= commented.Sequence {
+		t.Fatalf("answer event tail = %#v, %#v", updated, commented)
+	}
+}
+
+func TestManagedTaskQuestionAndAnswerPreserveWorkflowOwnedStatus(t *testing.T) {
+	svc, actor := workflowFixture(t)
+	mustRebindPool(t, svc, actor, "developers", []string{"dev-1"}, 0)
+	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
+	activateDevelopmentVersion(t, svc, actor, 1, 0)
+	task, err := svc.CreateTask(context.Background(), actor, CreateTaskInput{
+		Queue: "DEV", Title: "managed question", Assignee: "dev-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	question, err := svc.AddComment(context.Background(), AgentActor("dev-1"), task.Key, AddCommentInput{
+		Body: "@user:customer choose one",
+	})
+	if err != nil || len(question.CreatedWaits) != 1 {
+		t.Fatalf("question = %#v, %v", question, err)
+	}
+	afterQuestion, err := svc.GetTask(context.Background(), actor, task.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterQuestion.Task.Status != task.Status {
+		t.Errorf("status after question = %q; want %q", afterQuestion.Task.Status, task.Status)
+	}
+	if afterQuestion.Task.WorkflowStatus != task.WorkflowStatus || afterQuestion.Task.WorkflowRevision != task.WorkflowRevision {
+		t.Fatalf("workflow after question = %#v", afterQuestion.Task)
+	}
+
+	answer, err := svc.AddComment(context.Background(), CustomerActor("customer"), task.Key, AddCommentInput{Body: "approved"})
+	if err != nil || len(answer.ResolvedWaits) != 1 {
+		t.Fatalf("answer = %#v, %v", answer, err)
+	}
+	afterAnswer, err := svc.GetTask(context.Background(), actor, task.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterAnswer.Task.Status != task.Status {
+		t.Errorf("status after answer = %q; want %q", afterAnswer.Task.Status, task.Status)
+	}
+	if afterAnswer.Task.WorkflowStatus != task.WorkflowStatus || afterAnswer.Task.WorkflowRevision != task.WorkflowRevision || len(afterAnswer.WaitingFor) != 0 {
+		t.Fatalf("workflow after answer = %#v, waits %#v", afterAnswer.Task, afterAnswer.WaitingFor)
+	}
+}
+
+func TestCustomerAnswerTransitionsWithOtherWaitRemaining(t *testing.T) {
+	svc, task := assignedTask(t, "worker", StatusInProgress)
+	ctx := context.Background()
+	if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
+		Body: "@user:customer decide and @agent:reviewer review",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, CustomerActor("customer"), task.Key, AddCommentInput{
+		Body: "customer answer",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	detail := assertTaskStatus(t, svc, task.Key, StatusInProgress)
+	if len(detail.WaitingFor) != 1 || detail.WaitingFor[0].ExpectedPrincipal != "agent:reviewer" {
+		t.Fatalf("remaining waits = %#v; want agent:reviewer", detail.WaitingFor)
+	}
+}
+
+func TestUnrelatedCommentDoesNotResumeManualWaitCustomer(t *testing.T) {
+	svc, task := assignedTask(t, "worker", StatusWaitCustomer)
+	ctx := context.Background()
+	before, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
+		Body: "work continues elsewhere",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertTaskStatus(t, svc, task.Key, StatusWaitCustomer)
+	after, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before)+1 || after[len(after)-1].Kind != "task.comment_added" {
+		t.Fatalf("event tail after unrelated comment = %#v", after[len(before):])
+	}
+}
+
+func TestCustomerWaitStatusNonTransitions(t *testing.T) {
+	tests := []struct {
+		name                string
+		actor               Actor
+		mention             string
+		start               string
+		grantResponseAccess bool
+		manualBeforeAnswer  bool
+		want                string
+	}{
+		{name: "other agent question", actor: AgentActor("other"), mention: "@user:customer", start: StatusInProgress, grantResponseAccess: true, want: StatusInProgress},
+		{name: "wait for another principal", actor: AgentActor("worker"), mention: "@agent:reviewer", start: StatusInProgress, want: StatusInProgress},
+		{name: "done task", actor: AgentActor("worker"), mention: "@user:customer", start: StatusDone, want: StatusDone},
+		{name: "cancelled task", actor: AgentActor("worker"), mention: "@user:customer", start: StatusCancelled, want: StatusCancelled},
+		{name: "manual status before answer", actor: CustomerActor("customer"), start: StatusInProgress, manualBeforeAnswer: true, want: StatusOpen},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, task := assignedTask(t, "worker", tt.start)
+			ctx := context.Background()
+			if tt.grantResponseAccess {
+				if _, err := svc.AddComment(ctx, CustomerActor("customer"), task.Key, AddCommentInput{
+					Body: "@agent:other please respond",
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.manualBeforeAnswer {
+				if _, err := svc.AddComment(ctx, AgentActor("worker"), task.Key, AddCommentInput{
+					Body: "@user:customer question",
+				}); err != nil {
+					t.Fatal(err)
+				}
+				waiting := assertTaskStatus(t, svc, task.Key, StatusWaitCustomer)
+				status := StatusOpen
+				if _, err := svc.UpdateTask(ctx, CustomerActor("customer"), task.Key, UpdateTaskInput{
+					Status: &status, Revision: waiting.Task.Revision,
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body := tt.mention
+			if tt.manualBeforeAnswer {
+				body = "answer after manual status"
+			}
+			if _, err := svc.AddComment(ctx, tt.actor, task.Key, AddCommentInput{Body: body}); err != nil {
+				t.Fatal(err)
+			}
+			assertTaskStatus(t, svc, task.Key, tt.want)
+			after, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(after) != len(before)+1 || after[len(after)-1].Kind != "task.comment_added" {
+				t.Fatalf("event tail after non-transition = %#v", after[len(before):])
+			}
+		})
+	}
+}
+
+func assignedTask(t *testing.T, assignee, status string) (*Service, Task) {
+	t.Helper()
+	svc := newTestService(t)
+	ctx := context.Background()
+	customer := CustomerActor("customer")
+	if _, err := svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "ASK", Name: "Questions"}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := svc.CreateTask(ctx, customer, CreateTaskInput{
+		Queue: "ASK", Title: "decision", Assignee: assignee,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != StatusOpen {
+		updated, err := svc.UpdateTask(ctx, customer, task.Key, UpdateTaskInput{
+			Status: &status, Revision: task.Revision,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		task = updated
+	}
+	return svc, task
+}
+
+func assertTaskStatus(t *testing.T, svc *Service, key, want string) TaskDetail {
+	t.Helper()
+	detail, err := svc.GetTask(context.Background(), CustomerActor("customer"), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Task.Status != want {
+		t.Fatalf("status = %q; want %q", detail.Task.Status, want)
+	}
+	return detail
+}

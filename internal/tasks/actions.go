@@ -187,7 +187,7 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 		return s.CreateTask(ctx, actor, CreateTaskInput{
 			Queue: actionString(body, "queue"), ParentKey: actionString(body, "parent_key"),
 			Title: actionString(body, "title"), Description: actionString(body, "description"),
-			Assignee: actionString(body, "assignee"), Group: actionString(body, "group"),
+			PullRequest: actionString(body, "pull_request"), Assignee: actionString(body, "assignee"), Group: actionString(body, "group"),
 			Priority:       Priority(actionString(body, "priority")),
 			IdempotencyKey: actionString(body, "idempotency_key"),
 		})
@@ -199,7 +199,7 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 		}
 		return s.UpdateTask(ctx, actor, key, UpdateTaskInput{
 			Title: actionOptionalString(body, "title"), Description: actionOptionalString(body, "description"),
-			Status: actionOptionalString(body, "status"), Assignee: actionOptionalString(body, "assignee"),
+			Status: actionOptionalString(body, "status"), PullRequest: actionOptionalString(body, "pull_request"), Assignee: actionOptionalString(body, "assignee"),
 			ManualBlockReason: actionOptionalString(body, "manual_block_reason"), Priority: actionOptionalPriority(body, "priority"), Revision: revision,
 		})
 	case "assign":

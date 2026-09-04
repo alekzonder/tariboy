@@ -40,7 +40,9 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, er
 		"timeout_s": a.TimeoutS, "hard_timeout_s": a.HardTimeoutS, "on_timeout": a.OnTimeout,
 		"on_error": a.OnError, "user_prompt": a.UserPrompt, "env": a.Env, "plugins": a.Plugins,
 		"messages_batch": a.MessagesBatch, "messages_max_queue": a.MessagesMaxQueue,
-		"group": a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
+		"goal_enabled": a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS,
+		"current_goal_task_key": a.CurrentGoalTaskKey,
+		"group":                 a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
 		"max_idle_iterations": a.MaxIdleIterations,
 	}
 	budget, err := agentBudgetView(c, a.Name)
@@ -260,6 +262,8 @@ func agentRun() registry.Command {
 			{Name: "user_prompt", Type: registry.String, Help: "standing user prompt"},
 			{Name: "messages_batch", Type: registry.Int, Help: "maximum messages delivered per iteration"},
 			{Name: "messages_max_queue", Type: registry.Int, Help: "maximum queued messages"},
+			{Name: "goal_enabled", Flag: "goal-enabled", Type: registry.Bool, Default: true, Help: "enable Native Task goal selection (default true)"},
+			{Name: "goal_wait_customer_timeout_s", Flag: "goal-wait-customer-timeout-s", Type: registry.Int, Default: 300, Help: "customer-wait grace period in whole seconds (default 300)"},
 			{Name: "alias", Type: registry.String, Help: "display alias"},
 			{Name: "notes", Type: registry.String, Help: "operator notes"},
 			{Name: "color", Type: registry.String, Help: "agent accent color as #rrggbb"},
@@ -271,6 +275,22 @@ func agentRun() registry.Command {
 				loop = v
 			}
 			interactive, _ := p["interactive"].(bool)
+			goalEnabled := true
+			if value, present := p["goal_enabled"]; present {
+				var ok bool
+				goalEnabled, ok = value.(bool)
+				if !ok {
+					return nil, api.UserError{Code: "bad_goal_enabled", Msg: "goal_enabled must be a boolean"}
+				}
+			}
+			goalWaitCustomerTimeoutS := 300
+			if _, present := p["goal_wait_customer_timeout_s"]; present {
+				var err error
+				goalWaitCustomerTimeoutS, err = agentIntParam(p, "goal_wait_customer_timeout_s", "bad_goal_wait_customer_timeout", 1)
+				if err != nil {
+					return nil, err
+				}
+			}
 			if _, oldTimeout := p["timeout"]; oldTimeout {
 				if _, exactTimeout := p["timeout_s"]; exactTimeout {
 					return nil, api.UserError{Code: "ambiguous_timeout", Msg: "timeout and timeout_s cannot be supplied together"}
@@ -332,11 +352,13 @@ func agentRun() registry.Command {
 				Interactive: interactive, Env: env, Plugins: pluginList, Loop: loop,
 				IntervalS: intervalS, TimeoutS: timeoutS, HardTimeoutS: hardTimeoutS,
 				OnTimeout: onTimeout, OnError: onError,
-				MaxIdleIterations: maxIdleIterations,
-				UserPrompt:        str(p, "user_prompt"),
-				MessagesBatch:     messagesBatch,
-				MessagesMaxQueue:  messagesMaxQueue,
-				Group:             str(p, "group"), Alias: str(p, "alias"), Notes: str(p, "notes"),
+				MaxIdleIterations:        maxIdleIterations,
+				UserPrompt:               str(p, "user_prompt"),
+				MessagesBatch:            messagesBatch,
+				MessagesMaxQueue:         messagesMaxQueue,
+				GoalEnabled:              &goalEnabled,
+				GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS,
+				Group:                    str(p, "group"), Alias: str(p, "alias"), Notes: str(p, "notes"),
 				Color: strings.ToLower(color),
 			}
 			if spec.ImageRef == "" {
@@ -358,7 +380,8 @@ func agentRun() registry.Command {
 				return nil, api.UserError{Code: "run_failed", Msg: err.Error()}
 			}
 			state, _ := c.Control.LiveState(name)
-			return map[string]any{"name": name, "state": state}, nil
+			return map[string]any{"name": name, "state": state,
+				"goal_enabled": goalEnabled, "goal_wait_customer_timeout_s": goalWaitCustomerTimeoutS}, nil
 		},
 	}
 }
@@ -384,6 +407,8 @@ func agentPs() registry.Command {
 					"interval_s": a.IntervalS, "on_timeout": a.OnTimeout, "on_error": a.OnError,
 					"max_idle_iterations": a.MaxIdleIterations,
 					"interactive":         a.Interactive,
+					"goal_enabled":        a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS,
+					"current_goal_task_key": a.CurrentGoalTaskKey,
 				}
 				if budget, err := agentBudgetView(c, a.Name); err != nil {
 					return nil, err
@@ -394,6 +419,74 @@ func agentPs() registry.Command {
 				rows = append(rows, row)
 			}
 			return map[string]any{"agents": rows, "count": len(rows)}, nil
+		},
+	}
+}
+
+func agentGoalSettingsView(a agent.Agent) map[string]any {
+	return map[string]any{"name": a.Name, "goal_enabled": a.GoalEnabled,
+		"goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS}
+}
+
+func refreshAgentGoal(c *registry.Ctx, name string) {
+	if control, ok := c.Control.(registry.LoopConfigControl); ok {
+		control.RefreshLoopConfig(name)
+	}
+}
+
+func agentGoalEnabled() registry.Command {
+	return registry.Command{
+		Path: "agent.goal-enabled", Summary: "Enable or disable Native Task goal selection",
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "enabled", Flag: "enabled", Type: registry.Bool, Required: true, Help: "true or false"},
+		},
+		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-enabled"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			a, err := getAgent(c, str(p, "name"))
+			if err != nil {
+				return nil, err
+			}
+			enabled, ok := p["enabled"].(bool)
+			if !ok {
+				return nil, api.UserError{Code: "bad_goal_enabled", Msg: "enabled must be a boolean"}
+			}
+			a.GoalEnabled = enabled
+			if err := agentStore(c).Update(a); err != nil {
+				return nil, err
+			}
+			refreshAgentGoal(c, a.Name)
+			return agentGoalSettingsView(a), nil
+		},
+	}
+}
+
+func agentGoalWaitCustomerTimeout() registry.Command {
+	return registry.Command{
+		Path: "agent.goal-wait-customer-timeout", Summary: "Set the Goal customer-wait grace period",
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "seconds", Flag: "seconds", Type: registry.Int, Required: true, Help: "positive whole seconds"},
+		},
+		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-wait-customer-timeout"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			a, err := getAgent(c, str(p, "name"))
+			if err != nil {
+				return nil, err
+			}
+			if _, present := p["seconds"]; !present {
+				return nil, api.UserError{Code: "bad_goal_wait_customer_timeout", Msg: "seconds must be at least 1"}
+			}
+			seconds, err := agentIntParam(p, "seconds", "bad_goal_wait_customer_timeout", 1)
+			if err != nil {
+				return nil, err
+			}
+			a.GoalWaitCustomerTimeoutS = seconds
+			if err := agentStore(c).Update(a); err != nil {
+				return nil, err
+			}
+			refreshAgentGoal(c, a.Name)
+			return agentGoalSettingsView(a), nil
 		},
 	}
 }

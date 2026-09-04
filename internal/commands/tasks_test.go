@@ -557,3 +557,99 @@ func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
 		t.Fatalf("invalid create status/env = %d/%+v", status, env)
 	}
 }
+
+func TestTaskCreateAndUpdateAcceptPullRequestAndWaitCustomer(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	svc := tasks.NewService(st.DB, "customer", time.Now)
+	server := api.NewServer(BuildRegistry(), &registry.Ctx{
+		Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Tasks: svc,
+	})
+	httpServer := httptest.NewServer(server.Handler())
+	t.Cleanup(httpServer.Close)
+
+	actor := tasks.CustomerActor("customer")
+	if _, err := svc.CreateQueue(t.Context(), actor, tasks.CreateQueueInput{Prefix: "PR", Name: "Pull requests"}); err != nil {
+		t.Fatal(err)
+	}
+	status, env := taskRequest(t, httpServer.Client(), http.MethodPost,
+		httpServer.URL+"/api/tasks", map[string]any{
+			"queue": "PR", "title": "Expose PR", "pull_request": " HTTPS://Example.test/o/r/pull/6 ",
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("create task = %d/%+v", status, env)
+	}
+	var created tasks.Task
+	if err := json.Unmarshal(env.Result, &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.PullRequest != "https://example.test/o/r/pull/6" {
+		t.Fatalf("created task = %#v", created)
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodPatch,
+		httpServer.URL+"/api/tasks/"+created.Key, map[string]any{
+			"pull_request": "https://github.com/o/r/pull/7",
+			"status":       tasks.StatusWaitCustomer,
+			"revision":     created.Revision,
+		})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("update task = %d/%+v", status, env)
+	}
+	var updated tasks.Task
+	if err := json.Unmarshal(env.Result, &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.PullRequest != "https://github.com/o/r/pull/7" || updated.Status != tasks.StatusWaitCustomer {
+		t.Fatalf("updated task = %#v", updated)
+	}
+}
+
+func TestTaskOpenAPIExposesCreateAndUpdatePullRequestAndWaitCustomer(t *testing.T) {
+	server := api.NewServer(BuildRegistry(), &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	httpServer := httptest.NewServer(server.Handler())
+	t.Cleanup(httpServer.Close)
+
+	resp, err := httpServer.Client().Get(httpServer.URL + "/api/openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var document struct {
+		Result struct {
+			Paths      map[string]map[string]any `json:"paths"`
+			Components struct {
+				Schemas map[string]map[string]any `json:"schemas"`
+			} `json:"components"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&document); err != nil {
+		t.Fatal(err)
+	}
+	properties := document.Result.Components.Schemas["Task"]["properties"].(map[string]any)
+	if properties["pull_request"] == nil {
+		t.Fatalf("Task schema properties = %#v", properties)
+	}
+	create := document.Result.Paths["/api/tasks"]["post"].(map[string]any)
+	createBody := create["requestBody"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	createProperties := createBody["properties"].(map[string]any)
+	if createProperties["pull_request"] == nil {
+		t.Fatalf("task create properties = %#v", createProperties)
+	}
+	update := document.Result.Paths["/api/tasks/{key}"]["patch"].(map[string]any)
+	body := update["requestBody"].(map[string]any)["content"].(map[string]any)["application/json"].(map[string]any)["schema"].(map[string]any)
+	updateProperties := body["properties"].(map[string]any)
+	if updateProperties["pull_request"] == nil {
+		t.Fatalf("task update properties = %#v", updateProperties)
+	}
+	statusSchema := updateProperties["status"].(map[string]any)
+	values := statusSchema["enum"].([]any)
+	for _, value := range values {
+		if value == tasks.StatusWaitCustomer {
+			return
+		}
+	}
+	t.Fatalf("task update status values = %#v", values)
+}

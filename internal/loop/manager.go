@@ -107,6 +107,11 @@ type ManagerConfig struct {
 	// final status is persisted. The daemon wires this to gzip the AI-proxy
 	// transcript (spec §9/§12) without loop importing aiproxy directly.
 	OnIterationClose func(agent, iterationID string)
+	// GoalSignal coalesces agent configuration changes into a goal scan.
+	GoalSignal func()
+	// IterationCompleted requests the next goal wake after terminal persistence.
+	IterationCompleted func(agent, iterationID string)
+	CurrentGoal        func(string, time.Time) (tasks.Task, bool, error)
 	// ProvidedChannels returns provider-declared channels drawn from installed
 	// plugin manifests, so `tools sources` can list and annotate provider
 	// channels even before their channel row exists (spec §6.1). Wired by the
@@ -241,6 +246,18 @@ func NewManager(cfg ManagerConfig) *Manager {
 	}
 }
 
+func (m *Manager) signalGoals() {
+	if m.cfg.GoalSignal != nil {
+		m.cfg.GoalSignal()
+	}
+}
+
+func (m *Manager) iterationCompleted(agentName, iterationID string) {
+	if m.cfg.IterationCompleted != nil {
+		m.cfg.IterationCompleted(agentName, iterationID)
+	}
+}
+
 func defaultRuntimeDir(agentsDir string) string {
 	base := agentsDir
 	if filepath.Base(agentsDir) == "agents" {
@@ -302,6 +319,7 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, ShimBin: m.cfg.ShimBin,
 		ImgStore: m.cfg.ImgStore, Store: m.cfg.Store, Spawner: m.cfg.Spawner, Clock: m.cfg.Clock,
 		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Bus: m.cfg.Bus, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
+		CurrentGoal: m.cfg.CurrentGoal,
 	})
 }
 
@@ -602,12 +620,12 @@ func (m *Manager) adopt(ctx context.Context, li agentdir.LiveIteration) <-chan s
 }
 
 // iterationStore is the narrow slice of *agent.Store that terminal-status
-// finalization needs. It exists so a failing UpdateIteration can be injected
+// finalization needs. It exists so a failing terminal CAS can be injected
 // (ManagerConfig.iterationStore); every other call site keeps using the
 // concrete store.
 type iterationStore interface {
 	GetIteration(agentName, id string) (agent.Iteration, error)
-	UpdateIteration(it agent.Iteration) error
+	FinalizeRunningIteration(it agent.Iteration) (bool, error)
 }
 
 // iterations returns the store used for terminal-status finalization.
@@ -624,7 +642,8 @@ var errIterationLookup = errors.New("read iteration")
 
 // finalizeIteration commits a terminal status for one running iteration and
 // drops its shim.sock as a single all-or-nothing step. It reports whether the
-// terminal status was committed.
+// terminal status was committed and whether the row was already terminal
+// before cleanup began.
 //
 // Two facts pull the order in opposite directions. The iteration's status is
 // what every observer polls, so the socket must be gone *before* the terminal
@@ -641,17 +660,22 @@ var errIterationLookup = errors.New("read iteration")
 // The removal stays inside the "still running" guard: the shim socket is
 // per-agent, not per-iteration, so once this iteration is terminal the file at
 // that path may already belong to the agent's next iteration.
-func (m *Manager) finalizeIteration(l agentdir.Layout, agentName, id string, apply func(*agent.Iteration)) (bool, error) {
+func (m *Manager) finalizeIteration(
+	l agentdir.Layout,
+	agentName, id string,
+	apply func(*agent.Iteration),
+) (committed, terminalBeforeCleanup bool, err error) {
 	it, err := m.iterations().GetIteration(agentName, id)
 	if err != nil {
-		return false, fmt.Errorf("%w: %v", errIterationLookup, err)
+		return false, false, fmt.Errorf("%w: %v", errIterationLookup, err)
 	}
 	if it.Status != "running" {
-		return false, nil
+		return false, true, nil
 	}
 	apply(&it)
 	_ = os.Remove(l.ShimSock())
-	if err := m.iterations().UpdateIteration(it); err != nil {
+	committed, err = m.iterations().FinalizeRunningIteration(it)
+	if err != nil {
 		// Roll the marker back so adoption can retry this iteration. A plain
 		// file is enough: ListLive only stats the path, adoption's probe of a
 		// non-socket fails exactly like a dead shim, and every shim removes a
@@ -662,9 +686,9 @@ func (m *Manager) finalizeIteration(l agentdir.Layout, agentName, id string, app
 			m.cfg.Log.Error("restore shim.sock marker after failed terminal status",
 				"agent", agentName, "id", id, "err", cerr)
 		}
-		return false, err
+		return false, false, err
 	}
-	return true, nil
+	return committed, false, nil
 }
 
 // terminalHarnessError shapes an iteration into the harness_error outcome used
@@ -679,7 +703,7 @@ func (m *Manager) terminalHarnessError(it *agent.Iteration) {
 // recordAdopted persists a completed adopted iteration from its result.json.
 func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, res shim.IterationResult) {
 	status := ""
-	committed, err := m.finalizeIteration(l, li.Agent, li.ID, func(it *agent.Iteration) {
+	committed, _, err := m.finalizeIteration(l, li.Agent, li.ID, func(it *agent.Iteration) {
 		ec, cpu, mem := res.ExitCode, res.CPUMs, res.MemPeakKB
 		it.Status = Classify(res.ExitCode, it.DoneFlag, it.TimeoutTriggeredAt != nil, res.TerminationReason == "hard_timeout")
 		it.EndedAt = m.cfg.Clock().Format(time.RFC3339)
@@ -696,6 +720,7 @@ func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, re
 	if m.cfg.Proxy != nil {
 		m.cfg.Proxy.RevokeIteration(li.ID)
 	}
+	m.iterationCompleted(li.Agent, li.ID)
 	m.cfg.Log.Info("adopted live iteration", "agent", li.Agent, "id", li.ID, "status", status)
 }
 
@@ -703,9 +728,9 @@ func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, re
 // without ever writing result.json (harness_error, exit_code=-1) and removes the
 // stale shim.sock so reattach cannot spin on it forever.
 func (m *Manager) recordStaleAdoption(l agentdir.Layout, li agentdir.LiveIteration) {
-	committed, err := m.finalizeIteration(l, li.Agent, li.ID, m.terminalHarnessError)
+	committed, terminalBeforeCleanup, err := m.finalizeIteration(l, li.Agent, li.ID, m.terminalHarnessError)
 	switch {
-	case err == nil && !committed:
+	case err == nil && terminalBeforeCleanup:
 		// Already terminal, yet ListLive still offered this iteration — so the
 		// socket outlived a committed status. Drop it (as this function always
 		// did) or reattach spins on it forever. Safe here specifically because
@@ -718,6 +743,9 @@ func (m *Manager) recordStaleAdoption(l agentdir.Layout, li agentdir.LiveIterati
 	}
 	if committed && m.cfg.Proxy != nil {
 		m.cfg.Proxy.RevokeIteration(li.ID)
+	}
+	if committed {
+		m.iterationCompleted(li.Agent, li.ID)
 	}
 	m.cfg.Log.Warn("adopted iteration abandoned: shim not responding", "agent", li.Agent, "id", li.ID)
 }
@@ -801,6 +829,14 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	if messagesMaxQueue == 0 {
 		messagesMaxQueue = 1000
 	}
+	goalEnabled := true
+	if spec.GoalEnabled != nil {
+		goalEnabled = *spec.GoalEnabled
+	}
+	goalWaitCustomerTimeoutS := spec.GoalWaitCustomerTimeoutS
+	if goalWaitCustomerTimeoutS == 0 {
+		goalWaitCustomerTimeoutS = 300
+	}
 	ag := agent.Agent{
 		Name: name, ImageRef: ref.String(), ImageDigest: man.Digest,
 		Cwd: spec.Cwd, HarnessType: harnessType,
@@ -811,6 +847,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 		UserPrompt: spec.UserPrompt,
 		Env:        env, Plugins: resolvedPlugins,
 		MessagesBatch: messagesBatch, MessagesMaxQueue: messagesMaxQueue,
+		GoalEnabled: goalEnabled, GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS,
 		Alias: spec.Alias, Notes: spec.Notes, Color: spec.Color,
 	}
 	if ref == image.BareRef {
@@ -1165,6 +1202,7 @@ func (m *Manager) start(ag agent.Agent) error {
 			m.cfg.OnIterationClose(agentName, iterationID)
 		}
 	})
+	engine.SetIterationCompleted(m.iterationCompleted)
 
 	// Bind the per-agent tools socket SYNCHRONOUSLY before launching the loop.
 	// The harness reaches the daemon (loop done, context, messages, ...) only
@@ -1225,6 +1263,7 @@ func (m *Manager) Start(name string) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.signalGoals()
 	if err := m.start(ag); err != nil {
 		if errors.Is(err, errIterationAdopting) {
 			return nil
@@ -1262,6 +1301,7 @@ func (m *Manager) Stop(name string) error {
 		rt.engine.Wake(WakeStop)
 	}
 	m.mu.Unlock()
+	m.signalGoals()
 	_ = m.Kill(name)
 	return nil
 }
@@ -1284,6 +1324,7 @@ func (m *Manager) SetLoopEnabled(name string, enabled bool) error {
 // RefreshLoopConfig asks a live engine to discard its timer and reload the
 // persisted settings. A stopped or not-yet-started agent has nothing to wake.
 func (m *Manager) RefreshLoopConfig(name string) {
+	m.signalGoals()
 	m.mu.Lock()
 	rt := m.runs[name]
 	m.mu.Unlock()
@@ -1304,6 +1345,7 @@ func (m *Manager) Restart(name string) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.signalGoals()
 	m.mu.Lock()
 	if _, ok := m.adopting[name]; ok {
 		if ag.Interactive {
@@ -1370,15 +1412,18 @@ func (m *Manager) recoverStaleKill(name, id string, rt *runtime, l agentdir.Layo
 	// state everywhere: status still "running" and the shim.sock marker on disk
 	// for a later adoption to retry. Before, this path alone kept the socket by
 	// never reaching the removal, while the adoption paths dropped it.
-	committed, err := m.finalizeIteration(l, name, id, m.terminalHarnessError)
+	committed, terminalBeforeCleanup, err := m.finalizeIteration(l, name, id, m.terminalHarnessError)
 	switch {
 	case errors.Is(err, errIterationLookup):
 		return fmt.Errorf("kill shim for %q: %w", name, rpcErr)
 	case err != nil:
 		return fmt.Errorf("recover stale shim for %q: %w", name, err)
-	case !committed:
+	case terminalBeforeCleanup:
 		// Already terminal: the socket must not outlive a committed status.
 		_ = os.Remove(l.ShimSock())
+	}
+	if committed {
+		m.iterationCompleted(name, id)
 	}
 	m.mu.Lock()
 	if m.runs[name] == rt && rt.engine.CurrentIterationID() == id {
@@ -2068,6 +2113,7 @@ func (m *Manager) reprovision(name, imageRef string) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.signalGoals()
 	return m.start(ag)
 }
 

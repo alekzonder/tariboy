@@ -16,11 +16,38 @@ iteration under a watchdog**. The daemon hands it:
 
 Everything after `--` is the harness command it supervises.
 
-For tmux-backed interactive iterations, the shim uses a fixed `/bin/sh`
-wrapper that preserves the harness argv, captures its real exit status, writes
-the numeric value to an owner-private temporary file, and atomically renames it
-within the iteration's private logs directory. After the tmux session ends,
-the shim validates and removes that transient status file before writing
+For tmux-backed interactive iterations, the pane command is a hidden supervisor
+mode of the same shim binary. That supervisor starts one directly owned harness
+process group and places it in the pane terminal's foreground before exec, so
+stdin and terminal-generated signals go to the harness rather than the
+supervisor. A native observer reports only the direct leader's real exit:
+Linux uses `waitid(P_PID, pid, WEXITED|WNOWAIT)` and macOS uses kqueue
+`EVFILT_PROC|NOTE_EXIT`. Stop, continue, unrelated, and forged `SIGCHLD`
+notifications do not end supervision. The observer does not reap the leader;
+the supervisor remains its sole reaper. This is a mode of the existing shim
+process: it does not poll tmux, start a helper process, or reap arbitrary
+descendants.
+
+The supervisor also catches the `SIGHUP` tmux sends when a pane is destroyed.
+On `SIGHUP`, it sends `SIGTERM` to the owned group and waits up to two seconds
+for confirmed leader exit, then escalates to `SIGKILL` and waits at most two
+more seconds. Once exit is confirmed, both natural and HUP teardown send a
+final `SIGKILL` to the still-pinned group before the sole blocking `Wait4`, so
+lingering descendants are removed without risking a reused process-group id.
+`ESRCH` means the group is already empty and is not an error. A cooperative
+leader keeps its exit status; forced termination records `137`. Observer,
+signal, reap, and wait-deadline failures return promptly after a best-effort
+final group kill and leave the transient status absent, preserving the outer
+shim's fail-closed unknown result (`-1`). The supervisor never discovers a pane
+PID from tmux or signals a process after reaping its leader. It does not restore
+terminal foreground ownership because it performs no further terminal I/O and
+exits immediately after recording the result.
+
+After successful observation, group cleanup, and the exact leader reap, the
+supervisor captures the harness's real numeric status, writes it to an
+owner-private temporary file, and atomically renames it within the iteration's
+private logs directory. After the tmux session ends, the outer shim validates
+and removes that transient status file before writing
 `result.json`. A non-zero harness status is preserved; a missing, malformed, or
 unreadable status becomes unknown failure (`-1`), never success. Timeout and
 explicit termination reasons still take precedence. The status file is not in
@@ -39,7 +66,10 @@ options, user tmux configuration, or unrelated sessions.
 
 Separating the watchdog from the daemon means a runaway or hung iteration can be
 killed (`tariboy agent kill`) without touching the daemon or other agents. The
-shim isn't a subcommand CLI — it has exactly one job.
+outer shim matches the managed session's full name before using tmux's exact
+session target. An absent server or session is already stopped; other tmux
+operational errors remain visible to the caller. The shim isn't a subcommand
+CLI — it has exactly one job.
 
 It also makes daemon upgrades non-destructive. `tariboyd` cancellation does
 not signal the shim or its harness. The old loop observer detaches while the

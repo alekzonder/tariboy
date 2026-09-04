@@ -65,6 +65,9 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
 
 - Diagnose root cause before fixing a bug.
 - For behavior changes, add a focused failing test before production code.
+- For implementation subtasks, use TDD RED/GREEN and run tests for the affected
+  packages. Run `make check` at meaningful large integration boundaries, not
+  after every subtask.
 - Follow existing subsystem patterns and keep changes narrowly scoped.
 - Use `rg` or `rg --files` for repository search.
 - Choose the fast, read-only check by the files changed: run
@@ -77,8 +80,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   not dirty `git status`, so they are safe in a shared working tree. Successful
   command output is suppressed; each step reports its result and duration as it
   finishes, while a failure also prints its command and complete diagnostics.
-- Run `make full-check` when the diff reaches e2e, packaging, or desktop
-  behavior. It runs `check`, then `make build`, the four core E2E scripts,
+- Run `make full-check` once before final handoff when the diff reaches e2e,
+  packaging, or desktop behavior. It runs `check`, then `make build`, the four core E2E scripts,
   `full-smoke`, the browser suites, and the host's desktop gates, and it takes
   tens of minutes. Neither target stops at the first failure; both end with a
   summary table and fail if any step failed.

@@ -27,6 +27,10 @@ type fakeRunner struct {
 	seen     []string // iteration ids
 }
 
+type countingEvalRunner struct{ calls atomic.Int32 }
+
+func (r *countingEvalRunner) RunEvals(agent.Agent, string, string) { r.calls.Add(1) }
+
 func (f *fakeRunner) Run(_ context.Context, _ agent.Agent, _, id, _ string) (Outcome, error) {
 	o := f.outcomes[min(f.calls, len(f.outcomes)-1)]
 	f.seen = append(f.seen, id)
@@ -394,6 +398,78 @@ func TestRunOnceOnIterationCloseDone(t *testing.T) {
 	}
 	if want := "smoke/" + r.seen[0]; calls[0] != want {
 		t.Fatalf("onClose args = %q, want %q", calls[0], want)
+	}
+}
+
+func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	e, as := newEngine(t, baseAgent(), r)
+
+	var calls []string
+	e.SetIterationCompleted(func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls = append(calls, agentName+"/"+iterationID+"/"+it.Status)
+	})
+
+	if got := e.runOnce(context.Background(), "interval", ""); got != TickCompletedWaiting {
+		t.Fatalf("runOnce = %q", got)
+	}
+	if want := "smoke/" + r.seen[0] + "/done"; len(calls) != 1 || calls[0] != want {
+		t.Fatalf("completion calls = %v, want [%s]", calls, want)
+	}
+}
+
+func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
+	raw, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	as := agent.NewStore(raw)
+	ag := baseAgent()
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.DB.Exec(`CREATE TRIGGER reject_terminal_iteration_update
+		BEFORE UPDATE OF status ON iterations
+		WHEN OLD.status = 'running' AND NEW.status != 'running'
+		BEGIN
+			SELECT RAISE(FAIL, 'terminal write rejected');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+	r := &fakeRunner{outcomes: []Outcome{{Status: "harness_error", DoneFlag: true}}}
+	clk := func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
+	ag.OnError = "stop"
+	e := NewEngine(ag, as, r, slog.New(slog.NewTextHandler(io.Discard, nil)), clk)
+	evals := &countingEvalRunner{}
+	e.evals = evals
+	var phases, audits []string
+	e.SetEmit(func(event events.Event) { phases = append(phases, event.Data["phase"].(string)) })
+	e.SetAudit(func(typ, _, _ string, _ map[string]any) { audits = append(audits, typ) })
+	closes, completions := 0, 0
+	e.SetOnIterationClose(func(string, string) { closes++ })
+	e.SetIterationCompleted(func(string, string) { completions++ })
+
+	if got := e.runOnce(context.Background(), "manual", ""); got != TickSkipped {
+		t.Fatalf("runOnce = %q, want skipped", got)
+	}
+	if evals.calls.Load() != 0 || len(phases) != 1 || phases[0] != "start" || len(audits) != 1 || audits[0] != "iteration_started" || closes != 1 || completions != 0 {
+		t.Fatalf("evals/phases/audits/closes/completions = %d/%v/%v/%d/%d", evals.calls.Load(), phases, audits, closes, completions)
+	}
+	it, err := as.GetIteration(ag.Name, r.seen[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Status != "running" || it.DoneFlag {
+		t.Fatalf("iteration after rejected terminal status = %#v", it)
+	}
+	stored, err := as.Get(ag.Name)
+	if err != nil || !stored.LoopEnabled || stored.ErrorReason != "" {
+		t.Fatalf("agent after rejected terminal status = %#v, %v", stored, err)
 	}
 }
 
@@ -1099,6 +1175,37 @@ func TestRunOnceManualFailsOnSessionConflict(t *testing.T) {
 	}
 	if len(events) != 1 || events[0] != "iteration_failed:tmux_session_exists" {
 		t.Fatalf("audit = %v", events)
+	}
+}
+
+func TestRunOnceManualSessionConflictSignalsGoalAfterFailedRow(t *testing.T) {
+	r := &blockingRunner{}
+	ag := baseAgent()
+	ag.Interactive = true
+	e, as := newEngine(t, ag, r)
+	var calls []string
+	e.SetIterationCompleted(func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			calls = append(calls, "lookup error: "+err.Error())
+			return
+		}
+		calls = append(calls, agentName+"/"+iterationID+"/"+it.Status)
+	})
+
+	if got := e.runOnce(context.Background(), "manual", ""); got != TickError {
+		t.Fatalf("runOnce = %q, want tick_error", got)
+	}
+	its, err := as.ListIterations(ag.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(its) != 1 {
+		t.Fatalf("iterations = %+v, want one failed row", its)
+	}
+	want := ag.Name + "/" + its[0].ID + "/failed"
+	if len(calls) != 1 || calls[0] != want {
+		t.Fatalf("completion calls = %v, want [%s]", calls, want)
 	}
 }
 

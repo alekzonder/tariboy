@@ -272,9 +272,11 @@ func Run(ctx context.Context, o Options) error {
 	taskHub := tasks.NewHub(taskService)
 	taskService.SetHub(taskHub)
 	taskPublisher := tasknotify.New(st.DB, channelBus, time.Now, log)
-	taskReminder := taskreminder.NewReconciler(taskreminder.ReconcilerConfig{
+	goalReconciler := taskreminder.NewReconciler(taskreminder.ReconcilerConfig{
 		Store: st, Bus: channelBus, Clock: time.Now, Log: log,
 	})
+	currentGoal := taskreminder.NewStore(st).Current
+	taskService.SetGoalSignal(goalReconciler.Signal)
 	imgStore := &image.Store{Dir: p.ImagesDir()}
 	if err := image.WithPublicationGate(func() error {
 		return imgStore.RecoverMutablePublications((imageprovenance.Store{DB: st.DB}).IsCommitted)
@@ -610,11 +612,15 @@ func Run(ctx context.Context, o Options) error {
 		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), SkillsDir: skillsDir, ShimBin: shimBin,
 		ImgStore: imgStore, Store: as, Log: log, Clock: time.Now, Bus: channelBus,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: hub.Emit, Proxy: proxy,
-		Groups:          groupProv,
-		Evals:           evalRunner,
-		Tasks:           taskService,
-		ExternalPlugins: plugins.ResolveEnabledInstalledMetadata(p.PluginsDir(), pluginStore),
-		Spawner:         o.Spawner, OnIterationClose: onIterationClose,
+		Groups:             groupProv,
+		Evals:              evalRunner,
+		Tasks:              taskService,
+		ExternalPlugins:    plugins.ResolveEnabledInstalledMetadata(p.PluginsDir(), pluginStore),
+		Spawner:            o.Spawner,
+		OnIterationClose:   onIterationClose,
+		GoalSignal:         goalReconciler.Signal,
+		IterationCompleted: goalReconciler.IterationCompleted,
+		CurrentGoal:        currentGoal,
 		// ProvidedChannels feeds the Messages skill provider-declared channels
 		// from installed plugin manifests (spec §6.1), read fresh per call so a
 		// newly installed provider is annotated without a restart.
@@ -802,7 +808,7 @@ func Run(ctx context.Context, o Options) error {
 	}()
 	go func() {
 		defer wg.Done()
-		taskReminder.Run(gctx)
+		goalReconciler.Run(gctx)
 	}()
 	go func() {
 		defer wg.Done()

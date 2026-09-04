@@ -357,6 +357,37 @@ func TestAgentActionAppliesPriority(t *testing.T) {
 	}
 }
 
+func TestAgentActionCreateAndUpdatePreservePullRequestAndWaitCustomer(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	actor := AgentActor("alice")
+	if _, err := svc.CreateQueue(ctx, CustomerActor("customer"), CreateQueueInput{
+		Prefix: "PR", Name: "Pull requests", Owners: []string{"alice"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.AgentAction(ctx, actor, "create", map[string]any{
+		"queue": "PR", "title": "Expose PR", "pull_request": " HTTPS://Example.test/o/r/pull/6 ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := result.(Task)
+	if created.PullRequest != "https://example.test/o/r/pull/6" {
+		t.Fatalf("created task = %#v", created)
+	}
+	result, err = svc.AgentAction(ctx, actor, "update", map[string]any{
+		"key": created.Key, "pull_request": "https://github.com/o/r/pull/7", "status": StatusWaitCustomer,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := result.(Task)
+	if updated.PullRequest != "https://github.com/o/r/pull/7" || updated.Status != StatusWaitCustomer {
+		t.Fatalf("updated task = %#v", updated)
+	}
+}
+
 func TestAgentActionUpdateClearsExplicitManualBlockReason(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()

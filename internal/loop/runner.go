@@ -27,6 +27,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 // PromptParts are the ordered sections of an iteration prompt (spec §5.3).
@@ -357,6 +358,7 @@ type RunnerConfig struct {
 	Logger       *slog.Logger
 	Bus          *bus.Bus
 	Proxy        ProxyBinder
+	CurrentGoal  func(string, time.Time) (tasks.Task, bool, error)
 	// HasTmuxSession reports whether an interactive agent's tmux session is already
 	// alive. Injectable so tests avoid a real tmux. Defaults to tmuxHasSession.
 	HasTmuxSession func(session string) bool
@@ -414,7 +416,7 @@ func tmuxHasSession(session string) bool {
 
 // tmuxKillSession is the production KillTmuxSession.
 func tmuxKillSession(session string) error {
-	return exec.Command("tmux", "kill-session", "-t", session).Run()
+	return shim.KillTmuxSession(session)
 }
 
 // SessionBlocked reports whether launching an iteration for ag would collide with
@@ -757,8 +759,21 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			if err != nil {
 				return fail(err)
 			}
+			goal := ""
+			if r.cfg.CurrentGoal != nil && slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
+				return entry.Kind == "runtime" && entry.Runtime == "goal"
+			}) {
+				task, ok, err := r.cfg.CurrentGoal(ag.Name, r.cfg.Clock().UTC())
+				if err != nil {
+					return fail(fmt.Errorf("read current agent goal: %w", err))
+				}
+				if ok {
+					goal = FormatRuntimeGoal(task)
+				}
+			}
 			prompt, err = RenderPromptTemplate(template, l.ImageDir(), RuntimePromptValues{
 				Identity: FormatRuntimeIdentity(ag.Name, ag.ImageRef, ag.ImageDigest, agentCwd(ag, l), iterationID),
+				Goal:     goal,
 				Workdir:  workdir,
 				Context:  contextText, Messages: FormatMessages(batch), AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()), UserPrompt: ag.UserPrompt, OneShot: oneShot,
 			})

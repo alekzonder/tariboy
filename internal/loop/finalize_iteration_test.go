@@ -18,6 +18,7 @@ type stubIterationStore struct {
 	it        agent.Iteration
 	sockPath  string
 	updateErr error
+	beforeCAS func()
 
 	updates       int
 	sockAtCommit  bool
@@ -32,17 +33,23 @@ func (s *stubIterationStore) GetIteration(agentName, id string) (agent.Iteration
 	return s.it, nil
 }
 
-func (s *stubIterationStore) UpdateIteration(it agent.Iteration) error {
+func (s *stubIterationStore) FinalizeRunningIteration(it agent.Iteration) (bool, error) {
 	s.updates++
 	_, err := os.Stat(s.sockPath)
 	s.sockAtCommit = err == nil
 	s.attemptedStat = it.Status
+	if s.beforeCAS != nil {
+		s.beforeCAS()
+	}
 	if s.updateErr != nil {
-		return s.updateErr
+		return false, s.updateErr
+	}
+	if s.it.Status != "running" {
+		return false, nil
 	}
 	s.it = it
 	s.committedStat = it.Status
-	return nil
+	return true, nil
 }
 
 // finalizeFixture wires a manager whose finalization store is the stub, plus a
@@ -100,7 +107,7 @@ func TestFinalizeIterationRemovesSocketBeforeCommittingTerminalStatus(t *testing
 				t.Fatalf("%s = %v, want nil", p.name, err)
 			}
 			if st.updates != 1 {
-				t.Fatalf("UpdateIteration calls = %d, want 1", st.updates)
+				t.Fatalf("FinalizeRunningIteration calls = %d, want 1", st.updates)
 			}
 			if st.committedStat == "running" || st.committedStat == "" {
 				t.Fatalf("committed status = %q, want terminal", st.committedStat)
@@ -137,7 +144,7 @@ func TestFinalizeIterationKeepsSocketWhenTerminalStatusIsRejected(t *testing.T) 
 				}
 			}
 			if st.updates != 1 {
-				t.Fatalf("UpdateIteration calls = %d, want 1", st.updates)
+				t.Fatalf("FinalizeRunningIteration calls = %d, want 1", st.updates)
 			}
 			if st.attemptedStat == "running" || st.attemptedStat == "" {
 				t.Fatalf("attempted status = %q, want terminal", st.attemptedStat)
@@ -155,5 +162,50 @@ func TestFinalizeIterationKeepsSocketWhenTerminalStatusIsRejected(t *testing.T) 
 				t.Fatalf("shim.sock after a rejected status: %v, want kept for re-adoption", err)
 			}
 		})
+	}
+}
+
+func TestRecoverStaleKillCASLossPreservesSuccessorSocket(t *testing.T) {
+	m, st, l, li := finalizeFixture(t, nil)
+	const successor = "successor iteration socket"
+	st.beforeCAS = func() {
+		// The engine wins the terminal CAS and immediately launches a queued
+		// successor on the same per-agent socket path before the manager learns
+		// that its own CAS lost.
+		st.it.Status = "done"
+		if err := os.WriteFile(l.ShimSock(), []byte(successor), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	completed := 0
+	m.cfg.IterationCompleted = func(string, string) { completed++ }
+
+	if err := m.recoverStaleKill(li.Agent, li.ID, &runtime{}, l, errors.New("shim unreachable")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(l.ShimSock())
+	if err != nil {
+		t.Fatalf("successor shim socket was removed after stale-kill CAS loss: %v", err)
+	}
+	if string(got) != successor {
+		t.Fatalf("successor shim socket = %q, want %q", got, successor)
+	}
+	if completed != 0 {
+		t.Fatalf("stale-kill CAS loser emitted %d completions, want 0", completed)
+	}
+}
+
+func TestRecoverStaleKillAlreadyTerminalRemovesStaleSocket(t *testing.T) {
+	m, st, l, li := finalizeFixture(t, nil)
+	st.it.Status = "done"
+
+	if err := m.recoverStaleKill(li.Agent, li.ID, &runtime{}, l, errors.New("shim unreachable")); err != nil {
+		t.Fatal(err)
+	}
+	if st.updates != 0 {
+		t.Fatalf("terminal row CAS attempts = %d, want 0", st.updates)
+	}
+	if _, err := os.Stat(l.ShimSock()); !os.IsNotExist(err) {
+		t.Fatalf("stale shim socket after already-terminal recovery = %v, want removed", err)
 	}
 }

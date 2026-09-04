@@ -58,6 +58,12 @@ the idle prefix qualifies.
 
 ## Native task state
 
+Each agent row persists `goal_enabled` (default true), a positive
+`goal_wait_customer_timeout_s` (default 300), and its read-only
+`current_goal_task_key`. Disabling Goal clears the selected key; re-enabling it
+selects from current task state rather than restoring an old choice. The goal
+reconciler is the only writer of the selection.
+
 Task queues, the unlimited parent tree, comments, waits, relations, events,
 notification outbox, customer notification state, and mutation idempotency
 records are normalized tables in the same `tariboyd.db`. Task keys include

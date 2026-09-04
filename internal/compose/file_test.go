@@ -330,6 +330,46 @@ agents:
 	}
 }
 
+func TestGoalBlockParsesPositiveWholeSecondDuration(t *testing.T) {
+	f, err := Parse([]byte(`
+version: 1
+agents:
+  worker:
+    image: basic:latest
+    goal:
+      enabled: false
+      wait_customer_timeout: 5m
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	goal := f.Agents["worker"].Goal
+	if goal == nil || goal.Enabled == nil || *goal.Enabled || goal.WaitCustomerTimeout != "5m" {
+		t.Fatalf("Goal = %#v", goal)
+	}
+	seconds, set, err := f.Agents["worker"].goalWaitCustomerTimeoutSeconds()
+	if err != nil || !set || seconds != 300 {
+		t.Fatalf("goal timeout = %d set=%t err=%v", seconds, set, err)
+	}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("valid Goal rejected: %v", err)
+	}
+}
+
+func TestGoalDurationRejectsZeroFractionalAndInvalidValues(t *testing.T) {
+	for _, value := range []string{"0s", "1500ms", "5", "-1s"} {
+		t.Run(value, func(t *testing.T) {
+			f, err := Parse([]byte("version: 1\nagents:\n  worker:\n    image: basic:latest\n    goal:\n      wait_customer_timeout: " + value + "\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := f.Validate(); err == nil {
+				t.Fatalf("Goal duration %q was accepted", value)
+			}
+		})
+	}
+}
+
 func TestEffectiveTimeoutPrecedence(t *testing.T) {
 	loopWins := AgentSpec{Timeout: "10m", Loop: &LoopSpec{Timeout: "60m"}}
 	if got := loopWins.effectiveTimeout(); got != "60m" {

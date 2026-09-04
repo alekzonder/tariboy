@@ -6,7 +6,6 @@ import { SupportBundle } from "@/components/SupportBundle";
 
 const SECTIONS = [
   { suffix: "", label: "General", end: true },
-  { suffix: "/task-reminders", label: "Task reminders" },
   { suffix: "/hosts", label: "Hosts" },
   { suffix: "/cli", label: "CLI" },
   { suffix: "/appearance", label: "Appearance" },

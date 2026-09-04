@@ -24,6 +24,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
+	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -34,7 +35,25 @@ import (
 	"github.com/alekzonder/tariboy/internal/scriptnotify"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
+
+func TestManagerPassesCurrentGoalToRunner(t *testing.T) {
+	want := tasks.Task{Key: "TARI-43"}
+	m := &Manager{cfg: ManagerConfig{
+		CurrentGoal: func(agentName string, _ time.Time) (tasks.Task, bool, error) {
+			if agentName != "alice" {
+				t.Fatalf("agent = %q", agentName)
+			}
+			return want, true, nil
+		},
+	}}
+	runner := m.runnerFor(agent.Agent{}).(*ShimRunner)
+	got, ok, err := runner.cfg.CurrentGoal("alice", time.Time{})
+	if err != nil || !ok || got != want {
+		t.Fatalf("CurrentGoal = %#v, %v, %v", got, ok, err)
+	}
+}
 
 func TestShutdownDoesNotHoldManagerLockWhileDrainingHTTP(t *testing.T) {
 	entered := make(chan struct{})
@@ -570,6 +589,78 @@ func testSkillsDir(t *testing.T) string {
 	return root
 }
 
+func TestRefreshLoopConfigSignalsGoalReconciler(t *testing.T) {
+	m, _, _, _ := newManager(t, &fakeRunner{})
+	calls := 0
+	m.cfg.GoalSignal = func() { calls++ }
+
+	m.RefreshLoopConfig("worker")
+
+	if calls != 1 {
+		t.Fatalf("goal signals = %d, want 1", calls)
+	}
+}
+
+func TestStartSignalsGoalReconcilerWhileIterationIsAdopting(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
+	calls := 0
+	m.cfg.GoalSignal = func() { calls++ }
+
+	if err := m.Start("worker"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("goal signals = %d, want 1", calls)
+	}
+}
+
+func TestSetLoopEnabledSignalsGoalReconcilerAfterPersistence(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	var enabled []bool
+	m.cfg.GoalSignal = func() {
+		ag, err := as.Get("worker")
+		if err == nil {
+			enabled = append(enabled, ag.LoopEnabled)
+		}
+	}
+
+	if err := m.SetLoopEnabled("worker", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(enabled) != 1 || !enabled[0] {
+		t.Fatalf("loop-enabled states at goal signals = %v, want [true]", enabled)
+	}
+}
+
+func TestRestartSignalsGoalReconcilerAfterReenableDuringAdoption(t *testing.T) {
+	m, as, _, _ := newManager(t, &fakeRunner{})
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
+	var enabled []bool
+	m.cfg.GoalSignal = func() {
+		ag, err := as.Get("worker")
+		if err == nil {
+			enabled = append(enabled, ag.Enabled)
+		}
+	}
+
+	if err := m.Restart("worker"); err != nil {
+		t.Fatal(err)
+	}
+	if len(enabled) != 2 || enabled[0] || !enabled[1] {
+		t.Fatalf("enabled states at goal signals = %v, want [false true]", enabled)
+	}
+}
+
 // Removing the own-inbox subscription from Manager.Run must make this fail:
 // a standalone agent would persist successfully but task publication would
 // create no delivery for it.
@@ -615,7 +706,7 @@ func TestRunDoesNotInjectRetiredCapabilityEnvironment(t *testing.T) {
 func TestRunPersistsCompleteConfiguration(t *testing.T) {
 	m, store, _, _ := newManager(t, &fakeRunner{})
 	cwd := t.TempDir()
-	_, err := m.Run(registry.RunSpec{
+	spec := registry.RunSpec{
 		ImageRef: "basic:latest", Name: "clone", Cwd: cwd,
 		Harness: "codex", Model: "gpt-5", Effort: "high",
 		Interactive: true, Loop: false,
@@ -624,7 +715,11 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 		UserPrompt: "standing prompt", Env: map[string]string{"CSV": "a,b"},
 		Plugins: []string{"context"}, MessagesBatch: 8, MessagesMaxQueue: 900,
 		Alias: "Clone", Notes: "all fields", Color: "#123abc",
-	})
+	}
+	enabled := false
+	spec.GoalEnabled = &enabled
+	spec.GoalWaitCustomerTimeoutS = 120
+	_, err := m.Run(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,7 +734,8 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 		got.UserPrompt != "standing prompt" || got.Env["CSV"] != "a,b" ||
 		strings.Join(got.Plugins, ",") != "whoami,loop,messages,context" ||
 		got.MessagesBatch != 8 || got.MessagesMaxQueue != 900 ||
-		got.Alias != "Clone" || got.Notes != "all fields" || got.Color != "#123abc" {
+		got.Alias != "Clone" || got.Notes != "all fields" || got.Color != "#123abc" ||
+		got.GoalEnabled || got.GoalWaitCustomerTimeoutS != 120 {
 		t.Fatalf("persisted agent = %#v", got)
 	}
 }
@@ -652,7 +748,8 @@ type killBlockingRunner struct {
 	// the engine goroutine that unwinds it. Most users of this runner leave it
 	// unset, and receiving from a nil channel blocks forever, so Run must skip
 	// the receive entirely when it is nil.
-	release chan struct{}
+	release           chan struct{}
+	returnAfterCancel *Outcome
 }
 
 func (r *killBlockingRunner) Run(ctx context.Context, _ agent.Agent, _ string, id string, _ string) (Outcome, error) {
@@ -660,6 +757,12 @@ func (r *killBlockingRunner) Run(ctx context.Context, _ agent.Agent, _ string, i
 	<-ctx.Done()
 	if r.release != nil {
 		<-r.release
+	}
+	// ShimRunner can still find and classify result.json after cancellation.
+	// Model that normal return so stale-kill recovery races the real terminal
+	// result path instead of only the simpler ctx.Err path.
+	if r.returnAfterCancel != nil {
+		return *r.returnAfterCancel, nil
 	}
 	return Outcome{}, ctx.Err()
 }
@@ -1116,12 +1219,35 @@ func TestManagerAttachAndResizeForwardToLiveShim(t *testing.T) {
 	}
 }
 
-func TestManagerKillRecoversMissingShim(t *testing.T) {
-	r := &killBlockingRunner{started: make(chan string, 2), release: make(chan struct{})}
+func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
+	r := &killBlockingRunner{
+		started: make(chan string, 2), release: make(chan struct{}),
+		returnAfterCancel: &Outcome{Status: "timeout", DoneFlag: true, ExitCode: 0, CPUMs: 17, MemPeakKB: 23},
+	}
 	var releaseOnce sync.Once
 	releaseRunner := func() { releaseOnce.Do(func() { close(r.release) }) }
 	m, as, agentsDir, _ := newManager(t, r)
-	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+	evals := &countingEvalRunner{}
+	m.cfg.Evals = evals
+	var finishEvents, closes atomic.Int32
+	m.cfg.Emit = func(event events.Event) {
+		if event.Type == "iteration" && event.Data["phase"] == "finish" {
+			finishEvents.Add(1)
+		}
+	}
+	recorder := &captureRecorder{}
+	m.cfg.AuditFor = func(string) Recorder { return recorder }
+	m.cfg.OnIterationClose = func(string, string) { closes.Add(1) }
+	completed := make(chan string, 2)
+	m.cfg.IterationCompleted = func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			completed <- "lookup error: " + err.Error()
+			return
+		}
+		completed <- agentName + "/" + iterationID + "/" + it.Status
+	}
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true, OnTimeout: "stop"}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Shutdown)
@@ -1154,8 +1280,21 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 	if err := m.Kill("smoke"); err != nil {
 		t.Fatalf("recover stale kill: %v", err)
 	}
+	select {
+	case got := <-completed:
+		if want := "smoke/" + id + "/harness_error"; got != want {
+			t.Fatalf("completion = %q, want %q", got, want)
+		}
+	default:
+		t.Fatal("stale-kill terminal commit did not signal goal completion")
+	}
 	if err := m.Kill("smoke"); err != nil {
 		t.Fatalf("repeated stale kill: %v", err)
+	}
+	select {
+	case got := <-completed:
+		t.Fatalf("repeated stale kill emitted duplicate completion %q", got)
+	default:
 	}
 	// Both Kill calls above have observed the recovery path; let the cancelled
 	// iteration finish unwinding so the polls below can see it close.
@@ -1199,6 +1338,22 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 	if err := m.Kill("smoke"); err == nil || !strings.Contains(err.Error(), "has no running iteration") {
 		t.Fatalf("Kill after recovered iteration unwound = %v, want no-running-iteration error", err)
 	}
+	select {
+	case got := <-completed:
+		t.Fatalf("recovered iteration unwind emitted duplicate completion %q", got)
+	default:
+	}
+	finishedAudits := 0
+	for _, event := range recorder.snapshot() {
+		if event.typ == "iteration_finished" {
+			finishedAudits++
+		}
+	}
+	stored, err := as.Get("smoke")
+	if err != nil || evals.calls.Load() != 0 || finishEvents.Load() != 0 || finishedAudits != 0 || closes.Load() != 1 || !stored.LoopEnabled || stored.ErrorReason != "" {
+		t.Fatalf("losing engine side effects: evals=%d finish_events=%d finish_audits=%d closes=%d agent=%#v err=%v",
+			evals.calls.Load(), finishEvents.Load(), finishedAudits, closes.Load(), stored, err)
+	}
 	if err := m.Stop("smoke"); err != nil {
 		t.Fatal(err)
 	}
@@ -1221,6 +1376,21 @@ func TestManagerKillRecoversMissingShim(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("subsequent iteration did not reach runner")
+	}
+	// The engine launches this next iteration only after every defer from the
+	// recovered one has run, making this an exact (non-timing-based) duplicate
+	// check for the stale-kill/unwind handoff.
+	select {
+	case got := <-completed:
+		t.Fatalf("recovered iteration emitted duplicate completion before next launch: %q", got)
+	default:
+	}
+	it, err = as.GetIteration("smoke", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Status != "harness_error" || it.ExitCode == nil || *it.ExitCode != -1 || it.DoneFlag || it.CPUMs != nil || it.MemPeakKB != nil {
+		t.Fatalf("cancelled runner overwrote stale-kill winner: %+v", it)
 	}
 }
 
@@ -1590,6 +1760,36 @@ func TestRecordAdoptedPreservesPersistedTimeoutAndHardWatchdogReason(t *testing.
 	}
 	if it.Status != "timeout" || it.TimeoutDeadline == nil || it.TimeoutExtensions != 0 {
 		t.Fatalf("adopted hard timeout lost persisted state: %+v", it)
+	}
+}
+
+func TestRecordAdoptedSignalsGoalCompletionAfterFinalStatus(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub"}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	id := "smoke-adopted-goal"
+	if err := as.CreateIteration(agent.Iteration{ID: id, Agent: ag.Name, Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	m.cfg.IterationCompleted = func(agentName, iterationID string) {
+		it, err := as.GetIteration(agentName, iterationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = agentName + "/" + iterationID + "/" + it.Status
+	}
+	l := agentdir.New(agentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
+	if err := l.EnsureIteration(id); err != nil {
+		t.Fatal(err)
+	}
+
+	m.recordAdopted(l, agentdir.LiveIteration{Agent: ag.Name, ID: id}, shim.IterationResult{ExitCode: 0})
+
+	if got != "smoke/smoke-adopted-goal/no_i_am_done" {
+		t.Fatalf("completion = %q", got)
 	}
 }
 
@@ -2825,9 +3025,19 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	if _, err := os.Stat(l.ImageDir()); !os.IsNotExist(err) {
 		t.Fatalf("preserve remove kept the image tree (err=%v)", err)
 	}
+	var goalStates []string
+	m.cfg.GoalSignal = func() {
+		ag, err := as.Get(name)
+		if err == nil {
+			goalStates = append(goalStates, fmt.Sprintf("enabled=%v loop=%v", ag.Enabled, ag.LoopEnabled))
+		}
+	}
 
 	if err := m.Reprovision(name, "basic2:latest"); err != nil {
 		t.Fatalf("reprovision: %v", err)
+	}
+	if len(goalStates) != 1 || goalStates[0] != "enabled=true loop=true" {
+		t.Fatalf("states at reprovision goal signals = %v, want [enabled=true loop=true]", goalStates)
 	}
 	// Tree re-unpacked, shims rewritten.
 	if _, err := os.Stat(filepath.Join(l.ImageDir(), "PROMPT.md")); err != nil {

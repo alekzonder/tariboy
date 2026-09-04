@@ -2,11 +2,13 @@ package taskreminder
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
 	basestore "github.com/alekzonder/tariboy/internal/store"
 )
@@ -25,15 +27,14 @@ type ReconcilerConfig struct {
 	Log      *slog.Logger
 }
 
-// Reconciler publishes one ordinary inbox reminder for each eligible task
-// generation and records the generation only after Publish succeeds.
 type Reconciler struct {
-	configStore *basestore.Store
-	store       *Store
-	bus         MessagePublisher
-	clock       func() time.Time
-	interval    time.Duration
-	log         *slog.Logger
+	agents   *agent.Store
+	store    *Store
+	bus      MessagePublisher
+	clock    func() time.Time
+	interval time.Duration
+	log      *slog.Logger
+	signals  chan struct{}
 }
 
 func NewReconciler(config ReconcilerConfig) *Reconciler {
@@ -47,69 +48,103 @@ func NewReconciler(config ReconcilerConfig) *Reconciler {
 		config.Log = slog.Default()
 	}
 	return &Reconciler{
-		configStore: config.Store,
-		store:       NewStore(config.Store),
-		bus:         config.Bus,
-		clock:       config.Clock,
-		interval:    config.Interval,
-		log:         config.Log,
+		agents: agent.NewStore(config.Store), store: NewStore(config.Store), bus: config.Bus,
+		clock: config.Clock, interval: config.Interval, log: config.Log, signals: make(chan struct{}, 1),
 	}
 }
 
-// Reconcile reads the current policy on every scan. Candidate failures are
-// accumulated while later agents continue, so one unavailable inbox cannot
-// prevent unrelated reminders from being delivered.
-func (r *Reconciler) Reconcile(ctx context.Context) error {
+// Signal coalesces task and agent configuration changes into one prompt scan.
+func (r *Reconciler) Signal() {
+	select {
+	case r.signals <- struct{}{}:
+	default:
+	}
+}
+
+// IterationCompleted publishes the next durable wake after a terminal
+// iteration, keyed by the stable iteration ID.
+func (r *Reconciler) IterationCompleted(agentName, iterationID string) {
+	if err := r.Reconcile(context.Background(), agentName, iterationID); err != nil {
+		r.log.Warn("task goal reconciliation failed", "agent", agentName, "iteration", iterationID, "err", err)
+	}
+}
+
+// Reconcile selects current goals and publishes each non-waiting selection.
+// Empty agentName scans every agent; failures are joined so later agents still
+// receive their wake.
+func (r *Reconciler) Reconcile(ctx context.Context, agentName, iterationID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	raw, _, err := r.configStore.ConfigGet("task_reminder")
-	if err != nil {
-		return fmt.Errorf("read task reminder policy: %w", err)
-	}
-	policy, err := ParsePolicy(raw)
-	if err != nil {
-		return fmt.Errorf("read task reminder policy: %w", err)
-	}
-	candidates, err := r.store.Eligible(policy, r.clock().UTC())
-	if err != nil {
-		return fmt.Errorf("select task reminder candidates: %w", err)
+	names := []string{agentName}
+	if agentName == "" {
+		agents, err := r.agents.List()
+		if err != nil {
+			return fmt.Errorf("list agents for task goals: %w", err)
+		}
+		names = make([]string, len(agents))
+		for i := range agents {
+			names[i] = agents[i].Name
+		}
 	}
 
 	var failures []error
-	for _, candidate := range candidates {
+	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			failures = append(failures, err)
 			break
 		}
-		_, err := r.bus.Publish(bus.Message{
-			IdempotencyKey: "task-reminder:" + candidate.Fingerprint,
-			Channel:        bus.InboxChannel(candidate.Agent),
-			Source:         "tasks",
-			Type:           "task.reminder",
-			Data: map[string]any{
-				"reason":           "assigned-work-idle",
-				"idle_threshold_s": policy.IdleThresholdS,
-				"task_keys":        append([]string(nil), candidate.TaskKeys...),
-			},
-		})
+		goal, err := r.store.ReconcileAgent(name, r.clock().UTC())
 		if err != nil {
-			failures = append(failures, fmt.Errorf("publish task reminder for %s: %w", candidate.Agent, err))
+			failures = append(failures, fmt.Errorf("reconcile task goal for %s: %w", name, err))
 			continue
 		}
-		if err := r.store.MarkSent(candidate, r.clock().UTC()); err != nil {
-			failures = append(failures, fmt.Errorf("mark task reminder sent for %s: %w", candidate.Agent, err))
+		if goal.TaskKey == "" || goal.Waiting {
+			continue
+		}
+		generation := iterationID
+		if generation == "" {
+			generation, err = r.latestTerminalIteration(name)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("read latest iteration for task goal %s: %w", name, err))
+				continue
+			}
+		} else {
+			goal.Reason = "iteration_completed"
+		}
+		if _, err := r.bus.Publish(goalMessage(goal, generation)); err != nil {
+			failures = append(failures, fmt.Errorf("publish task goal for %s: %w", name, err))
 		}
 	}
 	return errors.Join(failures...)
 }
 
-// Run performs an initial scan, then scans on a bounded cadence until the
-// daemon context is cancelled. Scan errors are logged and retried later.
+func (r *Reconciler) latestTerminalIteration(agentName string) (string, error) {
+	var id string
+	err := r.store.db.QueryRow(`SELECT id FROM iterations
+		WHERE agent=? AND ended_at<>'' ORDER BY ended_at DESC, id DESC LIMIT 1`, agentName).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return id, err
+}
+
+func goalMessage(goal Goal, iterationID string) bus.Message {
+	return bus.Message{
+		IdempotencyKey: fmt.Sprintf("task-goal:%s:%s:%d:%s", goal.Agent, goal.TaskKey, goal.Revision, iterationID),
+		Channel:        bus.InboxChannel(goal.Agent),
+		Source:         "tasks",
+		Type:           "task.goal",
+		Data:           map[string]any{"task_key": goal.TaskKey, "reason": goal.Reason},
+	}
+}
+
+// Run performs startup recovery, then reconciles on the bounded cadence and
+// coalesced mutation signals until cancellation.
 func (r *Reconciler) Run(ctx context.Context) {
 	run := func() {
-		if err := r.Reconcile(ctx); err != nil && ctx.Err() == nil {
-			r.log.Warn("task reminder reconciliation failed", "err", err)
+		if err := r.Reconcile(ctx, "", ""); err != nil && ctx.Err() == nil {
+			r.log.Warn("task goal reconciliation failed", "err", err)
 		}
 	}
 	run()
@@ -120,6 +155,8 @@ func (r *Reconciler) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			run()
+		case <-r.signals:
 			run()
 		}
 	}

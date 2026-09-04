@@ -14,6 +14,7 @@ import {
   listWorkflowQuestions,
   listWorkflowVersions,
   rebindAgentPool,
+  updateTask,
 } from "./tasks"
 
 describe("workflow task client", () => {
@@ -46,5 +47,19 @@ describe("workflow task client", () => {
       ["GET", "/api/tasks/DEV-1/artifacts"],
       ["GET", "/api/tasks/DEV-1/questions"],
     ])
+  })
+
+  it("keeps wait-customer, pull request, revision, and explicit target in task updates", async () => {
+    const target = { id: "remote", label: "Remote", baseURL: "https://remote.test", token: "secret" }
+    await updateTask("TARI-43", {
+      status: "wait_customer",
+      pull_request: "https://example.test/pull/7",
+      revision: 7,
+    }, target)
+    expect(apiOn).toHaveBeenCalledWith(target, "PATCH", "/api/tasks/TARI-43", {
+      status: "wait_customer",
+      pull_request: "https://example.test/pull/7",
+      revision: 7,
+    })
   })
 })

@@ -527,6 +527,7 @@ function TasksWorkspaceContent({
   const saveDetail = async (input: {
     title: string
     description: string
+    pull_request: string
     status?: TaskStatus
     assignee?: string
     manual_block_reason?: string

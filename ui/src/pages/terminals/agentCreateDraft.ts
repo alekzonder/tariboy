@@ -23,6 +23,8 @@ export interface AgentCreateDraft {
   plugins: string[];
   messagesBatch: string;
   messagesMaxQueue: string;
+  goalEnabled: boolean;
+  goalWaitCustomerTimeoutS: string;
   group: string;
   alias: string;
   notes: string;
@@ -51,6 +53,8 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     plugins: [],
     messagesBatch: "10",
     messagesMaxQueue: "1000",
+    goalEnabled: true,
+    goalWaitCustomerTimeoutS: "300",
     group: "",
     alias: "",
     notes: "",
@@ -63,6 +67,8 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     source.configured_cwd === undefined
     || source.messages_batch === undefined
     || source.messages_max_queue === undefined
+    || source.goal_enabled === undefined
+    || source.goal_wait_customer_timeout_s === undefined
   ) {
     throw new Error("Update the source host before making a complete clone");
   }
@@ -87,6 +93,8 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     plugins: [...source.plugins],
     messagesBatch: String(source.messages_batch),
     messagesMaxQueue: String(source.messages_max_queue),
+    goalEnabled: source.goal_enabled,
+    goalWaitCustomerTimeoutS: String(source.goal_wait_customer_timeout_s),
     group: source.group ?? "",
     alias: source.alias,
     notes: source.notes,

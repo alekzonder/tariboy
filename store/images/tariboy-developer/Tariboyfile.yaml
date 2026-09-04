@@ -39,6 +39,7 @@ skills:
 
 prompts:
   - runtime: identity
+  - runtime: goal
   - runtime: context
   - runtime: messages
   - runtime: workdir

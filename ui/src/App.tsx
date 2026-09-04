@@ -17,7 +17,6 @@ import {
   CliSettings,
   GeneralSettings,
 } from "@/pages/settings/SettingsPage";
-import TaskReminderSettings from "@/pages/settings/TaskReminderSettings";
 import PluginSettings from "@/pages/settings/PluginSettings";
 import UsagePage from "@/pages/UsagePage";
 import GroupsPage from "@/pages/GroupsPage";
@@ -129,7 +128,6 @@ function MainApp() {
 
           <Route path="/servers/:hostId/settings" element={<TerminalsPage serverView="settings" />}>
             <Route index element={<GeneralSettings />} />
-            <Route path="task-reminders" element={<TaskReminderSettingsRoute />} />
             <Route path="hosts" element={<DaemonsPage />} />
             <Route path="cli" element={<CliSettings />} />
             <Route path="appearance" element={<AppearanceSettings />} />
@@ -172,11 +170,6 @@ function MainApp() {
       </main>
     </>
   );
-}
-
-function TaskReminderSettingsRoute() {
-  const target = useOutletContext<ApiTarget>();
-  return <TaskReminderSettings target={target} />;
 }
 
 function PluginSettingsRoute() {

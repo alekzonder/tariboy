@@ -21,6 +21,7 @@ type Service struct {
 	customer                                 string
 	clock                                    func() time.Time
 	hub                                      *Hub
+	goalSignal                               func()
 	workflowIngressEnabled                   atomic.Bool
 	workflowIngressAfterTargetCount          func()
 	workflowActivationAfterWriterReservation func()
@@ -48,9 +49,14 @@ func (s *Service) CustomerLogin() string { return s.customer }
 
 func (s *Service) SetHub(hub *Hub) { s.hub = hub }
 
+func (s *Service) SetGoalSignal(signal func()) { s.goalSignal = signal }
+
 func (s *Service) signal() {
 	if s.hub != nil {
 		s.hub.Nudge()
+	}
+	if s.goalSignal != nil {
+		s.goalSignal()
 	}
 }
 
@@ -138,6 +144,10 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 		return Task{}, domainError(http.StatusBadRequest, "missing_title", "task title is required")
 	}
 	priority, err := NormalizePriority(in.Priority)
+	if err != nil {
+		return Task{}, err
+	}
+	pullRequest, err := NormalizePullRequest(in.PullRequest)
 	if err != nil {
 		return Task{}, err
 	}
@@ -232,12 +242,12 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	}
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tasks(
-			task_key, queue_prefix, parent_id, position, priority, title, description, status,
+			task_key, queue_prefix, parent_id, position, priority, title, description, status, pull_request,
 			author, customer, group_name, assignee,
 			workflow_version_id, workflow_status, workflow_revision, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		key, queue, parentID, position, priority, in.Title, strings.TrimSpace(in.Description),
-		actor.Principal, customer, group, normalizeAssignee(in.Assignee),
+		pullRequest, actor.Principal, customer, group, normalizeAssignee(in.Assignee),
 		workflowVersionID, workflowStatus, workflowRevision, now, now)
 	if err != nil {
 		return Task{}, err
@@ -248,7 +258,7 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	}
 	task := Task{
 		ID: taskID, Key: key, Queue: queue, ParentKey: parentKey, Position: position, Priority: priority,
-		Title: in.Title, Description: strings.TrimSpace(in.Description), Status: StatusOpen,
+		Title: in.Title, Description: strings.TrimSpace(in.Description), Status: StatusOpen, PullRequest: pullRequest,
 		Author: actor.Principal, Customer: customer, Group: group,
 		Assignee: normalizeAssignee(in.Assignee), Revision: 1, CreatedAt: now, UpdatedAt: now,
 		Access: "write",
@@ -262,7 +272,7 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	if filed {
 		task.Access, task.Filed = "", true
 	}
-	payload := map[string]any{"key": key, "parent_key": parentKey, "priority": priority}
+	payload := map[string]any{"key": key, "parent_key": parentKey, "priority": priority, "pull_request": task.PullRequest}
 	if managed {
 		payload["workflow_version"] = task.WorkflowVersion
 		payload["workflow_status"] = task.WorkflowStatus
@@ -456,7 +466,7 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 	}
 	switch statusView {
 	case "active":
-		query += ` AND t.status IN ('open', 'in_progress')`
+		query += ` AND t.status IN ('open', 'in_progress', 'wait_customer')`
 	case "closed":
 		query += ` AND t.status = 'done'`
 	}

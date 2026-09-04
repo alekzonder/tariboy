@@ -29,6 +29,19 @@ defaults; they contain only plugins and the ordered prompt template. Compose
 may build an image from an original relative context, but portable runnable
 image artifacts do not replace that source directory for later rebuilds.
 
+An agent may optionally override its per-agent Goal settings; omitted values
+keep the daemon default or current value:
+
+```yaml
+agents:
+  worker:
+    goal:
+      enabled: true
+      wait_customer_timeout: 300s
+```
+
+`wait_customer_timeout` must be a positive whole-second duration.
+
 ## Task workflows and queues
 
 Compose can publish a versioned Native Tasks workflow and bind it to a queue.

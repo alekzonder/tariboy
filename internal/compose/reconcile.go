@@ -106,6 +106,16 @@ func (r *Runner) Up(f File) error {
 			if cwd := effectiveCwd(a.Cwd, r.workdir); cwd != "" {
 				body["cwd"] = cwd
 			}
+			if a.Goal != nil {
+				if a.Goal.Enabled != nil {
+					body["goal_enabled"] = *a.Goal.Enabled
+				}
+				if seconds, set, err := a.goalWaitCustomerTimeoutSeconds(); err != nil {
+					return fmt.Errorf("agent %s goal: %w", name, err)
+				} else if set {
+					body["goal_wait_customer_timeout_s"] = seconds
+				}
+			}
 			if _, err := r.call.Call("POST", "/api/agents", body); err != nil {
 				return fmt.Errorf("create agent %s: %w", name, err)
 			}
@@ -184,6 +194,9 @@ func (r *Runner) Up(f File) error {
 		if err := r.convergeLoop(name, a, cur); err != nil {
 			return err
 		}
+		if err := r.convergeGoal(name, a, cur); err != nil {
+			return err
+		}
 		// Drift: converge the agent's declared subscriptions toward the file.
 		if err := r.convergeSubscriptions(name, a); err != nil {
 			return err
@@ -193,6 +206,30 @@ func (r *Runner) Up(f File) error {
 		return err
 	}
 	return r.convergeTaskWorkflows(f)
+}
+
+func (r *Runner) convergeGoal(name string, a AgentSpec, cur map[string]any) error {
+	if a.Goal == nil {
+		return nil
+	}
+	if a.Goal.Enabled != nil {
+		want := *a.Goal.Enabled
+		if fmt.Sprintf("%v", cur["goal_enabled"]) != fmt.Sprintf("%v", want) {
+			if _, err := r.call.Call("POST", "/api/agents/"+name+"/goal-enabled", map[string]any{"enabled": want}); err != nil {
+				return fmt.Errorf("set goal enabled %s: %w", name, err)
+			}
+		}
+	}
+	seconds, set, err := a.goalWaitCustomerTimeoutSeconds()
+	if err != nil {
+		return fmt.Errorf("agent %s goal: %w", name, err)
+	}
+	if set && fmt.Sprintf("%v", cur["goal_wait_customer_timeout_s"]) != fmt.Sprintf("%d", seconds) {
+		if _, err := r.call.Call("POST", "/api/agents/"+name+"/goal-wait-customer-timeout", map[string]any{"seconds": seconds}); err != nil {
+			return fmt.Errorf("set goal wait customer timeout %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 // convergeTaskWorkflows drives only the typed native Tasks REST commands, whose

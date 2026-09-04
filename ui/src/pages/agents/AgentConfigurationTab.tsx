@@ -312,7 +312,7 @@ export default function AgentConfigurationTab({
           <div className="flex flex-wrap gap-2"><Select value={selectedImage} onValueChange={setSelectedImage}><SelectTrigger aria-label="Agent image" className="w-72"><SelectValue placeholder="Select image"/></SelectTrigger><SelectContent>{images.map(item=>{const ref=`${item.name}:${item.tag}`;return <SelectItem key={ref} value={ref}>{ref}</SelectItem>})}</SelectContent></Select><Button disabled={imageSaving||!selectedImage} onClick={()=>void scheduleImage()}>{imageStatus.pending.error?"Retry":"Use next iteration"}</Button>{imageStatus.pending.ref&&<Button variant="outline" disabled={imageSaving} onClick={()=>void cancelImage()}>Cancel pending</Button>}</div>
         </div>}
       </section>
-      <AgentSettings />
+      <AgentSettings target={requestTarget} />
     </div>
   );
 }

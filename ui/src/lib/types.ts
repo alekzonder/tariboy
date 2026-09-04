@@ -66,6 +66,9 @@ export interface AgentView {
   plugins: string[];
   messages_batch?: number;
   messages_max_queue?: number;
+  goal_enabled: boolean;
+  goal_wait_customer_timeout_s: number;
+  current_goal_task_key: string;
   group: string | null;
   alias: string;
   notes: string;
