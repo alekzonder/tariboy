@@ -608,3 +608,33 @@ model scope rather than invalidating it.
 
 No revised forward outcomes are recorded yet. Fresh reruns are required before
 assessing whether the wording correction resolves these observed failures.
+
+## Second forward arm
+
+- Skill checkpoint: `4a7caa5`.
+- Samples: five fresh original-input contexts and one fresh citation-regression
+  holdout. The raw six responses are preserved unchanged in the local Task 3
+  evidence directory. The V1 arm was not run after the original-input samples
+  exposed a repeatable failure.
+- Isolation and cost: read-only simulations with no live actions or paid Judge
+  experiment; model-run cost metadata remains unavailable.
+
+All five original-input responses again made the core safe decisions. Compared
+with the first forward arm, they kept the 15 reviews reported rather than
+validated accepted, kept the unknown reference label distinct from an uncertain
+Judge verdict, did not assert an actual identity mismatch, and scoped the result
+to sol without requiring terra. Rerun 3 additionally displayed a reported,
+explicitly unvalidated `10/10 analyses` calculation over two labeled targets;
+that is not measured accuracy or an independent-example denominator, and no
+stronger result is inferred from it.
+
+One record-semantics failure remained in 5/5 responses: each changed silence
+about fixture execution into `not run`, commonly reasoning “none stated” or
+“none reported.” Silence establishes only unavailable execution status. Because
+the failure was uniform, the V1 arm was stopped rather than spending five more
+samples on known-failing wording.
+
+The holdout stopped promotion after the citation regression, retained the
+concrete 8/12 to 10/12 agreement comparison and 1/12 to 4/12 unsupported-citation
+change, and correctly treated the experiment as valid sol-only evidence with no
+terra generalization. No final-arm outcomes are recorded yet.

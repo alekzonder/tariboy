@@ -44,6 +44,7 @@ Judge results (one row per reported analysis, with acceptance verified separatel
   baseline/candidate | run ID | target ID | repeat | reported/validated accepted | verdict/score | citations | rationale
 
 Fixture results (baseline and candidate separately):
+  execution status (default unavailable unless non-execution is established):
   confusion counts (TP/FP/TN/FN):
   accuracy (correct/labeled n/N):
   uncertain Judge verdicts / invalid reference labels / coverage:
