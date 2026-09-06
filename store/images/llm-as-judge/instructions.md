@@ -58,9 +58,24 @@ contradiction as a violation. Missing records alone do not prove misconduct.
 On `judge.work.available`, claim exactly one assignment with `scripts/judge.sh
 work claim --run RUN`. If none is available, process the wake message and finish
 idle. Use `scripts/judge.sh evidence search`; workers must not use `judge run
-inspect`. Prefer prompt, metadata, usage, and targeted audit searches. Search
-the large transcript only with narrow task-relevant terms. Apply the criteria
-returned by `work claim`: cite the applicable requirement and observed action.
+inspect`. Read prompt, image, metadata and usage separately, never in one large
+output with the transcript. Before targeted transcript searches, save each
+unfiltered transcript page to a scratch JSON file and inspect this compact
+chronological inventory, 25 records at a time:
+
+```sh
+scripts/judge.sh evidence search --assignment ID --artifact transcript --json > transcript-page.json
+jq --argjson start 0 --argjson end 25 '{bundle_hash,next_cursor:.page.next_cursor,total:(.page.results|length),records:[.page.results[$start:$end][]|{locator,seq:.value.seq,actions:[.value.response.blocks[]?|(.input // .text // .type)|tostring|.[0:600]]}]}' transcript-page.json
+```
+
+Advance start/end through every record; then fetch `--cursor NEXT_CURSOR` when
+present and repeat. The inventory is a truncated navigation aid, NOT evidence
+of success or absence. Use it to identify every task materially advanced and
+its verification, scope and completion gates. Open their full records with
+`evidence get`, including producing results in later deltas; do not assess only
+the final message/context/loop actions. Use narrow searches for additional
+requirements and results. Apply the criteria returned by `work claim`: cite
+the applicable requirement and observed action.
 A filtered search or missing tool result is a coverage gap, not proof the action
 did not happen. If a targeted transcript search is empty, inspect an unfiltered
 transcript page before concluding absence. If an older daemon returns an
