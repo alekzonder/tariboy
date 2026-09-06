@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useAgentName } from "@/lib/agent";
 import { agentGetOn, subscribeAgentEventsOn } from "@/lib/api";
@@ -34,9 +34,9 @@ export default function AuditLogPage() {
   const name = useAgentName();
   const { hostId: hostParam = "local" } = useParams();
   const hostId = paramToHost(hostParam);
-  const target = useMemo(() => targetFor(hostId), [hostId]);
+  const descriptor = targetFor(hostId);
   const [searchParams, setSearchParams] = useSearchParams();
-  const listKey = `${hostId}\0${name}`;
+  const listKey = `${hostId}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}`;
   const [listState, setListState] = useState<{ key: string; items: IterationSummary[] } | null>(null);
   const items = listState?.key === listKey ? listState.items : [];
   const loaded = listState?.key === listKey;
@@ -57,6 +57,7 @@ export default function AuditLogPage() {
   useEffect(() => {
     if (!name) return;
     let current = true;
+    const target = targetFor(hostId);
     const load = () =>
       void agentGetOn<{ iterations: IterationSummary[]; count: number }>(target, name, "iterations")
         .then((r) =>
@@ -72,7 +73,7 @@ export default function AuditLogPage() {
     const t = window.setInterval(load, 5000);
     const off = subscribeAgentEventsOn(target, name, ["iteration"], () => load());
     return () => { current = false; window.clearInterval(t); off(); };
-  }, [listKey, name, target]);
+  }, [hostId, listKey, name]);
 
   const selectedItem = selected ? items.find((it) => it.id === selected) : null;
 
