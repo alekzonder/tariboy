@@ -57,18 +57,21 @@ export default function AuditLogPage() {
   useEffect(() => {
     if (!name) return;
     let current = true;
+    let generation = 0;
     const target = targetFor(hostId);
-    const load = () =>
+    const load = () => {
+      const requestGeneration = ++generation;
       void agentGetOn<{ iterations: IterationSummary[]; count: number }>(target, name, "iterations")
-        .then((r) =>
-          current && setListState({
+        .then((r) => {
+          if (current && requestGeneration === generation) setListState({
             key: listKey,
             items: r.iterations
               .slice()
               .sort((a, b) => b.started_at.localeCompare(a.started_at)),
-          }),
-        )
+          });
+        })
         .catch(() => { /* keep last on a transient failure */ });
+    };
     load();
     const t = window.setInterval(load, 5000);
     const off = subscribeAgentEventsOn(target, name, ["iteration"], () => load());
