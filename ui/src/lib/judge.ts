@@ -1,5 +1,6 @@
 import { apiGet, apiOn, apiPost, resolveTarget, type ApiTarget } from "@/lib/api";
 import type { ImprovementProposal } from "@/lib/improvement";
+import type { IterationJudgeReview } from "@/lib/types";
 
 export type JudgeRunStatus =
   | "snapshotting"
@@ -66,6 +67,12 @@ export const getJudgeEvidence = (runID: string, targetID: string, artifact: stri
 };
 export const retryJudgeRun = (id: string) => apiPost<{ id: string; retried: boolean }>(`/api/judges/${encodeURIComponent(id)}/retry`);
 export const cancelJudgeRun = (id: string) => apiPost<{ id: string; cancelled: boolean }>(`/api/judges/${encodeURIComponent(id)}/cancel`);
+
+export interface JudgeReviewStart { id: string; status: string; targets: number }
+export const reviewIterationOn = (target: ApiTarget, iterationId: string) =>
+  apiOn<JudgeReviewStart>(resolveTarget(target), "POST", "/api/judges/review", { iteration: [iterationId] });
+export const getIterationJudgeReviewsOn = (target: ApiTarget, agentName: string, iterationId: string) =>
+  apiOn<{ reviews: IterationJudgeReview[] }>(resolveTarget(target), "GET", `/api/agents/${encodeURIComponent(agentName)}/iterations/${encodeURIComponent(iterationId)}/judges`);
 
 export interface JudgeAutomationDiagnostic { path: string; message: string }
 export interface JudgeAutomationRevision { revision: number; hash: string; canonical_json: string; created_at: string }

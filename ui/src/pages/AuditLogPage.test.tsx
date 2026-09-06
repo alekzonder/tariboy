@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import AuditLogPage from "./AuditLogPage";
 import { AgentNameContext } from "@/lib/agent";
 
@@ -21,8 +21,8 @@ const OLD_ID = "dev-worker-20200102030400-1";
 // SetIterationDone; failure states leave productive at its DEFAULT 1). OLD_ID is
 // thus a done+idle iteration; TODAY_ID a done+productive one.
 const ITERS = [
-  { id: OLD_ID, trigger: "manual", status: "done", started_at: OLD_ISO, done: true, productive: false },
-  { id: TODAY_ID, trigger: "manual", status: "done", started_at: TODAY_ISO, done: true, productive: true },
+  { id: OLD_ID, trigger: "manual", status: "done", started_at: OLD_ISO, done: true, productive: false, judge: { latest_completed: null, active: null } },
+  { id: TODAY_ID, trigger: "manual", status: "done", started_at: TODAY_ISO, done: true, productive: true, judge: { latest_completed: { run_id: "run", target_id: "target", created_at: TODAY_ISO, state: "done", verdict: "pass", score: 0, completed: 1, failed: 0, pending: 0 }, active: null } },
 ];
 const mkEvent = (trigger: string, iter: string) => [
   { seq: 1, kind: "iteration_started", source: "system", at: "t1", data: JSON.stringify({ trigger }), iteration_id: iter },
@@ -55,6 +55,20 @@ const renderPage = (route = "/") =>
       </AgentNameContext.Provider>
     </MemoryRouter>,
   );
+
+function NavigationProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return <><output data-testid="location">{location.search}</output><button onClick={() => navigate("?keep=yes&iteration=does-not-exist")}>external</button><button onClick={() => navigate(-1)}>back</button></>;
+}
+
+const renderRoutedPage = (route: string) => render(
+  <MemoryRouter initialEntries={[route]}>
+    <AgentNameContext.Provider value="dev-worker">
+      <Routes><Route path="/agents/:hostId/:agent/activity" element={<><NavigationProbe /><AuditLogPage /></>} /></Routes>
+    </AgentNameContext.Provider>
+  </MemoryRouter>,
+);
 
 describe("AuditLogPage (merged iterations + audit log)", () => {
   it("renders the Full log in the right pane by default", async () => {
@@ -115,12 +129,30 @@ describe("AuditLogPage (merged iterations + audit log)", () => {
     expect(full.className).not.toMatch(/(^|\s)bg-accent($|\s)/);
   });
 
-  it("falls back to Full log when ?iteration= names an iteration that isn't present", async () => {
+  it("shows an explicit missing state when ?iteration= names an unknown iteration", async () => {
     renderPage("/agent/dev-worker/logs?iteration=does-not-exist");
-    // Once items load without the named id, the pruning-fallback effect resets
-    // the pane to the default Full log rather than a blank iteration view.
-    await waitFor(() => expect(screen.getByText("fulldefault")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Iteration does-not-exist was not found.")).toBeInTheDocument());
     const full = screen.getByText("Full log").closest("button")!;
-    expect(full.className).toContain("bg-accent");
+    expect(full.className).not.toMatch(/(^|\s)bg-accent($|\s)/);
+  });
+
+  it("renders zero score and verdict in the iteration row", async () => {
+    renderPage();
+    const row = (await screen.findByText("09:05")).closest("button")!;
+    expect(row).toHaveTextContent("0");
+    expect(row).toHaveTextContent("pass");
+  });
+
+  it("keeps selection in the URL, preserves other params, and follows external and back navigation", async () => {
+    renderRoutedPage("/agents/local/dev-worker/activity?keep=yes");
+    fireEvent.click(await screen.findByText("09:05"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(`keep=yes&iteration=${TODAY_ID}`));
+
+    fireEvent.click(screen.getByRole("button", { name: "external" }));
+    expect(await screen.findByText("Iteration does-not-exist was not found.")).toBeInTheDocument();
+    expect(screen.queryByText("fulldefault")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "back" }));
+    await waitFor(() => expect(screen.getByText(/065606-3 · done/)).toBeInTheDocument());
   });
 });

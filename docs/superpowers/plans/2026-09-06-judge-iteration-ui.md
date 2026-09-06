@@ -35,15 +35,17 @@
 
 **Interfaces:** Новый JSON тип `IterationJudgeReview` имеет `run_id`, `target_id`, `created_at`, `state`, `verdict` (string), `score` (number|null), `completed`, `failed`, `pending` (integer). Проекция `judge` содержит `latest_completed: IterationJudgeReview|null` и `active: IterationJudgeReview|null`. Добавить её к строкам iteration list/detail; `GET /api/agents/{name}/iterations/{id}/judges` возвращает `{reviews: IterationJudgeReview[]}` в порядке created_at DESC, run_id DESC. Existing `POST /api/judges/review` остаётся совместимым.
 
-- [ ] Добавить fixtures с одной итерацией и тремя reviews: завершённый score=0, более новый завершённый score=0.8, самый новый pending; ещё один target принадлежит другому агенту. Проверить результат буквально: `latest_completed.score == 0.8`, `active.pending == 1`, история содержит только три своих review. Отдельно проверить единственный score=0 и отсутствие review.
-- [ ] Запустить `go test ./internal/judge ./internal/commands -run 'IterationJudge|Iteration' -count=1`; убедиться, что новые assertions падают из-за отсутствующего контракта.
-- [ ] Реализовать batch-чтение по iteration IDs на сервере, без запроса на каждую строку и без загрузки всех runs в браузере. Считать target завершённым только при наличии всех требуемых валидных analyses; failed/partial не выдавать за полностью оценённый. Использовать существующие статусы assignments, не новую машину состояний.
-- [ ] Проверить принадлежность iteration агенту, terminal eligibility по существующим правилам selector, пустые результаты и порядок при одинаковой дате. Сохранить прежние поля API.
-- [ ] Запустить `go test ./internal/judge ./internal/commands ./internal/registry -count=1`, проверить diff и закоммитить серверный контракт.
+- [x] Добавить fixtures с одной итерацией и тремя reviews: завершённый score=0, более новый завершённый score=0.8, самый новый pending; ещё один target принадлежит другому агенту. Проверить результат буквально: `latest_completed.score == 0.8`, `active.pending == 1`, история содержит только три своих review. Отдельно проверить единственный score=0 и отсутствие review.
+- [x] Запустить `go test ./internal/judge ./internal/commands -run 'IterationJudge|Iteration' -count=1`; убедиться, что новые assertions падают из-за отсутствующего контракта.
+- [x] Реализовать batch-чтение по iteration IDs на сервере, без запроса на каждую строку и без загрузки всех runs в браузере. Считать target завершённым только при наличии всех требуемых валидных analyses; failed/partial не выдавать за полностью оценённый. Использовать существующие статусы assignments, не новую машину состояний.
+- [x] Проверить принадлежность iteration агенту, terminal eligibility по существующим правилам selector, пустые результаты и порядок при одинаковой дате. Сохранить прежние поля API.
+- [x] Запустить `go test ./internal/judge ./internal/commands ./internal/registry -count=1`, проверить diff и закоммитить серверный контракт.
+
+Completed in `7332a03` and `81aaf43`; backend-check passed, review clean after the 40,000-ID SQLite-boundary fix.
 
 ## Task 2: Запуск и score в iterations
 
-**Files:** Modify `ui/src/lib/judge.ts`, `ui/src/lib/types.ts`, `ui/src/pages/AuditLogPage.tsx`, `ui/src/components/IterationAuditLog.tsx`; create `ui/src/components/IterationJudgePanel.tsx`, `ui/src/components/IterationJudgePanel.test.tsx`, `ui/src/pages/AuditLogPage.test.tsx`.
+**Files:** Modify `ui/src/lib/judge.ts`, `ui/src/lib/types.ts`, `ui/src/pages/AuditLogPage.tsx` и существующий `ui/src/pages/AuditLogPage.test.tsx`; create `ui/src/components/IterationJudgePanel.tsx`, `ui/src/components/IterationJudgePanel.test.tsx`. Inspect `ui/src/components/IterationAuditLog.tsx`; compose the Judge panel in the selected iteration detail of AuditLogPage without requiring changes to embedded overview logs.
 
 **Interfaces:** Панель получает `agentName: string`, `iterationId: string`, `terminal: boolean` и серверную проекцию Task 1. API helper отправляет `{iteration: [iterationId]}` через существующий explicit-host транспорт, возвращает существующие `{id, status, targets}`. После ответа перечитать историю, чтобы получить target ID, не угадывать его по ID run.
 

@@ -125,6 +125,24 @@ export interface IterationSummary {
   // `productive` column is NOT NULL DEFAULT 1, so pre-field rows and
   // in-flight iterations serialize as true, never undefined.
   productive: boolean;
+  judge: IterationJudgeProjection;
+}
+
+export interface IterationJudgeReview {
+  run_id: string;
+  target_id: string;
+  created_at: string;
+  state: string;
+  verdict: string;
+  score: number | null;
+  completed: number;
+  failed: number;
+  pending: number;
+}
+
+export interface IterationJudgeProjection {
+  latest_completed: IterationJudgeReview | null;
+  active: IterationJudgeReview | null;
 }
 
 export interface IterationDetail {
@@ -139,6 +157,7 @@ export interface IterationDetail {
   exit_code?: number;
   cpu_ms?: number;
   mem_peak_kb?: number;
+  judge: IterationJudgeProjection;
 }
 
 export interface IterationLogs {
