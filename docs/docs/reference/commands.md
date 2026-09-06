@@ -131,7 +131,8 @@ reviews each iteration by default. `--judges-per-iteration` must be between one
 and the number of configured workers. Unknown, nonterminal, or empty selections
 and invalid configured roles are rejected without creating a run.
 
-The command stores the current frozen review rubric with the run. Results are
+The command pins each eligible worker's image ref, resolved digest, and
+prompt-template hash with the run. Results are
 evidence-backed assessments, not calibrated probabilities: confidence values
 express the judge's support from the available evidence and must not be read as
 measured error rates. When every independent review is `uncertain`, consensus
