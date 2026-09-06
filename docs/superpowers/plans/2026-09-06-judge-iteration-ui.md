@@ -28,6 +28,7 @@
 5. Показывать число в шкале 0–1, verdict и дату; `0` допустим, отсутствие — `—`. Это оценка, не вероятность. `uncertain`/`disputed` не красить как уверенный pass/fail. Частичный результат показывать отдельно с количеством ответов.
 6. Прямая ссылка выбирает конкретный target. Хлебные крошки дают ссылки и на исходную итерацию, и на Judge runs; переходы, API-запросы и browser back сохраняют сервер.
 7. Полезные дополнения в этом срезе: история повторных reviews, ответы отдельных judges, расхождения, evidence gaps, переход к цитируемому доказательству. Без графиков, новых фильтров и изменения scoring.
+8. По уточнению пользователя одного Judge достаточно: ручной API/CLI уже использует `judges_per_iteration=1` по умолчанию, UI сохраняет этот default. Второй ответ нужен только при явном запросе двух judges; количество настроенных workers само по себе не является требуемым числом ответов. Число analyses не выдавать за число оплаченных harness-запусков.
 
 ## Task 1: Серверная проекция и история итерации
 
@@ -49,11 +50,11 @@ Completed in `7332a03` and `81aaf43`; backend-check passed, review clean after t
 
 **Interfaces:** Панель получает `agentName: string`, `iterationId: string`, `terminal: boolean` и серверную проекцию Task 1. API helper отправляет `{iteration: [iterationId]}` через существующий explicit-host транспорт, возвращает существующие `{id, status, targets}`. После ответа перечитать историю, чтобы получить target ID, не угадывать его по ID run.
 
-- [ ] Написать failing UI tests: score=0 отображается как число; pending сохраняет старые 0.8; двойной клик даёт один POST; ошибка POST видна и позволяет retry; незавершённая итерация не запускает review.
-- [ ] Запустить `cd ui && npm test -- src/components/IterationJudgePanel.test.tsx src/pages/AuditLogPage.test.tsx` и зафиксировать RED.
-- [ ] Реализовать панель на существующих компонентах. Показывать `Queued`, пока нет подтверждения выполнения; disabled workers объяснять через доступные данные конфигурации, не менять их. Активный review предлагает перейти к нему, а не создать новый. Это UI-защита от повторного клика, не глобальная дедупликация CLI-экспериментов.
-- [ ] Отображать score/verdict в строках AuditLogPage. Синхронизировать выбранную итерацию с `?iteration=` при клике, внешней навигации и back/forward, сохраняя остальные параметры. Для неизвестного ID показать явное отсутствие, не чужую итерацию.
-- [ ] Повторить focused tests до GREEN; проверить keyboard access и доступное имя кнопки; закоммитить UI iterations.
+- [x] Написать failing UI tests: score=0 отображается как число; pending сохраняет старые 0.8; двойной клик даёт один POST; ошибка POST видна и позволяет retry; незавершённая итерация не запускает review.
+- [x] Запустить `cd ui && npm test -- src/components/IterationJudgePanel.test.tsx src/pages/AuditLogPage.test.tsx` и зафиксировать RED.
+- [x] Реализовать панель на существующих компонентах. Показывать `Queued`, пока нет подтверждения выполнения; disabled workers объяснять через доступные данные конфигурации, не менять их. Активный review предлагает перейти к нему, а не создать новый. Это UI-защита от повторного клика, не глобальная дедупликация CLI-экспериментов.
+- [x] Отображать score/verdict в строках AuditLogPage. Синхронизировать выбранную итерацию с `?iteration=` при клике, внешней навигации и back/forward, сохраняя остальные параметры. Для неизвестного ID показать явное отсутствие, не чужую итерацию.
+- [x] Повторить focused tests до GREEN; проверить keyboard access и доступное имя кнопки; закоммитить UI iterations.
 
 ## Task 3: Target-specific анализ и обратная навигация
 
@@ -61,11 +62,11 @@ Completed in `7332a03` and `81aaf43`; backend-check passed, review clean after t
 
 **Interfaces:** Существующий URL run дополняется `?target=<target_id>`. Page фильтрует analyses по `target_id`, берёт agent/iteration из target, а не из непроверенного return URL. Использует explicit-host API и существующий host-aware построитель ссылок.
 
-- [ ] Добавить failing test с двумя targets: URL выбирает второй, его score и analyses видны, первый не представлен как анализ выбранной итерации; breadcrumbs ведут к её `?iteration=` и к Judge runs того же сервера. Неизвестный target даёт not-found, не fallback.
-- [ ] Запустить `cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx` и убедиться в RED.
-- [ ] Добавить target mode без дублирования всей страницы run. Оставить общий run view доступным. Вывести consensus, счётчик ответов, individual verdict/score, violations с citations и evidence gaps; не смешивать доказательства разных targets.
-- [ ] Привязать ссылки из панели/истории Task 2 к этому target mode; проверить прямое открытие URL и browser back после обновления страницы.
-- [ ] Повторить focused tests до GREEN и закоммитить.
+- [x] Добавить failing test с двумя targets: URL выбирает второй, его score и analyses видны, первый не представлен как анализ выбранной итерации; breadcrumbs ведут к её `?iteration=` и к Judge runs того же сервера. Неизвестный target даёт not-found, не fallback.
+- [x] Запустить `cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx` и убедиться в RED.
+- [x] Добавить target mode без дублирования всей страницы run. Оставить общий run view доступным. Вывести consensus, счётчик ответов, individual verdict/score, violations с citations и evidence gaps; не смешивать доказательства разных targets.
+- [x] Привязать ссылки из панели/истории Task 2 к этому target mode; проверить прямое открытие URL и browser back после обновления страницы.
+- [x] Повторить focused tests до GREEN и закоммитить.
 
 ## Task 4: Production-проверки и handoff
 
@@ -73,8 +74,15 @@ Completed in `7332a03` and `81aaf43`; backend-check passed, review clean after t
 
 **Interfaces:** Сценарий `iteration → review → target analysis → iteration / Judge runs` использует контракты Tasks 1–3 и production Desktop.
 
-- [ ] Добавить сценарий со score=0, pending поверх прошлого результата, завершением review, выбором одного из двух targets и обоими breadcrumbs. Проверить host isolation: запросы и ссылки не уходят на default server.
-- [ ] Запустить production Desktop проверку через Playwright и tauri-driver согласно contributor guide; mock-list alone не доказывает работоспособность POST/dispatch, поэтому проверить их отдельно с изолированным daemon и контролируемым worker.
-- [ ] Обновить product docs, включая честное различие queued/running и ручной режим workers. При затронутом shared Store UI пересобрать committed `internal/storeui/dist` через `make store-ui` в изоляции; desktop build outputs не stage.
-- [ ] На интеграционной границе выполнить `make check`, отдельно собрать production Desktop и запустить затронутые сценарии через Playwright/tauri-driver. `make full-check` не запускать по уточнению пользователя. После сборки проверить обе формы `./bin/tariboy version` и `./bin/tariboy --version`; записать точные результаты выполненных проверок, не заявлять прохождение пропущенного полного набора.
+- [x] Добавить сценарий со score=0, pending поверх прошлого результата, завершением review, выбором одного из двух targets и обоими breadcrumbs. Проверить host isolation: запросы и ссылки не уходят на default server.
+- [x] Запустить production Desktop проверку через Playwright и tauri-driver согласно contributor guide; mock-list alone не доказывает работоспособность POST/dispatch, поэтому проверить их отдельно с изолированным daemon и контролируемым worker.
+- [x] Обновить product docs, включая честное различие queued/running и ручной режим workers. При затронутом shared Store UI пересобрать committed `internal/storeui/dist` через `make store-ui` в изоляции; desktop build outputs не stage.
+- [x] На интеграционной границе выполнить `make check`, отдельно собрать production Desktop и запустить затронутые сценарии через Playwright/tauri-driver. `make full-check` не запускать по уточнению пользователя. После сборки проверить обе формы `./bin/tariboy version` и `./bin/tariboy --version`; записать точные результаты выполненных проверок, не заявлять прохождение пропущенного полного набора.
 - [ ] Выполнить `git diff --check`, просмотреть весь diff, устранить Critical/Important замечания, закоммитить и обновить PR #15. Затем переходить к плану `2026-09-06-judge-image-rubric.md`.
+
+Verification checkpoint: `make check` passed (backend 112 s, frontend 142 s).
+Production Desktop Playwright/tauri-driver: 2/2 passed in 24.0 s on `ce8c74a`,
+including real default-one POST/claim/submit and target-specific immutable evidence.
+Both CLI version forms: `0.48.0`. Final product docs doctor/build passed.
+`full-check` was not run. Controlled stub verdicts establish integration behavior,
+not accuracy or paid-model cost statistics.
