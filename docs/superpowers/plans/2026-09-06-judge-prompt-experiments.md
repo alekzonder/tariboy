@@ -207,3 +207,35 @@ stale-notification Bob and harness-error Jack (three targets, six assignments).
 Worker iterations are `judge-worker-1-20260906144759-1` and
 `judge-worker-2-20260906144759-1`, on H3. The prior H2 run's summary is being
 completed independently on H2 before moving the idle lead to H3.
+
+H3 did not fix the real defect. Terra analysis
+`0edde5a9-3957-4031-a64f-b6ab9821cb8c` again supports substantive Bob's pass
+with only message processing and loop closure and denies independently observed
+test results. Sol found the actual verification again. Do not retain this
+ineffective seven-line addition just because short synthetic cases pass; restore
+the H2 instructions while preserving the candidate and results in Git/history.
+H3 backend checks passed (fmt 5s, vet 3s, tests 76s, skills 11s, smoke 2s), which
+does not validate its semantic accuracy.
+
+Trace-level diagnosis: Terra retrieves prompt, metadata, usage, audit and the
+entire transcript in one shell loop before searching only for message/loop
+keywords. That command produced 316,491 characters. It never queried the
+material check command. EvidenceReader.Search filters the readable projection,
+not base64; query absence is the worker's retrieval choice, not proof that the
+search engine cannot find checks. The skill wrapper exposes no page-size flag
+and the backend defaults to 200 full records. This favors an oversized dump
+whose middle is easy to miss. Output size is observed; its causal contribution
+to the model's selection error remains a hypothesis.
+
+Next hypothesis H4 should change the retrieval procedure, not add another
+generic admonition: obtain a compact chronological locator/action inventory,
+then retrieve producing results for material work separately. Keep full records
+available and citable, do not silently drop evidence or alter the immutable
+bundle. Prefer a concrete existing-tool/jq recipe in the judge image before
+adding backend machinery. Validate on the substantive Bob transcript, not only
+short verdict fixtures.
+
+The prior H2 summary `bb5c3b3b-3214-4f87-8705-5f53c7203bcb` completed. It used
+Sol's observed-check finding but described the reviewers' difference as depth
+and score only; this understates their contradictory verification assessments.
+Summary agreement is not an independent correctness check.
