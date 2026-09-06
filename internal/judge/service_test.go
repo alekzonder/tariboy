@@ -4,17 +4,200 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/groups"
+	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/improvement"
 )
 
 type recordingImprovements struct {
 	request improvement.CreateProposalRequest
+}
+
+func seedJudgeImages(t *testing.T, js *Store, names ...string) (*image.Store, image.Manifest) {
+	t.Helper()
+	images := &image.Store{Dir: t.TempDir()}
+	manifest, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Plugins: []imagefile.V2Plugin{{Name: "llm-as-judge"}}, Prompts: []imagefile.PromptEntry{{Runtime: "identity"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if _, err := js.db.Exec(`UPDATE agents SET image_ref='effective-judge:latest',image_digest=? WHERE name=?`, manifest.Digest, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return images, manifest
+}
+
+func TestImageIdentityFreezesActiveSnapshotForManualAndAgentRuns(t *testing.T) {
+	s, js, _, _ := serviceFixture(t)
+	images, first := seedJudgeImages(t, js, "judge")
+	s.images = images
+	if _, err := js.SaveAutomation(context.Background(), `{"judge":{"lead":"lead","workers":["judge"],"image_ref":"old-label:v1"}}`); err != nil {
+		t.Fatal(err)
+	}
+	// Rebuilding the mutable tag must not mix active digest A with template B.
+	if _, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "messages"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	manual, _, err := s.OperatorReview(context.Background(), []string{"target"}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "context"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.AgentAction(context.Background(), "lead", "lead-it", "run.create", map[string]any{
+		"original_request": "verify", "judge_group": "judges", "summary_agent": "lead",
+		"judge_agents": []string{"judge"}, "selector": Selector{ExplicitIDs: []string{"target"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []JudgeImageIdentity{{Agent: "judge", ImageRef: "effective-judge:latest", ImageDigest: first.Digest, PromptTemplateSHA256: first.PromptTemplateSHA256}}
+	for _, run := range []Run{manual, result["run"].(Run)} {
+		stored, err := js.GetRun(run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(run.JudgeImages, want) || !reflect.DeepEqual(stored.JudgeImages, want) {
+			t.Fatalf("identity run=%+v stored=%+v want=%+v", run.JudgeImages, stored.JudgeImages, want)
+		}
+	}
+}
+
+func TestImageIdentityClaimAndSubmitUseWorkerIteration(t *testing.T) {
+	s, js, run, _ := serviceFixture(t)
+	identity := []JudgeImageIdentity{{Agent: "judge", ImageRef: "judge:v1", ImageDigest: strings.Repeat("a", 64), PromptTemplateSHA256: strings.Repeat("c", 64)}}
+	raw, _ := json.Marshal(identity)
+	if _, err := js.db.Exec(`UPDATE judge_runs SET judge_images_json=? WHERE id=?`, string(raw), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	setIteration := func(ref, digest, hash string) {
+		t.Helper()
+		if _, err := js.db.Exec(`UPDATE iterations SET image_ref=?,image_digest=?,prompt_template_sha256=? WHERE id='judge-it'`, ref, digest, hash); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, mismatch := range []JudgeImageIdentity{
+		{ImageRef: "judge:v1", ImageDigest: strings.Repeat("b", 64), PromptTemplateSHA256: identity[0].PromptTemplateSHA256},
+		{ImageRef: "judge:v2", ImageDigest: identity[0].ImageDigest, PromptTemplateSHA256: identity[0].PromptTemplateSHA256},
+		{ImageRef: "judge:v1", ImageDigest: identity[0].ImageDigest, PromptTemplateSHA256: strings.Repeat("d", 64)},
+	} {
+		setIteration(mismatch.ImageRef, mismatch.ImageDigest, mismatch.PromptTemplateSHA256)
+		if _, err := s.AgentAction(context.Background(), "judge", "judge-it", "work.claim", map[string]any{"run_id": run.ID}); !errors.Is(err, ErrImageMismatch) {
+			t.Fatalf("mismatched claim: %v", err)
+		}
+		inspected, err := s.OperatorInspect(run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(inspected["run"].(Run).LastError, "new run") {
+			t.Fatalf("mismatch is not visible to operator: %+v", inspected["run"])
+		}
+	}
+	setIteration(identity[0].ImageRef, identity[0].ImageDigest, identity[0].PromptTemplateSHA256)
+	claimed, err := s.AgentAction(context.Background(), "judge", "judge-it", "work.claim", map[string]any{"run_id": run.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := claimed["assignment"].(Assignment)
+	setIteration("judge:v1", strings.Repeat("b", 64), identity[0].PromptTemplateSHA256)
+	if _, err := s.AgentAction(context.Background(), "judge", "judge-it", "analysis.submit", map[string]any{"assignment_id": a.ID, "result": validAnalysis()}); !errors.Is(err, ErrImageMismatch) || !strings.Contains(err.Error(), "new run") {
+		t.Fatalf("mismatched submit: %v", err)
+	}
+	setIteration(identity[0].ImageRef, identity[0].ImageDigest, identity[0].PromptTemplateSHA256)
+	// Current agent configuration is not the execution snapshot.
+	if _, err := js.db.Exec(`UPDATE agents SET image_digest=? WHERE name='judge'`, strings.Repeat("b", 64)); err != nil {
+		t.Fatal(err)
+	}
+	result := AnalysisResult{SchemaVersion: 1, Verdict: "uncertain", Score: 0, Confidence: 0, Summary: "No usable evidence", EvidenceGaps: []string{"missing evidence"}}
+	if _, err := s.AgentAction(context.Background(), "judge", "judge-it", "analysis.submit", map[string]any{"assignment_id": a.ID, "result": result}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AgentAction(context.Background(), "lead", "lead-it", "summary.claim", map[string]any{"run_id": run.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AgentAction(context.Background(), "lead", "lead-it", "summary.inputs", map[string]any{"run_id": run.ID}); err != nil {
+		t.Fatalf("mismatch diagnostic blocked valid summary: %v", err)
+	}
+	setIteration("judge:v1", strings.Repeat("b", 64), identity[0].PromptTemplateSHA256)
+	if _, err := s.AgentAction(context.Background(), "judge", "judge-it", "work.claim", map[string]any{"run_id": run.ID}); !errors.Is(err, ErrImageMismatch) {
+		t.Fatalf("late mismatched claim: %v", err)
+	}
+	if _, err := s.AgentAction(context.Background(), "lead", "lead-it", "summary.inputs", map[string]any{"run_id": run.ID}); err != nil {
+		t.Fatalf("late mismatch overwrote summary lease: %v", err)
+	}
+}
+
+func TestImageIdentityMismatchedPoolMemberDoesNotBlockCompatibleWorker(t *testing.T) {
+	s, js, run, _ := serviceFixture(t)
+	identity := []JudgeImageIdentity{
+		{Agent: "judge", ImageRef: "judge:v1", ImageDigest: strings.Repeat("a", 64), PromptTemplateSHA256: strings.Repeat("c", 64)},
+		{Agent: "other", ImageRef: "judge:v2", ImageDigest: strings.Repeat("b", 64), PromptTemplateSHA256: strings.Repeat("d", 64)},
+	}
+	raw, _ := json.Marshal(identity)
+	if _, err := js.db.Exec(`UPDATE judge_runs SET judge_agents_json='["judge","other"]',judge_images_json=? WHERE id=?`, string(raw), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.db.Exec(`UPDATE iterations SET image_ref=?,image_digest=?,prompt_template_sha256=? WHERE id='other-it'`, identity[1].ImageRef, identity[1].ImageDigest, identity[1].PromptTemplateSHA256); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AgentAction(context.Background(), "judge", "judge-it", "work.claim", map[string]any{"run_id": run.ID}); !errors.Is(err, ErrImageMismatch) {
+		t.Fatalf("bad pool member: %v", err)
+	}
+	got, err := s.AgentAction(context.Background(), "other", "other-it", "work.claim", map[string]any{"run_id": run.ID})
+	if err != nil || got["claimed"] != true {
+		t.Fatalf("compatible pool member blocked: %+v %v", got, err)
+	}
+	stored, err := js.GetRun(run.ID)
+	if err != nil || stored.Status != RunRunning || stored.JudgesPerIteration != 1 {
+		t.Fatalf("run stopped or count changed: %+v %v", stored, err)
+	}
+}
+
+func TestImageIdentityConcurrentClaimsPreserveSingleAnalysis(t *testing.T) {
+	s, js, run, _ := serviceFixture(t)
+	identities := []JudgeImageIdentity{{Agent: "judge", ImageRef: "judge:v1", ImageDigest: strings.Repeat("a", 64), PromptTemplateSHA256: strings.Repeat("c", 64)}}
+	identities = append(identities, identities[0])
+	identities[1].Agent = "other"
+	raw, _ := json.Marshal(identities)
+	if _, err := js.db.Exec(`UPDATE judge_runs SET judge_agents_json='["judge","other"]',judge_images_json=? WHERE id=?`, string(raw), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.db.Exec(`UPDATE iterations SET image_ref=?,image_digest=?,prompt_template_sha256=? WHERE id IN ('judge-it','other-it')`, identities[0].ImageRef, identities[0].ImageDigest, identities[0].PromptTemplateSHA256); err != nil {
+		t.Fatal(err)
+	}
+	type claimResult struct {
+		claimed bool
+		err     error
+	}
+	results := make(chan claimResult, 2)
+	for _, name := range []string{"judge", "other"} {
+		go func() {
+			got, err := s.AgentAction(context.Background(), name, name+"-it", "work.claim", map[string]any{"run_id": run.ID})
+			results <- claimResult{claimed: got["claimed"] == true, err: err}
+		}()
+	}
+	claimed := 0
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		if result.claimed {
+			claimed++
+		}
+	}
+	if claimed != 1 {
+		t.Fatalf("single-analysis run issued %d claims", claimed)
+	}
 }
 
 func (r *recordingImprovements) CreateProposal(_ context.Context, request improvement.CreateProposalRequest) (improvement.Proposal, error) {
@@ -241,7 +424,8 @@ func TestOperatorReviewCreatesExplicitRunFromDisabledAutomation(t *testing.T) {
 		t.Fatal(err)
 	}
 	enqueued := ""
-	s := NewService(ServiceConfig{Store: js, Enqueue: func(id string) { enqueued = id }})
+	images, _ := seedJudgeImages(t, js, "worker-1", "worker-2")
+	s := NewService(ServiceConfig{Store: js, Images: images, Enqueue: func(id string) { enqueued = id }})
 
 	run, targets, err := s.OperatorReview(context.Background(), []string{"target-1"}, 2)
 	if err != nil {
@@ -273,7 +457,8 @@ func TestOperatorReviewRejectsInvalidInputWithoutSideEffects(t *testing.T) {
 	if _, err := js.SaveAutomation(context.Background(), config); err != nil {
 		t.Fatal(err)
 	}
-	s := NewService(ServiceConfig{Store: js})
+	images, _ := seedJudgeImages(t, js, "worker-1", "worker-2")
+	s := NewService(ServiceConfig{Store: js, Images: images})
 
 	cases := []struct {
 		name string
@@ -306,5 +491,35 @@ func TestOperatorReviewRejectsInvalidInputWithoutSideEffects(t *testing.T) {
 	var runs int
 	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM judge_runs`).Scan(&runs); err != nil || runs != 0 {
 		t.Fatalf("runs=%d err=%v", runs, err)
+	}
+}
+
+func TestImageIdentityPublicCreateRejectsUnverifiableWorkers(t *testing.T) {
+	s, js, _, _ := serviceFixture(t)
+	config := `{"schema_version":1,"judge":{"lead":"lead","workers":["judge"]}}`
+	if _, err := js.SaveAutomation(context.Background(), config); err != nil {
+		t.Fatal(err)
+	}
+	enqueued := 0
+	s.enqueue = func(string) { enqueued++ }
+	before, err := js.ListRuns(ListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.OperatorReview(context.Background(), []string{"target"}, 1); err == nil {
+		t.Error("manual run accepted unverifiable worker image")
+	}
+	if _, err := s.AgentAction(context.Background(), "lead", "lead-it", "run.create", map[string]any{
+		"original_request": "verify", "judge_group": "judges", "summary_agent": "lead",
+		"judge_agents": []string{"judge"}, "selector": Selector{ExplicitIDs: []string{"target"}},
+	}); err == nil {
+		t.Error("agent run accepted unverifiable worker image")
+	}
+	after, err := js.ListRuns(ListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) || enqueued != 0 {
+		t.Fatalf("unverifiable runs persisted or enqueued: runs %d -> %d, enqueue %d", len(before), len(after), enqueued)
 	}
 }

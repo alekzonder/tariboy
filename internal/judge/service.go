@@ -16,6 +16,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/groups"
+	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/improvement"
 )
 
@@ -25,6 +26,7 @@ type proposalCreator interface {
 
 type ServiceConfig struct {
 	Store        *Store
+	Images       *image.Store
 	Agents       *agent.Store
 	Groups       *groups.Store
 	Bus          *bus.Bus
@@ -36,6 +38,7 @@ type ServiceConfig struct {
 }
 type Service struct {
 	store        *Store
+	images       *image.Store
 	agents       *agent.Store
 	groups       *groups.Store
 	bus          *bus.Bus
@@ -47,7 +50,7 @@ type Service struct {
 }
 
 func NewService(c ServiceConfig) *Service {
-	return &Service{store: c.Store, agents: c.Agents, groups: c.Groups, bus: c.Bus, evidence: c.Evidence, audit: c.Audit, enqueue: c.Enqueue, improvements: c.Improvements, automation: c.Automation}
+	return &Service{store: c.Store, images: c.Images, agents: c.Agents, groups: c.Groups, bus: c.Bus, evidence: c.Evidence, audit: c.Audit, enqueue: c.Enqueue, improvements: c.Improvements, automation: c.Automation}
 }
 
 func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration, action string, body map[string]any) (map[string]any, error) {
@@ -72,7 +75,7 @@ func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration,
 			return nil, err
 		}
 		req := CreateRunRequest{OriginalRequest: str(body, "original_request"), Selector: selector(body["selector"]), JudgeGroup: group, LeadAgent: callerAgent, SummaryAgent: str(body, "summary_agent"), CreatorIteration: callerIteration, JudgeAgents: stringsList(body["judge_agents"]), JudgesPerIteration: num(body, "judges_per_iteration"), MaxAttempts: num(body, "max_attempts")}
-		r, ts, e := s.store.CreateRun(ctx, req)
+		r, ts, e := s.store.createRunWithImages(ctx, req, s.images)
 		if e != nil {
 			return nil, e
 		}
@@ -98,6 +101,9 @@ func (s *Service) AgentAction(ctx context.Context, callerAgent, callerIteration,
 		}
 		if !contains(r.JudgeAgents, callerAgent) {
 			return nil, ErrUnauthorized
+		}
+		if e := s.checkWorkerImage(r, callerAgent, callerIteration); e != nil {
+			return nil, e
 		}
 		a, ok, e := s.store.Claim(ClaimRequest{RunID: r.ID, Agent: callerAgent, Iteration: callerIteration})
 		if e != nil {
@@ -323,12 +329,12 @@ func (s *Service) OperatorReview(ctx context.Context, iterationIDs []string, jud
 	if err != nil {
 		return Run{}, nil, err
 	}
-	run, targets, err := s.store.CreateRun(ctx, CreateRunRequest{
+	run, targets, err := s.store.createRunWithImages(ctx, CreateRunRequest{
 		OriginalRequest: fmt.Sprintf("Manual Judge review.\n\nRubric SHA-256: %s\n\n%s", hash, criteria),
 		Selector:        Selector{ExplicitIDs: iterationIDs}, JudgeGroup: group,
 		LeadAgent: config.Judge.Lead, SummaryAgent: config.Judge.Lead,
 		JudgeAgents: config.Judge.Workers, JudgesPerIteration: judgesPerIteration, MaxAttempts: 1,
-	})
+	}, s.images)
 	if err != nil {
 		return Run{}, nil, err
 	}
@@ -471,7 +477,41 @@ func (s *Service) ownedAssignment(a, i, id string) (Assignment, error) {
 	if x.State != "claimed" || x.JudgeAgent != a || x.JudgeIteration != i || x.LeaseExpiresAt <= s.store.now().UTC().Format(timeFormat) {
 		return Assignment{}, ErrLeaseNotOwned
 	}
+	run, err := s.store.GetRun(x.RunID)
+	if err != nil {
+		return Assignment{}, err
+	}
+	if err := s.checkWorkerImage(run, a, i); err != nil {
+		return Assignment{}, err
+	}
 	return x, nil
+}
+
+func (s *Service) checkWorkerImage(run Run, name, iteration string) error {
+	// Historical runs remain readable/executable without fabricated provenance.
+	if len(run.JudgeImages) == 0 {
+		return nil
+	}
+	actual := JudgeImageIdentity{Agent: name}
+	err := s.store.db.QueryRow(`SELECT image_ref,image_digest,prompt_template_sha256 FROM iterations WHERE id=? AND agent=?`, iteration, name).Scan(&actual.ImageRef, &actual.ImageDigest, &actual.PromptTemplateSHA256)
+	if err != nil {
+		return s.workerImageMismatch(run.ID, name, iteration)
+	}
+	for _, expected := range run.JudgeImages {
+		if expected.Agent == name && expected == actual && actual.ImageRef != "" && actual.ImageDigest != "" && actual.PromptTemplateSHA256 != "" {
+			return nil
+		}
+	}
+	return s.workerImageMismatch(run.ID, name, iteration)
+}
+
+func (s *Service) workerImageMismatch(runID, name, iteration string) error {
+	mismatch := fmt.Errorf("%w: worker %s iteration %s", ErrImageMismatch, name, iteration)
+	// Keep other eligible workers claimable and expose the rejection to operators.
+	if _, err := s.store.db.Exec(`UPDATE judge_runs SET last_error=?,updated_at=? WHERE id=? AND status='running'`, mismatch.Error(), s.store.now().UTC().Format(timeFormat), runID); err != nil {
+		return fmt.Errorf("%w (record diagnostic: %v)", mismatch, err)
+	}
+	return mismatch
 }
 func (s *Service) bundle(t string) (string, error) {
 	var h string

@@ -378,12 +378,12 @@ func Run(ctx context.Context, o Options) error {
 			return err == nil && count > 0
 		},
 	}, time.Now)
-	judgeAutomation.ConfigureExecution(taskService, judgeRunner.Enqueue)
+	judgeAutomation.ConfigureExecution(taskService, judgeRunner.Enqueue, imgStore)
 	judgeRunner.SetFailureCallback(func(ctx context.Context, runID string, err error) {
 		_ = judgeAutomation.Fail(ctx, runID, err)
 	})
 	judgeService := judge.NewService(judge.ServiceConfig{
-		Store: judgeStore, Agents: as, Groups: groups.NewStore(st, time.Now), Bus: channelBus,
+		Store: judgeStore, Images: imgStore, Agents: as, Groups: groups.NewStore(st, time.Now), Bus: channelBus,
 		Evidence: judge.NewEvidenceReader(p.Base), Enqueue: judgeRunner.Enqueue, Improvements: improvementStore, Automation: judgeAutomation,
 		Audit: func(agent, kind, iteration string, data map[string]any) {
 			auditReg.For(agent).Record(kind, "system", iteration, data)

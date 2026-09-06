@@ -143,6 +143,54 @@ func TestMigrationCreatesJudgeTables(t *testing.T) {
 	}
 }
 
+func TestLegacyRunImageIdentityMigrationPreservesHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := basestore.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	js := NewStore(db, nil)
+	seedJudgeAgent(t, db.DB, "lead")
+	seedJudgeAgent(t, db.DB, "judge")
+	seedTarget(t, db.DB, "historical-target", "worker", "done", "2026-07-01T10:00:00Z")
+	run, targets, err := js.CreateRun(context.Background(), request("historical-target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reconstitute the pre-identity schema with actual run/target/subject rows.
+	if _, err := db.DB.Exec(`ALTER TABLE judge_runs DROP COLUMN judge_images_json; DELETE FROM schema_migrations WHERE name='0039_judge_image_identity.sql'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = basestore.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	js = NewStore(db, nil)
+	got, err := js.GetRun(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.JudgeImages) != 0 || got.OriginalRequest != run.OriginalRequest {
+		t.Fatalf("legacy run rewritten: %+v", got)
+	}
+	gotTargets, err := js.ListTargets(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotTargets, targets) {
+		t.Fatalf("legacy targets changed: %+v", gotTargets)
+	}
+	subjects, err := js.ListSubjects(run.ID)
+	if err != nil || len(subjects) != 1 {
+		t.Fatalf("legacy subjects lost: %+v %v", subjects, err)
+	}
+}
+
 func TestCreateRunFreezesOrderedTargets(t *testing.T) {
 	db, js := newJudgeStore(t)
 	seedJudgeAgent(t, db.DB, "lead")

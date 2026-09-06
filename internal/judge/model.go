@@ -17,6 +17,7 @@ var (
 	ErrCapabilityDisabled   = errors.New("judge: llm-as-judge capability is disabled")
 	ErrStaleIteration       = errors.New("judge: caller iteration is not active")
 	ErrInvalidAction        = errors.New("judge: invalid action")
+	ErrImageMismatch        = errors.New("judge: worker image identity mismatch; create a new run after image activation")
 )
 
 type RunStatus string
@@ -48,30 +49,39 @@ type CreateRunRequest struct {
 	Selector                                              Selector
 	JudgeGroup, LeadAgent, SummaryAgent, CreatorIteration string
 	JudgeAgents                                           []string
+	JudgeImages                                           []JudgeImageIdentity
 	JudgesPerIteration, MaxAttempts                       int
 }
 
+type JudgeImageIdentity struct {
+	Agent                string `json:"agent"`
+	ImageRef             string `json:"image_ref"`
+	ImageDigest          string `json:"image_digest"`
+	PromptTemplateSHA256 string `json:"prompt_template_sha256"`
+}
+
 type Run struct {
-	ID                    string    `json:"id"`
-	CreatedAt             string    `json:"created_at"`
-	UpdatedAt             string    `json:"updated_at"`
-	CreatorIteration      string    `json:"creator_iteration"`
-	OriginalRequest       string    `json:"original_request"`
-	Spec                  Selector  `json:"spec"`
-	JudgeGroup            string    `json:"judge_group"`
-	LeadAgent             string    `json:"lead_agent"`
-	SummaryAgent          string    `json:"summary_agent"`
-	JudgeAgents           []string  `json:"judge_agents"`
-	JudgesPerIteration    int       `json:"judges_per_iteration"`
-	MaxAttempts           int       `json:"max_attempts"`
-	Status                RunStatus `json:"status"`
-	TargetsTotal          int       `json:"targets_total"`
-	TargetsReady          int       `json:"targets_ready"`
-	AssignmentsTotal      int       `json:"assignments_total"`
-	AssignmentsCompleted  int       `json:"assignments_completed"`
-	ManifestHash          string    `json:"manifest_hash"`
-	CurrentSummaryVersion int       `json:"current_summary_version"`
-	LastError             string    `json:"last_error"`
+	ID                    string               `json:"id"`
+	CreatedAt             string               `json:"created_at"`
+	UpdatedAt             string               `json:"updated_at"`
+	CreatorIteration      string               `json:"creator_iteration"`
+	OriginalRequest       string               `json:"original_request"`
+	Spec                  Selector             `json:"spec"`
+	JudgeGroup            string               `json:"judge_group"`
+	LeadAgent             string               `json:"lead_agent"`
+	SummaryAgent          string               `json:"summary_agent"`
+	JudgeAgents           []string             `json:"judge_agents"`
+	JudgeImages           []JudgeImageIdentity `json:"judge_images"`
+	JudgesPerIteration    int                  `json:"judges_per_iteration"`
+	MaxAttempts           int                  `json:"max_attempts"`
+	Status                RunStatus            `json:"status"`
+	TargetsTotal          int                  `json:"targets_total"`
+	TargetsReady          int                  `json:"targets_ready"`
+	AssignmentsTotal      int                  `json:"assignments_total"`
+	AssignmentsCompleted  int                  `json:"assignments_completed"`
+	ManifestHash          string               `json:"manifest_hash"`
+	CurrentSummaryVersion int                  `json:"current_summary_version"`
+	LastError             string               `json:"last_error"`
 }
 
 type Target struct {

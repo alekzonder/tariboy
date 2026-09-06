@@ -78,7 +78,28 @@ func ValidatePromptTemplate(template PromptTemplate) error {
 }
 
 func (s *Store) ReadTemplate(ref Ref) (PromptTemplate, error) {
-	body, err := readFileFromTar(s.tarPath(ref), "prompt/template.json")
+	return readTemplate(s.tarPath(ref))
+}
+
+// ReadTemplatePinned reads and validates the template belonging to an exact
+// archive digest. Callers hold WithPublicationGate across capture and persistence.
+func (s *Store) ReadTemplatePinned(ref Ref, digest string) (PromptTemplate, error) {
+	manifest, archivePath, err := s.inspectPinnedArchive(ref, digest)
+	if err != nil {
+		return PromptTemplate{}, err
+	}
+	template, err := readTemplate(archivePath)
+	if err != nil {
+		return PromptTemplate{}, err
+	}
+	if manifest.PromptTemplateSHA256 != template.SHA256 {
+		return PromptTemplate{}, fmt.Errorf("pinned image prompt template digest mismatch")
+	}
+	return template, nil
+}
+
+func readTemplate(archivePath string) (PromptTemplate, error) {
+	body, err := readFileFromTar(archivePath, "prompt/template.json")
 	if err != nil {
 		return PromptTemplate{}, err
 	}
