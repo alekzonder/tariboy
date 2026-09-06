@@ -13,7 +13,10 @@ import (
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
-func taskCommands() []registry.Command {
+// TaskOperatorCommands returns a copy of the native Tasks operator commands.
+// Other CLIs can reuse their canonical HTTP schemas without maintaining a second
+// task command registry.
+func TaskOperatorCommands() []registry.Command {
 	return []registry.Command{
 		taskRoute("tasks.queue.list", "GET", "/api/task-queues", "List task queues",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -291,6 +294,8 @@ func taskCommands() []registry.Command {
 			}),
 	}
 }
+
+func taskCommands() []registry.Command { return TaskOperatorCommands() }
 
 type taskHandler func(context.Context, registry.TaskControl, tasks.Actor, registry.Params) (any, error)
 
