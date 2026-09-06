@@ -42,9 +42,14 @@
 
 ## Task 2: Удаление daemon-owned рубрики
 
-**Files:** Move `store/prompts/judge-rubric.md` to `store/images/llm-as-judge/rubric.md`; modify `store/images/llm-as-judge/Tariboyfile.yaml`, `internal/judge/service.go`, `internal/judge/automation.go`, `internal/judge/image_contract_test.go`; remove `internal/judge/criteria.go` и заменить обязанности `internal/judge/criteria_test.go` контрактным тестом образа.
+**Files:** Move `store/prompts/judge-rubric.md` to `store/images/llm-as-judge/rubric.md`; modify `store/images/llm-as-judge/Tariboyfile.yaml` and only the rubric-ownership sentence in `store/images/llm-as-judge/instructions.md`; modify `internal/judge/service.go`, `internal/judge/automation.go`, their existing criteria assertions in `service_test.go`/`automation_test.go`, and `internal/judge/image_contract_test.go`; remove `internal/judge/criteria.go` и заменить обязанности `internal/judge/criteria_test.go` контрактным тестом образа.
 
 **Interfaces:** Tariboyfile содержит `file: ./rubric.md` в прежней позиции. `OriginalRequest` новых runs содержит только задачу/контекст пользователя, не повторяет image instructions. Protocol/schema/validators остаются Go-owned.
+
+The worker instruction must point to the image rubric and treat returned claim
+criteria as task context; it must no longer expect the semantic rubric from the
+daemon. This ownership clarification does not change the rubric file's bytes or
+its scoring rules.
 
 - [ ] Найти все literal callers `ReviewCriteria` и ссылки на `judge-rubric.md`; проверить manual и scheduled paths, Store assets и тесты. Исторические experiment logs не переписывать.
 - [ ] Добавить failing contract test: built image содержит rubric layer ровно один раз; после изменения только локального rubric файла rebuild меняет image/template digest; создание run не требует bundled semantic prompt.
