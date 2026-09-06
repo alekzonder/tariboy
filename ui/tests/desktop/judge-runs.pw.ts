@@ -46,6 +46,10 @@ test("Judge table shows start time and linked IDs, newest first", async ({ deskt
 
 test("reviews real iterations and keeps navigation on the fixture daemon", async ({ desktop, desktopWorker }) => {
   const agents = ["judge-one", "judge-two"];
+  const cli = join(repositoryRoot, "desktop/src-tauri/resources/bin/linux-x86_64/tariboy");
+  const version = spawnSync(cli, ["version"], { encoding: "utf8" });
+  expect(version.status, version.error?.message ?? version.stderr).toBe(0);
+  const clientVersion = version.stdout.trim();
   agents.forEach(desktopWorker.registerAgentForCleanup);
   await waitForMainWindow(desktop);
 
@@ -128,7 +132,7 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
     const socket = join(desktopWorker.runtimeDir, `${name}.sock`);
     await expect.poll(async () => { try { await access(socket); return true; } catch { return false; } }, { timeout: 30_000 }).toBe(true);
     const judge = join(repositoryRoot, "store/skills/llm-as-judge/scripts/judge.sh");
-    const env = { ...process.env, TARIBOY_TOOLS_SOCKET: socket, TARIBOY_CLIENT_VERSION: "0.48.0" };
+    const env = { ...process.env, TARIBOY_TOOLS_SOCKET: socket, TARIBOY_CLIENT_VERSION: clientVersion };
     const claimed = spawnSync(judge, ["--json", "work", "claim", "--run", run], { env, encoding: "utf8" });
     expect(claimed.status, claimed.error?.message ?? claimed.stderr).toBe(0);
     const assignment = JSON.parse(claimed.stdout).assignment;
@@ -169,6 +173,13 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
   await expect.poll(() => desktop.execute<string>("return document.body.innerText"), { timeout: 30_000 }).toContain("Waiting: Judge worker judge-one has Autopilot disabled.");
   const firstTarget = await worker("judge-one", second.runID, 0, "second run first target");
   const secondTarget = await worker("judge-two", second.runID, 1, "second target only");
+  const targetIterations = await desktop.execute<{ first: string; second: string }>(`
+    const detail = await window.__judgeCall("GET", "/api/judges/${second.runID}");
+    return {
+      first: detail.targets.find(target => target.id === ${JSON.stringify(firstTarget)}).iteration,
+      second: detail.targets.find(target => target.id === ${JSON.stringify(secondTarget)}).iteration,
+    };
+  `);
 
   await desktop.execute(`window.location.hash = "#/servers/local/settings/advanced/judges/${second.runID}?target=${secondTarget}"; return true;`);
   await expect.poll(() => desktop.execute<string>("return document.body.innerText"), { timeout: 30_000 }).toContain("second target only");
@@ -176,6 +187,12 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
   expect(await desktop.execute<string[]>(`return [...document.querySelectorAll('nav[aria-label="Breadcrumb"] a')].map(a => a.textContent);`)).toEqual(["Judge runs", expect.stringContaining("judge-target iteration")]);
   await desktop.elementClick(await desktop.findElement("xpath", "//button[contains(normalize-space(.), '[metadata:metadata]')]"));
   await expect.poll(() => desktop.execute<string>("return document.body.innerText"), { timeout: 30_000 }).toContain("Immutable evidence (untrusted)");
+  const evidenceText = await desktop.execute<string>(`
+    return [...document.querySelectorAll("span")]
+      .find(element => element.textContent.startsWith("Immutable evidence (untrusted):"))?.textContent || "";
+  `);
+  expect(evidenceText).toContain(targetIterations.second);
+  expect(evidenceText).not.toContain(targetIterations.first);
   expect(await desktop.execute<boolean>(`
     const base = window.__judgeBaseURL;
     return window.__judgeRequests.length > 0 && window.__judgeRequests.every(url => url.startsWith(base + "/api/"))
