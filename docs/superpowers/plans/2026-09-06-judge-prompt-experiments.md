@@ -239,3 +239,29 @@ The prior H2 summary `bb5c3b3b-3214-4f87-8705-5f53c7203bcb` completed. It used
 Sol's observed-check finding but described the reviewers' difference as depth
 and score only; this understates their contradictory verification assessments.
 Summary agreement is not an independent correctness check.
+
+H3 short controls finished 42/42 exact verdict matches; all rationales were
+read. This does not rescue the failed real reproduction. Its real run also
+exposed a queue-protocol error: Terra combined submitting assignment 732b58c7
+with claiming the next assignment in one command. The next claim successfully
+leased `3bbd32c5-e2c8-4e83-adcf-4827aa3d2685` for Jack, but the worker ignored
+that ID, submitted the previous ID again (lease ownership error), called claim
+again (claimed false), and ended with a false all-work-submitted statement.
+Five analyses were saved; one assignment remained leased to the terminal
+`judge-worker-2-20260906144759-1` until 15:06:24 UTC.
+
+An operator continuation `judge-worker-2-20260906145538-1` was started after
+confirming the earlier iteration done and worker idle; it cannot take the
+previous iteration's still-active lease. Do not impersonate that lease owner or
+edit live state to conceal the failed experiment. Cancel the rejected H3 run
+through the supported CLI, preserving its evidence and five analyses instead
+of waiting ten minutes to repair a known-failed candidate. H2 is selected as
+the next worker image; running iterations retain their pinned H3 image.
+
+H4's execution recipe must also separate claim from submit: inspect the exact
+claim response and assignment ID before doing work, finish submission before
+claiming again, and never interpret no-new-claim as proof that a previously
+claimed assignment was submitted. This is distinct from the retrieval issue;
+test each procedure independently rather than counting operator recovery as
+judge reliability. Old unrelated runs were not judged, though workers did
+acknowledge stale judge wake messages while closing their controlled iterations.
