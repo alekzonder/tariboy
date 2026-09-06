@@ -30,13 +30,13 @@
 
 ## Task 1: Фиксация и проверка image identity
 
-**Files:** Modify `internal/judge/model.go`, `internal/judge/store.go`, `internal/judge/service.go`, `internal/judge/automation.go`; tests `internal/judge/store_test.go`, `internal/judge/service_test.go`, `internal/judge/automation_test.go`. Use existing migration registration in judge store; не угадывать номер общей migration.
+**Files:** Modify `internal/judge/model.go`, `internal/judge/store.go`, `internal/judge/service.go`, `internal/judge/automation.go`; tests `internal/judge/store_test.go`, `internal/judge/service_test.go`, `internal/judge/automation_test.go`. Extend existing pinned-image/template access in `internal/image/template.go` with focused image tests as needed, and wire its existing image store at `internal/daemon/daemon.go`. Use existing migration registration in judge store; не угадывать номер общей migration.
 
 **Interfaces:** Новый `JudgeImageIdentity` содержит JSON string fields `agent`, `image_ref`, `image_digest`, `prompt_template_sha256`; Run получает `judge_images: JudgeImageIdentity[]`. Сохранить одной JSON-колонкой рядом с конфигурацией run через существующий migration mechanism, без новой relational subsystem. Пустое значение означает legacy, не доказанный образ.
 
 - [ ] Добавить тест: manual и automatic run фиксируют одинаковую identity при одинаковой конфигурации; смена tag после создания не меняет сохранённое значение. Отдельный fixture старой базы читается без identity и без data loss.
 - [ ] Запустить `go test ./internal/judge -run 'ImageIdentity|Legacy' -count=1`; увидеть RED.
-- [ ] Разрешить образ через существующий image store и validated `ReadTemplate(ref)`; фиксировать digest и template hash из одного согласованного snapshot. Не искать layer по имени rubric и не дублировать его текст в базе.
+- [ ] Разрешить образ через существующий image store и validated template, используя pinned archive при несовпадении active digest с текущим tag; фиксировать digest и template hash из одного согласованного snapshot. `ReadTemplate(ref)` сам по себе читает mutable tag и недостаточен для digest A после публикации B. Не искать layer по имени rubric и не дублировать его текст в базе. Общий capture должен охватывать также agent `run.create`, а не оставлять публичный путь без provenance.
 - [ ] В общем пути выдачи/приёма assignment сверить identity фактической worker iteration. Тест: записан digest A, worker использует B → assignment не получает валидный результат; A → нормальное выполнение. Закрыть смену образа между claim и submit повторной проверкой фактической iteration provenance.
 - [ ] Запустить `go test ./internal/judge ./internal/image -count=1`; проверить concurrent claim и legacy compatibility; закоммитить provenance отдельно от переноса текста.
 
