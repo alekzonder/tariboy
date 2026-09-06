@@ -419,4 +419,3 @@
   git add README.md docs cmd internal store Makefile scripts desktop/src-tauri/src
   git commit -m "docs: document tariboy tasks cli"
   ```
-
