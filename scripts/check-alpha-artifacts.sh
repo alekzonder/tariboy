@@ -214,7 +214,7 @@ for platform in darwin-arm64 linux-x86_64; do
   else
     expected_format="ELF 64-bit.*x86-64"
   fi
-  for binary in tariboyd tariboy tariboy-shim tariboy-plugin-telegram; do
+  for binary in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
     path="$APP/Contents/Resources/bin/$platform/$binary"
     [ -x "$path" ] || { echo "FAIL: missing bundled binary: $path" >&2; exit 1; }
     description="$(file "$path")"
@@ -230,6 +230,9 @@ for platform in darwin-arm64 linux-x86_64; do
     [ "$reported" = "$VERSION" ] || {
       echo "FAIL: $path reports $reported, expected $VERSION" >&2; exit 1; }
   done
+  alias_path="$APP/Contents/Resources/bin/$platform/ttasks"
+  [ ! -e "$alias_path" ] && [ ! -L "$alias_path" ] || {
+    echo "FAIL: ttasks must be an installed alias, not a bundled payload" >&2; exit 1; }
   [ "$(tr -d '\r\n' < "$APP/Contents/Resources/bin/$platform/VERSION")" = "$VERSION" ] || {
     echo "FAIL: $platform/VERSION does not equal $VERSION" >&2; exit 1; }
 done

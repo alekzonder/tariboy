@@ -85,14 +85,10 @@ fn install_cli_with_dialog(app: &AppHandle) {
             "Not updated: {}.\n\nRemove the conflicting entry and try again.",
             r.existing
         ),
-        Ok(r) if r.outcome == "already-installed" => format!(
-            "All four managed binaries were already installed from {}.\n\nThe daemon was restarted.",
-            r.target
-        ),
-        Ok(r) => format!(
-            "Updated all four managed binaries.\n\nExample: {} -> {}\n\nThe daemon was restarted. Make sure ~/.local/bin is on your PATH.",
-            r.link, r.target
-        ),
+        Ok(r) if r.outcome == "already-installed" =>
+            "All six managed commands were already installed.\n\nThe daemon was restarted.".to_string(),
+        Ok(_) =>
+            "Updated all six managed commands.\n\nThe daemon was restarted. Make sure ~/.local/bin is on your PATH.".to_string(),
         Err(e) => format!("Install/Update CLI failed: {e}"),
     };
     app.dialog()
