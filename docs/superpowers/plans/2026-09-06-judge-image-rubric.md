@@ -17,6 +17,7 @@
 - Прочитать contributor guide, architecture/index, state-model, iteration-loop, shim и images-and-groups/index; отсутствующий `docs/docs/images.mdx` не заменять выдуманными правилами.
 - Не менять другие images, формат моделей sol/terra и harness Codex. Не включать automation и не перезапускать live daemon.
 - Существующие runs и сохранённые criteria остаются читаемыми. Не приписывать старым данным текущий image digest.
+- По уточнению пользователя `make full-check` не запускать; использовать адресные проверки и отдельный production Desktop-сценарий.
 
 ## Требования
 
@@ -60,5 +61,5 @@
 - [ ] Добавить failing UI test с новым и legacy run: новый показывает сохранённый digest A при текущем B, legacy не показывает B как доказанную provenance.
 - [ ] Запустить `cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx`; увидеть RED, добавить поля в существующий блок деталей, повторить до GREEN.
 - [ ] Выполнить изолированный regression scenario: run A → update tag → A остаётся неизменным, несовпадающий worker блокируется явно → новый run B использует B. Старый завершённый run открывается с прежними evidence/criteria.
-- [ ] Документировать image-owned rubric и mismatch behavior; выполнить `make full-check` с production Playwright и tauri-driver для изменённого UI. Если shared UI затрагивает Store bundle, пересобрать его по AGENTS.md.
+- [ ] Документировать image-owned rubric и mismatch behavior; выполнить `make check` и отдельно production Playwright/tauri-driver сценарий для изменённого UI. `make full-check` не запускать по уточнению пользователя. Если shared UI затрагивает Store bundle, пересобрать его по AGENTS.md.
 - [ ] `git diff --check`, полный review, commit/push в PR #15. Не заявлять улучшение accuracy на основании переноса; новые статистические эксперименты принадлежат следующему процессу. Далее `2026-09-06-judge-image-improvement-skill.md`.

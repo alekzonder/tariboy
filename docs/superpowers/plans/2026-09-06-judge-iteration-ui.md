@@ -17,6 +17,7 @@
 - Прочитать README, contributor guide и документы architecture/index, state-model, iteration-loop, shim, web-ui согласно AGENTS.md перед реализацией.
 - Тесты только с изолированными base/runtime/listener; не перезапускать live daemon, не включать циклы, не применять automation configuration.
 - Не изменять другие agent images. Не добавлять зависимости и отдельный dashboard.
+- По уточнению пользователя `make full-check` не запускать; использовать адресные проверки и отдельный production Desktop-сценарий.
 
 ## Требования
 
@@ -73,5 +74,5 @@
 - [ ] Добавить сценарий со score=0, pending поверх прошлого результата, завершением review, выбором одного из двух targets и обоими breadcrumbs. Проверить host isolation: запросы и ссылки не уходят на default server.
 - [ ] Запустить production Desktop проверку через Playwright и tauri-driver согласно contributor guide; mock-list alone не доказывает работоспособность POST/dispatch, поэтому проверить их отдельно с изолированным daemon и контролируемым worker.
 - [ ] Обновить product docs, включая честное различие queued/running и ручной режим workers. При затронутом shared Store UI пересобрать committed `internal/storeui/dist` через `make store-ui` в изоляции; desktop build outputs не stage.
-- [ ] Запустить `make full-check` один раз на интеграционной границе; проверить обе формы `./bin/tariboy version` и `./bin/tariboy --version`. Не выдавать известный сбой shell E2E за green; записать точный результат.
+- [ ] На интеграционной границе выполнить `make check`, отдельно собрать production Desktop и запустить затронутые сценарии через Playwright/tauri-driver. `make full-check` не запускать по уточнению пользователя. После сборки проверить обе формы `./bin/tariboy version` и `./bin/tariboy --version`; записать точные результаты выполненных проверок, не заявлять прохождение пропущенного полного набора.
 - [ ] Выполнить `git diff --check`, просмотреть весь diff, устранить Critical/Important замечания, закоммитить и обновить PR #15. Затем переходить к плану `2026-09-06-judge-image-rubric.md`.
