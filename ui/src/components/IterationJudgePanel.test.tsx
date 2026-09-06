@@ -51,7 +51,7 @@ function renderRemotePanel() {
   );
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
 
 beforeEach(() => {
   vi.mocked(targetFor).mockImplementation((hostId) => hostId ? { id: hostId, label: hostId, baseURL: "", token: "" } : null);
@@ -134,6 +134,44 @@ describe("IterationJudgePanel", () => {
     expect(await screen.findByText("Queued — waiting for the review target to be confirmed.")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry Judge review" })).not.toBeInTheDocument();
+  });
+
+  it("clears accepted queued state when a later poll finds that run terminal", async () => {
+    const terminalReview = { ...completed, run_id: "accepted", state: "terminal", score: null, verdict: "", completed: 0, failed: 1, pending: 0 };
+    vi.mocked(getIterationJudgeReviewsOn)
+      .mockResolvedValueOnce({ reviews: [] })
+      .mockResolvedValueOnce({ reviews: [] })
+      .mockResolvedValue({ reviews: [terminalReview] });
+    vi.mocked(reviewIterationOn).mockResolvedValue({ id: "accepted", status: "running", targets: 1 });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Run Judge review" }));
+    expect(await screen.findByText("Queued — waiting for the review target to be confirmed.")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Run Judge review" }, { timeout: 4000 })).toBeInTheDocument();
+  });
+
+  it("recovers accepted queued state after the immediate history read fails", async () => {
+    const terminalReview = { ...completed, run_id: "accepted", state: "terminal", score: null, verdict: "", completed: 0, failed: 1, pending: 0 };
+    vi.mocked(getIterationJudgeReviewsOn)
+      .mockResolvedValueOnce({ reviews: [] })
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ reviews: [terminalReview] });
+    vi.mocked(reviewIterationOn).mockResolvedValue({ id: "accepted", status: "running", targets: 1 });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Run Judge review" }));
+    expect(await screen.findByText("Queued — waiting for the review target to be confirmed.")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Run Judge review" }, { timeout: 4000 })).toBeInTheDocument();
+  });
+
+  it("ignores an older same-iteration poll that resolves after a newer poll", async () => {
+    let resolveOld!: (value: { reviews: (typeof completed)[] }) => void;
+    vi.mocked(getIterationJudgeReviewsOn)
+      .mockReturnValueOnce(new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValue({ reviews: [completed] });
+    renderPanel();
+    expect(await screen.findByRole("link", { name: /pass · 0.8/ }, { timeout: 4000 })).toBeInTheDocument();
+    resolveOld({ reviews: [] });
+    await Promise.resolve();
+    expect(screen.getByRole("link", { name: /pass · 0.8/ })).toBeInTheDocument();
   });
 
   it("drops stale active history when a refresh reports the review terminal", async () => {

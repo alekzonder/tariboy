@@ -24,32 +24,55 @@ export function IterationJudgePanel({ agentName, iterationId, terminal, judge }:
   const descriptor = targetFor(hostId);
   const requestKey = `${hostId}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${agentName}\0${iterationId}`;
   const [reviewState, setReviewState] = useState<{ key: string; reviews: IterationJudgeReview[]; loaded: boolean }>({ key: requestKey, reviews: [], loaded: false });
-  const [queuedState, setQueuedState] = useState<{ key: string; value: boolean }>({ key: requestKey, value: false });
+  const [acceptedState, setAcceptedState] = useState<{ key: string; runId: string }>({ key: requestKey, runId: "" });
   const [errorState, setErrorState] = useState<{ key: string; value: string }>({ key: requestKey, value: "" });
   const [postingKey, setPostingKey] = useState("");
   const [workerReason, setWorkerReason] = useState<{ key: string; value: string }>({ key: requestKey, value: "" });
   const posting = useRef("");
+  const accepted = useRef({ key: requestKey, runId: "" });
+  const historyGeneration = useRef(0);
   const currentKey = useRef(requestKey);
   const reviews = reviewState.key === requestKey ? reviewState.reviews : [];
   const historyLoaded = reviewState.key === requestKey && reviewState.loaded;
-  const queued = queuedState.key === requestKey && queuedState.value;
+  const queued = acceptedState.key === requestKey && acceptedState.runId !== "";
   const error = errorState.key === requestKey ? errorState.value : "";
   const isPosting = postingKey === requestKey;
 
   const load = async (key = requestKey) => {
+    const generation = ++historyGeneration.current;
     const requestTarget = targetFor(hostId);
     const result = await getIterationJudgeReviewsOn(requestTarget, agentName, iterationId);
-    if (currentKey.current === key) setReviewState({ key, reviews: result.reviews ?? [], loaded: true });
-    return result.reviews ?? [];
+    const reviews = result.reviews ?? [];
+    if (currentKey.current === key && historyGeneration.current === generation) {
+      setReviewState({ key, reviews, loaded: true });
+      const pending = accepted.current;
+      if (pending.key === key && pending.runId && reviews.some((review) => review.run_id === pending.runId)) {
+        accepted.current = { key, runId: "" };
+        setAcceptedState({ key, runId: "" });
+      }
+    }
+    return reviews;
   };
 
   useEffect(() => {
     let current = true;
     currentKey.current = requestKey;
     const requestTarget = targetFor(hostId);
-    const refresh = () => void getIterationJudgeReviewsOn(requestTarget, agentName, iterationId)
-      .then((result) => { if (current) setReviewState({ key: requestKey, reviews: result.reviews ?? [], loaded: true }); })
+    const refresh = () => {
+      const generation = ++historyGeneration.current;
+      void getIterationJudgeReviewsOn(requestTarget, agentName, iterationId)
+      .then((result) => {
+        if (!current || historyGeneration.current !== generation) return;
+        const reviews = result.reviews ?? [];
+        setReviewState({ key: requestKey, reviews, loaded: true });
+        const pending = accepted.current;
+        if (pending.key === requestKey && pending.runId && reviews.some((review) => review.run_id === pending.runId)) {
+          accepted.current = { key: requestKey, runId: "" };
+          setAcceptedState({ key: requestKey, runId: "" });
+        }
+      })
       .catch(() => { /* list projection remains usable */ });
+    };
     refresh();
     const timer = window.setInterval(refresh, 1500);
     return () => { current = false; window.clearInterval(timer); };
@@ -72,10 +95,10 @@ export function IterationJudgePanel({ agentName, iterationId, terminal, judge }:
       if (currentKey.current === key) setPostingKey("");
     }
     if (currentKey.current !== key) return;
-    setQueuedState({ key, value: true });
+    accepted.current = { key, runId: started.id };
+    setAcceptedState({ key, runId: started.id });
     try {
-      const next = await load(key);
-      if (currentKey.current === key && next.some((review) => review.run_id === started.id)) setQueuedState({ key, value: false });
+      await load(key);
     } catch { /* accepted POST remains queued; periodic history refresh will reconcile it */ }
   };
 
