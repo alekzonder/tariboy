@@ -308,9 +308,9 @@ func (s *Store) ListIterationJudgeReviews(iterationIDs []string) (map[string][]I
 	if len(iterationIDs) == 0 {
 		return out, nil
 	}
-	args := make([]any, len(iterationIDs))
-	for i, id := range iterationIDs {
-		args[i] = id
+	ids, err := json.Marshal(iterationIDs)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := s.db.Query(`SELECT t.target_iteration,r.id,t.id,r.created_at,t.target_state,t.consensus_verdict,t.consensus_score,r.judges_per_iteration,
 		SUM(CASE WHEN a.state='completed' AND a.analysis_id<>'' AND x.id IS NOT NULL THEN 1 ELSE 0 END),
@@ -319,9 +319,9 @@ func (s *Store) ListIterationJudgeReviews(iterationIDs []string) (map[string][]I
 		FROM judge_targets t JOIN judge_runs r ON r.id=t.run_id
 		LEFT JOIN judge_assignments a ON a.target_id=t.id
 		LEFT JOIN judge_analyses x ON x.id=a.analysis_id AND x.assignment_id=a.id
-		WHERE t.target_iteration IN (`+placeholders(len(iterationIDs))+`)
+		WHERE t.target_iteration IN (SELECT value FROM json_each(?))
 		GROUP BY t.id
-		ORDER BY r.created_at DESC,r.id DESC`, args...)
+		ORDER BY r.created_at DESC,r.id DESC`, string(ids))
 	if err != nil {
 		return nil, err
 	}
