@@ -298,8 +298,12 @@ func TestSnapshotUsageAndEmptyEvidenceCompleteness(t *testing.T) {
 		t.Fatalf("usage=%+v, want %+v", bundle.Usage, want)
 	}
 	wantStatus := map[string]string{"prompt": "missing", "audit": "empty", "transcript": "empty", "task": "present", "image": "missing"}
+	if len(bundle.Completeness) != len(wantStatus) {
+		t.Fatalf("completeness=%+v, want exactly %+v", bundle.Completeness, wantStatus)
+	}
 	for _, status := range bundle.Completeness {
-		if wantStatus[status.Artifact] != status.Status {
+		want, ok := wantStatus[status.Artifact]
+		if !ok || want != status.Status {
 			t.Fatalf("completeness=%+v", bundle.Completeness)
 		}
 		item, err := reader.Get(targets[0].BundleHash, EvidenceLocator{Artifact: "completeness", Locator: status.Artifact})
@@ -309,6 +313,10 @@ func TestSnapshotUsageAndEmptyEvidenceCompleteness(t *testing.T) {
 		if item["value"].(ArtifactStatus) != status {
 			t.Fatalf("completeness item=%+v, want %+v", item, status)
 		}
+		delete(wantStatus, status.Artifact)
+	}
+	if len(wantStatus) != 0 {
+		t.Fatalf("missing completeness statuses: %+v", wantStatus)
 	}
 	page, err := reader.Search(targets[0].BundleHash, EvidenceQuery{Artifacts: []string{"completeness"}})
 	if err != nil || len(page.Results) != len(bundle.Completeness) {
