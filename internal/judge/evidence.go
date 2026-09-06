@@ -226,8 +226,13 @@ func readableTranscript(raw []map[string]any) []map[string]any {
 		if !call.InstructionsChanged {
 			call.Instructions = ""
 		}
-		encoded, _ := json.Marshal(call)
-		_ = json.Unmarshal(encoded, &out[i])
+		encoded, err := json.Marshal(call)
+		if err == nil {
+			err = json.Unmarshal(encoded, &out[i])
+		}
+		if err != nil {
+			out[i] = map[string]any{"seq": call.Seq, "provider": call.Provider, "model": call.Model, "parse_error": "transcript projection error"}
+		}
 		out[i]["request_id"] = fmt.Sprint(raw[i]["request_id"])
 		if invalid[i] {
 			out[i]["parse_error"] = "transcript envelope: invalid"

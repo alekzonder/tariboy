@@ -396,6 +396,29 @@ func TestEvidenceReaderHidesRepeatedInstructionsWithoutChangingTranscriptLocator
 	if err != nil || second["value"].(map[string]any)["instructions"] != "" {
 		t.Fatalf("second call = %+v, err = %v", second, err)
 	}
+	page, err = NewEvidenceReader(base).Search(hash, EvidenceQuery{Artifacts: []string{"transcript"}, Query: "verify"})
+	if err != nil || len(page.Results) != 1 || page.Results[0]["locator"] != "req-second" {
+		t.Fatalf("rewritten request search = %+v, err = %v", page, err)
+	}
+}
+
+func TestEvidenceReaderProjectionErrorRemainsCitable(t *testing.T) {
+	base := t.TempDir()
+	entry := aiproxy.TranscriptEntry{
+		Meta:     aiproxy.AIRequest{ID: "req-truncated", Provider: "openai"},
+		Request:  []byte(`{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"call-1","function":{"name":"broken","arguments":"{"}}]}]}`),
+		Response: []byte(`{"choices":[{"message":{"content":"ok"}}]}`),
+	}
+	hash := putBundle(t, base, EvidenceBundle{SchemaVersion: 1, Transcript: []map[string]any{transcriptMap(t, entry)}})
+	reader := NewEvidenceReader(base)
+	page, err := reader.Search(hash, EvidenceQuery{Artifacts: []string{"transcript"}, Query: "projection error"})
+	if err != nil || len(page.Results) != 1 || page.Results[0]["locator"] != "req-truncated" {
+		t.Fatalf("projection gap search = %+v, err = %v", page, err)
+	}
+	got, err := reader.Get(hash, EvidenceLocator{Artifact: "transcript", Locator: "req-truncated"})
+	if err != nil || got["locator"] != "req-truncated" {
+		t.Fatalf("projection gap get = %+v, err = %v", got, err)
+	}
 }
 
 func TestEvidenceReaderLegacyAndMalformedTranscriptRemainVisible(t *testing.T) {

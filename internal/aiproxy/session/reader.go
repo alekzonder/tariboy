@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
@@ -68,7 +69,7 @@ func scanEntries(r io.Reader) ([]aiproxy.TranscriptEntry, error) {
 func Build(entries []aiproxy.TranscriptEntry) SessionTimeline {
 	tl := SessionTimeline{Calls: []Call{}}
 	prevInstr := ""
-	prevMsgCount := 0
+	var prevMsgs []Message
 	for i, e := range entries {
 		call := Call{
 			Seq: i, Ts: e.Meta.TS, Provider: e.Meta.Provider, Model: e.Meta.Model,
@@ -84,10 +85,10 @@ func Build(entries []aiproxy.TranscriptEntry) SessionTimeline {
 		}
 		call.Instructions = instr
 		call.InstructionsChanged = i == 0 || instr != prevInstr
-		if len(msgs) >= prevMsgCount {
-			call.Delta = msgs[prevMsgCount:]
+		if len(msgs) >= len(prevMsgs) && reflect.DeepEqual(msgs[:len(prevMsgs)], prevMsgs) {
+			call.Delta = msgs[len(prevMsgs):]
 		} else {
-			call.Delta = msgs // history shrank (unexpected) — show all
+			call.Delta = msgs // history changed or shrank — show all
 		}
 		call.Response = resp
 		call.Truncated = truncated
@@ -103,7 +104,7 @@ func Build(entries []aiproxy.TranscriptEntry) SessionTimeline {
 			}
 		}
 		prevInstr = instr
-		prevMsgCount = len(msgs)
+		prevMsgs = msgs
 		tl.Calls = append(tl.Calls, call)
 	}
 	return tl
