@@ -37,6 +37,9 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 		fmt.Fprintln(stdout, version.Version)
 		return 0
 	}
+	if len(args) == 1 && args[0] == "--help-json" {
+		return runHelpJSON(ctx, stdout, stderr)
+	}
 	if len(args) == 0 || (len(args) == 1 && (args[0] == "--help" || args[0] == "-h")) {
 		fmt.Fprintln(stdout, "usage: tariboy-tasks <mine|ready|show|create|update|assign|comment|ask|move|block|relate|done|work|artifacts|questions|answer|observe> ... [--json]")
 		return 0
