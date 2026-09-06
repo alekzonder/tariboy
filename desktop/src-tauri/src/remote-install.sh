@@ -35,25 +35,30 @@ suffix=${staging#.stage-}
 switched=
 release_created=false
 committed=false
-binaries="tariboyd tariboy tariboy-shim tariboy-plugin-telegram"
+sources="tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram"
+managed_links="tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram"
 binary_source=$stage
 test "$mode" != activate || binary_source=$release
-test ! -f "$binary_source/tariboy-store" || binaries="$binaries tariboy-store"
+if test -f "$binary_source/tariboy-store"; then
+  sources="$sources tariboy-store"
+  managed_links="$managed_links tariboy-store:tariboy-store"
+fi
 
 if test "$mode" != activate; then
   test -d "$stage"
   test "$(cat "$stage/VERSION")" = "$version"
   (cd "$stage" && sha256sum -c SHA256SUMS >&2)
 
-  for name in $binaries; do
-    test -f "$stage/$name"
-    chmod 0755 "$stage/$name"
+  for source in $sources; do
+    test -f "$stage/$source"
+    chmod 0755 "$stage/$source"
   done
 fi
 
 rollback() {
   if test "$committed" != true; then
-    for name in $binaries; do
+    for entry in $managed_links; do
+      name=${entry%%:*}
       target=$bindir/$name
       backup=$bindir/.$name.old-$suffix
       case " $switched " in
@@ -67,7 +72,8 @@ rollback() {
       rm -rf "$release"
     fi
   fi
-  for name in $binaries; do
+  for entry in $managed_links; do
+    name=${entry%%:*}
     rm -f "$bindir/.$name.new-$suffix"
     rm -f "$bindir/.$name.old-$suffix"
   done
@@ -87,6 +93,45 @@ flock -w 60 9 || {
 
 mkdir -p "$bindir"
 umask 022
+previous=
+legacy_tools=$bindir/tariboy-tools
+remove_legacy_tools=false
+if test -L "$legacy_tools"; then
+  legacy_target=$(readlink "$legacy_tools")
+  legacy_version=$(basename "$(dirname "$legacy_target")")
+  case "$legacy_version" in
+    ""|*[!A-Za-z0-9._-]*|.*|*/*) ;;
+    *) test "$legacy_target" != "$root/$legacy_version/tariboy-tools" || remove_legacy_tools=true ;;
+  esac
+fi
+for entry in $managed_links; do
+  name=${entry%%:*}
+  source=${entry#*:}
+  target=$bindir/$name
+  if test -e "$target" && ! test -L "$target"; then
+    echo "refusing to replace non-symlink $target" >&2
+    exit 1
+  fi
+  if test -L "$target"; then
+    old_target=$(readlink "$target")
+    old_version=$(basename "$(dirname "$old_target")")
+    case "$old_version" in
+      ""|*[!A-Za-z0-9._-]*|.*|*/*) echo "invalid current release link" >&2; exit 1 ;;
+    esac
+    expected_target=$root/$old_version/$source
+    if test "$old_target" != "$expected_target"; then
+      echo "refusing to replace foreign symlink $target -> $old_target" >&2
+      exit 1
+    fi
+    if test -z "$previous"; then
+      previous=$old_version
+    elif test "$previous" != "$old_version"; then
+      echo "current tariboy links are inconsistent" >&2
+      exit 1
+    fi
+  fi
+done
+
 if test "$mode" = activate; then
   test -d "$release"
   test "$(cat "$release/VERSION")" = "$version"
@@ -101,43 +146,6 @@ else
   release_created=true
 fi
 
-previous=
-legacy_tools=$bindir/tariboy-tools
-remove_legacy_tools=false
-if test -L "$legacy_tools"; then
-  legacy_target=$(readlink "$legacy_tools")
-  legacy_version=$(basename "$(dirname "$legacy_target")")
-  case "$legacy_version" in
-    ""|*[!A-Za-z0-9._-]*|.*|*/*) ;;
-    *) test "$legacy_target" != "$root/$legacy_version/tariboy-tools" || remove_legacy_tools=true ;;
-  esac
-fi
-for name in $binaries; do
-  target=$bindir/$name
-  if test -e "$target" && ! test -L "$target"; then
-    echo "refusing to replace non-symlink $target" >&2
-    exit 1
-  fi
-  if test -L "$target"; then
-    old_target=$(readlink "$target")
-    old_version=$(basename "$(dirname "$old_target")")
-    case "$old_version" in
-      ""|*[!A-Za-z0-9._-]*|.*|*/*) echo "invalid current release link" >&2; exit 1 ;;
-    esac
-    expected_target=$root/$old_version/$name
-    if test "$old_target" != "$expected_target"; then
-      echo "refusing to replace foreign symlink $target -> $old_target" >&2
-      exit 1
-    fi
-    if test -z "$previous"; then
-      previous=$old_version
-    elif test "$previous" != "$old_version"; then
-      echo "current tariboy links are inconsistent" >&2
-      exit 1
-    fi
-  fi
-done
-
 if test "$mode" = stage; then
   committed=true
   rollback
@@ -151,10 +159,13 @@ if test "$mode" = activate && test "$previous" != "$expected_previous"; then
   exit 76
 fi
 
-for name in $binaries; do
-  ln -s "$release/$name" "$bindir/.$name.new-$suffix"
+for entry in $managed_links; do
+  name=${entry%%:*}
+  source=${entry#*:}
+  ln -s "$release/$source" "$bindir/.$name.new-$suffix"
 done
-for name in $binaries; do
+for entry in $managed_links; do
+  name=${entry%%:*}
   target=$bindir/$name
   backup=$bindir/.$name.old-$suffix
   if test -L "$target"; then
@@ -165,7 +176,8 @@ for name in $binaries; do
 done
 committed=true
 test "$remove_legacy_tools" != true || rm -f "$legacy_tools"
-for name in $binaries; do
+for entry in $managed_links; do
+  name=${entry%%:*}
   rm -f "$bindir/.$name.old-$suffix" || true
 done
 rollback

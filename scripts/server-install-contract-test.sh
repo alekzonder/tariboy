@@ -25,21 +25,100 @@ chmod 0755 "$output"
 SH
 chmod 0755 "$tools/go"
 
-binaries="tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram"
-for name in $binaries; do
-  printf 'old\n' >"$home/.local/lib/tariboy/old/$name"
-  ln -s "$home/.local/lib/tariboy/old/$name" "$home/.local/bin/$name"
-done
+cat >"$tools/mv" <<'SH'
+#!/bin/sh
+if test "${TARIBOY_TEST_FAIL_MV_TO-}" = "${2-}"; then exit 1; fi
+exec /bin/mv "$@"
+SH
+chmod 0755 "$tools/mv"
 
-HOME="$home" PATH="$tools:$PATH" make --no-print-directory -C "$ROOT" \
-  GO="$tools/go" BINDIR="$tmp/build" server-install
+binaries=(tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram tariboy-tasks)
+links=(
+  tariboyd:tariboyd
+  tariboy:tariboy
+  tariboy-tasks:tariboy-tasks
+  ttasks:tariboy-tasks
+  tariboy-shim:tariboy-shim
+  tariboy-plugin-telegram:tariboy-plugin-telegram
+  tariboy-store:tariboy-store
+)
+
+seed_old() {
+  rm -rf -- "$home/.local"
+  mkdir -p "$home/.local/lib/tariboy/old" "$home/.local/bin"
+  for name in "${binaries[@]}"; do
+    printf 'old\n' >"$home/.local/lib/tariboy/old/$name"
+  done
+  for pair in "${links[@]}"; do
+    name=${pair%%:*}
+    source=${pair#*:}
+    ln -s "$home/.local/lib/tariboy/old/$source" "$home/.local/bin/$name"
+  done
+}
+
+install_server() {
+  HOME="$home" PATH="$tools:$PATH" make --no-print-directory -C "$ROOT" \
+    GO="$tools/go" BINDIR="$tmp/build" server-install
+}
+
+assert_old_links() {
+  for pair in "${links[@]}"; do
+    name=${pair%%:*}
+    source=${pair#*:}
+    test "$(readlink "$home/.local/bin/$name")" = "$home/.local/lib/tariboy/old/$source"
+  done
+}
+
+assert_old_links_except_ttasks() {
+  for pair in "${links[@]}"; do
+    name=${pair%%:*}
+    source=${pair#*:}
+    test "$name" = ttasks || test "$(readlink "$home/.local/bin/$name")" = "$home/.local/lib/tariboy/old/$source"
+  done
+}
 
 version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' "$ROOT/internal/version/version.go")
-for name in $binaries; do
-  expected="$home/.local/lib/tariboy/$version/$name"
+
+seed_old
+install_server
+
+for pair in "${links[@]}"; do
+  name=${pair%%:*}
+  source=${pair#*:}
+  expected="$home/.local/lib/tariboy/$version/$source"
   test "$(readlink "$home/.local/bin/$name")" = "$expected"
   test "$("$home/.local/bin/$name" --version)" = "$version"
 done
 test "$(cat "$home/.local/lib/tariboy/old/tariboy")" = old
+test -f "$home/.local/lib/tariboy/$version/tariboy-tasks"
+test ! -e "$home/.local/lib/tariboy/$version/ttasks"
+
+seed_old
+rm "$home/.local/bin/ttasks"
+printf 'foreign\n' >"$home/.local/bin/ttasks"
+if install_server; then
+  echo "foreign ttasks regular file was accepted" >&2
+  exit 1
+fi
+assert_old_links_except_ttasks
+test "$(cat "$home/.local/bin/ttasks")" = foreign
+
+seed_old
+rm "$home/.local/bin/ttasks"
+printf 'foreign\n' >"$home/.local/lib/tariboy/old/ttasks"
+ln -s "$home/.local/lib/tariboy/old/ttasks" "$home/.local/bin/ttasks"
+if install_server; then
+  echo "foreign ttasks symlink was accepted" >&2
+  exit 1
+fi
+assert_old_links_except_ttasks
+test "$(readlink "$home/.local/bin/ttasks")" = "$home/.local/lib/tariboy/old/ttasks"
+
+seed_old
+if TARIBOY_TEST_FAIL_MV_TO="$home/.local/bin/ttasks" install_server; then
+  echo "forced ttasks switch failure was accepted" >&2
+  exit 1
+fi
+assert_old_links
 
 echo "server install contract passed"
