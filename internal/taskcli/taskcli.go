@@ -4,6 +4,7 @@ package taskcli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -43,6 +44,9 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 	parsed, err := parse(args)
 	if err != nil {
 		if isOperatorCommand(args) && strings.TrimSpace(getenv("TARIBOY_TOOLS_SOCKET")) == "" {
+			if jsonOut {
+				args = append(args, "--json")
+			}
 			return runOperatorCommand(ctx, args, getenv, stdout, stderr)
 		}
 		fmt.Fprintln(stderr, err)
@@ -62,6 +66,11 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 func runAgent(parsed request, caller Caller, jsonOut bool, stdout, stderr io.Writer) int {
 	raw, err := caller.Call("POST", "/tools/tasks/"+parsed.action, parsed.payload)
 	if err != nil {
+		var apiErr *client.APIError
+		if errors.As(err, &apiErr) {
+			fmt.Fprintf(stderr, "error (%s): %s\n", apiErr.Code, apiErr.Msg)
+			return 1
+		}
 		fmt.Fprintln(stderr, "tools: agent socket is not reachable")
 		return 2
 	}

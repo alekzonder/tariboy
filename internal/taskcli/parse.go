@@ -16,6 +16,7 @@ type usageError struct{ message string }
 func (e usageError) Error() string { return e.message }
 
 var commonWork = map[string]bool{"task-revision": true, "assignment-revision": true, "idempotency-key": true}
+var boolFlags = map[string]bool{"claim": true, "to-root": true, "complete-anyway": true}
 
 func parse(argv []string) (request, error) {
 	if len(argv) == 0 {
@@ -170,7 +171,7 @@ func parse(argv []string) (request, error) {
 		for _, name := range []string{"queue", "limit", "idempotency-key"} {
 			copyFlag(name, false)
 		}
-		if _, ok := flags["claim"]; ok {
+		if flags["claim"] == "true" {
 			p["claim"] = true
 		}
 	case "show":
@@ -221,6 +222,9 @@ func parse(argv []string) (request, error) {
 			return request{}, e
 		}
 		body := strings.TrimSpace(flags["body"])
+		if _, set := flags["body"]; set && len(pos) > 1 {
+			return request{}, usageError{fmt.Sprintf("tasks comment: unexpected argument: %s", pos[1])}
+		}
 		if body == "" {
 			body = strings.TrimSpace(strings.Join(pos[1:], " "))
 		}
@@ -290,7 +294,7 @@ func parse(argv []string) (request, error) {
 			p["before_key"] = v
 		}
 		copyFlag("revision", false)
-		if _, root := flags["to-root"]; root {
+		if flags["to-root"] == "true" {
 			if _, parent := p["parent_key"]; parent {
 				return request{}, usageError{"tasks move: --to-root cannot be combined with --parent or --before"}
 			}
@@ -336,7 +340,7 @@ func parse(argv []string) (request, error) {
 		}
 		p["key"] = v
 		copyFlag("revision", false)
-		if _, ok := flags["complete-anyway"]; ok {
+		if flags["complete-anyway"] == "true" {
 			p["complete_anyway"] = true
 		}
 	}
@@ -378,11 +382,17 @@ func parseFlags(args []string, allowed map[string]bool) (map[string]string, []st
 			return nil, nil, usageError{fmt.Sprintf("unknown flag --%s", name)}
 		}
 		if !has {
-			value = "true"
-			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+			if boolFlags[name] {
+				value = "true"
+			} else {
+				if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+					return nil, nil, usageError{fmt.Sprintf("flag --%s needs a value", name)}
+				}
 				i++
 				value = args[i]
 			}
+		} else if boolFlags[name] && value != "true" && value != "false" {
+			return nil, nil, usageError{fmt.Sprintf("flag --%s must be true or false", name)}
 		}
 		flags[name] = value
 	}

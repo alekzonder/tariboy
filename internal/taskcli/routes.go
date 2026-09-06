@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/cli"
@@ -26,21 +27,11 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 	case "mine":
 		method, route = "GET", "/api/tasks"
 	case "ready":
-		method, route = "GET", "/api/tasks"
-		body["ready"] = "true"
 		if claim, _ := body["claim"].(bool); claim {
-			delete(body, "claim")
-			raw, err := caller.Call(method, route, query(body))
-			if err != nil {
-				return operatorError(err, stderr)
-			}
-			key, revision, err := firstTask(raw)
-			if err != nil {
-				fmt.Fprintln(stderr, err)
-				return 1
-			}
-			method, route, body = "POST", "/api/tasks/"+key+"/claim", map[string]any{"revision": revision}
+			fmt.Fprintln(stderr, "tasks ready --claim requires agent mode")
+			return 2
 		}
+		return runReady(parsed, caller, jsonOut, stdout, stderr)
 	case "show":
 		method, route, body = "GET", "/api/tasks/"+key, nil
 	case "create":
@@ -60,7 +51,11 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 		delete(body, "key")
 	case "ask":
 		method, route = "POST", "/api/tasks/"+key+"/comments"
-		body = map[string]any{"body": "@" + fmt.Sprint(body["principal"]) + " " + fmt.Sprint(body["body"]), "idempotency_key": body["idempotency_key"]}
+		principal := strings.TrimSpace(fmt.Sprint(body["principal"]))
+		if !strings.Contains(principal, ":") {
+			principal = "agent:" + principal
+		}
+		body = map[string]any{"body": "@" + principal + " " + fmt.Sprint(body["body"]), "idempotency_key": body["idempotency_key"]}
 	case "move":
 		if _, ok := body["revision"]; !ok {
 			revision, code := revisionFor(caller, key, stderr)
@@ -71,7 +66,20 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 		}
 		method, route = "POST", "/api/tasks/"+key+"/move"
 		delete(body, "key")
-	case "block", "relate":
+	case "block":
+		blocker, _ := body["blocker_key"].(string)
+		if _, ok := body["revision"]; !ok {
+			revision, code := revisionFor(caller, blocker, stderr)
+			if code != 0 {
+				return code
+			}
+			body["revision"] = revision
+		}
+		method, route = "POST", "/api/tasks/"+blocker+"/relations"
+		body["target_key"], body["type"] = key, "blocks"
+		delete(body, "key")
+		delete(body, "blocker_key")
+	case "relate":
 		if _, ok := body["revision"]; !ok {
 			revision, code := revisionFor(caller, key, stderr)
 			if code != 0 {
@@ -79,12 +87,7 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 			}
 			body["revision"] = revision
 		}
-		if parsed.action == "block" {
-			body["target_key"], body["type"] = body["blocker_key"], "blocks"
-			delete(body, "blocker_key")
-		} else {
-			body["type"] = "related"
-		}
+		body["type"] = "related"
 		method, route = "POST", "/api/tasks/"+key+"/relations"
 		delete(body, "key")
 	case "done":
@@ -126,13 +129,69 @@ func revisionFor(caller Caller, key string, stderr io.Writer) (int64, int) {
 		return 0, operatorError(err, stderr)
 	}
 	var value struct {
-		Revision int64 `json:"revision"`
+		Task struct {
+			Revision int64 `json:"revision"`
+		} `json:"task"`
 	}
 	if err := json.Unmarshal(raw, &value); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 0, 1
 	}
-	return value.Revision, 0
+	return value.Task.Revision, 0
+}
+
+func runReady(parsed request, caller Caller, jsonOut bool, stdout, stderr io.Writer) int {
+	limit := 50
+	if text, _ := parsed.payload["limit"].(string); text != "" {
+		if n, err := strconv.Atoi(text); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	readyQuery := map[string]string{"status": "open", "blocked": "false", "limit": "500"}
+	if queue, _ := parsed.payload["queue"].(string); queue != "" {
+		readyQuery["queue"] = queue
+	}
+	ready := []json.RawMessage{}
+	for {
+		raw, err := caller.Call("GET", "/api/tasks", readyQuery)
+		if err != nil {
+			return operatorError(err, stderr)
+		}
+		var page struct {
+			Tasks      []json.RawMessage `json:"tasks"`
+			NextCursor string            `json:"next_cursor"`
+		}
+		if err := json.Unmarshal(raw, &page); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		for _, rawTask := range page.Tasks {
+			var task struct {
+				Status            string `json:"status"`
+				Assignee          string `json:"assignee"`
+				ManualBlockReason string `json:"manual_block_reason"`
+				Blocked           bool   `json:"blocked"`
+				WorkflowVersionID int64  `json:"workflow_version_id"`
+			}
+			if err := json.Unmarshal(rawTask, &task); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+			if task.Status == "open" && task.Assignee == "" && task.ManualBlockReason == "" && !task.Blocked && task.WorkflowVersionID == 0 {
+				ready = append(ready, rawTask)
+				if len(ready) == limit {
+					result, _ := json.Marshal(ready)
+					return printResult(parsed, result, jsonOut, stdout, stderr)
+				}
+			}
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		readyQuery["after"] = page.NextCursor
+	}
+	result, _ := json.Marshal(ready)
+	return printResult(parsed, result, jsonOut, stdout, stderr)
 }
 
 func firstTask(raw json.RawMessage) (string, int64, error) {
