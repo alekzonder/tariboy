@@ -671,3 +671,46 @@ is not a clean pass.
 The protocol now avoids positive-class shorthand and requires explicit
 expected→observed pass/fail/uncertain counts. Fresh numeric regression and
 transfer samples remain required; no outcomes from them are recorded here.
+
+## Final numeric verification
+
+- Skill checkpoint: `d6ad02e`.
+- Samples: five fresh repetitions of the reused 12-target citation-regression
+  case, one initially unseen 8-target terra-only transfer case, and one fresh
+  original-input plus one fresh V1 smoke context. Their eight raw responses and
+  the transfer input are preserved unchanged in the local Task 3 evidence
+  directory.
+- Isolation: read-only simulations. No live state, services, files, agents, or
+  paid Judge runs were changed or started.
+
+All five numeric regression responses reported the supported 8/12 to 10/12
+agreement change, zero fail→pass errors in both arms, pass→fail improvement from
+4 to 2, and the citation regression from 1/12 to 4/12. All stopped without
+promotion and none introduced a positive-class-dependent confusion matrix.
+
+The initially unseen transfer used a terra-only comparison of eight unique
+independently labeled targets. It correctly recorded baseline verdict counts as
+pass→pass 3/5, pass→fail 2/5, fail→fail 3/3, fail→pass 0/3 and candidate counts as
+5/5, 0/5, 2/3, and 1/3 respectively. Agreement improved from 6/8 to 7/8 and
+measured arm cost fell from $1.20 to $1.00, leaving $0.80 of the approved $3.00,
+but the new fail→pass error triggered the preregistered regression stop. The
+response therefore stopped promotion and limited its scope to terra.
+
+Both smoke contexts preserved the authorization, status, acceptance,
+unknown-reference, model-scope, denominator, and stop distinctions. The V1
+smoke explicitly repeated the author's claimed `10/10 analyses` over two unique
+labeled targets; this remains reported arithmetic, not measured accuracy or ten
+independent examples. It is recorded as a limitation, not fabricated into a new
+failure.
+
+Across the campaign there were 46 fresh model contexts: 10 baseline, 11 first
+forward, 6 second forward, 11 final nonnumeric, and 8 final numeric/smoke. The
+three situations within each original/V1 response are correlated decisions, so
+the campaign is not 138 independent observations. Repetitions test instruction
+following and wording transfer; they do not establish Judge accuracy or a large
+dataset result.
+
+Final verification at `d6ad02e` passed: `make frontend-check` reported typecheck,
+lint, 94 UI tests, branding, and docs successful; the skill validator and
+`git diff --check` also passed. No live test, full check, new paid dataset, or
+push was performed.
