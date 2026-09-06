@@ -76,6 +76,12 @@ fails, daemon startup remains available with its inherited `PATH` and emits a
 stable warning; neither the inherited nor resolved path nor shell startup
 output may be logged, audited, or included in support bundles.
 
+After resolving the account baseline, a packaged daemon prepends its shared
+runtime `bin` directory, which contains a `ttasks` symlink to the sibling
+`tariboy-tasks` payload. This makes the bundled client available to fresh
+Desktop agents without the optional CLI installation. The alias is refreshed
+atomically and retained across restart handoff.
+
 The final iteration environment preserves this precedence:
 
 1. daemon environment, including the resolved account baseline;
@@ -225,6 +231,11 @@ uses an isolated temporary store and never contacts a daemon. `desktop-binaries`
 the same image step before compiling its local and remote daemon payloads.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
+
+The Tasks mode E2E inside `backend-check` builds its five required binaries and
+basic image in temporary directories. A Go build overlay embeds that temporary
+image, so the check never regenerates workspace `bin/` or
+`internal/builtinimages/generated`.
 
 `make server-install` builds all six real server binaries, stages and verifies
 their checksums, publishes a versioned release under

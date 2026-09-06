@@ -161,7 +161,7 @@ iteration-timeout-e2e: build
 group-request-deadline-e2e: build
 	./scripts/group-request-deadline-e2e.sh
 
-tariboy-tasks-e2e: build
+tariboy-tasks-e2e:
 	./scripts/tariboy-tasks-e2e.sh
 
 smoke:

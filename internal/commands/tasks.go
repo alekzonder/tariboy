@@ -300,9 +300,32 @@ func taskCommands() []registry.Command { return TaskOperatorCommands() }
 type taskHandler func(context.Context, registry.TaskControl, tasks.Actor, registry.Params) (any, error)
 
 func taskRoute(path, method, route, summary string, handler taskHandler) registry.Command {
+	bodyArgs := taskHTTPArgs(path)
+	var args []registry.Arg
+	for _, segment := range strings.Split(route, "/") {
+		if !strings.HasPrefix(segment, "{") || !strings.HasSuffix(segment, "}") {
+			continue
+		}
+		name := segment[1 : len(segment)-1]
+		arg := registry.Arg{Name: name, Required: true, Help: "Resource " + name}
+		for i, candidate := range bodyArgs {
+			if candidate.Name == name {
+				arg = candidate
+				bodyArgs = append(bodyArgs[:i], bodyArgs[i+1:]...)
+				break
+			}
+		}
+		args = append(args, arg)
+	}
+	args = append(args, bodyArgs...)
+	for i := range args {
+		if args[i].Flag == "" {
+			args[i].Flag = strings.ReplaceAll(args[i].Name, "_", "-")
+		}
+	}
 	return registry.Command{
 		Path: path, Summary: summary, CLIHidden: path != "tasks.queue.create",
-		Args: taskHTTPArgs(path), ResultSchema: taskHTTPResultSchema(path),
+		Args: args, ResultSchema: taskHTTPResultSchema(path),
 		Schemas: taskOpenAPISchemas(),
 		HTTP:    &registry.HTTPRoute{Method: method, Path: route},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -328,6 +351,16 @@ func taskRoute(path, method, route, summary string, handler taskHandler) registr
 
 func taskHTTPArgs(path string) []registry.Arg {
 	switch path {
+	case "tasks.queue.update":
+		return []registry.Arg{
+			{Name: "name", Help: "Queue name"},
+			{Name: "description", Help: "Queue description"},
+			{Name: "owners", Help: "Comma-separated owner agents"},
+			{Name: "responsible_agent", Help: "Responsible agent"},
+			{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"},
+		}
+	case "tasks.notifications.list":
+		return []registry.Arg{{Name: "include_dismissed", Type: registry.Bool, Help: "Include dismissed notifications"}}
 	case "tasks.queue.create":
 		return []registry.Arg{
 			{Name: "prefix", Required: true, Help: "Queue key prefix"},
@@ -364,7 +397,7 @@ func taskHTTPArgs(path string) []registry.Arg {
 			{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"},
 		}
 	case "tasks.workflows.create":
-		return []registry.Arg{{Name: "definition", Required: true, Help: "Versioned workflow definition", Schema: schemaRef("WorkflowDefinition")}}
+		return []registry.Arg{{Name: "definition", Type: registry.JSONObject, Required: true, Help: "Versioned workflow definition as JSON", Schema: schemaRef("WorkflowDefinition")}}
 	case "tasks.queue.workflow.set":
 		return workflowMutationArgs(registry.Arg{Name: "workflow_version_id", Type: registry.Int, Required: true, Help: "Published workflow version id"})
 	case "tasks.queue.pool.set":
@@ -373,13 +406,15 @@ func taskHTTPArgs(path string) []registry.Arg {
 		return []registry.Arg{{Name: "pattern", Required: true, Help: "Allowed channel pattern"}, {Name: "correlation_key", Help: "Correlation selector"}, {Name: "action", Required: true, Help: "Declared workflow trigger action"}}
 	case "tasks.workflows.get", "tasks.workflows.validate", "tasks.workflows.publish":
 		return []registry.Arg{{Name: "version", Type: registry.Int, Required: true, Help: "Workflow version"}}
-	case "tasks.queue.trigger.delete", "tasks.workflow.artifact.get", "tasks.workflow.question.get":
+	case "tasks.workflow.artifact.get":
+		return []registry.Arg{{Name: "id", Type: registry.Int, Required: true, Help: "Resource id"}, {Name: "assignment_id", Help: "Optional assignment scope"}}
+	case "tasks.queue.trigger.delete", "tasks.workflow.question.get":
 		return []registry.Arg{{Name: "id", Type: registry.Int, Required: true, Help: "Resource id"}}
 	case "tasks.workflow.artifacts", "tasks.workflow.questions":
 		return []registry.Arg{{Name: "assignment_id", Help: "Optional assignment scope"}}
 	case "tasks.workflow.subscriptions":
 		return []registry.Arg{{Name: "assignment_id", Required: true, Help: "Assignment id"}}
-	case "tasks.workflow.events":
+	case "tasks.events", "tasks.workflow.events":
 		return []registry.Arg{{Name: "after", Type: registry.Int, Help: "Resume after sequence"}, {Name: "limit", Type: registry.Int, Help: "Maximum events"}}
 	default:
 		return nil

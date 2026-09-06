@@ -165,7 +165,7 @@ derives identity from the socket.
 | Command | Purpose |
 | --- | --- |
 | `ttasks mine` | List visible tasks |
-| `ttasks ready [--queue Q] [--claim]` | List ready work or atomically claim one |
+| `ttasks ready [--queue Q] [--claim]` | List ready work; `--claim` requires agent mode |
 | `ttasks show KEY` | Show task detail, comments, waits, and relations |
 | `ttasks create --queue Q --title T [--assignee A]` | Create a queue-root task |
 | `ttasks create --parent KEY --title T` | Create a child inheriting queue/context |
@@ -178,7 +178,7 @@ derives identity from the socket.
 | `ttasks relate KEY OTHER` | Add a symmetric related link |
 | `ttasks done KEY [--complete-anyway]` | Complete, optionally overriding active descendants |
 
-Workflow-managed queues add an assignment-scoped surface:
+Workflow-managed queues add an assignment-scoped surface that requires agent mode:
 
 | Command | Purpose |
 | --- | --- |
@@ -203,3 +203,18 @@ The following administration roots are operator-only and are documented by
 `ttasks --help-json`: `queue` (including pools, workflow bindings, and
 triggers), `workflows`, `workflow` task history and artifacts, `events`,
 `principals`, and `notifications`. They are unavailable to agent mode.
+
+Resource identifiers are positional (or named flags), for example:
+
+```bash
+ttasks queue get OPS
+ttasks queue update OPS --name Operations --revision 2
+ttasks workflows get review 1
+ttasks workflow get OPS-1
+ttasks notifications read 1
+ttasks events OPS-1 --after 7 --limit 10
+```
+
+`ttasks workflows create --definition JSON` accepts a workflow definition as a
+JSON object; malformed JSON and non-object values fail before contacting the
+daemon. Use each administration command's `--help` for its required fields.

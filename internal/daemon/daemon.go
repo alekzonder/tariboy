@@ -294,6 +294,15 @@ func Run(ctx context.Context, o Options) error {
 		exeDir = filepath.Dir(exe)
 	}
 	shimBin := firstNonEmpty(os.Getenv("TARIBOY_SHIM_BIN"), filepath.Join(exeDir, "tariboy-shim"))
+	tasksBinDir, err := installTasksAlias(exeDir, p.RuntimeDir())
+	if err != nil {
+		return fmt.Errorf("prepare bundled Tasks command: %w", err)
+	}
+	if tasksBinDir != "" {
+		if err := os.Setenv("PATH", tasksBinDir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+			return err
+		}
+	}
 	skillsDir := filepath.Join(p.CurrentVersionStoreDir(version.Version), "skills")
 
 	schedStore := schedule.NewStore(st, time.Now)
@@ -989,6 +998,52 @@ const userPathFallbackWarning = "resolve user PATH: keeping inherited PATH"
 // shellEnvMarker is set by a launcher that already started tariboyd inside
 // the account's login shell (Desktop does; a terminal or SSH launch does not).
 const shellEnvMarker = "TARIBOY_SHELL_ENV"
+
+// installTasksAlias exposes the one sibling payload to all daemon children,
+// including fresh Desktop agents before optional CLI installation. The stable
+// runtime path survives daemon handoff; explicit agent PATH overrides still win.
+func installTasksAlias(exeDir, runtimeDir string) (string, error) {
+	source := filepath.Join(exeDir, "tariboy-tasks")
+	info, err := os.Stat(source)
+	if os.IsNotExist(err) {
+		return "", nil // Direct development builds may contain only tariboyd.
+	}
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return "", errors.New("Tasks payload is not executable")
+	}
+	binDir := filepath.Join(runtimeDir, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		return "", err
+	}
+	if info, err := os.Lstat(binDir); err != nil || !info.IsDir() {
+		return "", errors.New("runtime bin must be a directory")
+	}
+	link := filepath.Join(binDir, "ttasks")
+	if info, err := os.Lstat(link); err == nil && info.Mode()&os.ModeSymlink == 0 {
+		return "", errors.New("refusing to replace non-symlink Tasks command")
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	if target, err := os.Readlink(link); err == nil && (!filepath.IsAbs(target) || filepath.Base(target) != "tariboy-tasks") {
+		return "", errors.New("refusing to replace foreign Tasks command symlink")
+	}
+	stage, err := os.MkdirTemp(binDir, ".tasks-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(stage)
+	temporary := filepath.Join(stage, "ttasks")
+	if err := os.Symlink(source, temporary); err != nil {
+		return "", err
+	}
+	if err := os.Rename(temporary, link); err != nil {
+		return "", err
+	}
+	return binDir, nil
+}
 
 func applyUserPath(ctx context.Context, log *slog.Logger, resolve UserPathResolver) {
 	// Desktop launches tariboyd through the account's login shell, so the

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,6 +26,60 @@ import (
 	"github.com/alekzonder/tariboy/internal/version"
 	storeassets "github.com/alekzonder/tariboy/store"
 )
+
+func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
+	runtimeDir := t.TempDir()
+	for _, value := range []string{"old", "new"} {
+		bundle := t.TempDir()
+		payload := filepath.Join(bundle, "tariboy-tasks")
+		if err := os.WriteFile(payload, []byte("#!/bin/sh\nprintf '"+value+"\\n'\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		binDir, err := installTasksAlias(bundle, runtimeDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(filepath.Join(binDir, "ttasks")).Output()
+		if err != nil || strings.TrimSpace(string(out)) != value {
+			t.Fatalf("alias output = %q, err = %v", out, err)
+		}
+	}
+	for _, kind := range []string{"file", "foreign-link", "directory"} {
+		t.Run(kind, func(t *testing.T) {
+			bundle, runtimeDir := t.TempDir(), t.TempDir()
+			if err := os.WriteFile(filepath.Join(bundle, "tariboy-tasks"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			binDir := filepath.Join(runtimeDir, "bin")
+			if err := os.Mkdir(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(binDir, "ttasks")
+			switch kind {
+			case "file":
+				if err := os.WriteFile(link, []byte("user-owned"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "foreign-link":
+				if err := os.Symlink("/bin/sh", link); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(link, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := installTasksAlias(bundle, runtimeDir); err == nil {
+				t.Fatal("occupied runtime command was replaced")
+			}
+			if kind == "foreign-link" {
+				if target, err := os.Readlink(link); err != nil || target != "/bin/sh" {
+					t.Fatalf("foreign target = %q, err = %v", target, err)
+				}
+			}
+		})
+	}
+}
 
 type fakeObservationReconciler struct{ calls chan struct{} }
 

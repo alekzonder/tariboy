@@ -11,6 +11,7 @@
 #   STUB_IMAGE_BUILD "name:tag|path" to author+build an image via the gated tool (default unset)
 #   STUB_AI  set to 1 to POST one AI request through the proxy before finishing (default unset)
 #   STUB_STDOUT    line to print before finishing             (default unset)
+#   STUB_TASKS_MINE file to receive a direct ttasks mine result (default unset)
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,6 +26,10 @@ fi
 
 PROMPT_PATH="${1:-}"
 [ -n "$PROMPT_PATH" ] && [ -f "$PROMPT_PATH" ] && head -c 0 "$PROMPT_PATH" || true
+
+if [ -n "${STUB_TASKS_MINE:-}" ]; then
+  ttasks mine --json >"$STUB_TASKS_MINE"
+fi
 
 sleep "${STUB_SLEEP:-0.2}"
 

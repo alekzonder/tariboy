@@ -29,7 +29,11 @@ must therefore include it.
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
 | `scripts/messages.sh group info`/`status`/`send`/`request`/`loop` | group coordination |
 
-`tariboy-tasks` is installed globally with the `ttasks` alias. A non-empty
+`tariboy-tasks` is installed globally with the `ttasks` alias. Packaged daemons
+also expose it through a shared runtime `bin/ttasks` symlink on their baseline
+`PATH`, so fresh Desktop agents can use it before optional CLI installation.
+An explicit agent `PATH` override must retain that directory or another
+installed `ttasks`. A non-empty
 `TARIBOY_TOOLS_SOCKET` selects its identity-bound agent mode and a missing or
 unreachable socket fails closed; without the variable it uses the host Unix
 daemon socket as the customer actor. Images that enable `plugins: [{name:

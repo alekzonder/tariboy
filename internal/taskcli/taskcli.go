@@ -46,7 +46,7 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 	}
 	parsed, err := parse(args)
 	if err != nil {
-		if isOperatorCommand(args) && strings.TrimSpace(getenv("TARIBOY_TOOLS_SOCKET")) == "" {
+		if isOperatorCommand(args) && getenv("TARIBOY_TOOLS_SOCKET") == "" {
 			if jsonOut {
 				args = append(args, "--json")
 			}
@@ -55,7 +55,7 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if toolsSocket := strings.TrimSpace(getenv("TARIBOY_TOOLS_SOCKET")); toolsSocket != "" {
+	if toolsSocket := getenv("TARIBOY_TOOLS_SOCKET"); toolsSocket != "" {
 		return runAgent(parsed, newCaller(toolsSocket), jsonOut, stdout, stderr)
 	}
 	resolved, err := paths.Resolve(getenv)

@@ -35,12 +35,17 @@ suffix=${staging#.stage-}
 switched=
 release_created=false
 committed=false
-sources="tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram"
+sources="tariboyd tariboy tariboy-shim tariboy-plugin-telegram"
 managed_links="tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram"
 binary_source=$stage
 test "$mode" != activate || binary_source=$release
+if test "$mode" != activate || test -e "$binary_source/tariboy-tasks" || test -L "$binary_source/tariboy-tasks"; then
+  sources="$sources tariboy-tasks"
+fi
 if test -f "$binary_source/tariboy-store"; then
   sources="$sources tariboy-store"
+fi
+if test -f "$binary_source/tariboy-store" || test -L "$bindir/tariboy-store"; then
   managed_links="$managed_links tariboy-store:tariboy-store"
 fi
 
@@ -146,6 +151,10 @@ else
   release_created=true
 fi
 
+for source in $sources; do
+  test -f "$release/$source" || { echo "missing release payload: $source" >&2; exit 1; }
+done
+
 if test "$mode" = stage; then
   committed=true
   rollback
@@ -162,7 +171,10 @@ fi
 for entry in $managed_links; do
   name=${entry%%:*}
   source=${entry#*:}
-  ln -s "$release/$source" "$bindir/.$name.new-$suffix"
+  # Releases predating an optional payload must restore its absence too.
+  if test -f "$release/$source"; then
+    ln -s "$release/$source" "$bindir/.$name.new-$suffix"
+  fi
 done
 for entry in $managed_links; do
   name=${entry%%:*}
@@ -171,7 +183,9 @@ for entry in $managed_links; do
   if test -L "$target"; then
     mv "$target" "$backup"
   fi
-  mv "$bindir/.$name.new-$suffix" "$target"
+  if test -L "$bindir/.$name.new-$suffix"; then
+    mv "$bindir/.$name.new-$suffix" "$target"
+  fi
   switched="$switched $name"
 done
 committed=true
