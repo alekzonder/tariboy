@@ -245,7 +245,7 @@ func TestRunJSONAndVersion(t *testing.T) {
 	}
 }
 
-func TestHelpJSONUsesTaskCommandDescriptorsWithoutSocket(t *testing.T) {
+func TestHelpJSONCoversRunnableTaskRootsWithoutSocket(t *testing.T) {
 	old := newCaller
 	defer func() { newCaller = old }()
 	newCaller = func(string) Caller { t.Fatal("help must not construct a caller"); return nil }
@@ -254,8 +254,18 @@ func TestHelpJSONUsesTaskCommandDescriptorsWithoutSocket(t *testing.T) {
 		t.Fatalf("code = %d, want 0", code)
 	}
 	var tree map[string]any
-	if err := json.Unmarshal([]byte(out.String()), &tree); err != nil || tree["queue"] == nil {
+	if err := json.Unmarshal([]byte(out.String()), &tree); err != nil {
 		t.Fatalf("help = %q, tree = %#v, err = %v", out.String(), tree, err)
+	}
+	for _, root := range []string{"mine", "ready", "show", "assign", "ask", "work", "artifacts", "observe", "queue", "workflows", "workflow", "events", "principals", "notifications"} {
+		if tree[root] == nil {
+			t.Fatalf("help tree missing runnable root %q: %#v", root, tree)
+		}
+	}
+	for _, root := range []string{"list", "get"} {
+		if tree[root] != nil {
+			t.Fatalf("help tree advertises inaccessible root %q: %#v", root, tree)
+		}
 	}
 }
 

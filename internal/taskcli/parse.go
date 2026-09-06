@@ -18,6 +18,19 @@ func (e usageError) Error() string { return e.message }
 var commonWork = map[string]bool{"task-revision": true, "assignment-revision": true, "idempotency-key": true}
 var boolFlags = map[string]bool{"claim": true, "to-root": true, "complete-anyway": true}
 
+func taskCommandFlags() map[string]map[string]bool {
+	return map[string]map[string]bool{
+		"mine": set("queue,status,assignee,text,waiting-for"), "ready": set("queue,limit,idempotency-key,claim"), "show": {},
+		"create": set("queue,parent,title,description,pull-request,assignee,group,priority,idempotency-key"),
+		"update": set("title,description,status,pull-request,assignee,manual-block-reason,priority,revision"), "assign": set("revision"),
+		"comment": set("body,idempotency-key"), "ask": set("question,context,blocking-scope,anchor,suggested-answer,options,artifacts,task-revision,assignment-revision,idempotency-key"),
+		"move": set("parent,before,to-root,revision"), "block": set("by,revision,idempotency-key"), "relate": set("revision,idempotency-key"), "done": set("revision,complete-anyway"),
+		"work_next": set("queue,idempotency-key"), "work_show": commonWork, "work_complete": set("task-revision,assignment-revision,idempotency-key,outcome"), "work_release": commonWork,
+		"artifact_add": set("task-revision,assignment-revision,idempotency-key,name,type,content,metadata"), "artifact_show": set("task"), "questions": {},
+		"answer": set("task-revision,assignment-revision,idempotency-key,assignment,answer"), "observe_subscribe": set("task-revision,assignment-revision,idempotency-key,correlation-key,reaction"), "observe_list": {}, "observe_cancel": commonWork,
+	}
+}
+
 func parse(argv []string) (request, error) {
 	if len(argv) == 0 {
 		return request{}, usageError{"tasks: a command is required"}
@@ -33,16 +46,7 @@ func parse(argv []string) (request, error) {
 		action += "_" + rest[0]
 		rest = rest[1:]
 	}
-	allowed := map[string]map[string]bool{
-		"mine": set("queue,status,assignee,text,waiting-for"), "ready": set("queue,limit,idempotency-key,claim"), "show": {},
-		"create": set("queue,parent,title,description,pull-request,assignee,group,priority,idempotency-key"),
-		"update": set("title,description,status,pull-request,assignee,manual-block-reason,priority,revision"), "assign": set("revision"),
-		"comment": set("body,idempotency-key"), "ask": set("question,context,blocking-scope,anchor,suggested-answer,options,artifacts,task-revision,assignment-revision,idempotency-key"),
-		"move": set("parent,before,to-root,revision"), "block": set("by,revision,idempotency-key"), "relate": set("revision,idempotency-key"), "done": set("revision,complete-anyway"),
-		"work_next": set("queue,idempotency-key"), "work_show": commonWork, "work_complete": set("task-revision,assignment-revision,idempotency-key,outcome"), "work_release": commonWork,
-		"artifact_add": set("task-revision,assignment-revision,idempotency-key,name,type,content,metadata"), "artifact_show": set("task"), "questions": {},
-		"answer": set("task-revision,assignment-revision,idempotency-key,assignment,answer"), "observe_subscribe": set("task-revision,assignment-revision,idempotency-key,correlation-key,reaction"), "observe_list": {}, "observe_cancel": commonWork,
-	}
+	allowed := taskCommandFlags()
 	valid, ok := allowed[action]
 	if !ok {
 		return request{}, usageError{fmt.Sprintf("tasks: unknown command %q", action)}
