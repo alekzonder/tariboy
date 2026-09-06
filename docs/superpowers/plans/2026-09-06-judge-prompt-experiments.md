@@ -46,3 +46,20 @@ Baseline rubric SHA-256:
 Ephemeral outputs are under `/tmp/tariboy-judge-prompt.bqmehxUJ`; sanitized
 results and conclusions are recorded here after inspection. No private task
 transcripts are copied into the repository.
+
+### First comparison
+
+Baseline micro-tests: 24/24 verdicts matched the eight independent expectations
+(12 per model, including five c01 repetitions). The short c01 pack did not
+reproduce the explicit independent-test-verification overclaim seen in the real
+Bob transcript. Some Sol answers loosely equated a done task with prior work
+completed, but these are not counted as definite false verdicts. This control
+sample therefore cannot establish a quality improvement by verdict count alone.
+
+Candidate H1, commit `643ea1a`, changes only image role instructions. It adds
+an evidence-origin recipe for both workers and summary lead, and explicitly
+preserves the scope of valid notification handling. The frozen rubric and v1
+wire schema are unchanged. Candidate image `llm-as-judge:reliability-h1` has
+digest `f763f50470bc5f098a6da357fb9076da968133b7a282bf0a6a7d359d7830ce11`.
+Image build and focused image/rubric tests passed. It is not assigned until the
+micro-tests have been inspected; the real Bob repeat is the decisive H1 check.
