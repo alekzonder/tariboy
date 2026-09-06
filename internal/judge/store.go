@@ -300,6 +300,43 @@ func (s *Store) ListTargets(runID string) ([]Target, error) {
 	return out, nil
 }
 
+func (s *Store) ListIterationJudgeReviews(iterationIDs []string) (map[string][]IterationJudgeReview, error) {
+	out := make(map[string][]IterationJudgeReview, len(iterationIDs))
+	for _, id := range iterationIDs {
+		out[id] = []IterationJudgeReview{}
+	}
+	if len(iterationIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(iterationIDs))
+	for i, id := range iterationIDs {
+		args[i] = id
+	}
+	rows, err := s.db.Query(`SELECT t.target_iteration,r.id,t.id,r.created_at,t.target_state,t.consensus_verdict,t.consensus_score,r.judges_per_iteration,
+		SUM(CASE WHEN a.state='completed' AND a.analysis_id<>'' AND x.id IS NOT NULL THEN 1 ELSE 0 END),
+		SUM(CASE WHEN a.state IN ('failed','cancelled') THEN 1 ELSE 0 END),
+		SUM(CASE WHEN a.state IN ('pending','claimed') THEN 1 ELSE 0 END)
+		FROM judge_targets t JOIN judge_runs r ON r.id=t.run_id
+		LEFT JOIN judge_assignments a ON a.target_id=t.id
+		LEFT JOIN judge_analyses x ON x.id=a.analysis_id AND x.assignment_id=a.id
+		WHERE t.target_iteration IN (`+placeholders(len(iterationIDs))+`)
+		GROUP BY t.id
+		ORDER BY r.created_at DESC,r.id DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var iteration string
+		var review IterationJudgeReview
+		if err := rows.Scan(&iteration, &review.RunID, &review.TargetID, &review.CreatedAt, &review.State, &review.Verdict, &review.Score, &review.required, &review.Completed, &review.Failed, &review.Pending); err != nil {
+			return nil, err
+		}
+		out[iteration] = append(out[iteration], review)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListSubjects(runID string) ([]Subject, error) {
 	rows, err := s.db.Query(`SELECT id,run_id,subject_type,external_id,sequence,snapshot_hash,snapshot_json,created_at FROM judge_subjects WHERE run_id=? ORDER BY sequence`, runID)
 	if err != nil {

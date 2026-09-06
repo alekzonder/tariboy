@@ -8,6 +8,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
@@ -55,12 +56,21 @@ func iterationLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			ids := make([]string, len(its))
+			for i := range its {
+				ids[i] = its[i].ID
+			}
+			reviews, err := iterationJudgeReviews(c, ids)
+			if err != nil {
+				return nil, err
+			}
 			rows := make([]map[string]any, 0, len(its))
 			for _, it := range its {
 				rows = append(rows, map[string]any{
 					"id": it.ID, "trigger": it.Trigger, "status": it.Status,
 					"started_at": it.StartedAt, "done": it.DoneFlag,
 					"productive": it.Productive,
+					"judge":      judge.ProjectIterationJudgeReviews(reviews[it.ID]),
 				})
 			}
 			return map[string]any{"iterations": rows, "count": len(rows)}, nil
@@ -90,6 +100,11 @@ func iterationInspect() registry.Command {
 				"image_ref":   it.ImageRef, "image_digest": it.ImageDigest,
 				"prompt_template_sha256": it.PromptTemplateSHA256,
 			}
+			reviews, err := iterationJudgeReviews(c, []string{it.ID})
+			if err != nil {
+				return nil, err
+			}
+			out["judge"] = judge.ProjectIterationJudgeReviews(reviews[it.ID])
 			if it.ExitCode != nil {
 				out["exit_code"] = *it.ExitCode
 			}
@@ -102,6 +117,40 @@ func iterationInspect() registry.Command {
 			return out, nil
 		},
 	}
+}
+
+func iterationJudges() registry.Command {
+	return registry.Command{
+		Path: "iteration.judges", Summary: "List Judge reviews for one iteration",
+		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "id", Type: registry.String, Required: true}},
+		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations/{id}/judges"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			id := str(p, "id")
+			if _, err := agentStore(c).GetIteration(str(p, "name"), id); err != nil {
+				return nil, api.UserError{Code: "not_found", Msg: "iteration not found"}
+			}
+			reviews, err := iterationJudgeReviews(c, []string{id})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"reviews": reviews[id]}, nil
+		},
+	}
+}
+
+func iterationJudgeReviews(c *registry.Ctx, ids []string) (map[string][]judge.IterationJudgeReview, error) {
+	if c.Judges == nil {
+		out := make(map[string][]judge.IterationJudgeReview, len(ids))
+		for _, id := range ids {
+			out[id] = []judge.IterationJudgeReview{}
+		}
+		return out, nil
+	}
+	control, ok := c.Judges.(registry.IterationJudgeControl)
+	if !ok {
+		return nil, api.UserError{Code: "no_judge_control", Msg: "iteration Judge control is not available"}
+	}
+	return control.OperatorIterationReviews(ids)
 }
 
 func iterationLogs() registry.Command {

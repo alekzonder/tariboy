@@ -93,6 +93,24 @@ type Target struct {
 	SubjectID            string   `json:"subject_id,omitempty"`
 }
 
+type IterationJudgeReview struct {
+	RunID     string   `json:"run_id"`
+	TargetID  string   `json:"target_id"`
+	CreatedAt string   `json:"created_at"`
+	State     string   `json:"state"`
+	Verdict   string   `json:"verdict"`
+	Score     *float64 `json:"score"`
+	Completed int      `json:"completed"`
+	Failed    int      `json:"failed"`
+	Pending   int      `json:"pending"`
+	required  int
+}
+
+type IterationJudgeProjection struct {
+	LatestCompleted *IterationJudgeReview `json:"latest_completed"`
+	Active          *IterationJudgeReview `json:"active"`
+}
+
 type SubjectParticipant struct {
 	Agent                string `json:"agent"`
 	Iteration            string `json:"iteration"`

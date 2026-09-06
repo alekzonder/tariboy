@@ -62,6 +62,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, promptGet())
 	mustRegister(r, iterationLs())
 	mustRegister(r, iterationInspect())
+	mustRegister(r, iterationJudges())
 	mustRegister(r, iterationExtendTimeout())
 	mustRegister(r, iterationLogs())
 	mustRegister(r, secretStore())

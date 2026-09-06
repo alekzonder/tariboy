@@ -170,6 +170,60 @@ func TestCreateRunFreezesOrderedTargets(t *testing.T) {
 	}
 }
 
+func TestIterationJudgeReviewsBatchOrdersAndCountsValidAssignments(t *testing.T) {
+	db, js := newJudgeStore(t)
+	seedTarget(t, db.DB, "iteration-1", "worker", "done", "2026-07-01T10:00:00Z")
+	seedTarget(t, db.DB, "other-iteration", "other", "done", "2026-07-01T10:00:00Z")
+
+	for _, row := range []struct {
+		run, target, iteration, created, state, verdict string
+		score                                           any
+	}{
+		{"run-zero", "target-zero", "iteration-1", "2026-07-01T11:00:00Z", "terminal", "fail", 0.0},
+		{"run-complete", "target-complete", "iteration-1", "2026-07-01T12:00:00Z", "terminal", "pass", 0.8},
+		{"run-pending", "target-pending", "iteration-1", "2026-07-01T12:00:00Z", "running", "", nil},
+		{"run-other", "target-other", "other-iteration", "2026-07-01T14:00:00Z", "terminal", "pass", 1.0},
+	} {
+		if _, err := db.DB.Exec(`INSERT INTO judge_runs(id,created_at,updated_at,original_request,spec_json,judge_group,lead_agent,judge_agents_json,summary_agent,judges_per_iteration,status) VALUES(?,?,?,'review','{}','judges','lead','["judge"]','lead',1,'running')`, row.run, row.created, row.created); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.DB.Exec(`INSERT INTO judge_targets(id,run_id,target_iteration,target_agent,sequence,snapshot_status,target_state,consensus_verdict,consensus_score) VALUES(?,?,?,?,0,'ready',?,?,?)`, row.target, row.run, row.iteration, map[string]string{"iteration-1": "worker", "other-iteration": "other"}[row.iteration], row.state, row.verdict, row.score); err != nil {
+			t.Fatal(err)
+		}
+		assignmentState := "pending"
+		analysisID := ""
+		if row.state == "terminal" {
+			assignmentState, analysisID = "completed", "analysis-"+row.run
+		}
+		if _, err := db.DB.Exec(`INSERT INTO judge_assignments(id,run_id,target_id,replica_index,state,analysis_id) VALUES(?,?,?,0,?,?)`, "assignment-"+row.run, row.run, row.target, assignmentState, analysisID); err != nil {
+			t.Fatal(err)
+		}
+		if analysisID != "" {
+			if _, err := db.DB.Exec(`INSERT INTO judge_analyses(id,run_id,target_id,assignment_id,judge_agent,judge_iteration,schema_version,result_json,raw_submission,created_at) VALUES(?,?,?,?, 'judge','judge-it',1,'{}','{}',?)`, analysisID, row.run, row.target, "assignment-"+row.run, row.created); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	got, err := js.ListIterationJudgeReviews([]string{"iteration-1", "missing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviews := got["iteration-1"]
+	if len(reviews) != 3 || reviews[0].RunID != "run-pending" || reviews[1].RunID != "run-complete" || reviews[2].RunID != "run-zero" {
+		t.Fatalf("reviews = %+v", reviews)
+	}
+	if reviews[0].Pending != 1 || reviews[0].Completed != 0 || reviews[1].Completed != 1 || reviews[1].Score == nil || *reviews[1].Score != 0.8 || reviews[2].Score == nil || *reviews[2].Score != 0 {
+		t.Fatalf("review counts/scores = %+v", reviews)
+	}
+	if _, ok := got["other-iteration"]; ok {
+		t.Fatalf("batch leaked another iteration: %+v", got)
+	}
+	if len(got["missing"]) != 0 {
+		t.Fatalf("missing reviews = %+v", got["missing"])
+	}
+}
+
 func TestCreateRunGroupsTargetsIntoTaskSubjects(t *testing.T) {
 	db, js := newJudgeStore(t)
 	seedJudgeAgent(t, db.DB, "lead")
