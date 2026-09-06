@@ -22,7 +22,6 @@ COMMANDS = {
     "scripts": "scripts",
     "image-creator": "image_creator",
     "llm-as-judge": "judge",
-    "tasks": "tasks",
 }
 
 
@@ -101,7 +100,6 @@ class StoreSkillsTest(unittest.TestCase):
             "schedule": "scripts/schedule.sh",
             "scripts": "scripts/scripts.sh",
             "image-creator": "scripts/image_creator.sh",
-            "tasks": "scripts/tasks.sh",
             "workdir": "scripts/scripts.sh",
         }
         for skill, entrypoint in expected.items():
@@ -157,6 +155,24 @@ class StoreSkillsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("usage:", result.stdout)
 
+    def test_tasks_launcher_delegates_to_ttasks_and_propagates_exit_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args_path = Path(tmp) / "args"
+            fake = Path(tmp) / "ttasks"
+            fake.write_text(
+                "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$TASKS_ARGS\"\nexit 73\n"
+            )
+            fake.chmod(0o700)
+            process = subprocess.run(
+                [ROOT / "tasks/scripts/tasks.sh", "mine", "--queue", "OPS"],
+                env=dict(os.environ, PATH=tmp + os.pathsep + os.environ["PATH"], TASKS_ARGS=args_path),
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(process.returncode, 73)
+            self.assertEqual(args_path.read_text(), "mine\n--queue\nOPS\n")
+        self.assertFalse((ROOT / "tasks/scripts/tasks.py").exists())
+
     def test_context_help_describes_get_and_set(self):
         env = dict(os.environ)
         env.pop("TARIBOY_TOOLS_SOCKET", None)
@@ -185,7 +201,6 @@ class StoreSkillsTest(unittest.TestCase):
             ("scripts/scripts/scripts.sh", ["rerun", "scr-1"], "POST", "/tools/script/rerun", {"id": "scr-1"}),
             ("image-creator/scripts/image_creator.sh", ["build", "--name", "reviewer", "--path", "./image"], "POST", "/tools/image/build", {"name": "reviewer", "tag": "latest", "path": "./image"}),
             ("llm-as-judge/scripts/judge.sh", ["work", "claim"], "POST", "/tools/judge/action/work.claim", {}),
-            ("tasks/scripts/tasks.sh", ["show", "TARI-1"], "POST", "/tools/tasks/show", {"key": "TARI-1"}),
         ]
         for relative, args, method, route, body in cases:
             with self.subTest(relative=relative):
@@ -293,66 +308,6 @@ class StoreSkillsTest(unittest.TestCase):
                 self.assertEqual(process.returncode, 2)
                 self.assertIn("unknown flag", process.stderr)
                 self.assertIsNone(request)
-
-    def test_flexible_task_ask_rejects_workflow_flags_before_request(self):
-        workflow_flags = (
-            "--question=ignored",
-            "--context=context",
-            "--blocking-scope=task",
-            "--anchor=checkpoint",
-            "--suggested-answer=yes",
-            "--options=yes,no",
-            "--artifacts=1",
-            "--task-revision=2",
-            "--assignment-revision=3",
-        )
-        for flag in workflow_flags:
-            with self.subTest(flag=flag):
-                process, request = self.run_script(
-                    "tasks/scripts/tasks.sh",
-                    ["ask", "TARI-41", "user:alice", "Choose", flag],
-                    {},
-                )
-                self.assertEqual(process.returncode, 2)
-                self.assertIn("workflow", process.stderr)
-                self.assertIsNone(request)
-
-    def test_tasks_update_pull_request(self):
-        for value in ("https://github.com/o/r/pull/7", ""):
-            with self.subTest(value=value):
-                process, request = self.run_script(
-                    "tasks/scripts/tasks.sh",
-                    ["update", "TARI-43", "--revision", "2", f"--pull-request={value}"],
-                    {},
-                )
-                self.assertEqual(process.returncode, 0, process.stderr)
-                self.assertEqual(request[0], ["POST", "/tools/tasks/update"])
-                self.assertEqual(
-                    json.loads(request[1]),
-                    {"key": "TARI-43", "revision": "2", "pull_request": value},
-                )
-
-    def test_tasks_create_pull_request(self):
-        process, request = self.run_script(
-            "tasks/scripts/tasks.sh",
-            [
-                "create",
-                "--queue=TARI",
-                "--title=Ship it",
-                "--pull-request=https://github.com/o/r/pull/7",
-            ],
-            {},
-        )
-        self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertEqual(request[0], ["POST", "/tools/tasks/create"])
-        self.assertEqual(
-            json.loads(request[1]),
-            {
-                "queue": "TARI",
-                "title": "Ship it",
-                "pull_request": "https://github.com/o/r/pull/7",
-            },
-        )
 
     def test_current_task_rejects_ambiguous_arguments_before_request(self):
         for args in (

@@ -325,9 +325,8 @@ func TestTasksCapabilityIsOptionalAndContributesItsOwnPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, command := range []string{
-		"scripts/tasks.sh mine", "scripts/tasks.sh ready", "scripts/tasks.sh create", "scripts/tasks.sh comment",
-		"scripts/tasks.sh ask", "scripts/tasks.sh done", "scripts/tasks.sh work next", "scripts/tasks.sh work show",
-		"scripts/tasks.sh observe",
+		"ttasks mine", "ttasks ready", "ttasks create", "ttasks comment",
+		"ttasks ask", "ttasks done", "ttasks work next", "ttasks work show", "ttasks observe",
 	} {
 		if !strings.Contains(fragment.Body+string(skill), command) {
 			t.Fatalf("tasks instructions missing %q", command)
@@ -352,7 +351,7 @@ func TestTasksPromptDistinguishesFlexibleAndWorkflowQuestions(t *testing.T) {
 	normalized := strings.Join(strings.Fields(string(body)), " ")
 	for _, want := range []string{
 		"For a flexible task",
-		"scripts/tasks.sh ask <key> user:<login>|agent:<name> <text>",
+		"ttasks ask <key> user:<login>|agent:<name> <text>",
 		"A comment is not a blocking question",
 		"For workflow-managed work",
 		"Treat its packet as the complete authority",
