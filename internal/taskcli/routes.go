@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -220,8 +221,10 @@ func operatorError(err error, stderr io.Writer) int {
 }
 
 func isOperatorCommand(args []string) bool {
-	return len(args) > 0 && map[string]bool{"queue": true, "workflows": true, "workflow": true, "events": true, "principals": true, "notifications": true}[args[0]]
+	return len(args) > 0 && operatorRoots[args[0]]
 }
+
+var operatorRoots = map[string]bool{"queue": true, "workflows": true, "workflow": true, "events": true, "principals": true, "notifications": true}
 
 func runOperatorCommand(ctx context.Context, args []string, getenv func(string) string, stdout, stderr io.Writer) int {
 	resolved, err := paths.Resolve(getenv)
@@ -243,7 +246,55 @@ func runHelpJSON(ctx context.Context, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	return cli.Run(ctx, reg, []string{"--help-json"}, nil, nil, stdout, stderr)
+	_ = ctx
+	tree := reg.Tree()
+	for action, flags := range taskCommandFlags() {
+		path := sharedHelpPath(action)
+		if len(path) == 0 {
+			continue
+		}
+		insertSharedHelp(tree, path, flags)
+	}
+	encoded, err := json.MarshalIndent(tree, "", "  ")
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	fmt.Fprintln(stdout, string(encoded))
+	return 0
+}
+
+func sharedHelpPath(action string) []string {
+	switch {
+	case strings.HasPrefix(action, "work_"):
+		return []string{"work", strings.TrimPrefix(action, "work_")}
+	case strings.HasPrefix(action, "artifact_"):
+		return []string{"artifacts", strings.TrimPrefix(action, "artifact_")}
+	case strings.HasPrefix(action, "observe_"):
+		return []string{"observe", strings.TrimPrefix(action, "observe_")}
+	case action == "workflow_ask" || action == "workflow_answer":
+		return nil
+	default:
+		return []string{action}
+	}
+}
+
+func insertSharedHelp(tree map[string]any, path []string, flags map[string]bool) {
+	node := tree
+	for _, segment := range path[:len(path)-1] {
+		child, ok := node[segment].(map[string]any)
+		if !ok {
+			child = map[string]any{"summary": "Shared task commands"}
+			node[segment] = child
+		}
+		node = child
+	}
+	values := make([]string, 0, len(flags))
+	for flag := range flags {
+		values = append(values, flag)
+	}
+	sort.Strings(values)
+	node[path[len(path)-1]] = map[string]any{"summary": "Shared task command", "flags": values}
 }
 
 func taskOperatorRegistry() (*registry.Registry, error) {
@@ -251,6 +302,9 @@ func taskOperatorRegistry() (*registry.Registry, error) {
 	groups := map[string]bool{}
 	for _, command := range commands.TaskOperatorCommands() {
 		command.Path = strings.TrimPrefix(command.Path, "tasks.")
+		if !operatorRoots[strings.Split(command.Path, ".")[0]] {
+			continue
+		}
 		command.CLIHidden = false
 		if err := reg.Register(command); err != nil {
 			return nil, err
