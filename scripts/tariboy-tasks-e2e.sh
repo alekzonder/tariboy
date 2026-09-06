@@ -3,9 +3,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/bin"
 BASE="$(mktemp -d)"
 RUNTIME="$(mktemp -d)"
+BIN="$RUNTIME/bundle"
 export TARIBOY_BASE_DIR="$BASE"
 export TARIBOY_RUNTIME_DIR="$RUNTIME"
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
@@ -14,15 +14,33 @@ unset TARIBOY_TOOLS_SOCKET
 
 SOCK="$RUNTIME/tariboyd.sock"
 DPID=""
-trap 'kill "${DPID:-}" 2>/dev/null || true; wait "${DPID:-}" 2>/dev/null || true; rm -rf "$BASE" "$RUNTIME"' EXIT
+trap '"$BIN/tariboy" --socket "$SOCK" agent kill worker >/dev/null 2>&1 || true; kill "${DPID:-}" 2>/dev/null || true; wait "${DPID:-}" 2>/dev/null || true; rm -rf "$BASE" "$RUNTIME"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-[ -x "$BIN/tariboy-tasks" ] || fail "missing $BIN/tariboy-tasks"
-mkdir "$RUNTIME/bin"
-ln -s "$BIN/tariboy-tasks" "$RUNTIME/bin/ttasks"
-export PATH="$RUNTIME/bin:$PATH"
+# Compile the current source and image without modifying workspace artifacts.
+cd "$ROOT"
+VERSION="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)"
+go run ./internal/builtinimages/generate -source internal/builtinimages/source -output "$RUNTIME/generated" -version "$VERSION"
+python3 - "$ROOT" "$RUNTIME" <<'PY' >"$RUNTIME/overlay.json"
+import json, os, sys
+root, runtime = sys.argv[1:]
+print(json.dumps({"Replace": {
+    os.path.join(root, "internal/builtinimages/generated", name):
+    os.path.join(runtime, "generated", name)
+    for name in ("basic.tar.gz", "VERSION")
+}}))
+PY
+for name in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
+  go build -trimpath -overlay "$RUNTIME/overlay.json" -o "$BIN/$name" "./cmd/$name"
+done
 
-"$BIN/tariboyd" --base-dir "$BASE" --http-addr "" --log-level error &
+[ -x "$BIN/tariboy-tasks" ] || fail "missing $BIN/tariboy-tasks"
+ttasks() { "$BIN/tariboy-tasks" "$@"; }
+mkdir "$RUNTIME/prerequisites"
+ln -s "$(command -v python3)" "$RUNTIME/prerequisites/python3"
+
+# Model fresh Desktop startup: no optional CLI install or Tasks alias on PATH.
+TARIBOY_SHELL_ENV=1 PATH="$RUNTIME/prerequisites:/usr/bin:/bin" "$BIN/tariboyd" --base-dir "$BASE" --http-addr "" --log-level error &
 DPID=$!
 for _ in $(seq 1 200); do
   [ -S "$SOCK" ] && break
@@ -33,6 +51,10 @@ done
 echo "--- operator mode sees and updates both queues"
 ttasks queue create --prefix OPS --name "Operator Queue" >/dev/null
 ttasks queue create --prefix AGT --name "Agent Queue" >/dev/null
+ttasks queue get OPS --json | grep -q '"prefix":"OPS"' || fail "operator queue argument was lost"
+ttasks workflows create --definition '{"name":"cli-flow","version":1,"initial_status":"implement","statuses":[{"id":"implement","requirements":[{"id":"code","pool":"developers","dispatch":"claim_one","produces":["implementation"],"outcomes":["done"]}],"transitions":[{"when":"code.done","to":"done"}]},{"id":"done","terminal":true}]}' >/dev/null
+ttasks workflows publish cli-flow 1 >/dev/null
+ttasks workflows get cli-flow 1 --json | grep -q '"state":"published"' || fail "workflow definition was not published"
 ttasks create --queue OPS --title "operator task" >/dev/null
 ttasks create --queue AGT --title "agent task" >/dev/null
 OPERATOR="$(ttasks mine --json)"
@@ -45,7 +67,7 @@ ttasks show AGT-1 --json | grep -q '"title":"agent updated"' || fail "operator d
 
 echo "--- agent mode is identity-bound to its real tools socket"
 "$BIN/tariboy" --socket "$SOCK" agent run basic:latest --name worker --harness stub --loop false \
-  --plugins tasks --env 'STUB_SLEEP=300,STUB_CALL_DONE=0' >/dev/null
+  --plugins tasks --env "STUB_SLEEP=300,STUB_CALL_DONE=0,STUB_TASKS_MINE=$RUNTIME/agent-tasks.json" >/dev/null
 ttasks assign AGT-1 worker >/dev/null
 "$BIN/tariboy" --socket "$SOCK" agent exec worker >/dev/null
 for _ in $(seq 1 200); do
@@ -53,6 +75,14 @@ for _ in $(seq 1 200); do
   sleep 0.05
 done
 [ -S "$RUNTIME/worker.sock" ] || fail "agent tools socket did not start"
+for _ in $(seq 1 200); do
+  [ -s "$RUNTIME/agent-tasks.json" ] && break
+  sleep 0.05
+done
+[ -s "$RUNTIME/agent-tasks.json" ] || fail "daemon-launched agent could not invoke bundled ttasks"
+grep -q '"queue":"AGT"' "$RUNTIME/agent-tasks.json" || fail "launched agent did not see assigned task"
+test ! -e "$BASE/agents/worker/bin/ttasks" && test ! -L "$BASE/agents/worker/bin/ttasks" || fail "agent-local ttasks was created"
+test "$(readlink "$RUNTIME/bin/ttasks")" = "$BIN/tariboy-tasks" || fail "runtime alias does not select the bundled payload"
 AGENT="$(TARIBOY_TOOLS_SOCKET="$RUNTIME/worker.sock" ttasks mine --json)"
 printf '%s' "$AGENT" | grep -q '"queue":"AGT"' || fail "agent did not see assigned AGT task"
 if printf '%s' "$AGENT" | grep -q '"queue":"OPS"'; then

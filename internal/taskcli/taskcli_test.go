@@ -245,6 +245,51 @@ func TestRunJSONAndVersion(t *testing.T) {
 	}
 }
 
+func TestOperatorAdministrationArguments(t *testing.T) {
+	tests := []struct {
+		args          []string
+		method, route string
+		body          any
+	}{
+		{[]string{"queue", "get", "OPS"}, "GET", "/api/task-queues/OPS", map[string]string{}},
+		{[]string{"queue", "update", "OPS", "--name", "Operations", "--revision", "2"}, "PATCH", "/api/task-queues/OPS", map[string]any{"name": "Operations", "revision": 2}},
+		{[]string{"notifications", "read", "1"}, "POST", "/api/task-notifications/1/read", map[string]any{}},
+		{[]string{"notifications", "dismiss", "1"}, "POST", "/api/task-notifications/1/dismiss", map[string]any{}},
+		{[]string{"notifications", "list", "--include-dismissed"}, "GET", "/api/task-notifications", map[string]string{"include_dismissed": "true"}},
+		{[]string{"workflows", "get", "review", "2"}, "GET", "/api/workflows/review/versions/2", map[string]string{}},
+		{[]string{"workflows", "publish", "review", "2"}, "POST", "/api/workflows/review/versions/2/publish", map[string]any{}},
+		{[]string{"workflows", "create", "--definition", `{"name":"review","version":1}`}, "POST", "/api/workflows", map[string]any{"definition": map[string]any{"name": "review", "version": 1}}},
+		{[]string{"queue", "workflow", "set", "OPS", "--workflow-version-id", "3", "--revision", "0", "--idempotency-key", "bind"}, "PUT", "/api/task-queues/OPS/workflow", map[string]any{"workflow_version_id": 3, "revision": 0, "idempotency_key": "bind"}},
+		{[]string{"queue", "pool", "get", "OPS", "reviewers"}, "GET", "/api/task-queues/OPS/pools/reviewers", map[string]string{}},
+		{[]string{"queue", "trigger", "delete", "OPS", "4"}, "DELETE", "/api/task-queues/OPS/workflow-triggers/4", map[string]string{}},
+		{[]string{"workflow", "get", "OPS-1"}, "GET", "/api/tasks/OPS-1/workflow", map[string]string{}},
+		{[]string{"workflow", "artifact", "get", "OPS-1", "5", "--assignment-id", "A-1"}, "GET", "/api/tasks/OPS-1/artifacts/5", map[string]string{"assignment_id": "A-1"}},
+		{[]string{"events", "OPS-1", "--after", "7", "--limit", "10"}, "GET", "/api/tasks/OPS-1/events", map[string]string{"after": "7", "limit": "10"}},
+	}
+	old := newCaller
+	defer func() { newCaller = old }()
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			r := &recorder{result: json.RawMessage(`{}`)}
+			newCaller = func(string) Caller { return r }
+			var errOut strings.Builder
+			if code := Run(context.Background(), tt.args, operatorEnv(t), io.Discard, &errOut); code != 0 {
+				t.Fatalf("code = %d, stderr = %s", code, errOut.String())
+			}
+			if len(r.calls) != 1 || r.calls[0].method != tt.method || r.calls[0].route != tt.route || !sameJSON(r.calls[0].body, tt.body) {
+				t.Fatalf("calls = %#v, want %s %s %#v", r.calls, tt.method, tt.route, tt.body)
+			}
+		})
+	}
+	for _, definition := range []string{`not-json`, `[]`, `null`, `"string"`} {
+		r := &recorder{result: json.RawMessage(`{}`)}
+		newCaller = func(string) Caller { return r }
+		if code := Run(context.Background(), []string{"workflows", "create", "--definition", definition}, operatorEnv(t), io.Discard, io.Discard); code != 2 || len(r.calls) != 0 {
+			t.Errorf("definition %s: code = %d calls = %#v", definition, code, r.calls)
+		}
+	}
+}
+
 func TestHelpJSONCoversRunnableTaskRootsWithoutSocket(t *testing.T) {
 	old := newCaller
 	defer func() { newCaller = old }()
@@ -284,6 +329,24 @@ func TestAgentModeNeverFallsBack(t *testing.T) {
 	}
 	if len(sockets) != 1 || sockets[0] != "/missing/agent.sock" {
 		t.Fatalf("sockets = %q, want only agent socket", sockets)
+	}
+}
+
+func TestWhitespaceSocketRemainsAgentMode(t *testing.T) {
+	old := newCaller
+	defer func() { newCaller = old }()
+	var sockets []string
+	newCaller = func(socket string) Caller {
+		sockets = append(sockets, socket)
+		return &recorder{err: io.EOF}
+	}
+	env := mapEnv("TARIBOY_TOOLS_SOCKET", " \t ", "TARIBOY_BASE_DIR", t.TempDir(), "TARIBOY_RUNTIME_DIR", t.TempDir())
+	if code := Run(context.Background(), []string{"mine"}, env, io.Discard, io.Discard); code != 2 || len(sockets) != 1 || sockets[0] != " \t " {
+		t.Fatalf("mine code = %d, sockets = %q; want only raw agent socket", code, sockets)
+	}
+	sockets = nil
+	if code := Run(context.Background(), []string{"queue", "list"}, env, io.Discard, io.Discard); code != 2 || len(sockets) != 0 {
+		t.Fatalf("admin code = %d, sockets = %q; want local refusal", code, sockets)
 	}
 }
 

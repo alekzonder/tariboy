@@ -317,6 +317,12 @@ func findArg(cmd registry.Command, flag string) (registry.Arg, bool) {
 
 func convert(a registry.Arg, s string) (any, error) {
 	switch a.Type {
+	case registry.JSONObject:
+		var value map[string]any
+		if err := json.Unmarshal([]byte(s), &value); err != nil || value == nil {
+			return nil, fmt.Errorf("argument %s must be a JSON object", a.Name)
+		}
+		return value, nil
 	case registry.Bool:
 		switch s {
 		case "true", "1":

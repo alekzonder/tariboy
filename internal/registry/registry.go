@@ -32,6 +32,7 @@ const (
 	Int         ArgType = "int"
 	IntegerList ArgType = "integer-list"
 	SecretFile  ArgType = "secret-file"
+	JSONObject  ArgType = "json-object"
 )
 
 type Arg struct {

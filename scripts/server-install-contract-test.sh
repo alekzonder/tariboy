@@ -105,6 +105,44 @@ test "$(cat "$home/.local/lib/tariboy/old/tariboy")" = old
 test -f "$home/.local/lib/tariboy/$version/tariboy-tasks"
 test ! -e "$home/.local/lib/tariboy/$version/ttasks"
 
+# A pre-Tasks release has neither payload nor alias. Reactivation removes the
+# newer managed names, and selecting the new release again restores them.
+old_release="$home/.local/lib/tariboy/old"
+rm "$old_release/tariboy-tasks"
+printf 'old\n' >"$old_release/VERSION"
+(cd "$old_release" && sha256sum tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram >SHA256SUMS)
+if HOME="$home" PATH="$tools:$PATH" TARIBOY_TEST_FAIL_MV_TO="$home/.local/bin/tariboy-shim" \
+  sh "$ROOT/desktop/src-tauri/src/remote-install.sh" old .stage-rollback-fail activate "$version"; then
+  echo "forced pre-Tasks activation failure was accepted" >&2
+  exit 1
+fi
+for pair in "${links[@]}"; do
+  test "$(readlink "$home/.local/bin/${pair%%:*}")" = "$home/.local/lib/tariboy/$version/${pair#*:}"
+done
+HOME="$home" sh "$ROOT/desktop/src-tauri/src/remote-install.sh" old .stage-rollback activate "$version"
+for name in tariboy-tasks ttasks; do
+  if test -e "$home/.local/bin/$name" || test -L "$home/.local/bin/$name"; then
+    echo "pre-Tasks activation left a Tasks link: $name" >&2
+    exit 1
+  fi
+done
+for name in tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram; do
+  test "$(readlink "$home/.local/bin/$name")" = "$old_release/$name"
+done
+HOME="$home" sh "$ROOT/desktop/src-tauri/src/remote-install.sh" "$version" .stage-reactivate activate old
+test "$("$home/.local/bin/ttasks" --version)" = "$version"
+
+# An incomplete checksum list must not allow absent mandatory payloads.
+rm "$old_release/tariboy-shim"
+(cd "$old_release" && sha256sum tariboyd tariboy tariboy-store tariboy-plugin-telegram >SHA256SUMS)
+if HOME="$home" sh "$ROOT/desktop/src-tauri/src/remote-install.sh" old .stage-incomplete activate "$version"; then
+  echo "activation accepted an incomplete release" >&2
+  exit 1
+fi
+for pair in "${links[@]}"; do
+  test "$(readlink "$home/.local/bin/${pair%%:*}")" = "$home/.local/lib/tariboy/$version/${pair#*:}"
+done
+
 seed_old
 rm "$home/.local/bin/ttasks"
 printf 'foreign\n' >"$home/.local/bin/ttasks"

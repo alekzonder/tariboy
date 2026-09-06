@@ -262,7 +262,13 @@ reaction to a mismatch belongs to the client, see
 
 Provisioning writes only the compatibility shims enabled by the image into
 `<data dir>/agents/<name>/bin`: `i-am-done` and the legacy `tasks` shim. The
-real `tariboy-tasks` executable is installed globally as `ttasks`. When
+real `tariboy-tasks` executable is installed globally as `ttasks`. At startup,
+a packaged daemon also atomically refreshes one shared `bin/ttasks` symlink in
+its runtime directory to its sibling payload and prepends that directory to
+the resolved account `PATH`. Fresh Desktop agents therefore have `ttasks`
+before optional CLI installation; no agent-local `ttasks` shim is created.
+The runtime alias remains across daemon restarts for surviving iterations.
+An explicit agent `PATH` override must retain a Tasks command location. When
 `TARIBOY_TOOLS_SOCKET` is non-empty, it uses that identity-bound socket and
 fails closed; when absent, it uses the host Unix daemon socket as the customer
 actor. Each compatibility shim `exec`s its owning skill script by an **absolute
