@@ -245,6 +245,20 @@ func TestRunJSONAndVersion(t *testing.T) {
 	}
 }
 
+func TestHelpJSONUsesTaskCommandDescriptorsWithoutSocket(t *testing.T) {
+	old := newCaller
+	defer func() { newCaller = old }()
+	newCaller = func(string) Caller { t.Fatal("help must not construct a caller"); return nil }
+	var out strings.Builder
+	if code := Run(context.Background(), []string{"--help-json"}, mapEnv(), &out, io.Discard); code != 0 {
+		t.Fatalf("code = %d, want 0", code)
+	}
+	var tree map[string]any
+	if err := json.Unmarshal([]byte(out.String()), &tree); err != nil || tree["queue"] == nil {
+		t.Fatalf("help = %q, tree = %#v, err = %v", out.String(), tree, err)
+	}
+}
+
 func TestAgentModeNeverFallsBack(t *testing.T) {
 	old := newCaller
 	defer func() { newCaller = old }()

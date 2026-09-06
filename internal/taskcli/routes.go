@@ -229,14 +229,31 @@ func runOperatorCommand(ctx context.Context, args []string, getenv func(string) 
 		fmt.Fprintf(stderr, "tariboy-tasks: %v\n", err)
 		return 2
 	}
+	reg, err := taskOperatorRegistry()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return cli.Run(ctx, reg, args, newCaller(resolved.Socket()), nil, stdout, stderr)
+}
+
+func runHelpJSON(ctx context.Context, stdout, stderr io.Writer) int {
+	reg, err := taskOperatorRegistry()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return cli.Run(ctx, reg, []string{"--help-json"}, nil, nil, stdout, stderr)
+}
+
+func taskOperatorRegistry() (*registry.Registry, error) {
 	reg := registry.New()
 	groups := map[string]bool{}
 	for _, command := range commands.TaskOperatorCommands() {
 		command.Path = strings.TrimPrefix(command.Path, "tasks.")
 		command.CLIHidden = false
 		if err := reg.Register(command); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
+			return nil, err
 		}
 		parts := strings.Split(command.Path, ".")
 		for i := 1; i < len(parts); i++ {
@@ -244,7 +261,9 @@ func runOperatorCommand(ctx context.Context, args []string, getenv func(string) 
 		}
 	}
 	for group := range groups {
-		_ = reg.RegisterGroup(group, "Manage native tasks")
+		if err := reg.RegisterGroup(group, "Manage native tasks"); err != nil {
+			return nil, err
+		}
 	}
-	return cli.Run(ctx, reg, args, newCaller(resolved.Socket()), nil, stdout, stderr)
+	return reg, nil
 }
