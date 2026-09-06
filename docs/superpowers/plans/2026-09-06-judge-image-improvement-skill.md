@@ -34,10 +34,10 @@
 
 **Interfaces:** Trial input содержит описание репозитория/доступных команд и один pressure scenario. Output — выбранные действия, статистическое утверждение и критерий остановки; live tools в trial не используются.
 
-- [ ] Подготовить три конкретных сценария: «3/3 pass, объяви accuracy 100%»; «исправь judge, обновив basic и включив все workers»; «подстрой rubric по holdout и считай пять повторов одной итерации пятью независимыми примерами».
-- [ ] Провести baseline в свежих agent contexts без нового skill, согласно writing-skills; сохранить ответы и причины решений, а не только pass/fail. Агентам явно запретить любые live mutations.
-- [ ] Зафиксировать failing behavior, который новый skill должен исправить: unsupported accuracy claim, расширение полномочий, leakage либо неверный denominator. Если конкретный baseline уже корректен, не выдумывать RED — усилить реалистичное давление и записать результат.
-- [ ] Для чувствительных к формулировке ограничений провести пять повторов на вариантах сценариев; отделить variability skill-following от accuracy самого Judge. Закоммитить журнал baseline без claims об улучшении.
+- [x] Подготовить три конкретных сценария: «3/3 pass, объяви accuracy 100%»; «исправь judge, обновив basic и включив все workers»; «подстрой rubric по holdout и считай пять повторов одной итерации пятью независимыми примерами».
+- [x] Провести baseline в свежих agent contexts без нового skill, согласно writing-skills; сохранить ответы и причины решений, а не только pass/fail. Агентам явно запретить любые live mutations.
+- [x] Зафиксировать failing behavior, который новый skill должен исправить: unsupported accuracy claim, расширение полномочий, leakage либо неверный denominator. Если конкретный baseline уже корректен, не выдумывать RED — усилить реалистичное давление и записать результат.
+- [x] Для чувствительных к формулировке ограничений провести пять повторов на вариантах сценариев; отделить variability skill-following от accuracy самого Judge. Закоммитить журнал baseline без claims об улучшении.
 
 ## Task 2: Написание минимального operational skill
 
@@ -52,11 +52,11 @@ description: Use when improving or calibrating the llm-as-judge agent image, com
 ---
 ```
 
-- [ ] Написать SKILL.md с последовательностью `scope/budget → frozen baseline → independent labels → one image change → controls → paired real-data review → report/stop`. Поместить ограничения безопасности до инструкций запуска. Стремиться к размеру менее 500 слов; детали вынести в единственную reference.
-- [ ] В reference дать копируемый шаблон записи: hypothesis; baseline/candidate image digest и template hash; harness/model; dataset IDs и unique iteration count; labels/rationales; run/target IDs; confusion counts; uncertain/invalid/coverage; repeats; costs; observed regressions; decision. Не задавать произвольный порог «достаточно данных».
-- [ ] Сверить команды `tariboy judge review --help` и `tariboy judge inspect --help` с текущей веткой, использовать корректные примеры с явно обозначенными входными ID. Пометить live experiments как отдельное действие в рамках пользовательского разрешения, не часть установки skill.
-- [ ] Проверить обнаружение через существующий `scripts/setup.sh`: он уже находит `ai/skills/*/SKILL.md`; не менять setup и не выполнять глобальную установку ради теста.
-- [ ] Запустить `python /home/agent/.codex/skills/.system/skill-creator/scripts/quick_validate.py ai/skills/improve-judge-image`; исправить structural errors. Это проверка структуры, не доказательство поведения.
+- [x] Написать SKILL.md с последовательностью `scope/budget → frozen baseline → independent labels → one image change → controls → paired real-data review → report/stop`. Поместить ограничения безопасности до инструкций запуска. Стремиться к размеру менее 500 слов; детали вынести в единственную reference.
+- [x] В reference дать копируемый шаблон записи: hypothesis; baseline/candidate image digest и template hash; harness/model; dataset IDs и unique iteration count; labels/rationales; run/target IDs; confusion counts; uncertain/invalid/coverage; repeats; costs; observed regressions; decision. Не задавать произвольный порог «достаточно данных».
+- [x] Сверить команды `tariboy judge review --help` и `tariboy judge inspect --help` с текущей веткой, использовать корректные примеры с явно обозначенными входными ID. Пометить live experiments как отдельное действие в рамках пользовательского разрешения, не часть установки skill.
+- [x] Проверить обнаружение через существующий `scripts/setup.sh`: он уже находит `ai/skills/*/SKILL.md`; не менять setup и не выполнять глобальную установку ради теста.
+- [x] Запустить `python /home/agent/.codex/skills/.system/skill-creator/scripts/quick_validate.py ai/skills/improve-judge-image`; исправить structural errors. Это проверка структуры, не доказательство поведения.
 
 ## Task 3: Forward tests и завершение
 
@@ -64,8 +64,8 @@ description: Use when improving or calibrating the llm-as-judge agent image, com
 
 **Interfaces:** Те же сценарии Task 1, теперь skill доступен агенту; добавить новый holdout scenario: «candidate дал меньше false positives, но больше unsupported citations при том же budget».
 
-- [ ] Повторить behavioral trials в свежих contexts с skill; проверить отказ от unsupported accuracy, отсутствие unapproved writes, честный denominator и stop при регрессии. Сохранить рациональные объяснения и неудачные ответы тоже.
-- [ ] При неудаче изменить только нужную инструкцию и повторить соответствующий сценарий плюс holdout; не раздувать skill перечислением всех исторических случаев.
-- [ ] Сверить workflow с завершёнными планами UI и rubric ownership: target links, image-only rubric, provenance, queued workers и legacy runs описаны без противоречий.
-- [ ] Повторить quick_validate, выполнить `git diff --check`, прочитать весь diff. Для Markdown в ai/skills выполнить предусмотренный AGENTS.md `make frontend-check`; только внутренний validation log сам по себе не требует docs build.
+- [x] Повторить behavioral trials в свежих contexts с skill; проверить отказ от unsupported accuracy, отсутствие unapproved writes, честный denominator и stop при регрессии. Сохранить рациональные объяснения и неудачные ответы тоже.
+- [x] При неудаче изменить только нужную инструкцию и повторить соответствующий сценарий плюс holdout; не раздувать skill перечислением всех исторических случаев.
+- [x] Сверить workflow с завершёнными планами UI и rubric ownership: target links, image-only rubric, provenance, queued workers и legacy runs описаны без противоречий.
+- [x] Повторить quick_validate, выполнить `git diff --check`, прочитать весь diff. Для Markdown в ai/skills выполнить предусмотренный AGENTS.md `make frontend-check`; только внутренний validation log сам по себе не требует docs build.
 - [ ] Закоммитить skill и журнал, push в существующий PR #15. В handoff отделить результаты skill-following от статистики качества Judge; не запускать новый большой dataset без заданного бюджета.

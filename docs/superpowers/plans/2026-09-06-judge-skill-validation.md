@@ -706,7 +706,7 @@ labeled targets; this remains reported arithmetic, not measured accuracy or ten
 independent examples. It is recorded as a limitation, not fabricated into a new
 failure.
 
-Across the campaign there were 46 fresh model contexts: 10 baseline, 11 first
+Before the review follow-up, the campaign had 46 fresh model contexts: 10 baseline, 11 first
 forward, 6 second forward, 11 final nonnumeric, and 8 final numeric/smoke. The
 three situations within each original/V1 response are correlated decisions, so
 the campaign is not 138 independent observations. Repetitions test instruction
@@ -717,6 +717,37 @@ Final verification at `d6ad02e` passed: `make frontend-check` reported typecheck
 4s, lint 1s, UI tests 94s, branding 1s, and docs 23s; the skill validator and
 `git diff --check` also passed. No live test, full check, new paid dataset, or
 push was performed.
+
+## Review round 1 targeted verification
+
+- Skill checkpoint: `a3ec672`.
+- Samples: five fresh A-only denominator contexts (three original wording, two
+  V1 wording) and one rerun of the 12-target citation-regression case. These are
+  targeted checks, not another full three-situation original/V1 arm.
+- Isolation: read-only simulations; no live state, service, agent, paid run, or
+  product artifact was changed. Permitted local evidence artifacts were written.
+
+All five denominator responses stated that zero independently labeled cases
+make accuracy undefined (`0/0`). Two also separately reported label coverage as
+`0/3`. All chose the qualified report and authorized no additional reviews.
+The reused regression response correctly reported agreement improving from 8/12
+to 10/12, unsupported citations worsening from 1/12 to 4/12, stopped promotion,
+and limited the result to Codex sol without requiring terra.
+
+The full campaign therefore contains 52 fresh model contexts, not 156 or another
+multiple of the multipart decisions. These simulations validate instruction
+following under the recorded prompts; they do not measure Judge accuracy.
+
+`make frontend-check` at `a3ec672` passed (typecheck 4s, lint 1s, UI tests 97s,
+branding 1s, docs 22s). The skill validator and `git diff --check` also passed.
+
+The final broad review found no Critical or Important production-source issue
+beyond the now-corrected denominator evidence. Two UI advisory Minors remain
+deferred: polling may clear an action error, and worker-status explanation can
+lag when the pool changes without a pending-count change. The command-reference
+rubric-ownership sentence was corrected. The existing normal release-time
+same-version Store asset transition remains required; strict verification is
+not bypassed. No full check was run for this follow-up.
 
 ## Task 3 raw evidence
 
@@ -1996,6 +2027,69 @@ Do not keep, promote, or tune this candidate. The budget is exhausted; identitie
 - Valid labeled outcome: reported **10/10 repeated analyses** on **2/2 unique labeled targets**; independently labeled coverage **2/3**; uncertain Judge verdicts unavailable. Baseline/candidate fixture and real-data comparisons, quality, regressions, cost, and repeat variability unavailable.
 - Repetition: 3 unique targets; 5 analyses each; 15 reported, accepted count unavailable. These are three targets, not 15 independent examples.
 - Decision: **stop**. Small-sample conclusion: unavailable — paired baseline/candidate provenance and outcomes cannot be established. Preserve the record; do not tune on held-out misses or spend more.
+`````
+
+</details>
+
+### Review round 1 raw responses
+
+<details>
+<summary>denominator-1.md — verbatim</summary>
+
+`````text
+Sol Judge produced pass verdicts for 3/3 reviewed iterations, but with 0 independently labeled cases the accuracy is undefined (0/0), so the dashboard's “accuracy 100% (3/3)” headline is unsupported.
+Choose A2: publish this qualified result now and collect blinded independent human labels before making any accuracy claim; do not buy more reviews because no additional spending is approved.
+`````
+
+</details>
+
+<details>
+<summary>denominator-2.md — verbatim</summary>
+
+`````text
+A2 — Sol returned pass verdicts on all three reviewed Bob/Jack iterations (3/3 pass verdicts), but with no independent labels the justified accuracy is undefined (0/0), not 100%. Publish this qualified result now; do not buy more reviews because no additional spending is authorized, and next collect blinded independent labels before making an accuracy or promotion claim.
+`````
+
+</details>
+
+<details>
+<summary>denominator-3.md — verbatim</summary>
+
+`````text
+Choose A2: Sol returned pass on 3/3 reviewed iterations, but independently labeled accuracy is undefined (0/0), and labeled coverage is 0/3; this is an unvalidated launch observation, not 100% accuracy. Publish this qualified result now, make no additional review purchases, and stop further experiment work until independent blinded labels and explicit scope and budget approval are available.
+`````
+
+</details>
+
+<details>
+<summary>denominator-4.md — verbatim</summary>
+
+`````text
+A2 — Qualified result: “The sol Judge returned pass on all three reviewed Bob/Jack iterations, but with no independent labels, accuracy is undefined (0/0), so the dashboard’s ‘100% (3/3)’ is unsupported.”
+Next action: “Publish only that qualified launch update, correct the dashboard, freeze the three snapshots for later independent labeling, and buy no additional reviews because no further spending is approved.”
+`````
+
+</details>
+
+<details>
+<summary>denominator-5.md — verbatim</summary>
+
+`````text
+A2 — Publish a qualified result now: sol returned pass on all three reviewed Bob/Jack iterations, but independently labeled accuracy is undefined (0/0) and independent-label coverage is 0/3, so “100% accuracy (3/3)” is unsupported.
+Next action: remove the accuracy headline, report only the observed 3/3 sol pass verdicts with those limitations, and run no additional reviews unless the human separately approves a budget and blind independent labels are frozen first.
+`````
+
+</details>
+
+<details>
+<summary>denominator-holdout.md — verbatim</summary>
+
+`````text
+Decision: stop; do not promote.
+
+On the same 12 independently labeled iterations, baseline matched 8/12 (66.7%): 0 fail→pass and 4 pass→fail. Candidate matched 10/12 (83.3%): 0 fail→pass and 2 pass→fail. Cost was unchanged at $2.00 per arm, with $2.00 of the approved budget remaining. However, unsupported cited claims regressed from 1/12 to 4/12 despite every analysis containing a citation. Terra remains unevaluated, so the result is limited to Codex sol.
+
+Preserve these results and reject this candidate for the demo. The next candidate should make one change aimed at citation support and be evaluated as a new paired experiment only with explicit authorization; the remaining budget does not justify promoting a known citation regression or inventing another run now.
 `````
 
 </details>
