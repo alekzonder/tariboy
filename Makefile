@@ -46,7 +46,8 @@ install:
 		name=$${link%%:*}; source=$${link#*:}; \
 		test "$$name" != "$$source" || continue; \
 		echo "ln -s $$source -> $(INSTALLDIR)/$$name"; \
-		ln -sf "$$source" "$(INSTALLDIR)/$$name"; \
+		rm -f "$(INSTALLDIR)/$$name"; \
+		ln -s "$$source" "$(INSTALLDIR)/$$name"; \
 	done
 
 server-install: build
