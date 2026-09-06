@@ -68,4 +68,13 @@ description: Use when improving or calibrating the llm-as-judge agent image, com
 - [x] При неудаче изменить только нужную инструкцию и повторить соответствующий сценарий плюс holdout; не раздувать skill перечислением всех исторических случаев.
 - [x] Сверить workflow с завершёнными планами UI и rubric ownership: target links, image-only rubric, provenance, queued workers и legacy runs описаны без противоречий.
 - [x] Повторить quick_validate, выполнить `git diff --check`, прочитать весь diff. Для Markdown в ai/skills выполнить предусмотренный AGENTS.md `make frontend-check`; только внутренний validation log сам по себе не требует docs build.
-- [ ] Закоммитить skill и журнал, push в существующий PR #15. В handoff отделить результаты skill-following от статистики качества Judge; не запускать новый большой dataset без заданного бюджета.
+- [x] Закоммитить skill и журнал, push в существующий PR #15. В handoff отделить результаты skill-following от статистики качества Judge; не запускать новый большой dataset без заданного бюджета.
+
+## Completion
+
+All three sequential plans are implemented and task-reviewed. The final whole-branch
+review and its scoped fix review are approved, with two nonblocking UI advisory
+issues recorded in the validation journal and PR. Commits through `7cd180d` were
+pushed to the existing branch/PR #15. No new paid Judge dataset, live installation,
+or `full-check` was run in these follow-ups; skill-following evidence is not
+Judge-accuracy evidence.
