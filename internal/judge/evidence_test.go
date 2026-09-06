@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/paths"
 )
@@ -76,6 +77,20 @@ func putLegacyBundle(t *testing.T, base, canonical string) string {
 		t.Fatal(err)
 	}
 	return hash
+}
+
+func transcriptMap(t *testing.T, entry aiproxy.TranscriptEntry) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	out["request_id"] = entry.Meta.ID
+	return out
 }
 
 func TestEvidenceReaderSearchGetAndCorruption(t *testing.T) {
@@ -337,6 +352,92 @@ func TestEvidenceReaderPreservesLegacyBundleHashes(t *testing.T) {
 		if err != nil || bundle.BundleHash != hash {
 			t.Fatalf("legacy bundle hash=%q bundle=%+v err=%v", hash, bundle, err)
 		}
+	}
+}
+
+func TestEvidenceReaderExposesReadableTranscriptCalls(t *testing.T) {
+	base := t.TempDir()
+	entry := aiproxy.TranscriptEntry{
+		Meta:     aiproxy.AIRequest{ID: "req-action", Provider: "openai", Model: "gpt-test"},
+		Request:  []byte(`{"instructions":"work safely","input":"run verification"}`),
+		Response: []byte(`{"status":"completed","output":[{"type":"local_shell_call","call_id":"shell-1","action":{"type":"exec","command":["bash","-lc","make check"]}}]}`),
+	}
+	hash := putBundle(t, base, EvidenceBundle{SchemaVersion: 1, Transcript: []map[string]any{transcriptMap(t, entry)}})
+	reader := NewEvidenceReader(base)
+	page, err := reader.Search(hash, EvidenceQuery{Artifacts: []string{"transcript"}, Query: "make check"})
+	if err != nil || len(page.Results) != 1 || page.Results[0]["locator"] != "req-action" {
+		t.Fatalf("readable transcript search=%+v err=%v", page, err)
+	}
+	got, err := reader.Get(hash, EvidenceLocator{Artifact: "transcript", Locator: "req-action"})
+	if err != nil || stringMustJSON(t, got) != stringMustJSON(t, page.Results[0]) {
+		t.Fatalf("get=%+v search=%+v err=%v", got, page.Results[0], err)
+	}
+	if strings.Contains(stringMustJSON(t, got), `"request":"`) {
+		t.Fatalf("readable call leaked base64 envelope: %+v", got)
+	}
+}
+
+func TestEvidenceReaderLegacyAndMalformedTranscriptRemainVisible(t *testing.T) {
+	base := t.TempDir()
+	entry := aiproxy.TranscriptEntry{Meta: aiproxy.AIRequest{ID: "legacy-request", Provider: "openai"}, Request: []byte(`not json`), Response: []byte(`also not json`)}
+	encoded := stringMustJSON(t, transcriptMap(t, entry))
+	canonical := `{"schema_version":1,"bundle_hash":"","target":{"Iteration":"iter-v1","Agent":"worker","Status":"done","StartedAt":"2026-07-01T10:00:00Z"},"prompt":{"locator":"prompt","content":"","present":false},"audit":[],"transcript":[` + encoded + `],"usage":{"Requests":0,"InputTokens":0,"OutputTokens":0,"CostUSD":0},"completeness":[]}`
+	hash := putLegacyBundle(t, base, canonical)
+	reader := NewEvidenceReader(base)
+	page, err := reader.Search(hash, EvidenceQuery{Artifacts: []string{"transcript"}, Query: "parse_error"})
+	if err != nil || len(page.Results) != 1 || page.Results[0]["locator"] != "legacy-request" {
+		t.Fatalf("malformed legacy transcript=%+v err=%v", page, err)
+	}
+	if _, err := reader.Manifest(hash); err != nil {
+		t.Fatalf("readable projection changed legacy hash: %v", err)
+	}
+}
+
+func TestSnapshotRedactsDecodedTranscriptPayloads(t *testing.T) {
+	base := t.TempDir()
+	db, js := newJudgeStore(t)
+	seedJudgeAgent(t, db.DB, "lead")
+	seedJudgeAgent(t, db.DB, "judge")
+	seedTarget(t, db.DB, "iter-secret", "worker", "done", "2026-07-01T10:00:00Z")
+	if _, err := db.DB.Exec(`INSERT INTO secrets(agent,key,value) VALUES(?,?,?)`, "worker", "api", "very-secret"); err != nil {
+		t.Fatal(err)
+	}
+	agentsDir := paths.New(base).AgentsDir()
+	if err := agentdir.New(agentsDir, "worker").EnsureIteration("iter-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := aiproxy.AppendTranscript(agentsDir, aiproxy.TranscriptEntry{
+		Meta:     aiproxy.AIRequest{ID: "req-secret", Agent: "worker", Iteration: "iter-secret", Provider: "openai"},
+		Request:  []byte(`{"instructions":"use very-secret","input":"work"}`),
+		Response: []byte(`{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"very-secret"}]}]}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := js.CreateRun(context.Background(), request("iter-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NewSnapshotter(SnapshotConfig{Store: js, BaseDir: base, AgentsDir: agentsDir}).BuildRun(context.Background(), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := js.ListTargets(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := NewEvidenceReader(base).Manifest(targets[0].BundleHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(bundle.Transcript[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured aiproxy.TranscriptEntry
+	if err := json.Unmarshal(raw, &captured); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(captured.Request)+string(captured.Response), "very-secret") || !strings.Contains(string(captured.Request)+string(captured.Response), "[REDACTED]") {
+		t.Fatalf("decoded payloads not redacted: request=%s response=%s", captured.Request, captured.Response)
 	}
 }
 
