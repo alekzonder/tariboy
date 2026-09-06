@@ -209,12 +209,8 @@ func TestAutomationBeginImageIdentityCreatesOneTaskAndOneRunPerDelivery(t *testi
 	if err := db.DB.QueryRow(`SELECT original_request FROM judge_runs WHERE id=?`, first.RunID).Scan(&original); err != nil {
 		t.Fatal(err)
 	}
-	criteria, hash, err := ReviewCriteria()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(original, criteria) || !strings.Contains(original, "Rubric SHA-256: "+hash) {
-		t.Fatalf("automatic original request does not freeze rubric: %q", original)
+	if original != "Automatic Judge review for task "+first.TaskKey+", configuration revision 1." {
+		t.Fatalf("automatic original request = %q", original)
 	}
 	automatic, err := js.GetRun(first.RunID)
 	if err != nil {

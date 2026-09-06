@@ -437,12 +437,8 @@ func TestOperatorReviewCreatesExplicitRunFromDisabledAutomation(t *testing.T) {
 	if len(targets) != 1 || targets[0].Iteration != "target-1" || len(run.Spec.Agents) != 0 || len(run.Spec.ImageRefs) != 0 || run.Spec.OnlyUnprocessed {
 		t.Fatalf("targets=%+v selector=%+v", targets, run.Spec)
 	}
-	criteria, hash, err := ReviewCriteria()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(run.OriginalRequest, criteria) || !strings.Contains(run.OriginalRequest, "Rubric SHA-256: "+hash) {
-		t.Fatalf("request does not freeze criteria: %q", run.OriginalRequest)
+	if run.OriginalRequest != "Manual Judge review." {
+		t.Fatalf("original request = %q", run.OriginalRequest)
 	}
 }
 

@@ -78,8 +78,8 @@ of success or absence. Use it to identify every task materially advanced and
 its verification, scope and completion gates. Open their full records with
 `evidence get`, including producing results in later deltas; do not assess only
 the final message/context/loop actions. Use narrow searches for additional
-requirements and results. Apply the criteria returned by `work claim`: cite
-the applicable requirement and observed action.
+requirements and results. Apply the image rubric and treat criteria returned by
+`work claim` as task context: cite the applicable requirement and observed action.
 A filtered search or missing tool result is a coverage gap, not proof the action
 did not happen. If a targeted transcript search is empty, inspect an unfiltered
 transcript page before concluding absence. If an older daemon returns an
