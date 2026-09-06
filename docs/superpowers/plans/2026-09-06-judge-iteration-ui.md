@@ -57,7 +57,7 @@ Completed in `7332a03` and `81aaf43`; backend-check passed, review clean after t
 
 ## Task 3: Target-specific анализ и обратная навигация
 
-**Files:** Modify `ui/src/pages/JudgeRunDetailPage.tsx`, `ui/src/pages/JudgeRunDetailPage.test.tsx`, `ui/src/lib/judge.ts`; reuse existing route in `ui/src/App.tsx`.
+**Files:** Modify `ui/src/pages/JudgeRunDetailPage.tsx`, `ui/src/pages/JudgeRunDetailPage.test.tsx`, `ui/src/lib/judge.ts`; make the run-detail links in `ui/src/pages/JudgeRunsPage.tsx` explicit-host and update `ui/src/pages/JudgeRunsPage.test.tsx`. Reuse the existing route in `ui/src/App.tsx` without requiring a route change.
 
 **Interfaces:** Существующий URL run дополняется `?target=<target_id>`. Page фильтрует analyses по `target_id`, берёт agent/iteration из target, а не из непроверенного return URL. Использует explicit-host API и существующий host-aware построитель ссылок.
 

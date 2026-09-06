@@ -61,12 +61,19 @@ export interface JudgeRunList {
 
 export const listJudgeRuns = () => apiGet<JudgeRunList>("/api/judges");
 export const getJudgeRun = (id: string) => apiGet<JudgeRunDetail>(`/api/judges/${encodeURIComponent(id)}`);
+export const getJudgeRunOn = (target: ApiTarget, id: string) => apiOn<JudgeRunDetail>(resolveTarget(target), "GET", `/api/judges/${encodeURIComponent(id)}`);
 export const getJudgeEvidence = (runID: string, targetID: string, artifact: string, locator: string) => {
   const q = new URLSearchParams({ artifact, locator });
   return apiGet<{ evidence: Record<string, unknown> }>(`/api/judges/${encodeURIComponent(runID)}/targets/${encodeURIComponent(targetID)}/evidence?${q}`);
 };
 export const retryJudgeRun = (id: string) => apiPost<{ id: string; retried: boolean }>(`/api/judges/${encodeURIComponent(id)}/retry`);
 export const cancelJudgeRun = (id: string) => apiPost<{ id: string; cancelled: boolean }>(`/api/judges/${encodeURIComponent(id)}/cancel`);
+export const getJudgeEvidenceOn = (target: ApiTarget, runID: string, targetID: string, artifact: string, locator: string) => {
+  const q = new URLSearchParams({ artifact, locator });
+  return apiOn<{ evidence: Record<string, unknown> }>(resolveTarget(target), "GET", `/api/judges/${encodeURIComponent(runID)}/targets/${encodeURIComponent(targetID)}/evidence?${q}`);
+};
+export const retryJudgeRunOn = (target: ApiTarget, id: string) => apiOn<{ id: string; retried: boolean }>(resolveTarget(target), "POST", `/api/judges/${encodeURIComponent(id)}/retry`);
+export const cancelJudgeRunOn = (target: ApiTarget, id: string) => apiOn<{ id: string; cancelled: boolean }>(resolveTarget(target), "POST", `/api/judges/${encodeURIComponent(id)}/cancel`);
 
 export interface JudgeReviewStart { id: string; status: string; targets: number }
 export const reviewIterationOn = (target: ApiTarget, iterationId: string) =>

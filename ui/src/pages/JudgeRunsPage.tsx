@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { usePolling } from "@/hooks/usePolling";
 import { apiOn, resolveTarget, type ApiTarget } from "@/lib/api";
+import { serverPath } from "@/lib/terminalsHost";
 import { applyJudgeAutomation, getJudgeAutomation, listJudgeRunsOn, runJudgeAutomationOnce, validateJudgeAutomation, type JudgeAutomationDiagnostic, type JudgeRun, type JudgeRunStatus } from "@/lib/judge";
 
 const statusVariant = (status: JudgeRunStatus) => {
@@ -28,6 +29,7 @@ export default function JudgeRunsPage() {
 }
 
 function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
+	const hostId = resolveTarget(target)?.id ?? "";
 	const listRuns = useCallback(() => listJudgeRunsOn(target), [target]);
 	const { data, error } = usePolling(listRuns, 5000);
 	const runs = [...(data?.runs ?? [])].sort((a, b) => startTime(b) - startTime(a));
@@ -129,7 +131,7 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
             {runs.map((run) => (
               <tr key={run.id} className="border-t">
                 <td className="px-3 py-2 whitespace-nowrap">{Number.isFinite(startTime(run)) ? <time dateTime={run.created_at}>{new Date(run.created_at).toLocaleString()}</time> : "—"}</td>
-                <td className="px-3 py-2 font-mono whitespace-nowrap"><Link className="font-medium hover:underline" to={`/settings/advanced/judges/${encodeURIComponent(run.id)}`}>{run.id}</Link></td>
+                <td className="px-3 py-2 font-mono whitespace-nowrap"><Link className="font-medium hover:underline" to={`${serverPath(hostId, "settings")}/advanced/judges/${encodeURIComponent(run.id)}`}>{run.id}</Link></td>
                 <td className="px-3 py-2 font-mono whitespace-nowrap">{run.targets_ready}/{run.targets_total}</td>
                 <td className="px-3 py-2 font-mono whitespace-nowrap">{run.assignments_completed}/{run.assignments_total}</td>
                 <td className="px-3 py-2"><Badge variant={statusVariant(run.status)}>{run.status}</Badge></td>
