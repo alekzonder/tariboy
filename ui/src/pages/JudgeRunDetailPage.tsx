@@ -52,16 +52,16 @@ export default function JudgeRunDetailPage() {
 
 function RunDetailView({ id, hostId, selectedTarget, target }: { id: string; hostId: string; selectedTarget: string | null; target: ApiTarget }) {
   const [data, setData] = useState<JudgeRunDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; action: boolean } | null>(null);
   const [confirm, setConfirm] = useState<"retry" | "cancel" | null>(null);
   const [busy, setBusy] = useState(false);
   const fetchRun = useCallback(() => getJudgeRunOn(target, id), [id, target]);
-  const load = useCallback(async () => { try { setError(null); setData(await fetchRun()); } catch (cause) { setError((cause as Error).message); } }, [fetchRun]);
-  useEffect(() => { let current = true; void fetchRun().then(result => { if (current) setData(result); }).catch(cause => { if (current) setError((cause as Error).message); }); return () => { current = false; }; }, [fetchRun]);
-  useEffect(() => { if (!data || terminal.has(data.run.status)) return; let current = true; const timer = window.setInterval(() => { void fetchRun().then(result => { if (current) setData(result); }).catch(cause => { if (current) setError((cause as Error).message); }); }, 5000); return () => { current = false; window.clearInterval(timer); }; }, [data, fetchRun]);
-  const act = async () => { if (!confirm) return; setBusy(true); try { if (confirm === "retry") await retryJudgeRunOn(target, id); else await cancelJudgeRunOn(target, id); setConfirm(null); await load(); } catch (cause) { setError((cause as Error).message); } finally { setBusy(false); } };
+  const load = useCallback(async () => { try { setData(await fetchRun()); setError(null); } catch (cause) { setError({ message: (cause as Error).message, action: false }); } }, [fetchRun]);
+  useEffect(() => { let current = true; void fetchRun().then(result => { if (current) { setData(result); setError(null); } }).catch(cause => { if (current) setError({ message: (cause as Error).message, action: false }); }); return () => { current = false; }; }, [fetchRun]);
+  useEffect(() => { if (!data || terminal.has(data.run.status)) return; let current = true; const timer = window.setInterval(() => { void fetchRun().then(result => { if (current) { setData(result); setError(null); } }).catch(cause => { if (current) setError({ message: (cause as Error).message, action: false }); }); }, 5000); return () => { current = false; window.clearInterval(timer); }; }, [data, fetchRun]);
+  const act = async () => { if (!confirm) return; setBusy(true); try { if (confirm === "retry") await retryJudgeRunOn(target, id); else await cancelJudgeRunOn(target, id); setConfirm(null); await load(); } catch (cause) { setError({ message: (cause as Error).message, action: true }); } finally { setBusy(false); } };
   const judgesPath = `${serverPath(hostId, "settings")}/advanced/judges`;
-  if (error && !data) return <div className="space-y-4 p-6"><Link className="text-sm underline" to={judgesPath}>Judge runs</Link><p role="alert" className="text-destructive">Could not load judge run: {error}</p></div>;
+  if (error && !data) return <div className="space-y-4 p-6"><Link className="text-sm underline" to={judgesPath}>Judge runs</Link><p role="alert" className="text-destructive">Could not load judge run: {error.message}</p></div>;
   if (!data) return <div className="p-6 text-muted-foreground">Loading judge run…</div>;
   const { run, targets, analyses, summaries, usage, improvements = [] } = data;
   const chosen = selectedTarget === null ? null : targets.find(item => item.id === selectedTarget);
@@ -69,11 +69,12 @@ function RunDetailView({ id, hostId, selectedTarget, target }: { id: string; hos
   if (chosen) return <div className="space-y-5 p-6">
     <nav aria-label="Breadcrumb" className="flex gap-3 text-sm"><Link className="underline" to={judgesPath}>Judge runs</Link><Link className="underline" to={`/agents/${encodeURIComponent(hostToParam(hostId))}/${encodeURIComponent(chosen.agent)}/activity?iteration=${encodeURIComponent(chosen.iteration)}`}>{chosen.agent} iteration {chosen.iteration}</Link></nav>
     <div><h1 className="text-lg font-semibold">Judge analysis for <span className="font-mono text-base">{chosen.iteration}</span></h1><p className="text-sm text-muted-foreground">Run <span className="font-mono">{run.id}</span></p></div>
+    {error && <p role="alert" className="text-sm text-destructive">{error.action ? "Action failed" : "Could not refresh judge run"}: {error.message}</p>}
     <section><h2 className="mb-2 font-semibold">Target consensus and analyses</h2><TargetAnalysis apiTarget={target} runID={run.id} judgeTarget={chosen} analyses={analyses.filter(item => item.target_id === chosen.id)} targetOnly /></section>
   </div>;
   return <div className="space-y-5 p-6">
     <div className="flex items-start justify-between gap-4"><div><Link className="text-sm underline" to={judgesPath}>← Judge runs</Link><h1 className="mt-2 text-lg font-semibold">Judge run <span className="font-mono text-base">{run.id}</span></h1><p className="mt-1 max-w-3xl whitespace-pre-wrap text-sm text-muted-foreground">{run.original_request}</p></div><div className="flex gap-2"><Badge variant={statusVariant(run.status)}>{run.status}</Badge>{run.status === "partial" && <Button onClick={() => setConfirm("retry")}>Retry failed work</Button>}{!terminal.has(run.status) && <Button variant="destructive" onClick={() => setConfirm("cancel")}>Cancel run</Button>}</div></div>
-    {error && <p role="alert" className="text-sm text-destructive">Action failed: {error}</p>}
+    {error && <p role="alert" className="text-sm text-destructive">{error.action ? "Action failed" : "Could not refresh judge run"}: {error.message}</p>}
     <section className="grid gap-3 rounded border p-4 text-sm md:grid-cols-3"><div><b>Spec</b><br />{run.judge_group}; {run.judges_per_iteration} judge(s)/target; max {run.max_attempts} attempts</div><div><b>Manifest</b><br /><span className="font-mono text-xs">{run.manifest_hash || "—"}</span></div><div><b>Progress</b><br />{run.targets_ready}/{run.targets_total} targets · {run.assignments_completed}/{run.assignments_total} assignments · summary v{run.current_summary_version}</div><div><b>Models</b><br />{run.model || (run.judge_agents ?? []).join(", ") || "—"}</div><div><b>Cost</b><br />{money(run.cost_usd)}</div><div><b>Last error</b><br />{run.last_error || "None"}</div></section>
     <section><h2 className="mb-2 font-semibold">Targets and analyses</h2><div className="space-y-3">{targets.map(item => <TargetAnalysis key={item.id} apiTarget={target} runID={run.id} judgeTarget={item} analyses={analyses.filter(analysis => analysis.target_id === item.id)} />)}</div></section>
     <section><h2 className="mb-2 font-semibold">Summary versions</h2>{summaries.length ? summaries.map(summary => <div className="mb-2 rounded border p-3 text-sm" key={summary.id}><b>Version {summary.version}</b> · {summary.summary_agent}<p className="mt-1">{summary.result.executive_conclusion || "No executive conclusion."}</p>{summary.result.recommendations?.length ? <p className="mt-1 text-muted-foreground">Recommendations: {summary.result.recommendations.join("; ")}</p> : null}</div>) : <p className="text-sm text-muted-foreground">No summary version yet.</p>}</section>
