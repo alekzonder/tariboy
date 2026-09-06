@@ -8,3 +8,10 @@ func TestConsensusMarksTieDisputedAndUsesMedian(t *testing.T) {
 		t.Fatalf("consensus=%+v", got)
 	}
 }
+
+func TestConsensusKeepsAllUncertainEvenWhenScoresSpread(t *testing.T) {
+	got := Consensus([]AnalysisResult{{Verdict: "uncertain", Score: .1, Confidence: .3}, {Verdict: "uncertain", Score: .9, Confidence: .7}})
+	if got.Verdict != "uncertain" || got.Score != .5 || got.Confidence != .5 {
+		t.Fatalf("consensus=%+v", got)
+	}
+}

@@ -31,5 +31,6 @@ prompts:
   - runtime: context
   - runtime: workdir
   - file: ./instructions.md
+  - file: $CURRENT_VERSION_STORE/prompts/judge-rubric.md
   - runtime: user-prompt
   - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md

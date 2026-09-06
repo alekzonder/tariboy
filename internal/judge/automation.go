@@ -495,8 +495,12 @@ func (s *AutomationService) Begin(ctx context.Context, callerAgent, callerIterat
 	if err := s.store.db.QueryRowContext(ctx, `SELECT "group" FROM agents WHERE name=?`, callerAgent).Scan(&group); err != nil {
 		return AutomationCycle{}, err
 	}
+	criteria, criteriaHash, err := ReviewCriteria()
+	if err != nil {
+		return AutomationCycle{}, err
+	}
 	run, _, err := s.store.CreateRun(ctx, CreateRunRequest{
-		OriginalRequest: fmt.Sprintf("Automatic Judge review for task %s, configuration revision %d.", task.Key, revision),
+		OriginalRequest: fmt.Sprintf("Automatic Judge review for task %s, configuration revision %d.\n\nRubric SHA-256: %s\n\n%s", task.Key, revision, criteriaHash, criteria),
 		Selector:        Selector{Agents: parsed.Config.Targets.Agents, ImageRefs: parsed.Config.Targets.ImageRefs, OnlyUnprocessed: parsed.Config.Targets.OnlyUnprocessed, Statuses: []string{"done", "no_i_am_done", "harness_error", "timeout", "killed"}, Order: "oldest", Limit: limit},
 		JudgeGroup:      group, LeadAgent: callerAgent, SummaryAgent: callerAgent, CreatorIteration: callerIteration,
 		JudgeAgents: parsed.Config.Judge.Workers, JudgesPerIteration: 1, MaxAttempts: 1,
