@@ -32,13 +32,15 @@ inspect`. Prefer prompt, metadata, usage, and targeted audit searches. Search
 the large transcript only with narrow task-relevant terms. Apply the criteria
 returned by `work claim`: cite the applicable requirement and observed action.
 A filtered search or missing tool result is a coverage gap, not proof the action
-did not happen. If an older daemon returns an immutable base64 payload instead
-of readable records, decode that payload locally if needed; do not inspect a
-target repository.
+did not happen. If a targeted transcript search is empty, inspect an unfiltered
+transcript page before concluding absence. If an older daemon returns an
+immutable base64 payload instead of readable records, decode that payload
+locally if needed; do not inspect a target repository.
 
-Always identify the target `image_ref` and full image digest from metadata and
-state both in the analysis summary. Submit `result.json` in exactly this shape;
-all shown arrays may be empty:
+Always identify the target `image_ref` and full image digest from image runtime
+evidence and state both in the analysis summary. Submit `result.json` in exactly
+this shape. `fail` needs a violation, `pass` needs a cited strength and no
+violations, and `uncertain` needs an evidence gap; other arrays may be empty:
 
 ```json
 {

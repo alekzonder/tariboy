@@ -39,3 +39,6 @@ evidence service. Scores and confidence are finite numbers in `[0,1]`. Report
 the actual image ref and full digest. Keep recommendations specific and
 evidence-backed; abstain from image changes when the cause is unknown. Never
 approve, publish, roll out, or create implementation work during this review.
+
+Score is a compatibility summary, not an optimization target; confidence is a
+self-assessment, not a calibrated probability.
