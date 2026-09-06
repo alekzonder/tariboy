@@ -224,6 +224,23 @@ func TestIterationJudgeReviewsBatchOrdersAndCountsValidAssignments(t *testing.T)
 	}
 }
 
+func TestIterationJudgeReviewsAcceptsUnboundedIterationHistory(t *testing.T) {
+	js, _, _ := readyRun(t)
+	ids := make([]string, 40000)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("missing-%d", i)
+	}
+	ids[len(ids)-1] = "target"
+
+	got, err := js.ListIterationJudgeReviews(ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got["target"]) != 1 {
+		t.Fatalf("target reviews = %+v", got["target"])
+	}
+}
+
 func TestCreateRunGroupsTargetsIntoTaskSubjects(t *testing.T) {
 	db, js := newJudgeStore(t)
 	seedJudgeAgent(t, db.DB, "lead")

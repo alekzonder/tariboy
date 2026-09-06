@@ -30,7 +30,7 @@
 
 ## Task 1: Серверная проекция и история итерации
 
-**Files:** Modify `internal/judge/model.go`, `internal/judge/store.go`, `internal/judge/service.go`, `internal/registry/registry.go`, `internal/commands/iteration.go`, `internal/commands/judge.go`; tests in `internal/judge/store_test.go`, `internal/judge/service_test.go`, `internal/commands/iteration_test.go`.
+**Files:** Modify `internal/judge/model.go`, `internal/judge/store.go`, `internal/judge/service.go`, `internal/registry/registry.go`, `internal/commands/iteration.go`, `internal/commands/daemon.go` (route registration); tests in `internal/judge/store_test.go`, `internal/judge/service_test.go`, `internal/commands/iteration_test.go`. Inspect `internal/commands/judge.go` for POST compatibility; no change is required there when the existing command is preserved.
 
 **Interfaces:** Новый JSON тип `IterationJudgeReview` имеет `run_id`, `target_id`, `created_at`, `state`, `verdict` (string), `score` (number|null), `completed`, `failed`, `pending` (integer). Проекция `judge` содержит `latest_completed: IterationJudgeReview|null` и `active: IterationJudgeReview|null`. Добавить её к строкам iteration list/detail; `GET /api/agents/{name}/iterations/{id}/judges` возвращает `{reviews: IterationJudgeReview[]}` в порядке created_at DESC, run_id DESC. Existing `POST /api/judges/review` остаётся совместимым.
 
