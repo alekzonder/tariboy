@@ -21,7 +21,7 @@ DESKTOP_INSTALL_UI_DEPS ?= 1
 
 export CGO_ENABLED=0
 
-.PHONY: build build-basic-image install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build build-basic-image install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build-basic-image:
 	$(GO) run ./internal/builtinimages/generate -source internal/builtinimages/source -output internal/builtinimages/generated -version $(VERSION)
@@ -32,6 +32,7 @@ build: build-basic-image
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-shim ./cmd/tariboy-shim
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-store ./cmd/tariboy-store
 	$(GO) build -trimpath -o $(BINDIR)/tariboy-plugin-telegram ./cmd/tariboy-plugin-telegram
+	$(GO) build -trimpath -o $(BINDIR)/tariboy-tasks ./cmd/tariboy-tasks
 
 install:
 	$(MAKE) build
@@ -149,6 +150,9 @@ iteration-timeout-e2e: build
 # second). Never touches the live daemon.
 group-request-deadline-e2e: build
 	./scripts/group-request-deadline-e2e.sh
+
+tariboy-tasks-e2e: build
+	./scripts/tariboy-tasks-e2e.sh
 
 smoke:
 	./scripts/tariboy-smoke.sh
@@ -513,6 +517,7 @@ backend-check:
 	run_step "fmt-check"    '$(SUBMAKE) fmt-check'; \
 	run_step "vet"          '$(SUBMAKE) vet'; \
 	run_step "test"         '$(SUBMAKE) test'; \
+	run_step "tariboy-tasks-e2e" '$(SUBMAKE) tariboy-tasks-e2e'; \
 	run_step "store-skills" 'PYTHONDONTWRITEBYTECODE=1 python3 store/skills/test_store_skills.py'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \
 	summarize backend-check

@@ -258,6 +258,12 @@ func TestWriteShimsReconcilesTasksCapability(t *testing.T) {
 	if _, err := os.Stat(tasksPath); !os.IsNotExist(err) {
 		t.Fatalf("tasks shim survived a capability-less agent: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(l.BinDir(), "i-am-done")); err != nil {
+		t.Fatalf("removing tasks removed another capability shim: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(l.BinDir(), "ttasks")); !os.IsNotExist(err) {
+		t.Fatalf("agent-local ttasks shim exists: %v", err)
+	}
 	// And a second removal pass is not an error.
 	if err := WriteShims(l, without, skills); err != nil {
 		t.Fatalf("removal is not idempotent: %v", err)

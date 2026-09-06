@@ -5,29 +5,25 @@ description: Use when claiming, decomposing, delegating, questioning, updating, 
 
 # Native Tasks
 
-This skill's `scripts/tasks.sh` launcher lives inside this skill directory and
-calls the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
-The bare `tasks` command is a compatibility shim for this same native task
-system, which is the durable source of truth for work, decomposition, ownership,
-questions, and answers.
+This skill's launcher delegates to `ttasks`. The binary selects identity-bound
+agent mode when `TARIBOY_TOOLS_SOCKET` is set; otherwise it uses operator mode.
+The bare `tasks` command is an optional compatibility alias for `ttasks` in
+agents whose image enables the `tasks` capability.
 
-Inspect work with `scripts/tasks.sh mine`, `scripts/tasks.sh ready`,
-`scripts/tasks.sh ready --claim`, and `scripts/tasks.sh show <key>`.
-Create/decompose with `scripts/tasks.sh create`; delegate with
-`scripts/tasks.sh assign`; keep decisions in `scripts/tasks.sh comment`;
-advance with `scripts/tasks.sh update` and close only completed work with
-`scripts/tasks.sh done`.
+Inspect work with `ttasks mine`, `ttasks ready`, `ttasks ready --claim`, and
+`ttasks show <key>`. Create/decompose with `ttasks create`; delegate with
+`ttasks assign`; keep decisions in `ttasks comment`; advance with `ttasks
+update` and close only completed work with `ttasks done`.
 
 For a flexible task, ask with
-`scripts/tasks.sh ask <key> user:<login>|agent:<name> <text>`.
+`ttasks ask <key> user:<login>|agent:<name> <text>`.
 A comment is not a blocking question.
 
-For workflow-managed work, begin with `scripts/tasks.sh work next` and
-`scripts/tasks.sh work show <assignment>`. Treat its packet as the complete authority:
+For workflow-managed work, begin with `ttasks work next` and
+`ttasks work show <assignment>`. Treat its packet as the complete authority:
 use only declared actions, tools, outcomes, and channel patterns. Add artifacts
-with `scripts/tasks.sh artifacts add <assignment>`, inspect assignment questions
-with `scripts/tasks.sh questions <assignment>`, answer with
-`scripts/tasks.sh answer <question>`, and subscribe with
-`scripts/tasks.sh observe subscribe <assignment> <pattern>`. Complete with an
+with `ttasks artifacts add <assignment>`, inspect assignment questions with
+`ttasks questions <assignment>`, answer with `ttasks answer <question>`, and
+subscribe with `ttasks observe subscribe <assignment> <pattern>`. Complete with an
 allowed outcome. Raw channel subscriptions and undeclared direct or group
 messages remain denied. Never invent another principal's identity.
