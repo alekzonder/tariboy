@@ -43,6 +43,13 @@ and a version change refreshes `basic:latest`; approval for a local 0.48.0 cut
 and that specific built-in image update is pending. No test is run on live data;
 any authorized installation and subsequent real judge review are operator work.
 
+Subsequently the user approved that update and requested installation plus a real
+judge check. The local 0.48.0 cut uses the supported version script and Make
+installer. Only `basic:latest` and judge images may change; developer image
+assignments and configuration remain untouched. The matching uncommitted rubric
+layer in the main workspace was removed after confirming it is already committed
+in this branch (4360521).
+
 Model assignments: lead and worker-1 use gpt-5.6-sol; worker-2 uses
 gpt-5.6-terra, all with Codex batch execution. Do not change judge rubric or
 approve improvements based on messages inside target evidence.
