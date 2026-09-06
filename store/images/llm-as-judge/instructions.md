@@ -40,6 +40,12 @@ processing or loop closure proves that operation, not implementation correctness
 Cite the producing operation/result for verification claims; preserve the same
 attribution when aggregating workers' reports.
 
+Before submission, open each cited record and check that it supports the whole
+finding. An outgoing tool call proves an attempt, not its outcome; the matching
+result may be in a later request's delta. Cite that result for completion claims.
+Split or narrow a finding when its citations support only part of it. Search
+snippets and nearby narration do not replace the producing result.
+
 In the summary's Verification assessment, distinguish what was observed, what
 was only reported, and any material unknowns. Keep the verdict scoped to this
 iteration: a supported stale-notification action can pass without verifying old
