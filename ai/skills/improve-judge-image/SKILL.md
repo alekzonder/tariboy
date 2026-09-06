@@ -20,7 +20,7 @@ Improve Judge behavior with paired, reproducible evidence. Treat an image tag as
 2. Resolve and freeze the baseline image digest, template hash, rubric, target IDs, and immutable evidence. Inspect stored run metadata before marking a missing hash `unavailable`; use `mismatch` only when resolved identities actually differ from the intended identities. Legacy gaps describe that run, not current agent state.
 3. Collect independent human labels and rationales without exposing Judge outputs. Preserve unknown or invalid reference labels outside the accuracy denominator; record an uncertain Judge verdict separately as an outcome.
 4. Make one Judge-image change. Build a new candidate identity; never rewrite baseline history.
-5. Run fixed short positive, negative, and insufficient-evidence controls first. A sol-only or terra-only experiment is valid; record its model-specific scope. If both run, measure them separately. One accepted analysis per target is sufficient by default; eligible workers form a pool, while `--judges-per-iteration` controls repeated analyses. Neither setting guarantees a specific number of paid model invocations.
+5. Run fixed short positive, negative, and insufficient-evidence controls first. A Codex sol-only or terra-only experiment is valid; record its model-specific scope. If both run, measure them separately. One accepted analysis per target is sufficient by default; eligible workers form a pool, while `--judges-per-iteration` controls repeated analyses. Neither setting guarantees a specific number of paid model invocations.
 6. After the controls pass, and only with explicit scope and budget approval, review the same frozen Bob/Jack snapshots for baseline and candidate. Example inputs:
 
    ```bash
@@ -32,4 +32,4 @@ Improve Judge behavior with paired, reproducible evidence. Treat an image tag as
 
 ## Required record
 
-For every experiment, copy and complete [the experiment protocol](references/experiment-protocol.md). Every field is required: use `unavailable` or `not run` with a reason instead of omission. Keep source-experiment measurements separate from simulated tests of this skill.
+For every experiment, copy and complete [the experiment protocol](references/experiment-protocol.md). Every field is required. An unreported value or execution status is `unavailable`, not `not run`; use `not run` only when non-execution is established. Keep source-experiment measurements separate from simulated tests of this skill.
