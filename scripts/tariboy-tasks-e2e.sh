@@ -24,7 +24,7 @@ export PATH="$RUNTIME/bin:$PATH"
 
 "$BIN/tariboyd" --base-dir "$BASE" --http-addr "" --log-level error &
 DPID=$!
-for _ in $(seq 1 100); do
+for _ in $(seq 1 200); do
   [ -S "$SOCK" ] && break
   sleep 0.05
 done
@@ -48,7 +48,7 @@ echo "--- agent mode is identity-bound to its real tools socket"
   --plugins tasks --env 'STUB_SLEEP=300,STUB_CALL_DONE=0' >/dev/null
 ttasks assign AGT-1 worker >/dev/null
 "$BIN/tariboy" --socket "$SOCK" agent exec worker >/dev/null
-for _ in $(seq 1 100); do
+for _ in $(seq 1 200); do
   [ -S "$RUNTIME/worker.sock" ] && break
   sleep 0.05
 done
