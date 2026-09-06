@@ -114,6 +114,32 @@ func TestOperatorInspectReturnsExecutionSubjects(t *testing.T) {
 	}
 }
 
+func TestIterationJudgeProjectionKeepsLatestCompletedUnderActiveReview(t *testing.T) {
+	zero, pointEight := 0.0, 0.8
+	reviews := []IterationJudgeReview{
+		{RunID: "pending", CreatedAt: "2026-07-01T13:00:00Z", Pending: 1},
+		{RunID: "complete", CreatedAt: "2026-07-01T12:00:00Z", Score: &pointEight, Completed: 1},
+		{RunID: "zero", CreatedAt: "2026-07-01T11:00:00Z", Score: &zero, Completed: 1},
+	}
+	got := ProjectIterationJudgeReviews(reviews)
+	if got.LatestCompleted == nil || got.LatestCompleted.Score == nil || *got.LatestCompleted.Score != 0.8 {
+		t.Fatalf("latest completed = %+v", got.LatestCompleted)
+	}
+	if got.Active == nil || got.Active.RunID != "pending" || got.Active.Pending != 1 {
+		t.Fatalf("active = %+v", got.Active)
+	}
+	if onlyZero := ProjectIterationJudgeReviews(reviews[2:]); onlyZero.LatestCompleted == nil || onlyZero.LatestCompleted.Score == nil || *onlyZero.LatestCompleted.Score != 0 {
+		t.Fatalf("zero projection = %+v", onlyZero)
+	}
+	if empty := ProjectIterationJudgeReviews(nil); empty.LatestCompleted != nil || empty.Active != nil {
+		t.Fatalf("empty projection = %+v", empty)
+	}
+	partial := IterationJudgeReview{RunID: "partial", CreatedAt: "2026-07-01T14:00:00Z", State: "terminal", Failed: 1}
+	if terminal := ProjectIterationJudgeReviews([]IterationJudgeReview{partial, reviews[1]}); terminal.Active != nil || terminal.LatestCompleted == nil || terminal.LatestCompleted.RunID != "complete" {
+		t.Fatalf("terminal partial projection = %+v", terminal)
+	}
+}
+
 func TestSummaryAgentSubmitsEvidenceScopedImprovementProposal(t *testing.T) {
 	s, js, run, _ := serviceFixture(t)
 	if _, err := js.db.Exec(`UPDATE judge_runs SET status='summarizing',last_error='summary claimed by lead-it' WHERE id=?`, run.ID); err != nil {

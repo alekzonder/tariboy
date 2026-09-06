@@ -292,6 +292,10 @@ type JudgeControl interface {
 	OperatorRetry(string) error
 }
 
+type IterationJudgeControl interface {
+	OperatorIterationReviews([]string) (map[string][]judge.IterationJudgeReview, error)
+}
+
 type JudgeAutomationControl interface {
 	Get(context.Context) (judge.AutomationRevision, error)
 	Validate(context.Context, []byte) judge.AutomationValidation

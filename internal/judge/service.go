@@ -361,6 +361,29 @@ func (s *Service) OperatorInspect(id string) (map[string]any, error) {
 	return map[string]any{"run": r, "subjects": subjects, "targets": ts, "analyses": analyses, "summaries": summaries}, nil
 }
 
+func (s *Service) OperatorIterationReviews(iterationIDs []string) (map[string][]IterationJudgeReview, error) {
+	return s.store.ListIterationJudgeReviews(iterationIDs)
+}
+
+func ProjectIterationJudgeReviews(reviews []IterationJudgeReview) IterationJudgeProjection {
+	var out IterationJudgeProjection
+	for i := range reviews {
+		review := &reviews[i]
+		required := review.required
+		if required == 0 {
+			required = review.Completed + review.Failed + review.Pending
+		}
+		complete := required > 0 && review.Completed == required && review.Failed == 0 && review.Pending == 0
+		if out.LatestCompleted == nil && complete {
+			out.LatestCompleted = review
+		}
+		if out.Active == nil && (review.State == "pending" || review.State == "running" || review.Pending > 0) {
+			out.Active = review
+		}
+	}
+	return out
+}
+
 // OperatorEvidence reads one immutable evidence item by its stable locator.
 // targetID is checked against the run before the CAS object is opened.
 func (s *Service) OperatorEvidence(runID, targetID string, locator EvidenceLocator) (map[string]any, error) {
