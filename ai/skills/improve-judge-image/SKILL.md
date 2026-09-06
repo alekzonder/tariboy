@@ -20,15 +20,15 @@ Improve Judge behavior with paired, reproducible evidence. Treat an image tag as
 2. Resolve and freeze the baseline image digest, template hash, rubric, target IDs, and immutable evidence. Inspect stored run metadata before marking a missing hash unavailable; legacy gaps describe that run, not current agent state.
 3. Collect independent human labels and rationales without exposing Judge outputs. Preserve unknown or invalid labels outside the accuracy denominator.
 4. Make one Judge-image change. Build a new candidate identity; never rewrite baseline history.
-5. Keep controls fixed. Measure Codex sol and terra separately. One accepted analysis per target is sufficient by default; eligible workers form a pool, while `--judges-per-iteration` controls repeated analyses. Neither setting guarantees a specific number of paid model invocations.
-6. With explicit scope and budget approval, review the same real targets for baseline and candidate. Example inputs:
+5. Run fixed short positive, negative, and insufficient-evidence controls first. Measure Codex sol and terra separately. One accepted analysis per target is sufficient by default; eligible workers form a pool, while `--judges-per-iteration` controls repeated analyses. Neither setting guarantees a specific number of paid model invocations.
+6. After the controls pass, and only with explicit scope and budget approval, review the same frozen Bob/Jack snapshots for baseline and candidate. Example inputs:
 
    ```bash
    tariboy judge review ITERATION_ID --judges-per-iteration 1
    tariboy judge inspect RUN_ID
    ```
 
-7. Compare paired outcomes, citation and rationale quality, coverage, invalid/uncertain cases, repeat variability, and measured cost. Record regressions and stop or choose the next single change. Promote only under the user's stated decision rule; do not invent a universal sample-size threshold.
+7. Compare paired outcomes, citation and rationale quality, coverage, invalid/uncertain cases, repeat variability, and measured cost. A regression or exhausted budget means stop, save results, and do not promote. Roll back only your own authorized Judge-image change, never user state. Otherwise apply the user's decision rule or choose the next single change; do not invent a universal sample-size threshold.
 
 ## Required record
 

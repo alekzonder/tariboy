@@ -32,11 +32,10 @@ Controls:
   model/configuration (record sol and terra separately):
   other frozen settings:
 
-Dataset:
-  source/split:
-  dataset and frozen-evidence IDs:
-  unique iteration count:
-  iteration IDs:
+Frozen dataset:
+  fixture IDs and unique fixture count:
+  real-data split, dataset/evidence IDs, and unique iteration count:
+  real-data iteration IDs:
 
 Independent labels (one row per target):
   target/iteration ID | label | rationale | labeler/blinding | evidence ID
@@ -44,8 +43,16 @@ Independent labels (one row per target):
 Judge results (one row per accepted analysis):
   baseline/candidate | run ID | target ID | repeat | verdict/score | citations | rationale
 
-Quality assessment (baseline and candidate separately):
+Fixture results (baseline and candidate separately):
   confusion counts (TP/FP/TN/FN):
+  accuracy (correct/labeled n/N):
+  uncertain/invalid/coverage:
+  citation and rationale quality:
+  observed regressions:
+
+Real-data results (baseline and candidate separately):
+  confusion counts (TP/FP/TN/FN):
+  accuracy (correct/labeled n/N):
   uncertain count and handling:
   invalid count and reason:
   independently labeled coverage (numerator/denominator):
@@ -61,6 +68,7 @@ Repetition:
 
 Decision: stop / revise / promote
 Decision rationale:
+Small-sample conclusion (when applicable): regression not detected on this sample
 Unresolved or unavailable fields:
 ```
 
