@@ -4,12 +4,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import type { ApiTarget } from "@/lib/api";
-import { cancelJudgeRunOn, getJudgeEvidenceOn, getJudgeRunOn, retryJudgeRunOn, type JudgeAnalysis, type JudgeCitation, type JudgeRunDetail, type JudgeTarget } from "@/lib/judge";
+import { cancelJudgeRunOn, getJudgeEvidenceOn, getJudgeRunOn, retryJudgeRunOn, type JudgeAnalysis, type JudgeCitation, type JudgeImageIdentity, type JudgeRunDetail, type JudgeTarget } from "@/lib/judge";
 import { hostToParam, paramToHost, serverPath, targetFor } from "@/lib/terminalsHost";
 
 const terminal = new Set(["completed", "partial", "cancelled"]);
 const statusVariant = (status: string) => status === "completed" ? "default" : status === "partial" || status === "cancelled" ? "destructive" : "secondary";
 const money = (value?: number) => value === undefined ? "—" : `$${value.toFixed(4)}`;
+
+function ImageProvenance({ images }: { images?: JudgeImageIdentity[] }) {
+  return <section className="rounded border p-4 text-sm"><h2 className="mb-2 font-semibold">Pinned Judge image versions</h2>{images?.length ? <ul className="space-y-2">{images.map(image => <li key={image.agent}><b>{image.agent} · {image.image_ref}</b><br /><span className="font-mono text-xs">{image.image_digest}</span><br /><span className="font-mono text-xs text-muted-foreground">Template {image.prompt_template_sha256}</span></li>)}</ul> : <p className="text-muted-foreground">Image provenance unavailable</p>}</section>;
+}
 
 function Citation({ target, runID, targetID, citation }: { target: ApiTarget; runID: string; targetID: string; citation: JudgeCitation }) {
   const [content, setContent] = useState<Record<string, unknown> | null>(null);
@@ -70,12 +74,15 @@ function RunDetailView({ id, hostId, selectedTarget, target }: { id: string; hos
     <nav aria-label="Breadcrumb" className="flex gap-3 text-sm"><Link className="underline" to={judgesPath}>Judge runs</Link><Link className="underline" to={`/agents/${encodeURIComponent(hostToParam(hostId))}/${encodeURIComponent(chosen.agent)}/activity?iteration=${encodeURIComponent(chosen.iteration)}`}>{chosen.agent} iteration {chosen.iteration}</Link></nav>
     <div><h1 className="text-lg font-semibold">Judge analysis for <span className="font-mono text-base">{chosen.iteration}</span></h1><p className="text-sm text-muted-foreground">Run <span className="font-mono">{run.id}</span></p></div>
     {error && <p role="alert" className="text-sm text-destructive">{error.action ? "Action failed" : "Could not refresh judge run"}: {error.message}</p>}
+    {run.last_error && <p className="rounded border border-destructive/40 p-3 text-sm text-destructive"><b>Run diagnostic:</b> {run.last_error}</p>}
+    <ImageProvenance images={run.judge_images} />
     <section><h2 className="mb-2 font-semibold">Target consensus and analyses</h2><TargetAnalysis apiTarget={target} runID={run.id} judgeTarget={chosen} analyses={analyses.filter(item => item.target_id === chosen.id)} targetOnly /></section>
   </div>;
   return <div className="space-y-5 p-6">
     <div className="flex items-start justify-between gap-4"><div><Link className="text-sm underline" to={judgesPath}>← Judge runs</Link><h1 className="mt-2 text-lg font-semibold">Judge run <span className="font-mono text-base">{run.id}</span></h1><p className="mt-1 max-w-3xl whitespace-pre-wrap text-sm text-muted-foreground">{run.original_request}</p></div><div className="flex gap-2"><Badge variant={statusVariant(run.status)}>{run.status}</Badge>{run.status === "partial" && <Button onClick={() => setConfirm("retry")}>Retry failed work</Button>}{!terminal.has(run.status) && <Button variant="destructive" onClick={() => setConfirm("cancel")}>Cancel run</Button>}</div></div>
     {error && <p role="alert" className="text-sm text-destructive">{error.action ? "Action failed" : "Could not refresh judge run"}: {error.message}</p>}
     <section className="grid gap-3 rounded border p-4 text-sm md:grid-cols-3"><div><b>Spec</b><br />{run.judge_group}; {run.judges_per_iteration} judge(s)/target; max {run.max_attempts} attempts</div><div><b>Manifest</b><br /><span className="font-mono text-xs">{run.manifest_hash || "—"}</span></div><div><b>Progress</b><br />{run.targets_ready}/{run.targets_total} targets · {run.assignments_completed}/{run.assignments_total} assignments · summary v{run.current_summary_version}</div><div><b>Models</b><br />{run.model || (run.judge_agents ?? []).join(", ") || "—"}</div><div><b>Cost</b><br />{money(run.cost_usd)}</div><div><b>Last error</b><br />{run.last_error || "None"}</div></section>
+    <ImageProvenance images={run.judge_images} />
     <section><h2 className="mb-2 font-semibold">Targets and analyses</h2><div className="space-y-3">{targets.map(item => <TargetAnalysis key={item.id} apiTarget={target} runID={run.id} judgeTarget={item} analyses={analyses.filter(analysis => analysis.target_id === item.id)} />)}</div></section>
     <section><h2 className="mb-2 font-semibold">Summary versions</h2>{summaries.length ? summaries.map(summary => <div className="mb-2 rounded border p-3 text-sm" key={summary.id}><b>Version {summary.version}</b> · {summary.summary_agent}<p className="mt-1">{summary.result.executive_conclusion || "No executive conclusion."}</p>{summary.result.recommendations?.length ? <p className="mt-1 text-muted-foreground">Recommendations: {summary.result.recommendations.join("; ")}</p> : null}</div>) : <p className="text-sm text-muted-foreground">No summary version yet.</p>}</section>
     <section><h2 className="mb-2 font-semibold">Improvement proposals</h2>{improvements.length ? improvements.map(proposal => <div className="mb-2 rounded border p-3 text-sm" key={proposal.id}><Link className="font-mono underline" to={`${serverPath(hostId, "settings")}/advanced/improvements/${encodeURIComponent(proposal.id)}`}>{proposal.id}</Link> · {proposal.status}<p>{proposal.draft.target.repository} @ {proposal.draft.target.base_commit}</p></div>) : <p className="text-sm text-muted-foreground">No improvement proposal.</p>}</section>

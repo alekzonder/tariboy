@@ -24,6 +24,28 @@ it("shows detail, retrieves immutable evidence, and retries after confirmation",
   await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/judges/r%201/retry", expect.objectContaining({ method: "POST" })));
 });
 
+it("shows stored Judge image provenance without substituting a current image", async () => {
+  const pinned = { ...result, run: { ...result.run, judge_images: [{ agent: "judge-a", image_ref: "judge-e2e:latest", image_digest: "sha256:digest-a", prompt_template_sha256: "sha256:template-a" }] } };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: pinned }) } as Response));
+  render(<MemoryRouter initialEntries={["/judges/r%201"]}><Routes><Route path="/judges/:id" element={<JudgeRunDetailPage />} /></Routes></MemoryRouter>);
+
+  await screen.findByText("Pinned Judge image versions");
+  expect(screen.getByText("judge-a · judge-e2e:latest")).toBeInTheDocument();
+  expect(screen.getByText("sha256:digest-a")).toBeInTheDocument();
+  expect(screen.getByText(/Template sha256:template-a/)).toBeInTheDocument();
+  expect(screen.queryByText(/digest-b/)).not.toBeInTheDocument();
+});
+
+it("marks legacy provenance unavailable in target view and keeps run errors diagnostic", async () => {
+  const legacy = { ...result, run: { ...result.run, last_error: "worker image identity mismatch; create a new run after image activation" } };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: legacy }) } as Response));
+  render(<MemoryRouter initialEntries={["/judges/r%201?target=t1"]}><Routes><Route path="/judges/:id" element={<JudgeRunDetailPage />} /></Routes></MemoryRouter>);
+
+  expect(await screen.findByText("Image provenance unavailable")).toBeInTheDocument();
+  expect(screen.getByText(/worker image identity mismatch/)).toHaveTextContent("Run diagnostic:");
+  expect(screen.queryByText(/digest-b/)).not.toBeInTheDocument();
+});
+
 it("shows only the URL-selected target and links back to its iteration on the same host", async () => {
   const body = {
     ...result,
