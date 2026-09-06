@@ -651,13 +651,16 @@ terra generalization. No final-arm outcomes are recorded yet.
   3s, lint 1s, UI tests 97s, branding 1s, docs 22s), as did the skill validator
   and `git diff --check`.
 
-All ten original/V1 responses preserved the core decisions and the targeted
+All ten original/V1 responses preserved the core decisions and these targeted
 distinctions: unverified status remained unavailable, reported analyses were not
 promoted to validated acceptance, absent hashes were not asserted to mismatch,
 unknown reference labels remained separate from uncertain Judge verdicts, and
-sol-only scope did not require terra. These responses test skill following, not
-Judge accuracy, and do not establish improvement over the already-correct
-baseline decisions.
+sol-only scope did not require terra. Nine of ten also preserved the accuracy
+denominator. `final-5.md` instead wrote `accuracy is unavailable (0/3)` when no
+targets had independent labels: accuracy was undefined (`0/0`), while `0/3` was
+label coverage. The raw response remains unchanged below. These responses test
+skill following, not Judge accuracy, and do not establish improvement over the
+already-correct baseline decisions.
 
 The reused regression case again stopped promotion, correctly reported agreement
 as 8/12 to 10/12 and unsupported citations as 1/12 to 4/12, and respected the
