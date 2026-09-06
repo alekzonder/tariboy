@@ -78,7 +78,7 @@ Completed in `7332a03` and `81aaf43`; backend-check passed, review clean after t
 - [x] Запустить production Desktop проверку через Playwright и tauri-driver согласно contributor guide; mock-list alone не доказывает работоспособность POST/dispatch, поэтому проверить их отдельно с изолированным daemon и контролируемым worker.
 - [x] Обновить product docs, включая честное различие queued/running и ручной режим workers. При затронутом shared Store UI пересобрать committed `internal/storeui/dist` через `make store-ui` в изоляции; desktop build outputs не stage.
 - [x] На интеграционной границе выполнить `make check`, отдельно собрать production Desktop и запустить затронутые сценарии через Playwright/tauri-driver. `make full-check` не запускать по уточнению пользователя. После сборки проверить обе формы `./bin/tariboy version` и `./bin/tariboy --version`; записать точные результаты выполненных проверок, не заявлять прохождение пропущенного полного набора.
-- [ ] Выполнить `git diff --check`, просмотреть весь diff, устранить Critical/Important замечания, закоммитить и обновить PR #15. Затем переходить к плану `2026-09-06-judge-image-rubric.md`.
+- [x] Выполнить `git diff --check`, просмотреть весь diff, устранить Critical/Important замечания, закоммитить и обновить PR #15. Затем переходить к плану `2026-09-06-judge-image-rubric.md`.
 
 Verification checkpoint: `make check` passed (backend 112 s, frontend 142 s).
 Production Desktop Playwright/tauri-driver: 2/2 passed in 24.0 s on `ce8c74a`,
@@ -86,3 +86,9 @@ including real default-one POST/claim/submit and target-specific immutable evide
 Both CLI version forms: `0.48.0`. Final product docs doctor/build passed.
 `full-check` was not run. Controlled stub verdicts establish integration behavior,
 not accuracy or paid-model cost statistics.
+
+Whole-branch review `19c57fc..fe74a47`: no Critical/Important findings; PR #15
+updated as draft. Two nonblocking advisory-display issues remain recorded:
+successful polling can clear an action error, and a worker waiting reason can
+remain stale while the pending count is unchanged. Subsequent phases are not
+included in this completion checkpoint.
