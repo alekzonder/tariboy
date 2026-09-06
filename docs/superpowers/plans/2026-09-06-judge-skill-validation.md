@@ -638,3 +638,36 @@ The holdout stopped promotion after the citation regression, retained the
 concrete 8/12 to 10/12 agreement comparison and 1/12 to 4/12 unsupported-citation
 change, and correctly treated the experiment as valid sol-only evidence with no
 terra generalization. No final-arm outcomes are recorded yet.
+
+## Final nonnumeric arm and numeric limitation
+
+- Skill checkpoint: `d958244`.
+- Samples: five fresh original-input contexts, five fresh V1 contexts, and the
+  citation-regression case rerun after prior fixes. The raw eleven responses are
+  preserved unchanged in the local Task 3 evidence directory. This regression
+  case was initially unseen but is now reused; it is not described as an
+  untouched final holdout.
+- Verification supplied with the arm: `make frontend-check` passed (typecheck,
+  lint, 97 UI tests, branding, and docs), as did the skill validator and
+  `git diff --check`.
+
+All ten original/V1 responses preserved the core decisions and the targeted
+distinctions: unverified status remained unavailable, reported analyses were not
+promoted to validated acceptance, absent hashes were not asserted to mismatch,
+unknown reference labels remained separate from uncertain Judge verdicts, and
+sol-only scope did not require terra. These responses test skill following, not
+Judge accuracy, and do not establish improvement over the already-correct
+baseline decisions.
+
+The reused regression case again stopped promotion, correctly reported agreement
+as 8/12 to 10/12 and unsupported citations as 1/12 to 4/12, and respected the
+sol-only scope. Its confusion matrix was numerically mislabeled: after saying
+`fail` was positive, it reported baseline `TP=2, FP=0, TN=6, FN=4` and candidate
+`TP=4, FP=0, TN=6, FN=2`. With fail-positive semantics the counts are baseline
+`TP=6, FN=0, TN=2, FP=4` and candidate `TP=6, FN=0, TN=4, FP=2`. Thus the stop
+decision and match/citation fractions are supported, but the numeric presentation
+is not a clean pass.
+
+The protocol now avoids positive-class shorthand and requires explicit
+expected→observed pass/fail/uncertain counts. Fresh numeric regression and
+transfer samples remain required; no outcomes from them are recorded here.

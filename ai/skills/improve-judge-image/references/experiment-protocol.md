@@ -45,14 +45,14 @@ Judge results (one row per reported analysis, with acceptance verified separatel
 
 Fixture results (baseline and candidate separately):
   execution status (default unavailable unless non-execution is established):
-  confusion counts (TP/FP/TN/FN):
+  verdict counts (expected fail→fail, fail→pass, pass→pass, pass→fail, expected/observed uncertain):
   accuracy (correct/labeled n/N):
   uncertain Judge verdicts / invalid reference labels / coverage:
   citation and rationale quality:
   observed regressions:
 
 Real-data results (baseline and candidate separately):
-  confusion counts (TP/FP/TN/FN):
+  verdict counts (expected fail→fail, fail→pass, pass→pass, pass→fail, expected/observed uncertain):
   accuracy (correct/labeled n/N):
   uncertain Judge-verdict count and handling:
   unknown/invalid reference-label count and reason:
