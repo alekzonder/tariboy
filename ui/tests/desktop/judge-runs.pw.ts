@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { access, writeFile } from "node:fs/promises";
+import { access, appendFile, cp, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,6 +50,8 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
   const version = spawnSync(cli, ["version"], { encoding: "utf8" });
   expect(version.status, version.error?.message ?? version.stderr).toBe(0);
   const clientVersion = version.stdout.trim();
+  const imageSource = join(desktopWorker.baseDir, "judge-image-source");
+  await cp(join(repositoryRoot, "store/images/llm-as-judge"), imageSource, { recursive: true });
   agents.forEach(desktopWorker.registerAgentForCleanup);
   await waitForMainWindow(desktop);
 
@@ -77,7 +79,7 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
       window.__judgeCall = call;
       await call("POST", "/api/images/build", {
         name: "judge-e2e", tag: "latest",
-        path: ${JSON.stringify(join(repositoryRoot, "store/images/llm-as-judge"))},
+        path: ${JSON.stringify(imageSource)},
       });
       await call("POST", "/api/agents", { name: "judge-target", image: "basic:latest", harness: "stub", loop: false });
       for (const name of ["judge-lead", "judge-one", "judge-two"]) {
@@ -171,8 +173,40 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
   `);
   await expect.poll(() => desktop.execute<string>("return document.body.innerText"), { timeout: 30_000 }).toContain("Score 0");
   await expect.poll(() => desktop.execute<string>("return document.body.innerText"), { timeout: 30_000 }).toContain("Waiting: Judge worker judge-one has Autopilot disabled.");
+  const pinnedA = await desktop.execute<{ digest: string; template: string }>(`
+    const detail = await window.__judgeCall("GET", "/api/judges/${second.runID}");
+    return { digest: detail.run.judge_images[0].image_digest, template: detail.run.judge_images[0].prompt_template_sha256 };
+  `);
+  await appendFile(join(imageSource, "rubric.md"), "\nFixture rubric generation B.\n");
+  const builtB = await desktop.execute<{ digest: string }>(`
+    return window.__judgeCall("POST", "/api/images/build", { name: "judge-e2e", tag: "latest", path: ${JSON.stringify(imageSource)} });
+  `);
+  expect(builtB.digest).not.toBe(pinnedA.digest);
+  expect(await desktop.execute<boolean>(`
+    const detail = await window.__judgeCall("GET", "/api/judges/${second.runID}");
+    return detail.run.judge_images.every(image => image.image_digest === ${JSON.stringify(pinnedA.digest)} && image.prompt_template_sha256 === ${JSON.stringify(pinnedA.template)});
+  `)).toBe(true);
+
+  await desktop.execute(`
+    await window.__judgeCall("POST", "/api/agents/judge-two/image", { image: "judge-e2e:latest" });
+    await window.__judgeCall("POST", "/api/agents/judge-two/kill");
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      if ((await window.__judgeCall("GET", "/api/agents/judge-two/status")).state !== "running") break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    await window.__judgeCall("POST", "/api/agents/judge-two/exec", { prompt: "activate Judge fixture generation B" });
+  `);
+  const mismatched = spawnSync(join(repositoryRoot, "store/skills/llm-as-judge/scripts/judge.sh"), ["--json", "work", "claim", "--run", second.runID], {
+    env: { ...process.env, TARIBOY_TOOLS_SOCKET: join(desktopWorker.runtimeDir, "judge-two.sock"), TARIBOY_CLIENT_VERSION: clientVersion }, encoding: "utf8",
+  });
+  expect(mismatched.status).not.toBe(0);
+  expect(mismatched.stderr).toContain("worker image identity mismatch");
+  await expect.poll(() => desktop.execute<string>(`
+    return (await window.__judgeCall("GET", "/api/judges/${second.runID}")).run.last_error;
+  `)).toContain("create a new run after image activation");
   const firstTarget = await worker("judge-one", second.runID, 0, "second run first target");
-  const secondTarget = await worker("judge-two", second.runID, 1, "second target only");
+  const secondTarget = await worker("judge-one", second.runID, 1, "second target only");
   const targetIterations = await desktop.execute<{ first: string; second: string }>(`
     const detail = await window.__judgeCall("GET", "/api/judges/${second.runID}");
     return {
@@ -199,6 +233,28 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
       && document.querySelector('nav[aria-label="Breadcrumb"] a')?.getAttribute('href') === '#/servers/local/settings/advanced/judges';
   `)).toBe(true);
   expect(firstTarget).not.toBe(secondTarget);
+
+  await desktop.execute(`
+    await window.__judgeCall("POST", "/api/agents/judge-one/image", { image: "judge-e2e:latest" });
+    await window.__judgeCall("POST", "/api/agents/judge-one/kill");
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      if ((await window.__judgeCall("GET", "/api/agents/judge-one/status")).state !== "running") break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    await window.__judgeCall("POST", "/api/agents/judge-one/exec", { prompt: "activate Judge fixture generation B" });
+  `);
+  const third = await desktop.execute<{ runID: string; pinned: boolean }>(`
+    const created = await window.__judgeCall("POST", "/api/judges/review", { iteration: [window.__judgeIterations[0]], judges_per_iteration: 1 });
+    const detail = await window.__judgeCall("GET", "/api/judges/" + created.id);
+    return { runID: created.id, pinned: detail.run.judge_images.every(image => image.image_digest === ${JSON.stringify(builtB.digest)}) };
+  `);
+  expect(third.pinned).toBe(true);
+  expect(third.runID).not.toBe(second.runID);
+
+  await desktop.execute(`window.location.hash = "#/servers/local/settings/advanced/judges/${second.runID}?target=${secondTarget}"; return true;`);
+  await expect.poll(() => desktop.execute<string>("return document.body.innerText"), { timeout: 30_000 }).toContain(pinnedA.digest);
+  expect(await desktop.execute<string>("return document.body.innerText")).toContain("second target only");
 
   await desktop.elementClick(await desktop.findElement("xpath", "//nav[@aria-label='Breadcrumb']/a[contains(., 'judge-target iteration')]"));
   await expect.poll(() => desktop.execute<string>("return document.body.innerText"), { timeout: 30_000 }).toContain("Judge review");

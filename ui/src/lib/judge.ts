@@ -10,6 +10,13 @@ export type JudgeRunStatus =
   | "partial"
   | "cancelled";
 
+export interface JudgeImageIdentity {
+  agent: string;
+  image_ref: string;
+  image_digest: string;
+  prompt_template_sha256: string;
+}
+
 // These mirror the operator API. A few installations additionally expose the
 // optional model/cost fields; keeping them optional makes the list compatible
 // with older daemons while still rendering the richer response when present.
@@ -22,6 +29,7 @@ export interface JudgeRun {
   judge_group: string;
   lead_agent: string;
   judge_agents?: string[];
+  judge_images?: JudgeImageIdentity[];
   summary_agent: string;
   judges_per_iteration: number;
   max_attempts: number;
