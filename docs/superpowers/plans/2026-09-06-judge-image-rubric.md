@@ -10,6 +10,19 @@
 
 **Spec:** Раздел «Требования» ниже заменяет только решение о daemon-owned rubric из `docs/superpowers/specs/2026-09-06-judge-reliability-design.md`.
 
+## Verification checkpoint
+
+Completed through `73289b9`: all three task reviews approved. The rubric moved
+byte-for-byte (SHA-256 `85e6735491cbf3900df7eda4bbeb656b15b0430caa2994a5a406b526ffb88fa3`).
+`make check` passed (backend 170s, frontend 138s); the rebuilt production Desktop
+passed Playwright/tauri-driver `judge-runs.pw.ts` 2/2 in 25.4s. Both CLI version
+forms remain `0.48.0`. No `full-check`, live install, or daemon restart was run.
+This proves ownership/provenance behavior, not improved Judge accuracy.
+
+Final whole-branch review is shared with the following skill phase in this same
+PR. The existing same-version Store asset transition remains a release-time
+constraint; verification was not weakened.
+
 ## Global Constraints
 
 - Выполнять после `2026-09-06-judge-iteration-ui.md` в той же ветке и PR #15.
@@ -34,11 +47,11 @@
 
 **Interfaces:** Новый `JudgeImageIdentity` содержит JSON string fields `agent`, `image_ref`, `image_digest`, `prompt_template_sha256`; Run получает `judge_images: JudgeImageIdentity[]`. Сохранить одной JSON-колонкой рядом с конфигурацией run через существующий migration mechanism, без новой relational subsystem. Пустое значение означает legacy, не доказанный образ.
 
-- [ ] Добавить тест: manual и automatic run фиксируют одинаковую identity при одинаковой конфигурации; смена tag после создания не меняет сохранённое значение. Отдельный fixture старой базы читается без identity и без data loss.
-- [ ] Запустить `go test ./internal/judge -run 'ImageIdentity|Legacy' -count=1`; увидеть RED.
-- [ ] Разрешить образ через существующий image store и validated template, используя pinned archive при несовпадении active digest с текущим tag; фиксировать digest и template hash из одного согласованного snapshot. `ReadTemplate(ref)` сам по себе читает mutable tag и недостаточен для digest A после публикации B. Не искать layer по имени rubric и не дублировать его текст в базе. Общий capture должен охватывать также agent `run.create`, а не оставлять публичный путь без provenance.
-- [ ] В общем пути выдачи/приёма assignment сверить identity фактической worker iteration. Тест: записан digest A, worker использует B → assignment не получает валидный результат; A → нормальное выполнение. Закрыть смену образа между claim и submit повторной проверкой фактической iteration provenance.
-- [ ] Запустить `go test ./internal/judge ./internal/image -count=1`; проверить concurrent claim и legacy compatibility; закоммитить provenance отдельно от переноса текста.
+- [x] Добавить тест: manual и automatic run фиксируют одинаковую identity при одинаковой конфигурации; смена tag после создания не меняет сохранённое значение. Отдельный fixture старой базы читается без identity и без data loss.
+- [x] Запустить `go test ./internal/judge -run 'ImageIdentity|Legacy' -count=1`; увидеть RED.
+- [x] Разрешить образ через существующий image store и validated template, используя pinned archive при несовпадении active digest с текущим tag; фиксировать digest и template hash из одного согласованного snapshot. `ReadTemplate(ref)` сам по себе читает mutable tag и недостаточен для digest A после публикации B. Не искать layer по имени rubric и не дублировать его текст в базе. Общий capture должен охватывать также agent `run.create`, а не оставлять публичный путь без provenance.
+- [x] В общем пути выдачи/приёма assignment сверить identity фактической worker iteration. Тест: записан digest A, worker использует B → assignment не получает валидный результат; A → нормальное выполнение. Закрыть смену образа между claim и submit повторной проверкой фактической iteration provenance.
+- [x] Запустить `go test ./internal/judge ./internal/image -count=1`; проверить concurrent claim и legacy compatibility; закоммитить provenance отдельно от переноса текста.
 
 ## Task 2: Удаление daemon-owned рубрики
 
@@ -51,11 +64,11 @@ criteria as task context; it must no longer expect the semantic rubric from the
 daemon. This ownership clarification does not change the rubric file's bytes or
 its scoring rules.
 
-- [ ] Найти все literal callers `ReviewCriteria` и ссылки на `judge-rubric.md`; проверить manual и scheduled paths, Store assets и тесты. Исторические experiment logs не переписывать.
-- [ ] Добавить failing contract test: built image содержит rubric layer ровно один раз; после изменения только локального rubric файла rebuild меняет image/template digest; создание run не требует bundled semantic prompt.
-- [ ] Запустить `go test ./internal/judge -run 'ImageContract|Criteria|ImageIdentity' -count=1` и убедиться в RED.
-- [ ] Перенести текст без смысловых правок, заменить Tariboyfile entry и удалить helper/его вызовы. Проверить `git diff --find-renames`: рубрика перемещена, не отредактирована. Не оставлять fallback на старый bundled файл.
-- [ ] Запустить `go test ./internal/judge ./internal/image ./internal/commands -count=1`; проверить built image и оба способа создания run; закоммитить перенос.
+- [x] Найти все literal callers `ReviewCriteria` и ссылки на `judge-rubric.md`; проверить manual и scheduled paths, Store assets и тесты. Исторические experiment logs не переписывать.
+- [x] Добавить failing contract test: built image содержит rubric layer ровно один раз; после изменения только локального rubric файла rebuild меняет image/template digest; создание run не требует bundled semantic prompt.
+- [x] Запустить `go test ./internal/judge -run 'ImageContract|Criteria|ImageIdentity' -count=1` и убедиться в RED.
+- [x] Перенести текст без смысловых правок, заменить Tariboyfile entry и удалить helper/его вызовы. Проверить `git diff --find-renames`: рубрика перемещена, не отредактирована. Не оставлять fallback на старый bundled файл.
+- [x] Запустить `go test ./internal/judge ./internal/image ./internal/commands -count=1`; проверить built image и оба способа создания run; закоммитить перенос.
 
 ## Task 3: Видимая provenance и regression gate
 
@@ -63,8 +76,8 @@ its scoring rules.
 
 **Interfaces:** UI использует `run.judge_images` из Task 1. Показывает image ref/digest и template hash в существующих деталях, legacy — `Image provenance unavailable`, а не текущее состояние агента.
 
-- [ ] Добавить failing UI test с новым и legacy run: новый показывает сохранённый digest A при текущем B, legacy не показывает B как доказанную provenance.
-- [ ] Запустить `cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx`; увидеть RED, добавить поля в существующий блок деталей, повторить до GREEN.
-- [ ] Выполнить изолированный regression scenario: run A → update tag → A остаётся неизменным, несовпадающий worker блокируется явно → новый run B использует B. Старый завершённый run открывается с прежними evidence/criteria.
-- [ ] Документировать image-owned rubric и mismatch behavior; выполнить `make check` и отдельно production Playwright/tauri-driver сценарий для изменённого UI. `make full-check` не запускать по уточнению пользователя. Если shared UI затрагивает Store bundle, пересобрать его по AGENTS.md.
-- [ ] `git diff --check`, полный review, commit/push в PR #15. Не заявлять улучшение accuracy на основании переноса; новые статистические эксперименты принадлежат следующему процессу. Далее `2026-09-06-judge-image-improvement-skill.md`.
+- [x] Добавить failing UI test с новым и legacy run: новый показывает сохранённый digest A при текущем B, legacy не показывает B как доказанную provenance.
+- [x] Запустить `cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx`; увидеть RED, добавить поля в существующий блок деталей, повторить до GREEN.
+- [x] Выполнить изолированный regression scenario: run A → update tag → A остаётся неизменным, несовпадающий worker блокируется явно → новый run B использует B. Старый завершённый run открывается с прежними evidence/criteria.
+- [x] Документировать image-owned rubric и mismatch behavior; выполнить `make check` и отдельно production Playwright/tauri-driver сценарий для изменённого UI. `make full-check` не запускать по уточнению пользователя. Если shared UI затрагивает Store bundle, пересобрать его по AGENTS.md.
+- [x] `git diff --check`, полный review, commit/push в PR #15. Не заявлять улучшение accuracy на основании переноса; новые статистические эксперименты принадлежат следующему процессу. Далее `2026-09-06-judge-image-improvement-skill.md`.
