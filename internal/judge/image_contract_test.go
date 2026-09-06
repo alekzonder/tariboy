@@ -55,9 +55,13 @@ func TestBuiltinJudgeImageDeclaresAutomaticCycleContract(t *testing.T) {
 		`"locator": "exact string returned by evidence search"`,
 		"scripts/judge.sh summary claim RUN", "scripts/judge.sh summary inputs RUN", "scripts/judge.sh summary submit RUN --file summary.json",
 		"scripts/judge.sh improvement submit RUN --file proposal.json", `"rollback_image": "name:immutable-tag"`,
+		"Apply the criteria", "analysis submit --assignment ID --file result.json --json", "actionable image defect",
 	} {
 		if !strings.Contains(string(instructions), required) {
 			t.Fatalf("instructions missing %q", required)
 		}
+	}
+	if !strings.Contains(string(manifest), "- file: $CURRENT_VERSION_STORE/prompts/judge-rubric.md") {
+		t.Fatal("manifest does not include the canonical judge rubric")
 	}
 }

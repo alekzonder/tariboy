@@ -2,6 +2,7 @@ package judge
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -19,14 +20,34 @@ func ValidateAnalysis(a AnalysisResult, r CitationResolver) error {
 	if a.Verdict != "pass" && a.Verdict != "fail" && a.Verdict != "uncertain" {
 		return invalidAnalysis("verdict must be pass, fail, or uncertain")
 	}
+	if math.IsNaN(a.Score) || math.IsInf(a.Score, 0) {
+		return invalidAnalysis("score must be finite")
+	}
 	if a.Score < 0 || a.Score > 1 {
 		return invalidAnalysis("score must be between 0 and 1")
+	}
+	if math.IsNaN(a.Confidence) || math.IsInf(a.Confidence, 0) {
+		return invalidAnalysis("confidence must be finite")
 	}
 	if a.Confidence < 0 || a.Confidence > 1 {
 		return invalidAnalysis("confidence must be between 0 and 1")
 	}
 	if strings.TrimSpace(a.Summary) == "" {
 		return invalidAnalysis("summary must not be empty")
+	}
+	if a.Verdict == "fail" && len(a.Violations) == 0 {
+		return invalidAnalysis("fail requires a violation")
+	}
+	if a.Verdict == "pass" {
+		if len(a.Violations) != 0 {
+			return invalidAnalysis("pass must not include violations")
+		}
+		if len(a.Strengths) == 0 {
+			return invalidAnalysis("pass requires a cited strength")
+		}
+	}
+	if a.Verdict == "uncertain" && len(a.EvidenceGaps) == 0 {
+		return invalidAnalysis("uncertain requires an evidence gap")
 	}
 	for i, v := range a.Violations {
 		if strings.TrimSpace(v.Criterion) == "" || strings.TrimSpace(v.Description) == "" {
@@ -44,11 +65,19 @@ func ValidateAnalysis(a AnalysisResult, r CitationResolver) error {
 			return err
 		}
 	}
+	for i, gap := range a.EvidenceGaps {
+		if strings.TrimSpace(gap) == "" {
+			return invalidAnalysis(fmt.Sprintf("evidence_gaps[%d] must not be empty", i))
+		}
+	}
 	return nil
 }
 func invalidAnalysis(detail string) error { return fmt.Errorf("%w: %s", ErrInvalidAnalysis, detail) }
 
 func validateCitations(cs []Citation, r CitationResolver, path string) error {
+	if len(cs) == 0 {
+		return invalidAnalysis(path + " must not be empty")
+	}
 	for i, c := range cs {
 		prefix := fmt.Sprintf("%s[%d]", path, i)
 		if c.BundleHash == "" {

@@ -194,6 +194,28 @@ class StoreSkillsTest(unittest.TestCase):
                 self.assertEqual(request[0], [method, route])
                 self.assertEqual(request[1], b"" if body is None else json.dumps(body).encode())
 
+    def test_judge_evidence_get_sends_stable_string_locator(self):
+        process, request = self.run_script(
+            "llm-as-judge/scripts/judge.sh",
+            ["evidence", "get", "--assignment", "a-1", "--artifact", "audit", "--locator", "line:17"],
+            {},
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(request[0], ["POST", "/tools/judge/action/evidence.get"])
+        self.assertEqual(json.loads(request[1]), {"assignment_id": "a-1", "artifact": "audit", "locator": "line:17"})
+
+    def test_judge_command_help_names_required_submission_flags(self):
+        env = dict(os.environ)
+        env.pop("TARIBOY_TOOLS_SOCKET", None)
+        process = subprocess.run(
+            [ROOT / "llm-as-judge/scripts/judge.sh", "analysis", "submit", "--help"],
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertIn("analysis submit --assignment ID --file FILE [--json]", process.stdout)
+
     def test_message_reply_accepts_positional_text(self):
         process, request = self.run_script(
             "messages/scripts/messages.sh",

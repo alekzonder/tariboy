@@ -29,7 +29,12 @@ On `judge.work.available`, claim exactly one assignment with `scripts/judge.sh
 work claim --run RUN`. If none is available, process the wake message and finish
 idle. Use `scripts/judge.sh evidence search`; workers must not use `judge run
 inspect`. Prefer prompt, metadata, usage, and targeted audit searches. Search
-the large transcript only with narrow task-relevant terms.
+the large transcript only with narrow task-relevant terms. Apply the criteria
+returned by `work claim`: cite the applicable requirement and observed action.
+A filtered search or missing tool result is a coverage gap, not proof the action
+did not happen. If an older daemon returns an immutable base64 payload instead
+of readable records, decode that payload locally if needed; do not inspect a
+target repository.
 
 Always identify the target `image_ref` and full image digest from metadata and
 state both in the analysis summary. Submit `result.json` in exactly this shape;
@@ -54,6 +59,12 @@ or numbers for fields shown as strings. Every citation must copy the exact
 bundle hash, artifact, and locator returned by evidence search. Repair any
 field-specific validation error, process the wake message, and finish only
 after successful submission.
+
+Submit with this exact command:
+
+```text
+scripts/judge.sh analysis submit --assignment ID --file result.json --json
+```
 
 ## Summary lead
 
@@ -89,8 +100,9 @@ Coverage values are integers. Include every target and analysis ID. Compare
 target agents and exact image ref/digest separately when multiple versions are
 present.
 
-After the summary, submit one improvement proposal per repository/release unit
-that needs changes. Do not combine changes to different images, skills,
+After the summary, submit a proposal only when immutable evidence establishes an
+actionable image defect. Do not propose for unknown causes, missing evidence, or
+infrastructure failures. Do not combine changes to different images, skills,
 prompts, or repositories. Write each `proposal.json` in exactly this shape and
 run `scripts/judge.sh improvement submit RUN --file proposal.json`:
 

@@ -38,7 +38,7 @@ func readyRun(t *testing.T) (*Store, Run, Target) {
 }
 
 func validAnalysis() AnalysisResult {
-	return AnalysisResult{SchemaVersion: 1, Verdict: "pass", Score: .8, Confidence: .7, Summary: "evidence supports it"}
+	return AnalysisResult{SchemaVersion: 1, Verdict: "pass", Score: .8, Confidence: .7, Summary: "evidence supports it", Strengths: []Strength{{Description: "observed verification", Citations: []Citation{{BundleHash: "bundle", Artifact: "audit", Locator: "line:1"}}}}}
 }
 
 func TestClaimExclusivityAndDistinctJudges(t *testing.T) {

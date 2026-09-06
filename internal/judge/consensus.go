@@ -27,13 +27,16 @@ func Consensus(results []AnalysisResult) TargetConsensus {
 		}
 	}
 	v := "disputed"
+	if uncertain == len(results) {
+		v = "uncertain"
+	}
 	if pass > fail && pass > uncertain {
 		v = "pass"
 	}
 	if fail > pass && fail > uncertain {
 		v = "fail"
 	}
-	if max-min >= .5 {
+	if v != "uncertain" && max-min >= .5 {
 		v = "disputed"
 	}
 	return TargetConsensus{Verdict: v, Score: median(scores), Confidence: median(confidences)}

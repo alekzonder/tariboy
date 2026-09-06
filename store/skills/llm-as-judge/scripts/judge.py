@@ -181,8 +181,7 @@ def build(args):
                 body[name] = flags[name]
         return "evidence.search", body
     if command == "evidence get":
-        locator = json_object(required(flags, "locator", command), "tools judge evidence get: --locator is not valid JSON object")
-        return "evidence.get", {"assignment_id": required(flags, "assignment", command), "artifact": required(flags, "artifact", command), "locator": locator}
+        return "evidence.get", {"assignment_id": required(flags, "assignment", command), "artifact": required(flags, "artifact", command), "locator": required(flags, "locator", command)}
     if command == "analysis submit":
         result, raw = json_file(flags, command)
         return "analysis.submit", {"assignment_id": required(flags, "assignment", command), "result": result, "raw_submission": raw}
@@ -202,8 +201,19 @@ def run(args):
     print_result(call("POST", "/tools/judge/action/" + action, body))
 
 
+def help_text(args):
+    command = " ".join(args[:2])
+    usage = {
+        "analysis submit": "usage: judge.sh analysis submit --assignment ID --file FILE [--json]",
+        "summary submit": "usage: judge.sh summary submit RUN --file FILE [--json]",
+        "evidence get": "usage: judge.sh evidence get --assignment ID --artifact ARTIFACT --locator LOCATOR [--json]",
+        "evidence search": "usage: judge.sh evidence search --assignment ID --artifact ARTIFACT [--query TEXT] [--cursor CURSOR] [--json]",
+    }
+    return usage.get(command, "usage: judge.sh <automation|iterations|run|work|summary|evidence|analysis|improvement> <command> ... [--json]")
+
+
 if __name__ == "__main__":
-    if sys.argv[1:] in (["-h"], ["--help"]):
-        print("usage: judge.sh <automation|iterations|run|work|summary|evidence|analysis|improvement> <command> ... [--json]")
+    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
+        print(help_text([arg for arg in sys.argv[1:] if arg not in {"-h", "--help"}]))
         raise SystemExit(0)
     raise SystemExit(execute(lambda: run(sys.argv[1:])))

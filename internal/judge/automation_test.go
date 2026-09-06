@@ -203,6 +203,17 @@ func TestAutomationBeginCreatesOneTaskAndOneRunPerDelivery(t *testing.T) {
 	if taskCount != 1 || runCount != 1 {
 		t.Fatalf("tasks=%d runs=%d", taskCount, runCount)
 	}
+	var original string
+	if err := db.DB.QueryRow(`SELECT original_request FROM judge_runs WHERE id=?`, first.RunID).Scan(&original); err != nil {
+		t.Fatal(err)
+	}
+	criteria, hash, err := ReviewCriteria()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(original, criteria) || !strings.Contains(original, "Rubric SHA-256: "+hash) {
+		t.Fatalf("automatic original request does not freeze rubric: %q", original)
+	}
 }
 
 func TestAutomationFinishCompletesLinkedTaskAndMentionsConfiguredCustomer(t *testing.T) {
