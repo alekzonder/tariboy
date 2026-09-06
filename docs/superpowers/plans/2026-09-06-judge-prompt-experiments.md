@@ -402,3 +402,26 @@ to llm-as-judge:1.4; applying/migrating that automation or enabling background
 loops is outside this bounded acceptance. This validates the controlled manual
 workflow, not unattended scheduling. Do not silently apply the old automation
 and overwrite the final image selection.
+
+## Judge history UI follow-up
+
+The user requested start date/time, then full linked ID instead of verbose
+criteria, then the remaining table fields, newest first. Implemented in the
+same branch with local `created_at` rendering; invalid/missing dates sort last.
+Criteria remain on the detail page. Focused tests were observed RED before the
+change and GREEN afterward (14/14). A production Desktop test exercises the
+table through Playwright and tauri-driver with only its list response controlled.
+Independent read-only review found no issues.
+
+Fresh `make full-check` completed: check 191s, build 13s, workflow E2E 27s,
+iteration-timeout E2E 62s, group-deadline E2E 5s, full-smoke 53s, Tasks browser
+40s, Workspace browser 20s, and native Desktop E2E 147s all passed. Both built
+CLI version forms report the canonical 0.48.0. The aggregate still **failed**:
+the unchanged `scripts/e2e.sh` stopped in the model-route section (18s).
+A traced repeat passed that section but failed its store-pull assertion; a
+further untraced repeat again exited at model-route. Its unguarded iteration
+directory `ls` under `set -euo pipefail` can abort before polling retries.
+The store assertion's `grep -q` may close the pipe before the CLI finishes
+writing, but the captured trace does not prove that SIGPIPE hypothesis.
+These unrelated shell-test paths were not modified or waived. The PR must
+disclose the failed aggregate; it is not an all-green verification claim.

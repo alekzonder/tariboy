@@ -13,11 +13,9 @@ const statusVariant = (status: JudgeRunStatus) => {
   return "secondary";
 };
 
-// Kept exported for the focused formatting unit tests.
-// eslint-disable-next-line react-refresh/only-export-components
-export function compactCriteria(criteria: string | null | undefined): string {
-  const oneLine = (criteria ?? "").replace(/\s+/g, " ").trim();
-  return oneLine || "—";
+function startTime(run: JudgeRun): number {
+  const timestamp = Date.parse(run.created_at);
+  return Number.isNaN(timestamp) ? -Infinity : timestamp;
 }
 
 function modelFor(run: JudgeRun): string {
@@ -32,7 +30,7 @@ export default function JudgeRunsPage() {
 function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
 	const listRuns = useCallback(() => listJudgeRunsOn(target), [target]);
 	const { data, error } = usePolling(listRuns, 5000);
-	const runs = data?.runs ?? [];
+	const runs = [...(data?.runs ?? [])].sort((a, b) => startTime(b) - startTime(a));
 	const [config, setConfig] = useState("");
 	const [saved, setSaved] = useState("");
 	const [diagnostics, setDiagnostics] = useState<JudgeAutomationDiagnostic[]>([]);
@@ -123,14 +121,15 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">Criteria</th><th className="px-3 py-2">Count</th><th className="px-3 py-2">Coverage</th>
+              <th className="px-3 py-2" aria-sort="descending">Started</th><th className="px-3 py-2">ID</th><th className="px-3 py-2">Count</th><th className="px-3 py-2">Coverage</th>
               <th className="px-3 py-2">Verdict</th><th className="px-3 py-2">Model</th><th className="px-3 py-2 text-right">Cost</th><th className="px-3 py-2">Creator</th>
             </tr>
           </thead>
           <tbody>
             {runs.map((run) => (
               <tr key={run.id} className="border-t">
-                <td className="max-w-md px-3 py-2"><Link className="font-medium hover:underline" to={`/settings/advanced/judges/${encodeURIComponent(run.id)}`}>{compactCriteria(run.original_request)}</Link></td>
+                <td className="px-3 py-2 whitespace-nowrap">{Number.isFinite(startTime(run)) ? <time dateTime={run.created_at}>{new Date(run.created_at).toLocaleString()}</time> : "—"}</td>
+                <td className="px-3 py-2 font-mono whitespace-nowrap"><Link className="font-medium hover:underline" to={`/settings/advanced/judges/${encodeURIComponent(run.id)}`}>{run.id}</Link></td>
                 <td className="px-3 py-2 font-mono whitespace-nowrap">{run.targets_ready}/{run.targets_total}</td>
                 <td className="px-3 py-2 font-mono whitespace-nowrap">{run.assignments_completed}/{run.assignments_total}</td>
                 <td className="px-3 py-2"><Badge variant={statusVariant(run.status)}>{run.status}</Badge></td>
@@ -139,7 +138,7 @@ function JudgeRunsPageForTarget({ target }: { target: ApiTarget }) {
                 <td className="px-3 py-2 text-muted-foreground">{run.lead_agent || run.creator_iteration || "—"}</td>
               </tr>
             ))}
-            {!error && runs.length === 0 && <tr><td colSpan={7} className="px-3 py-4 text-center text-muted-foreground">No judge runs yet.</td></tr>}
+            {!error && runs.length === 0 && <tr><td colSpan={8} className="px-3 py-4 text-center text-muted-foreground">No judge runs yet.</td></tr>}
           </tbody>
         </table>
       </div>

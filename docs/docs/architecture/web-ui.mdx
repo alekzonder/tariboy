@@ -157,6 +157,11 @@ same view shows its provenance and exact release hash and can approve, reject,
 or stage it for one agent's next iteration. The view does not run Git changes or
 build a release, and it does not provide atomic team rollout.
 
+The Judge runs table shows local start date/time (`created_at`), the full run ID
+linked to its details, then count, coverage, verdict, model, cost, and creator.
+Runs are sorted newest first; missing or invalid dates appear last as `—`.
+The full criteria remain on the detail page rather than expanding table rows.
+
 The Judge page also exposes the selected daemon's automation document as a raw
 JSON textarea. Validate, Apply, and Run once send unchanged text or the existing
 one-shot request to `tariboyd`; JSON

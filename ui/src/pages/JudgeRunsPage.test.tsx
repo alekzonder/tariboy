@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
-import JudgeRunsPage, { compactCriteria } from "./JudgeRunsPage";
+import JudgeRunsPage from "./JudgeRunsPage";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
@@ -9,16 +9,27 @@ function response(result: unknown, ok = true): Response {
   return { ok, status: ok ? 200 : 500, text: async () => JSON.stringify(result) } as Response;
 }
 
-describe("compactCriteria", () => {
-  it("returns the placeholder for undefined without throwing", () => {
-    expect(compactCriteria(undefined)).toBe("—");
-  });
-  it("returns the placeholder for an empty string", () => {
-    expect(compactCriteria("")).toBe("—");
-  });
-  it("collapses whitespace onto one line", () => {
-    expect(compactCriteria("a\n  b")).toBe("a b");
-  });
+it("shows local start dates and orders runs newest first, with unknown dates last", async () => {
+  const runs = [
+    { id: "unknown", created_at: "", original_request: "Unknown" },
+    { id: "older", created_at: "2026-09-06T12:00:00Z", original_request: "Older" },
+    { id: "newer", created_at: "2026-09-06T14:30:00+02:00", original_request: "Newer" },
+    { id: "invalid", created_at: "not-a-date", original_request: "Invalid" },
+  ].map(run => ({ ...run, status: "completed", targets_total: 0, targets_ready: 0,
+    assignments_total: 0, assignments_completed: 0 }));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ ok: true, result: { runs, count: 4 } })));
+  render(<MemoryRouter><JudgeRunsPage /></MemoryRouter>);
+
+  await screen.findByRole("link", { name: "newer" });
+  const rows = screen.getAllByRole("row").slice(1);
+  expect(rows.map(row => within(row).getByRole("link").textContent)).toEqual(["newer", "older", "unknown", "invalid"]);
+  expect(screen.getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["Started", "ID", "Count", "Coverage", "Verdict", "Model", "Cost", "Creator"]);
+  expect(screen.getByRole("columnheader", { name: "Started" })).toHaveAttribute("aria-sort", "descending");
+  const time = rows[0].querySelector("time");
+  expect(time).toHaveAttribute("datetime", "2026-09-06T14:30:00+02:00");
+  expect(time).toHaveTextContent(new Date("2026-09-06T12:30:00Z").toLocaleString());
+  expect(within(rows[2]).getAllByRole("cell")[0]).toHaveTextContent("—");
+  expect(within(rows[3]).getAllByRole("cell")[0]).toHaveTextContent("—");
 });
 
 it("renders the table when a run has undefined criteria", async () => {
@@ -28,7 +39,7 @@ it("renders the table when a run has undefined criteria", async () => {
   render(<MemoryRouter><JudgeRunsPage /></MemoryRouter>);
 
   await waitFor(() => expect(screen.getByText("running")).toBeInTheDocument());
-  expect(screen.getByRole("link", { name: "—" })).toHaveAttribute("href", "/settings/advanced/judges/run%209");
+  expect(screen.getByRole("link", { name: "run 9" })).toHaveAttribute("href", "/settings/advanced/judges/run%209");
 });
 
 it("displays judge run progress, status, model, cost, and creator", async () => {
@@ -38,14 +49,15 @@ it("displays judge run progress, status, model, cost, and creator", async () => 
   }] } })));
   render(<MemoryRouter><JudgeRunsPage /></MemoryRouter>);
 
-  await waitFor(() => expect(screen.getByText("Assess implementation quality")).toBeInTheDocument());
+  await screen.findByRole("link", { name: "run 1" });
+  expect(screen.queryByText("Assess implementation quality")).not.toBeInTheDocument();
   expect(screen.getByText("2/3")).toBeInTheDocument();
   expect(screen.getByText("4/6")).toBeInTheDocument();
   expect(screen.getByText("partial")).toBeInTheDocument();
   expect(screen.getByText("claude-opus")).toBeInTheDocument();
   expect(screen.getByText("$1.2500")).toBeInTheDocument();
   expect(screen.getByText("judge-lead")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Assess implementation quality" })).toHaveAttribute("href", "/settings/advanced/judges/run%201");
+  expect(screen.getByRole("link", { name: "run 1" })).toHaveAttribute("href", "/settings/advanced/judges/run%201");
 });
 
 it("shows empty and error states", async () => {
