@@ -56,7 +56,7 @@ work packets:
 ```bash
 ttasks work next --queue OPS --idempotency-key claim-ops
 ttasks work show <assignment-id>
-ttasks artifacts add <assignment-id> --name report --type text --content "..."
+ttasks artifacts add <assignment-id> --name report --type markdown --content "..."
 ttasks ask <assignment-id> \
   --question "Which region?" \
   --context "Required to continue" \
@@ -104,5 +104,5 @@ before any request reaches the daemon.
 
 - [Native Tasks](/docs/tasks)
 - [Configurable task workflows](/docs/task-workflows)
-- [Command reference: Native Tasks](/docs/reference/commands#native-tasks-tasks-)
+- [Command reference: Native Tasks](/docs/reference/commands#native-tasks-ttasks-)
 - [Agent tools](/docs/binaries/agent-tools)
