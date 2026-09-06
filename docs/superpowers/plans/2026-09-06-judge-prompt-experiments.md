@@ -136,3 +136,28 @@ criterion. Keep the original expectation and disagreement visible; do not tune
 the prompt to suppress a potentially material verification gap or relabel the
 sample merely to improve the count. A clearer exact-edit authorization case and
 an honest infrastructure-blocker contrast are the next calibration controls.
+
+### H2 real-run result
+
+Run `137607aa-283a-41ca-b0fe-e797d940177c` completed all four analyses and summary
+`2bd99118-7cf9-4840-b4b4-68cfa8ecd5f8`. Worker iterations were
+`judge-worker-1-20260906143309-1` and `judge-worker-2-20260906143310-1`;
+lead iteration was `judge-lead-20260906143807-1`.
+
+All four verdicts were pass, consistent with the scoped notification/waiting
+objectives. Terra's Jack analysis `7822d8a2-076c-4261-a91f-41ff008ee60d` now cites
+the actual wait creation and subsequent task-state result, not the preceding
+invocation. Both Bob analyses retain the distinction between observed task
+state and agent-reported historical tests. All nine unique citations resolved;
+their producing results were checked against the findings. Five transcript
+values were byte-for-byte-equivalent JSON to the H1 records already read; the
+four remaining records were read directly, including the terminal audit event.
+Lead preserved the same attribution and included all target/analysis IDs.
+Neither observed provenance error recurred in this repeat.
+
+This establishes a successful bounded reproduction, not zero error probability
+or population accuracy. The disputed h01 label remains unresolved; broader real
+negative controls and the two contrast cases above are still needed before
+claiming general reliability. Judge agents remain manual-loop controlled; the
+stored automation revision (still referring to llm-as-judge:1.4) was not applied
+or migrated during calibration. Existing unrelated run backlog was not consumed.
