@@ -6,6 +6,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
 home="$tmp/home"
 tools="$tmp/tools"
+prefix="$tmp/prefix"
 mkdir -p "$home/.local/lib/tariboy/old" "$home/.local/bin" "$tools"
 
 cat >"$tools/go" <<'SH'
@@ -61,6 +62,11 @@ install_server() {
     GO="$tools/go" BINDIR="$tmp/build" server-install
 }
 
+install_ordinary() {
+  HOME="$home" PATH="$tools:$PATH" make --no-print-directory -C "$ROOT" \
+    GO="$tools/go" BINDIR="$tmp/build" PREFIX="$prefix" install
+}
+
 assert_old_links() {
   for pair in "${links[@]}"; do
     name=${pair%%:*}
@@ -78,6 +84,12 @@ assert_old_links_except_ttasks() {
 }
 
 version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' "$ROOT/internal/version/version.go")
+
+mkdir -p "$prefix/bin" "$tmp/foreign-ttasks"
+ln -s "$tmp/foreign-ttasks" "$prefix/bin/ttasks"
+install_ordinary
+test "$(readlink "$prefix/bin/ttasks")" = tariboy-tasks
+test ! -e "$tmp/foreign-ttasks/tariboy-tasks"
 
 seed_old
 install_server
