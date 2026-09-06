@@ -2,7 +2,8 @@ GO      ?= go
 BINDIR  := bin
 PREFIX  ?= $(HOME)/.local
 INSTALLDIR := $(PREFIX)/bin
-BINARIES := tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram
+BINARIES := tariboyd tariboy tariboy-tasks tariboy-shim tariboy-store tariboy-plugin-telegram
+MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram
 SA := $(BINDIR)/tariboy
 # Desktop E2E specs receive separate owner-only state from their fixture, so
 # two WebDriver workers can run safely on a normal development host. Keep this
@@ -41,6 +42,12 @@ install:
 		echo "install $(BINDIR)/$$b -> $(INSTALLDIR)/$$b"; \
 		install -m 0755 $(BINDIR)/$$b $(INSTALLDIR)/$$b; \
 	done
+	@for link in $(MANAGED_LINKS); do \
+		name=$${link%%:*}; source=$${link#*:}; \
+		test "$$name" != "$$source" || continue; \
+		echo "ln -s $$source -> $(INSTALLDIR)/$$name"; \
+		ln -sf "$$source" "$(INSTALLDIR)/$$name"; \
+	done
 
 server-install: build
 	@set -eu; \
@@ -53,8 +60,9 @@ server-install: build
 	cp desktop/src-tauri/src/remote-install.sh "$$stage/remote-install.sh"; \
 	(cd "$$stage" && sha256sum $(BINARIES) >SHA256SUMS); \
 	HOME="$(HOME)" sh "$$stage/remote-install.sh" "$(VERSION)" "$${stage##*/}"; \
-	for b in $(BINARIES); do \
-		test "$$($(HOME)/.local/bin/$$b --version)" = "$(VERSION)"; \
+	for link in $(MANAGED_LINKS); do \
+		name=$${link%%:*}; \
+		test "$$($(HOME)/.local/bin/$$name --version)" = "$(VERSION)"; \
 	done; \
 	echo "server binaries installed: $(VERSION)"
 
@@ -62,9 +70,10 @@ setup:
 	./scripts/setup.sh
 
 uninstall:
-	@for b in $(BINARIES); do \
-		echo "rm -f $(INSTALLDIR)/$$b"; \
-		rm -f $(INSTALLDIR)/$$b; \
+	@for link in $(MANAGED_LINKS); do \
+		name=$${link%%:*}; \
+		echo "rm -f $(INSTALLDIR)/$$name"; \
+		rm -f $(INSTALLDIR)/$$name; \
 	done
 
 test:
