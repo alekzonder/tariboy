@@ -515,17 +515,22 @@ func (s *Store) Inspect(ref Ref) (Manifest, error) {
 // Managed and ordinary mutable refs retain prior validated generations by
 // digest; immutable refs must still match their current archive.
 func (s *Store) InspectPinned(ref Ref, digest string) (Manifest, error) {
+	manifest, _, err := s.inspectPinnedArchive(ref, digest)
+	return manifest, err
+}
+
+func (s *Store) inspectPinnedArchive(ref Ref, digest string) (Manifest, string, error) {
 	if len(digest) != sha256.Size*2 {
-		return Manifest{}, errors.New("invalid pinned image digest")
+		return Manifest{}, "", errors.New("invalid pinned image digest")
 	}
 	if _, err := hex.DecodeString(digest); err != nil {
-		return Manifest{}, errors.New("invalid pinned image digest")
+		return Manifest{}, "", errors.New("invalid pinned image digest")
 	}
 	if current, err := s.Inspect(ref); err == nil && current.Digest == digest {
-		return current, nil
+		return current, s.tarPath(ref), nil
 	}
 	if !IsReserved(ref) && !s.IsMutable(ref) {
-		return Manifest{}, fmt.Errorf("image %s digest does not match pinned identity", ref.String())
+		return Manifest{}, "", fmt.Errorf("image %s digest does not match pinned identity", ref.String())
 	}
 	historyPath := s.pinnedManagedPath(ref, digest)
 	kind := "managed"
@@ -535,12 +540,12 @@ func (s *Store) InspectPinned(ref Ref, digest string) (Manifest, error) {
 	}
 	pinned, err := inspectArchive(historyPath, ref)
 	if err != nil {
-		return Manifest{}, fmt.Errorf("pinned %s image %s@%s is unavailable: %w", kind, ref.String(), digest, err)
+		return Manifest{}, "", fmt.Errorf("pinned %s image %s@%s is unavailable: %w", kind, ref.String(), digest, err)
 	}
 	if pinned.Digest != digest {
-		return Manifest{}, fmt.Errorf("%s image %s history digest mismatch", kind, ref.String())
+		return Manifest{}, "", fmt.Errorf("%s image %s history digest mismatch", kind, ref.String())
 	}
-	return pinned, nil
+	return pinned, historyPath, nil
 }
 
 func inspectArchive(archivePath string, ref Ref) (Manifest, error) {

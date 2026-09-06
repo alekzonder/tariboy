@@ -3,6 +3,7 @@ package judge
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -161,7 +162,7 @@ func TestAutomationRunOnceUsesActiveRevisionAndLimit(t *testing.T) {
 	}
 }
 
-func TestAutomationBeginCreatesOneTaskAndOneRunPerDelivery(t *testing.T) {
+func TestAutomationBeginImageIdentityCreatesOneTaskAndOneRunPerDelivery(t *testing.T) {
 	db, js := newJudgeStore(t)
 	for _, name := range []string{"summary-alpha", "review-alpha", "review-beta"} {
 		seedJudgeAgent(t, db.DB, name)
@@ -176,6 +177,7 @@ func TestAutomationBeginCreatesOneTaskAndOneRunPerDelivery(t *testing.T) {
 	clock := func() time.Time { return time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC) }
 	service := NewAutomationService(js, schedule.NewStore(db, clock), validAutomationValidator(), clock)
 	service.tasks = tasks.NewService(db.DB, "operator", clock)
+	service.images, _ = seedJudgeImages(t, js, "review-alpha", "review-beta")
 	enqueued := ""
 	service.enqueue = func(id string) { enqueued = id }
 	if _, err := service.Apply(context.Background(), []byte(validAutomationJSON)); err != nil {
@@ -214,6 +216,49 @@ func TestAutomationBeginCreatesOneTaskAndOneRunPerDelivery(t *testing.T) {
 	if !strings.Contains(original, criteria) || !strings.Contains(original, "Rubric SHA-256: "+hash) {
 		t.Fatalf("automatic original request does not freeze rubric: %q", original)
 	}
+	automatic, err := js.GetRun(first.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manualService := NewService(ServiceConfig{Store: js, Images: service.images})
+	manual, _, err := manualService.OperatorReview(context.Background(), []string{"target-one"}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(automatic.JudgeImages) != 2 || !reflect.DeepEqual(automatic.JudgeImages, manual.JudgeImages) || manual.JudgesPerIteration != 1 || automatic.JudgesPerIteration != 1 {
+		t.Fatalf("automatic/manual image identity or count differ: %+v / %+v", automatic, manual)
+	}
+}
+
+func TestAutomationImageIdentityRejectsUnverifiableWorkerBeforeEnqueue(t *testing.T) {
+	db, js := newJudgeStore(t)
+	for _, name := range []string{"summary-alpha", "review-alpha", "review-beta"} {
+		seedJudgeAgent(t, db.DB, name)
+	}
+	seedTarget(t, db.DB, "target-one", "maker-one", "done", "2026-08-20T09:00:00Z")
+	if _, err := db.DB.Exec(`UPDATE iterations SET image_ref='maker:11' WHERE id='target-one'`); err != nil {
+		t.Fatal(err)
+	}
+	service := NewAutomationService(js, schedule.NewStore(db, time.Now), validAutomationValidator(), time.Now)
+	images, _ := seedJudgeImages(t, js, "review-alpha", "review-beta")
+	enqueued := 0
+	service.ConfigureExecution(tasks.NewService(db.DB, "operator", time.Now), func(string) { enqueued++ }, images)
+	if _, err := service.Apply(context.Background(), []byte(validAutomationJSON)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB.Exec(`UPDATE agents SET image_digest='' WHERE name='review-beta'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Begin(context.Background(), "summary-alpha", "lead-it", 1, "delivery-invalid-image", 1); err == nil || !strings.Contains(err.Error(), "cannot verify worker review-beta") {
+		t.Fatalf("unverifiable automatic run: %v", err)
+	}
+	runs, err := js.ListRuns(ListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 0 || enqueued != 0 {
+		t.Fatalf("unverifiable run persisted/enqueued: %d/%d", len(runs), enqueued)
+	}
 }
 
 func TestAutomationFinishCompletesLinkedTaskAndMentionsConfiguredCustomer(t *testing.T) {
@@ -228,6 +273,7 @@ func TestAutomationFinishCompletesLinkedTaskAndMentionsConfiguredCustomer(t *tes
 	clock := func() time.Time { return time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC) }
 	service := NewAutomationService(js, schedule.NewStore(db, clock), validAutomationValidator(), clock)
 	service.tasks = tasks.NewService(db.DB, "operator", clock)
+	service.images, _ = seedJudgeImages(t, js, "review-alpha", "review-beta")
 	if _, err := service.Apply(context.Background(), []byte(validAutomationJSON)); err != nil {
 		t.Fatal(err)
 	}

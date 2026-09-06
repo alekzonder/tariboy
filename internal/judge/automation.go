@@ -66,6 +66,7 @@ type AutomationApplyResult struct {
 
 type AutomationService struct {
 	store     *Store
+	images    *image.Store
 	schedules *schedule.Store
 	validator AutomationValidator
 	now       func() time.Time
@@ -105,8 +106,8 @@ func (s *AutomationService) Validate(ctx context.Context, raw []byte) Automation
 	return s.validator.Validate(ctx, parsed.Config)
 }
 
-func (s *AutomationService) ConfigureExecution(taskService *tasks.Service, enqueue func(string)) {
-	s.tasks, s.enqueue = taskService, enqueue
+func (s *AutomationService) ConfigureExecution(taskService *tasks.Service, enqueue func(string), images *image.Store) {
+	s.tasks, s.enqueue, s.images = taskService, enqueue, images
 }
 
 func (s *AutomationService) SetActivator(activate func([]string) error) { s.activate = activate }
@@ -499,12 +500,12 @@ func (s *AutomationService) Begin(ctx context.Context, callerAgent, callerIterat
 	if err != nil {
 		return AutomationCycle{}, err
 	}
-	run, _, err := s.store.CreateRun(ctx, CreateRunRequest{
+	run, _, err := s.store.createRunWithImages(ctx, CreateRunRequest{
 		OriginalRequest: fmt.Sprintf("Automatic Judge review for task %s, configuration revision %d.\n\nRubric SHA-256: %s\n\n%s", task.Key, revision, criteriaHash, criteria),
 		Selector:        Selector{Agents: parsed.Config.Targets.Agents, ImageRefs: parsed.Config.Targets.ImageRefs, OnlyUnprocessed: parsed.Config.Targets.OnlyUnprocessed, Statuses: []string{"done", "no_i_am_done", "harness_error", "timeout", "killed"}, Order: "oldest", Limit: limit},
 		JudgeGroup:      group, LeadAgent: callerAgent, SummaryAgent: callerAgent, CreatorIteration: callerIteration,
 		JudgeAgents: parsed.Config.Judge.Workers, JudgesPerIteration: 1, MaxAttempts: 1,
-	})
+	}, s.images)
 	if err != nil {
 		status := "failed"
 		if err == ErrEmptySelection {

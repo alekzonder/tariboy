@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/google/uuid"
 )
@@ -24,6 +25,38 @@ func NewStore(s *store.Store, now func() time.Time) *Store {
 		now = time.Now
 	}
 	return &Store{db: s.DB, now: now}
+}
+
+// createRunWithImages is shared by every public creation path. The publication
+// gate keeps agent activation and mutable archive publication out of the entire
+// capture-and-persist operation; the configured automation label is not identity.
+func (s *Store) createRunWithImages(ctx context.Context, req CreateRunRequest, images *image.Store) (run Run, targets []Target, err error) {
+	if images == nil {
+		return Run{}, nil, fmt.Errorf("judge: cannot verify worker image identity: image store is unavailable")
+	}
+	err = image.WithPublicationGate(func() error {
+		req.JudgeImages = make([]JudgeImageIdentity, 0, len(req.JudgeAgents))
+		for _, name := range req.JudgeAgents {
+			identity := JudgeImageIdentity{Agent: name}
+			if err := s.db.QueryRowContext(ctx, `SELECT image_ref,image_digest FROM agents WHERE name=?`, name).Scan(&identity.ImageRef, &identity.ImageDigest); err != nil {
+				return fmt.Errorf("judge: cannot verify worker %s image identity: %w", name, err)
+			}
+			ref, err := image.ParseRef(identity.ImageRef)
+			if err != nil {
+				return fmt.Errorf("judge: cannot verify worker %s image identity: %w", name, err)
+			}
+			template, err := images.ReadTemplatePinned(ref, identity.ImageDigest)
+			if err != nil {
+				return fmt.Errorf("judge: cannot verify worker %s image identity: %w", name, err)
+			}
+			identity.PromptTemplateSHA256 = template.SHA256
+			req.JudgeImages = append(req.JudgeImages, identity)
+		}
+		var err error
+		run, targets, err = s.CreateRun(ctx, req)
+		return err
+	})
+	return
 }
 
 func (s *Store) CreateRun(ctx context.Context, req CreateRunRequest) (Run, []Target, error) {
@@ -65,9 +98,17 @@ func (s *Store) CreateRun(ctx context.Context, req CreateRunRequest) (Run, []Tar
 	if err != nil {
 		return Run{}, nil, err
 	}
+	if req.JudgeImages == nil {
+		req.JudgeImages = []JudgeImageIdentity{}
+	}
+	identities, err := json.Marshal(req.JudgeImages)
+	if err != nil {
+		return Run{}, nil, err
+	}
 	now := s.now().UTC().Format(time.RFC3339Nano)
 	run := Run{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: now, CreatorIteration: req.CreatorIteration, OriginalRequest: req.OriginalRequest, Spec: req.Selector, JudgeGroup: req.JudgeGroup, LeadAgent: req.LeadAgent, JudgeAgents: req.JudgeAgents, SummaryAgent: req.SummaryAgent, JudgesPerIteration: req.JudgesPerIteration, MaxAttempts: req.MaxAttempts, Status: RunSnapshotting, TargetsTotal: len(selected)}
-	_, err = tx.ExecContext(ctx, `INSERT INTO judge_runs(id,created_at,updated_at,creator_iteration,original_request,spec_json,judge_group,lead_agent,judge_agents_json,summary_agent,judges_per_iteration,max_attempts,status,targets_total) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, now, now, run.CreatorIteration, run.OriginalRequest, string(spec), run.JudgeGroup, run.LeadAgent, string(judges), run.SummaryAgent, run.JudgesPerIteration, run.MaxAttempts, run.Status, len(selected))
+	run.JudgeImages = req.JudgeImages
+	_, err = tx.ExecContext(ctx, `INSERT INTO judge_runs(id,created_at,updated_at,creator_iteration,original_request,spec_json,judge_group,lead_agent,judge_agents_json,summary_agent,judges_per_iteration,max_attempts,status,targets_total,judge_images_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, now, now, run.CreatorIteration, run.OriginalRequest, string(spec), run.JudgeGroup, run.LeadAgent, string(judges), run.SummaryAgent, run.JudgesPerIteration, run.MaxAttempts, run.Status, len(selected), string(identities))
 	if err != nil {
 		return Run{}, nil, err
 	}
@@ -235,7 +276,7 @@ func (s *Store) GetRun(id string) (Run, error) {
 	return Run{}, ErrNotFound
 }
 func (s *Store) ListRuns(f ListFilter) ([]Run, error) {
-	q := `SELECT id,created_at,updated_at,creator_iteration,original_request,spec_json,judge_group,lead_agent,judge_agents_json,summary_agent,judges_per_iteration,max_attempts,status,targets_total,targets_ready,assignments_total,assignments_completed,manifest_hash,current_summary_version,last_error FROM judge_runs`
+	q := `SELECT id,created_at,updated_at,creator_iteration,original_request,spec_json,judge_group,lead_agent,judge_agents_json,summary_agent,judges_per_iteration,max_attempts,status,targets_total,targets_ready,assignments_total,assignments_completed,manifest_hash,current_summary_version,last_error,judge_images_json FROM judge_runs`
 	args := []any{}
 	if len(f.Statuses) > 0 {
 		q += " WHERE status IN (" + placeholders(len(f.Statuses)) + ")"
@@ -256,14 +297,17 @@ func (s *Store) ListRuns(f ListFilter) ([]Run, error) {
 	out := []Run{}
 	for rows.Next() {
 		var r Run
-		var spec, judges string
-		if err := rows.Scan(&r.ID, &r.CreatedAt, &r.UpdatedAt, &r.CreatorIteration, &r.OriginalRequest, &spec, &r.JudgeGroup, &r.LeadAgent, &judges, &r.SummaryAgent, &r.JudgesPerIteration, &r.MaxAttempts, &r.Status, &r.TargetsTotal, &r.TargetsReady, &r.AssignmentsTotal, &r.AssignmentsCompleted, &r.ManifestHash, &r.CurrentSummaryVersion, &r.LastError); err != nil {
+		var spec, judges, identities string
+		if err := rows.Scan(&r.ID, &r.CreatedAt, &r.UpdatedAt, &r.CreatorIteration, &r.OriginalRequest, &spec, &r.JudgeGroup, &r.LeadAgent, &judges, &r.SummaryAgent, &r.JudgesPerIteration, &r.MaxAttempts, &r.Status, &r.TargetsTotal, &r.TargetsReady, &r.AssignmentsTotal, &r.AssignmentsCompleted, &r.ManifestHash, &r.CurrentSummaryVersion, &r.LastError, &identities); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(spec), &r.Spec); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(judges), &r.JudgeAgents); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(identities), &r.JudgeImages); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -682,7 +726,7 @@ func (s *Store) ClaimSummary(runID, agent, iteration string) (Run, error) {
 		return Run{}, ErrLeaseNotOwned
 	}
 	// Summary claims use the run's error field as an intentionally small durable lease.
-	_, err = tx.Exec(`UPDATE judge_runs SET last_error=?,updated_at=? WHERE id=? AND last_error=''`, "summary claimed by "+iteration, s.now().UTC().Format(time.RFC3339Nano), runID)
+	_, err = tx.Exec(`UPDATE judge_runs SET last_error=?,updated_at=? WHERE id=? AND (last_error='' OR last_error LIKE ?)`, "summary claimed by "+iteration, s.now().UTC().Format(time.RFC3339Nano), runID, ErrImageMismatch.Error()+"%")
 	if err != nil {
 		return Run{}, err
 	}
