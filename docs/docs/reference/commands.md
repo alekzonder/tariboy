@@ -82,6 +82,7 @@ tariboy has three command surfaces:
 | `tariboy judge evidence` | Read immutable judge evidence by stable locator |
 | `tariboy judge inspect` | Show an LLM-as-Judge run, targets, analyses, summaries and target usage |
 | `tariboy judge ls` | List LLM-as-Judge runs |
+| `tariboy judge review --iteration ID [--iteration ID] [--judges-per-iteration N]` | Review explicit terminal iterations with the configured Judge team |
 | `tariboy judge retry` | Retry failed assignments in an LLM-as-Judge run |
 | `tariboy judge automation get` | Read the active Judge automation revision |
 | `tariboy judge automation validate --json JSON` | Validate raw JSON in `tariboyd` without applying it |
@@ -122,6 +123,19 @@ tariboy has three command surfaces:
 | `tariboy version` | Print the Tariboy version locally without a daemon |
 
 > Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
+
+`judge review` creates one bounded run for only the listed terminal iteration
+IDs. It uses the lead and workers from the active Judge configuration even when
+its cron schedule is disabled; it does not enable agents or loops. One worker
+reviews each iteration by default. `--judges-per-iteration` must be between one
+and the number of configured workers. Unknown, nonterminal, or empty selections
+and invalid configured roles are rejected without creating a run.
+
+The command stores the current frozen review rubric with the run. Results are
+evidence-backed assessments, not calibrated probabilities: confidence values
+express the judge's support from the available evidence and must not be read as
+measured error rates. When every independent review is `uncertain`, consensus
+remains `uncertain`; missing evidence is not a disagreement or a failure.
 
 ## Agent capability scripts
 

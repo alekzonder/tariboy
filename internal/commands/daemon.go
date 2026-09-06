@@ -148,6 +148,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, evalLs())
 	mustRegister(r, evalInspect())
 	mustRegister(r, judgeLs())
+	mustRegister(r, judgeReview())
 	mustRegister(r, judgeInspect())
 	mustRegister(r, judgeEvidence())
 	mustRegister(r, judgeCancel())
