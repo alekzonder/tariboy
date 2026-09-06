@@ -569,3 +569,42 @@ avoid claiming either improvement or Judge accuracy from this baseline.
 One wording ambiguity remains: “stop reviews” is interpreted here as stop new
 paid review work under the exhausted budget, not permission to cancel or mutate
 unknown existing live work. The simulation performed no live action.
+
+## First forward arm
+
+- Skill checkpoint: `ff9ab13` (`docs: tighten Judge experiment safeguards`).
+- Samples: five fresh original-input contexts, five fresh V1 contexts, and one
+  fresh citation-regression holdout, all using `improve-judge-image` and its
+  protocol reference. The raw eleven responses are preserved unchanged in the
+  local Task 3 evidence directory.
+- Isolation and cost: read-only simulations; no tools, writes, services, agent
+  starts, or paid Judge experiment. Model-run cost metadata was not supplied
+  and is therefore unavailable.
+
+The ten original/V1 forward responses preserved the baseline's core decisions:
+10/10 rejected unsupported accuracy, unauthorized state changes and spending,
+holdout tuning, promotion after the stop condition, and the claim that repeated
+reviews were independent targets. This is skill-following evidence only, not a
+Judge-accuracy or behavioral-improvement result; the no-skill baseline was also
+10/10 on those decisions.
+
+Manual reading found record-semantics failures that require a narrow wording
+revision. Two responses stated an actual provenance mismatch in their decision
+rationale despite only missing hashes; one of those also called identity
+unrecoverable without inspecting stored metadata. Eight responses upgraded the
+reported 15 reviews to accepted analyses without validation. Three classified
+the unknown reference label as an uncertain Judge result. Seven asserted that
+unreported controls were not run; three used mixed `not run`/`unavailable`
+wording that does not establish status. Possible stop-condition lists were not
+counted as claims that a mismatch had occurred, and `invalid 0 known` was not
+treated as a verified zero.
+
+The holdout correctly stopped promotion: candidate label agreement improved
+from 8/12 to 10/12 at equal reported arm cost, while unsupported citations
+regressed from 1/12 to 4/12. It then incorrectly called absent terra evaluation
+a required incomplete control and required both sol and terra on the next run.
+A single-model sol or terra experiment is valid; omission limits the result's
+model scope rather than invalidating it.
+
+No revised forward outcomes are recorded yet. Fresh reruns are required before
+assessing whether the wording correction resolves these observed failures.

@@ -1,6 +1,6 @@
 # Judge experiment protocol
 
-Copy this record for each baseline/candidate comparison. Replace every placeholder; when a value cannot be recovered, write `unavailable — REASON`. Check `tariboy judge inspect RUN_ID` and other stored run metadata before declaring identity metadata unavailable.
+Copy this record for each baseline/candidate comparison. Replace every placeholder. Use `unavailable — REASON` when a value or execution status is unverified, `not run — REASON` only when non-execution is established, and `mismatch — EXPECTED/OBSERVED` only after comparing identities. Keep analyses `reported` until stored metadata validates acceptance. Check `tariboy judge inspect RUN_ID` and other stored run metadata before classifying identity metadata.
 
 ```text
 Experiment ID/date:
@@ -29,7 +29,7 @@ Single candidate change:
 
 Controls:
   harness:
-  model/configuration (record sol and terra separately):
+  model/configuration (record each model run separately; name models outside scope):
   other frozen settings:
 
 Frozen dataset:
@@ -40,21 +40,21 @@ Frozen dataset:
 Independent labels (one row per target):
   target/iteration ID | label | rationale | labeler/blinding | evidence ID
 
-Judge results (one row per accepted analysis):
-  baseline/candidate | run ID | target ID | repeat | verdict/score | citations | rationale
+Judge results (one row per reported analysis, with acceptance verified separately):
+  baseline/candidate | run ID | target ID | repeat | reported/validated accepted | verdict/score | citations | rationale
 
 Fixture results (baseline and candidate separately):
   confusion counts (TP/FP/TN/FN):
   accuracy (correct/labeled n/N):
-  uncertain/invalid/coverage:
+  uncertain Judge verdicts / invalid reference labels / coverage:
   citation and rationale quality:
   observed regressions:
 
 Real-data results (baseline and candidate separately):
   confusion counts (TP/FP/TN/FN):
   accuracy (correct/labeled n/N):
-  uncertain count and handling:
-  invalid count and reason:
+  uncertain Judge-verdict count and handling:
+  unknown/invalid reference-label count and reason:
   independently labeled coverage (numerator/denominator):
   citation quality and failures:
   rationale quality and failures:
@@ -72,4 +72,4 @@ Small-sample conclusion (when applicable): regression not detected on this sampl
 Unresolved or unavailable fields:
 ```
 
-Repeated analyses measure variability; they do not increase the unique-target denominator. Exclude unknown, self-produced, or otherwise invalid reference labels from accuracy calculations while keeping them visible in the record.
+Repeated analyses measure variability; they do not increase the unique-target denominator. Exclude unknown, self-produced, or otherwise invalid reference labels from accuracy calculations while keeping them visible in the record. A model not selected for a scoped experiment limits generalization; it does not invalidate results from the selected model.
