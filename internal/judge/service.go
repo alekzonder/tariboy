@@ -325,12 +325,8 @@ func (s *Service) OperatorReview(ctx context.Context, iterationIDs []string, jud
 		}
 		return Run{}, nil, err
 	}
-	criteria, hash, err := ReviewCriteria()
-	if err != nil {
-		return Run{}, nil, err
-	}
 	run, targets, err := s.store.createRunWithImages(ctx, CreateRunRequest{
-		OriginalRequest: fmt.Sprintf("Manual Judge review.\n\nRubric SHA-256: %s\n\n%s", hash, criteria),
+		OriginalRequest: "Manual Judge review.",
 		Selector:        Selector{ExplicitIDs: iterationIDs}, JudgeGroup: group,
 		LeadAgent: config.Judge.Lead, SummaryAgent: config.Judge.Lead,
 		JudgeAgents: config.Judge.Workers, JudgesPerIteration: judgesPerIteration, MaxAttempts: 1,
