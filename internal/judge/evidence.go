@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/aiproxy"
+	"github.com/alekzonder/tariboy/internal/aiproxy/session"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/paths"
 )
@@ -186,12 +188,14 @@ func (r *EvidenceReader) Search(hash string, q EvidenceQuery) (EvidencePage, err
 		loc := fmt.Sprint(x["seq"])
 		add("audit", loc, x)
 	}
-	for i, x := range b.Transcript {
-		loc := fmt.Sprint(x["request_id"])
-		if loc == "" || loc == "<nil>" {
-			loc = fmt.Sprintf("%d", i)
+	if len(allowed) == 0 || allowed["transcript"] {
+		for i, x := range readableTranscript(b.Transcript) {
+			loc := fmt.Sprint(x["request_id"])
+			if loc == "" || loc == "<nil>" {
+				loc = fmt.Sprintf("%d", i)
+			}
+			add("transcript", loc, x)
 		}
-		add("transcript", loc, x)
 	}
 	if start >= len(all) {
 		return EvidencePage{Results: []map[string]any{}}, nil
@@ -206,6 +210,29 @@ func (r *EvidenceReader) Search(hash string, q EvidenceQuery) (EvidencePage, err
 	}
 	return p, nil
 }
+
+func readableTranscript(raw []map[string]any) []map[string]any {
+	entries := make([]aiproxy.TranscriptEntry, len(raw))
+	invalid := make([]bool, len(raw))
+	for i, item := range raw {
+		encoded, err := json.Marshal(item)
+		if err != nil || json.Unmarshal(encoded, &entries[i]) != nil {
+			invalid[i] = true
+		}
+	}
+	calls := session.Build(entries).Calls
+	out := make([]map[string]any, len(raw))
+	for i, call := range calls {
+		encoded, _ := json.Marshal(call)
+		_ = json.Unmarshal(encoded, &out[i])
+		out[i]["request_id"] = fmt.Sprint(raw[i]["request_id"])
+		if invalid[i] {
+			out[i]["parse_error"] = "transcript envelope: invalid"
+		}
+	}
+	return out
+}
+
 func (r *EvidenceReader) Get(hash string, l EvidenceLocator) (map[string]any, error) {
 	if l.Locator == "" || strings.ContainsAny(l.Locator, "/\\") {
 		return nil, ErrBadLocator

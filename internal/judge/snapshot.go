@@ -121,7 +121,10 @@ func (s *Snapshotter) build(ctx context.Context, t Target) (err error) {
 	}
 	tr := []map[string]any{}
 	for i, x := range trs {
-		raw, _ := json.Marshal(x)
+		safe := x
+		safe.Request = []byte(redact(string(x.Request)))
+		safe.Response = []byte(redact(string(x.Response)))
+		raw, _ := json.Marshal(safe)
 		var m map[string]any
 		_ = json.Unmarshal([]byte(redact(string(raw))), &m)
 		m["request_id"] = x.Meta.ID
