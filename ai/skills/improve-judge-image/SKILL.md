@@ -28,7 +28,7 @@ Improve Judge behavior with paired, reproducible evidence. Treat an image tag as
    tariboy judge inspect RUN_ID
    ```
 
-7. Compare paired outcomes, citation and rationale quality, coverage, invalid/uncertain cases, repeat variability, and measured cost. A regression or exhausted budget means stop, save results, and do not promote. Roll back only your own authorized Judge-image change, never user state. Otherwise apply the user's decision rule or choose the next single change; do not invent a universal sample-size threshold.
+7. Compare paired outcomes, citation and rationale quality, coverage, invalid/uncertain cases, repeat variability, and measured cost. Report errors as expected→observed verdict labels, not an arbitrary positive class. A regression or exhausted budget means stop, save results, and do not promote. Roll back only your own authorized Judge-image change, never user state. Otherwise apply the user's decision rule or choose the next single change; do not invent a universal sample-size threshold.
 
 ## Required record
 
