@@ -8,7 +8,7 @@ sidebar:
 
 Run **inside** an agent from the applicable packaged skill directory. Each
 `scripts/*.sh` launcher executes the skill's Python 3 standard-library client.
-Only `tasks` and `i-am-done` also have PATH compatibility shims. The scripts
+Only the legacy `tasks` and `i-am-done` also have PATH compatibility shims. The scripts
 talk to the identity-bound per-agent socket selected by
 `$TARIBOY_TOOLS_SOCKET`; the daemon derives the agent identity server-side.
 For non-bare iterations, `python3` is resolved to an absolute path from the
@@ -29,19 +29,21 @@ must therefore include it.
 | `scripts/scripts.sh run`/`schedule`/`rerun`/`ls`/`runs`/`logs`/`cancel`/`rm` | local asynchronous commands and run history |
 | `scripts/messages.sh group info`/`status`/`send`/`request`/`loop` | group coordination |
 
-Agents whose image contains `plugins: [{name: tasks}]` also get the bare
-`tasks` command. It reaches native `tariboyd.db` Tasks through a
-capability-gated, identity-bound socket adapter; task/comment authorship is
-always the current agent. See [Native Tasks](/docs/tasks) for the command flow.
+`tariboy-tasks` is installed globally with the `ttasks` alias. A non-empty
+`TARIBOY_TOOLS_SOCKET` selects its identity-bound agent mode and a missing or
+unreachable socket fails closed; without the variable it uses the host Unix
+daemon socket as the customer actor. Images that enable `plugins: [{name:
+tasks}]` also get the bare `tasks` legacy compatibility shim. See [Native
+Tasks](/docs/tasks) for the command flow.
 
 Goal selection is not an agent command: `tariboyd` selects and persists one
 sticky assigned task per enabled agent. An image that declares `runtime: goal`
-receives that task as prompt context and should use the `tasks` command to read
+receives that task as prompt context and should use `ttasks` to read
 the authoritative task state.
 
-In a workflow-managed queue, `tasks work next` returns a leased work packet;
-`tasks artifacts`, workflow-form `tasks ask`/`answer`, `tasks observe`, and
-`tasks work complete` are the only execution path. The active packet also makes
+In a workflow-managed queue, `ttasks work next` returns a leased work packet;
+`ttasks artifacts`, workflow-form `ttasks ask`/`answer`, `ttasks observe`, and
+`ttasks work complete` are the only execution path. The active packet also makes
 ordinary direct messaging/group/channel tools deny-by-default, except for tools
 explicitly declared by the pinned workflow. See
 [Configurable task workflows](/docs/task-workflows#agent-capability-security-boundary).
@@ -50,11 +52,11 @@ Task priority is one of `P0` (Critical), `P1` (High), `P2` (Normal), or `P3`
 (Low). New tasks default to `P2`; set or change it explicitly with:
 
 ```bash
-tasks create --queue OPS --title "Restore service" --priority P0
-tasks update OPS-12 --priority P1
+ttasks create --queue OPS --title "Restore service" --priority P0
+ttasks update OPS-12 --priority P1
 ```
 
-`tasks show`, list commands, and `--json` output include `priority`. Roots and
+`ttasks show`, list commands, and `--json` output include `priority`. Roots and
 nested siblings are returned in priority order (`P0` through `P3`), then by
 their manual position within the same priority bucket.
 
@@ -69,7 +71,7 @@ A flag that no command branch reads is a hard error: the script prints
 `unknown flag …` and exits `2`. The check
 runs after the request is built but before it is sent, so nothing reaches the
 daemon. Older builds dropped an unread flag silently and exited `0`, which is how
-`tasks update --priority` could look like it worked while changing nothing.
+`ttasks update --priority` could look like it worked while changing nothing.
 
 `scripts/scripts.sh run` and `scripts/scripts.sh schedule` have a `--` separator: flags are parsed up to it, and
 everything after it is taken verbatim for the local command — that is why
