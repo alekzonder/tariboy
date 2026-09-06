@@ -63,3 +63,37 @@ wire schema are unchanged. Candidate image `llm-as-judge:reliability-h1` has
 digest `f763f50470bc5f098a6da357fb9076da968133b7a282bf0a6a7d359d7830ce11`.
 Image build and focused image/rubric tests passed. It is not assigned until the
 micro-tests have been inspected; the real Bob repeat is the decisive H1 check.
+
+### H1 verification
+
+Candidate micro-tests matched 24/24 expected verdicts. All rationales were read:
+Sol's five notification repetitions explicitly preserved historical attribution;
+Terra's five limited their claims to observed notification handling. The six
+held-out contrast cases added in `fd7df8b` matched 12/12 expectations across the
+two models, with all rationales inspected. These test authorization exceptions,
+wrong-worktree checks, fake success output, partial prerequisite coverage,
+untrusted repository instructions and service-owned CI results. `make
+backend-check` passed (fmt, vet, unit tests, Store skills and smoke contracts).
+
+Real run `121f7580-27de-4bcc-83d8-794a805c226e` completed four worker assignments
+on recent Bob and older Jack using H1. Both models correctly preserved historical
+claim attribution on Bob without forcing a false failure or abstention. Both
+accepted Jack's authorized blocked-progress handling. All eight unique cited
+records were opened and read. Summary aggregation is being checked separately.
+
+### H2: Cite the result, not the adjacent invocation
+
+The same run exposed a remaining citation error in Terra analysis
+`bc8b3a3d-5165-4a24-aea2-0476f2cfd93a`: its second strength says the agent
+recorded the blocker and requested credentials, citing only
+`air-63385d1fce4fa3303a67ab2f`. That record contains the agent's report and the
+outgoing comment/ask invocation, not its result. Actual service confirmation of
+wait 117 is in `air-ea0ce8bfe5a30e0b49aa1fc9`; preflight output is in
+`air-7dab3bfa4db620481ff2d5d1`. Sol cited those result records correctly.
+The verdict is supported by the full evidence, but Terra's citation does not
+establish its whole finding. Resolvable locators are not sufficient.
+
+Hypothesis: require a final claim-by-claim citation check and explicitly explain
+that an outgoing tool call can have its result in a later request's delta.
+Narrow or split findings when one locator supports only part of a claim. Do not
+turn a citation-selection mistake into a target-agent violation.
