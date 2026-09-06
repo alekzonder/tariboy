@@ -286,6 +286,7 @@ type GroupControl interface {
 // runs.  Agent actions remain authenticated through agentapi; this is the
 // daemon API used by operators and the web UI.
 type JudgeControl interface {
+	OperatorReview(context.Context, []string, int) (judge.Run, []judge.Target, error)
 	OperatorList(judge.ListFilter) ([]judge.Run, error)
 	OperatorInspect(string) (map[string]any, error)
 	OperatorEvidence(runID, targetID string, locator judge.EvidenceLocator) (map[string]any, error)

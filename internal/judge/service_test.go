@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -199,5 +200,85 @@ func TestServiceRejectsDisabledCapability(t *testing.T) {
 	}
 	if _, err := s.AgentAction(context.Background(), "judge", "judge-it", "work.claim", map[string]any{"run_id": r.ID}); !errors.Is(err, ErrCapabilityDisabled) {
 		t.Fatalf("capability error=%v", err)
+	}
+}
+
+func TestOperatorReviewCreatesExplicitRunFromDisabledAutomation(t *testing.T) {
+	db, js := newJudgeStore(t)
+	for _, name := range []string{"lead", "worker-1", "worker-2"} {
+		seedJudgeAgent(t, db.DB, name)
+	}
+	seedTarget(t, db.DB, "target-1", "target-agent", "done", "2026-07-01T10:00:00Z")
+	seedTarget(t, db.DB, "not-selected", "target-agent", "done", "2026-07-01T11:00:00Z")
+	config := `{"schema_version":1,"enabled":false,"judge":{"lead":"lead","workers":["worker-1","worker-2"],"image_ref":"judge:test"},"schedule":{"spec":"0 * * * *"},"targets":{"agents":["target-agent"],"image_refs":["test"],"only_unprocessed":true}}`
+	if _, err := js.SaveAutomation(context.Background(), config); err != nil {
+		t.Fatal(err)
+	}
+	enqueued := ""
+	s := NewService(ServiceConfig{Store: js, Enqueue: func(id string) { enqueued = id }})
+
+	run, targets, err := s.OperatorReview(context.Background(), []string{"target-1"}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.LeadAgent != "lead" || run.SummaryAgent != "lead" || run.JudgeGroup != "judges" || run.JudgesPerIteration != 2 || enqueued != run.ID {
+		t.Fatalf("run=%+v enqueued=%q", run, enqueued)
+	}
+	if len(targets) != 1 || targets[0].Iteration != "target-1" || len(run.Spec.Agents) != 0 || len(run.Spec.ImageRefs) != 0 || run.Spec.OnlyUnprocessed {
+		t.Fatalf("targets=%+v selector=%+v", targets, run.Spec)
+	}
+	criteria, hash, err := ReviewCriteria()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(run.OriginalRequest, criteria) || !strings.Contains(run.OriginalRequest, "Rubric SHA-256: "+hash) {
+		t.Fatalf("request does not freeze criteria: %q", run.OriginalRequest)
+	}
+}
+
+func TestOperatorReviewRejectsInvalidInputWithoutSideEffects(t *testing.T) {
+	db, js := newJudgeStore(t)
+	for _, name := range []string{"lead", "worker-1", "worker-2"} {
+		seedJudgeAgent(t, db.DB, name)
+	}
+	seedTarget(t, db.DB, "done", "target-agent", "done", "2026-07-01T10:00:00Z")
+	seedTarget(t, db.DB, "running", "target-agent", "running", "2026-07-01T11:00:00Z")
+	config := `{"schema_version":1,"enabled":false,"judge":{"lead":"lead","workers":["worker-1","worker-2"],"image_ref":"judge:test"},"schedule":{"spec":"0 * * * *"},"targets":{"agents":[],"image_refs":[],"only_unprocessed":false}}`
+	if _, err := js.SaveAutomation(context.Background(), config); err != nil {
+		t.Fatal(err)
+	}
+	s := NewService(ServiceConfig{Store: js})
+
+	cases := []struct {
+		name string
+		ids  []string
+		n    int
+	}{
+		{"empty", nil, 1},
+		{"zero judges", []string{"done"}, 0},
+		{"too many judges", []string{"done"}, 3},
+		{"unknown iteration", []string{"missing"}, 1},
+		{"nonterminal iteration", []string{"running"}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := s.OperatorReview(context.Background(), tc.ids, tc.n); err == nil {
+				t.Fatal("review succeeded")
+			}
+			var runs int
+			if err := db.DB.QueryRow(`SELECT COUNT(*) FROM judge_runs`).Scan(&runs); err != nil || runs != 0 {
+				t.Fatalf("runs=%d err=%v", runs, err)
+			}
+		})
+	}
+	if _, err := db.DB.Exec(`UPDATE agents SET plugins='[]' WHERE name='worker-2'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.OperatorReview(context.Background(), []string{"done"}, 1); err == nil {
+		t.Fatal("ineligible configured worker accepted")
+	}
+	var runs int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM judge_runs`).Scan(&runs); err != nil || runs != 0 {
+		t.Fatalf("runs=%d err=%v", runs, err)
 	}
 }

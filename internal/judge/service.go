@@ -297,6 +297,46 @@ func (s *Service) validateImprovementScope(runID string, draft improvement.Propo
 	return improvement.ValidateDraft(draft)
 }
 func (s *Service) OperatorList(f ListFilter) ([]Run, error) { return s.store.ListRuns(f) }
+func (s *Service) OperatorReview(ctx context.Context, iterationIDs []string, judgesPerIteration int) (Run, []Target, error) {
+	if len(iterationIDs) == 0 {
+		return Run{}, nil, ErrEmptySelection
+	}
+	revision, err := s.store.ActiveAutomation(ctx)
+	if err != nil {
+		return Run{}, nil, err
+	}
+	var config AutomationConfig
+	if err := json.Unmarshal([]byte(revision.CanonicalJSON), &config); err != nil {
+		return Run{}, nil, fmt.Errorf("judge: decode active automation: %w", err)
+	}
+	if judgesPerIteration < 1 || judgesPerIteration > len(config.Judge.Workers) {
+		return Run{}, nil, ErrInsufficientJudges
+	}
+	var group string
+	if err := s.store.db.QueryRowContext(ctx, `SELECT "group" FROM agents WHERE name=?`, config.Judge.Lead).Scan(&group); err != nil {
+		if err == sql.ErrNoRows {
+			return Run{}, nil, fmt.Errorf("%w: judge agent %s", ErrNotFound, config.Judge.Lead)
+		}
+		return Run{}, nil, err
+	}
+	criteria, hash, err := ReviewCriteria()
+	if err != nil {
+		return Run{}, nil, err
+	}
+	run, targets, err := s.store.CreateRun(ctx, CreateRunRequest{
+		OriginalRequest: fmt.Sprintf("Manual Judge review.\n\nRubric SHA-256: %s\n\n%s", hash, criteria),
+		Selector:        Selector{ExplicitIDs: iterationIDs}, JudgeGroup: group,
+		LeadAgent: config.Judge.Lead, SummaryAgent: config.Judge.Lead,
+		JudgeAgents: config.Judge.Workers, JudgesPerIteration: judgesPerIteration, MaxAttempts: 1,
+	})
+	if err != nil {
+		return Run{}, nil, err
+	}
+	if s.enqueue != nil {
+		s.enqueue(run.ID)
+	}
+	return run, targets, nil
+}
 func (s *Service) OperatorInspect(id string) (map[string]any, error) {
 	r, e := s.store.GetRun(id)
 	if e != nil {

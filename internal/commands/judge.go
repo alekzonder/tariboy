@@ -71,6 +71,31 @@ func judgeLs() registry.Command {
 		},
 	}
 }
+func judgeReview() registry.Command {
+	return registry.Command{
+		Path: "judge.review", Summary: "Review explicit terminal iterations with the configured Judge team",
+		Args: []registry.Arg{
+			{Name: "iteration", Flag: "iteration", Type: registry.String, Required: true, Repeatable: true, Help: "terminal iteration id (repeat for more)"},
+			{Name: "judges_per_iteration", Flag: "judges-per-iteration", Type: registry.Int, Default: 1, Help: "independent judges per iteration"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/judges/review"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			jc, err := requireJudges(c)
+			if err != nil {
+				return nil, err
+			}
+			iterations, ok := stringSlice(p["iteration"])
+			if !ok {
+				return nil, api.UserError{Code: "invalid_iteration", Msg: "iteration must be a list of IDs"}
+			}
+			run, targets, err := jc.OperatorReview(registry.RequestContext(p), iterations, intOf(p, "judges_per_iteration", 1))
+			if err != nil {
+				return nil, judgeError(err)
+			}
+			return map[string]any{"id": run.ID, "status": run.Status, "targets": len(targets)}, nil
+		},
+	}
+}
 func judgeInspect() registry.Command {
 	return registry.Command{
 		Path: "judge.inspect", Summary: "Show an LLM-as-Judge run, targets, analyses, summaries and target usage", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true, Help: "run id"}}, HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/judges/{id}"},

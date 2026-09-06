@@ -259,6 +259,24 @@ func TestRunImageBuildRepeatableTags(t *testing.T) {
 	}
 }
 
+func TestRunJudgeReviewRepeatableIterations(t *testing.T) {
+	caller := &fakeCaller{result: json.RawMessage(`{}`)}
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), commands.BuildRegistry(), []string{
+		"judge", "review", "--iteration", "iteration-1", "--iteration", "iteration-2",
+	}, caller, nil, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d err=%s", code, errOut.String())
+	}
+	body := caller.body.(registry.Params)
+	if got, want := body["iteration"], []string{"iteration-1", "iteration-2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("iteration = %#v, want %#v", got, want)
+	}
+	if body["judges_per_iteration"] != 1 {
+		t.Fatalf("judges_per_iteration = %#v, want 1", body["judges_per_iteration"])
+	}
+}
+
 func TestRunPositionalAndFlagArgs(t *testing.T) {
 	f := &fakeCaller{result: json.RawMessage(`{}`)}
 	var out, errOut bytes.Buffer
