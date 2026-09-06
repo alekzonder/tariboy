@@ -377,6 +377,27 @@ func TestEvidenceReaderExposesReadableTranscriptCalls(t *testing.T) {
 	}
 }
 
+func TestEvidenceReaderHidesRepeatedInstructionsWithoutChangingTranscriptLocators(t *testing.T) {
+	base := t.TempDir()
+	entries := []aiproxy.TranscriptEntry{
+		{Meta: aiproxy.AIRequest{ID: "req-first", Provider: "openai"}, Request: []byte(`{"instructions":"follow the rubric","input":"start"}`), Response: []byte(`{"status":"completed","output":[]}`)},
+		{Meta: aiproxy.AIRequest{ID: "req-second", Provider: "openai"}, Request: []byte(`{"instructions":"follow the rubric","input":"verify"}`), Response: []byte(`{"status":"completed","output":[{"type":"local_shell_call","call_id":"shell-2","action":{"type":"exec","command":["bash","-lc","make check"]}}]}`)},
+	}
+	hash := putBundle(t, base, EvidenceBundle{SchemaVersion: 1, Transcript: []map[string]any{transcriptMap(t, entries[0]), transcriptMap(t, entries[1])}})
+	page, err := NewEvidenceReader(base).Search(hash, EvidenceQuery{Artifacts: []string{"transcript"}, Query: "make check"})
+	if err != nil || len(page.Results) != 1 || page.Results[0]["locator"] != "req-second" {
+		t.Fatalf("action search = %+v, err = %v", page, err)
+	}
+	first, err := NewEvidenceReader(base).Get(hash, EvidenceLocator{Artifact: "transcript", Locator: "req-first"})
+	if err != nil || first["value"].(map[string]any)["instructions"] != "follow the rubric" {
+		t.Fatalf("first call = %+v, err = %v", first, err)
+	}
+	second, err := NewEvidenceReader(base).Get(hash, EvidenceLocator{Artifact: "transcript", Locator: "req-second"})
+	if err != nil || second["value"].(map[string]any)["instructions"] != "" {
+		t.Fatalf("second call = %+v, err = %v", second, err)
+	}
+}
+
 func TestEvidenceReaderLegacyAndMalformedTranscriptRemainVisible(t *testing.T) {
 	base := t.TempDir()
 	entry := aiproxy.TranscriptEntry{Meta: aiproxy.AIRequest{ID: "legacy-request", Provider: "openai"}, Request: []byte(`not json`), Response: []byte(`also not json`)}

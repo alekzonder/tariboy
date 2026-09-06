@@ -223,6 +223,9 @@ func readableTranscript(raw []map[string]any) []map[string]any {
 	calls := session.Build(entries).Calls
 	out := make([]map[string]any, len(raw))
 	for i, call := range calls {
+		if !call.InstructionsChanged {
+			call.Instructions = ""
+		}
 		encoded, _ := json.Marshal(call)
 		_ = json.Unmarshal(encoded, &out[i])
 		out[i]["request_id"] = fmt.Sprint(raw[i]["request_id"])

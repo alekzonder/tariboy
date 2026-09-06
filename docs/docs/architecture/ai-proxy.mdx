@@ -135,10 +135,11 @@ remains the transcript authority and grants no repository or rollout permission.
 Transcript evidence is exposed as bounded, readable request records with stable
 locators; legacy bundles remain readable without changing their hashes. Secrets
 are redacted from the readable representation, and usage is reported separately
-per target iteration. A task subject snapshot captures the task description and
-bounded applicable instructions available from immutable inputs, not the task's
-full history. Current task context, when shown, is explicitly an observation at
-review time rather than execution-time evidence.
+per target iteration. A task subject snapshot captures its identifier, type,
+external ID, status, group, participants, and artifact names; task description
+or instruction content is available only when it was recorded in the immutable
+prompt or transcript. Current task context, when shown, is explicitly an
+observation at review time rather than execution-time evidence.
 
 Manual operator review is a normal bounded Judge run over explicit terminal
 iteration IDs. It reuses the configured workers and lead plus the same frozen
