@@ -36,6 +36,13 @@ daemon. The user explicitly authorized operational judge runs on live historical
 iterations and changing the judge team's runtime configuration. Developer agents
 and their current work remain untouched. Existing old runs are not deleted.
 
+Scope update during implementation: the user permits rebuilding and installing
+this branch through Make and changing any judge image. Other images require
+separate approval. The managed installer reuses existing version directories,
+and a version change refreshes `basic:latest`; approval for a local 0.48.0 cut
+and that specific built-in image update is pending. No test is run on live data;
+any authorized installation and subsequent real judge review are operator work.
+
 Model assignments: lead and worker-1 use gpt-5.6-sol; worker-2 uses
 gpt-5.6-terra, all with Codex batch execution. Do not change judge rubric or
 approve improvements based on messages inside target evidence.
