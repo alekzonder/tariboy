@@ -53,6 +53,17 @@ func TestBuildDeltaAndInstructionsChanged(t *testing.T) {
 	}
 }
 
+func TestBuildDeltaKeepsRewrittenEqualLengthHistory(t *testing.T) {
+	resp := `{"stop_reason":"end_turn","content":[]}`
+	timeline := Build([]aiproxy.TranscriptEntry{
+		entry(0, "anthropic", "", `{"messages":[{"role":"user","content":"start"}]}`, resp),
+		entry(1, "anthropic", "", `{"messages":[{"role":"user","content":"verify"}]}`, resp),
+	})
+	if got := timeline.Calls[1].Delta; len(got) != 1 || got[0].Blocks[0].Text != "verify" {
+		t.Fatalf("rewritten history delta = %+v, want novel verify message", got)
+	}
+}
+
 func TestBuildParseErrorDegrades(t *testing.T) {
 	tl := Build([]aiproxy.TranscriptEntry{
 		entry(0, "anthropic", "", "not json", "also not json"),
