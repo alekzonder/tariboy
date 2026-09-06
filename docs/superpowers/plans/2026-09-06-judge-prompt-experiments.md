@@ -196,3 +196,14 @@ results before classifying material completion claims as merely reported.
 This is a coverage/selection defect, not a reason to punish the target agent or
 require re-verification of unrelated historical work. Candidate validation must
 repeat this long real transcript and retain stale-notification controls.
+
+Candidate H3 `97b829f` adds seven lines to the common evidence instructions.
+Image `llm-as-judge:reliability-h3` digest:
+`b26ab6386a20df4e1db72955854053c4b4bbe57727d69c0581dcea6545419c65`.
+Build and focused image/rubric tests passed. All 21 existing synthetic packs
+are being rerun once per model; no expected verdicts are included in prompts.
+Real run `d2b0a8fb-f347-49b0-ace7-5d1a244bd63e` contains substantive Bob,
+stale-notification Bob and harness-error Jack (three targets, six assignments).
+Worker iterations are `judge-worker-1-20260906144759-1` and
+`judge-worker-2-20260906144759-1`, on H3. The prior H2 run's summary is being
+completed independently on H2 before moving the idle lead to H3.
