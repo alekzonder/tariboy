@@ -216,7 +216,7 @@ RELEASE_VERSION := $(shell cat scripts/release-version.txt 2>/dev/null)
 # macOS bundle metadata uses x.y.z. Keep the full canonical string available to
 # Rust as TARIBOY_VERSION while SEMVER owns the Cargo/Tauri comparison.
 SEMVER      := $(firstword $(subst -, ,$(VERSION)))
-DESKTOP_BINARIES := tariboyd tariboy tariboy-shim tariboy-plugin-telegram
+DESKTOP_BINARIES := tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram
 # Resolved once so every desktop gate below agrees on what host it is running on.
 HOST_OS     := $(shell uname -s)
 HOST_ARCH   := $(shell uname -m)

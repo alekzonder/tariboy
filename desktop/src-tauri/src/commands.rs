@@ -607,7 +607,7 @@ pub fn install_update_cli(app: &AppHandle) -> Result<InstallResult, String> {
     let link_dir = cli_install::default_bin_dir(&paths::env_getter)?;
     let source = state.bundle.local_bundle()?;
     let outcome = install_then_restart(
-        || cli_install::install_all(&link_dir, &source.dir, &bundle::BINARIES),
+        || cli_install::install_all(&link_dir, &source.dir, &bundle::MANAGED_LINKS),
         || {
             let view = restart_daemon(app);
             if view.state == Phase::Ready {

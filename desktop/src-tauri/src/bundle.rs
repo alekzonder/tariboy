@@ -6,11 +6,43 @@ use std::path::{Path, PathBuf};
 /// It remains separate from CARGO_PKG_VERSION so bundled payloads and the
 /// running daemon are checked against the same release value.
 pub const VERSION: &str = env!("TARIBOY_VERSION");
-pub const BINARIES: [&str; 4] = [
+pub const BINARIES: [&str; 5] = [
     "tariboyd",
     "tariboy",
+    "tariboy-tasks",
     "tariboy-shim",
     "tariboy-plugin-telegram",
+];
+pub struct ManagedLink {
+    pub name: &'static str,
+    pub source: &'static str,
+}
+
+pub const MANAGED_LINKS: [ManagedLink; 6] = [
+    ManagedLink {
+        name: "tariboyd",
+        source: "tariboyd",
+    },
+    ManagedLink {
+        name: "tariboy",
+        source: "tariboy",
+    },
+    ManagedLink {
+        name: "tariboy-tasks",
+        source: "tariboy-tasks",
+    },
+    ManagedLink {
+        name: "ttasks",
+        source: "tariboy-tasks",
+    },
+    ManagedLink {
+        name: "tariboy-shim",
+        source: "tariboy-shim",
+    },
+    ManagedLink {
+        name: "tariboy-plugin-telegram",
+        source: "tariboy-plugin-telegram",
+    },
 ];
 const VERSION_FILE: &str = "VERSION";
 const CHECKSUM_FILE: &str = "SHA256SUMS";
@@ -288,7 +320,16 @@ mod tests {
             root.path().join(Platform::local().directory())
         );
         let linux = bundle.platform(Platform::LinuxX86_64).unwrap();
-        assert_eq!(linux.files_for_upload().len(), 6);
+        let uploads = linux.files_for_upload();
+        assert_eq!(uploads.len(), 7);
+        assert_eq!(
+            uploads
+                .iter()
+                .filter(|path| path.ends_with("tariboy-tasks"))
+                .count(),
+            1
+        );
+        assert!(!uploads.iter().any(|path| path.ends_with("ttasks")));
         assert_eq!(linux.version, VERSION);
     }
 
@@ -298,6 +339,12 @@ mod tests {
         let dir = write_bundle(root.path(), Platform::LinuxX86_64, VERSION);
         let bundle = Bundle::new(root.path().to_path_buf());
 
+        std::fs::remove_file(dir.join("tariboy-tasks")).unwrap();
+        assert!(bundle
+            .platform(Platform::LinuxX86_64)
+            .unwrap_err()
+            .contains("tariboy-tasks"));
+        std::fs::write(dir.join("tariboy-tasks"), b"binary").unwrap();
         std::fs::remove_file(dir.join("tariboy-shim")).unwrap();
         assert!(bundle
             .platform(Platform::LinuxX86_64)

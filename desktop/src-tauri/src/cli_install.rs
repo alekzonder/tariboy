@@ -7,6 +7,7 @@
 //!
 //! Anything at the target path that we did not put there is never overwritten.
 
+use crate::bundle::ManagedLink;
 use std::path::{Path, PathBuf};
 
 const BUNDLE_IDENTIFIER: &str = "app.tariboy.desktop";
@@ -36,13 +37,8 @@ fn bundle_identifier(app: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-fn is_managed_bundle_binary(target: &Path, link: &Path, binaries: &[&str]) -> bool {
-    let Some(name) = link.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    if target.file_name().and_then(|target| target.to_str()) != Some(name)
-        || !binaries.contains(&name)
-    {
+fn is_managed_bundle_binary(target: &Path, link: &Path, managed: &ManagedLink) -> bool {
+    if target.file_name().and_then(|target| target.to_str()) != Some(managed.source) {
         return false;
     }
     if bundle_root(target).is_none() {
@@ -95,15 +91,15 @@ struct Change {
     backup: Option<PathBuf>,
 }
 
-/// install_all updates a complete same-basename binary set as one transaction.
+/// install_all updates a complete mapped command set as one transaction.
 /// Every source and destination is preflighted before the first filesystem
 /// mutation, so a foreign occupant can never leave a partial installation.
 pub fn install_all(
     link_dir: &Path,
     source_dir: &Path,
-    binaries: &[&str],
+    links: &[ManagedLink],
 ) -> std::io::Result<Outcome> {
-    install_all_with_rename(link_dir, source_dir, binaries, &|from, to| {
+    install_all_with_rename(link_dir, source_dir, links, &|from, to| {
         std::fs::rename(from, to)
     })
 }
@@ -111,13 +107,13 @@ pub fn install_all(
 fn install_all_with_rename(
     link_dir: &Path,
     source_dir: &Path,
-    binaries: &[&str],
+    links: &[ManagedLink],
     rename: &dyn Fn(&Path, &Path) -> std::io::Result<()>,
 ) -> std::io::Result<Outcome> {
     let mut pending = Vec::new();
-    for binary in binaries {
-        let source = source_dir.join(binary);
-        let link = link_dir.join(binary);
+    for managed in links {
+        let source = source_dir.join(managed.source);
+        let link = link_dir.join(managed.name);
         if !source.is_file() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -126,7 +122,7 @@ fn install_all_with_rename(
         }
         match std::fs::read_link(&link) {
             Ok(target) if target == source => continue,
-            Ok(target) if is_managed_bundle_binary(&target, &link, binaries) => {
+            Ok(target) if is_managed_bundle_binary(&target, &link, managed) => {
                 pending.push((link, source));
             }
             Ok(target) => {
@@ -257,7 +253,7 @@ pub fn default_bin_dir(getenv: &dyn Fn(&str) -> Option<String>) -> Result<PathBu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bundle::BINARIES;
+    use crate::bundle::{BINARIES, MANAGED_LINKS};
 
     fn bundled(dir: &std::path::Path, app: &str) -> PathBuf {
         bundled_with_identifier(dir, app, "app.tariboy.desktop")
@@ -297,13 +293,13 @@ mod tests {
     }
 
     #[test]
-    fn installs_all_bundled_binaries_as_same_name_links() {
+    fn installs_all_commands_with_tasks_alias() {
         let dir = tempfile::tempdir().unwrap();
         let source_dir = bundled_set(dir.path(), "Tariboy.app");
         let link_dir = dir.path().join("local-bin");
 
         assert_eq!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &MANAGED_LINKS).unwrap(),
             Outcome::Created
         );
         for binary in BINARIES {
@@ -312,9 +308,66 @@ mod tests {
                 source_dir.join(binary)
             );
         }
+        for name in ["tariboy-tasks", "ttasks"] {
+            assert_eq!(
+                std::fs::read_link(link_dir.join(name)).unwrap(),
+                source_dir.join("tariboy-tasks")
+            );
+        }
         assert_eq!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &MANAGED_LINKS).unwrap(),
             Outcome::AlreadyInstalled
+        );
+    }
+
+    #[test]
+    fn occupied_tasks_alias_preserves_every_original_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = bundled_set(&dir.path().join("old"), "Tariboy.app");
+        let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
+        let link_dir = dir.path().join("local-bin");
+        std::fs::create_dir_all(&link_dir).unwrap();
+        for binary in BINARIES {
+            symlink(&old.join(binary), &link_dir.join(binary)).unwrap();
+        }
+        std::fs::write(link_dir.join("ttasks"), b"foreign").unwrap();
+        assert!(matches!(
+            install_all(&link_dir, &new, &MANAGED_LINKS).unwrap(),
+            Outcome::Occupied { .. }
+        ));
+        for binary in BINARIES {
+            assert_eq!(
+                std::fs::read_link(link_dir.join(binary)).unwrap(),
+                old.join(binary)
+            );
+        }
+        assert_eq!(std::fs::read(link_dir.join("ttasks")).unwrap(), b"foreign");
+    }
+
+    #[test]
+    fn tasks_alias_pointing_at_the_wrong_bundled_binary_is_foreign() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = bundled_set(&dir.path().join("old"), "Tariboy.app");
+        let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
+        let link_dir = dir.path().join("local-bin");
+        std::fs::create_dir_all(&link_dir).unwrap();
+        for binary in BINARIES {
+            symlink(&old.join(binary), &link_dir.join(binary)).unwrap();
+        }
+        symlink(&old.join("tariboy"), &link_dir.join("ttasks")).unwrap();
+        assert!(matches!(
+            install_all(&link_dir, &new, &MANAGED_LINKS).unwrap(),
+            Outcome::Occupied { .. }
+        ));
+        for binary in BINARIES {
+            assert_eq!(
+                std::fs::read_link(link_dir.join(binary)).unwrap(),
+                old.join(binary)
+            );
+        }
+        assert_eq!(
+            std::fs::read_link(link_dir.join("ttasks")).unwrap(),
+            old.join("tariboy")
         );
     }
 
@@ -326,7 +379,7 @@ mod tests {
         std::fs::create_dir_all(&link_dir).unwrap();
         std::fs::write(link_dir.join("tariboy-plugin-telegram"), b"foreign").unwrap();
 
-        match install_all(&link_dir, &source_dir, &BINARIES).unwrap() {
+        match install_all(&link_dir, &source_dir, &MANAGED_LINKS).unwrap() {
             Outcome::Occupied { existing } => {
                 assert!(existing.contains("tariboy-plugin-telegram"));
                 assert!(existing.contains("regular file"));
@@ -356,7 +409,7 @@ mod tests {
         std::os::unix::fs::symlink(&foreign_cli, link_dir.join("tariboy")).unwrap();
 
         assert!(matches!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &MANAGED_LINKS).unwrap(),
             Outcome::Occupied { .. }
         ));
         assert_eq!(
@@ -378,7 +431,7 @@ mod tests {
         std::os::unix::fs::symlink(&noncanonical_cli, link_dir.join("tariboy")).unwrap();
 
         assert!(matches!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &MANAGED_LINKS).unwrap(),
             Outcome::Occupied { .. }
         ));
         assert_eq!(
@@ -399,7 +452,7 @@ mod tests {
         std::fs::remove_dir_all(lowercase_root).unwrap();
 
         assert!(matches!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &MANAGED_LINKS).unwrap(),
             Outcome::Occupied { .. }
         ));
         assert_eq!(
@@ -415,18 +468,18 @@ mod tests {
         let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
         let link_dir = dir.path().join("local-bin");
         std::fs::create_dir_all(&link_dir).unwrap();
-        for binary in BINARIES {
-            std::os::unix::fs::symlink(old.join(binary), link_dir.join(binary)).unwrap();
+        for managed in MANAGED_LINKS {
+            symlink(&old.join(managed.source), &link_dir.join(managed.name)).unwrap();
         }
 
         assert_eq!(
-            install_all(&link_dir, &new, &BINARIES).unwrap(),
+            install_all(&link_dir, &new, &MANAGED_LINKS).unwrap(),
             Outcome::Created
         );
-        for binary in BINARIES {
+        for managed in MANAGED_LINKS {
             assert_eq!(
-                std::fs::read_link(link_dir.join(binary)).unwrap(),
-                new.join(binary)
+                std::fs::read_link(link_dir.join(managed.name)).unwrap(),
+                new.join(managed.source)
             );
         }
     }
@@ -444,7 +497,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            install_all(&link_dir, &source_dir, &BINARIES).unwrap(),
+            install_all(&link_dir, &source_dir, &MANAGED_LINKS).unwrap(),
             Outcome::Created
         );
         assert!(!std::fs::symlink_metadata(link_dir.join("tariboy-tools")).is_ok());
@@ -457,7 +510,7 @@ mod tests {
         std::fs::remove_file(source_dir.join("tariboy-shim")).unwrap();
         let link_dir = dir.path().join("local-bin");
 
-        assert!(install_all(&link_dir, &source_dir, &BINARIES).is_err());
+        assert!(install_all(&link_dir, &source_dir, &MANAGED_LINKS).is_err());
         for binary in BINARIES {
             assert!(!link_dir.join(binary).exists());
         }
@@ -470,26 +523,30 @@ mod tests {
         let new = bundled_set(&dir.path().join("new"), "Tariboy.app");
         let link_dir = dir.path().join("local-bin");
         std::fs::create_dir_all(&link_dir).unwrap();
-        for binary in BINARIES {
-            std::os::unix::fs::symlink(old.join(binary), link_dir.join(binary)).unwrap();
+        for managed in MANAGED_LINKS {
+            symlink(&old.join(managed.source), &link_dir.join(managed.name)).unwrap();
         }
-        let calls = std::cell::Cell::new(0);
+        let failed = std::cell::Cell::new(false);
         let rename = |from: &Path, to: &Path| {
-            let call = calls.get() + 1;
-            calls.set(call);
-            if call == 4 {
+            if to == link_dir.join("ttasks") {
+                failed.set(true);
                 return Err(std::io::Error::other("injected switch failure"));
             }
             std::fs::rename(from, to)
         };
 
-        assert!(install_all_with_rename(&link_dir, &new, &BINARIES, &rename).is_err());
-        for binary in BINARIES {
+        assert!(install_all_with_rename(&link_dir, &new, &MANAGED_LINKS, &rename).is_err());
+        assert!(failed.get());
+        for managed in MANAGED_LINKS {
             assert_eq!(
-                std::fs::read_link(link_dir.join(binary)).unwrap(),
-                old.join(binary)
+                std::fs::read_link(link_dir.join(managed.name)).unwrap(),
+                old.join(managed.source)
             );
         }
+        assert_eq!(
+            std::fs::read_link(link_dir.join("ttasks")).unwrap(),
+            old.join("tariboy-tasks")
+        );
         assert!(!std::fs::read_dir(&link_dir).unwrap().any(|entry| entry
             .unwrap()
             .file_name()
