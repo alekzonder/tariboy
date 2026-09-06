@@ -39,7 +39,7 @@ it("renders the table when a run has undefined criteria", async () => {
   render(<MemoryRouter><JudgeRunsPage /></MemoryRouter>);
 
   await waitFor(() => expect(screen.getByText("running")).toBeInTheDocument());
-  expect(screen.getByRole("link", { name: "run 9" })).toHaveAttribute("href", "/settings/advanced/judges/run%209");
+  expect(screen.getByRole("link", { name: "run 9" })).toHaveAttribute("href", "/servers/local/settings/advanced/judges/run%209");
 });
 
 it("displays judge run progress, status, model, cost, and creator", async () => {
@@ -57,7 +57,17 @@ it("displays judge run progress, status, model, cost, and creator", async () => 
   expect(screen.getByText("claude-opus")).toBeInTheDocument();
   expect(screen.getByText("$1.2500")).toBeInTheDocument();
   expect(screen.getByText("judge-lead")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "run 1" })).toHaveAttribute("href", "/settings/advanced/judges/run%201");
+  expect(screen.getByRole("link", { name: "run 1" })).toHaveAttribute("href", "/servers/local/settings/advanced/judges/run%201");
+});
+
+it("links runs to the selected remote host", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ ok: true, result: { count: 1, runs: [{
+    id: "run 1", status: "completed", targets_ready: 1, targets_total: 1, assignments_completed: 1, assignments_total: 1,
+  }] } })));
+  const target = { id: "remote host", label: "Remote", baseURL: "https://remote.example", token: "secret" };
+  render(<MemoryRouter><Routes><Route element={<Outlet context={target} />}><Route path="/" element={<JudgeRunsPage />} /></Route></Routes></MemoryRouter>);
+
+  expect(await screen.findByRole("link", { name: "run 1" })).toHaveAttribute("href", "/servers/remote%20host/settings/advanced/judges/run%201");
 });
 
 it("shows empty and error states", async () => {
