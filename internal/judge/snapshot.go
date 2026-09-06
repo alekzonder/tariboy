@@ -130,10 +130,14 @@ func (s *Snapshotter) build(ctx context.Context, t Target) (err error) {
 		}
 		tr = append(tr, m)
 	}
+	usage := UsageTotal{}
+	if e = s.store.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0),COALESCE(SUM(cost_usd),0) FROM ai_requests WHERE iteration=?`, t.Iteration).Scan(&usage.Requests, &usage.InputTokens, &usage.OutputTokens, &usage.CostUSD); e != nil {
+		return e
+	}
 	runtime := RuntimeEvidence{Agent: t.Agent, Group: subject.Snapshot.Group, ImageRef: imageRef, ImageDigest: imageDigest}
 	configuration := ConfigurationEvidence{PromptTemplateSHA256: promptTemplateSHA, Plugins: []image.ManifestPlugin{}, Skills: []image.ManifestSkill{}}
 	sourceEvidence := SourceEvidence{}
-	completeness := []ArtifactStatus{{Artifact: "prompt", Status: map[bool]string{true: "present", false: "missing"}[present]}, {Artifact: "audit", Status: "present"}, {Artifact: "transcript", Status: "present"}, {Artifact: "task", Status: "present"}}
+	completeness := []ArtifactStatus{{Artifact: "prompt", Status: map[bool]string{true: "present", false: "missing"}[present]}, {Artifact: "audit", Status: map[bool]string{true: "present", false: "empty"}[len(aud) > 0]}, {Artifact: "transcript", Status: map[bool]string{true: "present", false: "empty"}[len(tr) > 0]}, {Artifact: "task", Status: "present"}}
 	if imageDigest != "" {
 		snapshots := imagesnapshot.Store{DB: s.store.db, Root: filepath.Join(s.base, "image-source-snapshots")}
 		snapshot, ok, lookupErr := snapshots.LookupDigest(ctx, imageDigest)
@@ -167,6 +171,7 @@ func (s *Snapshotter) build(ctx context.Context, t Target) (err error) {
 		Prompt:        EvidenceArtifact{Locator: "prompt", Content: redact(string(prompt)), Present: present},
 		Audit:         aud,
 		Transcript:    tr,
+		Usage:         usage,
 		Completeness:  completeness,
 	}
 	raw, e := json.Marshal(b)

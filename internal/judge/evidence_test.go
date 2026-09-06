@@ -52,6 +52,32 @@ func putBundle(t *testing.T, base string, b EvidenceBundle) string {
 	return hash
 }
 
+func putLegacyBundle(t *testing.T, base, canonical string) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte(canonical))
+	hash := hex.EncodeToString(sum[:])
+	raw := strings.Replace(canonical, `"bundle_hash":""`, `"bundle_hash":"`+hash+`"`, 1)
+	dir := paths.New(base).JudgeObjectsDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(filepath.Join(dir, hash+".json.gz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := gzip.NewWriter(f)
+	if _, err := g.Write([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return hash
+}
+
 func TestEvidenceReaderSearchGetAndCorruption(t *testing.T) {
 	base := t.TempDir()
 	auditRows := make([]map[string]any, 205)
@@ -232,6 +258,77 @@ func TestSnapshotBuildsEvidenceV2WithTaskAndImageProvenance(t *testing.T) {
 	}
 	if len(page.Results) != 4 {
 		t.Fatalf("v2 evidence results = %+v", page.Results)
+	}
+}
+
+func TestSnapshotUsageAndEmptyEvidenceCompleteness(t *testing.T) {
+	base := t.TempDir()
+	db, js := newJudgeStore(t)
+	seedJudgeAgent(t, db.DB, "lead")
+	seedJudgeAgent(t, db.DB, "judge")
+	seedTarget(t, db.DB, "iter-usage", "worker", "done", "2026-07-01T10:00:00Z")
+	for _, row := range []struct {
+		id                  string
+		input, output, cost any
+	}{
+		{"req-1", 11, 7, 0.125},
+		{"req-2", 13, 5, 0.375},
+	} {
+		if _, err := db.DB.Exec(`INSERT INTO ai_requests(id,ts,agent,iteration,input_tokens,output_tokens,cost_usd) VALUES(?,?,?,?,?,?,?)`, row.id, "2026-07-01T10:30:00Z", "worker", "iter-usage", row.input, row.output, row.cost); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run, _, err := js.CreateRun(context.Background(), request("iter-usage"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NewSnapshotter(SnapshotConfig{Store: js, BaseDir: base, AgentsDir: paths.New(base).AgentsDir()}).BuildRun(context.Background(), run.ID); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := js.ListTargets(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := NewEvidenceReader(base)
+	bundle, err := reader.Manifest(targets[0].BundleHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (UsageTotal{Requests: 2, InputTokens: 24, OutputTokens: 12, CostUSD: 0.5}); bundle.Usage != want {
+		t.Fatalf("usage=%+v, want %+v", bundle.Usage, want)
+	}
+	wantStatus := map[string]string{"prompt": "missing", "audit": "empty", "transcript": "empty", "task": "present", "image": "missing"}
+	for _, status := range bundle.Completeness {
+		if wantStatus[status.Artifact] != status.Status {
+			t.Fatalf("completeness=%+v", bundle.Completeness)
+		}
+		item, err := reader.Get(targets[0].BundleHash, EvidenceLocator{Artifact: "completeness", Locator: status.Artifact})
+		if err != nil {
+			t.Fatalf("get completeness %q: %v", status.Artifact, err)
+		}
+		if item["value"].(ArtifactStatus) != status {
+			t.Fatalf("completeness item=%+v, want %+v", item, status)
+		}
+	}
+	page, err := reader.Search(targets[0].BundleHash, EvidenceQuery{Artifacts: []string{"completeness"}})
+	if err != nil || len(page.Results) != len(bundle.Completeness) {
+		t.Fatalf("completeness search=%+v err=%v", page, err)
+	}
+}
+
+func TestEvidenceReaderPreservesLegacyBundleHashes(t *testing.T) {
+	base := t.TempDir()
+	bundles := []string{
+		`{"schema_version":1,"bundle_hash":"","target":{"Iteration":"iter-v1","Agent":"worker","Status":"done","StartedAt":"2026-07-01T10:00:00Z"},"prompt":{"locator":"prompt","content":"","present":false},"audit":[],"transcript":[],"usage":{"Requests":0,"InputTokens":0,"OutputTokens":0,"CostUSD":0},"completeness":[]}`,
+		`{"schema_version":2,"bundle_hash":"","target":{"Iteration":"iter-v2","Agent":"worker","Status":"done","StartedAt":"2026-07-01T10:00:00Z"},"subject":{"id":"subject","type":"iteration","external_id":"iter-v2","snapshot_hash":"sha256:subject","status":"done","artifacts":[]},"runtime":{"agent":"worker"},"configuration":{"plugins":[],"skills":[]},"source":{},"prompt":{"locator":"prompt","content":"","present":false},"audit":[],"transcript":[],"usage":{"Requests":0,"InputTokens":0,"OutputTokens":0,"CostUSD":0},"completeness":[]}`,
+	}
+	reader := NewEvidenceReader(base)
+	for _, canonical := range bundles {
+		hash := putLegacyBundle(t, base, canonical)
+		bundle, err := reader.Manifest(hash)
+		if err != nil || bundle.BundleHash != hash {
+			t.Fatalf("legacy bundle hash=%q bundle=%+v err=%v", hash, bundle, err)
+		}
 	}
 }
 

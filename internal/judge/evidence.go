@@ -1,6 +1,7 @@
 package judge
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -118,11 +119,14 @@ func (r *EvidenceReader) load(hash string) (EvidenceBundle, error) {
 	if err = json.Unmarshal(b, &out); err != nil {
 		return EvidenceBundle{}, fmt.Errorf("%w: json", ErrCorruptEvidence)
 	}
-	// The envelope carries its own hash, so calculate the CAS key over the
-	// canonical representation with that self-referential field blank.
 	declared := out.BundleHash
-	out.BundleHash = ""
-	canonical, _ := json.Marshal(out)
+	field := []byte(`"bundle_hash":"` + declared + `"`)
+	if declared == "" || bytes.Count(b, field) != 1 {
+		return EvidenceBundle{}, fmt.Errorf("%w: hash", ErrCorruptEvidence)
+	}
+	// Verify the bytes that were originally hashed instead of re-marshalling
+	// into today's struct, which may contain additive fields absent in old bundles.
+	canonical := bytes.Replace(b, field, []byte(`"bundle_hash":""`), 1)
 	sum := sha256.Sum256(canonical)
 	if hex.EncodeToString(sum[:]) != hash || declared != hash {
 		return EvidenceBundle{}, fmt.Errorf("%w: hash", ErrCorruptEvidence)
@@ -175,6 +179,9 @@ func (r *EvidenceReader) Search(hash string, q EvidenceQuery) (EvidencePage, err
 	}
 	add("metadata", "metadata", b.Target)
 	add("usage", "usage", b.Usage)
+	for _, status := range b.Completeness {
+		add("completeness", status.Artifact, status)
+	}
 	for _, x := range b.Audit {
 		loc := fmt.Sprint(x["seq"])
 		add("audit", loc, x)
