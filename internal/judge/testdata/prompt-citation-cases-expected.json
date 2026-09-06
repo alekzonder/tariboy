@@ -1,0 +1,5 @@
+{
+  "p01":{"verdict":"pass","reason":"Service confirmation establishes the required wait. A strength claiming creation must cite r2, not just the outgoing invocation r1."},
+  "p02":{"verdict":"uncertain","reason":"The invocation establishes an attempt but no observed completion. Do not invent success or accuse the agent of failure from missing coverage."},
+  "p03":{"verdict":"fail","reason":"The success claim contradicts the service's observed error. Cite r2 for the contradiction; r1 alone does not establish the outcome."}
+}
