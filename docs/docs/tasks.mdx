@@ -76,7 +76,7 @@ whether it is the queue's `responsible_agent` or one of its owners:
 - **Does not run the queue.** A create without an assignee is *filed*: the
   created task is unassigned and ungrouped, and its author has no access to it
   afterwards. The create response carries `filed: true` and no `access`, and
-  `tasks create` prints that the task is recorded but no longer visible, so the
+  `ttasks create` prints that the task is recorded but no longer visible, so the
   agent does not read the following `not_found` as a failure and file it twice.
   An explicit assignee, including the creating agent, instead owns that task
   and its descendants without gaining access to the rest of the queue. A group
@@ -88,7 +88,7 @@ defect it noticed outside its current assignment. Triage stays with the queue's
 has none, that notification goes to the customer instead. To let a specific
 agent triage a queue, the customer adds it to the queue's owners.
 
-`tasks move KEY --to-root` detaches a task from its parent, which is the
+`ttasks move KEY --to-root` detaches a task from its parent, which is the
 inverse operation: the task becomes a root, and the mover loses access to it
 unless it is the assignee or runs the queue. A move without `--parent`,
 `--before`, or `--to-root` is refused rather than treated as a detach.
@@ -194,42 +194,44 @@ plugins:
   - name: tasks
 ```
 
-When enabled, provisioning creates the agent-local `tasks` shim. Schema-v2
-images must also package the Tasks Store skill; capability selection never
-packages instructions automatically. When disabled,
-reprovisioning removes a stale shim. This reuses image capability resolution
-without installing or supervising a Tasks plugin. See the [`tasks` built-in
-reference](/docs/plugins/built-in/tasks) for the complete boundary.
+`tariboy-tasks` is installed globally as `ttasks`; it uses identity-bound agent
+mode only when `TARIBOY_TOOLS_SOCKET` is non-empty and otherwise uses the host
+Unix daemon socket as the customer actor. Agent mode fails closed rather than
+falling back to operator access. When enabled, the `tasks` capability also
+provisions the bare legacy `tasks` shim. Schema-v2 images must still package the
+Tasks Store skill; capability selection never packages instructions
+automatically. See the [Tasks built-in reference](/docs/plugins/built-in/tasks)
+for the complete boundary.
 
 Every agent mutation is identity-bound by its per-agent socket. Body fields
 cannot forge the author, customer, or acting principal.
 
-`tasks create --queue` works in any existing queue. In a queue the agent does
+`ttasks create --queue` works in any existing queue. In a queue the agent does
 not run, omitting `--assignee` files an unassigned task the agent can no longer
 see; passing `--assignee` creates work owned by that agent without exposing the
 rest of the queue. `--group` remains forbidden there. See **Filing a task into
 a queue**.
 
 ```bash
-tasks mine
-tasks ready --claim
-tasks show TEST-12
-tasks create --queue TEST --title "Investigate failure" --priority P1
-tasks create --parent TEST-12 --title "Add regression test"
-tasks assign TEST-12 worker
-tasks update TEST-12 --priority P0
-tasks update TEST-12 --pull-request https://example.com/org/repo/pull/42
-tasks comment TEST-12 "Found the boundary"
-tasks ask TEST-12 user:login "Which behavior should win?"
-tasks move TEST-12 --parent TEST-3
-tasks move TEST-12 --to-root
-tasks block TEST-12 --by TEST-2
-tasks relate TEST-12 TEST-9
-tasks done TEST-12
+ttasks mine
+ttasks ready --claim
+ttasks show TEST-12
+ttasks create --queue TEST --title "Investigate failure" --priority P1
+ttasks create --parent TEST-12 --title "Add regression test"
+ttasks assign TEST-12 worker
+ttasks update TEST-12 --priority P0
+ttasks update TEST-12 --pull-request https://example.com/org/repo/pull/42
+ttasks comment TEST-12 "Found the boundary"
+ttasks ask TEST-12 user:login "Which behavior should win?"
+ttasks move TEST-12 --parent TEST-3
+ttasks move TEST-12 --to-root
+ttasks block TEST-12 --by TEST-2
+ttasks relate TEST-12 TEST-9
+ttasks done TEST-12
 ```
 
-For workflow-managed work, agents instead use `tasks work next`, `tasks work
-show`, `tasks artifacts add`, `tasks ask`, and `tasks work complete`. Direct
+For workflow-managed work, agents instead use `ttasks work next`, `ttasks work
+show`, `ttasks artifacts add`, `ttasks ask`, and `ttasks work complete`. Direct
 status/claim operations cannot bypass the pinned state machine.
 
 Create, comment, and relation actions accept stable idempotency keys internally

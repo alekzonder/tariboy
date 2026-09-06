@@ -57,7 +57,7 @@ flowchart LR
 | Surface | Typical client | Boundary and identity |
 | --- | --- | --- |
 | Operator API | Desktop, CLI, automation | Unix socket by default; a TCP listener requires the configured bearer-token policy. The optional HTTP/WebSocket listener accepts loopback addresses only. |
-| Agent capability socket | Skill-local scripts plus `tasks` and `i-am-done` compatibility shims | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
+| Agent capability socket | Skill-local scripts plus the legacy `tasks` and `i-am-done` compatibility shims | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
 | AI proxy | Harness or plugin making an LLM request | Loopback listener plus a short-lived iteration- or plugin-scoped token. Upstream provider keys remain in the daemon. |
 
 Remote Desktop access is an SSH local-forward to the remote daemon's loopback
@@ -202,7 +202,7 @@ redelivery. See [Agents and the iteration
 loop](/docs/architecture/iteration-loop) and [The shim](/docs/architecture/shim)
 for the detailed scheduler and watchdog behavior.
 
-For workflow-managed work, `tasks work next` atomically leases a persisted
+For workflow-managed work, `ttasks work next` atomically leases a persisted
 packet. That packet narrows tools, artifacts, outcomes, and observation
 patterns. A wake is only a scheduling hint: the task reducer uses durable
 status and assignment records, never a prompt or raw channel message, to
@@ -261,11 +261,13 @@ reaction to a mismatch belongs to the client, see
 ## Agent bin shims
 
 Provisioning writes only the compatibility shims enabled by the image into
-`<data dir>/agents/<name>/bin`: `i-am-done` and `tasks`. Each `exec`s its owning
-skill script by an **absolute path** inside the running daemon's versioned
-Store. Every other capability is invoked through its packaged skill-local
-`scripts/*.sh` launcher. The scripts use
-`$TARIBOY_TOOLS_SOCKET`; the daemon derives identity from that socket.
+`<data dir>/agents/<name>/bin`: `i-am-done` and the legacy `tasks` shim. The
+real `tariboy-tasks` executable is installed globally as `ttasks`. When
+`TARIBOY_TOOLS_SOCKET` is non-empty, it uses that identity-bound socket and
+fails closed; when absent, it uses the host Unix daemon socket as the customer
+actor. Each compatibility shim `exec`s its owning skill script by an **absolute
+path** inside the running daemon's versioned Store. Every other capability is
+invoked through its packaged skill-local `scripts/*.sh` launcher.
 
 Because the path is absolute, shims written at create time would otherwise
 outlive the daemon that wrote them, leaving every agent on a frozen client whose

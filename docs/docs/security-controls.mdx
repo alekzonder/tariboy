@@ -59,9 +59,10 @@ daemons running. Treat both behaviors as continuity features, not stop controls.
 Local data defaults to `~/.tariboy`; runtime files default to
 `~/.tariboyd`. Remote binaries live in versioned directories under
 `~/.local/lib/tariboy`; managed symlinks live in `~/.local/bin`. The local
-Desktop installer preflights all four command paths before changing any of them
+Desktop installer preflights all six command paths before changing any of them
 and refuses regular files, directories, or symlinks not owned by the verified
-Tariboy app bundle.
+Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
+managed alias whose source is `tariboy-tasks`.
 
 Image builds resolve only literal `$STORE`, `$CURRENT_VERSION_STORE`, and
 `$PLUGINS` roots, source-relative paths, or explicit operator absolute paths.

@@ -178,8 +178,10 @@ This separation gives operators:
 Core state lives in SQLite under `~/.tariboy`; runtime socket, pid, and logs
 live under `~/.tariboyd`. Remote releases are versioned below
 `~/.local/lib/tariboy`. The Desktop menu's **Install/Update CLI** action
-atomically points all four managed binaries (`tariboyd`, `tariboy`,
-`tariboy-shim`, and `tariboy-plugin-telegram`) at the current app bundle, then
+atomically points six managed command paths (`tariboyd`, `tariboy`,
+`tariboy-tasks`, `ttasks`, `tariboy-shim`, and `tariboy-plugin-telegram`) at
+the current app bundle. The bundle contains five real payload files; `ttasks`
+is an alias for `tariboy-tasks`. It then
 restarts the local daemon. Existing shim-owned iterations survive that restart,
 retry through the brief AI-proxy outage, and are adopted by the new daemon.
 Terminal attach, resize, input, and Kill continue to target the surviving shim
@@ -281,7 +283,8 @@ make build
 ./bin/tariboy daemon status
 ```
 
-Install or update all five server binaries as one versioned release:
+Install or update all six server binaries as one versioned release (including
+`tariboy-store`); `ttasks` is an additional alias for `tariboy-tasks`:
 
 ```bash
 make server-install
@@ -350,9 +353,13 @@ tariboy group --help
 tariboy usage --help
 ```
 
-Inside an image with `plugins: [{name: tasks}]`, an agent also gets the bare
-`tasks` command and the matching task workflow prompt. Native Tasks are part of
-`tariboyd`, not a supervised plugin.
+`tariboy-tasks` is the real Native Tasks executable and its globally installed
+`ttasks` alias works for both operators and agents. `ttasks --version` reports
+its build and `ttasks --json …` requests JSON output. An agent selects its
+identity-bound, fail-closed mode only when `TARIBOY_TOOLS_SOCKET` is non-empty;
+without it, `ttasks` uses the host Unix daemon socket as the customer actor.
+The bare `tasks` command is only a legacy capability-controlled agent shim.
+Native Tasks are part of `tariboyd`, not a supervised plugin.
 
 The complete command and API-oriented material remains in
 [Command reference](docs/docs/reference/commands.md), [Architecture

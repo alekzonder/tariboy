@@ -18,8 +18,9 @@ tariboy has three command surfaces:
    binary's registry (`tariboy --help-json`).
 2. **Agent capability scripts** — the applicable packaged skill's
    `scripts/*.sh` launcher, run *inside* an agent over `$TARIBOY_TOOLS_SOCKET`.
-3. **Native Tasks** — optional `tasks <verb>`, run inside an enabled agent
-   against daemon-owned work.
+3. **Native Tasks** — `tariboy-tasks`, installed as `ttasks`, runs shared task
+   verbs for an operator or an identity-bound agent. `ttasks --version` reports
+   its build and `ttasks --json …` requests JSON output.
 
 ## Operator commands
 
@@ -115,7 +116,7 @@ tariboy has three command surfaces:
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
 | `tariboy secret set` | Set a secret; value from --value or stdin |
-| `tariboy tasks queue create` | Create a task queue |
+| `ttasks queue create` | Create a task queue |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
 | `tariboy user-prompt get` | Read the agent's standing user-prompt |
 | `tariboy user-prompt set` | Set the agent's standing user-prompt |
@@ -150,44 +151,55 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
 | `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
 
-## Native Tasks (`tasks …`)
+## Native Tasks (`ttasks …`)
 
-An image enables this command with `plugins: [{name: tasks}]`. All mutations
-derive the agent identity from its socket.
+`tariboy-tasks` is the real executable and `ttasks` its managed alias. A
+non-empty `TARIBOY_TOOLS_SOCKET` selects agent mode; it uses only that socket
+and fails closed if it cannot connect. Without the variable, the client uses
+the host Unix daemon socket as the customer actor. The bare `tasks` command is
+only the optional capability-controlled legacy agent shim.
+
+These shared verbs are available in both modes; in agent mode every mutation
+derives identity from the socket.
 
 | Command | Purpose |
 | --- | --- |
-| `tasks mine` | List tasks visible/assigned to this agent |
-| `tasks ready [--queue Q] [--claim]` | List ready work or atomically claim one |
-| `tasks show KEY` | Show task detail, comments, waits, and relations |
-| `tasks create --queue Q --title T [--assignee A]` | Create a queue-root task; in a queue the agent does not run, an omitted assignee files it for triage while an explicit assignee owns only that task tree |
-| `tasks create --parent KEY --title T` | Create a child inheriting queue/context |
-| `tasks update KEY [--title T] [--description D] [--status S]` | Update fields with optimistic revision |
-| `tasks assign KEY ASSIGNEE` | Hand work to a known or arbitrary agent name |
-| `tasks comment KEY TEXT` | Add a task comment |
-| `tasks ask KEY agent:name\|user:login TEXT` | Mention a principal and record an open answer wait |
-| `tasks move KEY [--parent KEY] [--before KEY] [--to-root]` | Reparent/reorder in the same queue, or detach into a root with `--to-root` |
-| `tasks block KEY BLOCKER` | Add a directed, cycle-checked blocking relation |
-| `tasks relate KEY OTHER` | Add a symmetric related link |
-| `tasks done KEY [--complete-anyway]` | Complete, optionally overriding active descendants |
+| `ttasks mine` | List visible tasks |
+| `ttasks ready [--queue Q] [--claim]` | List ready work or atomically claim one |
+| `ttasks show KEY` | Show task detail, comments, waits, and relations |
+| `ttasks create --queue Q --title T [--assignee A]` | Create a queue-root task |
+| `ttasks create --parent KEY --title T` | Create a child inheriting queue/context |
+| `ttasks update KEY [--title T] [--description D] [--status S]` | Update fields with optimistic revision |
+| `ttasks assign KEY ASSIGNEE` | Hand work to an agent name |
+| `ttasks comment KEY TEXT` | Add a task comment |
+| `ttasks ask KEY agent:name\|user:login TEXT` | Mention a principal and record an open answer wait |
+| `ttasks move KEY [--parent KEY] [--before KEY] [--to-root]` | Reparent/reorder in the same queue |
+| `ttasks block KEY BLOCKER` | Add a directed, cycle-checked blocking relation |
+| `ttasks relate KEY OTHER` | Add a symmetric related link |
+| `ttasks done KEY [--complete-anyway]` | Complete, optionally overriding active descendants |
 
 Workflow-managed queues add an assignment-scoped surface:
 
 | Command | Purpose |
 | --- | --- |
-| `tasks work next [--queue Q] --idempotency-key K` | Atomically claim eligible work and return its least-context packet |
-| `tasks work show ASSIGNMENT` | Refresh the current packet and revisions |
-| `tasks work complete ASSIGNMENT --outcome O ...` | Submit one declared outcome |
-| `tasks work release ASSIGNMENT ...` | Release a leased attempt |
-| `tasks artifacts add ASSIGNMENT --name N --type T ...` | Attach a required typed output |
-| `tasks artifacts show ASSIGNMENT ARTIFACT --task KEY` | Read one packet-visible artifact |
-| `tasks ask ASSIGNMENT --question Q --context C --blocking-scope S ...` | Ask a universal workflow question and optionally hold work |
-| `tasks questions ASSIGNMENT` | List questions visible in the packet |
-| `tasks answer QUESTION --assignment ASSIGNMENT --answer TEXT ...` | Answer a routed question assignment |
-| `tasks observe subscribe ASSIGNMENT PATTERN ...` | Create a policy-bounded observation subscription |
-| `tasks observe list ASSIGNMENT` | List its workflow subscriptions |
-| `tasks observe cancel ASSIGNMENT SUBSCRIPTION ...` | Cancel one subscription |
+| `ttasks work next [--queue Q] --idempotency-key K` | Atomically claim eligible work and return its least-context packet |
+| `ttasks work show ASSIGNMENT` | Refresh the current packet and revisions |
+| `ttasks work complete ASSIGNMENT --outcome O ...` | Submit one declared outcome |
+| `ttasks work release ASSIGNMENT ...` | Release a leased attempt |
+| `ttasks artifacts add ASSIGNMENT --name N --type T ...` | Attach a required typed output |
+| `ttasks artifacts show ASSIGNMENT ARTIFACT --task KEY` | Read one packet-visible artifact |
+| `ttasks ask ASSIGNMENT --question Q --context C --blocking-scope S ...` | Ask a universal workflow question and optionally hold work |
+| `ttasks questions ASSIGNMENT` | List questions visible in the packet |
+| `ttasks answer QUESTION --assignment ASSIGNMENT --answer TEXT ...` | Answer a routed question assignment |
+| `ttasks observe subscribe ASSIGNMENT PATTERN ...` | Create a policy-bounded observation subscription |
+| `ttasks observe list ASSIGNMENT` | List its workflow subscriptions |
+| `ttasks observe cancel ASSIGNMENT SUBSCRIPTION ...` | Cancel one subscription |
 
 Mutations represented by `...` require current task/assignment revisions and a
 stable idempotency key. Exact semantics and operator REST routes are in
 [Configurable task workflows](/docs/task-workflows).
+
+The following administration roots are operator-only and are documented by
+`ttasks --help-json`: `queue` (including pools, workflow bindings, and
+triggers), `workflows`, `workflow` task history and artifacts, `events`,
+`principals`, and `notifications`. They are unavailable to agent mode.

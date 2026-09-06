@@ -140,12 +140,14 @@ To uninstall remotely after confirming no work is active:
 ```bash
 ssh build-box 'set -eu
 managed_cli=
-for name in tariboy tariboyd tariboy-shim tariboy-plugin-telegram; do
+for managed in tariboy:tariboy tariboyd:tariboyd tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram; do
+  name=${managed%%:*}
+  source=${managed#*:}
   link=$HOME/.local/bin/$name
   if test -L "$link"; then
     target=$(readlink "$link")
     case "$target" in
-      "$HOME"/.local/lib/tariboy/*/"$name")
+      "$HOME"/.local/lib/tariboy/*/"$source")
         test "$name" != tariboy || managed_cli=$target
         ;;
       *) echo "refusing to remove unrelated link: $link -> $target" >&2; exit 1 ;;
@@ -157,7 +159,7 @@ for name in tariboy tariboyd tariboy-shim tariboy-plugin-telegram; do
 done
 test -n "$managed_cli"
 "$managed_cli" daemon stop || true
-for name in tariboy tariboyd tariboy-shim tariboy-plugin-telegram; do
+for name in tariboy tariboyd tariboy-tasks ttasks tariboy-shim tariboy-plugin-telegram; do
   link=$HOME/.local/bin/$name
   test ! -L "$link" || rm -- "$link"
 done

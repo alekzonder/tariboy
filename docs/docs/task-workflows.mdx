@@ -58,7 +58,7 @@ sequenceDiagram
   D->>D: pin version; materialize initial status
   D->>B: commit durable wake intent
   B-->>A: inbox delivery and loop wake
-  A->>D: tasks work next
+  A->>D: ttasks work next
   D-->>A: atomically leased WorkPacket
   A->>D: artifacts plus declared outcome
   D->>D: validate requirements and reduce guards
@@ -307,7 +307,7 @@ the daemon snapshots the pool, so rebinding later affects future statuses only.
 | `dispatch` | enum | Yes | `claim_one` creates one ownerless compare-and-swap assignment visible to pool members; the first valid claimant leases it. `require_all` creates one assignment per member of the captured pool. |
 | `inputs` | list of strings | No | Artifact names put in this assignment's least-context packet. `previous_outputs` expands to all artifacts producible by predecessor statuses, including an earlier pass around a cycle. |
 | `produces` | list of strings | No | Artifact names that must be attached to this assignment before completion. These names also become valid guard and channel-template references. |
-| `outcomes` | list of strings | Yes | One or more unique, non-empty values accepted by `tasks work complete`. Guards may only name outcomes declared here. |
+| `outcomes` | list of strings | Yes | One or more unique, non-empty values accepted by `ttasks work complete`. Guards may only name outcomes declared here. |
 | `optional` | boolean | No, `false` | Does not block the containing status's reduction. Its assignments and evidence remain in execution history. |
 
 ### `transitions[]` and guard language
@@ -345,7 +345,7 @@ zero or multiple true guards freeze and escalate rather than selecting a route.
 
 Questions use one universal envelope rather than a schema per question. The
 agent supplies question text, context, and `blocking_scope` (`none`,
-`assignment`, or `requirement`) through `tasks ask`.
+`assignment`, or `requirement`) through `ttasks ask`.
 
 | Field | Type | Default | Meaning and constraints |
 | --- | --- | --- | --- |
@@ -356,7 +356,7 @@ agent supplies question text, context, and `blocking_scope` (`none`,
 
 ### `observations` and `permissions`
 
-An assignment can subscribe only with `tasks observe subscribe` while its lease
+An assignment can subscribe only with `ttasks observe subscribe` while its lease
 is current. A matching bus message becomes an immutable observation; it never
 directly changes a workflow status.
 
@@ -460,12 +460,12 @@ and create a manager escalation rather than allowing legacy task claims.
 
 Every terminal workflow status closes the Native Task as `done`; the pinned
 workflow status (`done`, `failed`, or another declared terminal ID) preserves
-the semantic result. Managed tasks are excluded from legacy `tasks ready
+the semantic result. Managed tasks are excluded from legacy `ttasks ready
 --claim` and cannot be driven by direct task status/claim mutations.
 
 ## Work packets and artifacts
 
-`tasks work next` atomically claims one eligible assignment and returns the
+`ttasks work next` atomically claims one eligible assignment and returns the
 least-context `WorkPacket`. It contains the task goal, current status and
 instructions, this requirement and assignment, only its named input artifacts,
 allowed outcomes/actions/tools/channel patterns, plus its questions, holds,
@@ -481,21 +481,21 @@ earlier pass through a cycle do not satisfy the new assignment.
 Typical agent loop (use the revisions returned in each response):
 
 ```bash
-tasks work next --queue DEV --idempotency-key iter-42-claim
-tasks work show 17
-tasks artifacts add 17 --name implementation --type commit \
+ttasks work next --queue DEV --idempotency-key iter-42-claim
+ttasks work show 17
+ttasks artifacts add 17 --name implementation --type commit \
   --content abc123 --task-revision 3 --assignment-revision 2 \
   --idempotency-key iter-42-implementation
-tasks artifacts add 17 --name tests --type markdown \
+ttasks artifacts add 17 --name tests --type markdown \
   --content "go test ./...: PASS" --task-revision 4 --assignment-revision 3 \
   --idempotency-key iter-42-tests
-tasks work complete 17 --outcome implemented \
+ttasks work complete 17 --outcome implemented \
   --task-revision 5 --assignment-revision 4 \
   --idempotency-key iter-42-complete
 ```
 
-Use `tasks work release 17` with both revisions and an idempotency key when the
-agent cannot finish this attempt. `tasks artifacts show 17 9 --task DEV-4`
+Use `ttasks work release 17` with both revisions and an idempotency key when the
+agent cannot finish this attempt. `ttasks artifacts show 17 9 --task DEV-4`
 reads one artifact without granting access to artifacts outside the packet.
 
 ## Questions and blocking holds
@@ -507,7 +507,7 @@ declared `blocking_scope`: `none`, `assignment`, or `requirement`. Optional
 question precise without constraining its subject.
 
 ```bash
-tasks ask 17 \
+ttasks ask 17 \
   --question "Which compatibility behavior should win?" \
   --context "The old API accepts an empty owner; the new invariant rejects it." \
   --blocking-scope requirement \
@@ -522,11 +522,11 @@ tasks ask 17 \
 The daemon routes the question to `questions.route_to`, creating a normal
 claimable manager assignment. A hold prevents the affected assignment or whole
 requirement from advancing; it does not create a side-channel status. The
-manager claims the question through `tasks work next`, inspects it with
-`tasks questions ASSIGNMENT`, and answers:
+manager claims the question through `ttasks work next`, inspects it with
+`ttasks questions ASSIGNMENT`, and answers:
 
 ```bash
-tasks answer 6 --assignment 21 --answer "Reject empty owners." \
+ttasks answer 6 --assignment 21 --answer "Reject empty owners." \
   --task-revision 6 --assignment-revision 2 \
   --idempotency-key iter-43-answer
 ```
@@ -534,7 +534,7 @@ tasks answer 6 --assignment 21 --answer "Reject empty owners." \
 The answer and released hold are durable and the original agent is woken.
 `max_open_per_assignment`, allowed hold scopes, timeout, and answer attempts
 are workflow policy. Question timeout follows the bounded retry/exhaustion
-path. This mechanism is separate from legacy `tasks ask KEY principal TEXT`,
+path. This mechanism is separate from legacy `ttasks ask KEY principal TEXT`,
 which remains the general principal-wait API for unmanaged tasks.
 
 ## Channels, triggers, subscriptions, and observations
@@ -556,11 +556,11 @@ A two-segment suffix wildcard such as `metrics:*` is allowed; arbitrary globs
 are not.
 
 ```bash
-tasks observe subscribe 17 logs:dev --reaction wake_current \
+ttasks observe subscribe 17 logs:dev --reaction wake_current \
   --task-revision 5 --assignment-revision 4 \
   --idempotency-key iter-42-observe
-tasks observe list 17
-tasks observe cancel 17 4 --task-revision 6 --assignment-revision 5 \
+ttasks observe list 17
+ttasks observe cancel 17 4 --task-revision 6 --assignment-revision 5 \
   --idempotency-key iter-42-cancel
 ```
 
@@ -658,22 +658,25 @@ curl -H 'Content-Type: application/json' -X POST \
 
 ## Agent capability security boundary
 
-The bare `tasks` shim is available only when the image enables the `tasks`
-capability. Workflow operations are:
+`ttasks` uses identity-bound agent mode only when `TARIBOY_TOOLS_SOCKET` is
+non-empty and fails closed if that socket cannot be used. Without it, the
+client uses the host Unix daemon socket as the customer actor. The bare `tasks`
+shim remains only as a legacy capability-controlled compatibility command.
+Workflow operations are:
 
 ```text
-tasks work next [--queue Q] --idempotency-key KEY
-tasks work show ASSIGNMENT
-tasks work complete ASSIGNMENT --outcome O --task-revision N --assignment-revision N --idempotency-key KEY
-tasks work release ASSIGNMENT --task-revision N --assignment-revision N --idempotency-key KEY
-tasks artifacts add ASSIGNMENT --name N --type T [--content V] [--metadata JSON] --task-revision N --assignment-revision N --idempotency-key KEY
-tasks artifacts show ASSIGNMENT ARTIFACT --task KEY
-tasks ask ASSIGNMENT --question Q --context C --blocking-scope none|assignment|requirement [...]
-tasks questions ASSIGNMENT
-tasks answer QUESTION --assignment ASSIGNMENT --answer TEXT [...]
-tasks observe subscribe ASSIGNMENT PATTERN [--correlation-key K] [--reaction R] [...]
-tasks observe list ASSIGNMENT
-tasks observe cancel ASSIGNMENT SUBSCRIPTION [...]
+ttasks work next [--queue Q] --idempotency-key KEY
+ttasks work show ASSIGNMENT
+ttasks work complete ASSIGNMENT --outcome O --task-revision N --assignment-revision N --idempotency-key KEY
+ttasks work release ASSIGNMENT --task-revision N --assignment-revision N --idempotency-key KEY
+ttasks artifacts add ASSIGNMENT --name N --type T [--content V] [--metadata JSON] --task-revision N --assignment-revision N --idempotency-key KEY
+ttasks artifacts show ASSIGNMENT ARTIFACT --task KEY
+ttasks ask ASSIGNMENT --question Q --context C --blocking-scope none|assignment|requirement [...]
+ttasks questions ASSIGNMENT
+ttasks answer QUESTION --assignment ASSIGNMENT --answer TEXT [...]
+ttasks observe subscribe ASSIGNMENT PATTERN [--correlation-key K] [--reaction R] [...]
+ttasks observe list ASSIGNMENT
+ttasks observe cancel ASSIGNMENT SUBSCRIPTION [...]
 ```
 
 The daemon derives agent and current iteration from the per-agent socket and
@@ -681,7 +684,7 @@ deletes caller-supplied identity fields. A managed iteration is deny-by-default
 for direct publishing, replies, group sends/requests/loop control, chat
 management, schedules that publish, and raw channel management. A direct tool
 is allowed only when named in `permissions.tools`; workflow observation
-subscriptions must go through `tasks observe ...` and match the resolved
+subscriptions must go through `ttasks observe ...` and match the resolved
 assignment policy. Core identity and completion remain available. Unmanaged
 iterations retain their ordinary capability scripts.
 
@@ -744,7 +747,7 @@ together.
 - `revision_conflict`: refetch task/assignment/binding/pool and retry with a new
   idempotency key only for a genuinely new intent.
 - `assignment_already_claimed`, `assignment_not_owned`, `lease_expired`: discard
-  stale local work and call `tasks work next` again.
+  stale local work and call `ttasks work next` again.
 - `missing_artifact` / `invalid_outcome`: use the packet's `produces` and
   `allowed_outcomes`, not an inferred result.
 - `workflow_assignment_budget_exhausted` or a frozen workflow: inspect

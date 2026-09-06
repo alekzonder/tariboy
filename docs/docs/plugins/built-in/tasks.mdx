@@ -1,21 +1,25 @@
 ---
 title: tasks
-description: Use identity-bound Native Tasks and leased workflow assignments through the bare tasks command.
+description: Use Native Tasks and leased workflow assignments through the globally installed ttasks client.
 sidebar:
-  label: tasks
+  label: Tasks
   icon: list-tree
 ---
 
-`tasks` exposes Tariboy's daemon-owned Native Tasks service to an agent. It is
-optional and is included in `basic:latest`. Native Tasks live in Tariboy's
-SQLite database.
+`tariboy-tasks` is the real Native Tasks executable; installers make it
+available everywhere as `ttasks`. Native Tasks live in Tariboy's SQLite
+database.
 
 ## Command and identity boundary
 
-When the capability is active, provisioning writes a bare `tasks` shim into the
-agent's bin directory. It invokes `tasks/scripts/tasks.py` inside the versioned
-Store skill directory over the per-agent socket. Removing the capability
-removes the shim.
+`ttasks --version` reports its build, and `ttasks --json …` requests JSON
+output. With a non-empty `TARIBOY_TOOLS_SOCKET`, `ttasks` uses only that
+identity-bound agent socket and fails closed when it is unavailable. With no
+such variable, it uses the host Unix daemon socket as the customer actor.
+
+The bare `tasks` command is a legacy, capability-controlled compatibility shim:
+when the image enables `tasks`, provisioning writes it into the agent bin
+directory; removing the capability removes it. New examples use `ttasks`.
 
 Every mutation derives its author or actor from that socket. Request fields
 that could forge an author, customer, principal identity, or iteration are
@@ -27,15 +31,15 @@ Agents can inspect, create, organize, delegate, discuss, and complete visible
 work:
 
 ```bash
-tasks mine
-tasks ready --queue OPS --claim
-tasks show OPS-12
-tasks create --parent OPS-12 --title "Add regression coverage"
-tasks assign OPS-12 worker
-tasks comment OPS-12 "The failing boundary is confirmed"
-tasks ask OPS-12 user:login "Which behavior should win?"
-tasks update OPS-12 --status in_progress --priority P1
-tasks done OPS-12
+ttasks mine
+ttasks ready --queue OPS --claim
+ttasks show OPS-12
+ttasks create --parent OPS-12 --title "Add regression coverage"
+ttasks assign OPS-12 worker
+ttasks comment OPS-12 "The failing boundary is confirmed"
+ttasks ask OPS-12 user:login "Which behavior should win?"
+ttasks update OPS-12 --status in_progress --priority P1
+ttasks done OPS-12
 ```
 
 The same surface includes same-queue move/reorder operations, directed blocking
@@ -50,20 +54,20 @@ ready/claim path. They claim leased assignments and operate on least-context
 work packets:
 
 ```bash
-tasks work next --queue OPS --idempotency-key claim-ops
-tasks work show <assignment-id>
-tasks artifacts add <assignment-id> --name report --type text --content "..."
-tasks ask <assignment-id> \
+ttasks work next --queue OPS --idempotency-key claim-ops
+ttasks work show <assignment-id>
+ttasks artifacts add <assignment-id> --name report --type text --content "..."
+ttasks ask <assignment-id> \
   --question "Which region?" \
   --context "Required to continue" \
   --blocking-scope assignment
-tasks observe subscribe <assignment-id> 'deploy:*' --reaction wake_current
-tasks work complete <assignment-id> --outcome approved
+ttasks observe subscribe <assignment-id> 'deploy:*' --reaction wake_current
+ttasks work complete <assignment-id> --outcome approved
 ```
 
 The packet declares allowed actions, tools, outcomes, artifacts, and channel
 patterns. Mutations require the current revisions and stable idempotency keys.
-Direct channel subscriptions are replaced by `tasks observe`, and undeclared
+Direct channel subscriptions are replaced by `ttasks observe`, and undeclared
 message or group tools are denied.
 
 ## Durable state and notifications
@@ -84,7 +88,7 @@ skills:
 ```
 
 The packaged Store skill teaches both flexible and workflow-managed operation. There is
-no general Tasks runtime marker: ordinary work is queried through `tasks`, and
+no general Tasks runtime marker: ordinary work is queried through `ttasks`, and
 a managed assignment supplies its work packet through the workflow launch
 path.
 
