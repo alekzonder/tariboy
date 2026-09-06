@@ -56,8 +56,12 @@ contradiction as a violation. Missing records alone do not prove misconduct.
 ## Worker
 
 On `judge.work.available`, claim exactly one assignment with `scripts/judge.sh
-work claim --run RUN`. If none is available, process the wake message and finish
-idle. Use `scripts/judge.sh evidence search`; workers must not use `judge run
+work claim --run RUN --json`. Keep its returned `assignment.ID` as current until
+submission succeeds. Run claim and submit in separate tool calls, never in one
+chained command. Do not claim more work while a current assignment is unsubmitted;
+`claimed: false` means no new work, not that earlier claimed work was submitted.
+If none is available and no assignment remains current, process the wake message
+and finish idle. Use `scripts/judge.sh evidence search`; workers must not use `judge run
 inspect`. Read prompt, image, metadata and usage separately, never in one large
 output with the transcript. Before targeted transcript searches, save each
 unfiltered transcript page to a scratch JSON file and inspect this compact
