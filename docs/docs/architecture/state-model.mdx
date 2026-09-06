@@ -139,6 +139,16 @@ one owned schedule ID, and cycles keyed by schedule delivery ID. A cycle links
 its Native Task and Judge run. Proposal revision hashes link approved plans to
 idempotent `IMPROVE` tasks.
 
+Iteration reads expose a derived Judge projection rather than another source of
+truth. `latest_completed` is the newest review whose required assignments have
+finished, while `active` is the newest in-flight target review; both may exist at
+once, so starting new work does not erase an older score (including `0`). The
+per-iteration history endpoint returns those durable review rows newest first.
+Clients use the projection directly and do not infer completion by summing
+history counters, because the required assignment count remains Judge-owned.
+`pending` means assignments have not yet completed or failed; it does not
+assert that a worker harness is running.
+
 Staging an approved single-agent release records the prior ref/digest and writes
 the candidate only to the existing pending fields. The launch gate remains the
 sole promotion path, so a running iteration is not interrupted. Successful

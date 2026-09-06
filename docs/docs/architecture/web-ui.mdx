@@ -162,6 +162,23 @@ linked to its details, then count, coverage, verdict, model, cost, and creator.
 Runs are sorted newest first; missing or invalid dates appear last as `—`.
 The full criteria remain on the detail page rather than expanding table rows.
 
+Agent Activity projects Judge state onto each iteration. A terminal iteration
+can queue a manual review with one Judge by default; operators can request two
+independent analyses through the CLI when that extra cost is warranted. Until
+the daemon creates its target the Activity action is only
+**Queued**, and after target creation pending work is still waiting for a
+configured worker, not proof that a harness is running. The latest completed
+score remains visible while a newer review is pending, including a numeric zero.
+History links open the run at that exact target. The target view contains only
+that iteration's consensus, analyses, and immutable evidence, with breadcrumbs
+back to both the explicit-host Judge list and the originating Activity entry.
+Every poll, action, citation, and link stays pinned to the host in the route.
+
+Judge workers run in manual mode when Autopilot is disabled. Activity reports
+that configured state as the reason pending work is waiting; an unavailable
+status is reported as unknown rather than treated as disabled. Operators start
+or enable workers separately—the review action does not claim that it did so.
+
 The Judge page also exposes the selected daemon's automation document as a raw
 JSON textarea. Validate, Apply, and Run once send unchanged text or the existing
 one-shot request to `tariboyd`; JSON
