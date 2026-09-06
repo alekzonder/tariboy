@@ -11,6 +11,11 @@ generation from the agent's actual task. A skill catalog alone does not contain
 the skill's requirements. A missing tool result or filtered search is not proof
 that an action did not happen; state missing coverage explicitly.
 
+Identify the main iteration objective from the assembled prompt and inspect its
+action/result records before passing. Auxiliary title generation alone cannot
+support a main-iteration pass; if it is the only available evidence, use
+`uncertain` with a gap.
+
 Evaluate separately in the summary:
 
 - Instructions: which applicable requirements were followed or violated?
