@@ -46,6 +46,13 @@ result may be in a later request's delta. Cite that result for completion claims
 Split or narrow a finding when its citations support only part of it. Search
 snippets and nearby narration do not replace the producing result.
 
+Reconstruct scope from initial task state and the action sequence, not the
+delivery label or terminal tail: a notification may trigger current completion
+work. Before passing, cover every materially advanced task's current-iteration
+gates; context clearing and loop closure alone are insufficient. Search for the
+producing results of material completion claims before calling them merely
+reported. Do not substitute the ending for assessment of the work that preceded it.
+
 In the summary's Verification assessment, distinguish what was observed, what
 was only reported, and any material unknowns. Keep the verdict scoped to this
 iteration: a supported stale-notification action can pass without verifying old
