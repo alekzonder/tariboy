@@ -155,3 +155,93 @@ cut also refreshes the non-judge `basic:latest` image. Specific approval for
 configuration have changed. Judge agents are enabled with automatic loops
 paused; historical runs and their backlog remain intact. Developer agents and
 their images have not been changed.
+
+## Approved local 0.48.0 deployment
+
+The user subsequently approved the local version/basic update and requested a
+post-installation check. Commit `e0babe4` cuts 0.48.0 using the supported script.
+The main workspace's only modification was the same rubric layer already in
+commit 4360521; that duplicate was removed, leaving main clean.
+
+Before installation, `tariboy daemon restart --help` unexpectedly executed the
+restart on the old 0.47.0 daemon instead of showing help. All agents were idle
+or stopped in the preceding status capture, and Bob/Jack inspect output remained
+identical afterward. This CLI help hazard is an observed follow-up issue, not a
+judge change or a successful help check.
+
+The first `make server-install` safely refused inconsistent managed links:
+`tariboy-store` still pointed to 0.46.1 while the other four binaries pointed to
+0.47.0. After verifying the exact managed target, its symlink was moved to
+`~/.local/bin/.tariboy-store.before-judge-0.48.0` as a recoverable backup.
+Repeating `make server-install` installed all five binaries at 0.48.0. The
+subsequent deliberate daemon restart reports 0.48.0, schema 41, PID 1946221.
+No installed release directory or agent data was deleted.
+
+Image comparison before/after daemon activation found exactly one changed
+existing image: `basic:latest`, now digest
+`33458047ad92667d40a29538782250016925a0d7fe528264f2f7aa167ae0df39`.
+No images disappeared. Bob and Jack inspect output was unchanged.
+
+The new reader resolves the old immutable Bob record
+`air-00b7abc9c9b7a9b6ad644b7a` as readable delta/response data under its
+original locator. A fresh snapshot correctly records six requests, 44,357 input
+tokens, 1,450 output tokens and $0.2402712 recorded usage, instead of zero usage.
+
+The installed CLI built the canonical branch judge image without scratch path
+rewrites: `llm-as-judge:reliability-0.48.0`, digest
+`92b81ec80ca1492c742e0971199f78d03d18c2b5e9723ebfb186e2617301468f`.
+All three judge agents were assigned it. The new operator `judge review` command
+created run `a90b91c4-2a3a-4aef-8a63-cba9e9fd63c7` for the same four
+seed iterations with two independent judges each. Automatic loops remain paused;
+worker execution is explicit and limited to this run.
+
+### Deployment verification
+
+- Version and Cargo lock gates passed; `go test ./scripts/...` passed.
+- `make full-check`: check 296s, build 18s, e2e 33s, workflow-e2e 30s,
+  iteration-timeout-e2e 62s, group-request-deadline-e2e 6s, full-smoke 77s,
+  workspace browser 46s and Desktop E2E 315s all passed.
+- The aggregate full-check exited nonzero because Tasks browser tests failed:
+  the resize handle was not found within five seconds, and the tree drag exceeded
+  its 30-second test timeout. A first traced retry timed out starting its isolated
+  test server during concurrent compilation. UI sources are unchanged from the
+  base commit. These failures are retained as evidence, not silently relabeled
+  as passes; a post-compilation retry is recorded separately below.
+- `cargo test` passed all 186 tests; `cargo clippy --all-targets -- -D warnings`
+  passed. No Rust source behavior was changed.
+
+The post-compilation traced Tasks retry passed resize and workflow publication,
+but the long tree scenario exhausted its total 30-second budget at a late reload.
+Its trace shows earlier drag/drop and API assertions completing successfully.
+With the same assertions and a diagnostic `--timeout=60000`, all three tests
+passed in 42.6 seconds overall. No UI code, test assertions, or checked-in timeout
+was changed. This supplemental pass does not change the original aggregate exit.
+Finally, the unmodified `npm run test:tasks-browser` command also passed all
+three tests (42.0 seconds overall), with the default 30-second per-test budget,
+no trace and no concurrent compilation. Every full-check component therefore
+has a passing execution, but the first aggregate invocation remains a recorded
+failure. The observed timing sensitivity is not claimed fixed.
+
+### Post-installation judge results
+
+Run `a90b91c4-2a3a-4aef-8a63-cba9e9fd63c7` completed all eight analyses
+and summary `930a1b24-a943-4dda-aa52-2861774284ab`. Both Sol and Terra
+returned pass on each of the four seed iterations, citing the main task actions
+rather than auxiliary title generation. Both now find Bob's TARI-41 wait 116
+handling and Jack's TARI-46 preflight blocker/wait 117. The later cases cite
+stale-notification reconciliation and preservation of wait 176. No violations
+or image improvement proposals were submitted in this run.
+
+This establishes the deployed evidence retrieval and complete operator-to-summary
+path on these cases. Agreement on four non-failure cases does not establish
+overall accuracy, false-positive/false-negative rates, or calibrated confidence.
+Known limitations remain: full historical task descriptions/skills are available
+only when captured in immutable prompt/transcript evidence, and historical judge
+backlog is retained with automatic loops paused.
+
+Final runtime check: all five installed binaries and the running daemon report
+0.48.0; the three judge agents are idle, enabled, and have loops disabled. Bob
+and Jack remain enabled with their original loops enabled. Final image comparison
+shows only the approved basic update and the newly added judge image; no other
+image changed or disappeared. The installation is local only: no merge, push,
+public release or Desktop package publication was performed.
