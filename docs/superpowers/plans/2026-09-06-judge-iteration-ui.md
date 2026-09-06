@@ -1,0 +1,77 @@
+# Iteration Judge Analysis and UI Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Запускать ручной Judge review из итерации и видеть её оценку, доказательства и историю без поиска по всем runs.
+
+**Architecture:** Использовать существующие Judge service, assignments и consensus. Добавить серверную проекцию результатов на итерации и target-specific представление существующей страницы анализа; не создавать второй pipeline оценки.
+
+**Tech Stack:** Go, SQLite, registry HTTP API, React/TypeScript, Vitest, Playwright, tauri-driver.
+
+**Spec:** Раздел «Требования» этого документа фиксирует текущий запрос пользователя; исторический контекст — `docs/superpowers/specs/2026-09-06-judge-reliability-design.md`.
+
+## Global Constraints
+
+- Первый из трёх последовательных планов; рубрику и алгоритм consensus здесь не менять.
+- Работать в `.worktrees/judge-reliability`, ветка `feat/judge-reliability`, существующий PR #15; версию не повышать.
+- Прочитать README, contributor guide и документы architecture/index, state-model, iteration-loop, shim, web-ui согласно AGENTS.md перед реализацией.
+- Тесты только с изолированными base/runtime/listener; не перезапускать live daemon, не включать циклы, не применять automation configuration.
+- Не изменять другие agent images. Не добавлять зависимости и отдельный dashboard.
+
+## Требования
+
+1. В выбранной завершённой итерации есть кнопка `Run Judge review`, вызывающая тот же API, что `judge review`, с ровно одним iteration ID.
+2. Запрос, постановка в очередь и выполнение — разные состояния. Pending-запрос блокирует повторный клик; существующий активный анализ показывается ссылкой. Ошибка оставляет возможность повторить запрос.
+3. Сохранить текущую семантику запуска команды: UI не включает отключённых агентов/циклы. Если workers не работают, показывать ожидание и причину, а не обещать выполняющийся анализ. Автоматический one-shot dispatch вне этого плана.
+4. Score в списке и деталях — median consensus последнего полностью оценённого target, а не среднее между runs. Target не обязан ждать summary всего multi-target run. Новый незавершённый/ошибочный review не затирает предыдущий score.
+5. Показывать число в шкале 0–1, verdict и дату; `0` допустим, отсутствие — `—`. Это оценка, не вероятность. `uncertain`/`disputed` не красить как уверенный pass/fail. Частичный результат показывать отдельно с количеством ответов.
+6. Прямая ссылка выбирает конкретный target. Хлебные крошки дают ссылки и на исходную итерацию, и на Judge runs; переходы, API-запросы и browser back сохраняют сервер.
+7. Полезные дополнения в этом срезе: история повторных reviews, ответы отдельных judges, расхождения, evidence gaps, переход к цитируемому доказательству. Без графиков, новых фильтров и изменения scoring.
+
+## Task 1: Серверная проекция и история итерации
+
+**Files:** Modify `internal/judge/model.go`, `internal/judge/store.go`, `internal/judge/service.go`, `internal/registry/registry.go`, `internal/commands/iteration.go`, `internal/commands/judge.go`; tests in `internal/judge/store_test.go`, `internal/judge/service_test.go`, `internal/commands/iteration_test.go`.
+
+**Interfaces:** Новый JSON тип `IterationJudgeReview` имеет `run_id`, `target_id`, `created_at`, `state`, `verdict` (string), `score` (number|null), `completed`, `failed`, `pending` (integer). Проекция `judge` содержит `latest_completed: IterationJudgeReview|null` и `active: IterationJudgeReview|null`. Добавить её к строкам iteration list/detail; `GET /api/agents/{name}/iterations/{id}/judges` возвращает `{reviews: IterationJudgeReview[]}` в порядке created_at DESC, run_id DESC. Existing `POST /api/judges/review` остаётся совместимым.
+
+- [ ] Добавить fixtures с одной итерацией и тремя reviews: завершённый score=0, более новый завершённый score=0.8, самый новый pending; ещё один target принадлежит другому агенту. Проверить результат буквально: `latest_completed.score == 0.8`, `active.pending == 1`, история содержит только три своих review. Отдельно проверить единственный score=0 и отсутствие review.
+- [ ] Запустить `go test ./internal/judge ./internal/commands -run 'IterationJudge|Iteration' -count=1`; убедиться, что новые assertions падают из-за отсутствующего контракта.
+- [ ] Реализовать batch-чтение по iteration IDs на сервере, без запроса на каждую строку и без загрузки всех runs в браузере. Считать target завершённым только при наличии всех требуемых валидных analyses; failed/partial не выдавать за полностью оценённый. Использовать существующие статусы assignments, не новую машину состояний.
+- [ ] Проверить принадлежность iteration агенту, terminal eligibility по существующим правилам selector, пустые результаты и порядок при одинаковой дате. Сохранить прежние поля API.
+- [ ] Запустить `go test ./internal/judge ./internal/commands ./internal/registry -count=1`, проверить diff и закоммитить серверный контракт.
+
+## Task 2: Запуск и score в iterations
+
+**Files:** Modify `ui/src/lib/judge.ts`, `ui/src/lib/types.ts`, `ui/src/pages/AuditLogPage.tsx`, `ui/src/components/IterationAuditLog.tsx`; create `ui/src/components/IterationJudgePanel.tsx`, `ui/src/components/IterationJudgePanel.test.tsx`, `ui/src/pages/AuditLogPage.test.tsx`.
+
+**Interfaces:** Панель получает `agentName: string`, `iterationId: string`, `terminal: boolean` и серверную проекцию Task 1. API helper отправляет `{iteration: [iterationId]}` через существующий explicit-host транспорт, возвращает существующие `{id, status, targets}`. После ответа перечитать историю, чтобы получить target ID, не угадывать его по ID run.
+
+- [ ] Написать failing UI tests: score=0 отображается как число; pending сохраняет старые 0.8; двойной клик даёт один POST; ошибка POST видна и позволяет retry; незавершённая итерация не запускает review.
+- [ ] Запустить `cd ui && npm test -- src/components/IterationJudgePanel.test.tsx src/pages/AuditLogPage.test.tsx` и зафиксировать RED.
+- [ ] Реализовать панель на существующих компонентах. Показывать `Queued`, пока нет подтверждения выполнения; disabled workers объяснять через доступные данные конфигурации, не менять их. Активный review предлагает перейти к нему, а не создать новый. Это UI-защита от повторного клика, не глобальная дедупликация CLI-экспериментов.
+- [ ] Отображать score/verdict в строках AuditLogPage. Синхронизировать выбранную итерацию с `?iteration=` при клике, внешней навигации и back/forward, сохраняя остальные параметры. Для неизвестного ID показать явное отсутствие, не чужую итерацию.
+- [ ] Повторить focused tests до GREEN; проверить keyboard access и доступное имя кнопки; закоммитить UI iterations.
+
+## Task 3: Target-specific анализ и обратная навигация
+
+**Files:** Modify `ui/src/pages/JudgeRunDetailPage.tsx`, `ui/src/pages/JudgeRunDetailPage.test.tsx`, `ui/src/lib/judge.ts`; reuse existing route in `ui/src/App.tsx`.
+
+**Interfaces:** Существующий URL run дополняется `?target=<target_id>`. Page фильтрует analyses по `target_id`, берёт agent/iteration из target, а не из непроверенного return URL. Использует explicit-host API и существующий host-aware построитель ссылок.
+
+- [ ] Добавить failing test с двумя targets: URL выбирает второй, его score и analyses видны, первый не представлен как анализ выбранной итерации; breadcrumbs ведут к её `?iteration=` и к Judge runs того же сервера. Неизвестный target даёт not-found, не fallback.
+- [ ] Запустить `cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx` и убедиться в RED.
+- [ ] Добавить target mode без дублирования всей страницы run. Оставить общий run view доступным. Вывести consensus, счётчик ответов, individual verdict/score, violations с citations и evidence gaps; не смешивать доказательства разных targets.
+- [ ] Привязать ссылки из панели/истории Task 2 к этому target mode; проверить прямое открытие URL и browser back после обновления страницы.
+- [ ] Повторить focused tests до GREEN и закоммитить.
+
+## Task 4: Production-проверки и handoff
+
+**Files:** Extend `ui/tests/desktop/judge-runs.pw.ts`; update `docs/docs/architecture/web-ui.mdx` и `docs/docs/architecture/state-model.mdx` для нового API-представления.
+
+**Interfaces:** Сценарий `iteration → review → target analysis → iteration / Judge runs` использует контракты Tasks 1–3 и production Desktop.
+
+- [ ] Добавить сценарий со score=0, pending поверх прошлого результата, завершением review, выбором одного из двух targets и обоими breadcrumbs. Проверить host isolation: запросы и ссылки не уходят на default server.
+- [ ] Запустить production Desktop проверку через Playwright и tauri-driver согласно contributor guide; mock-list alone не доказывает работоспособность POST/dispatch, поэтому проверить их отдельно с изолированным daemon и контролируемым worker.
+- [ ] Обновить product docs, включая честное различие queued/running и ручной режим workers. При затронутом shared Store UI пересобрать committed `internal/storeui/dist` через `make store-ui` в изоляции; desktop build outputs не stage.
+- [ ] Запустить `make full-check` один раз на интеграционной границе; проверить обе формы `./bin/tariboy version` и `./bin/tariboy --version`. Не выдавать известный сбой shell E2E за green; записать точный результат.
+- [ ] Выполнить `git diff --check`, просмотреть весь diff, устранить Critical/Important замечания, закоммитить и обновить PR #15. Затем переходить к плану `2026-09-06-judge-image-rubric.md`.
