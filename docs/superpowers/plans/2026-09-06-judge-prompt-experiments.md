@@ -265,3 +265,29 @@ claimed assignment was submitted. This is distinct from the retrieval issue;
 test each procedure independently rather than counting operator recovery as
 judge reliability. Old unrelated runs were not judged, though workers did
 acknowledge stale judge wake messages while closing their controlled iterations.
+
+## H4a: Compact navigation before targeted retrieval
+
+Candidate `c99838a` changes only the worker retrieval recipe: read artifacts
+separately, save a transcript page as local scratch JSON, print 25 locator/action
+previews at a time with existing jq, cover all records/pages, then open full
+producing results. Previews explicitly are not proof of success or absence.
+No backend, schema, skill wrapper or daemon change is needed. Queue-protocol
+changes are deferred to a separate experiment so this reproduction tests the
+retrieval intervention alone.
+
+The exact jq expression was executed on the cached readable responses from all
+41 substantive Bob records: batches contained 25 and 16 records with 41 unique
+unchanged locators, producing 20,431 characters together. The observed make-check
+invocation and its follow-up sequence are visible. The source projection was
+not edited; the preview deliberately omits full results, which remain available
+through evidence get. This checks navigation coverage, not judgment quality.
+
+Image `llm-as-judge:reliability-h4a` digest:
+`eea2fdb33f4c17e4a9207e0d1f1add5584990157f503d0af0255c4a620209b83`.
+Build and focused image/rubric tests passed. Real reproduction run
+`20b7d54e-7f99-4d08-92e7-b50830e0084d` assigns substantive Bob to both models.
+Five existing scope/provenance controls per model (c01, c02, c03, s01, s02) are
+also being checked; these do not exercise retrieval and cannot override a
+failed real reproduction. Do not repeat all short fixtures as a substitute for
+testing the actual failing long transcript.
