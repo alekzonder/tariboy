@@ -60,3 +60,23 @@ GREEN:
 ## Concerns
 
 None.
+
+## Review fix round 1
+
+- Added a router-history regression that opens target mode, remounts the page with the same memory history (refresh analogue), navigates back, and verifies the prior whole-run location and content are restored.
+- Distinguished action errors from load/poll errors, rendered refresh failures in both whole-run and target modes, and cleared them after a later successful response.
+
+RED:
+
+`cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx`
+
+- 1 file failed; 1 test failed and 6 passed.
+- The target polling lifecycle test failed because no alert rendered after the failed refresh.
+
+GREEN:
+
+`cd ui && npm test -- src/pages/JudgeRunDetailPage.test.tsx src/pages/JudgeRunsPage.test.tsx && npx tsc -b && npm run lint`
+
+- 2 test files passed; 22 tests passed.
+- TypeScript build passed.
+- Lint passed with the same six pre-existing exhaustive-deps warnings outside the changed files and none in `JudgeRunDetailPage.tsx`.
