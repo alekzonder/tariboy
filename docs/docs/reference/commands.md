@@ -174,7 +174,7 @@ derives identity from the socket.
 | `ttasks comment KEY TEXT` | Add a task comment |
 | `ttasks ask KEY agent:name\|user:login TEXT` | Mention a principal and record an open answer wait |
 | `ttasks move KEY [--parent KEY] [--before KEY] [--to-root]` | Reparent/reorder in the same queue |
-| `ttasks block KEY BLOCKER` | Add a directed, cycle-checked blocking relation |
+| `ttasks block KEY --by BLOCKER` | Add a directed, cycle-checked blocking relation |
 | `ttasks relate KEY OTHER` | Add a symmetric related link |
 | `ttasks done KEY [--complete-anyway]` | Complete, optionally overriding active descendants |
 
