@@ -40,7 +40,7 @@ func TestRenderPromptTemplateGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\n"
+	want := "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\n"
 	if got != want {
 		t.Fatalf("got %q", got)
 	}
@@ -59,7 +59,7 @@ func TestRenderPromptTemplateGoalPreservesDescriptionLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n" + goal + "\n"
+	want := "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n" + goal + "\n"
 	if got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}
@@ -133,7 +133,7 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 		want    string
 	}{
 		{"identity", RuntimePromptValues{Identity: "identity data"}, "# [runtime: identity]\n\nUse the `whoami` skill for this runtime data.\n\nidentity data\n"},
-		{"goal", RuntimePromptValues{Goal: "goal data"}, "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\ngoal data\n"},
+		{"goal", RuntimePromptValues{Goal: "goal data"}, "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\ngoal data\n"},
 		{"workdir", RuntimePromptValues{Workdir: "workdir data"}, "# [runtime: workdir]\n\nUse the `workdir` skill for this runtime data.\n\nworkdir data\n"},
 		{"context", RuntimePromptValues{Context: "context data"}, "# [runtime: context]\n\nUse the `context` skill for this runtime data.\n\n# Agent Context\n\ncontext data\n"},
 		{"messages", RuntimePromptValues{Messages: "message data"}, "# [runtime: messages]\n\nUse the `messages` skill for this runtime data.\n\n# Messages\n\nmessage data\n"},

@@ -13,7 +13,7 @@ execution, and prompt behavior are not the same.
 <CardGroup cols={2}>
   <Card title="Built-in plugins" href="/docs/plugins/built-in" icon="package-check">
     Daemon-owned capabilities such as context, messages, scripts, and Native
-    Tasks, plus instruction-only plugins such as workdir. They do not run as
+    Tasks, plus instruction-only plugins such as workdir and goal. They do not run as
     separate plugin processes.
   </Card>
   <Card title="External plugins" href="#external-plugins" icon="unplug">
@@ -34,7 +34,7 @@ execution, and prompt behavior are not the same.
 | Agent Skill packaging | Only when explicitly listed under image `skills` | Only when an explicit image skill directory resolves into the plugin tree |
 
 Schema-v2 images receive exactly the plugin names they declare. Most built-ins
-enable a capability; `workdir` is instruction-only. Neither class inserts
+enable a capability; `workdir` and `goal` are instruction-only. Neither class inserts
 instructions into the prompt. List every static instruction and runtime marker
 under the image's ordered `prompts` template. See [Images](/docs/images) for the
 complete manifest contract.

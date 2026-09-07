@@ -55,7 +55,7 @@ period remains the goal but sends no continuation wake. Disabled agents or
 disabled Autopilot loops neither select nor receive a goal wake, but preserve a
 valid sticky key; only disabling Goal clears it.
 
-Goal-capable images always render daemon-owned Goal guidance, even without a
+Images with the instruction-only `goal` plugin always render daemon-owned Goal guidance, even without a
 `runtime: goal` template entry. The block tells the agent to work through the
 Native Task workflow, wait for a recorded customer answer while in
 `wait_customer`, and set `wait_customer` after recording a PR while monitoring
@@ -162,13 +162,14 @@ On top of the core, an image opts into **optional capabilities**:
 
 - `context` — durable working memory,
 - `status` — a one-line "what I'm doing",
-- `schedule`, `scripts`, `current-task`, `tasks`,
+- `schedule`, `scripts`, `tasks`,
 - `image-creator`, `llm-as-judge`, and any validated, explicitly
   installed external plugin capability.
 
-The built-in `workdir` plugin is instruction-only rather than a capability. It
-adds no route or shim; a schema-v2 image explicitly packages its Store skill
-and composes `runtime: workdir`. See [workdir](/docs/plugins/built-in/workdir).
+The built-in `workdir` and `goal` plugins are instruction-only rather than
+capabilities. They add no routes or shims; a schema-v2 image explicitly
+packages their Store skills and composes the matching runtime value. See
+[built-in plugins](/docs/plugins/built-in).
 
 See [Built-in plugins](/docs/plugins/built-in) for the complete capability,
 command, prompt, and persistence reference.

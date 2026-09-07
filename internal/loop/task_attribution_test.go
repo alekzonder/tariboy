@@ -18,19 +18,6 @@ type attributionTaskReader struct {
 	seen  []tasks.Actor
 }
 
-type attributionProxy struct {
-	calls int
-	key   string
-	task  string
-	epic  string
-}
-
-func (p *attributionProxy) UpdateTask(key, task, epic string) int {
-	p.calls++
-	p.key, p.task, p.epic = key, task, epic
-	return 1
-}
-
 func (r *attributionTaskReader) GetTask(_ context.Context, actor tasks.Actor, key string) (tasks.TaskDetail, error) {
 	r.seen = append(r.seen, actor)
 	if err := r.err[key]; err != nil {
@@ -131,61 +118,5 @@ func TestResolveNativeTaskAttributionUsesRealServiceAuthorization(t *testing.T) 
 	}
 	if _, _, err := resolveNativeTaskAttribution(ctx, service, "outsider", child.Key); tasks.ErrorCode(err) != "not_found" {
 		t.Fatalf("outsider error=%v code=%q, want not_found", err, tasks.ErrorCode(err))
-	}
-}
-
-func TestSetCurrentTaskAttributionRejectsUnavailableProxy(t *testing.T) {
-	reader := &attributionTaskReader{tasks: map[string]tasks.Task{"SUPER-1": {Key: "SUPER-1"}}}
-	for _, clear := range []bool{false, true} {
-		_, err := setCurrentTaskAttribution(context.Background(), reader, nil, "iter-1", "worker", "SUPER-1", clear)
-		if err == nil || !strings.Contains(err.Error(), "proxy unavailable") {
-			t.Fatalf("clear=%v error=%v, want proxy unavailable", clear, err)
-		}
-	}
-	if len(reader.seen) != 0 {
-		t.Fatalf("proxy-unavailable path performed %d task lookups, want 0", len(reader.seen))
-	}
-}
-
-func TestSetCurrentTaskAttributionClearSkipsTaskLookup(t *testing.T) {
-	reader := &attributionTaskReader{}
-	proxy := &attributionProxy{}
-	result, err := setCurrentTaskAttribution(context.Background(), reader, proxy, "iter-1", "worker", "", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(reader.seen) != 0 || proxy.calls != 1 || proxy.task != "" || proxy.epic != "" {
-		t.Fatalf("clear lookups=%d proxy=%+v", len(reader.seen), proxy)
-	}
-	if result["cleared"] != true || result["updated"] != 1 {
-		t.Fatalf("clear result=%v", result)
-	}
-}
-
-func TestSetCurrentTaskAttributionUpdatesResolvedNativePair(t *testing.T) {
-	reader := &attributionTaskReader{tasks: map[string]tasks.Task{
-		"SUPER-1": {Key: "SUPER-1"},
-		"SUPER-3": {Key: "SUPER-3", ParentKey: "SUPER-1"},
-	}}
-	proxy := &attributionProxy{}
-	result, err := setCurrentTaskAttribution(context.Background(), reader, proxy, "iter-1", "worker", "SUPER-3", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if proxy.calls != 1 || proxy.key != "iter-1" || proxy.task != "SUPER-3" || proxy.epic != "SUPER-1" {
-		t.Fatalf("proxy=%+v", proxy)
-	}
-	if result["task_id"] != "SUPER-3" || result["epic_id"] != "SUPER-1" || result["updated"] != 1 {
-		t.Fatalf("result=%v", result)
-	}
-}
-
-func TestSetCurrentTaskAttributionLookupErrorDoesNotMutateProxy(t *testing.T) {
-	want := errors.New("native task denied")
-	reader := &attributionTaskReader{err: map[string]error{"SUPER-9": want}}
-	proxy := &attributionProxy{}
-	_, err := setCurrentTaskAttribution(context.Background(), reader, proxy, "iter-1", "worker", "SUPER-9", false)
-	if !errors.Is(err, want) || proxy.calls != 0 {
-		t.Fatalf("error=%v proxy calls=%d, want denied/0", err, proxy.calls)
 	}
 }

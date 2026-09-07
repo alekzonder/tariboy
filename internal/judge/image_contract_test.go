@@ -32,14 +32,14 @@ func TestBuiltinJudgeImageDeclaresAutomaticCycleContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"name: schedule", "name: tasks", "name: current-task"} {
+	for _, required := range []string{"name: schedule", "name: tasks", "name: goal"} {
 		if !strings.Contains(string(manifest), required) {
 			t.Fatalf("manifest missing %q", required)
 		}
 	}
 	for _, required := range []string{
 		"skills/whoami", "skills/loop", "skills/messages", "skills/context",
-		"skills/status", "skills/schedule", "skills/tasks", "skills/current-task",
+		"skills/status", "skills/schedule", "skills/tasks", "skills/goal",
 		"skills/llm-as-judge",
 	} {
 		if !strings.Contains(string(manifest), required) {
@@ -63,5 +63,8 @@ func TestBuiltinJudgeImageDeclaresAutomaticCycleContract(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest), "- file: ./rubric.md") {
 		t.Fatal("manifest does not include the canonical judge rubric")
+	}
+	if !strings.Contains(string(manifest), "- runtime: goal") {
+		t.Fatal("manifest does not render the daemon-selected Goal")
 	}
 }

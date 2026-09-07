@@ -319,7 +319,7 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, ShimBin: m.cfg.ShimBin,
 		ImgStore: m.cfg.ImgStore, Store: m.cfg.Store, Spawner: m.cfg.Spawner, Clock: m.cfg.Clock,
 		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Bus: m.cfg.Bus, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
-		CurrentGoal: m.cfg.CurrentGoal,
+		CurrentGoal: m.cfg.CurrentGoal, Tasks: m.cfg.Tasks,
 	})
 }
 
@@ -963,13 +963,6 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 				}
 			}
 			return map[string]any{"message": message, "updated": updated}, nil
-		},
-		SetTask: func(id string, clear bool) (map[string]any, error) {
-			iter := m.currentIterationID(agName)
-			if iter == "" {
-				return nil, fmt.Errorf("no iteration is currently running")
-			}
-			return setCurrentTaskAttribution(context.Background(), m.cfg.Tasks, m.cfg.Proxy, iter, ag.Name, id, clear)
 		},
 		Publish: func(msg bus.Message) (bus.Message, error) {
 			if m.cfg.Bus == nil {

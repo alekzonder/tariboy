@@ -483,6 +483,8 @@ type fakeBinder struct {
 	minted            []string
 	revoked           []string
 	revokedIterations []string
+	updates           []struct{ key, task, epic string }
+	failUpdate        bool
 	base              string
 }
 
@@ -499,7 +501,13 @@ func (b *fakeBinder) RevokeToken(token string) { b.revoked = append(b.revoked, t
 func (b *fakeBinder) RevokeIteration(iteration string) {
 	b.revokedIterations = append(b.revokedIterations, iteration)
 }
-func (b *fakeBinder) UpdateTask(key, task, epic string) int { return 0 }
+func (b *fakeBinder) UpdateTask(key, task, epic string) int {
+	b.updates = append(b.updates, struct{ key, task, epic string }{key, task, epic})
+	if b.failUpdate {
+		return 0
+	}
+	return 1
+}
 
 // fakeProxySpawner writes an exit-0 result.json so ShimRunner.await returns
 // promptly without spawning a real process.
@@ -569,6 +577,49 @@ func TestRunMintsAndRevokesToken(t *testing.T) {
 	}
 	if len(binder.minted) != 1 || len(binder.revoked) != 1 || binder.minted[0] != binder.revoked[0] {
 		t.Fatalf("mint/revoke mismatch: minted=%v revoked=%v", binder.minted, binder.revoked)
+	}
+}
+
+func TestRunAttributesTokenToCurrentGoal(t *testing.T) {
+	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
+	r, ag, _, _ := newRunnerForProxyTest(t, binder)
+	goalReads := 0
+	r.cfg.CurrentGoal = func(string, time.Time) (tasks.Task, bool, error) {
+		goalReads++
+		return tasks.Task{Key: "SUPER-3", ParentKey: "SUPER-1"}, true, nil
+	}
+	r.cfg.Tasks = &attributionTaskReader{tasks: map[string]tasks.Task{
+		"SUPER-1": {Key: "SUPER-1"},
+		"SUPER-3": {Key: "SUPER-3", ParentKey: "SUPER-1"},
+	}}
+
+	if _, err := r.Run(context.Background(), ag, "manual", "alice-1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if goalReads != 1 {
+		t.Fatalf("CurrentGoal reads = %d, want 1", goalReads)
+	}
+	if len(binder.updates) != 1 {
+		t.Fatalf("proxy attribution updates = %v, want one", binder.updates)
+	}
+	if got := binder.updates[0]; got.key != binder.minted[0] || got.task != "SUPER-3" || got.epic != "SUPER-1" {
+		t.Fatalf("proxy attribution = %+v, want token/SUPER-3/SUPER-1", got)
+	}
+}
+
+func TestRunFailsWhenGoalAttributionCannotBePersisted(t *testing.T) {
+	binder := &fakeBinder{base: "http://127.0.0.1:5555", failUpdate: true}
+	r, ag, _, _ := newRunnerForProxyTest(t, binder)
+	r.cfg.CurrentGoal = func(string, time.Time) (tasks.Task, bool, error) {
+		return tasks.Task{Key: "SUPER-1"}, true, nil
+	}
+
+	_, err := r.Run(context.Background(), ag, "manual", "alice-1", "")
+	if err == nil || !strings.Contains(err.Error(), "attribute proxy token") {
+		t.Fatalf("error = %v, want attribution failure", err)
+	}
+	if len(binder.revoked) != 1 || binder.revoked[0] != binder.minted[0] {
+		t.Fatalf("minted=%v revoked=%v", binder.minted, binder.revoked)
 	}
 }
 
@@ -1086,7 +1137,7 @@ func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T)
 	externalCwd := t.TempDir()
 	ag := agent.Agent{
 		Name: "alice", ImageRef: "img:latest", ImageDigest: "digest",
-		HarnessType: "stub", Cwd: externalCwd, Plugins: []string{"tasks"},
+		HarnessType: "stub", Cwd: externalCwd, Plugins: []string{"goal"},
 	}
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
@@ -1213,7 +1264,7 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n# Agent Goal\n\nA selected task is active work: complete it through its Native Task workflow. If it is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
+	want := "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n# Agent Goal\n\nA selected task is active work: complete it through its Native Task workflow. If it is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
 	if got := string(body); got != want {
 		t.Fatalf("prompt = %q, want %q", got, want)
 	}

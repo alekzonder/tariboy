@@ -127,7 +127,7 @@ func promptGet() registry.Command {
 				hasGoalRuntime := slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
 					return entry.Kind == "runtime" && entry.Runtime == "goal"
 				})
-				if hasGoalRuntime || slices.Contains(a.Plugins, "tasks") {
+				if hasGoalRuntime || slices.Contains(a.Plugins, "goal") {
 					if task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
 						return nil, err
 					} else if ok {
@@ -144,7 +144,7 @@ func promptGet() registry.Command {
 					return nil, err
 				}
 				if goal != "" && !hasGoalRuntime {
-					prompt += "\n\n# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n" + goal + "\n"
+					prompt += "\n\n# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n" + goal + "\n"
 				}
 				layers = template.Entries
 			} else {

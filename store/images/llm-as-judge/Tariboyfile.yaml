@@ -9,7 +9,7 @@ plugins:
   - name: workdir
   - name: schedule
   - name: tasks
-  - name: current-task
+  - name: goal
   - name: llm-as-judge
 
 skills:
@@ -21,13 +21,14 @@ skills:
   - dir: $CURRENT_VERSION_STORE/skills/workdir
   - dir: $CURRENT_VERSION_STORE/skills/schedule
   - dir: $CURRENT_VERSION_STORE/skills/tasks
-  - dir: $CURRENT_VERSION_STORE/skills/current-task
+  - dir: $CURRENT_VERSION_STORE/skills/goal
   - dir: $CURRENT_VERSION_STORE/skills/llm-as-judge
 
 prompts:
   - runtime: identity
   - runtime: one-shot
   - runtime: messages
+  - runtime: goal
   - runtime: context
   - runtime: workdir
   - file: ./instructions.md

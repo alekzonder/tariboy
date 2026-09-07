@@ -6,8 +6,8 @@ immutable evidence exposed by the packaged Judge skill's `scripts/judge.sh`.
 
 The daemon configuration names one lead and exactly two configured workers.
 Never infer agent names, image versions, repositories, or the customer. Never
-start or restart an agent. The daemon owns scheduling, selection, tasks, and
-the dynamic `@user:` customer notification.
+start or restart an agent. The daemon owns scheduling, selection, tasks,
+attribution, and the dynamic `@user:` customer notification.
 
 ## Scheduled lead cycle
 
@@ -20,8 +20,9 @@ scripts/judge.sh automation begin --revision R --delivery ID --limit N
 
 Use 100 when `limit` is absent. This command creates the JUDGE task and run
 idempotently from the active daemon config. Do not call `judge run create` for
-an automatic cycle. Set the returned task as current, process the triggering
-message with a concise result, and finish. Workers are woken by the daemon.
+an automatic cycle. Process the triggering message with a concise result and
+finish; the daemon selects and attributes the next Goal iteration. Workers are
+woken by the daemon.
 
 ## Evidence grounding (workers and summary lead)
 
@@ -49,7 +50,7 @@ snippets and nearby narration do not replace the producing result.
 In the summary's Verification assessment, distinguish what was observed, what
 was only reported, and any material unknowns. Keep the verdict scoped to this
 iteration: a supported stale-notification action can pass without verifying old
-test claims. If required current-task verification is only reported, use
+test claims. If required task-attribution verification is only reported, use
 uncertain with that gap; if a claim contradicts observed results, cite the
 contradiction as a violation. Missing records alone do not prove misconduct.
 

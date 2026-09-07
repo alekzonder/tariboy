@@ -79,8 +79,8 @@ cannot be rebuilt or edited.
 `tariboyd` carries it and installs or refreshes it when that daemon version
 is activated. Existing agents and pending assignments stay pinned to their
 previous digest until explicitly changed, even when the managed ref advances.
-It enables context, status, scripts, legacy current-task usage
-attribution, and native Tasks; its prompt also renders the selected Agent Goal.
+It enables context, status, scripts, Goal-based usage attribution, and native
+Tasks; its prompt also renders the selected Agent Goal.
 It tells new agents where their managed
 workdir is, even when they run in another CWD. Provider integrations remain
 opt-in.
