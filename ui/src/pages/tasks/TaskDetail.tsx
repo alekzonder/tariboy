@@ -320,7 +320,7 @@ export default function TaskDetail({
               <option value="oldest">Oldest first</option>
             </select>
           </label>
-          <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} onComment={onComment} onDirtyChange={setCommentDirty} />
+          <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} formFirst={commentOrder === "newest"} onComment={onComment} onDirtyChange={setCommentDirty} />
           <section className="task-history">
             <div className="task-section-title">History <span>{events.length}</span></div>
             <ol>

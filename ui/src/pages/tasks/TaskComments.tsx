@@ -11,12 +11,14 @@ export default function TaskComments({
   comments,
   waits,
   principals,
+  formFirst,
   onComment,
   onDirtyChange,
 }: {
   comments: TaskComment[]
   waits: TaskWait[]
   principals: TaskPrincipals | null
+  formFirst: boolean
   onDirtyChange: (dirty: boolean) => void
   onComment: (body: string, idempotencyKey: string) => Promise<void>
 }) {
@@ -46,6 +48,32 @@ export default function TaskComments({
     }
   }
 
+  const commentList = (
+    <div key="list" className="task-comment-list">
+      {comments.map((comment) => (
+        <article key={comment.id}>
+          <header><strong>{comment.author}</strong><time>{new Date(comment.created_at).toLocaleString()}</time></header>
+          <MarkdownContent>{comment.body}</MarkdownContent>
+        </article>
+      ))}
+    </div>
+  )
+  const commentForm = (
+    <form key="form" onSubmit={(event) => void submit(event)}>
+      <label>
+        Ask
+        <select aria-label="Ask" value={ask} onChange={(event) => setAsk(event.target.value)}>
+          <option value="">No explicit answer needed</option>
+          {choices.map((principal) => <option key={principal} value={principal}>{principal}</option>)}
+        </select>
+      </label>
+      <div><label htmlFor="task-comment">Comment</label>
+        <MarkdownEditor id="task-comment" placeholder="Comment" value={body} onChange={setBody} disabled={busy} />
+      </div>
+      <Button type="submit" disabled={busy || !body.trim()}>Send comment</Button>
+    </form>
+  )
+
   return (
     <section className="task-comments">
       <div className="task-section-title">Comments <span>{comments.length}</span></div>
@@ -54,27 +82,7 @@ export default function TaskComments({
           Waiting for {openWaits.map((wait) => wait.expected_principal).join(", ")}
         </div>
       )}
-      <div className="task-comment-list">
-        {comments.map((comment) => (
-          <article key={comment.id}>
-            <header><strong>{comment.author}</strong><time>{new Date(comment.created_at).toLocaleString()}</time></header>
-            <MarkdownContent>{comment.body}</MarkdownContent>
-          </article>
-        ))}
-      </div>
-      <form onSubmit={(event) => void submit(event)}>
-        <label>
-          Ask
-          <select aria-label="Ask" value={ask} onChange={(event) => setAsk(event.target.value)}>
-            <option value="">No explicit answer needed</option>
-            {choices.map((principal) => <option key={principal} value={principal}>{principal}</option>)}
-          </select>
-        </label>
-        <div><label htmlFor="task-comment">Comment</label>
-          <MarkdownEditor id="task-comment" placeholder="Comment" value={body} onChange={setBody} disabled={busy} />
-        </div>
-        <Button type="submit" disabled={busy || !body.trim()}>Send comment</Button>
-      </form>
+      {formFirst ? [commentForm, commentList] : [commentList, commentForm]}
     </section>
   )
 }

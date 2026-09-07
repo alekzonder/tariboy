@@ -386,9 +386,13 @@ describe("TasksWorkspace", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
 
     const comments = screen.getByText("Comments").closest("section")!
+    const commentList = comments.querySelector(".task-comment-list")!
+    const commentForm = comments.querySelector("form")!
     expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Newest")
+    expect(commentForm.compareDocumentPosition(commentList)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     await userEvent.selectOptions(screen.getByLabelText("Comment order"), "oldest")
     expect(within(comments).getAllByRole("article")[0]).toHaveTextContent("Oldest")
+    expect(commentList.compareDocumentPosition(commentForm)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
   it("keeps the latest task selected during a real-time refresh", async () => {
