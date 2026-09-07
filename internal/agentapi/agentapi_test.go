@@ -166,94 +166,16 @@ func newTestServer(t *testing.T, plugins []string) (*Server, *string, string) {
 	return s, &doneSet, ctxPath
 }
 
-func TestTaskCurrent(t *testing.T) {
-	var gotID string
-	var gotClear bool
-	s := NewServer(Deps{
-		Agent: "smoke", Cwd: "/w", ContextPath: filepath.Join(t.TempDir(), "CONTEXT.md"),
-		Plugins:          []string{"whoami", "loop", "messages", "current-task"},
-		CurrentIteration: func() string { return "iter-1" },
-		SetTask: func(id string, clear bool) (map[string]any, error) {
-			gotID, gotClear = id, clear
-			if clear {
-				return map[string]any{"task_id": "", "epic_id": "", "cleared": true}, nil
-			}
-			if id == "bad-1" {
-				return nil, errors.New("unknown task id")
-			}
-			return map[string]any{"task_id": id, "epic_id": "epic-1", "updated": 1}, nil
-		},
-	})
-	h := s.Handler()
-
-	post := func(payload string) (bool, map[string]any) {
-		rr := httptest.NewRecorder()
-		h.ServeHTTP(rr, httptest.NewRequest("POST", "/tools/task/current", bytes.NewBufferString(payload)))
-		return decode(t, rr.Body.Bytes())
-	}
-
-	// Tag a valid id -> passed through, result echoes task/epic.
-	ok, res := post(`{"id":"t-9"}`)
-	if !ok || res["task_id"] != "t-9" || res["epic_id"] != "epic-1" {
-		t.Fatalf("tag = %v", res)
-	}
-	if gotID != "t-9" || gotClear {
-		t.Fatalf("hook got id=%q clear=%v", gotID, gotClear)
-	}
-
-	// Clear -> clear=true forwarded.
-	ok, res = post(`{"clear":true}`)
-	if !ok || res["cleared"] != true {
-		t.Fatalf("clear = %v", res)
-	}
-	if !gotClear {
-		t.Fatalf("clear not forwarded")
-	}
-
-	// Missing id (and not clearing) -> user error, hook untouched.
-	gotID = "sentinel"
-	ok, errRes := post(`{}`)
-	if ok || errRes["code"] != "missing_id" {
-		t.Fatalf("missing id = %v", errRes)
-	}
-	if gotID != "sentinel" {
-		t.Fatalf("hook should not run on missing id")
-	}
-
-	// Unknown id -> hook error surfaces as task_failed.
-	ok, errRes = post(`{"id":"bad-1"}`)
-	if ok || errRes["code"] != "task_failed" {
-		t.Fatalf("unknown id = %v", errRes)
-	}
-}
-
-func TestTaskCurrentUnavailable(t *testing.T) {
-	s := NewServer(Deps{Agent: "a", ContextPath: filepath.Join(t.TempDir(), "CONTEXT.md"),
-		Plugins: []string{"whoami", "loop", "messages", "current-task"}})
-	rr := httptest.NewRecorder()
-	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/task/current", bytes.NewBufferString(`{"id":"x"}`)))
-	ok, errRes := decode(t, rr.Body.Bytes())
-	if ok || errRes["code"] != "unavailable" {
-		t.Fatalf("want unavailable, got ok=%v %v", ok, errRes)
-	}
-}
-
-func TestTaskCurrentGatedByPlugin(t *testing.T) {
-	// current-task plugin absent -> 404 plugin_disabled, hook never consulted.
+func TestTaskCurrentRouteIsRemoved(t *testing.T) {
 	s := NewServer(Deps{Agent: "smoke", ContextPath: filepath.Join(t.TempDir(), "CONTEXT.md"),
-		Plugins: []string{"whoami", "loop", "messages"},
-		SetTask: func(string, bool) (map[string]any, error) {
-			t.Fatalf("SetTask must not run when plugin disabled")
-			return nil, nil
-		},
-	})
+		Plugins: []string{"whoami", "loop", "messages", "current-task"}})
 	rr := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/task/current", bytes.NewBufferString(`{"id":"x"}`)))
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rr.Code)
 	}
 	ok, e := decode(t, rr.Body.Bytes())
-	if ok || e["code"] != "plugin_disabled" {
+	if ok || e["code"] != "not_found" {
 		t.Fatalf("error = %v", e)
 	}
 }

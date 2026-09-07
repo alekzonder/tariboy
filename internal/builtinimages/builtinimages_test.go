@@ -20,7 +20,7 @@ func TestShippedImagesOrderActionableRuntimes(t *testing.T) {
 			{Runtime: "one-shot"}, {Runtime: "messages"}, {Runtime: "goal"},
 		},
 		filepath.Join(root, "store", "images", "llm-as-judge"): {
-			{Runtime: "one-shot"}, {Runtime: "messages"},
+			{Runtime: "one-shot"}, {Runtime: "messages"}, {Runtime: "goal"},
 		},
 	} {
 		t.Run(filepath.Base(path), func(t *testing.T) {

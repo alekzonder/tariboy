@@ -1,0 +1,31 @@
+---
+title: goal
+description: Receive the daemon-selected Native Task and automatic AI usage attribution.
+sidebar:
+  label: goal
+  icon: target
+---
+
+`goal` is an instruction-only plugin included in `basic:latest`. It adds no
+agent route or command.
+
+Before the harness starts, `tariboyd` reads the selected Goal once and stamps
+the iteration's AI-proxy lease with its task key and top-level root key. Every
+proxied request in that iteration therefore records `task_id` and `epic_id`
+without an agent command. An iteration without a selected Goal remains
+unattributed.
+
+Package the Goal skill and render the runtime value explicitly:
+
+```yaml Tariboyfile.yaml
+plugins:
+  - name: goal
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/goal
+prompts:
+  - runtime: goal
+```
+
+The Goal skill explains ownership and attribution. Use the separate
+[`tasks`](/docs/plugins/built-in/tasks) capability and skill to read or mutate
+the authoritative Native Task.

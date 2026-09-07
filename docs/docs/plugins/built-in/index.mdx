@@ -21,10 +21,10 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | [`context`](/docs/plugins/built-in/context) | Optional | Yes | `scripts/context.sh get/set` | Per-agent `CONTEXT.md` |
 | [`status`](/docs/plugins/built-in/status) | Optional | Yes | `scripts/status.sh [set]` | Agent row and audit timeline |
 | [`workdir`](/docs/plugins/built-in/workdir) | Instruction-only | Yes | Prompt only | None |
+| [`goal`](/docs/plugins/built-in/goal) | Instruction-only | Yes | Prompt only | AI usage attribution on the iteration lease |
 | [`schedule`](/docs/plugins/built-in/schedule) | Optional | No | `scripts/schedule.sh …` | Schedules and resulting bus messages |
 | [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |
-| [`current-task`](/docs/plugins/built-in/current-task) | Optional | Yes | `scripts/current_task.sh` | Current iteration usage attribution |
 | [`llm-as-judge`](/docs/plugins/built-in/llm-as-judge) | Optional | No | `scripts/judge.sh …` | Judge runs, evidence, analyses, summaries |
 | [`tasks`](/docs/plugins/built-in/tasks) | Optional | Yes | Bare `tasks` command | Native Tasks and workflow state in SQLite |
 
@@ -67,7 +67,7 @@ prompt files and runtime placeholders remain separate from the plugin list.
 Declaring `context` enables its route but does not package its skill or add the
 live context text. List the Store skill and `runtime: context` explicitly when
 the agent needs both. The same transparency rule applies to instruction-only
-`workdir`.
+`workdir` and `goal`.
 :::
 
 ## The default image
@@ -75,7 +75,7 @@ the agent needs both. The same transparency rule applies to instruction-only
 The daemon-managed `basic:latest` image declares nine built-ins:
 
 ```text
-whoami, loop, messages, context, status, workdir, scripts, current-task, tasks
+whoami, loop, messages, context, status, workdir, scripts, goal, tasks
 ```
 
 It deliberately excludes `schedule`, `image-creator`, and

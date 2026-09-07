@@ -264,7 +264,7 @@ type ProxyBinder interface {
 	RevokeIteration(iteration string)
 	// UpdateTask stamps native task/root attribution onto the live token(s) for
 	// key (a token string or iteration id); empty task/root clear it. Returns
-	// the number of tokens updated. Used by the tools task-current handler.
+	// the number of tokens updated. Iteration preparation uses it before launch.
 	UpdateTask(key, taskID, epicID string) int
 }
 
@@ -359,6 +359,7 @@ type RunnerConfig struct {
 	Bus          *bus.Bus
 	Proxy        ProxyBinder
 	CurrentGoal  func(string, time.Time) (tasks.Task, bool, error)
+	Tasks        nativeTaskReader
 	// HasTmuxSession reports whether an interactive agent's tmux session is already
 	// alive. Injectable so tests avoid a real tmux. Defaults to tmuxHasSession.
 	HasTmuxSession func(session string) bool
@@ -717,6 +718,13 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 	if iteration.PromptTemplateSHA256 != "" {
 		imageSchemaVersion = 2
 	}
+	currentGoal, hasCurrentGoal := tasks.Task{}, false
+	if r.cfg.CurrentGoal != nil && !bare {
+		currentGoal, hasCurrentGoal, err = r.cfg.CurrentGoal(ag.Name, r.cfg.Clock().UTC())
+		if err != nil {
+			return fail(fmt.Errorf("read current agent goal: %w", err))
+		}
+	}
 
 	// Assemble and write the prompt.
 	prompt := ""
@@ -763,13 +771,9 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			hasGoalRuntime := slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
 				return entry.Kind == "runtime" && entry.Runtime == "goal"
 			})
-			if r.cfg.CurrentGoal != nil && (hasGoalRuntime || slices.Contains(ag.Plugins, "tasks")) {
-				task, ok, err := r.cfg.CurrentGoal(ag.Name, r.cfg.Clock().UTC())
-				if err != nil {
-					return fail(fmt.Errorf("read current agent goal: %w", err))
-				}
-				if ok {
-					goal = FormatRuntimeGoal(task)
+			if hasGoalRuntime || slices.Contains(ag.Plugins, "goal") {
+				if hasCurrentGoal {
+					goal = FormatRuntimeGoal(currentGoal)
 				} else {
 					goal = FormatRuntimeGoalGuidance()
 				}
@@ -784,7 +788,7 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 				return fail(err)
 			}
 			if goal != "" && !hasGoalRuntime {
-				prompt += "\n\n# [runtime: goal]\n\nUse the `tasks` skill for this runtime data.\n\n" + goal + "\n"
+				prompt += "\n\n# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n" + goal + "\n"
 			}
 		} else {
 			imagePrompt, err := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT.md"))
@@ -862,11 +866,27 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 	proxyEnabled := r.cfg.Proxy != nil
 	proxyURL, proxyToken := "", ""
 	if proxyEnabled {
+		taskID, epicID := "", ""
+		if hasCurrentGoal {
+			taskID, epicID = currentGoal.Key, currentGoal.Key
+			if currentGoal.ParentKey != "" {
+				taskID, epicID, err = resolveNativeTaskAttribution(ctx, r.cfg.Tasks, ag.Name, currentGoal.Key)
+				if err != nil {
+					return fail(fmt.Errorf("resolve current agent goal attribution: %w", err))
+				}
+			}
+		}
 		name, tag := imageNameTag(ag.ImageRef)
 		tok, mErr := r.cfg.Proxy.MintToken(ag.Name, iterationID, name, tag, ag.ImageDigest)
 		if mErr != nil {
 			// Nothing was minted, so there is no token to revoke.
 			return fail(fmt.Errorf("proxy token unavailable, refusing to run without proxy: %w", mErr))
+		}
+		if taskID != "" {
+			if r.cfg.Proxy.UpdateTask(tok, taskID, epicID) != 1 {
+				r.cfg.Proxy.RevokeToken(tok)
+				return fail(fmt.Errorf("attribute proxy token to current agent goal"))
+			}
 		}
 		// A token exists from here on. If we abort below (ProxyBaseURL empty) it
 		// must still be revoked even though prepare is about to return an error;

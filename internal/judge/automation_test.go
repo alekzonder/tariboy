@@ -38,7 +38,7 @@ func validAutomationValidator() AutomationValidator {
 		AgentExists: func(_ context.Context, name string) bool { return agents[name] },
 		ImagePlugins: func(ref string) ([]string, error) {
 			if ref == "quality-gate:7" {
-				return []string{"llm-as-judge", "schedule", "tasks", "current-task", "messages", "loop"}, nil
+				return []string{"llm-as-judge", "schedule", "tasks", "goal", "messages", "loop"}, nil
 			}
 			if ref == "maker:11" || ref == "maker:12" {
 				return nil, nil

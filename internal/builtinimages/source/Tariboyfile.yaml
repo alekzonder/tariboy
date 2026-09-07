@@ -7,7 +7,7 @@ plugins:
   - name: status
   - name: workdir
   - name: scripts
-  - name: current-task
+  - name: goal
   - name: tasks
 skills:
   - dir: $CURRENT_VERSION_STORE/skills/whoami
@@ -17,7 +17,7 @@ skills:
   - dir: $CURRENT_VERSION_STORE/skills/status
   - dir: $CURRENT_VERSION_STORE/skills/workdir
   - dir: $CURRENT_VERSION_STORE/skills/scripts
-  - dir: $CURRENT_VERSION_STORE/skills/current-task
+  - dir: $CURRENT_VERSION_STORE/skills/goal
   - dir: $CURRENT_VERSION_STORE/skills/tasks
 prompts:
   - runtime: identity

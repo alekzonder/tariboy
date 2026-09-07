@@ -257,9 +257,9 @@ func (v AutomationValidator) Validate(ctx context.Context, config AutomationConf
 			add("/judge/image_ref", "image does not exist")
 		} else {
 			have := set(plugins...)
-			for _, required := range []string{"llm-as-judge", "schedule", "tasks", "current-task", "messages", "loop"} {
+			for _, required := range []string{"llm-as-judge", "schedule", "tasks", "goal", "messages", "loop"} {
 				if !have[required] {
-					add("/judge/image_ref", "image lacks "+required+" capability")
+					add("/judge/image_ref", "image lacks required plugin "+required)
 					break
 				}
 			}

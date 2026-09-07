@@ -47,7 +47,7 @@ func TestGenerateBuildsCanonicalBasicBundle(t *testing.T) {
 	for _, plugin := range manifest.Plugins {
 		plugins[plugin.Name] = true
 	}
-	for _, required := range []string{"tasks", "current-task", "workdir"} {
+	for _, required := range []string{"tasks", "goal", "workdir"} {
 		if !plugins[required] {
 			t.Errorf("basic image missing %q: %#v", required, manifest.Plugins)
 		}
@@ -66,7 +66,7 @@ func TestGenerateBuildsCanonicalBasicBundle(t *testing.T) {
 			t.Errorf("basic image missing packaged skill %q: %#v", required, manifest.Skills)
 		}
 	}
-	for _, required := range []string{"whoami", "loop", "messages", "context", "status", "workdir", "scripts", "current-task", "tasks"} {
+	for _, required := range []string{"whoami", "loop", "messages", "context", "status", "workdir", "scripts", "goal", "tasks"} {
 		if !skills[required] {
 			t.Errorf("basic image capability %q is not packaged as a skill: %#v", required, manifest.Skills)
 		}
@@ -84,7 +84,7 @@ func TestGenerateBuildsCanonicalBasicBundle(t *testing.T) {
 			t.Errorf("basic template retains migrated prompt fragment %q", entry.Source)
 		}
 	}
-	for _, required := range []string{"identity", "messages", "context", "workdir", "user-prompt", "one-shot"} {
+	for _, required := range []string{"identity", "messages", "goal", "context", "workdir", "user-prompt", "one-shot"} {
 		if !runtimes[required] {
 			t.Errorf("basic template missing runtime %q: %#v", required, template.Entries)
 		}

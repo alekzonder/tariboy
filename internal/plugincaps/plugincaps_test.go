@@ -362,25 +362,20 @@ func TestTasksPromptDistinguishesFlexibleAndWorkflowQuestions(t *testing.T) {
 	}
 }
 
-func TestCurrentTaskCapabilityUsesNativeTasksContract(t *testing.T) {
-	resolved, err := Resolve([]string{"current-task"})
+func TestGoalIsInstructionOnlyAndCurrentTaskIsRemoved(t *testing.T) {
+	if _, err := ValidateExplicit([]string{"goal"}, nil); err != nil {
+		t.Fatalf("goal plugin validation: %v", err)
+	}
+	if _, err := ValidateExplicit([]string{"current-task"}, nil); err == nil {
+		t.Fatal("current-task plugin still validates")
+	}
+	body, err := storeassets.ReadBundled("skills/goal/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var body string
-	for _, fragment := range BodyFragments(resolved) {
-		if fragment.Plugin == "current-task" {
-			body = fragment.Body
-			break
+	for _, want := range []string{"# Goal", "automatically attributes AI usage", "tasks"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("goal skill missing %q:\n%s", want, body)
 		}
-	}
-	for _, want := range []string{"Current task", "scripts/current_task.sh KEY", "--clear"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("current-task prompt missing %q:\n%s", want, body)
-		}
-	}
-	retired := "be" + "ads"
-	if strings.Contains(strings.ToLower(body), retired) || strings.Contains(body, "bd ready") {
-		t.Fatalf("current-task prompt still teaches a retired capability:\n%s", body)
 	}
 }

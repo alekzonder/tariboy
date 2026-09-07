@@ -90,7 +90,7 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 		"workdir": values.Workdir,
 	}
 	runtimeSkills := map[string]string{
-		"identity": "whoami", "goal": "tasks", "workdir": "workdir", "context": "context",
+		"identity": "whoami", "goal": "goal", "workdir": "workdir", "context": "context",
 		"messages": "messages", "awaiting-replies": "messages",
 	}
 	root, err := filepath.Abs(imageDir)

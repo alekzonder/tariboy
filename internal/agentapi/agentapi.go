@@ -39,13 +39,6 @@ type Deps struct {
 	// {message, updated}. Gated by the `status` plugin. Nil yields unavailable.
 	SetStatus func(message string) (map[string]any, error)
 
-	// SetTask stamps the calling agent's current iteration with a Native Tasks key
-	// and its top-level root (clear=true drops the tags). The daemon resolves both
-	// as the current agent and updates the live proxy token. An unknown or
-	// inaccessible key leaves attribution unchanged. Nil hook yields
-	// unavailable. Backs the current-task skill (epic dev-t-3e1 §1).
-	SetTask func(id string, clear bool) (map[string]any, error)
-
 	// Bus surface (messages is CORE; nil hooks yield bus_unavailable).
 	Publish           func(bus.Message) (bus.Message, error)
 	Subscribe         func(channel string, matcher bus.Matcher, typeFilter []string) (bus.Subscription, error)
@@ -219,7 +212,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /tools/script/cancel", s.gated("scripts", s.scriptCancel))
 	mux.HandleFunc("POST /tools/script/rm", s.gated("scripts", s.scriptRemove))
 	mux.HandleFunc("POST /tools/image/build", s.gated("image-creator", s.imageBuild))
-	mux.HandleFunc("POST /tools/task/current", s.gated("current-task", s.taskCurrent))
 	mux.HandleFunc("POST /tools/tasks/{action}", s.gated("tasks", s.nativeTaskAction))
 	mux.HandleFunc("POST /tools/judge/action/{action...}", s.gated("llm-as-judge", s.judgeAction))
 
@@ -331,34 +323,6 @@ func (s *Server) loopControl(w http.ResponseWriter, r *http.Request) {
 	res, err := s.d.LoopControl(body.Action)
 	if err != nil {
 		api.WriteErr(w, http.StatusBadRequest, "loop_failed", err.Error())
-		return
-	}
-	api.WriteOK(w, res)
-}
-
-// taskCurrent stamps the current iteration with a native task/root pair (or
-// clears it with --clear). The daemon-wired SetTask hook validates the key and updates the
-// live proxy token; an unknown id is a user error that leaves attribution as-is.
-func (s *Server) taskCurrent(w http.ResponseWriter, r *http.Request) {
-	if s.d.SetTask == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "unavailable", "task attribution is not available")
-		return
-	}
-	var body struct {
-		ID    string `json:"id"`
-		Clear bool   `json:"clear"`
-	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
-		return
-	}
-	if !body.Clear && strings.TrimSpace(body.ID) == "" {
-		api.WriteErr(w, http.StatusBadRequest, "missing_id", "id is required (or pass --clear)")
-		return
-	}
-	res, err := s.d.SetTask(strings.TrimSpace(body.ID), body.Clear)
-	if err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "task_failed", err.Error())
 		return
 	}
 	api.WriteOK(w, res)

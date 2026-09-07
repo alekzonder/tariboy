@@ -10,14 +10,10 @@ import (
 	"time"
 )
 
-// TestTaskCurrentTagsProxiedRows is the integration proof for the current-task
-// current` chain (epic dev-t-3e1 §1): it drives real proxied requests through
-// the proxy's forward+persist pipeline and asserts that the ingested ai_requests
-// row carries task_id/epic_id exactly per the current-task tag on the live token.
-// Native Tasks validation and root resolution are covered in internal/loop; this
-// test covers the proxy half of the manager's SetTask chain: untagged, tagged,
-// and cleared requests.
-func TestTaskCurrentTagsProxiedRows(t *testing.T) {
+// TestTaskAttributionTagsProxiedRows drives real proxied requests through the
+// forward-and-persist pipeline. Native Tasks validation and root resolution are
+// covered in internal/loop; this test covers the proxy token update itself.
+func TestTaskAttributionTagsProxiedRows(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5,` +
