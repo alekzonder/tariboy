@@ -222,8 +222,10 @@ links, lists, checklists, code, and tables are supported. Unsupported syntax
 keeps the editor in source mode rather than being silently converted or lost.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
-editor documents are not stored. Dependency license notices are included in
-`ui/public/THIRD-PARTY-TIPTAP.txt`, copied into the Desktop assets by Vite.
+editor documents are not stored. Vite's `build.license` generates bundled
+JavaScript dependency license texts and copyright notices in
+`desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
+asset is packaged with the app and is not committed.
 Existing typed mentions, explicit questions,
 and answer-wait semantics remain daemon-owned.
 
