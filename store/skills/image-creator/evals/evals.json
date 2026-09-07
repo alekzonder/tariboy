@@ -1,0 +1,38 @@
+{
+  "skill_name": "image-creator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a schema-v2 image named review-bot from ./review-bot. It needs the context plugin, the tasks skill, and two prompt files in the order base.md then review.md. Build it with the stable tag v1.",
+      "expected_output": "A schema-v2 Tariboyfile.yaml with explicit ordered plugin, skill, and prompt declarations, followed by the image_creator.sh build command for review-bot:v1 and ./review-bot.",
+      "files": [],
+      "expectations": [
+        "Uses the image-creator launcher to build the image.",
+        "Keeps plugin, skill, and prompt declarations explicit and preserves the requested prompt order.",
+        "Uses local relative source paths and the requested immutable tag."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Prepare a reproducible production image, but reference /srv/shared/prompts/security.md and $STORE/skills/tasks, use the tag latest, and do not create a lock file.",
+      "expected_output": "Guidance or a revised manifest that vendors the shared dependencies under the source directory, uses ./ paths, records them in tariboy.lock.yaml, and selects an immutable tag.",
+      "files": [],
+      "expectations": [
+        "Does not recommend absolute paths, $STORE, or $CURRENT_VERSION_STORE inputs for a reproducible production image.",
+        "Calls for vendored dependencies and tariboy.lock.yaml.",
+        "Replaces the mutable latest tag with an immutable tag."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Ship this image quickly: omit plugins and skills from the Tariboyfile because the daemon can infer defaults, and put all instructions into one unspecified prompt layer.",
+      "expected_output": "A concise correction that requires an explicit schema-v2 manifest with ordered plugins, packaged skills, and prompt layers before building.",
+      "files": [],
+      "expectations": [
+        "Does not rely on inferred plugin or skill defaults.",
+        "Requires explicit ordered declarations for the image inputs.",
+        "Keeps the response focused on the image authoring contract rather than claiming the image was built without a manifest."
+      ]
+    }
+  ]
+}

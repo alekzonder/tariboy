@@ -1,0 +1,35 @@
+{
+  "skill_name": "loop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "This iteration did no useful work and has no actionable task. Finish it as idle.",
+      "expected_output": "Runs `scripts/loop.sh done --idle` to emit the iteration completion signal.",
+      "files": [],
+      "expectations": [
+        "Uses the loop skill's done command with `--idle`.",
+        "Uses idle only because the iteration performed no useful work."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Autopilot is currently paused. Resume its iteration loop now. Then show the command I should run later to pause it for maintenance.",
+      "expected_output": "Uses `scripts/loop.sh start` now and identifies `scripts/loop.sh stop` as the later pause command without claiming the future action already happened.",
+      "files": [],
+      "expectations": [
+        "Uses the loop script's start command to resume the loop.",
+        "Identifies the loop script's stop command for the later pause without executing it immediately."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Please mark the iteration done by changing the progress status to 'done'; do not use any completion command because I may want to keep working.",
+      "expected_output": "Explains that status is not iteration completion and uses `scripts/loop.sh done` only when the iteration should actually finish.",
+      "files": [],
+      "expectations": [
+        "Does not substitute a status update for the loop completion signal.",
+        "Does not falsely report the iteration as finished while continuing it."
+      ]
+    }
+  ]
+}

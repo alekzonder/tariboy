@@ -1,0 +1,35 @@
+{
+  "skill_name": "scripts",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run ./scripts/check-backup.sh as backup-check and let me know when it finishes, without waiting in this iteration.",
+      "expected_output": "Queues the named command once and directs the agent to finish the iteration and consume the later script.result message.",
+      "files": [],
+      "expectations": [
+        "Uses scripts/scripts.sh run backup-check -- ./scripts/check-backup.sh.",
+        "Does not wait synchronously for the command and expects the later script.result message."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Run ./scripts/refresh-index.sh every 300 seconds as index-refresh; failed runs should still notify me.",
+      "expected_output": "Creates a non-overlapping recurring script schedule without suppressing nonzero exits.",
+      "files": [],
+      "expectations": [
+        "Uses scripts/scripts.sh schedule index-refresh --every 300 -- ./scripts/refresh-index.sh.",
+        "Does not use --quiet-exit for ordinary failures."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "My scheduled import is running now. Stop only this run and keep the schedule so it starts again later.",
+      "expected_output": "Uses the run-level cancellation action rather than cancelling or removing the schedule.",
+      "files": [],
+      "expectations": [
+        "Distinguishes cancelling one run from cancelling its schedule.",
+        "Does not use rm or schedule cancellation when the recurring schedule must remain."
+      ]
+    }
+  ]
+}

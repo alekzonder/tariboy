@@ -1,0 +1,35 @@
+{
+  "skill_name": "schedule",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Assume the current time is 2026-09-07T09:00:00Z. Wake me up once at 2026-09-10T09:00:00Z to check the deployment.",
+      "expected_output": "Creates a one-shot schedule for the specified time.",
+      "files": [],
+      "expectations": [
+        "Uses scripts/schedule.sh add with kind oneshot.",
+        "Passes the requested timestamp as the schedule specification."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Every weekday at 09:30, publish a reminder to the standup channel instead of starting an iteration.",
+      "expected_output": "Creates a cron schedule with the weekday 09:30 expression and the standup channel.",
+      "files": [],
+      "expectations": [
+        "Uses kind cron with a valid weekday 09:30 cron expression.",
+        "Uses --channel standup so the firing publishes there."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Delete schedule sched-17, but do not cancel it because I might need it again later.",
+      "expected_output": "Explains that the documented schedule lifecycle action is cancellation and asks for confirmation or uses cancel only when authorized.",
+      "files": [],
+      "expectations": [
+        "Does not invent an unsupported delete command.",
+        "Identifies scripts/schedule.sh cancel sched-17 as the available removal action."
+      ]
+    }
+  ]
+}

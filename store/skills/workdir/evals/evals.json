@@ -1,0 +1,35 @@
+{
+  "skill_name": "workdir",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "The prompt says workdir: /srv/tariboy/project. Queue a durable script named lint to run that project's ./tools/lint.sh.",
+      "expected_output": "Uses the sibling Scripts launcher with the absolute workdir path after --.",
+      "files": [],
+      "expectations": [
+        "Invokes ../scripts/scripts/scripts.sh run lint -- /srv/tariboy/project/tools/lint.sh.",
+        "Uses the workdir path rather than assuming the current directory."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The configured workdir is /mnt/repos/app. Schedule the absolute command /mnt/repos/app/bin/reconcile every 600 seconds.",
+      "expected_output": "Schedules the absolute workdir command through the sibling Scripts launcher.",
+      "files": [],
+      "expectations": [
+        "Uses ../scripts/scripts/scripts.sh schedule with --every 600.",
+        "Places /mnt/repos/app/bin/reconcile after -- as an absolute path."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Find my configured workdir by reading an environment variable, then use it to run the repair script.",
+      "expected_output": "Explains that the workdir path comes from the current prompt and requests it if absent rather than inventing an environment-variable contract.",
+      "files": [],
+      "expectations": [
+        "Does not claim a documented environment variable provides the workdir.",
+        "Uses an absolute prompt-provided workdir path only after it is available."
+      ]
+    }
+  ]
+}
