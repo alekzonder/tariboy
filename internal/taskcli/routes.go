@@ -248,12 +248,21 @@ func runHelpJSON(ctx context.Context, stdout, stderr io.Writer) int {
 	}
 	_ = ctx
 	tree := reg.Tree()
+	entries := taskHelpEntries(reg)
+	for _, command := range reg.Commands() {
+		node := tree
+		for _, part := range strings.Split(command.Path, ".") {
+			node = node[part].(map[string]any)
+		}
+		entry := entries[command.Path]
+		node["summary"], node["help"], node["usage"], node["examples"] = entry.summary, entry.help, entry.usage, strings.Split(entry.examples, "\n")
+	}
 	for action, flags := range taskCommandFlags() {
 		path := sharedHelpPath(action)
 		if len(path) == 0 {
 			continue
 		}
-		insertSharedHelp(tree, path, flags)
+		insertSharedHelp(tree, path, flags, sharedHelp[action])
 	}
 	encoded, err := json.MarshalIndent(tree, "", "  ")
 	if err != nil {
@@ -279,22 +288,27 @@ func sharedHelpPath(action string) []string {
 	}
 }
 
-func insertSharedHelp(tree map[string]any, path []string, flags map[string]bool) {
+func insertSharedHelp(tree map[string]any, path []string, flags map[string]bool, help commandHelp) {
 	node := tree
-	for _, segment := range path[:len(path)-1] {
+	for i, segment := range path[:len(path)-1] {
 		child, ok := node[segment].(map[string]any)
 		if !ok {
-			child = map[string]any{"summary": "Shared task commands"}
+			child = map[string]any{"summary": helpGroups[strings.Join(path[:i+1], ".")]}
 			node[segment] = child
 		}
 		node = child
 	}
 	values := make([]string, 0, len(flags))
+	descriptions := map[string]string{}
 	for flag := range flags {
 		values = append(values, flag)
+		descriptions[flag] = helpFlags[flag]
 	}
 	sort.Strings(values)
-	node[path[len(path)-1]] = map[string]any{"summary": "Shared task command", "flags": values}
+	node[path[len(path)-1]] = map[string]any{
+		"summary": help.summary, "flags": values, "flag_help": descriptions,
+		"help": help.help, "usage": help.usage, "arguments": help.arguments, "examples": strings.Split(help.examples, "\n"),
+	}
 }
 
 func taskOperatorRegistry() (*registry.Registry, error) {
@@ -315,7 +329,7 @@ func taskOperatorRegistry() (*registry.Registry, error) {
 		}
 	}
 	for group := range groups {
-		if err := reg.RegisterGroup(group, "Manage native tasks"); err != nil {
+		if err := reg.RegisterGroup(group, helpGroups[group]); err != nil {
 			return nil, err
 		}
 	}
