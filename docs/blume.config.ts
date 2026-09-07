@@ -8,6 +8,11 @@ export default defineConfig({
     base: "/tariboy",
     site: "https://alekzonder.github.io",
   },
+  github: {
+    owner: "alekzonder",
+    repo: "tariboy",
+    dir: "docs",
+  },
   navigation: {
     sidebar: {
       display: "group",
