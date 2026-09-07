@@ -126,7 +126,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.50.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.51.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -137,7 +137,7 @@ Do not disable Gatekeeper globally, change system-wide `spctl` policy, or remove
 quarantine recursively from Applications. Developer ID signing, notarization,
 and signed updater artifacts are later release work.
 
-The internal alpha deliberately enables Tauri WebView developer tools in its
+The alpha deliberately enables Tauri WebView developer tools in its
 release build for local diagnosis. DevTools exposes the current WebView state
 to the person operating the local Desktop session; it does not relax daemon
 loopback binding, bearer-token requirements, CORS, or SSH trust boundaries.

@@ -43,6 +43,10 @@ Install only the toolchains needed for the area you are changing:
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
 
+Coding agents must run all shell commands through a Bash login shell
+(`bash -lc 'COMMAND'`) so the account's login profile and exported environment
+are loaded. Keep credentials in the environment; never print their values.
+
 Load the Rust environment before Cargo or desktop commands:
 
 ```bash
@@ -323,6 +327,19 @@ npm run test:workspace-browser
 npm run build:store
 ```
 
+For interactive visual checks of React-only changes, start the production UI
+and its real API together:
+
+```bash
+make ui-dev
+```
+
+The target prints the browser URL, builds and starts a daemon with temporary
+isolated data and runtime directories on `127.0.0.1:4176`, and serves the UI on
+`127.0.0.1:4175`. Press Ctrl-C to stop both processes and remove the temporary
+daemon state. Use the native Desktop gates only when the change depends on the
+Tauri host, WebView behavior, packaging, or generated Desktop assets.
+
 Use the build target affected by the change during iteration. Run both when
 shared UI code is consumed by both applications. `npm run build:store` is a
 build, not a check: it regenerates the committed `internal/storeui/dist` bundle
@@ -445,7 +462,7 @@ make desktop PLATFORM=linux  # .deb and .AppImage
 The preflight rejects unknown platform values, unsupported host architectures,
 and a platform that does not match the current host before compiling payloads.
 
-`make desktop-alpha` packages and verifies the internal alpha; publication is a
+`make desktop-alpha` packages and verifies the alpha; publication is a
 separate manual action.
 
 The tray action **Install/Update CLI** owns the local five-file payload and
@@ -459,6 +476,13 @@ this flow require Rust installer tests plus the daemon restart-handoff tests;
 never exercise it against the user's live daemon.
 
 ### Documentation
+
+The documentation homepage uses `docs/pages/index.astro` for Blume's full-width
+layout and page styles. Its content stays in `docs/docs/index.mdx`, rendered
+through `BlumePage`, so search and agent-facing Markdown share the same source.
+Other documentation pages keep the standard sidebar layout. Use site-root paths
+such as `/quickstart` in Markdown and Card links; Blume adds the deployment
+base to produce `/tariboy/quickstart`. Raw HTML anchors are not rewritten.
 
 Install the dependencies once, as for the UI:
 

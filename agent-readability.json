@@ -16,5 +16,6 @@
     "search": true,
     "ai-input": true,
     "ai-train": true
-  }
+  },
+  "repository": "https://github.com/alekzonder/tariboy"
 }

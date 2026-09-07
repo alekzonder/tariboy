@@ -141,18 +141,31 @@ component with `scope_agent` fixed to that agent. The layout is Tree-first:
   customer-authored questions do not add an agent dot. Both indicators clear
   when the notification is read or dismissed.
 
-Clicking a task opens a fullscreen dialog with its description, priority,
-assignment, status, block reason, pull request URL, comments, and open answer
-requests. **Back** or **Close** returns to the tree with its expansion and
-scroll position preserved. Unsaved description or comment drafts require
-confirmation before being discarded. The list has no reserved detail sidebar
-or detail resize handle.
+Clicking a task opens a right-side sheet over the tree with its description,
+priority, assignment, status, block reason, pull request URL, comments, and open
+answer requests. It starts at half the viewport width; drag its left separator
+or use its keyboard controls to resize it, and the chosen width survives reloads.
+**Back**, **Close**, Escape, or a backdrop click returns to the still-mounted
+tree with its expansion and scroll position preserved. Unsaved task, comment,
+or relation drafts require confirmation before being discarded.
 
 Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.
 Switch to **Source Markdown** to edit the source directly; content the visual editor
 cannot represent stays in source mode so unsupported syntax is preserved.
 Both modes save the same Markdown strings used by the API and `ttasks`.
+
+**Send files** beside Description and Comment uploads selected files to the
+task's server and appends their absolute paths to that editor's current draft.
+It works without an assigned agent, including in Agent Tasks. Uploading does
+not save the task or send the comment; use **Save task** or **Send comment**.
+If a later file fails, paths for files already uploaded are kept in the draft.
+
+Files are stored on disk under `$TARIBOY_BASE_DIR/files` (normally
+`~/.tariboy/files`), with a unique directory per upload so matching names never
+overwrite earlier files. Each file is limited to 16 MiB. Files remain after a
+draft is discarded or a task is closed; remove unneeded files manually on the
+server when their paths are no longer needed.
 
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
@@ -216,6 +229,36 @@ for the complete boundary.
 
 Every agent mutation is identity-bound by its per-agent socket. Body fields
 cannot forge the author, customer, or acting principal.
+
+### Command help
+
+`ttasks` and `tariboy-tasks` provide the same local help. Run either without
+arguments or with `--help` / `-h` for the command list and mode descriptions.
+Every command and nested group accepts those help flags; a bare group lists
+its subcommands. Command help explains its purpose, syntax, arguments, flags,
+required fields, and examples:
+
+```bash
+ttasks --help
+ttasks create --help
+ttasks ask -h
+ttasks work complete --help
+ttasks queue pool --help
+tariboy-tasks notifications read --help
+ttasks --help-json
+```
+
+Help never executes the command, resolves a daemon socket, or requires a
+running daemon. It lists both modes and labels operator-only administration
+and agent-only workflow operations; showing help does not grant execution
+access. `ask --help` describes both the flexible `KEY PRINCIPAL TEXT` form and
+the workflow `ASSIGNMENT --question ...` form, including its required context,
+blocking scope, revisions, and retry key.
+
+Root `--help-json` returns the complete command tree with descriptions and
+examples. Shared commands retain their `flags` name array and add `flag_help`
+descriptions, `usage`, `arguments`, `help`, and `examples`. `--json` controls
+command results; use `--help-json` for machine-readable documentation.
 
 Write task descriptions and comments as valid Markdown: use real newlines,
 blank lines before lists, closed code fences, and no raw HTML. Typed mentions

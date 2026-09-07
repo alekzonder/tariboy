@@ -5,55 +5,184 @@
 # Tariboy
 Source: https://alekzonder.github.io/tariboy
 
-# The control plane for autonomous coding agents
+<section className="hero">
+  <p className="eyebrow">The control plane for autonomous coding agents</p>
+  <h1>From one agent<br /> to a team.</h1>
+  <p className="hero-description">Define reusable images, work with coding agents directly, and let Autopilot carry the work forward. Bring agents together when the job needs a team.</p>
+  <div className="actions">
+    <div className="primary-action">
 
-Tariboy brings local and remote coding-agent sessions into one desktop
-workspace. It starts as a familiar terminal manager and grows with the operator:
+[Get started ↗](/quickstart)
 
-**Image → Agent → Interactive → Autopilot → Team**
+    </div>
+    <a className="secondary-action" href="#explore">Explore the docs <span aria-hidden="true">↓</span></a>
+  </div>
+  <p className="alpha-note"><strong>Alpha</strong> · macOS 12+ on Apple Silicon · Remote Linux x86_64 over SSH</p>
+</section>
 
-- An **Image** captures an explicit plugin list and ordered prompt template.
-- An **Agent** adds a durable named workspace.
-- **Interactive** opens a terminal session with a human in control.
-- **Autopilot** runs bounded iterations on a timer or in response to messages.
-- A **Team** coordinates agents through groups and channels.
+<nav className="progression" aria-label="From image to team">
+  <a href="#image"><span className="step-number">01</span><strong>Image</strong><span>Define the workflow</span></a>
+  <a href="#agent"><span className="step-number">02</span><strong>Agent</strong><span>Give it a place to work</span></a>
+  <a href="#interactive"><span className="step-number">03</span><strong>Interactive</strong><span>Guide the work</span></a>
+  <a href="#autopilot"><span className="step-number">04</span><strong>Autopilot</strong><span>Let work continue</span></a>
+  <a href="#team"><span className="step-number">05</span><strong>Team</strong><span>Coordinate agents</span></a>
+</nav>
 
-The internal alpha makes Image through Autopilot the primary path. Team,
-channels, plugins, proxy policy, and complete CLI/API controls remain available
-under the advanced documentation.
+<section id="image" className="feature">
+  <div>
+    <p className="eyebrow">01 / Define</p>
+    <h2>Image</h2>
+    <p className="feature-summary">A reusable definition of how an agent works.</p>
+  </div>
+  <div className="feature-detail">
 
-## What you can do in the alpha
+An image packages **plugins, Agent Skills, and an ordered prompt template**.
+Build it from an original directory containing `Tariboyfile.yaml`, inspect
+exactly what the agent will receive, and reuse it across agents.
 
-- manage sessions on one Mac and multiple Linux servers;
-- use Claude, Codex, OpenCode, or stub harness configurations;
-- validate and build images from original directories containing `Tariboyfile.yaml`;
-- configure Interactive and Autopilot independently;
-- attach a live Console without hiding autonomous state;
-- inspect triggers, current and previous iterations, usage, cost, and audit;
-- pause new iterations or kill current work;
-- update remote Tariboy binaries transactionally;
-- export a privacy-scoped support bundle.
+Start with the bundled `basic:latest` image or build one for a specific role.
+Export runnable images to other hosts; keep the original source for rebuilds.
+Harness, model, and effort belong to agent configuration.
 
-Start with the [ten-minute quickstart](/docs/quickstart). Before onboarding other
-people, read [Security and controls](/docs/security-controls) and
-[Support](/docs/support).
+[Explore images →](/images)
 
-:::note[An ordinary terminal is a first-class use case]
-`bare:latest` is an instructions-free, read-only, terminal-only image. Choose it
-when you want a normal agent terminal session. It deliberately has no Autopilot
-behavior and is not a general base image.
-:::
+  </div>
+</section>
 
-## How it is built
+<section id="agent" className="feature">
+  <div>
+    <p className="eyebrow">02 / Configure</p>
+    <h2>Agent</h2>
+    <p className="feature-summary">A named agent, with its own runtime and working directory.</p>
+  </div>
+  <div className="feature-detail">
 
-The desktop app is a Tauri shell around the React workspace. Each managed host
-runs `tariboyd`, which owns SQLite state, agents, terminals, the event loop,
-AI usage, budgets, and audit. Local and remote HTTP listeners bind loopback;
-remote access goes through system OpenSSH local forwarding.
+Create an agent from an image, then choose **where it runs and which harness
+it uses**. Configure its model, effort, working directory, and environment
+independently of other agents.
 
-For automation and deep operations, continue to [Binaries](/docs/binaries),
-[Architecture](/docs/architecture), and the [Command
-reference](/docs/reference/commands).
+Use Claude Code, Codex, or OpenCode installed on the selected host. Start
+locally or connect a remote Linux host through your existing SSH configuration.
+
+[Create your first agent →](/quickstart#4-create-an-agent) ·
+[Connect a host →](/remote-hosts)
+
+  </div>
+</section>
+
+<section id="interactive" className="feature">
+  <div>
+    <p className="eyebrow">03 / Collaborate</p>
+    <h2>Interactive</h2>
+    <p className="feature-summary">Work with the agent directly.</p>
+  </div>
+  <div className="feature-detail">
+
+Open **Console** for a live session with the selected harness. Give
+instructions, follow the work as it happens, and return to the same session
+after switching away.
+
+Interactive and Autopilot are independent: enable either or both.
+For an ordinary terminal session without image instructions, choose
+`bare:latest`, which keeps Autopilot off.
+
+[Open Console →](/quickstart#5-use-console)
+
+  </div>
+</section>
+
+<section id="autopilot" className="feature">
+  <div>
+    <p className="eyebrow">04 / Automate</p>
+    <h2>Autopilot</h2>
+    <p className="feature-summary">Keep work moving between conversations.</p>
+  </div>
+  <div className="feature-detail">
+
+Run **bounded iterations on a timer or in response to durable messages**.
+The host daemon manages the loop, so closing the desktop app does not stop it.
+
+Inspect triggers, outcomes, usage, and cost in Activity. Set budgets and
+deadlines, pause new iterations, or kill current work when needed.
+Pausing Autopilot leaves the interactive session alone.
+
+[Configure Autopilot →](/autopilot) ·
+[Understand the controls →](/security-controls)
+
+  </div>
+</section>
+
+<section id="team" className="feature">
+  <div>
+    <p className="eyebrow">05 / Coordinate</p>
+    <h2>Team</h2>
+    <p className="feature-summary">Independent agents. Shared work.</p>
+  </div>
+  <div className="feature-detail">
+
+Group agents with a **lead, shared channels, and individually configured
+roles**. Each member keeps its own image, harness, model, and runtime settings.
+
+Native Tasks helps you decompose work, delegate it, track progress, and keep
+questions and answers attached to the task. Transfer team configuration as
+compose YAML or a portable archive, and transfer runnable images separately.
+
+[Build a team →](/images-and-groups) ·
+[Organize tasks →](/tasks)
+
+  </div>
+</section>
+
+<section className="start-panel" aria-labelledby="start-heading">
+  <div>
+    <p className="eyebrow">Start small. Grow when you need to.</p>
+    <h2 id="start-heading">Your first agent in ten minutes.</h2>
+  </div>
+  <div>
+
+Get the alpha DMG and checksums from the release owner. You need
+an Apple Silicon Mac running macOS 12+ and a supported harness on the host
+where the agent will run.
+
+**Install the app → Choose a host and image → Create an agent.**
+
+[Follow the quickstart →](/quickstart)
+
+Tariboy is under heavy development. APIs, workflows, and configuration may
+change without notice. [Building from source?](/development#prerequisites)
+
+  </div>
+</section>
+
+<section id="explore" className="explore">
+  <p className="eyebrow">Go further</p>
+  <h2>Explore the documentation</h2>
+
+<CardGroup cols={3}>
+  <Card title="Images & skills" href="/images" icon="layers">
+    Package your workflow and inspect the prompts and tools agents receive.
+  </Card>
+  <Card title="Autopilot" href="/autopilot" icon="repeat">
+    Configure timers, message triggers, deadlines, and iteration controls.
+  </Card>
+  <Card title="Teams & tasks" href="/images-and-groups" icon="users">
+    Bring agents together and coordinate their work.
+  </Card>
+  <Card title="Remote hosts" href="/remote-hosts" icon="server">
+    Run agents on Linux servers through system OpenSSH.
+  </Card>
+  <Card title="Security & support" href="/security-controls" icon="shield">
+    Understand trust boundaries, limits, and safe operator controls.
+  </Card>
+  <Card title="Development" href="/development" icon="code">
+    Build, test, and contribute with isolated environments.
+  </Card>
+</CardGroup>
+
+[Architecture](/architecture) · [CLI reference](/reference/commands) ·
+[Plugins](/plugins) · [Support](/support)
+
+</section>
 
 ---
 
@@ -147,6 +276,17 @@ Path resolution lives in `internal/paths`:
   side-by-side external plugin versions.
 - **Runtime dir** — `$TARIBOY_RUNTIME_DIR`, else `~/.tariboyd`. Holds the
   control socket (`tariboyd.sock`), pidfile, and log.
+
+Operator `PUT /api/files` (`files upload`) accepts a file `name` and base64
+`content`, stores up to 16 MiB decoded under `files/<unique-directory>/<name>`
+in the data directory, and returns `path`, absolute `abs`, and `bytes`.
+All Send files, Attach, terminal-drop, and CLI uploads use this route.
+These uploads belong to the server independently of agents and tasks; agents
+on the same server can read the returned absolute paths. The former
+agent-scoped PUT route and `agent push` command are removed. Uploads
+are ordinary owner-only files, excluded from support bundles, with no automatic
+retention. The server rejects path components and control characters in names
+and confines filesystem operations with `os.Root`.
 
 The data directory also holds each agent's working/configuration files and
 iteration evidence. SQLite owns agents, iterations, channels/deliveries, tasks,
@@ -1009,7 +1149,9 @@ Each agent row persists `goal_enabled` (default true), a positive
 Goal clears the selected key; re-enabling it selects from current task state
 rather than restoring an old choice. The goal reconciler normally owns
 selection; an agent may explicitly select an active task assigned to itself
-during a live iteration. Only the reconciler writes the delivery timestamp.
+during a live iteration. Manually blocked tasks and tasks with an active
+incoming `blocks` relation are not eligible; a selected task is released if it
+becomes blocked. Only the reconciler writes the delivery timestamp.
 
 Task queues, the unlimited parent tree, comments, waits, relations, events,
 notification outbox, customer notification state, and mutation idempotency
@@ -1365,18 +1507,22 @@ depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
 inside a task reparents it without changing priority. Compact priority markers
-appear in the tree. Selecting a task opens its detail in a fullscreen shadcn
-dialog, with priority, other task fields, comments, mentions, and answer waits.
-Back and Close dismiss the dialog while preserving the mounted tree's expansion
-and scroll position. Dismissal protects unsaved description and comment drafts
-with a discard confirmation. There is no empty detail sidebar or detail resizer.
+appear in the tree. Selecting a task opens its detail in a right-side sheet over
+the still-mounted tree, with priority, other task fields, comments, mentions,
+and answer waits. The sheet starts at half the viewport width. Its keyboard- and
+pointer-accessible left separator resizes it, and the pixel width persists in
+`tasks:workspace:v1`. Back, Close, Escape, or a backdrop click dismisses the
+sheet while preserving the tree's expansion and scroll position. Dismissal
+protects unsaved task, comment, and relation drafts with the confirmation
+“Are you sure you want to close this task? Unsaved changes will be discarded.”
 Task Detail also offers `Wait customer` status and an editable Pull request URL;
 both use the existing optimistic revision and explicit-host request path.
 On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
 the left task navigation. Arrow keys move the separator, Shift increases the
 step, Home and double-click restore its default,
 and the clamped navigation width persists in the versioned WebView localStorage
-record `tasks:workspace:v1`. Route changes and app reloads restore that record.
+record `tasks:workspace:v1` alongside the detail width. Route changes and app
+reloads restore that record.
 An active resize reserves the tree's minimum usable width. At responsive
 breakpoints, fixed or hidden mobile navigation takes precedence; the inactive
 separator is hidden without discarding the stored desktop navigation width.
@@ -1385,14 +1531,17 @@ Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
 links, lists, checklists, code, and tables are supported. Unsupported syntax
 keeps the editor in source mode rather than being silently converted or lost.
+The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
-editor documents are not stored. Vite's `build.license` generates bundled
+editor documents are not stored. Long text and links wrap within the task
+panel, while wide tables and code blocks scroll inside their own Markdown
+block. Vite's `build.license` generates bundled
 JavaScript dependency license texts and copyright notices in
 `desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
 asset is packaged with the app and is not committed.
-Existing typed mentions, explicit questions,
-and answer-wait semantics remain daemon-owned.
+The comment form defaults its Ask selector to the task assignee, while typed
+mentions, explicit questions, and answer-wait semantics remain daemon-owned.
 
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
@@ -1535,6 +1684,12 @@ size, weights, node shape, and duplicate identities before loading. It never
 persists terminal bytes or scrollback, prompts, transcripts, messages, output,
 environment values, tokens, secrets, cwd/workdir paths, or user files.
 Malformed state resets only the Workspace canvas.
+
+**Send files**, Attach, and terminal file drops all upload through the selected
+server's `PUT /api/files` endpoint. Uploads have no agent destination: files
+live in the server's shared files directory and the returned absolute paths
+are inserted into the corresponding draft or reported when no terminal is
+available. Console and every Workspace tile retain their explicit host target.
 
 The terminal compose draft is also non-persistent in Workspace: typed text and
 uploaded server paths remain in the mounted tile's memory and are discarded
@@ -2011,7 +2166,9 @@ when the daemon is down.
 | `image` | `build`, `ls`, `inspect`, `prompt`, `rm` |
 | `improvement` | `ls`, `inspect`, `plan approve` / `reject` |
 | `image-release` | `inspect`, `rollout approve` / `reject` / `stage`, `rollback` |
-| `agent` | `run`, `ps`, `inspect`, `start`, `stop`, `restart`, `kill`, `rm`, `exec`, `screen`, `send-keys`, `status show`/`history`, `cp` / `push` / `pull` |
+| `agent` | `run`, `ps`, `inspect`, `start`, `stop`, `restart`, `kill`, `rm`, `exec`, `screen`, `send-keys`, `status show`/`history`, `pull` |
+| `cp` | Upload `LOCAL_FILE` to the shared server directory, or download `AGENT:SRC LOCAL_DST` |
+| `files` | `upload` base64 content to the shared server directory |
 | `loop` | `enable`, `disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error` |
 | `channel` / `message` | `channel ls`/`inspect`/`tail`, `message send` |
 | `group` | `create`, `assign`, `inspect`, `ls`, `rm` |
@@ -2054,6 +2211,18 @@ Agent create and update accept `--goal-enabled` and
 `--goal-wait-customer-timeout-s`; their defaults are enabled and 300 seconds.
 Inspect and list output also reports the daemon-selected read-only
 `current_goal_task_key`.
+
+## File transfer
+
+`tariboy cp LOCAL_FILE` uploads a local file through `PUT /api/files` and
+prints the returned absolute server path. Files are stored beneath
+`$TARIBOY_BASE_DIR/files`, with a unique directory for each upload and a
+16 MiB per-file limit. Agents on that server can read the same uploaded file;
+uploading does not require an agent or write into an agent's working directory.
+
+`tariboy cp AGENT:SRC LOCAL_DST` still downloads from the agent's working
+directory. The former upload syntax `cp SRC AGENT:DST` and `agent push`
+have been removed; use `cp LOCAL_FILE` and the returned shared path instead.
 
 ---
 
@@ -2122,6 +2291,10 @@ Install only the toolchains needed for the area you are changing:
 - **Agent smoke suites:** `tmux` is checked by both `make smoke` and
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
+
+Coding agents must run all shell commands through a Bash login shell
+(`bash -lc 'COMMAND'`) so the account's login profile and exported environment
+are loaded. Keep credentials in the environment; never print their values.
 
 Load the Rust environment before Cargo or desktop commands:
 
@@ -2403,6 +2576,19 @@ npm run test:workspace-browser
 npm run build:store
 ```
 
+For interactive visual checks of React-only changes, start the production UI
+and its real API together:
+
+```bash
+make ui-dev
+```
+
+The target prints the browser URL, builds and starts a daemon with temporary
+isolated data and runtime directories on `127.0.0.1:4176`, and serves the UI on
+`127.0.0.1:4175`. Press Ctrl-C to stop both processes and remove the temporary
+daemon state. Use the native Desktop gates only when the change depends on the
+Tauri host, WebView behavior, packaging, or generated Desktop assets.
+
 Use the build target affected by the change during iteration. Run both when
 shared UI code is consumed by both applications. `npm run build:store` is a
 build, not a check: it regenerates the committed `internal/storeui/dist` bundle
@@ -2525,7 +2711,7 @@ make desktop PLATFORM=linux  # .deb and .AppImage
 The preflight rejects unknown platform values, unsupported host architectures,
 and a platform that does not match the current host before compiling payloads.
 
-`make desktop-alpha` packages and verifies the internal alpha; publication is a
+`make desktop-alpha` packages and verifies the alpha; publication is a
 separate manual action.
 
 The tray action **Install/Update CLI** owns the local five-file payload and
@@ -2539,6 +2725,13 @@ this flow require Rust installer tests plus the daemon restart-handoff tests;
 never exercise it against the user's live daemon.
 
 ### Documentation
+
+The documentation homepage uses `docs/pages/index.astro` for Blume's full-width
+layout and page styles. Its content stays in `docs/docs/index.mdx`, rendered
+through `BlumePage`, so search and agent-facing Markdown share the same source.
+Other documentation pages keep the standard sidebar layout. Use site-root paths
+such as `/quickstart` in Markdown and Card links; Blume adds the deployment
+base to produce `/tariboy/quickstart`. Raw HTML anchors are not rewritten.
 
 Install the dependencies once, as for the UI:
 
@@ -4816,13 +5009,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.50.0` internal alpha on an Apple Silicon Mac.
+This path is for the `0.51.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.50.0_aarch64.dmg`;
+- a verified `Tariboy_0.51.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -4848,7 +5041,7 @@ Never disable Gatekeeper globally and never run `spctl --master-disable`.
 Desktop opens the workspace directly. Daemon startup and saved-host reconnect
 continue in the background, with their state visible in the workspace.
 
-This internal alpha includes WebView developer tools in release builds. Open
+This alpha includes WebView developer tools in release builds. Open
 them with **Option-Command-I** on macOS or choose **Inspect Element** from the
 WebView context menu.
 
@@ -5390,7 +5583,6 @@ tariboy has three command surfaces:
 | `tariboy agent kill` | Kill the current iteration via its shim |
 | `tariboy agent ps` | List agents |
 | `tariboy agent pull` | Read a base64 file from an agent's cwd (used by 'cp') |
-| `tariboy agent push` | Write a base64 file into an agent's cwd (used by 'cp') |
 | `tariboy agent restart` | Restart an agent and run one iteration now |
 | `tariboy agent rm` | Remove an agent (stop it first, or --force) |
 | `tariboy agent run` | Create and start an agent from an image (image:tag) |
@@ -5409,7 +5601,8 @@ tariboy has three command surfaces:
 | `tariboy channel tail` | Print recent messages on a channel (-f to follow) |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
 | `tariboy compose import` | Preview and import compose-only team/runtime configuration |
-| `tariboy cp` | Copy files to/from an agent cwd: cp SRC AGENT:DST \| AGENT:SRC DST |
+| `tariboy files upload` | Upload base64 content to the server and return its absolute path |
+| `tariboy cp` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
@@ -5891,7 +6084,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.50.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.51.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -5902,7 +6095,7 @@ Do not disable Gatekeeper globally, change system-wide `spctl` policy, or remove
 quarantine recursively from Applications. Developer ID signing, notarization,
 and signed updater artifacts are later release work.
 
-The internal alpha deliberately enables Tauri WebView developer tools in its
+The alpha deliberately enables Tauri WebView developer tools in its
 release build for local diagnosis. DevTools exposes the current WebView state
 to the person operating the local Desktop session; it does not relax daemon
 loopback binding, bearer-token requirements, CORS, or SSH trust boundaries.
@@ -5962,7 +6155,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.50.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.51.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -6999,18 +7192,31 @@ component with `scope_agent` fixed to that agent. The layout is Tree-first:
   customer-authored questions do not add an agent dot. Both indicators clear
   when the notification is read or dismissed.
 
-Clicking a task opens a fullscreen dialog with its description, priority,
-assignment, status, block reason, pull request URL, comments, and open answer
-requests. **Back** or **Close** returns to the tree with its expansion and
-scroll position preserved. Unsaved description or comment drafts require
-confirmation before being discarded. The list has no reserved detail sidebar
-or detail resize handle.
+Clicking a task opens a right-side sheet over the tree with its description,
+priority, assignment, status, block reason, pull request URL, comments, and open
+answer requests. It starts at half the viewport width; drag its left separator
+or use its keyboard controls to resize it, and the chosen width survives reloads.
+**Back**, **Close**, Escape, or a backdrop click returns to the still-mounted
+tree with its expansion and scroll position preserved. Unsaved task, comment,
+or relation drafts require confirmation before being discarded.
 
 Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.
 Switch to **Source Markdown** to edit the source directly; content the visual editor
 cannot represent stays in source mode so unsupported syntax is preserved.
 Both modes save the same Markdown strings used by the API and `ttasks`.
+
+**Send files** beside Description and Comment uploads selected files to the
+task's server and appends their absolute paths to that editor's current draft.
+It works without an assigned agent, including in Agent Tasks. Uploading does
+not save the task or send the comment; use **Save task** or **Send comment**.
+If a later file fails, paths for files already uploaded are kept in the draft.
+
+Files are stored on disk under `$TARIBOY_BASE_DIR/files` (normally
+`~/.tariboy/files`), with a unique directory per upload so matching names never
+overwrite earlier files. Each file is limited to 16 MiB. Files remain after a
+draft is discarded or a task is closed; remove unneeded files manually on the
+server when their paths are no longer needed.
 
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
@@ -7074,6 +7280,36 @@ for the complete boundary.
 
 Every agent mutation is identity-bound by its per-agent socket. Body fields
 cannot forge the author, customer, or acting principal.
+
+### Command help
+
+`ttasks` and `tariboy-tasks` provide the same local help. Run either without
+arguments or with `--help` / `-h` for the command list and mode descriptions.
+Every command and nested group accepts those help flags; a bare group lists
+its subcommands. Command help explains its purpose, syntax, arguments, flags,
+required fields, and examples:
+
+```bash
+ttasks --help
+ttasks create --help
+ttasks ask -h
+ttasks work complete --help
+ttasks queue pool --help
+tariboy-tasks notifications read --help
+ttasks --help-json
+```
+
+Help never executes the command, resolves a daemon socket, or requires a
+running daemon. It lists both modes and labels operator-only administration
+and agent-only workflow operations; showing help does not grant execution
+access. `ask --help` describes both the flexible `KEY PRINCIPAL TEXT` form and
+the workflow `ASSIGNMENT --question ...` form, including its required context,
+blocking scope, revisions, and retry key.
+
+Root `--help-json` returns the complete command tree with descriptions and
+examples. Shared commands retain their `flags` name array and add `flag_help`
+descriptions, `usage`, `arguments`, `help`, and `examples`. `--json` controls
+command results; use `--help-json` for machine-readable documentation.
 
 Write task descriptions and comments as valid Markdown: use real newlines,
 blank lines before lists, closed code fences, and no raw HTML. Typed mentions

@@ -65,7 +65,9 @@ Each agent row persists `goal_enabled` (default true), a positive
 Goal clears the selected key; re-enabling it selects from current task state
 rather than restoring an old choice. The goal reconciler normally owns
 selection; an agent may explicitly select an active task assigned to itself
-during a live iteration. Only the reconciler writes the delivery timestamp.
+during a live iteration. Manually blocked tasks and tasks with an active
+incoming `blocks` relation are not eligible; a selected task is released if it
+becomes blocked. Only the reconciler writes the delivery timestamp.
 
 Task queues, the unlimited parent tree, comments, waits, relations, events,
 notification outbox, customer notification state, and mutation idempotency

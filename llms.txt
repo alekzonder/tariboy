@@ -4,7 +4,7 @@
 
 ## Docs
 
-- [Tariboy](https://alekzonder.github.io/tariboy): One desktop control plane for coding agents across hosts and harnesses.
+- [Tariboy](https://alekzonder.github.io/tariboy): Define reusable images, run coding agents interactively, and grow into autonomous teams.
 - [Ten-minute quickstart](https://alekzonder.github.io/tariboy/quickstart): Install Tariboy, connect a host, build an image, and run one agent interactively and on Autopilot.
 - [Remote hosts](https://alekzonder.github.io/tariboy/remote-hosts): Connect, provision, update, and remove Linux hosts through system OpenSSH.
 - [Autopilot](https://alekzonder.github.io/tariboy/autopilot): Run bounded, observable iterations on timers and durable message triggers.

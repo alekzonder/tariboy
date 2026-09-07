@@ -94,6 +94,17 @@ Path resolution lives in `internal/paths`:
 - **Runtime dir** — `$TARIBOY_RUNTIME_DIR`, else `~/.tariboyd`. Holds the
   control socket (`tariboyd.sock`), pidfile, and log.
 
+Operator `PUT /api/files` (`files upload`) accepts a file `name` and base64
+`content`, stores up to 16 MiB decoded under `files/<unique-directory>/<name>`
+in the data directory, and returns `path`, absolute `abs`, and `bytes`.
+All Send files, Attach, terminal-drop, and CLI uploads use this route.
+These uploads belong to the server independently of agents and tasks; agents
+on the same server can read the returned absolute paths. The former
+agent-scoped PUT route and `agent push` command are removed. Uploads
+are ordinary owner-only files, excluded from support bundles, with no automatic
+retention. The server rejects path components and control characters in names
+and confines filesystem operations with `os.Root`.
+
 The data directory also holds each agent's working/configuration files and
 iteration evidence. SQLite owns agents, iterations, channels/deliveries, tasks,
 workflow execution history, idempotency keys, and durable outboxes. The

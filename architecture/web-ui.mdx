@@ -200,18 +200,22 @@ depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
 inside a task reparents it without changing priority. Compact priority markers
-appear in the tree. Selecting a task opens its detail in a fullscreen shadcn
-dialog, with priority, other task fields, comments, mentions, and answer waits.
-Back and Close dismiss the dialog while preserving the mounted tree's expansion
-and scroll position. Dismissal protects unsaved description and comment drafts
-with a discard confirmation. There is no empty detail sidebar or detail resizer.
+appear in the tree. Selecting a task opens its detail in a right-side sheet over
+the still-mounted tree, with priority, other task fields, comments, mentions,
+and answer waits. The sheet starts at half the viewport width. Its keyboard- and
+pointer-accessible left separator resizes it, and the pixel width persists in
+`tasks:workspace:v1`. Back, Close, Escape, or a backdrop click dismisses the
+sheet while preserving the tree's expansion and scroll position. Dismissal
+protects unsaved task, comment, and relation drafts with the confirmation
+“Are you sure you want to close this task? Unsaved changes will be discarded.”
 Task Detail also offers `Wait customer` status and an editable Pull request URL;
 both use the existing optimistic revision and explicit-host request path.
 On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
 the left task navigation. Arrow keys move the separator, Shift increases the
 step, Home and double-click restore its default,
 and the clamped navigation width persists in the versioned WebView localStorage
-record `tasks:workspace:v1`. Route changes and app reloads restore that record.
+record `tasks:workspace:v1` alongside the detail width. Route changes and app
+reloads restore that record.
 An active resize reserves the tree's minimum usable width. At responsive
 breakpoints, fixed or hidden mobile navigation takes precedence; the inactive
 separator is hidden without discarding the stored desktop navigation width.
@@ -220,14 +224,17 @@ Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
 links, lists, checklists, code, and tables are supported. Unsupported syntax
 keeps the editor in source mode rather than being silently converted or lost.
+The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
-editor documents are not stored. Vite's `build.license` generates bundled
+editor documents are not stored. Long text and links wrap within the task
+panel, while wide tables and code blocks scroll inside their own Markdown
+block. Vite's `build.license` generates bundled
 JavaScript dependency license texts and copyright notices in
 `desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
 asset is packaged with the app and is not committed.
-Existing typed mentions, explicit questions,
-and answer-wait semantics remain daemon-owned.
+The comment form defaults its Ask selector to the task assignee, while typed
+mentions, explicit questions, and answer-wait semantics remain daemon-owned.
 
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
@@ -370,6 +377,12 @@ size, weights, node shape, and duplicate identities before loading. It never
 persists terminal bytes or scrollback, prompts, transcripts, messages, output,
 environment values, tokens, secrets, cwd/workdir paths, or user files.
 Malformed state resets only the Workspace canvas.
+
+**Send files**, Attach, and terminal file drops all upload through the selected
+server's `PUT /api/files` endpoint. Uploads have no agent destination: files
+live in the server's shared files directory and the returned absolute paths
+are inserted into the corresponding draft or reported when no terminal is
+available. Console and every Workspace tile retain their explicit host target.
 
 The terminal compose draft is also non-persistent in Workspace: typed text and
 uploaded server paths remain in the mounted tile's memory and are discarded
