@@ -8,23 +8,38 @@ import { AgentNameContext } from "@/lib/agent";
 afterEach(() => vi.restoreAllMocks());
 
 interface Post { path: string; body: unknown }
+interface StubOptions {
+  archive?: unknown[];
+  dlq?: unknown[];
+  pendingGate?: Promise<void>;
+  postGate?: Promise<void>;
+}
 
 // Stub fetch for the P5 inbox endpoints. `queue` rows back the pending view;
 // POSTs are recorded so the tests can assert the operator actions fired.
-function stubInbox(queue: unknown[], opts: { archive?: unknown[]; dlq?: unknown[] } = {}) {
+function stubInbox(queue: unknown[], opts: StubOptions = {}) {
   const posts: Post[] = [];
   vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
     let result: unknown = {};
+    let gate: Promise<void> | undefined;
     if (init?.method === "POST") {
       posts.push({ path, body: init?.body ? JSON.parse(init.body as string) : undefined });
       result = { ok: true };
+      gate = opts.postGate;
     } else if (path.includes("/inbox")) {
-      const rows = path.includes("status=processed") ? (opts.archive ?? [])
+      let rows = path.includes("status=processed") ? (opts.archive ?? [])
         : path.includes("status=dlq") ? (opts.dlq ?? [])
         : queue;
+      const url = new URL(path, "http://localhost");
+      const before = url.searchParams.get("before");
+      if (before) rows = rows.slice(rows.findIndex((item) => (item as { id?: string }).id === before) + 1);
+      rows = rows.slice(0, Number(url.searchParams.get("limit") ?? 100));
       result = { messages: rows, count: rows.length };
+      if (url.searchParams.get("status") === "pending") gate = opts.pendingGate;
     }
-    return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
+    return (gate ?? Promise.resolve()).then(() =>
+      ({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response),
+    );
   }));
   return posts;
 }
@@ -75,6 +90,45 @@ it("marks a queue row processed via the dialog (non-empty result required)", asy
   await waitFor(() =>
     expect(posts.some((p) => p.path.endsWith("/inbox/m1/processed") && (p.body as { result?: string }).result === "handled")).toBe(true),
   );
+});
+
+it("marks every captured pending message processed across pages", async () => {
+  const pending = Array.from({ length: 101 }, (_, index) =>
+    row(`m${index}`, `2026-07-12T10:00:${String(index % 60).padStart(2, "0")}Z`, `message ${index}`),
+  );
+  let releasePosts!: () => void;
+  const posts = stubInbox(pending, { postGate: new Promise((resolve) => { releasePosts = resolve; }) });
+  renderPage();
+
+  await waitFor(() => expect(screen.getByText("message 0")).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "Mark all processed" }));
+
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.change(within(dialog).getByPlaceholderText("result"), { target: { value: "handled in bulk" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Mark all processed" }));
+
+  await waitFor(() => expect(posts).toHaveLength(1));
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(dialog).toBeInTheDocument();
+  releasePosts();
+  await waitFor(() => expect(posts).toHaveLength(101));
+  expect(posts.map((post) => post.path.split("/").at(-2))).toEqual(pending.map((item) => item.id));
+  expect(posts.every((post) => (post.body as { result?: string }).result === "handled in bulk")).toBe(true);
+});
+
+it("does not offer the bulk action for stale rows from another view", async () => {
+  stubInbox([], {
+    archive: [row("a1", "2026-07-12T09:00:00Z", "archived")],
+    pendingGate: new Promise(() => {}),
+  });
+  renderPage();
+
+  await userEvent.click(screen.getByRole("tab", { name: "Archive" }));
+  await waitFor(() => expect(screen.getByText("archived")).toBeInTheDocument());
+  await userEvent.click(screen.getByRole("tab", { name: "Queue" }));
+
+  expect(screen.queryByRole("button", { name: "Mark all processed" })).not.toBeInTheDocument();
 });
 
 it("replies to a queue row via the dialog", async () => {
