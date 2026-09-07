@@ -231,7 +231,10 @@ Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
 editor documents are not stored. Long text and links wrap within the task
 panel, while wide tables and code blocks scroll inside their own Markdown
-block. Vite's `build.license` generates bundled
+block. In Desktop, absolute `http://` and `https://` links in descriptions and
+comments open through the native system-browser command instead of navigating
+the WebView; relative links and ordinary browser builds keep normal anchor
+behavior. Vite's `build.license` generates bundled
 JavaScript dependency license texts and copyright notices in
 `desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
 asset is packaged with the app and is not committed.
