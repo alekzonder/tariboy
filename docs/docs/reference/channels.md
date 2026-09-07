@@ -308,6 +308,12 @@ tariboy agent unsubscribe <agent> <channel>
 `channel tail` reads messages on a channel. It does not show per-agent delivery
 state such as `acked_at`, `attempts`, or DLQ.
 
+In an agent's Desktop **Messages → Queue** view, **Mark all processed** captures
+all pages that are pending when the action begins and applies one required
+operator result to each message. The action uses the same idempotent
+per-message processing operation as an individual row; a retry is safe, and
+messages arriving after the snapshot remain pending.
+
 ## Agent configuration that affects channels
 
 The agent row contains these message-related fields:

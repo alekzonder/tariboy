@@ -234,6 +234,12 @@ asset is packaged with the app and is not committed.
 The comment form defaults its Ask selector to the task assignee, while typed
 mentions, explicit questions, and answer-wait semantics remain daemon-owned.
 
+An agent's **Messages → Queue** view can mark one row or every currently
+pending row processed. The bulk action captures all pending pages before it
+starts processing, applies one required result through the existing idempotent
+per-message action, and then reloads the queue. Messages published after that
+snapshot remain pending.
+
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task; it updates from the

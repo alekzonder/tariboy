@@ -33,8 +33,12 @@ const VIEW_STATUS: Record<View, InboxStatus> = {
   dlq: "dlq",
 };
 
-// A pending Mark-processed / Reply dialog, keyed to the row it acts on.
-type DialogState = { mode: "processed" | "reply"; item: InboxItem } | null;
+// A pending Mark-processed / Reply dialog. A processed dialog without an item
+// applies to the captured pending queue.
+type DialogState =
+  | { mode: "processed"; item?: InboxItem }
+  | { mode: "reply"; item: InboxItem }
+  | null;
 
 // One inbox row. Actions differ per view: Queue rows can be processed or
 // replied to, DLQ rows requeued; Archive rows are read-only and additionally
@@ -119,7 +123,7 @@ function MessageRow({
 export default function AgentMessages() {
   const name = useAgentName();
   const [view, setView] = useState<View>("queue");
-  const [items, setItems] = useState<InboxItem[]>([]);
+  const [page, setPage] = useState<{ view: View; items: InboxItem[] }>({ view: "queue", items: [] });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<DialogState>(null);
   const [dialogText, setDialogText] = useState("");
@@ -128,10 +132,11 @@ export default function AgentMessages() {
   const load = useCallback(
     (v: View) =>
       agentInboxList(name, VIEW_STATUS[v])
-        .then((r) => setItems(r.messages ?? []))
+        .then((r) => setPage({ view: v, items: r.messages ?? [] }))
         .catch(() => { /* keep last rows on a transient failure */ }),
     [name],
   );
+  const items = page.view === view ? page.items : [];
 
   // Reload the active view; refresh on SSE `message` events with a 3s poll
   // fallback (the SSE hub drops on a full buffer, so it is only a hint).
@@ -155,6 +160,11 @@ export default function AgentMessages() {
     setDialog({ mode, item });
   };
 
+  const openBulkDialog = () => {
+    setDialogText("");
+    setDialog({ mode: "processed" });
+  };
+
   const submitDialog = async () => {
     if (!dialog) return;
     const text = dialogText.trim();
@@ -165,17 +175,29 @@ export default function AgentMessages() {
     setBusy(true);
     try {
       if (dialog.mode === "processed") {
-        await agentInboxProcessed(name, dialog.item.id, text);
-        toast.success("marked processed");
+        if (dialog.item) {
+          await agentInboxProcessed(name, dialog.item.id, text);
+          toast.success("marked processed");
+        } else {
+          const pending: InboxItem[] = [];
+          let before: string | undefined;
+          do {
+            const page = await agentInboxList(name, "pending", 100, before);
+            pending.push(...page.messages);
+            before = page.messages.at(-1)?.id;
+          } while (before && pending.length % 100 === 0);
+          for (const item of pending) await agentInboxProcessed(name, item.id, text);
+          toast.success(`marked ${pending.length} processed`);
+        }
       } else {
         await agentInboxReply(name, dialog.item.id, text);
         toast.success("replied");
       }
       setDialog(null);
-      await load(view); // the row leaves Queue for Archive
     } catch (e) {
       toast.error(`failed: ${e instanceof ApiError ? e.message : String(e)}`);
     } finally {
+      await load(view);
       setBusy(false);
     }
   };
@@ -199,11 +221,18 @@ export default function AgentMessages() {
   return (
     <div className="flex h-full flex-col gap-3">
       <Tabs value={view} onValueChange={(v) => setView(v as View)}>
-        <TabsList>
-          <TabsTrigger value="queue">Queue</TabsTrigger>
-          <TabsTrigger value="archive">Archive</TabsTrigger>
-          <TabsTrigger value="dlq">DLQ</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="queue">Queue</TabsTrigger>
+            <TabsTrigger value="archive">Archive</TabsTrigger>
+            <TabsTrigger value="dlq">DLQ</TabsTrigger>
+          </TabsList>
+          {view === "queue" && items.length > 0 && (
+            <Button size="sm" variant="outline" onClick={openBulkDialog} disabled={busy}>
+              Mark all processed
+            </Button>
+          )}
+        </div>
         {(["queue", "archive", "dlq"] as View[]).map((v) => (
           <TabsContent key={v} value={v}>
             <div className="rounded border bg-muted/20 p-2">
@@ -227,14 +256,18 @@ export default function AgentMessages() {
         ))}
       </Tabs>
 
-      <Dialog open={dialog !== null} onOpenChange={(o) => { if (!o) setDialog(null); }}>
+      <Dialog open={dialog !== null} onOpenChange={(o) => { if (!o && !busy) setDialog(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{dialog?.mode === "reply" ? "Reply" : "Mark processed"}</DialogTitle>
+            <DialogTitle>
+              {dialog?.mode === "reply" ? "Reply" : dialog?.item ? "Mark processed" : "Mark all processed"}
+            </DialogTitle>
             <DialogDescription>
               {dialog?.mode === "reply"
                 ? "Publish a reply — this also marks the message processed."
-                : "A non-empty result is required."}
+                : dialog?.item
+                  ? "A non-empty result is required."
+                  : "Mark every currently pending message processed with the same required result."}
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -247,7 +280,7 @@ export default function AgentMessages() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)} disabled={busy}>Cancel</Button>
             <Button onClick={() => void submitDialog()} disabled={busy}>
-              {dialog?.mode === "reply" ? "Reply" : "Mark processed"}
+              {dialog?.mode === "reply" ? "Reply" : dialog?.item ? "Mark processed" : "Mark all processed"}
             </Button>
           </DialogFooter>
         </DialogContent>
