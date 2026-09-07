@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type MouseEvent } from "react"
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { Markdown } from "@tiptap/markdown"
@@ -12,6 +12,8 @@ import { Bold, Italic, Strikethrough, List, ListOrdered, ListTodo, Link, Quote, 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { isDesktop, openExternalUrl } from "@/lib/desktop"
+import { toast } from "sonner"
 
 const extensions = [
   StarterKit.configure({ underline: false, trailingNode: false, link: { openOnClick: false } }),
@@ -36,8 +38,23 @@ function markdownStructure(value: string) {
   return JSON.stringify(markdownParser.parse(value), (key, field) => key === "position" ? undefined : field)
 }
 
+function openMarkdownLink(event: MouseEvent, href?: string) {
+  if (!isDesktop() || !href) return
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return
+  event.preventDefault()
+  void openExternalUrl(url.toString()).catch(() => toast.error("Could not open web link"))
+}
+
 export function MarkdownContent({ children }: { children: string }) {
-  return <div className={markdownStyles}><ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown></div>
+  return <div className={markdownStyles}><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+    a: ({ href, children: content, title }) => <a href={href} title={title} onClick={(event) => openMarkdownLink(event, href)}>{content}</a>,
+  }}>{children}</ReactMarkdown></div>
 }
 
 export function MarkdownEditor({ value, onChange, id, placeholder, disabled = false }: {
@@ -151,7 +168,7 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
         {linkError && <p role="alert" className="text-xs text-destructive">{linkError}</p>}
       </div>}
       <div className="relative">
-        <EditorContent editor={editor} />
+        <EditorContent editor={editor} onClick={(event) => openMarkdownLink(event, (event.target as Element).closest("a")?.getAttribute("href") ?? undefined)} />
         {editor?.isEmpty && placeholder && <p aria-hidden="true" className="pointer-events-none absolute top-3 left-3 text-sm text-muted-foreground">{placeholder}</p>}
       </div>
     </>}

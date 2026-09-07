@@ -3,7 +3,38 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { MarkdownContent, MarkdownEditor } from "./TaskMarkdown"
 
+const { openExternalUrl } = vi.hoisted(() => ({ openExternalUrl: vi.fn().mockResolvedValue(null) }))
+
+vi.mock("@/lib/desktop", () => ({
+  isDesktop: () => true,
+  openExternalUrl,
+}))
+
 describe("task Markdown", () => {
+  it("opens absolute web links outside the Desktop WebView", () => {
+    openExternalUrl.mockClear()
+    render(<MarkdownContent>{"[Tariboy](https://example.com/path)"}</MarkdownContent>)
+    const link = screen.getByRole("link", { name: "Tariboy" })
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true })
+
+    link.dispatchEvent(click)
+
+    expect(click.defaultPrevented).toBe(true)
+    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/path")
+  })
+
+  it("opens links from an editable description outside the Desktop WebView", () => {
+    openExternalUrl.mockClear()
+    render(<MarkdownEditor value="[Tariboy](https://example.com/edit)" onChange={() => {}} />)
+    const link = screen.getByRole("link", { name: "Tariboy" })
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true })
+
+    link.dispatchEvent(click)
+
+    expect(click.defaultPrevented).toBe(true)
+    expect(openExternalUrl).toHaveBeenCalledWith("https://example.com/edit")
+  })
+
   it("renders task formatting and neutralizes executable markup", () => {
     const { container } = render(<MarkdownContent>{"# Plan\n\n**Bold** and ~~removed~~\n\n- [x] Done\n\n| Name | State |\n| --- | --- |\n| Work | Ready |\n\n[Unsafe](javascript:alert%281%29)\n\n<script>alert(1)</script>"}</MarkdownContent>)
     expect(screen.getByRole("heading", { name: "Plan" })).toBeInTheDocument()
