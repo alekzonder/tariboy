@@ -125,7 +125,8 @@
 
 .task-detail-dialog[data-slot="dialog-content"] {
   inset: 0; width: 100vw; height: 100dvh; max-width: none;
-  transform: none; translate: none; padding: 0; border-radius: 0; gap: 0;
+  /* Pairing this with transform: none lets minification drop the translate reset. */
+  translate: none; padding: 0; border-radius: 0; gap: 0;
 }
 .task-detail-panel { min-width: 0; min-height: 0; overflow: auto; background: var(--background); }
 .task-detail-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0 32px; max-width: 1440px; margin: 0 auto; padding: 24px 32px; }

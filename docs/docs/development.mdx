@@ -43,6 +43,10 @@ Install only the toolchains needed for the area you are changing:
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
 
+Coding agents must run all shell commands through a Bash login shell
+(`bash -lc 'COMMAND'`) so the account's login profile and exported environment
+are loaded. Keep credentials in the environment; never print their values.
+
 Load the Rust environment before Cargo or desktop commands:
 
 ```bash

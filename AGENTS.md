@@ -63,6 +63,8 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
 
 ## Implementation and verification
 
+- Run all shell commands through a Bash login shell (`bash -lc 'COMMAND'`) so
+  the account's login profile and exported environment are loaded.
 - Diagnose root cause before fixing a bug.
 - For behavior changes, add a focused failing test before production code.
 - For implementation subtasks, use TDD RED/GREEN and run tests for the affected
