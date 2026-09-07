@@ -1170,12 +1170,11 @@ describe("TasksWorkspace", () => {
     )
   })
 
-  it("turns a plain principal-list agent name into a typed agent mention", async () => {
+  it("defaults a comment question to the task assignee", async () => {
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     await screen.findByRole("heading", { name: "TEST-1" })
 
-    await userEvent.selectOptions(screen.getByLabelText("Ask"), "worker")
     await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Source Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
