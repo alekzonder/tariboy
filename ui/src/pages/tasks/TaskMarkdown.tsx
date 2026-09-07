@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { Markdown } from "@tiptap/markdown"
-import { TaskItem, TaskList } from "@tiptap/extension-list"
+import { OrderedList, TaskItem, TaskList } from "@tiptap/extension-list"
 import { TableKit } from "@tiptap/extension-table"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -14,7 +14,19 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
 const extensions = [
-  StarterKit.configure({ underline: false, trailingNode: false, link: { openOnClick: false } }),
+  StarterKit.configure({ orderedList: false, underline: false, trailingNode: false, link: { openOnClick: false } }),
+  OrderedList.extend({
+    parseMarkdown(token, helpers) {
+      const parsed = this.parent?.(token, helpers)
+      if (parsed && !Array.isArray(parsed)) {
+        // Tiptap's ordered-list parser omits the required paragraph for empty items.
+        for (const item of parsed.content ?? []) {
+          if (item.type === "listItem" && !item.content?.length) item.content = [{ type: "paragraph" }]
+        }
+      }
+      return parsed ?? []
+    },
+  }),
   TaskList,
   TaskItem.configure({ nested: true }),
   TableKit,
