@@ -16,6 +16,7 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   base: "./",
   build: {
+    license: { fileName: "THIRD-PARTY-LICENSES.md" },
     outDir: path.resolve(__dirname, "../desktop/dist"),
     emptyOutDir: true,
   },
