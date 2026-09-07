@@ -127,8 +127,8 @@ Generated UI rules:
 
 - `desktop/dist` and `desktop/src-tauri/resources/bin/` are ignored build
   output; do not stage them.
-- For React-only Tasks UI work, run `make tasks-ui-dev` to start the production
-  workspace against an isolated API, then verify it in a browser at the printed
+- For React-only UI work, run `make ui-dev` to start the production workspace
+  against an isolated API, then verify it in a browser at the printed
   URL. This is sufficient visual verification unless the change touches the
   native host, WebView-only behavior, packaging, or generated Desktop assets;
   those changes still require the applicable Playwright/`tauri-driver` gates.
