@@ -103,6 +103,52 @@ func (t *TokenRegistry) UpdateTask(key, taskID, epicID string) int {
 	return n
 }
 
+// SetTaskIfEmpty attributes matching live leases only when they are untagged
+// or already carry the same task/root pair. It returns the matched count and
+// whether any lease changed.
+func (t *TokenRegistry) SetTaskIfEmpty(key, taskID, epicID string) (int, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	matched := make([]string, 0, 1)
+	if _, ok := t.tokens[key]; ok {
+		matched = append(matched, key)
+	} else {
+		for token, attr := range t.tokens {
+			if attr.Iteration == key {
+				matched = append(matched, token)
+			}
+		}
+	}
+	if len(matched) == 0 {
+		return 0, false
+	}
+	for _, token := range matched {
+		attr := t.tokens[token]
+		if attr.TaskID != "" && (attr.TaskID != taskID || attr.EpicID != epicID) {
+			return 0, false
+		}
+	}
+
+	old := cloneAttributions(t.tokens)
+	changed := false
+	for _, token := range matched {
+		attr := t.tokens[token]
+		if attr.TaskID == "" {
+			attr.TaskID, attr.EpicID = taskID, epicID
+			t.tokens[token] = attr
+			changed = true
+		}
+	}
+	if changed {
+		if err := t.persistLocked(); err != nil {
+			t.tokens = old
+			return 0, false
+		}
+	}
+	return len(matched), changed
+}
+
 func (t *TokenRegistry) Revoke(token string) {
 	t.mu.Lock()
 	delete(t.tokens, token)

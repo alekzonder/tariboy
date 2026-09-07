@@ -112,6 +112,7 @@ type ManagerConfig struct {
 	// IterationCompleted requests the next goal wake after terminal persistence.
 	IterationCompleted func(agent, iterationID string)
 	CurrentGoal        func(string, time.Time) (tasks.Task, bool, error)
+	SetGoal            func(agent, key string, activate func() (func(), error)) error
 	// ProvidedChannels returns provider-declared channels drawn from installed
 	// plugin manifests, so `tools sources` can list and annotate provider
 	// channels even before their channel row exists (spec §6.1). Wired by the
@@ -963,6 +964,17 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 				}
 			}
 			return map[string]any{"message": message, "updated": updated}, nil
+		},
+		SetGoal: func(key string) (map[string]any, error) {
+			iteration := m.currentIterationID(agName)
+			if iteration == "" {
+				return nil, fmt.Errorf("no iteration is currently running")
+			}
+			proxy, ok := m.cfg.Proxy.(taskAttributionProxy)
+			if !ok {
+				return nil, fmt.Errorf("goal selection is unavailable")
+			}
+			return setGoal(context.Background(), m.cfg.Tasks, m.cfg.SetGoal, proxy, iteration, agName, key)
 		},
 		Publish: func(msg bus.Message) (bus.Message, error) {
 			if m.cfg.Bus == nil {

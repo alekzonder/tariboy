@@ -21,6 +21,7 @@ must therefore include it.
 | `scripts/status.sh [set …]` | read / set the one-line status |
 | `scripts/loop.sh done` | finish this iteration (`i-am-done`) |
 | `scripts/context.sh get` / `set <text>` | read / overwrite durable working memory |
+| `scripts/goal.sh set <TASK-KEY>` | select an assigned active Goal for this iteration |
 | `scripts/messages.sh message send --channel C …` | publish to a channel |
 | `scripts/messages.sh message ls` / `processed` / `reply` | inbox handling |
 | `scripts/messages.sh channel subscribe`/`unsubscribe`/`ls`, `scripts/messages.sh sources` | manage subscriptions |
@@ -39,11 +40,13 @@ daemon socket as the customer actor. Images that enable `plugins: [{name:
 tasks}]` also get the bare `tasks` legacy compatibility shim. See [Native
 Tasks](/docs/tasks) for the command flow.
 
-Goal selection and attribution are not agent commands: `tariboyd` selects and
-persists one sticky assigned task per enabled agent, then stamps its key and
-top-level root onto the AI-proxy lease before the harness starts. An image that
-declares `runtime: goal` receives that task as prompt context and should use
-`ttasks` to read the authoritative task state.
+`tariboyd` normally selects and persists one sticky assigned task per enabled
+agent, then stamps its key and top-level root onto the AI-proxy lease before the
+harness starts. If an iteration starts without a task, the agent may create or
+claim one through `ttasks` and run `scripts/goal.sh set <TASK-KEY>`. The task
+must be active and assigned to that agent. Subsequent requests use the new
+task/root attribution; earlier requests remain unattributed. A second call with
+a different key is rejected.
 
 In a workflow-managed queue, `ttasks work next` returns a leased work packet;
 `ttasks artifacts`, workflow-form `ttasks ask`/`answer`, `ttasks observe`, and

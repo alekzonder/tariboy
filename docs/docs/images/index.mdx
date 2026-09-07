@@ -259,7 +259,7 @@ for this operation, not source backup or persistent state.
   terminal-only behavior is runtime policy.
 - `basic:latest` explicitly declares every plugin, packaged Store skill,
   runtime placeholder, and mandatory finish prompt it uses, including the
-  instruction-only `workdir` and `goal` plugins, their skills, `runtime: workdir`, and
+  instruction-only `workdir` plugin, the `goal` capability, their skills, `runtime: workdir`, and
   `runtime: goal`. New agents receive the
   current managed generation. A daemon upgrade may advance this managed ref,
   while active agents and pending assignments continue resolving their pinned

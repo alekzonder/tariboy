@@ -38,6 +38,9 @@ type Deps struct {
 	// SetStatus records the agent-authored status message and returns the saved
 	// {message, updated}. Gated by the `status` plugin. Nil yields unavailable.
 	SetStatus func(message string) (map[string]any, error)
+	// SetGoal selects an assigned active Native Task and updates the current
+	// iteration's live AI-proxy attribution. Nil yields unavailable.
+	SetGoal func(key string) (map[string]any, error)
 
 	// Bus surface (messages is CORE; nil hooks yield bus_unavailable).
 	Publish           func(bus.Message) (bus.Message, error)
@@ -212,6 +215,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /tools/script/cancel", s.gated("scripts", s.scriptCancel))
 	mux.HandleFunc("POST /tools/script/rm", s.gated("scripts", s.scriptRemove))
 	mux.HandleFunc("POST /tools/image/build", s.gated("image-creator", s.imageBuild))
+	mux.HandleFunc("POST /tools/goal/set", s.gated("goal", s.goalSet))
 	mux.HandleFunc("POST /tools/tasks/{action}", s.gated("tasks", s.nativeTaskAction))
 	mux.HandleFunc("POST /tools/judge/action/{action...}", s.gated("llm-as-judge", s.judgeAction))
 
@@ -229,6 +233,31 @@ func (s *Server) Handler() http.Handler {
 	// One wrapper for the whole agent-facing surface: every response carries the
 	// daemon's version, so a shim pinned to an older build can notice the drift.
 	return api.VersionHeader(mux)
+}
+
+func (s *Server) goalSet(w http.ResponseWriter, r *http.Request) {
+	if s.d.SetGoal == nil {
+		api.WriteErr(w, http.StatusServiceUnavailable, "unavailable", "Goal selection is unavailable")
+		return
+	}
+	var body struct {
+		Key string `json:"key"`
+	}
+	if err := decodeBody(r, &body); err != nil {
+		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+		return
+	}
+	body.Key = strings.TrimSpace(body.Key)
+	if body.Key == "" {
+		api.WriteErr(w, http.StatusBadRequest, "missing_key", "key is required")
+		return
+	}
+	result, err := s.d.SetGoal(body.Key)
+	if err != nil {
+		api.WriteErr(w, http.StatusBadRequest, "goal_failed", err.Error())
+		return
+	}
+	api.WriteOK(w, result)
 }
 
 func (s *Server) nativeTaskAction(w http.ResponseWriter, r *http.Request) {

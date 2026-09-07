@@ -3,6 +3,7 @@ package taskgoal
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	basestore "github.com/alekzonder/tariboy/internal/store"
@@ -49,6 +50,54 @@ LEFT JOIN task_workflow_versions w ON w.id = t.workflow_version_id`
 type Store struct{ db *sql.DB }
 
 func NewStore(s *basestore.Store) *Store { return &Store{db: s.DB} }
+
+// Set selects an active task assigned to agent as its sticky Goal.
+func (s *Store) Set(agent, key string, now time.Time, activate func() (func(), error)) (tasks.Task, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return tasks.Task{}, err
+	}
+	defer tx.Rollback()
+
+	var enabled bool
+	var timeoutS int
+	var current string
+	if err := tx.QueryRow(`SELECT goal_enabled, goal_wait_customer_timeout_s, current_goal_task_key FROM agents WHERE name=?`, agent).Scan(&enabled, &timeoutS, &current); err != nil {
+		return tasks.Task{}, err
+	}
+	if !enabled {
+		return tasks.Task{}, fmt.Errorf("goal is disabled")
+	}
+	task, waitAt, err := readGoalTask(tx, strings.TrimSpace(key), agent)
+	if err != nil {
+		return tasks.Task{}, err
+	}
+	valid, _, err := validGoal(task, waitAt, timeoutS, now)
+	if err != nil {
+		return tasks.Task{}, err
+	}
+	if !valid {
+		return tasks.Task{}, fmt.Errorf("task %s is not an active goal", task.Key)
+	}
+	if current != "" && current != task.Key {
+		return tasks.Task{}, fmt.Errorf("goal is already set to %s", current)
+	}
+	changed := current == ""
+	if _, err := tx.Exec(`UPDATE agents SET current_goal_task_key=? WHERE name=?`, task.Key, agent); err != nil {
+		return tasks.Task{}, err
+	}
+	undo, err := activate()
+	if err != nil {
+		return tasks.Task{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		if changed && undo != nil {
+			undo()
+		}
+		return tasks.Task{}, err
+	}
+	return task, nil
+}
 
 // ReconcileAgent validates the agent's sticky goal and selects a replacement
 // when necessary. Selection and persistence share one transaction.

@@ -12,6 +12,57 @@ import (
 
 var goalNow = time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 
+func TestSetSelectsOnlyActiveAssignedGoal(t *testing.T) {
+	s := goalStore(t, goalNow)
+	seedTask(t, s, "T-1", "agent:worker", "P2", "open", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-2", "agent:other", "P2", "open", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-3", "agent:worker", "P2", "done", "2026-09-01T00:00:00Z")
+
+	task, err := s.Set("worker", "T-1", goalNow, func() (func(), error) { return nil, nil })
+	if err != nil || task.Key != "T-1" {
+		t.Fatalf("Set active assigned goal: task=%#v err=%v", task, err)
+	}
+	assertStoredGoal(t, s, "T-1")
+
+	for _, key := range []string{"T-2", "T-3", "T-404"} {
+		if _, err := s.Set("worker", key, goalNow, func() (func(), error) { return nil, nil }); err == nil {
+			t.Errorf("Set(%s) succeeded, want error", key)
+		}
+		assertStoredGoal(t, s, "T-1")
+	}
+}
+
+func TestSetDoesNotReplaceExistingGoal(t *testing.T) {
+	s := goalStore(t, goalNow)
+	seedTask(t, s, "T-1", "agent:worker", "P2", "open", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-2", "agent:worker", "P2", "open", "2026-09-01T00:00:00Z")
+	assertSet := func(key string) error {
+		_, err := s.Set("worker", key, goalNow, func() (func(), error) { return nil, nil })
+		return err
+	}
+	if err := assertSet("T-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := assertSet("T-1"); err != nil {
+		t.Fatalf("idempotent set: %v", err)
+	}
+	if err := assertSet("T-2"); err == nil {
+		t.Fatal("replacement set succeeded")
+	}
+	assertStoredGoal(t, s, "T-1")
+}
+
+func TestSetRollsBackWhenLeaseActivationFails(t *testing.T) {
+	s := goalStore(t, goalNow)
+	seedTask(t, s, "T-1", "agent:worker", "P2", "open", "2026-09-01T00:00:00Z")
+	if _, err := s.Set("worker", "T-1", goalNow, func() (func(), error) {
+		return nil, context.Canceled
+	}); err == nil {
+		t.Fatal("Set succeeded")
+	}
+	assertStoredGoal(t, s, "")
+}
+
 func TestReconcileAgentPreemptsStickyGoalForHigherPriority(t *testing.T) {
 	s := goalStore(t, goalNow)
 	seedTask(t, s, "T-2", "agent:worker", "P2", "in_progress", "2026-09-02T00:00:00Z")

@@ -18,6 +18,22 @@ type attributionTaskReader struct {
 	seen  []tasks.Actor
 }
 
+type attributionProxy struct {
+	key, task, epic string
+	updated         int
+	changed         bool
+}
+
+func (p *attributionProxy) UpdateTask(key, task, epic string) int {
+	p.key, p.task, p.epic = key, task, epic
+	return p.updated
+}
+
+func (p *attributionProxy) SetTaskIfEmpty(key, task, epic string) (int, bool) {
+	p.key, p.task, p.epic = key, task, epic
+	return p.updated, p.changed
+}
+
 func (r *attributionTaskReader) GetTask(_ context.Context, actor tasks.Actor, key string) (tasks.TaskDetail, error) {
 	r.seen = append(r.seen, actor)
 	if err := r.err[key]; err != nil {
@@ -118,5 +134,49 @@ func TestResolveNativeTaskAttributionUsesRealServiceAuthorization(t *testing.T) 
 	}
 	if _, _, err := resolveNativeTaskAttribution(ctx, service, "outsider", child.Key); tasks.ErrorCode(err) != "not_found" {
 		t.Fatalf("outsider error=%v code=%q, want not_found", err, tasks.ErrorCode(err))
+	}
+}
+
+func TestSetGoalUpdatesSelectionAndLiveProxyAttribution(t *testing.T) {
+	reader := &attributionTaskReader{tasks: map[string]tasks.Task{
+		"T-1": {Key: "T-1"},
+		"T-2": {Key: "T-2", ParentKey: "T-1"},
+	}}
+	proxy := &attributionProxy{updated: 1, changed: true}
+	selected := ""
+	result, err := setGoal(context.Background(), reader, func(agent, key string, activate func() (func(), error)) error {
+		if agent != "worker" {
+			t.Fatalf("agent=%q", agent)
+		}
+		if _, err := activate(); err != nil {
+			return err
+		}
+		selected = key
+		return nil
+	}, proxy, "iter-1", "worker", "T-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected != "T-2" || proxy.key != "iter-1" || proxy.task != "T-2" || proxy.epic != "T-1" {
+		t.Fatalf("selected=%q proxy=%+v", selected, proxy)
+	}
+	if result["task_id"] != "T-2" || result["epic_id"] != "T-1" || result["updated"] != 1 {
+		t.Fatalf("result=%v", result)
+	}
+}
+
+func TestSetGoalDoesNotPersistWhenLiveLeaseCannotBeUpdated(t *testing.T) {
+	reader := &attributionTaskReader{tasks: map[string]tasks.Task{"T-1": {Key: "T-1"}}}
+	proxy := &attributionProxy{}
+	selected := false
+	_, err := setGoal(context.Background(), reader, func(_, _ string, activate func() (func(), error)) error {
+		if _, err := activate(); err != nil {
+			return err
+		}
+		selected = true
+		return nil
+	}, proxy, "iter-1", "worker", "T-1")
+	if err == nil || selected {
+		t.Fatalf("err=%v selected=%t", err, selected)
 	}
 }

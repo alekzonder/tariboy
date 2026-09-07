@@ -16,6 +16,7 @@ COMMANDS = {
     "loop": "loop",
     "context": "context",
     "status": "status",
+    "goal": "goal",
     "messages": "messages",
     "schedule": "schedule",
     "scripts": "scripts",
@@ -194,6 +195,7 @@ class StoreSkillsTest(unittest.TestCase):
             ("loop/scripts/loop.sh", ["done", "--idle=false"], "POST", "/tools/loop/done", {"idle": False}),
             ("context/scripts/context.sh", ["set", "next", "step"], "POST", "/tools/context/set", {"text": "next step"}),
             ("status/scripts/status.sh", ["set", "reviewing"], "POST", "/tools/status/set", {"message": "reviewing"}),
+            ("goal/scripts/goal.sh", ["set", "TARI-41"], "POST", "/tools/goal/set", {"key": "TARI-41"}),
             ("messages/scripts/messages.sh", ["message", "processed", "m-1", "done"], "POST", "/tools/message/processed", {"id": "m-1", "result": "done"}),
             ("schedule/scripts/schedule.sh", ["cancel", "s-1"], "POST", "/tools/schedule/cancel", {"id": "s-1"}),
             ("scripts/scripts/scripts.sh", ["rerun", "scr-1"], "POST", "/tools/script/rerun", {"id": "scr-1"}),
@@ -334,12 +336,10 @@ class StoreSkillsTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "launch failed"):
                 self.run_script("whoami/scripts/whoami.sh", [], {})
 
-    def test_instruction_only_skills_have_no_scripts(self):
-        for name in ("workdir", "goal"):
-            with self.subTest(name=name):
-                skill = ROOT / name / "SKILL.md"
-                self.assertTrue(skill.is_file())
-                self.assertFalse((ROOT / name / "scripts").exists())
+    def test_workdir_is_an_instruction_only_skill(self):
+        skill = ROOT / "workdir" / "SKILL.md"
+        self.assertTrue(skill.is_file())
+        self.assertFalse((ROOT / "workdir" / "scripts").exists())
 
 
 if __name__ == "__main__":
