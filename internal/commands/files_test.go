@@ -2,12 +2,17 @@ package commands
 
 import (
 	"encoding/base64"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -141,5 +146,80 @@ func TestParseCp(t *testing.T) {
 	}
 	if _, _, _, _, err := parseCp("a.txt", "b.txt"); err == nil {
 		t.Fatal("cp with no agent side should error")
+	}
+}
+
+func TestServerUploadFiles(t *testing.T) {
+	c := &registry.Ctx{BaseDir: t.TempDir()}
+	upload := h(t, "files.upload")
+	var previous string
+	for _, content := range []string{"first", "second"} {
+		result, err := upload(c, registry.Params{"name": "notes.txt", "content": base64.StdEncoding.EncodeToString([]byte(content))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		abs := result.(map[string]any)["abs"].(string)
+		if !filepath.IsAbs(abs) || !strings.HasPrefix(abs, filepath.Join(c.BaseDir, "files")+string(os.PathSeparator)) || filepath.Base(abs) != "notes.txt" || abs == previous {
+			t.Fatalf("invalid upload path %q", abs)
+		}
+		data, err := os.ReadFile(abs)
+		if err != nil || string(data) != content {
+			t.Fatalf("uploaded data %q: %v", data, err)
+		}
+		info, err := os.Stat(abs)
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("file permissions: %v, %v", info, err)
+		}
+		if previous != "" {
+			data, err := os.ReadFile(previous)
+			if err != nil || string(data) != "first" {
+				t.Fatalf("previous upload changed: %q, %v", data, err)
+			}
+		}
+		previous = abs
+	}
+	for _, name := range []string{"", ".", "..", "../outside", "/tmp/outside", "a/b", "a\\b", "bad\x00name", "bad\nname"} {
+		if _, err := upload(c, registry.Params{"name": name, "content": "aGk="}); err == nil {
+			t.Errorf("accepted name %q", name)
+		}
+	}
+	if _, err := upload(c, registry.Params{"name": "bad.txt", "content": "!"}); err == nil {
+		t.Fatal("accepted invalid base64")
+	}
+	if _, err := upload(c, registry.Params{"name": "large.txt", "content": strings.Repeat("A", 24<<20)}); err == nil {
+		t.Fatal("accepted oversized upload")
+	}
+	outside := t.TempDir()
+	symlinkBase := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(symlinkBase, "files")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := upload(&registry.Ctx{BaseDir: symlinkBase}, registry.Params{"name": "escape.txt", "content": "aGk="}); err == nil {
+		t.Fatal("accepted symlink upload directory")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("wrote outside base: %v %v", entries, err)
+	}
+}
+
+func TestServerUploadRejectsOversizedHTTPBody(t *testing.T) {
+	c := &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	server := api.NewServer(BuildRegistry(), c)
+	body := `{"name":"large.txt","content":"` + strings.Repeat("A", 24<<20) + `"}`
+	reader := strings.NewReader(body)
+	request := httptest.NewRequest(http.MethodPut, "/api/files", reader)
+	request.ContentLength = -1 // The bound must also protect streamed requests.
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if reader.Len() == 0 {
+		t.Fatal("read the entire oversized body before rejecting it")
+	}
+	entries, err := os.ReadDir(c.BaseDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("oversized request wrote files: %v, %v", entries, err)
 	}
 }

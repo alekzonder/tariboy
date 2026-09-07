@@ -18,6 +18,19 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("SendFilesButton", () => {
+  it("keeps completed upload paths when a later file fails", async () => {
+    const onUploaded = vi.fn();
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockImplementationOnce(() => Promise.resolve({
+      ok: true, status: 200,
+      text: async () => JSON.stringify({ ok: true, result: { abs: "/server/files/one/a.txt", path: "files/one/a.txt", bytes: 1 } }),
+    } as Response)).mockRejectedValueOnce(new Error("Upload failed"));
+    render(<SendFilesButton daemon={null} onUploaded={onUploaded} />);
+    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, [new File(["a"], "a.txt"), new File(["b"], "b.txt")]);
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(["/server/files/one/a.txt"]));
+    expect(screen.getByRole("button", { name: "Send files" })).toBeEnabled();
+  });
+
   it("renders a Send files button", () => {
     render(<SendFilesButton name="a1" onUploaded={() => {}} />);
     expect(screen.getByRole("button", { name: /send files/i })).toBeInTheDocument();

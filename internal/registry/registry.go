@@ -49,7 +49,11 @@ type Arg struct {
 	Schema map[string]any
 }
 
-type HTTPRoute struct{ Method, Path string }
+type HTTPRoute struct {
+	Method, Path string
+	// MaxBodyBytes bounds JSON decoding when positive; zero preserves the route default.
+	MaxBodyBytes int64 `json:"-"`
+}
 
 type Params map[string]any
 

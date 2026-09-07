@@ -154,6 +154,18 @@ Switch to **Source Markdown** to edit the source directly; content the visual ed
 cannot represent stays in source mode so unsupported syntax is preserved.
 Both modes save the same Markdown strings used by the API and `ttasks`.
 
+**Send files** beside Description and Comment uploads selected files to the
+task's server and appends their absolute paths to that editor's current draft.
+It works without an assigned agent, including in Agent Tasks. Uploading does
+not save the task or send the comment; use **Save task** or **Send comment**.
+If a later file fails, paths for files already uploaded are kept in the draft.
+
+Files are stored on disk under `$TARIBOY_BASE_DIR/files` (normally
+`~/.tariboy/files`), with a unique directory per upload so matching names never
+overwrite earlier files. Each file is limited to 16 MiB. Files remain after a
+draft is discarded or a task is closed; remove unneeded files manually on the
+server when their paths are no longer needed.
+
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
 dots without replaying stale native notifications. A question first observed
