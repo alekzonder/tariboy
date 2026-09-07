@@ -39,7 +39,6 @@ export function InboxComposer({ name }: { name: string }) {
       />
       {/* Uploaded file paths are appended to the message so the agent sees them. */}
       <SendFilesButton
-        name={name}
         onUploaded={(paths) =>
           setText((t) => (t.trim() ? `${t} ${paths.join(" ")}` : paths.join(" ")))
         }

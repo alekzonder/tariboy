@@ -4,7 +4,7 @@ import {
   setLocalBaseURL, getLocalBaseURL, listImagesOn, imageManifestGetOn, imagePromptGetOn,
   imageFilesListOn, imageFileReadOn, startAgent,
 } from "./api";
-import { subscribeAgentEvents, agentUploadFile, setAgentInteractive } from "./api";
+import { subscribeAgentEvents, serverUploadFile, setAgentInteractive } from "./api";
 import { setAlias, getStatusHistory, loopEnable } from "./api";
 import type { Daemon } from "./daemons";
 
@@ -106,19 +106,21 @@ describe("api extras (M11b carry-forward)", () => {
 });
 
 describe("interactive terminal + upload helpers", () => {
-  it("agentUploadFile targets .tariboy/files and returns abs", async () => {
+  it("serverUploadFile targets the shared upload endpoint and returns abs", async () => {
     let seenInit: RequestInit = {};
+    let seenURL = "";
     vi.stubGlobal("fetch", mockFetch(200, {
       ok: true,
-      result: { path: ".tariboy/files/x.txt", abs: "/cwd/.tariboy/files/x.txt", bytes: 2 },
-    }, (_u, i) => (seenInit = i)));
+      result: { path: "files/one/x.txt", abs: "/server/files/one/x.txt", bytes: 2 },
+    }, (u, i) => { seenURL = u; seenInit = i; }));
     const file = new File(["hi"], "x.txt");
-    const res = await agentUploadFile("a1", file);
+    const res = await serverUploadFile(file);
     const body = JSON.parse(seenInit.body as string);
+    expect(seenURL).toBe("/api/files");
     expect(seenInit.method).toBe("PUT");
-    expect(body.path).toBe(".tariboy/files/x.txt");
+    expect(body.name).toBe("x.txt");
     expect(body.content).toBe(btoa("hi"));
-    expect(res.abs).toContain(".tariboy/files/x.txt");
+    expect(res.abs).toBe("/server/files/one/x.txt");
   });
 
   it("setAgentInteractive posts a boolean value", async () => {

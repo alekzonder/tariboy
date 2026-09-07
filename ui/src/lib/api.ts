@@ -440,27 +440,11 @@ export const getAgentUsage = (
   return agentGet<AgentUsageReport>(name, `usage${s ? `?${s}` : ""}`);
 };
 
-// ---- File upload into the agent cwd ----
+// ---- Shared server file upload ----
 export interface PushResult {
   path: string;
   abs: string;
   bytes: number;
-}
-
-// agentUploadFile base64-encodes a picked file and writes it under the agent's
-// cwd at .tariboy/files/<name>, returning the absolute server-side path so
-// the operator can paste it into the terminal.
-export async function agentUploadFile(
-  name: string,
-  file: File,
-  target?: ApiTarget,
-): Promise<PushResult> {
-  return apiOn<PushResult>(
-    resolveTarget(target),
-    "PUT",
-    agentApiPath(name, "files"),
-    { path: `.tariboy/files/${file.name}`, content: await fileBase64(file) },
-  );
 }
 
 export async function serverUploadFile(file: File, target?: ApiTarget): Promise<PushResult> {
@@ -629,7 +613,7 @@ export const agentContextSet = (name: string, text: string) =>
   agentPost(name, "context", { text });
 
 // ---- File browser (CWD-jailed; singular /file namespace — /files is owned by
-// cp push/pull). Backend: FB-1, commit 631fdeb. Reads shipped in FB-2; the
+// cp downloads). Backend: FB-1, commit 631fdeb. Reads shipped in FB-2; the
 // write operations (save/create/rename/delete) are FB-3. Envelope error codes:
 // bad_path / not_found / exists / is_dir / not_dir / bad_type. ----
 export interface FileEntry {

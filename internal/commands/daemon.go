@@ -69,7 +69,6 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, secretSet())
 	mustRegister(r, secretLs())
 	mustRegister(r, secretRm())
-	mustRegister(r, agentPush())
 	mustRegister(r, serverUpload())
 	mustRegister(r, agentPull())
 	mustRegister(r, cpCommand())

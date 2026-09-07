@@ -72,7 +72,6 @@ describe("AgentConsoleTab non-interactive uploads", () => {
   it("keeps the non-interactive panel reachable while offering Send files for its route-selected agent", () => {
     renderTab(agent({ interactive: false }));
 
-    expect(screen.getByTestId("send-files")).toHaveAttribute("data-agent-name", "worker");
     expect(screen.getByTestId("send-files")).toHaveAttribute("data-daemon-id", "remote");
     expect(screen.getByText("This agent has no interactive terminal.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Configuration" })).toHaveAttribute(
@@ -89,7 +88,7 @@ describe("AgentConsoleTab non-interactive uploads", () => {
   });
 
   it("case 6: drops on the non-interactive panel, uploads the files, and toasts the paths", async () => {
-    const upload = vi.spyOn(api, "agentUploadFile").mockResolvedValue({
+    const upload = vi.spyOn(api, "serverUploadFile").mockResolvedValue({
       path: "staged.txt", abs: "/cwd/staged.txt", bytes: 1,
     });
     const success = vi.spyOn(toast, "success");
@@ -99,7 +98,7 @@ describe("AgentConsoleTab non-interactive uploads", () => {
       dataTransfer: { files: [new File(["staged"], "staged.txt")] },
     });
 
-    await waitFor(() => expect(upload).toHaveBeenCalledWith("worker", expect.any(File), target));
+    await waitFor(() => expect(upload).toHaveBeenCalledWith(expect.any(File), target));
     expect(success).toHaveBeenCalledWith("uploaded: /cwd/staged.txt");
   });
 });
