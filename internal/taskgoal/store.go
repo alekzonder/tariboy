@@ -199,9 +199,15 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			var higherPriority bool
 			if valid {
 				err = tx.QueryRow(`SELECT EXISTS(
-					SELECT 1 FROM tasks
-					WHERE assignee='agent:' || ? AND pull_request=''
-					  AND status IN ('in_progress','open') AND priority < ?
+					SELECT 1 FROM tasks t
+					WHERE t.assignee='agent:' || ? AND t.pull_request=''
+					  AND t.status IN ('in_progress','open') AND t.priority < ?
+					  AND t.manual_block_reason = '' AND NOT EXISTS (
+						SELECT 1 FROM task_relations r
+						JOIN tasks blocker ON blocker.id = r.source_id
+						WHERE r.target_id = t.id AND r.type = 'blocks'
+						  AND blocker.status NOT IN ('done', 'cancelled')
+					  )
 				)`, agent, task.Priority).Scan(&higherPriority)
 			}
 			if err != nil {
@@ -221,6 +227,12 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			WHERE t.assignee='agent:' || ?
 			  AND t.pull_request=''
 			  AND t.status IN ('in_progress','open')
+			  AND t.manual_block_reason = '' AND NOT EXISTS (
+				SELECT 1 FROM task_relations r
+				JOIN tasks blocker ON blocker.id = r.source_id
+				WHERE r.target_id = t.id AND r.type = 'blocks'
+				  AND blocker.status NOT IN ('done', 'cancelled')
+			  )
 			ORDER BY CASE t.priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 ELSE 3 END,
 			         CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
 			         t.created_at, t.task_key
@@ -259,7 +271,7 @@ func readGoalTask(tx *sql.Tx, key, agent string) (tasks.Task, string, error) {
 }
 
 func validGoal(task tasks.Task, waitAt string, timeoutS int, now time.Time) (bool, bool, error) {
-	if task.PullRequest != "" {
+	if task.PullRequest != "" || task.Blocked {
 		return false, false, nil
 	}
 	switch task.Status {
