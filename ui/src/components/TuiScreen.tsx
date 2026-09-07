@@ -177,7 +177,6 @@ export function TuiScreen({
   const draft = useTuiDraft(name, "terminal", persistDraft)
   const workspaceSurface = surface === "workspace"
   const liveUpload = useSendFiles({
-    name,
     daemon,
     onUploaded: (paths) => {
       draft.append(buildPathsText(paths))
@@ -185,7 +184,6 @@ export function TuiScreen({
     },
   })
   const absentUpload = useSendFiles({
-    name,
     daemon,
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
   })
@@ -374,10 +372,9 @@ export function TuiScreen({
               Start
             </Button>
           )}
-          {/* Files still upload to the agent's cwd even with no live session,
+          {/* Files still upload to the server even with no live session,
               so the operator can pre-stage them; report the saved paths. */}
           <SendFilesButton
-            name={name}
             daemon={daemon}
             onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)}
           />
@@ -427,7 +424,6 @@ export function TuiScreen({
         )}
       >
         <SendFilesButton
-          name={name}
           daemon={daemon}
           onUploaded={(paths) => {
             draft.append(buildPathsText(paths))

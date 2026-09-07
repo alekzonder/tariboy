@@ -20,7 +20,9 @@ when the daemon is down.
 | `image` | `build`, `ls`, `inspect`, `prompt`, `rm` |
 | `improvement` | `ls`, `inspect`, `plan approve` / `reject` |
 | `image-release` | `inspect`, `rollout approve` / `reject` / `stage`, `rollback` |
-| `agent` | `run`, `ps`, `inspect`, `start`, `stop`, `restart`, `kill`, `rm`, `exec`, `screen`, `send-keys`, `status show`/`history`, `cp` / `push` / `pull` |
+| `agent` | `run`, `ps`, `inspect`, `start`, `stop`, `restart`, `kill`, `rm`, `exec`, `screen`, `send-keys`, `status show`/`history`, `pull` |
+| `cp` | Upload `LOCAL_FILE` to the shared server directory, or download `AGENT:SRC LOCAL_DST` |
+| `files` | `upload` base64 content to the shared server directory |
 | `loop` | `enable`, `disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error` |
 | `channel` / `message` | `channel ls`/`inspect`/`tail`, `message send` |
 | `group` | `create`, `assign`, `inspect`, `ls`, `rm` |
@@ -63,3 +65,15 @@ Agent create and update accept `--goal-enabled` and
 `--goal-wait-customer-timeout-s`; their defaults are enabled and 300 seconds.
 Inspect and list output also reports the daemon-selected read-only
 `current_goal_task_key`.
+
+## File transfer
+
+`tariboy cp LOCAL_FILE` uploads a local file through `PUT /api/files` and
+prints the returned absolute server path. Files are stored beneath
+`$TARIBOY_BASE_DIR/files`, with a unique directory for each upload and a
+16 MiB per-file limit. Agents on that server can read the same uploaded file;
+uploading does not require an agent or write into an agent's working directory.
+
+`tariboy cp AGENT:SRC LOCAL_DST` still downloads from the agent's working
+directory. The former upload syntax `cp SRC AGENT:DST` and `agent push`
+have been removed; use `cp LOCAL_FILE` and the returned shared path instead.

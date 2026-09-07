@@ -2,14 +2,13 @@ import { useRef, useState, type ChangeEvent } from "react"
 import { Paperclip } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { agentUploadFile, ApiError } from "@/lib/api"
-import { useAgentName } from "@/lib/agent"
+import { serverUploadFile, ApiError } from "@/lib/api"
+import type { Daemon } from "@/lib/daemons"
 
-/** Pick a file, upload it under the agent's cwd at `.tariboy/files/`, and hand
+/** Pick a file, upload it to the server's shared directory, and hand
  * the saved absolute host path back to the caller (which inserts it into the
  * issue description). Mirrors the "Send files" flow in TuiScreen. */
-export function AttachButton({ onAttached }: { onAttached: (path: string) => void }) {
-  const name = useAgentName()
+export function AttachButton({ onAttached, daemon }: { onAttached: (path: string) => void; daemon?: Daemon | null }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
@@ -19,7 +18,7 @@ export function AttachButton({ onAttached }: { onAttached: (path: string) => voi
     if (!file) return
     setBusy(true)
     try {
-      const { abs } = await agentUploadFile(name, file)
+      const { abs } = await serverUploadFile(file, daemon)
       onAttached(abs)
       toast.success(`file uploaded: ${abs}`)
     } catch (err) {

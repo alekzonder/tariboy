@@ -2,8 +2,10 @@ package commands
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,43 +18,15 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
-func TestAgentPush_ReturnsAbsolutePath(t *testing.T) {
-	c, as, _ := ctxWithStore(t)
-	c.BaseDir = t.TempDir()
-	work := filepath.Join(t.TempDir(), "work")
-	os.MkdirAll(work, 0o700)
-	as.Create(agent.Agent{Name: "a1", Cwd: work, OnTimeout: "restart", OnError: "restart"})
-
-	content := base64.StdEncoding.EncodeToString([]byte("hi"))
-	res, err := h(t, "agent.push")(c, registry.Params{
-		"name": "a1", "path": ".tariboy/files/x.txt", "content": content,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	abs, _ := res.(map[string]any)["abs"].(string)
-	want := filepath.Join(work, ".tariboy", "files", "x.txt")
-	if !filepath.IsAbs(abs) || abs != want {
-		t.Fatalf("abs = %q want %q", abs, want)
-	}
-	if !strings.HasSuffix(abs, filepath.Join(".tariboy", "files", "x.txt")) {
-		t.Fatalf("abs suffix = %q", abs)
-	}
-}
-
-func TestPushPullConfinement(t *testing.T) {
+func TestPullConfinement(t *testing.T) {
 	c, as, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	work := filepath.Join(t.TempDir(), "work")
 	os.MkdirAll(work, 0o700)
 	as.Create(agent.Agent{Name: "smoke", Cwd: work, OnTimeout: "restart", OnError: "restart"})
 
-	content := base64.StdEncoding.EncodeToString([]byte("hello file"))
-	if _, err := h(t, "agent.push")(c, registry.Params{"name": "smoke", "path": "notes.txt", "content": content}); err != nil {
+	if err := os.WriteFile(filepath.Join(work, "notes.txt"), []byte("hello file"), 0o600); err != nil {
 		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(filepath.Join(work, "notes.txt")); string(data) != "hello file" {
-		t.Fatalf("pushed file = %q", data)
 	}
 	res, err := h(t, "agent.pull")(c, registry.Params{"name": "smoke", "path": "notes.txt"})
 	if err != nil {
@@ -69,7 +43,7 @@ func TestPushPullConfinement(t *testing.T) {
 }
 
 // TestSymlinkConfinement verifies that a symlink placed inside the agent
-// workdir cannot be used to read (pull) or write (push) outside of it, while a
+// workdir cannot be used to read (pull) outside of it, while a
 // legitimate real subdirectory still works and lexical escapes stay rejected.
 func TestSymlinkConfinement(t *testing.T) {
 	c, as, _ := ctxWithStore(t)
@@ -93,22 +67,13 @@ func TestSymlinkConfinement(t *testing.T) {
 	if _, err := h(t, "agent.pull")(c, registry.Params{"name": "smoke", "path": "escape/secret.txt"}); err == nil {
 		t.Fatal("pull through symlink escaped confinement")
 	}
-	// (b) push THROUGH the symlink is rejected (file does not exist yet).
-	content := base64.StdEncoding.EncodeToString([]byte("pwned"))
-	if _, err := h(t, "agent.push")(c, registry.Params{"name": "smoke", "path": "escape/planted.txt", "content": content}); err == nil {
-		t.Fatal("push through symlink escaped confinement")
+	// A legitimate real subdirectory remains readable.
+	content := base64.StdEncoding.EncodeToString([]byte("safe"))
+	if err := os.MkdirAll(filepath.Join(work, "sub"), 0o700); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(outside, "planted.txt")); err == nil {
-		t.Fatal("push through symlink wrote a file outside the workdir")
-	}
-	// Writing directly to the symlink itself is also rejected.
-	if _, err := h(t, "agent.push")(c, registry.Params{"name": "smoke", "path": "escape", "content": content}); err == nil {
-		t.Fatal("push onto symlink escaped confinement")
-	}
-
-	// (c) a legitimate real subdirectory file still works end to end.
-	if _, err := h(t, "agent.push")(c, registry.Params{"name": "smoke", "path": "sub/ok.txt", "content": content}); err != nil {
-		t.Fatalf("legit real-subdir push failed: %v", err)
+	if err := os.WriteFile(filepath.Join(work, "sub/ok.txt"), []byte("safe"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	res, err := h(t, "agent.pull")(c, registry.Params{"name": "smoke", "path": "sub/ok.txt"})
 	if err != nil {
@@ -118,31 +83,28 @@ func TestSymlinkConfinement(t *testing.T) {
 		t.Fatalf("round-tripped content = %q", got)
 	}
 
-	// (d) lexical ../ and absolute paths stay clamped inside the workdir (they are
-	// anchored via Clean("/"+rel)), so they can never reference anything outside
-	// root. Pull of such a clamped, nonexistent path errors; push clamps the write
-	// under root rather than escaping.
+	// Lexical paths stay clamped inside the workdir.
 	for _, bad := range []string{"../../etc/passwd", "/etc/passwd"} {
 		if _, err := h(t, "agent.pull")(c, registry.Params{"name": "smoke", "path": bad}); err == nil {
-			t.Fatalf("pull %q unexpectedly succeeded (should be clamped to a nonexistent in-root path)", bad)
+			t.Fatalf("pull %q unexpectedly escaped the workdir", bad)
 		}
-	}
-	if _, err := h(t, "agent.push")(c, registry.Params{"name": "smoke", "path": "/etc/passwd", "content": content}); err != nil {
-		t.Fatalf("clamped absolute push failed: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(work, "etc", "passwd")); err != nil {
-		t.Fatalf("absolute path was not clamped inside the workdir: %v", err)
 	}
 }
 
 func TestParseCp(t *testing.T) {
-	name, remote, local, up, err := parseCp("./a.txt", "smoke:in.txt")
-	if err != nil || name != "smoke" || remote != "in.txt" || local != "./a.txt" || !up {
+	name, remote, local, up, err := parseCp("./a.txt", "")
+	if err != nil || name != "" || remote != "" || local != "./a.txt" || !up {
 		t.Fatalf("upload parse: %q %q %q %v %v", name, remote, local, up, err)
 	}
 	name, remote, local, up, err = parseCp("smoke:out.txt", "./b.txt")
 	if err != nil || name != "smoke" || remote != "out.txt" || local != "./b.txt" || up {
 		t.Fatalf("download parse: %q %q %q %v %v", name, remote, local, up, err)
+	}
+	if _, _, _, _, err := parseCp("a.txt", "smoke:in.txt"); err == nil {
+		t.Fatal("agent-scoped upload accepted")
+	}
+	if _, _, _, _, err := parseCp("smoke:out.txt", ""); err == nil {
+		t.Fatal("download without destination accepted")
 	}
 	if _, _, _, _, err := parseCp("a.txt", "b.txt"); err == nil {
 		t.Fatal("cp with no agent side should error")
@@ -221,5 +183,45 @@ func TestServerUploadRejectsOversizedHTTPBody(t *testing.T) {
 	entries, err := os.ReadDir(c.BaseDir)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("oversized request wrote files: %v, %v", entries, err)
+	}
+}
+
+func TestCpSharedUpload(t *testing.T) {
+	c := &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	c.Socket = filepath.Join(t.TempDir(), "api.sock")
+	listener, err := net.Listen("unix", c.Socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(api.NewServer(BuildRegistry(), c).Handler())
+	server.Listener.Close()
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+	src := filepath.Join(t.TempDir(), "notes.txt")
+	if err := os.WriteFile(src, []byte("shared"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := cpCommand().Handler(c, registry.Params{"src": src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct{ Abs string }
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(saved.Abs)
+	if err != nil || string(contents) != "shared" || !strings.HasPrefix(saved.Abs, filepath.Join(c.BaseDir, "files")+string(os.PathSeparator)) {
+		t.Fatalf("upload result %s, contents %q: %v", data, contents, err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/api/agents/unused/files", strings.NewReader("{}"))
+	server.Config.Handler.ServeHTTP(response, request)
+	if response.Code != http.StatusMethodNotAllowed && response.Code != http.StatusNotFound {
+		t.Fatalf("old upload route remains: %d", response.Code)
 	}
 }

@@ -38,7 +38,6 @@ export default function AgentConsoleTab({ hostId, agent, refresh }: {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const absentUpload = useSendFiles({
-    name: agent.name,
     daemon: target,
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
   });
@@ -156,7 +155,6 @@ export default function AgentConsoleTab({ hostId, agent, refresh }: {
           <p>This agent has no interactive terminal.</p>
           <Link className="text-primary underline" to={configuration}>Open Configuration</Link>
           <SendFilesButton
-            name={agent.name}
             daemon={target}
             onUploaded={(paths) => toast.success(`uploaded: ${paths.join(", ")}`)}
           />

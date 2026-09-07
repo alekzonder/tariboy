@@ -150,40 +150,6 @@ func serverUpload() registry.Command {
 	}
 }
 
-func agentPush() registry.Command {
-	return registry.Command{
-		Path:    "agent.push",
-		Summary: "Write a base64 file into an agent's cwd (used by 'cp')",
-		Args: []registry.Arg{
-			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
-			{Name: "path", Type: registry.String, Required: true, Help: "destination path (relative to cwd)"},
-			{Name: "content", Type: registry.String, Required: true, Help: "base64 file content"},
-		},
-		HTTP: &registry.HTTPRoute{Method: "PUT", Path: "/api/agents/{name}/files"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
-			if err != nil {
-				return nil, err
-			}
-			target, err := confine(root, str(p, "path"))
-			if err != nil {
-				return nil, err
-			}
-			raw, err := base64.StdEncoding.DecodeString(str(p, "content"))
-			if err != nil {
-				return nil, api.UserError{Code: "bad_content", Msg: "content is not valid base64"}
-			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-				return nil, err
-			}
-			if err := os.WriteFile(target, raw, 0o600); err != nil {
-				return nil, err
-			}
-			return map[string]any{"path": str(p, "path"), "abs": target, "bytes": len(raw)}, nil
-		},
-	}
-}
-
 func agentPull() registry.Command {
 	return registry.Command{
 		Path:    "agent.pull",
@@ -211,14 +177,14 @@ func agentPull() registry.Command {
 	}
 }
 
-// cp is CLI-local: it reads/writes a local file and calls push/pull on the daemon.
+// cp is CLI-local: it reads/writes a local file and calls upload/pull on the daemon.
 func cpCommand() registry.Command {
 	return registry.Command{
 		Path:    "cp",
-		Summary: "Copy files to/from an agent cwd: cp SRC AGENT:DST | AGENT:SRC DST",
+		Summary: "Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST",
 		Args: []registry.Arg{
 			{Name: "src", Type: registry.String, Required: true, Help: "source (local path or AGENT:path)"},
-			{Name: "dst", Type: registry.String, Required: true, Help: "destination (local path or AGENT:path)"},
+			{Name: "dst", Type: registry.String, Help: "local destination (downloads only)"},
 		},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
 			name, remote, local, upload, err := parseCp(str(p, "src"), str(p, "dst"))
@@ -231,13 +197,9 @@ func cpCommand() registry.Command {
 				if err != nil {
 					return nil, api.UserError{Code: "read_failed", Msg: err.Error()}
 				}
-				_, err = cl.Call("PUT", "/api/agents/"+name+"/files", map[string]string{
-					"name": name, "path": remote, "content": base64.StdEncoding.EncodeToString(data),
+				return cl.Call("PUT", "/api/files", map[string]string{
+					"name": filepath.Base(local), "content": base64.StdEncoding.EncodeToString(data),
 				})
-				if err != nil {
-					return nil, err
-				}
-				return map[string]any{"copied": fmt.Sprintf("%s -> %s:%s", local, name, remote)}, nil
 			}
 			raw, err := cl.Call("GET", "/api/agents/"+name+"/files", map[string]string{"name": name, "path": remote})
 			if err != nil {
@@ -261,17 +223,17 @@ func cpCommand() registry.Command {
 	}
 }
 
-// parseCp splits the two cp operands; exactly one must carry an AGENT: prefix.
+// parseCp accepts a local upload or an agent-relative download with a local destination.
 func parseCp(src, dst string) (name, remote, local string, upload bool, err error) {
 	sn, sp, sIsRemote := splitAgentPath(src)
-	dn, dp, dIsRemote := splitAgentPath(dst)
+	_, _, dIsRemote := splitAgentPath(dst)
 	switch {
-	case sIsRemote && !dIsRemote:
+	case sIsRemote && sp != "" && dst != "" && !dIsRemote:
 		return sn, sp, dst, false, nil // download AGENT:SRC -> DST
-	case !sIsRemote && dIsRemote:
-		return dn, dp, src, true, nil // upload SRC -> AGENT:DST
+	case !sIsRemote && src != "" && dst == "":
+		return "", "", src, true, nil // upload LOCAL_FILE -> shared server directory
 	default:
-		return "", "", "", false, fmt.Errorf("exactly one of SRC/DST must be AGENT:path")
+		return "", "", "", false, fmt.Errorf("use cp LOCAL_FILE to upload to the server, or cp AGENT:SRC LOCAL_DST to download; agent upload destinations are not supported")
 	}
 }
 

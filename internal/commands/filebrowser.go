@@ -19,8 +19,8 @@ func fbErr(err error) error {
 }
 
 // The file-browser routes live under the singular /file namespace. Listing is
-// /file/list rather than /files because GET/PUT /api/agents/{name}/files are
-// already owned by the cp push/pull commands (agentPull/agentPush).
+// /file/list rather than /files because GET /api/agents/{name}/files is
+// already owned by the cp download command (agentPull).
 
 func fileList() registry.Command {
 	return registry.Command{

@@ -6,12 +6,12 @@ import * as api from "@/lib/api";
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
-    // Echo the uploaded relative path back as an absolute one.
-    const rel = init?.body ? JSON.parse(init.body as string).path : "x";
+    // Return a shared absolute path for each uploaded file name.
+    const rel = init?.body ? JSON.parse(init.body as string).name : "x";
     return Promise.resolve({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ ok: true, result: { path: rel, abs: `/cwd/${rel}`, bytes: 2 } }),
+      text: async () => JSON.stringify({ ok: true, result: { path: rel, abs: `/server/files/one/${rel}`, bytes: 2 } }),
     } as Response);
   }));
 });
@@ -32,13 +32,13 @@ describe("SendFilesButton", () => {
   });
 
   it("renders a Send files button", () => {
-    render(<SendFilesButton name="a1" onUploaded={() => {}} />);
+    render(<SendFilesButton onUploaded={() => {}} />);
     expect(screen.getByRole("button", { name: /send files/i })).toBeInTheDocument();
   });
 
   it("uploads every picked file and reports their absolute paths", async () => {
     const onUploaded = vi.fn();
-    render(<SendFilesButton name="a1" onUploaded={onUploaded} />);
+    render(<SendFilesButton onUploaded={onUploaded} />);
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const a = new File(["a"], "a.txt", { type: "text/plain" });
@@ -47,29 +47,30 @@ describe("SendFilesButton", () => {
 
     await waitFor(() =>
       expect(onUploaded).toHaveBeenCalledWith([
-        "/cwd/.tariboy/files/a.txt",
-        "/cwd/.tariboy/files/b.txt",
+        "/server/files/one/a.txt",
+        "/server/files/one/b.txt",
       ]),
     );
 
     const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls).toHaveLength(2);
-    expect(JSON.parse(calls[0][1].body as string).path).toBe(".tariboy/files/a.txt");
+    expect(calls[0][0]).toBe("/api/files");
+    expect(JSON.parse(calls[0][1].body as string).name).toBe("a.txt");
   });
 
-  it("passes the target daemon to agentUploadFile", async () => {
+  it("passes the target daemon to serverUploadFile", async () => {
     const d = { id: "d1", label: "x", baseURL: "https://h", token: "t" };
     const spy = vi
-      .spyOn(api, "agentUploadFile")
+      .spyOn(api, "serverUploadFile")
       .mockResolvedValue({ path: "a.txt", abs: "/cwd/a.txt", bytes: 1 });
     const onUploaded = vi.fn();
-    render(<SendFilesButton name="a1" daemon={d} onUploaded={onUploaded} />);
+    render(<SendFilesButton daemon={d} onUploaded={onUploaded} />);
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const a = new File(["a"], "a.txt", { type: "text/plain" });
     await userEvent.upload(input, [a]);
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalled());
-    expect(spy).toHaveBeenCalledWith("a1", expect.anything(), d);
+    expect(spy).toHaveBeenCalledWith(expect.anything(), d);
   });
 });

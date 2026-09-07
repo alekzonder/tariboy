@@ -5,21 +5,18 @@ import { useSendFiles } from "@/hooks/useSendFiles"
 import type { Daemon } from "@/lib/daemons"
 
 /** Pick files and hand their saved absolute host paths to the caller.
- * With a name, uploads go under the agent's cwd at `.tariboy/files/`;
- * without a name, they go to the server's shared files directory.
+ * Uploads go to the server's shared files directory.
  * The caller decides where the paths go — injected into the live terminal
  * (interactive) or appended to the inbox message (non-interactive).
  * `daemon` targets a specific host (undefined = active daemon, null =
  * same-origin), for cross-host views like /terminals. */
 export function SendFilesButton({
-  name,
   onUploaded,
   className,
   daemon,
   disabled,
   onUploadingChange,
 }: {
-  name?: string
   onUploaded: (paths: string[]) => void
   className?: string
   daemon?: Daemon | null
@@ -27,7 +24,7 @@ export function SendFilesButton({
   onUploadingChange?: (uploading: boolean) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const { uploading, sendFiles } = useSendFiles({ name, daemon, onUploaded })
+  const { uploading, sendFiles } = useSendFiles({ daemon, onUploaded })
   useEffect(() => { onUploadingChange?.(uploading) }, [uploading, onUploadingChange])
 
   const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
