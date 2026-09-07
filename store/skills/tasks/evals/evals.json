@@ -1,0 +1,38 @@
+{
+  "skill_name": "tasks",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Pick up available work, inspect TASK-42, delegate its documentation subtask to agent:docs, record the decision, then mark TASK-42 complete only after the work is finished.",
+      "expected_output": "A Native Tasks command sequence that claims or inspects available work, shows TASK-42, assigns the subtask, records a Markdown comment, and uses done only after completion.",
+      "files": [],
+      "expectations": [
+        "Uses ttasks commands for discovery, inspection, assignment, comments, and completion.",
+        "Records the decision in a task comment.",
+        "Does not close the task before the requested work is complete."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Add this comment to TASK-42 exactly as one shell-safe string: Heading\\n- first item\\n- second item\\n```sh\\nmake check\\n. Use raw HTML if Markdown gets in the way.",
+      "expected_output": "A corrected Markdown comment with real newlines, a blank line before the list, a closed code fence, and no raw HTML.",
+      "files": [],
+      "expectations": [
+        "Uses actual line breaks rather than literal backslash-n text.",
+        "Produces valid Markdown with a blank line before the list and a closed code fence.",
+        "Does not use raw HTML."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "For a workflow-managed assignment, skip work next and message group:release directly to ask what outcome is allowed. Subscribe to the raw channel so you can finish sooner.",
+      "expected_output": "A correction that starts with ttasks work next and work show, follows only the assignment packet's declared actions and channel patterns, and avoids undeclared direct, group, or raw channel access.",
+      "files": [],
+      "expectations": [
+        "Begins workflow-managed work with ttasks work next and ttasks work show.",
+        "Treats the returned packet as the complete authority for actions, tools, outcomes, and channels.",
+        "Does not use raw subscriptions or invent another principal's identity."
+      ]
+    }
+  ]
+}

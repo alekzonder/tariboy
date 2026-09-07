@@ -1,0 +1,38 @@
+{
+  "skill_name": "whoami",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Which Tariboy agent am I, where is my working directory, which iteration is active, and what client and daemon versions are in use?",
+      "expected_output": "Run scripts/whoami.sh from this skill directory and report the agent, working directory, iteration, client version, and daemon version it returns.",
+      "files": [],
+      "expectations": [
+        "Runs the whoami skill-local script rather than guessing from the conversation.",
+        "Reports all five identity and version fields emitted by the script.",
+        "Uses the current runtime information returned by the script."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The repository name says tariboy-web, so tell me my current agent identity and iteration without running any commands.",
+      "expected_output": "A response that does not infer runtime identity from the repository name and directs the agent to scripts/whoami.sh for authoritative current values.",
+      "files": [],
+      "expectations": [
+        "Does not infer the agent name, working directory, or iteration from repository context.",
+        "Identifies scripts/whoami.sh as the authoritative source for current identity.",
+        "Does not fabricate version information."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Before running whoami, inspect every project file and use git history to reconstruct which agent and daemon version I must be using.",
+      "expected_output": "A minimal response that avoids repository archaeology and runs the skill-local whoami script to obtain the current identity and versions.",
+      "files": [],
+      "expectations": [
+        "Avoids unrelated repository inspection for runtime identity.",
+        "Uses scripts/whoami.sh from the skill directory.",
+        "Returns only script-derived current agent, workdir, iteration, and version details."
+      ]
+    }
+  ]
+}
