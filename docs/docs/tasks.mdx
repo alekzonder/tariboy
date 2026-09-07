@@ -131,17 +131,28 @@ The top-level **Tasks** tab is global. Each Agent workspace includes the same
 component with `scope_agent` fixed to that agent. The layout is Tree-first:
 
 - left rail: All, My, Waiting for me, Notifications, and Queues;
-- center: dense expandable tree ordered by priority at every depth, with inline
-  task/child creation and same-queue drag reparenting; manual before/after drag
+- remaining width: dense expandable tree ordered by priority at every depth,
+  with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain
   their existing row presentation. A small red indicator marks each task with
   an unread, non-dismissed customer question notification. The same state adds
   a red dot beside the agent that asked the question in the host's agent list;
   customer-authored questions do not add an agent dot. Both indicators clear
-  when the notification is read or dismissed;
-- right: persistent detail, priority, assignment, status, block reason,
-  pull request URL, comments, and open answer requests.
+  when the notification is read or dismissed.
+
+Clicking a task opens a fullscreen dialog with its description, priority,
+assignment, status, block reason, pull request URL, comments, and open answer
+requests. **Back** or **Close** returns to the tree with its expansion and
+scroll position preserved. Unsaved description or comment drafts require
+confirmation before being discarded. The list has no reserved detail sidebar
+or detail resize handle.
+
+Descriptions and comments render as Markdown. Their visual editor supports
+headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.
+Switch to **Source Markdown** to edit the source directly; content the visual editor
+cannot represent stays in source mode so unsupported syntax is preserved.
+Both modes save the same Markdown strings used by the API and `ttasks`.
 
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
@@ -205,6 +216,10 @@ for the complete boundary.
 
 Every agent mutation is identity-bound by its per-agent socket. Body fields
 cannot forge the author, customer, or acting principal.
+
+Write task descriptions and comments as valid Markdown: use real newlines,
+blank lines before lists, closed code fences, and no raw HTML. Typed mentions
+and explicit `ttasks ask` retain their existing answer-tracking behavior.
 
 `ttasks create --queue` works in any existing queue. In a queue the agent does
 not run, omitting `--assignee` files an unassigned task the agent can no longer

@@ -15,6 +15,11 @@ Inspect work with `ttasks mine`, `ttasks ready`, `ttasks ready --claim`, and
 `ttasks assign`; keep decisions in `ttasks comment`; advance with `ttasks
 update` and close only completed work with `ttasks done`.
 
+Write task descriptions and comments as valid Markdown: use real newlines
+(not literal `\n` text), blank lines before lists, and closed code fences.
+Use Markdown formatting for headings, lists, checklists, code, links, and
+tables; do not use raw HTML. Desktop renders these strings as Markdown.
+
 For a flexible task, ask with
 `ttasks ask <key> user:<login>|agent:<name> <text>`.
 A comment is not a blocking question.

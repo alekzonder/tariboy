@@ -48,11 +48,8 @@ import TaskNotifications from "./TaskNotifications"
 import TaskTree from "./TaskTree"
 import TasksNavigation, { type TasksView } from "./TasksNavigation"
 import {
-  DEFAULT_TASK_DETAIL_WIDTH,
   DEFAULT_TASK_NAVIGATION_WIDTH,
-  MAX_TASK_DETAIL_WIDTH,
   MAX_TASK_NAVIGATION_WIDTH,
-  MIN_TASK_DETAIL_WIDTH,
   MIN_TASK_NAVIGATION_WIDTH,
   useTaskPanelWidths,
 } from "./useTaskPanelWidths"
@@ -78,46 +75,21 @@ type TasksWorkspaceProps = {
 }
 
 const TASK_CENTER_MIN_WIDTH = 360
-const TASK_PANEL_HANDLE_WIDTHS = 8
-
-function effectiveTaskPanelWidths(
-  workspaceWidth: number,
-  navigationWidth: number,
-  detailWidth: number,
-) {
-  if (workspaceWidth <= 0) return { navigationWidth, detailWidth }
-  const sidePanelBudget = Math.max(
-    MIN_TASK_NAVIGATION_WIDTH + MIN_TASK_DETAIL_WIDTH,
-    Math.floor(workspaceWidth) - TASK_CENTER_MIN_WIDTH - TASK_PANEL_HANDLE_WIDTHS,
-  )
-  const effectiveDetailWidth = Math.min(
-    detailWidth,
-    sidePanelBudget - MIN_TASK_NAVIGATION_WIDTH,
-  )
-  return {
-    navigationWidth: Math.min(navigationWidth, sidePanelBudget - effectiveDetailWidth),
-    detailWidth: effectiveDetailWidth,
-  }
-}
-
 function TaskPanelResizeHandle({
-  panel,
   width,
   maximum,
   workspaceRef,
   onResize,
 }: {
-  panel: "navigation" | "detail"
   width: number
   maximum: number
   workspaceRef: React.RefObject<HTMLDivElement | null>
   onResize: (width: number) => void
 }) {
   const cleanupDragRef = useRef<(() => void) | null>(null)
-  const navigation = panel === "navigation"
-  const minimum = navigation ? MIN_TASK_NAVIGATION_WIDTH : MIN_TASK_DETAIL_WIDTH
-  const defaultWidth = navigation ? DEFAULT_TASK_NAVIGATION_WIDTH : DEFAULT_TASK_DETAIL_WIDTH
-  const label = navigation ? "Resize task navigation" : "Resize task details"
+  const minimum = MIN_TASK_NAVIGATION_WIDTH
+  const defaultWidth = DEFAULT_TASK_NAVIGATION_WIDTH
+  const label = "Resize task navigation"
   const resize = (requestedWidth: number) => {
     onResize(Math.min(requestedWidth, maximum))
   }
@@ -138,7 +110,7 @@ function TaskPanelResizeHandle({
       if (isDifferentPointer(moveEvent.pointerId)) return
       const bounds = workspaceRef.current?.getBoundingClientRect()
       if (!bounds) return
-      resize(navigation ? moveEvent.clientX - bounds.left : bounds.right - moveEvent.clientX)
+      resize(moveEvent.clientX - bounds.left)
     }
     const cleanup = () => {
       if (finished) return
@@ -185,13 +157,12 @@ function TaskPanelResizeHandle({
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     const step = event.shiftKey ? 32 : 8
-    const direction = navigation ? 1 : -1
     if (event.key === "ArrowLeft") {
       event.preventDefault()
-      resize(width - step * direction)
+      resize(width - step)
     } else if (event.key === "ArrowRight") {
       event.preventDefault()
-      resize(width + step * direction)
+      resize(width + step)
     } else if (event.key === "Home") {
       event.preventDefault()
       resize(defaultWidth)
@@ -224,9 +195,7 @@ function TasksWorkspaceContent({
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const {
     navigationWidth,
-    detailWidth,
     setNavigationWidth,
-    setDetailWidth,
   } = useTaskPanelWidths()
   const [workspaceWidth, setWorkspaceWidth] = useState(0)
   useEffect(() => {
@@ -242,25 +211,10 @@ function TasksWorkspaceContent({
       window.removeEventListener("resize", measure)
     }
   }, [])
-  const effectiveWidths = effectiveTaskPanelWidths(
-    workspaceWidth,
-    navigationWidth,
-    detailWidth,
-  )
-  const sidePanelBudget = workspaceWidth > 0
-    ? Math.max(
-      MIN_TASK_NAVIGATION_WIDTH + MIN_TASK_DETAIL_WIDTH,
-      Math.floor(workspaceWidth) - TASK_CENTER_MIN_WIDTH - TASK_PANEL_HANDLE_WIDTHS,
-    )
-    : MAX_TASK_NAVIGATION_WIDTH + MAX_TASK_DETAIL_WIDTH
-  const navigationMaximum = Math.min(
-    MAX_TASK_NAVIGATION_WIDTH,
-    Math.max(MIN_TASK_NAVIGATION_WIDTH, sidePanelBudget - effectiveWidths.detailWidth),
-  )
-  const detailMaximum = Math.min(
-    MAX_TASK_DETAIL_WIDTH,
-    Math.max(MIN_TASK_DETAIL_WIDTH, sidePanelBudget - effectiveWidths.navigationWidth),
-  )
+  const navigationMaximum = workspaceWidth > 0
+    ? Math.min(MAX_TASK_NAVIGATION_WIDTH, Math.max(MIN_TASK_NAVIGATION_WIDTH, workspaceWidth - TASK_CENTER_MIN_WIDTH - 4))
+    : MAX_TASK_NAVIGATION_WIDTH
+  const effectiveNavigationWidth = Math.min(navigationWidth, navigationMaximum)
   const [queues, setQueues] = useState<TaskQueue[]>([])
   const [principals, setPrincipals] = useState<TaskPrincipals | null>(null)
   const [metadataError, setMetadataError] = useState("")
@@ -374,6 +328,7 @@ function TasksWorkspaceContent({
   }, [principalFilter, principalMetadataError, query, queue, scopeAgent, statusView, target, view])
 
   const loadDetail = useCallback(async (key: string) => {
+    const refreshingSelection = selectedKeyRef.current === key
     selectedKeyRef.current = key
     const request = ++detailRequestRef.current
     try {
@@ -429,6 +384,10 @@ function TasksWorkspaceContent({
       }
     } catch (error) {
       if (!mountedRef.current || request !== detailRequestRef.current) return
+      if (refreshingSelection) {
+        toast.error(errorMessage(error))
+        return
+      }
       selectedKeyRef.current = ""
       setSelectedKey("")
       setDetail(null)
@@ -525,6 +484,7 @@ function TasksWorkspaceContent({
   }
 
   const saveDetail = async (input: {
+    revision: number
     title: string
     description: string
     pull_request: string
@@ -533,21 +493,22 @@ function TasksWorkspaceContent({
     manual_block_reason?: string
     priority: TaskPriority
   }) => {
-    if (!detail) return
+    if (!detail) throw new Error("Task is no longer selected")
     try {
       const updated = await updateTask(detail.task.key, {
         ...input,
-        revision: detail.task.revision,
       }, target)
       setDetail((current) => current ? { ...current, task: updated } : current)
       setTasks((current) => current.map((task) => task.key === updated.key ? updated : task))
       toast.success("Task updated")
+      return updated
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await loadTree()
         await loadDetail(detail.task.key)
       }
       toast.error(error instanceof Error ? error.message : String(error))
+      throw error
     }
   }
 
@@ -558,6 +519,7 @@ function TasksWorkspaceContent({
       await loadDetail(detail.task.key)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
+      throw error
     }
   }
 
@@ -627,8 +589,7 @@ function TasksWorkspaceContent({
       data-testid="tasks-workspace"
       data-scope-agent={scopeAgent ?? ""}
       style={{
-        "--tasks-navigation-width": `${effectiveWidths.navigationWidth}px`,
-        "--tasks-detail-width": `${effectiveWidths.detailWidth}px`,
+        "--tasks-navigation-width": `${effectiveNavigationWidth}px`,
       } as CSSProperties}
     >
       <TasksNavigation
@@ -640,8 +601,7 @@ function TasksWorkspaceContent({
         unread={unread}
       />
       <TaskPanelResizeHandle
-        panel="navigation"
-        width={effectiveWidths.navigationWidth}
+        width={effectiveNavigationWidth}
         maximum={navigationMaximum}
         workspaceRef={workspaceRef}
         onResize={setNavigationWidth}
@@ -737,16 +697,9 @@ function TasksWorkspaceContent({
           <QueueSettings queues={queues} onCreate={createQueue} onUpdate={updateQueue} target={target} />
         )}
       </main>
-      <TaskPanelResizeHandle
-        panel="detail"
-        width={effectiveWidths.detailWidth}
-        maximum={detailMaximum}
-        workspaceRef={workspaceRef}
-        onResize={setDetailWidth}
-      />
-      {detail ? (
+      {detail && (
         <TaskDetail
-          key={`${detail.task.key}:${detail.task.revision}`}
+          key={detail.task.key}
           detail={detail}
           principals={principals}
           onClose={() => {
@@ -790,11 +743,6 @@ function TasksWorkspaceContent({
             await loadDetail(detail.task.key)
           }}
         />
-      ) : (
-        <aside className="task-detail-empty">
-          <span>Select a task</span>
-          <p>Details, dependencies, questions, and the full conversation stay here.</p>
-        </aside>
       )}
     </div>
   )
