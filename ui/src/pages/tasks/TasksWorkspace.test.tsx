@@ -1187,6 +1187,36 @@ describe("TasksWorkspace", () => {
     )
   })
 
+  it("updates and restores the default question when the assignee changes", async () => {
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    await screen.findByRole("heading", { name: "TEST-1" })
+
+    const ask = screen.getByLabelText("Ask")
+    expect(ask).toHaveValue("worker")
+    await userEvent.selectOptions(ask, "")
+    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Source Markdown" }))
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
+    expect(ask).toHaveValue("")
+
+    const reassigned = { ...root, assignee: "freelance-reviewer", revision: 3 }
+    api.getTask.mockResolvedValue({ ...detail, task: reassigned })
+    fireEvent.change(screen.getByLabelText("Assignee"), { target: { value: reassigned.assignee } })
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    expect(ask).toHaveValue("freelance-reviewer")
+    expect(within(ask).getByRole("option", { name: "freelance-reviewer" })).toBeInTheDocument()
+
+    await userEvent.selectOptions(ask, "user:owner")
+    await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
+    await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
+      "TEST-1",
+      "@user:owner\n\nCan you verify?",
+      undefined,
+      expect.any(String),
+    ))
+    expect(ask).toHaveValue("freelance-reviewer")
+  })
+
   it("shows task metadata, dependencies, and history and edits relations", async () => {
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
