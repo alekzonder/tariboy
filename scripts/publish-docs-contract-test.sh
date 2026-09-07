@@ -22,6 +22,8 @@ printf 'source content\n' >"$source_repo/README.md"
 printf '%s\n' \
   '<link rel="canonical" href="https://alekzonder.github.io/tariboy">' \
   '<link href="/tariboy/_astro/app.css">' \
+  '<a href="/tariboy/quickstart">Get started</a>' \
+  '<section id="image"></section><section id="agent"></section><section id="interactive"></section><section id="autopilot"></section><section id="team"></section><section id="explore"></section>' \
   'first build' >"$source_repo/docs/publish-fixture/index.html"
 printf 'asset\n' >"$source_repo/docs/publish-fixture/assets/app.js"
 printf '<url><loc>https://alekzonder.github.io/tariboy/architecture</loc></url>\n' \
@@ -109,6 +111,8 @@ git -C "$source_repo" update-ref -d refs/remotes/origin/docs
 printf '%s\n' \
   '<link rel="canonical" href="https://alekzonder.github.io/tariboy">' \
   '<link href="/tariboy/_astro/app.css">' \
+  '<a href="/tariboy/quickstart">Get started</a>' \
+  '<section id="image"></section><section id="agent"></section><section id="interactive"></section><section id="autopilot"></section><section id="team"></section><section id="explore"></section>' \
   'second build' >"$source_repo/docs/publish-fixture/index.html"
 run_publisher
 
