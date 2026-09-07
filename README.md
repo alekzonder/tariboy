@@ -8,9 +8,9 @@ locally or on remote hosts, from one desktop app.
 
 **Image → Agent → Interactive → Autopilot → Team**
 
-[Get started](docs/docs/quickstart.mdx) ·
+[Get started](https://alekzonder.github.io/tariboy/quickstart) ·
 [Documentation](https://alekzonder.github.io/tariboy/) ·
-[Development](docs/docs/development.mdx)
+[Development](https://alekzonder.github.io/tariboy/development)
 
 > **Internal alpha:** Tariboy is under heavy development. APIs, workflows,
 > and configuration may change without notice. The alpha onboarding path is
@@ -27,7 +27,7 @@ what the agent will receive, and export runnable images to another host.
 Start with the bundled `basic:latest` image, or build a role-specific image.
 Harness, model, and effort are configured on the agent.
 
-[Explore images →](docs/docs/images/index.mdx)
+[Explore images →](https://alekzonder.github.io/tariboy/images)
 
 ### 2. Agent — give the image a place to work
 
@@ -35,7 +35,7 @@ Create a named agent from an image. Choose its host, working directory,
 harness, model, and runtime settings. Use Claude Code, Codex, or OpenCode
 installed on that host, and keep each agent independently configured.
 
-[Create your first agent →](docs/docs/quickstart.mdx#4-create-an-agent)
+[Create your first agent →](https://alekzonder.github.io/tariboy/quickstart#4-create-an-agent)
 
 ### 3. Interactive — work with the agent directly
 
@@ -45,7 +45,7 @@ follow the work as it runs. Interactive and Autopilot are independent controls.
 For an ordinary terminal session without image instructions, choose
 `bare:latest`. It does not support Autopilot.
 
-[Start an interactive session →](docs/docs/quickstart.mdx#5-use-console)
+[Start an interactive session →](https://alekzonder.github.io/tariboy/quickstart#5-use-console)
 
 ### 4. Autopilot — let work continue
 
@@ -56,7 +56,7 @@ iterations or kill current work when needed.
 Autopilot is managed by the host daemon. Closing the desktop app does not stop
 it or delete the agent's data.
 
-[Configure Autopilot →](docs/docs/autopilot.mdx)
+[Configure Autopilot →](https://alekzonder.github.io/tariboy/autopilot)
 
 ### 5. Team — coordinate agents around shared work
 
@@ -67,8 +67,8 @@ keep questions and answers attached to the task.
 Copy team configuration as compose YAML or export a portable team archive.
 Transfer runnable images separately; keep their original sources for rebuilds.
 
-[Build a team →](docs/docs/images-and-groups/index.mdx) ·
-[Organize tasks →](docs/docs/tasks.mdx)
+[Build a team →](https://alekzonder.github.io/tariboy/images-and-groups) ·
+[Organize tasks →](https://alekzonder.github.io/tariboy/tasks)
 
 ## Get started
 
@@ -78,20 +78,20 @@ your agent will run. Remote use also needs a Linux x86_64 host reachable through
 your existing SSH configuration.
 
 1. **Install Tariboy.** Verify the checksum, move the app to Applications, and
-   open it. Follow the [quickstart](docs/docs/quickstart.mdx) for the alpha
+   open it. Follow the [quickstart](https://alekzonder.github.io/tariboy/quickstart) for the alpha
    signing instructions.
 2. **Choose a host and image.** Keep the local host or add an SSH host, then
    select `basic:latest` or build your own image.
 3. **Create an agent.** Pick its harness and model, enable Interactive, and open
    Console. Add Autopilot when you are ready, then grow into a team.
 
-[Follow the ten-minute quickstart →](docs/docs/quickstart.mdx)
+[Follow the ten-minute quickstart →](https://alekzonder.github.io/tariboy/quickstart)
 
 ### Build from source
 
 The control plane requires Go 1.26; agent skill scripts require Python 3.
 Desktop builds also need Node.js/npm, Rust, and native Tauri prerequisites.
-See the [development guide](docs/docs/development.mdx#prerequisites) for setup.
+See the [development guide](https://alekzonder.github.io/tariboy/development#prerequisites) for setup.
 
 ```bash
 make build
@@ -100,27 +100,27 @@ make build
 ```
 
 For native Desktop packages, follow the
-[Desktop build instructions](docs/docs/development.mdx#rust-desktop-host).
-The [CLI reference](docs/docs/reference/commands.md) covers automation and
+[Desktop build instructions](https://alekzonder.github.io/tariboy/development#rust-desktop-host).
+The [CLI reference](https://alekzonder.github.io/tariboy/reference/commands) covers automation and
 advanced operations, including the `ttasks` Native Tasks client.
 
 ## Documentation
 
 | I want to… | Read |
 | --- | --- |
-| Run my first agent | [Quickstart](docs/docs/quickstart.mdx) |
-| Package prompts, skills, and plugins | [Images](docs/docs/images/index.mdx) |
-| Run work autonomously | [Autopilot](docs/docs/autopilot.mdx) |
-| Coordinate a team | [Images & groups](docs/docs/images-and-groups/index.mdx) |
-| Delegate and track work | [Tasks](docs/docs/tasks.mdx) and [Task workflows](docs/docs/task-workflows.mdx) |
-| Connect a remote host | [Remote hosts](docs/docs/remote-hosts.mdx) |
-| Extend agent capabilities | [Plugins](docs/docs/plugins/index.mdx) |
-| Understand the control plane | [Architecture](docs/docs/architecture/index.mdx) and [Binaries](docs/docs/binaries/index.mdx) |
-| Set limits or troubleshoot | [Security & controls](docs/docs/security-controls.mdx) and [Support](docs/docs/support.mdx) |
+| Run my first agent | [Quickstart](https://alekzonder.github.io/tariboy/quickstart) |
+| Package prompts, skills, and plugins | [Images](https://alekzonder.github.io/tariboy/images) |
+| Run work autonomously | [Autopilot](https://alekzonder.github.io/tariboy/autopilot) |
+| Coordinate a team | [Images & groups](https://alekzonder.github.io/tariboy/images-and-groups) |
+| Delegate and track work | [Tasks](https://alekzonder.github.io/tariboy/tasks) and [Task workflows](https://alekzonder.github.io/tariboy/task-workflows) |
+| Connect a remote host | [Remote hosts](https://alekzonder.github.io/tariboy/remote-hosts) |
+| Extend agent capabilities | [Plugins](https://alekzonder.github.io/tariboy/plugins) |
+| Understand the control plane | [Architecture](https://alekzonder.github.io/tariboy/architecture) and [Binaries](https://alekzonder.github.io/tariboy/binaries) |
+| Set limits or troubleshoot | [Security & controls](https://alekzonder.github.io/tariboy/security-controls) and [Support](https://alekzonder.github.io/tariboy/support) |
 
 ## Development
 
-Start with the canonical [contributor guide](docs/docs/development.mdx) for
+Start with the canonical [contributor guide](https://alekzonder.github.io/tariboy/development) for
 the repository map, prerequisites, verification matrix, and generated-artifact
 rules. Coding agents must also follow [AGENTS.md](AGENTS.md).
 
@@ -141,10 +141,10 @@ the user's host verification. Pause prevents new autonomous iterations;
 Kill stops current work. Quitting the app leaves daemons running.
 
 Upgrading a daemon older than `0.10.1` requires it to be idle; see the
-[quickstart](docs/docs/quickstart.mdx#1-install) for the upgrade path.
+[quickstart](https://alekzonder.github.io/tariboy/quickstart#1-install) for the upgrade path.
 
-Read [Security & controls](docs/docs/security-controls.mdx) before onboarding
-others, and use the [Support guide](docs/docs/support.mdx) for diagnostics.
+Read [Security & controls](https://alekzonder.github.io/tariboy/security-controls) before onboarding
+others, and use the [Support guide](https://alekzonder.github.io/tariboy/support) for diagnostics.
 
 ## The name
 
