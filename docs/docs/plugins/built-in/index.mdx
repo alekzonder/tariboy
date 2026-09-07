@@ -21,7 +21,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | [`context`](/docs/plugins/built-in/context) | Optional | Yes | `scripts/context.sh get/set` | Per-agent `CONTEXT.md` |
 | [`status`](/docs/plugins/built-in/status) | Optional | Yes | `scripts/status.sh [set]` | Agent row and audit timeline |
 | [`workdir`](/docs/plugins/built-in/workdir) | Instruction-only | Yes | Prompt only | None |
-| [`goal`](/docs/plugins/built-in/goal) | Instruction-only | Yes | Prompt only | AI usage attribution on the iteration lease |
+| [`goal`](/docs/plugins/built-in/goal) | Optional | Yes | `scripts/goal.sh set <TASK-KEY>` | Selected task and AI usage attribution on the iteration lease |
 | [`schedule`](/docs/plugins/built-in/schedule) | Optional | No | `scripts/schedule.sh …` | Schedules and resulting bus messages |
 | [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |

@@ -61,6 +61,14 @@ func TestTaskAttributionTagsProxiedRows(t *testing.T) {
 		t.Fatalf("tagged row = task=%q epic=%q, want SUPER-3/SUPER-1", r.TaskID, r.EpicID)
 	}
 
+	// A Goal may be set only on an untagged lease (or retried with the same pair).
+	if updated, _ := p.SetTaskIfEmpty("alice-1", "SUPER-4", "SUPER-1"); updated != 0 {
+		t.Fatalf("replaced live Goal: updated=%d", updated)
+	}
+	if r := call(); r.TaskID != "SUPER-3" || r.EpicID != "SUPER-1" {
+		t.Fatalf("retagged row = task=%q epic=%q", r.TaskID, r.EpicID)
+	}
+
 	// 3. Clear: the next request is untagged again.
 	p.UpdateTask("alice-1", "", "")
 	if r := call(); r.TaskID != "" || r.EpicID != "" {

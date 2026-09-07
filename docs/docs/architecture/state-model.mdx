@@ -63,8 +63,9 @@ Each agent row persists `goal_enabled` (default true), a positive
 `goal_delivery_cooldown_s` (default 60), daemon-owned
 `last_goal_delivery_at`, and its read-only `current_goal_task_key`. Disabling
 Goal clears the selected key; re-enabling it selects from current task state
-rather than restoring an old choice. The goal reconciler is the only writer of
-the selection and delivery timestamp.
+rather than restoring an old choice. The goal reconciler normally owns
+selection; an agent may explicitly select an active task assigned to itself
+during a live iteration. Only the reconciler writes the delivery timestamp.
 
 Task queues, the unlimited parent tree, comments, waits, relations, events,
 notification outbox, customer notification state, and mutation idempotency

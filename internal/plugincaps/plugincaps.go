@@ -16,10 +16,10 @@ var (
 	CORE = []string{"whoami", "loop", "messages"}
 	// OPTIONAL contains built-in capabilities selectable in an image. External
 	// capabilities are accepted only through a resolver for installed manifests.
-	OPTIONAL = []string{"context", "status", "schedule", "scripts", "image-creator", "llm-as-judge", "tasks"}
+	OPTIONAL = []string{"context", "status", "schedule", "scripts", "goal", "image-creator", "llm-as-judge", "tasks"}
 	// INSTRUCTION_ONLY contains schema-v2 built-ins that contribute no route,
 	// command, shim, or legacy schema-v1 prompt fragment.
-	INSTRUCTION_ONLY = []string{"workdir", "goal"}
+	INSTRUCTION_ONLY = []string{"workdir"}
 )
 
 // ResolvedPlugin is the capability information schema-v1 image construction
@@ -51,6 +51,7 @@ var fragments = []Fragment{
 	{Plugin: "status", Name: "system:status", Order: 40, Path: "skills/status/SKILL.md", Teaches: []string{"scripts/status.sh"}},
 	{Plugin: "schedule", Name: "system:schedule", Order: 50, Path: "skills/schedule/SKILL.md", Teaches: []string{"scripts/schedule.sh"}},
 	{Plugin: "scripts", Name: "system:scripts", Order: 60, Path: "skills/scripts/SKILL.md", Teaches: []string{"scripts/scripts.sh"}},
+	{Plugin: "goal", Name: "system:goal", Order: 70, Path: "skills/goal/SKILL.md", Teaches: []string{"scripts/goal.sh"}},
 	{Plugin: "llm-as-judge", Name: "system:llm-as-judge", Order: 80, Path: "skills/llm-as-judge/SKILL.md", Teaches: []string{"scripts/judge.sh"}},
 	{Plugin: "image-creator", Name: "system:image-creator", Order: 90, Path: "skills/image-creator/SKILL.md", Teaches: []string{"scripts/image_creator.sh"}},
 	{Plugin: "tasks", Name: "system:tasks", Order: 100, Path: "skills/tasks/SKILL.md", Teaches: []string{"scripts/tasks.sh"}},

@@ -180,6 +180,30 @@ func TestTaskCurrentRouteIsRemoved(t *testing.T) {
 	}
 }
 
+func TestGoalSetIsCapabilityGated(t *testing.T) {
+	called := ""
+	server := NewServer(Deps{
+		Plugins: []string{"goal"},
+		SetGoal: func(key string) (map[string]any, error) {
+			called = key
+			return map[string]any{"task_id": key, "epic_id": "T-1"}, nil
+		},
+	})
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/tools/goal/set", bytes.NewBufferString(`{"key":"T-2"}`)))
+	ok, result := decode(t, rr.Body.Bytes())
+	if rr.Code != http.StatusOK || !ok || called != "T-2" || result["epic_id"] != "T-1" {
+		t.Fatalf("enabled response=%d %v called=%q", rr.Code, result, called)
+	}
+
+	server.d.Plugins = nil
+	rr = httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/tools/goal/set", bytes.NewBufferString(`{"key":"T-2"}`)))
+	if rr.Code != http.StatusNotFound || called != "T-2" {
+		t.Fatalf("disabled response=%d called=%q", rr.Code, called)
+	}
+}
+
 func TestNativeTasksActionIsCapabilityGatedAndScrubsForgedIdentity(t *testing.T) {
 	disabled := NewServer(Deps{
 		Agent: "alice", Plugins: []string{"whoami", "loop", "messages"},

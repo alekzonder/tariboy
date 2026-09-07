@@ -31,6 +31,12 @@ AI-proxy lease with `task_id` and `epic_id`. All requests in the iteration are
 therefore attributed without an agent command. An iteration without a selected
 Goal remains unattributed.
 
+An agent that creates or claims work after its iteration starts may use
+`scripts/goal.sh set <TASK-KEY>`. The daemon validates and persists that Goal,
+resolves its top-level root, and updates the live lease. Only later requests use
+the new attribution; already recorded requests remain unchanged. A tagged live
+lease rejects a different Goal.
+
 ## Pricing catalog and request costs
 
 The daemon owns a last-known-good model-price catalog from LiteLLM's fixed

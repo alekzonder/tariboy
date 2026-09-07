@@ -540,6 +540,10 @@ func (p *Proxy) UpdateTask(key, taskID, epicID string) int {
 	return p.cfg.Tokens.UpdateTask(key, taskID, epicID)
 }
 
+func (p *Proxy) SetTaskIfEmpty(key, taskID, epicID string) (int, bool) {
+	return p.cfg.Tokens.SetTaskIfEmpty(key, taskID, epicID)
+}
+
 // Listen binds a random loopback port and records the chosen address.
 func (p *Proxy) Listen() (string, error) {
 	return p.ListenAt("")

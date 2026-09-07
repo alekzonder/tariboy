@@ -362,18 +362,21 @@ func TestTasksPromptDistinguishesFlexibleAndWorkflowQuestions(t *testing.T) {
 	}
 }
 
-func TestGoalIsInstructionOnlyAndCurrentTaskIsRemoved(t *testing.T) {
+func TestGoalCapabilityReplacesCurrentTask(t *testing.T) {
 	if _, err := ValidateExplicit([]string{"goal"}, nil); err != nil {
 		t.Fatalf("goal plugin validation: %v", err)
 	}
 	if _, err := ValidateExplicit([]string{"current-task"}, nil); err == nil {
 		t.Fatal("current-task plugin still validates")
 	}
+	if !IsOptional("goal") {
+		t.Fatal("goal is not a capability")
+	}
 	body, err := storeassets.ReadBundled("skills/goal/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"# Goal", "automatically attributes AI usage", "tasks"} {
+	for _, want := range []string{"# Goal", "automatically attributes AI usage", "scripts/goal.sh set", "tasks"} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("goal skill missing %q:\n%s", want, body)
 		}
