@@ -96,6 +96,7 @@ class StoreSkillsTest(unittest.TestCase):
 
     def test_skill_instructions_use_owning_direct_entrypoints(self):
         expected = {
+            "whoami": "From the directory containing this SKILL.md, run `scripts/whoami.sh`",
             "messages": "scripts/messages.sh",
             "schedule": "scripts/schedule.sh",
             "scripts": "scripts/scripts.sh",
