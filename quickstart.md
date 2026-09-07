@@ -6,15 +6,15 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.39.1` internal alpha on an Apple Silicon Mac.
+This path is for the `0.50.0` internal alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.39.1_aarch64.dmg`;
+- a verified `Tariboy_0.50.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
-- a writable `~/.local` and `flock` on that remote host;
+- a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
 
 ## 1. Install
@@ -43,8 +43,9 @@ them with **Option-Command-I** on macOS or choose **Inspect Element** from the
 WebView context menu.
 
 To expose the bundled local commands on your shell `PATH`, choose
-**Install/Update CLI** from the Tariboy menu-bar item. It updates all four
-Tariboy links under `~/.local/bin` and restarts the local daemon. Running
+**Install/Update CLI** from the Tariboy menu-bar item. It updates six Tariboy
+command links under `~/.local/bin` and restarts the local daemon. The bundle
+has five real payload files; `ttasks` is the alias for `tariboy-tasks`. Running
 agent shims continue; their harnesses retry through the brief proxy outage.
 When upgrading a running daemon older than `0.10.1`, Desktop first verifies
 that it is idle and refuses to change links or restart it while work is active.
@@ -59,9 +60,9 @@ ssh-agent, `known_hosts`, and interactive authentication work as they do in a
 terminal.
 
 Run preflight. Review the detected platform, architecture, disk, `flock`,
-`tmux`, and harnesses. Choose **Install** when the host reports Linux x86_64 and
-the required install prerequisites are green. Provisioning ends by opening a
-loopback-forwarding tunnel and checking daemon health.
+`python3`, `tmux`, and harnesses. Choose **Install** when the host reports Linux
+x86_64 and the required install prerequisites are green. Provisioning ends by
+opening a loopback-forwarding tunnel and checking daemon health.
 
 For local-only use, keep the default Local host and continue.
 

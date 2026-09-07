@@ -34,6 +34,36 @@ Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline.
 
+### Agent Goals
+
+Goal is per-agent and enabled by default. The reconciler retains one assigned
+Native Task selection until it is released: `done` or `cancelled`, a non-empty
+pull request, lost assignment or visibility, Goal disabled, a `wait_customer`
+task whose oldest unanswered customer wait reaches the agent's positive
+`goal_wait_customer_timeout_s` (300 seconds by default), or eligible assigned
+work with a strictly higher priority. It orders replacements by priority (`P0`
+through `P3`), then `in_progress` before `open`, creation time, and task key.
+Equal-priority work does not displace a valid selection.
+
+At startup, relevant task or agent changes, terminal iteration completion, and
+the bounded one-minute recovery cadence, the reconciler publishes one durable
+`task.goal` inbox message. It follows `Publish -> delivery -> WakeMessage` and
+never starts an iteration directly. An unprocessed Goal delivery blocks another
+publication; after it is processed, the positive per-agent delivery cooldown
+(60 seconds by default) also blocks rapid repeats. A wait within its grace
+period remains the goal but sends no continuation wake. Disabled agents or
+disabled Autopilot loops neither select nor receive a goal wake, but preserve a
+valid sticky key; only disabling Goal clears it.
+
+Images with the `goal` capability always render daemon-owned Goal guidance, even without a
+`runtime: goal` template entry. The block tells the agent to work through the
+Native Task workflow, wait for a recorded customer answer while in
+`wait_customer`, and set `wait_customer` after recording a PR while monitoring
+it rather than merging. When selected, it also contains the task key, title,
+priority, status, and description. The inbox message is only a durable wake
+hint. Task title and description are untrusted task input, not daemon
+instructions or lifecycle authority.
+
 ## Harness environment and preflight
 
 The daemon's own environment is the baseline every iteration starts from, so
@@ -47,11 +77,13 @@ intentional override. Non-bare images prepend the agent bin directory after the
 override; bare images omit that prefix and otherwise keep the daemon baseline.
 
 Before starting the shim, the runner checks the adapter's actual executable
-against this final environment. A missing or non-executable harness fails
-preparation through the normal `harness_error` path with the executable name,
-without including environment values, prompts, secrets, working directories,
-or user files. This preflight improves the diagnosis but cannot remove the
-normal race in which an executable disappears before process launch.
+against this final environment. For a non-bare image it also resolves `python3`
+there and supplies that absolute interpreter path to the packaged skill
+launchers. A missing or non-executable harness or Python interpreter fails
+preparation through the normal `harness_error` path without including
+environment values, prompts, secrets, working directories, or user files. This
+preflight improves the diagnosis but cannot remove the normal race in which an
+executable disappears before process launch.
 
 For a schema-v2 image with skills, the launch gate prepares
 `agents/<agent>/image-bridges/<image-digest>/<adapter-contract>/<harness>` before
@@ -96,7 +128,7 @@ before the watchdog is updated, so a daemon restart can adopt the running
 iteration with the same deadline and extension count. Extensions are unavailable
 after the timeout starts firing or for agents with no soft timeout.
 
-Agents signal completion with `tools loop done` (surfaced as `i-am-done`).
+Agents signal completion with `scripts/loop.sh done` (surfaced as `i-am-done`).
 
 When a schema-v2 template declares `runtime: workdir`, preparation resolves the
 agent's managed `agents/<agent>/workdir` to an absolute path and renders it
@@ -117,7 +149,7 @@ Schema-v2 agents receive exactly the plugins declared by their image, including
 an empty list. No core union is implicit. The familiar built-in capabilities
 are:
 
-- **whoami** — identity: which agent, image, cwd, and current iteration.
+- **whoami** — identity: which agent, cwd, current iteration, and client/daemon versions.
 - **loop** — iteration control: signal done, start/stop the loop.
 - **messages** — publish to and receive from channels.
 
@@ -130,28 +162,35 @@ On top of the core, an image opts into **optional capabilities**:
 
 - `context` — durable working memory,
 - `status` — a one-line "what I'm doing",
-- `schedule`, `scripts`, `current-task`, `tasks`,
+- `schedule`, `scripts`, `tasks`,
 - `image-creator`, `llm-as-judge`, and any validated, explicitly
   installed external plugin capability.
 
-The built-in `workdir` plugin is instruction-only rather than a capability. It
-adds no tool or shim; a schema-v2 image explicitly composes its Store prompt and
-`runtime: workdir` marker. See [workdir](/docs/plugins/built-in/workdir).
+The built-in `workdir` plugin is instruction-only. The `goal` capability adds
+only `scripts/goal.sh set <TASK-KEY>`, allowing an agent that started without a
+Goal to select an active task assigned to itself and attribute subsequent AI
+requests. It cannot replace a different Goal already attached to that
+iteration. A schema-v2 image explicitly packages their Store skills and
+composes the matching runtime value. See
+[built-in plugins](/docs/plugins/built-in).
 
 See [Built-in plugins](/docs/plugins/built-in) for the complete capability,
 command, prompt, and persistence reference.
 
-Capabilities gate tools and shims, but do not contribute prompt text
-automatically. Every static instruction is an explicit `prompts` file entry.
-Schema-v1 images retain the historical core union and fragment behavior.
+Capabilities gate routes and compatibility shims, but do not package skills or
+contribute prompt text automatically. Schema-v1 images retain the historical
+core union and render the matching skill instructions for compatibility.
 
-Before each iteration's prompt or message preparation, the launch gate checks
-for a pending image assignment. It stages and validates the new artifact,
-prepares and verifies any native skill bridge, reconciles image-owned shims,
-atomically promotes the DB assignment, and records
+Before each iteration's prompt or message preparation, the launch gate first
+honors a pending image assignment. Without one, it checks whether the active
+ordinary mutable-build ref now resolves to a different digest and stages that
+digest as pending. It then validates the new artifact, prepares and verifies
+any native skill bridge, reconciles image-owned shims, atomically promotes the
+DB assignment, and records
 the iteration's image ref, digest, and template hash. A running iteration is
 never interrupted. Backup and staging markers make an interrupted swap
 recoverable without changing durable agent state.
-Recovery compares the pinned digest, not only the ref. For daemon-managed refs,
-both inspection and staging resolve the exact retained digest recorded on the
-agent, including assignments that were pending when the daemon was upgraded.
+Recovery compares the pinned digest, not only the ref. For daemon-managed and
+ordinary mutable-build refs, both inspection and staging resolve the exact
+retained digest recorded on the agent, including assignments that were pending
+when the daemon was upgraded or the ordinary ref was rebuilt.

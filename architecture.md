@@ -14,8 +14,8 @@ sidebar:
 - the **agent lifecycle** — create, start/stop the loop, run iterations, reap;
 - the **message bus** — channels, subscriptions, deliveries;
 - **native Tasks** — queues, recursive task trees, comments, dependencies,
-  immutable queue workflow versions, assignment leases, events, and durable
-  notification/workflow outboxes;
+  per-agent sticky goal selection, immutable queue workflow versions, assignment
+  leases, events, and durable notification/workflow outboxes;
 - the **SQLite store** — `tariboyd.db`, all durable state;
 - the **plugin supervisor** — spawns, health-checks, and restarts plugins;
 - the **AI proxy** — every LLM call flows through it;
@@ -36,20 +36,20 @@ flowchart LR
 
   subgraph daemon[tariboyd on one host]
     api[Operator API and event hub]
-    tools[Per-agent tools sockets]
+    agentapi[Per-agent capability sockets]
     manager[Loop manager]
     proxy[In-process AI proxy]
     plugins[Plugin supervisor]
     store[(SQLite and agent files)]
     api <--> store
-    tools <--> store
+    agentapi <--> store
     manager <--> store
     proxy <--> store
     plugins <--> store
   end
 
   manager -->|one supervised iteration| shim[tariboy-shim and harness]
-  shim -->|identity-bound tools calls| tools
+  shim -->|identity-bound capability calls| agentapi
   shim -->|short-lived scoped token| proxy
   plugins -->|declared channels and API| daemon
 ```
@@ -57,7 +57,7 @@ flowchart LR
 | Surface | Typical client | Boundary and identity |
 | --- | --- | --- |
 | Operator API | Desktop, CLI, automation | Unix socket by default; a TCP listener requires the configured bearer-token policy. The optional HTTP/WebSocket listener accepts loopback addresses only. |
-| Agent tools socket | `tools`, `tasks`, and `i-am-done` within an agent | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
+| Agent capability socket | Skill-local scripts plus the legacy `tasks` and `i-am-done` compatibility shims | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
 | AI proxy | Harness or plugin making an LLM request | Loopback listener plus a short-lived iteration- or plugin-scoped token. Upstream provider keys remain in the daemon. |
 
 Remote Desktop access is an SSH local-forward to the remote daemon's loopback
@@ -124,12 +124,12 @@ sequenceDiagram
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
   D->>P: bind proxy and prepare plugin host
-  D->>C: serve operator API, tools sockets, and optional HTTP/WS
+  D->>C: serve operator API, capability sockets, and optional HTTP/WS
   D->>D: refresh stale prices without blocking clients; run background workers
   O->>D: cancellation or controlled stop
   D->>C: stop API and proxy listeners
   D->>D: cancel and drain background workers
-  D->>M: stop managed loops and tools servers
+  D->>M: stop managed loops and capability servers
   D->>S: flush and close durable state
 ```
 
@@ -139,7 +139,7 @@ listener, or receives a non-loopback HTTP address. A shim refresh failure is
 logged for its agent without preventing unrelated agents from starting.
 
 In steady state it runs the schedule publisher, task-workflow outbox publisher,
-workflow question and observation reconcilers, AI ingestion, the daily pricing
+the per-agent goal reconciler, workflow question and observation reconcilers, AI ingestion, the daily pricing
 catalog worker, policy/budget cache refresh, post-iteration evaluations,
 LLM-as-judge runner, retention pruner, loop engines, and plugin supervisors.
 Shutdown stops the proxy first, then cancels and awaits the pricing worker and
@@ -202,7 +202,7 @@ redelivery. See [Agents and the iteration
 loop](/docs/architecture/iteration-loop) and [The shim](/docs/architecture/shim)
 for the detailed scheduler and watchdog behavior.
 
-For workflow-managed work, `tasks work next` atomically leases a persisted
+For workflow-managed work, `ttasks work next` atomically leases a persisted
 packet. That packet narrows tools, artifacts, outcomes, and observation
 patterns. A wake is only a scheduling hint: the task reducer uses durable
 status and assignment records, never a prompt or raw channel message, to
@@ -210,7 +210,7 @@ advance work.
 
 ```mermaid
 flowchart LR
-  mutation[API or agent-tools mutation] --> transaction[One SQLite transaction]
+  mutation[API or skill-script mutation] --> transaction[One SQLite transaction]
   transaction --> state[Authoritative rows and event]
   transaction --> outbox[Durable outbox intent]
   outbox --> publisher[Background publisher]
@@ -247,7 +247,7 @@ transcripts are sensitive data and support bundles intentionally exclude them.
 
 ## Version reporting
 
-Every HTTP response from the daemon — the operator API and the per-agent tools
+Every HTTP response from the daemon — the operator API and per-agent capability
 socket alike — carries the daemon's build version in the `X-Tariboy-Version`
 response header. It is stamped by one wrapper around each server's handler, so
 successes, error envelopes and 404s all carry it; clients never need a dedicated
@@ -260,12 +260,20 @@ reaction to a mismatch belongs to the client, see
 
 ## Agent bin shims
 
-Provisioning writes three shims into `<data dir>/agents/<name>/bin`: `tools`,
-`i-am-done`, and — only for agents with the `tasks` capability — `tasks`. Each
-one `exec`s an **absolute path** to a specific release's `tariboy-tools`
-(`$TARIBOY_TOOLS_BIN`, else the binary next to the running `tariboyd`).
-The path stays absolute on purpose: an agent must talk to the daemon that owns
-it, and that is also what lets a test daemon isolate its agents.
+Provisioning writes only the compatibility shims enabled by the image into
+`<data dir>/agents/<name>/bin`: `i-am-done` and the legacy `tasks` shim. The
+real `tariboy-tasks` executable is installed globally as `ttasks`. At startup,
+a packaged daemon also atomically refreshes one shared `bin/ttasks` symlink in
+its runtime directory to its sibling payload and prepends that directory to
+the resolved account `PATH`. Fresh Desktop agents therefore have `ttasks`
+before optional CLI installation; no agent-local `ttasks` shim is created.
+The runtime alias remains across daemon restarts for surviving iterations.
+An explicit agent `PATH` override must retain a Tasks command location. When
+`TARIBOY_TOOLS_SOCKET` is non-empty, it uses that identity-bound socket and
+fails closed; when absent, it uses the host Unix daemon socket as the customer
+actor. Each compatibility shim `exec`s its owning skill script by an **absolute
+path** inside the running daemon's versioned Store. Every other capability is
+invoked through its packaged skill-local `scripts/*.sh` launcher.
 
 Because the path is absolute, shims written at create time would otherwise
 outlive the daemon that wrote them, leaving every agent on a frozen client whose

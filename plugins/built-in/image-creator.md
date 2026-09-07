@@ -14,7 +14,7 @@ host's image store. It is optional and is not included in `basic:latest`.
 Create a directory containing `Tariboyfile.yaml`, then build it:
 
 ```bash
-tools image build \
+scripts/image_creator.sh build \
   --name reviewer \
   --tag v1 \
   --path ./reviewer-image
@@ -56,11 +56,11 @@ assign the image to the creating agent or change a running iteration.
 ```yaml Tariboyfile.yaml
 plugins:
   - name: image-creator
-prompts:
-  - file: $CURRENT_VERSION_STORE/skills/image-creator/prompt.md
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/image-creator
 ```
 
-The Store prompt teaches the authoring command. It grants no extra filesystem
+The packaged Store skill teaches the authoring command. It grants no extra filesystem
 access beyond the capability-gated, workdir-confined API.
 
 ## Failure behavior

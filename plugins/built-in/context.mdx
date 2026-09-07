@@ -12,8 +12,8 @@ optional capability included in `basic:latest`.
 ## Capability surface
 
 ```bash
-tools context get
-tools context set "Current goal, completed work, and next step"
+scripts/context.sh get
+scripts/context.sh set "Current goal, completed work, and next step"
 ```
 
 `get` returns the complete document. A missing document is equivalent to empty
@@ -34,14 +34,15 @@ removal.
 
 ## Prompt integration
 
-The capability gates the commands. The Store prompt explains the replacement
-contract, and the runtime marker inserts the current text:
+The capability gates the route, the packaged Store skill explains replacement,
+and the runtime marker inserts the current text:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: context
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/context
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/context/prompt.md
   - runtime: context
 ```
 

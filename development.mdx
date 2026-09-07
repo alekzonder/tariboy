@@ -76,6 +76,12 @@ fails, daemon startup remains available with its inherited `PATH` and emits a
 stable warning; neither the inherited nor resolved path nor shell startup
 output may be logged, audited, or included in support bundles.
 
+After resolving the account baseline, a packaged daemon prepends its shared
+runtime `bin` directory, which contains a `ttasks` symlink to the sibling
+`tariboy-tasks` payload. This makes the bundled client available to fresh
+Desktop agents without the optional CLI installation. The alias is refreshed
+atomically and retained across restart handoff.
+
 The final iteration environment preserves this precedence:
 
 1. daemon environment, including the resolved account baseline;
@@ -97,17 +103,17 @@ entries. They may not override `HOME`, `CODEX_HOME`, or `XDG_CONFIG_HOME`.
 
 | Path | Responsibility |
 | --- | --- |
-| `cmd/` | Go binary entry points: daemon, CLI, shim, tools, and store service. |
+| `cmd/` | Go binary entry points: daemon, CLI, shim, and store service. |
 | `internal/` | Go domain logic, APIs, persistence, loop, bus, proxy, plugins, and embedded store UI. |
 | `ui/` | Shared React/TypeScript source and the Desktop and store UI build targets. |
 | `desktop/src-tauri/` | Rust/Tauri native host, daemon lifecycle, SSH, Keychain, tunnels, support export, and packaging resources. |
 | `internal/builtinimages/source/` | Canonical source for the embedded `basic:latest` image. |
-| `store/skills/` | Canonical static prompts installed under the current version Store. |
+| `store/skills/` | Canonical Agent Skills installed under each versioned Store. |
 | `scripts/` | Isolated smoke, end-to-end, packaging, and release verification. |
 | `docs/docs/` | Current product, operator, architecture, and development documentation. |
 | `docs/releases/` | Release notes and acceptance evidence. |
-| `outside/superpowers/specs/` | Historical and active feature design decisions. |
-| `outside/superpowers/plans/` | Historical and active implementation plans. |
+| `docs/superpowers/specs/` | Historical and active feature design decisions. |
+| `docs/superpowers/plans/` | Historical and active implementation plans. |
 
 Current product and architecture docs take precedence over historical plans.
 Read a historical spec or plan when extending the feature it describes or when
@@ -135,18 +141,25 @@ change in the Desktop app requires the loop/shim, Web UI, and Desktop/SSH rows.
 
 ## Build and verification matrix
 
-Two targets are the entry points, and they compose everything below:
+Use the smallest fast entry point that covers the change; the aggregate and
+heavy targets compose them:
 
 ```bash
-make check       # fast, read-only, minutes
-make full-check  # heavy, tens of minutes, includes check
+make backend-check   # Go, Store skills, and smoke contracts
+make frontend-check  # UI and documentation
+make check           # both fast checks
+make full-check      # heavy, tens of minutes, includes check
 ```
 
-`make check` is safe to run often in a shared working tree: it only reads. It
-never rewrites files, never installs node modules, never writes into `bin/`,
-and does not dirty `git status`. Its steps are
-`fmt-check`, `vet`, `test`, `ui-typecheck`, `ui-lint`,
-`ui-test`, `ui-branding`, and `docs`.
+Run `make backend-check` for backend-only changes and `make frontend-check` for
+frontend- or documentation-only changes. Run `make check` for mixed changes or
+when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
+the Store skill tests, and smoke contracts. The frontend target runs UI
+typecheck, lint, unit tests, branding, and the documentation checks. All three
+are read-only: they never install dependencies, write into `bin/`, or dirty
+`git status`. Each step reports its result and duration as it finishes.
+Successful command output is suppressed; failed steps print their command and
+complete diagnostics, and every run ends with a compact summary.
 
 `make full-check` is the full set of checks that run unattended on a developer
 machine, not every check in the repository. It runs `check`, then `build`, the
@@ -154,13 +167,14 @@ four core E2E scripts, `full-smoke`, the two Playwright browser suites, and one
 desktop step for the host: `desktop-e2e` on Linux x86_64, `desktop` plus
 `desktop-smoke` on macOS arm64, and the version and lock gates alone elsewhere.
 
-Neither target stops at the first failure. Each step is timed and recorded, and
-the run ends with a summary table naming every step that failed, so one pass
-surfaces gofmt drift and a UI type error together.
+The check targets do not stop at the first failure. Each step is timed and
+recorded, and the run ends with a summary table naming every step that failed,
+so one aggregate pass surfaces gofmt drift and a UI type error together.
 
-Both targets require `ui/node_modules` and `docs/node_modules` to exist; run
-`npm ci` in those directories once, as described below. Neither target installs
-them, because installing would rewrite a shared working tree.
+`frontend-check`, `check`, and `full-check` require `ui/node_modules` and
+`docs/node_modules` to exist; run `npm ci` in those directories once, as
+described below. These targets do not install them, because installing would
+rewrite a shared working tree.
 
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
@@ -169,10 +183,10 @@ data), and `scripts/check-alpha-artifacts.sh` is a release gate that takes a
 release directory as its argument. The Rust host tests are outside both targets
 as well; see [Rust desktop host](#rust-desktop-host).
 
-The individual targets are unchanged and remain callable on their own, so
-running `make vet` or `make e2e` while iterating is still legitimate. Use the
-smallest relevant check while iterating, then `make check`, and `make full-check`
-when the diff reaches e2e, packaging, or desktop behavior.
+The individual targets remain callable on their own, so running `make vet` or
+`make e2e` while iterating is still legitimate. Use the smallest relevant
+check, `make check` for mixed changes, and `make full-check` when the diff
+reaches e2e, packaging, or desktop behavior.
 
 ## Cleaning the working tree
 
@@ -191,8 +205,8 @@ git clean -ndx
 
 ### Go control plane and plugins
 
-`make check` covers this subsystem with `fmt-check`, `vet`, and `test`. To run
-one of them from the repository root while iterating:
+`make backend-check` covers this subsystem with `fmt-check`, `vet`, and `test`.
+To run one of them from the repository root while iterating:
 
 ```bash
 make vet
@@ -205,21 +219,34 @@ fixture embedded in an npm dependency is not Tariboy source and must not extend
 the Go quality gate.
 
 `make fmt` is not a check: it rewrites files. Only `fmt-check` is part of
-`make check`; run `make fmt` yourself when it reports drift.
+`backend-check`; run `make fmt` yourself when it reports drift.
 
 `make build` produces the core binaries. It is not part of `check`, which
 writes nothing into `bin/`, and it is the first build step of `full-check`. It
 also builds the canonical `basic:latest` image bundle before the main binaries;
-optional external plugins have their own build under `plugins/`. Static
-built-in prompts come from `store/skills`, not Go constants. The image build
+optional external plugins have their own build under `plugins/`. Built-in
+skills and the mandatory finish prompt come from the versioned Store, not Go
+constants. The image build
 uses an isolated temporary store and never contacts a daemon. `desktop-binaries` runs
 the same image step before compiling its local and remote daemon payloads.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
+The Tasks mode E2E inside `backend-check` builds its five required binaries and
+basic image in temporary directories. A Go build overlay embeds that temporary
+image, so the check never regenerates workspace `bin/` or
+`internal/builtinimages/generated`.
+
+`make server-install` builds all six real server binaries, stages and verifies
+their checksums, publishes a versioned release under
+`$HOME/.local/lib/tariboy/<version>`, and transactionally switches the matching
+`$HOME/.local/bin` links. `ttasks` is an additional alias for
+`tariboy-tasks`. It does not start or restart the daemon.
+
 Configurable Native Tasks workflow changes normally need focused tests under
 `internal/tasks`, the operator route/OpenAPI registry tests under
-`internal/commands`, and agent command parsing under `internal/toolscli`.
+`internal/commands`, and agent command parsing under
+`store/skills/test_store_skills.py`.
 Changes to queue-trigger or observation delivery also exercise bus/daemon
 recovery; Compose changes exercise `internal/compose`. The isolated product
 path is `scripts/workflow-e2e.sh` and is included by `make full-check`. Keep the
@@ -421,11 +448,13 @@ and a platform that does not match the current host before compiling payloads.
 `make desktop-alpha` packages and verifies the internal alpha; publication is a
 separate manual action.
 
-The tray action **Install/Update CLI** owns the local four-binary install. It
-preflights and atomically switches `tariboyd`, `tariboy`,
-`tariboy-shim`, and `tariboy-tools` links under `~/.local/bin`, then
-restarts the bundled daemon even when the links already target the same app
-path. Its filesystem and lifecycle work must stay off the UI thread. Changes to
+The tray action **Install/Update CLI** owns the local five-file payload and
+six-command-path install. It preflights and atomically switches `tariboyd`,
+`tariboy`, `tariboy-tasks`, `ttasks`, `tariboy-shim`, and
+`tariboy-plugin-telegram` links under `~/.local/bin`; `ttasks` points to the
+real `tariboy-tasks` payload. It then restarts the bundled daemon even when the
+links already target the same app path. Its filesystem and lifecycle work must
+stay off the UI thread. Changes to
 this flow require Rust installer tests plus the daemon restart-handoff tests;
 never exercise it against the user's live daemon.
 

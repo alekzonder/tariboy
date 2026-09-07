@@ -12,12 +12,12 @@ open. It is an optional capability and is not included in `basic:latest`.
 ## Capability surface
 
 ```bash
-tools schedule add --kind oneshot --spec 2026-08-20T10:00:00Z
-tools schedule add --kind cron --spec "*/15 * * * *" \
+scripts/schedule.sh add --kind oneshot --spec 2026-08-20T10:00:00Z
+scripts/schedule.sh add --kind cron --spec "*/15 * * * *" \
   --channel agent:worker:inbox \
   --message '{"text":"check the queue"}'
-tools schedule ls
-tools schedule cancel <schedule-id>
+scripts/schedule.sh ls
+scripts/schedule.sh cancel <schedule-id>
 ```
 
 `kind` is `oneshot` or `cron`. The schedule parser validates `spec`; a malformed
@@ -51,12 +51,12 @@ can consume it.
 ```yaml Tariboyfile.yaml
 plugins:
   - name: schedule
-prompts:
-  - file: $CURRENT_VERSION_STORE/skills/schedule/prompt.md
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/schedule
 ```
 
-There is no schedule runtime marker. The Store prompt teaches the commands;
-`tools schedule ls` reads current state when needed.
+There is no schedule runtime marker. The packaged skill teaches the commands;
+`scripts/schedule.sh ls` reads current state when needed.
 
 ## Workflow restrictions
 
@@ -74,4 +74,4 @@ cannot escape an assignment's live communication boundary.
 
 - [Channels: schedules and scripts](/docs/reference/channels#schedules-and-scripts)
 - [Messaging architecture](/docs/architecture/messaging)
-- [Configurable task workflows](/docs/task-workflows#agent-tools-and-security-boundary)
+- [Configurable task workflows](/docs/task-workflows#agent-capability-security-boundary)

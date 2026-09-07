@@ -13,7 +13,7 @@ execution, and prompt behavior are not the same.
 <CardGroup cols={2}>
   <Card title="Built-in plugins" href="/docs/plugins/built-in" icon="package-check">
     Daemon-owned capabilities such as context, messages, scripts, and Native
-    Tasks, plus instruction-only plugins such as workdir. They do not run as
+    Tasks and Goal, plus instruction-only plugins such as workdir. They do not run as
     separate plugin processes.
   </Card>
   <Card title="External plugins" href="#external-plugins" icon="unplug">
@@ -92,8 +92,11 @@ tariboy plugin ls
 tariboy plugin inspect my-plugin
 ```
 
-External plugins are optional and are not compiled into Tariboy. Immutable
-versions live side by side under `$PLUGINS/<name>/<version>`. Exactly one
+Third-party external plugins are optional and installed separately. A
+first-party plugin may instead ship as a sibling Tariboy executable; the daemon
+ensures its reserved manifest at startup through the same supervised-process
+and versioned-directory path. Immutable versions live side by side under
+`$PLUGINS/<name>/<version>`. Exactly one
 version is active and one process is supervised per plugin name. Reinstalling
 identical bytes is idempotent; different bytes at an existing name/version are
 rejected.
@@ -104,12 +107,105 @@ that named plugin run without changing the image manifest. Keep any static
 guidance explicit in the image template, normally with a `$PLUGINS/...` prompt
 path.
 
+### Operator CLI and settings contributions
+
+An external manifest may declare `operator_commands` and `settings`. Command
+paths are relative to the plugin name: a `telegram` manifest command named
+`chat.setup` becomes `tariboy telegram chat setup`. The CLI obtains these
+descriptors from the selected running daemon and invokes them through the
+existing generic plugin action endpoint. Core commands remain available when
+the daemon is down; contributed commands require the daemon that supplied
+their schema. Secret command arguments are file-or-stdin inputs and are never
+accepted as token values in argv.
+
+Settings descriptors use only Tariboy's built-in string, password,
+integer-list, status, and action controls. Desktop renders them under the
+route-selected server's **Settings → Integrations** section. Passwords are
+write-only. A plugin cannot inject JavaScript, HTML, CSS, React components,
+routes, or assets into the CLI or Desktop process. The daemon validates command
+names, field types, required values, action fields, and namespace ownership
+before forwarding an action to the supervised plugin.
+
+## Bundled Telegram plugin
+
+`tariboy-plugin-telegram` is installed and enabled automatically beside each
+packaged daemon. The operator must first create a Telegram supergroup, enable
+topics, add the bot, and give the bot permission to manage topics. Bots cannot
+create a group, enable forum mode, or grant administrator rights, and Tariboy
+never changes user or bot permissions.
+
+Configure the bot with an owner-only token file (or stdin), then bind the
+existing forum supergroup:
+
+```bash
+tariboy telegram configure --token-file ./telegram-token --allowed-uids 123,456
+tariboy telegram chat setup --chat-id -1001234567890
+tariboy telegram status
+```
+
+The same fields and actions are available for the selected server under
+**Settings → Integrations → Telegram**. The token is write-only. An empty
+allowed UID list is deny-all: no message or command is accepted, including from
+the configured chat, and discarded update offsets still advance so old
+messages cannot run after access is enabled later. Allowed users do not need to
+be chat administrators.
+
+Setup accepts only a forum `supergroup` and verifies the bot can manage topics.
+It creates a `tariboyd` management topic and one retained topic per current
+agent; reconciliation creates topics for later agents. Deleting an agent does
+not delete its topic. If a mapped topic is removed in Telegram, the next agent
+reply creates and records a replacement.
+
+The management topic supports:
+
+```text
+/help
+/agents
+/agent create NAME IMAGE
+/agent show NAME
+/agent set NAME FIELD VALUE
+/start NAME
+/stop NAME
+/kill NAME
+/tasks [NAME]
+/task show KEY
+/task create QUEUE TITLE
+/task assign KEY AGENT
+/task status KEY open|in_progress|done|cancelled
+/task comment KEY TEXT
+```
+
+Each agent topic supports the same lifecycle and task operations with the
+agent implied:
+
+```text
+/help
+/start
+/stop
+/kill
+/tasks
+/task show KEY
+/task create QUEUE TITLE
+/task assign KEY
+/task status KEY open|in_progress|done|cancelled
+/task comment KEY TEXT
+```
+
+`/help` prints the complete list for its topic. `/agent set` permits only
+alias, image, harness, model, effort, working directory, interactive mode, and
+Autopilot settings; it cannot set environment variables or secrets. Ordinary
+text in a live agent topic travels through `chat:telegram:<agent>` and the
+existing channel/message delivery and acknowledgement path; its Telegram update
+is marked read only after the mapped agent has a non-DLQ delivery. Private chats,
+other groups, the general topic, anonymous posts, unknown topics, media,
+reactions, edits, and webhooks are not supported.
+
 ## Related reference
 
 - [Built-in plugins](/docs/plugins/built-in) lists every daemon-owned
   capability and its command surface.
-- [Agent tools](/docs/binaries/agent-tools) explains the `tools` and `tasks`
-  shims used inside an agent.
+- [Agent capability scripts](/docs/binaries/agent-tools) explains skill-local
+  launchers and the `tasks` compatibility shim used inside an agent.
 - [Channels](/docs/reference/channels) defines delivery, subscriptions,
   provider watches, schedules, and script results.
 - [Command reference](/docs/reference/commands) lists operator and agent

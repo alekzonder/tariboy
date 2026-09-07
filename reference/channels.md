@@ -12,6 +12,11 @@ This document describes the v2 channel bus: how messages move through channels,
 how agents receive them, how deliveries are acknowledged, and which agent
 settings affect message handling.
 
+Judge automation uses ordinary inbox deliveries. `judge.review.requested` goes
+to the configured lead from a cron or one-shot schedule,
+`judge.work.available` wakes configured workers, and `judge.summary.ready`
+wakes the lead. The delivery ID is the automatic cycle's idempotency key.
+
 ## Mental model
 
 The bus is a store-backed fan-out system with four core tables:
@@ -46,6 +51,7 @@ Built-in helpers define the main system channel shapes:
 - `group:<group>:inbox`: group lead inbox.
 - `group:<group>:direct:<agent>`: direct group lane; currently helper-defined, not the main group workflow.
 - `chat:<name>`: chat/plugin-facing channel.
+- `chat:telegram:<agent>`: the bundled Telegram topic for one agent.
 - `user:<name>`: user-facing channel.
 
 Channel kind is inferred from the name:
@@ -60,6 +66,13 @@ Channel kind is inferred from the name:
 
 Unknown shapes default to `chat` kind in low-level classification, but operator
 subscription validates channel names before creating them.
+
+The Telegram plugin subscribes the mapped agent and its sink to the concrete
+`chat:telegram:<agent>` channel. Authorized topic text is published as a normal
+plugin-produced message; an agent-produced reply is delivered back to that
+topic only after it passes through the same durable bus. The plugin suppresses
+its inbound echo and acknowledges the sink delivery only after Telegram accepts
+the reply.
 
 ## Messages
 
@@ -84,13 +97,13 @@ tariboy message send --channel chat:ops --type note --text "hello"
 Agent publish from inside an iteration:
 
 ```bash
-tools message send --channel chat:ops --type note --text "hello"
+scripts/messages.sh message send --channel chat:ops --type note --text "hello"
 ```
 
 Group request is a convenience wrapper over normal message publish:
 
 ```bash
-tools group request worker --text "What is blocking you?" --deadline 5m
+scripts/messages.sh group request worker --text "What is blocking you?" --deadline 5m
 ```
 
 It publishes to `agent:worker:inbox` with type `group.request` and
@@ -106,15 +119,15 @@ A subscription belongs to one agent and one channel. It can also include:
 An empty matcher and empty type filter match all messages on the channel.
 Subscriptions are idempotent on `(agent, channel, matcher)`.
 
-Agent-side subscription tools:
+Agent-side subscription script:
 
 ```bash
-tools channel subscribe chat:ops
-tools channel subscribe chat:ops --type incident.*
-tools channel subscribe chat:ops --matcher '{"subject.env":"prod"}'
-tools channel ls
-tools channel unsubscribe <subscription-id>
-tools sources
+scripts/messages.sh channel subscribe chat:ops
+scripts/messages.sh channel subscribe chat:ops --type incident.*
+scripts/messages.sh channel subscribe chat:ops --matcher '{"subject.env":"prod"}'
+scripts/messages.sh channel ls
+scripts/messages.sh channel unsubscribe <subscription-id>
+scripts/messages.sh sources
 ```
 
 Operator-side subscription commands:
@@ -157,7 +170,12 @@ nudge: the engine checks `HasPending(agent)` and starts a message-triggered
 iteration only when the agent's loop is enabled and pending deliveries exist.
 Native Task assignment and mention notifications use this same path; they do
 not call a Tasks-specific runner or poller. A disabled loop keeps the delivery
-pending until it is enabled or started manually.
+pending until it is enabled or started manually. The per-agent Goal reconciler
+uses it too: it publishes `task.goal` only while the agent and Autopilot are
+enabled. An unprocessed Goal delivery suppresses another publication; a
+positive per-agent cooldown then suppresses rapid repeats (60 seconds by
+default). That message is a durable wake hint, not a task mutation or a direct
+iteration start.
 
 ### Workflow-owned channel use
 
@@ -233,7 +251,7 @@ For a group named `dev-team`:
 - the lead subscribes to `group:dev-team:inbox`;
 - non-lead members are not subscribed to the group inbox.
 
-`tools group request <member> ...` and `tools group send <member> ...` publish
+`scripts/messages.sh group request <member> ...` and `scripts/messages.sh group send <member> ...` publish
 directly to the member's `agent:<member>:inbox`, not to the group broadcast.
 
 `group:<group>:inbox` is the external entry point for the lead. Broadcast is the
@@ -251,26 +269,26 @@ Schedules are agent-owned bus producers. A schedule has:
 - `next_fire_at`
 - `enabled`
 
-Agent tools can create schedules:
+The packaged Schedule skill can create schedules:
 
 ```bash
-tools schedule add --kind oneshot --spec 2026-07-10T10:00:00Z
-tools schedule add --kind cron --spec "*/15 * * * *" --channel agent:worker:inbox --message '{"text":"wake"}'
-tools schedule ls
-tools schedule cancel <id>
+scripts/schedule.sh add --kind oneshot --spec 2026-07-10T10:00:00Z
+scripts/schedule.sh add --kind cron --spec "*/15 * * * *" --channel agent:worker:inbox --message '{"text":"wake"}'
+scripts/schedule.sh ls
+scripts/schedule.sh cancel <id>
 ```
 
 If no channel is passed, the agent API defaults the schedule target to the
 agent's own inbox.
 
 Scripts are also agent-owned, but they execute only local commands; they do not
-schedule arbitrary channel publication. `tools script run NAME -- COMMAND`
-queues one attempt, while `tools script schedule NAME --every N -- COMMAND`
+schedule arbitrary channel publication. `scripts/scripts.sh run NAME -- COMMAND`
+queues one attempt, while `scripts/scripts.sh schedule NAME --every N -- COMMAND`
 runs immediately and then after a fixed post-completion delay. Non-quiet runs
 publish `script.result` to the owner's inbox. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
-Combined stdout and stderr remain in that file and are not copied into the
-message.
+The log starts with the resolved execution CWD; combined stdout and stderr
+follow in that file and are not copied into the message.
 
 ## Operator visibility
 
@@ -297,8 +315,9 @@ The agent row contains these message-related fields:
 - `messages_batch`: maximum number of pending messages inserted into one prompt.
   Default is `10`. If the runtime value is `<= 0`, the runner also falls back to
   `10`.
-- `messages_max_queue`: stored on the agent with default `1000`, but current
-  bus/runner code does not enforce it as a queue limit.
+- `messages_max_queue`: maximum pending messages for the agent, default `1000`.
+  A publish beyond the limit is retained in that agent's DLQ with result
+  `queue_limit`; it is not added to the runnable pending queue.
 - `loop_enabled`: if false, publish can create pending deliveries but the agent
   will not run automatically to consume them.
 - `interval_s`: timer-based loop interval. Message-triggered iterations do not
@@ -326,10 +345,10 @@ tariboy loop interval worker <seconds>
 Inside an agent:
 
 ```bash
-tools loop start
-tools loop stop
-tools channel subscribe <channel>
-tools channel unsubscribe <subscription-id>
+scripts/loop.sh start
+scripts/loop.sh stop
+scripts/messages.sh channel subscribe <channel>
+scripts/messages.sh channel unsubscribe <subscription-id>
 ```
 
 There is currently no public CLI command dedicated to changing
@@ -340,14 +359,14 @@ There is currently no public CLI command dedicated to changing
 Direct worker request from a lead:
 
 ```bash
-tools group request worker --text "Please take TARI-12" --deadline 5m
-tools group loop start worker
+scripts/messages.sh group request worker --text "Please take TARI-12" --deadline 5m
+scripts/messages.sh group loop start worker
 ```
 
 Broadcast to a group:
 
 ```bash
-tools message send --channel group:dev-team:broadcast --type note --text "Stand by"
+scripts/messages.sh message send --channel group:dev-team:broadcast --type note --text "Stand by"
 ```
 
 Subscribe an agent to a plugin/chat channel:

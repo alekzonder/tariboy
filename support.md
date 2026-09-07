@@ -11,11 +11,11 @@ sidebar:
 1. Open **Settings → General** and note app/daemon version and local status.
 2. For a remote problem, inspect the host phase and last structured error.
 3. Confirm the SSH alias still works in Terminal.
-4. Check free disk, writable `~/.local`, `flock`, `tmux`, and the selected
-   harness on the remote host.
+4. Check free disk, writable `~/.local`, `flock`, `python3`, `tmux`, and the
+   selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.39.1`. Resolve a local mismatch with
+The app and bundled daemons must report `0.50.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -81,13 +81,13 @@ Repository owner and alpha incident lead: GitHub user
 2. Quit Tariboy from its menu-bar item.
 3. Move the current app out of Applications without deleting its support data.
 4. Reinstall the previously verified DMG.
-5. Relaunch, choose **Install/Update CLI** to repoint all four local links and
+5. Relaunch, choose **Install/Update CLI** to repoint all six local links and
    restart the local daemon, then update remote hosts to the version bundled by
    that app.
 
 Local link switching is preflighted and transactional. Remote activation also
 attempts to restore the previous release if verification/restart fails. Do not
-manually repoint only one of the four local or remote CLI symlinks.
+manually repoint only one of the six local or remote managed symlinks.
 
 ## Uninstall
 
@@ -101,9 +101,11 @@ app=/Applications/Tariboy.app
 identifier=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
 test "$identifier" = app.tariboy.desktop
 bundle_bin=$app/Contents/Resources/bin/darwin-arm64
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for managed in tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram; do
+  name=${managed%%:*}
+  source=${managed#*:}
   link="$HOME/.local/bin/$name"
-  expected="$bundle_bin/$name"
+  expected="$bundle_bin/$source"
   test -x "$expected"
   if test -L "$link"; then
     target=$(readlink "$link")
@@ -117,7 +119,7 @@ for name in tariboyd tariboy tariboy-shim tariboy-tools; do
   fi
 done
 "$bundle_bin/tariboy" daemon stop || true
-for name in tariboyd tariboy tariboy-shim tariboy-tools; do
+for name in tariboyd tariboy tariboy-tasks ttasks tariboy-shim tariboy-plugin-telegram; do
   link="$HOME/.local/bin/$name"
   test ! -L "$link" || rm -- "$link"
 done

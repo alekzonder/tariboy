@@ -29,17 +29,42 @@ adoption/start and saved-host reconnect continue independently in the
 background, so their existing status banners may be visible during startup.
 Dock reopen and the menu-bar Open action raise the same main window.
 
-The primary **New agent** dialog keeps host, image, harness, model, effort, cwd,
-and launch controls in the main flow. Harness is selected from the supported
-Tariboy harnesses. Model and effort are editable preset fields: they start
-from explicit runtime defaults for schema-v2 images, accept arbitrary
-overrides, and include conservative built-in suggestions instead of querying
-harness or provider catalogs. Schema-v1 image defaults remain readable for
-compatibility.
-Successful custom overrides are remembered in the Desktop WebView by harness
-and offered on later creates. These local suggestions are an operator
-convenience, not a capability check for the selected host; failed creates do
-not add values. Advanced overrides contains only the raw environment field.
+The primary agent dialog has **Target**, **Identity**, **Runtime**,
+**Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
+documented defaults and submits one complete create request; the daemon writes
+one complete stopped agent row. Environment is a string-valued JSON object,
+schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
+read-only. Bare images force Interactive on and Autopilot off.
+
+Ordinary creation defaults the soft iteration timeout to 7,200 seconds (2
+hours) and the hard timeout to 10,800 seconds (3 hours). Clone mode continues
+to copy both timeout values from the source agent.
+
+Agent creation, clone, and **Configuration** carry the per-agent Goal settings:
+an enabled-by-default switch, a positive whole-second customer-wait timeout
+(300 by default), and a positive Goal delivery cooldown (60 seconds by
+default). Configuration shows the daemon-selected goal key read-only.
+The former server-global policy screen is not part of Settings.
+
+Right-clicking any grouped or individual sidebar agent exposes **Clone**.
+Clone loads the source inspect projection from that agent's explicit host,
+leaves the unique name blank, and prefills every persisted agent-row
+configuration field, including raw configured CWD and message limits. It does
+not copy secrets, history, runtime evidence, messages, subscriptions, scripts,
+workdir contents, retention/evals, budgets, or proxy policy. The target host
+and image remain editable, and every follow-up request stays pinned to that
+explicit target. Older daemons that do not expose the complete clone projection
+must be updated. **Start now** remains a separate retryable lifecycle request
+after creation.
+
+Harness is selected from the supported Tariboy harnesses. Model and effort are
+editable preset fields: they start from explicit runtime defaults for schema-v2
+images, accept arbitrary overrides, and include conservative built-in
+suggestions instead of querying harness or provider catalogs. Schema-v1 image
+defaults remain readable for compatibility. Successful custom overrides are
+remembered in the Desktop WebView by harness and offered on later creates.
+These local suggestions are an operator convenience, not a capability check
+for the selected host; failed creates do not add values.
 
 The Agents sidebar partitions each host into expandable **Teams** and
 **Individual agents** without changing agent navigation or terminal drag
@@ -100,28 +125,110 @@ iteration boundary.
 Runnable import previews expose the target name and tag. Operators can keep the
 artifact ref for an idempotent import or choose a different target when that ref
 already contains another digest; the source archive remains runnable-only.
+For an exportable non-reserved built image, **Upload to servers** captures the
+source target and offers all ready non-source hosts, with individual selection
+or **All servers**. A remote source includes **This daemon (local)** exactly
+once; a local source excludes itself. The UI exports one runnable archive into
+the open dialog's browser memory, then previews and applies it against each
+explicit destination target. It continues after destination failures; same-digest results are
+**Already present**, and a conflicting destination can be retagged and retried
+without another export. Closing the dialog drops the archive and progress. This
+operation never switches the active host or the selected source route, and the
+archive is neither a source backup nor persisted state.
+Eligible and selected targets are snapshotted for the open transfer, so a
+registry refresh cannot remove a requested destination's result. The source
+archive has its own **Exporting** phase: controls and cancellation are disabled
+until the one download completes, after which cancellation only skips
+unstarted destinations.
 
 The persistent server context places **Tasks** beside **Images** and **Settings**.
-Tasks uses one reusable three-region workspace at `/servers/:hostId/tasks` and
-inside each Agent tab. The server route shows every task visible on that host;
+Settings discovers declarative pages from enabled plugins on that explicit
+server and lists them under **Integrations**. One generic React renderer owns
+the supported form controls and forwards actions through the daemon's existing
+plugin bridge; plugin-provided executable UI, HTML, and styles are never loaded.
+Password controls are write-only and status responses contain only the safe
+projection selected by the plugin contract.
+
+A completed Judge run lists its evidence-linked improvement proposals. Opening
+one shows the repository and base commit, approved file scope, acceptance
+criteria, evidence citations, rollback image, and exact revision hash. Operators
+can approve or reject that plan; if an immutable release has been recorded, the
+same view shows its provenance and exact release hash and can approve, reject,
+or stage it for one agent's next iteration. The view does not run Git changes or
+build a release, and it does not provide atomic team rollout.
+
+The Judge runs table shows local start date/time (`created_at`), the full run ID
+linked to its details, then count, coverage, verdict, model, cost, and creator.
+Runs are sorted newest first; missing or invalid dates appear last as `—`.
+The full criteria remain on the detail page rather than expanding table rows.
+
+Agent Activity projects Judge state onto each iteration. A terminal iteration
+can queue a manual review with one Judge by default; operators can request two
+independent analyses through the CLI when that extra cost is warranted. Until
+the daemon creates its target the Activity action is only
+**Queued**, and after target creation pending work is still waiting for a
+configured worker, not proof that a harness is running. The latest completed
+score remains visible while a newer review is pending, including a numeric zero.
+History links open the run at that exact target. The target view contains only
+that iteration's consensus, analyses, and immutable evidence, with breadcrumbs
+back to both the explicit-host Judge list and the originating Activity entry.
+Every poll, action, citation, and link stays pinned to the host in the route.
+
+Judge workers run in manual mode when Autopilot is disabled. Activity reports
+that configured state as the reason pending work is waiting; an unavailable
+status is reported as unknown rather than treated as disabled. Operators start
+or enable workers separately—the review action does not claim that it did so.
+
+The Judge page also exposes the selected daemon's automation document as a raw
+JSON textarea. Validate, Apply, and Run once send unchanged text or the existing
+one-shot request to `tariboyd`; JSON
+Pointer diagnostics and canonical applied JSON come back from the daemon.
+Unsaved text stays only in component state, and Reset restores the last applied
+revision. When that selected daemon has no complete `judges` group, the page
+offers to create or repair it from the applied document's Judge lead, two
+workers, and image. Missing agents are created first; the page then reapplies
+the saved automation document so the daemon restores its image and loop settings
+before group membership is reconciled. Every request uses that same explicit
+daemon target.
+
+Tasks uses one reusable workspace at `/servers/:hostId/tasks` and inside each
+Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
-`scope_agent=<name>` to render only that agent's inherited view. The center is
-an expandable tree ordered at every depth by priority, manual position, and
+`scope_agent=<name>` to render only that agent's inherited view. The tree fills
+all remaining width after task navigation and is expandable, ordered at every
+depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
 inside a task reparents it without changing priority. Compact priority markers
-appear in the tree and the right panel edits priority alongside the other task
-fields, comments, mentions, and answer waits.
-On desktop-width layouts, keyboard- and pointer-accessible separators resize
-the left task navigation and right task-detail panels. Arrow keys move a
-separator, Shift increases the step, Home and double-click restore its default,
-and both clamped widths persist together in the versioned WebView localStorage
+appear in the tree. Selecting a task opens its detail in a fullscreen shadcn
+dialog, with priority, other task fields, comments, mentions, and answer waits.
+Back and Close dismiss the dialog while preserving the mounted tree's expansion
+and scroll position. Dismissal protects unsaved description and comment drafts
+with a discard confirmation. There is no empty detail sidebar or detail resizer.
+Task Detail also offers `Wait customer` status and an editable Pull request URL;
+both use the existing optimistic revision and explicit-host request path.
+On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
+the left task navigation. Arrow keys move the separator, Shift increases the
+step, Home and double-click restore its default,
+and the clamped navigation width persists in the versioned WebView localStorage
 record `tasks:workspace:v1`. Route changes and app reloads restore that record.
-An active resize also reserves the center tree's minimum usable width and the
-other panel before accepting a new side-panel width.
-At the existing responsive breakpoints, the fixed navigation, overlay detail,
-and hidden mobile navigation behavior still takes precedence; inactive
-separators are hidden without discarding the stored desktop widths.
+An active resize reserves the tree's minimum usable width. At responsive
+breakpoints, fixed or hidden mobile navigation takes precedence; the inactive
+separator is hidden without discarding the stored desktop navigation width.
+
+Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
+with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
+links, lists, checklists, code, and tables are supported. Unsupported syntax
+keeps the editor in source mode rather than being silently converted or lost.
+Saved content renders through `react-markdown` and `remark-gfm`, without raw
+HTML execution. Markdown strings remain the API and persistence contract;
+editor documents are not stored. Vite's `build.license` generates bundled
+JavaScript dependency license texts and copyright notices in
+`desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
+asset is packaged with the app and is not committed.
+Existing typed mentions, explicit questions,
+and answer-wait semantics remain daemon-owned.
+
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task; it updates from the
@@ -222,6 +329,14 @@ that is still unsaved. Harness and Interactive remain separate immediate
 operations: each selection is persisted without confirmation or an automatic
 restart, takes effect the next time the agent starts, and leaves the timing of
 any restart under the operator's control.
+
+Configuration also renders the daemon-authoritative per-agent USD budget
+projection. Its four calendar rows pair each current spend with one editable
+limit (`spent / limit`), label zero as Unlimited, and save atomically against
+the explicit agent-route host. The agent header and sidebar use the same
+projection; they show an explicit Out of budget state and every exhausted
+period rather than recomputing spend in the browser. Older daemons simply omit
+the additive projection.
 
 When the daemon reports a halt reason for the agent, the Autopilot card shows
 it under the Running/Stopped line, toned as an error for an `error`

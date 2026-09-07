@@ -58,6 +58,15 @@ the idle prefix qualifies.
 
 ## Native task state
 
+Each agent row persists `goal_enabled` (default true), a positive
+`goal_wait_customer_timeout_s` (default 300), a positive
+`goal_delivery_cooldown_s` (default 60), daemon-owned
+`last_goal_delivery_at`, and its read-only `current_goal_task_key`. Disabling
+Goal clears the selected key; re-enabling it selects from current task state
+rather than restoring an old choice. The goal reconciler normally owns
+selection; an agent may explicitly select an active task assigned to itself
+during a live iteration. Only the reconciler writes the delivery timestamp.
+
 Task queues, the unlimited parent tree, comments, waits, relations, events,
 notification outbox, customer notification state, and mutation idempotency
 records are normalized tables in the same `tariboyd.db`. Task keys include
@@ -97,11 +106,66 @@ The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
 already-promoted image digest matches the row. Each unpacked image carries a
 daemon-owned digest marker, so two generations of a managed ref such as
-`basic:latest` cannot be confused. Managed archive generations are retained by
-digest so active and pending assignments survive a daemon upgrade. Harness,
+`basic:latest` cannot be confused. Managed and ordinary mutable-build archive
+generations are retained by digest, so active and pending assignments survive a
+daemon upgrade or a rebuilt ordinary ref. Harness,
 model, effort, environment,
 CWD, context, workdir, messages, history, group, and subscriptions are not image
 assignment fields.
+
+An ordinary multi-tag build stages every complete archive before publication,
+writes an owner-only batch journal, advances the refs, and commits every source
+snapshot and provenance row in one SQLite transaction. Any synchronous failure
+rolls back the whole ref stack. On daemon startup, a surviving journal is
+finalized only when both authoritative metadata rows name every candidate
+digest; otherwise every moved ref is restored before agents or clients can use
+it. Removing a ref or installing a new immutable import deletes the paired
+ordinary-build authority rows transactionally before filesystem visibility, so
+matching bytes from an older lifecycle cannot authorize mutable replacement.
+One publication gate spans ordinary, editable-source, team-import,
+agent-authored, compose, and controlled-release publication plus assignment,
+activation, provisioning, reprovisioning, import, and removal, so none can
+persist an uncommitted generation. Compose publishes through the daemon rather
+than writing its image store from the client process.
+
+Controlled improvement adds durable task-level Judge subjects, structured
+proposals, append-only approvals, immutable image releases, and rollout rows.
+A proposal revision hash covers its citations, repository/base commit, file
+allowlist, acceptance criteria, risk, and rollback image. A release hash covers
+merged source and lock provenance plus prompt and image digests. Approvals for
+other hashes do not unlock either transition.
+
+Judge automation adds immutable JSON revisions, one active revision pointer,
+one owned schedule ID, and cycles keyed by schedule delivery ID. A cycle links
+its Native Task and Judge run. Proposal revision hashes link approved plans to
+idempotent `IMPROVE` tasks.
+
+Every Judge run also snapshots the active image ref, digest, and prompt-template
+hash for each eligible worker while the image publication gate is held. The
+image-packaged rubric is read from that pinned digest, never from the mutable
+tag's later generation. Claim and submission compare the worker iteration's
+execution snapshot with the run snapshot; a mismatch is denied and recorded as
+an actionable run diagnostic without turning it into a target finding or
+invalidating compatible workers. Legacy runs keep an empty snapshot and clients
+must present their provenance as unavailable rather than derive it from current
+agent state. The number of snapshotted eligible workers is independent of the
+required analyses per target, which remains one by default.
+
+Iteration reads expose a derived Judge projection rather than another source of
+truth. `latest_completed` is the newest review whose required assignments have
+finished, while `active` is the newest in-flight target review; both may exist at
+once, so starting new work does not erase an older score (including `0`). The
+per-iteration history endpoint returns those durable review rows newest first.
+Clients use the projection directly and do not infer completion by summing
+history counters, because the required assignment count remains Judge-owned.
+`pending` means assignments have not yet completed or failed; it does not
+assert that a worker harness is running.
+
+Staging an approved single-agent release records the prior ref/digest and writes
+the candidate only to the existing pending fields. The launch gate remains the
+sole promotion path, so a running iteration is not interrupted. Successful
+promotion completes the linked rollout; failure leaves the old active image.
+Rollback stages the recorded prior immutable assignment through the same gate.
 
 ## Restart handoff
 
@@ -109,7 +173,7 @@ A running iteration is owned by `tariboy-shim`, not by the lifetime of the
 daemon process. During a graceful daemon restart, cancellation detaches the old
 engine observer without changing the durable iteration row from `running`.
 Before any of that, the replacement daemon repoints every stored agent's bin
-shims at its own `tariboy-tools` (see
+shims at its own versioned Store skill scripts (see
 [Agent bin shims](/docs/architecture#agent-bin-shims)), so an adopted or
 newly-started agent never calls the client of the release that provisioned it.
 The replacement daemon enumerates live shim sockets before starting loop

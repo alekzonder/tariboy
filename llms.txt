@@ -16,7 +16,7 @@
 
 ## Images
 
-- [Images](https://alekzonder.github.io/tariboy/images): Build immutable plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
+- [Images](https://alekzonder.github.io/tariboy/images): Build plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
 - [Agent Skills in images](https://alekzonder.github.io/tariboy/images/agent-skills): Package validated Agent Skills in schema-v2 images and expose them through Claude Code, Codex, or OpenCode.
 
 ## Architecture
@@ -31,9 +31,9 @@
 
 ## Binaries & commands
 
-- [Binaries & commands](https://alekzonder.github.io/tariboy/binaries): The five core binaries built by make build.
+- [Binaries & commands](https://alekzonder.github.io/tariboy/binaries): Core binaries and the bundled Telegram plugin built by make build.
 - [tariboy (operator CLI)](https://alekzonder.github.io/tariboy/binaries/operator-cli): The human/CI client that talks to the daemon over its socket, grouped by noun.
-- [tariboy-tools (agent-facing)](https://alekzonder.github.io/tariboy/binaries/agent-tools): Run inside an agent, surfaced as `tools …` — identity, status, loop control, context, messaging, schedules, and durable scripts.
+- [Agent capability scripts](https://alekzonder.github.io/tariboy/binaries/agent-tools): Run packaged skill-local scripts inside an agent for identity, status, loop control, context, messaging, schedules, and durable work.
 - [The compose workflow](https://alekzonder.github.io/tariboy/binaries/compose): Bring up a whole set of images, groups, and agents declaratively from a tariboy-compose.yaml.
 - [tariboy-store](https://alekzonder.github.io/tariboy/binaries/store): A standalone image registry server that stores agent-image blobs and serves a token-authenticated push/pull API.
 
@@ -53,9 +53,9 @@
 - [schedule](https://alekzonder.github.io/tariboy/plugins/built-in/schedule): Create agent-owned one-shot or cron schedules that wake the agent or publish to a channel.
 - [scripts](https://alekzonder.github.io/tariboy/plugins/built-in/scripts): Run asynchronous one-shot or fixed-interval local commands with durable per-run logs.
 - [image-creator](https://alekzonder.github.io/tariboy/plugins/built-in/image-creator): Build a runnable Tariboy image from source confined to the authenticated agent's working directory.
-- [current-task](https://alekzonder.github.io/tariboy/plugins/built-in/current-task): Attribute AI usage in the current iteration to a Native Task and its top-level root.
+- [goal](https://alekzonder.github.io/tariboy/plugins/built-in/goal): Receive or set the selected Native Task and AI usage attribution.
 - [llm-as-judge](https://alekzonder.github.io/tariboy/plugins/built-in/llm-as-judge): Run capability-gated, evidence-scoped worker and lead actions for durable historical iteration reviews.
-- [tasks](https://alekzonder.github.io/tariboy/plugins/built-in/tasks): Use identity-bound Native Tasks and leased workflow assignments through the bare tasks command.
+- [tasks](https://alekzonder.github.io/tariboy/plugins/built-in/tasks): Use Native Tasks and leased workflow assignments through the globally installed ttasks client.
 
 ## Images & groups
 
@@ -64,5 +64,5 @@
 
 ## Reference
 
-- [Command reference](https://alekzonder.github.io/tariboy/reference/commands): The full command reference — operator commands and agent tools, generated from the binary registry.
+- [Command reference](https://alekzonder.github.io/tariboy/reference/commands): The full command reference — operator commands and agent capability scripts.
 - [Channel bus reference](https://alekzonder.github.io/tariboy/reference/channels): How messages move through channels, how agents receive them, how deliveries are acknowledged, and which agent settings affect message handling.

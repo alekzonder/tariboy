@@ -9,6 +9,11 @@ sidebar:
 Native Tasks are Tariboy's central work domain. They live in the existing
 host-local `tariboyd.db`.
 
+Judge automation reserves queue prefixes `JUDGE` and `IMPROVE`; Apply creates
+both if absent. Every scheduled fire has a `JUDGE-*` task, including skipped,
+empty, and failed cycles. Approving an exact proposal revision creates its
+idempotent `IMPROVE-*` task in the same database transaction.
+
 Queues may optionally activate a [configurable task workflow](/docs/task-workflows).
 New tasks in such a queue automatically pin that published version; callers do
 not pass a workflow when creating the task. Existing tasks and unmanaged queues
@@ -18,8 +23,10 @@ retain the flexible model described below.
 
 Every task belongs to a queue and receives an immutable queue key such as
 `TEST-1`. A task records its author, customer, assignee, optional group,
-status, priority, block reason, parent, ordered siblings, comments,
-dependencies, and principals whose answers are still required. Priority is one
+status, priority, pull request URL, block reason, parent, ordered siblings,
+comments, dependencies, and principals whose answers are still required. A pull
+request is an optional normalized absolute `http` or `https` URL without
+embedded credentials; an empty value clears it. Priority is one
 of `P0` Critical, `P1` High, `P2` Normal (the default), or `P3` Low. Root and
 nested sibling sets sort by priority, then manual position, then task key.
 
@@ -49,6 +56,12 @@ assignments, leases one to a running agent iteration, and advances only through
 declared outcomes. See [Configurable task workflows](/docs/task-workflows) for
 work packets, artifacts, questions, and observations.
 
+Flexible tasks use `open`, `in_progress`, `wait_customer`, `done`, or
+`cancelled` status. When the assigned agent asks the task customer a question,
+the same comment transaction moves a non-terminal task to `wait_customer`.
+The last customer answer returns it to `in_progress`, unless an operator made an
+intervening status change. Questions for another principal do not change status.
+
 ## Filing a task into a queue
 
 Any agent identity may create a root task in any existing queue. Creating one
@@ -63,7 +76,7 @@ whether it is the queue's `responsible_agent` or one of its owners:
 - **Does not run the queue.** A create without an assignee is *filed*: the
   created task is unassigned and ungrouped, and its author has no access to it
   afterwards. The create response carries `filed: true` and no `access`, and
-  `tasks create` prints that the task is recorded but no longer visible, so the
+  `ttasks create` prints that the task is recorded but no longer visible, so the
   agent does not read the following `not_found` as a failure and file it twice.
   An explicit assignee, including the creating agent, instead owns that task
   and its descendants without gaining access to the rest of the queue. A group
@@ -75,7 +88,7 @@ defect it noticed outside its current assignment. Triage stays with the queue's
 has none, that notification goes to the customer instead. To let a specific
 agent triage a queue, the customer adds it to the queue's owners.
 
-`tools tasks move KEY --to-root` detaches a task from its parent, which is the
+`ttasks move KEY --to-root` detaches a task from its parent, which is the
 inverse operation: the task becomes a root, and the mover loses access to it
 unless it is the assignee or runs the queue. A move without `--parent`,
 `--before`, or `--to-root` is refused rather than treated as a detach.
@@ -94,6 +107,13 @@ mentioned principal's next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.
 
+An enabled agent normally follows one sticky assigned task as its Goal. It
+releases that selection when the task is done, cancelled, has a pull request,
+loses assignment or visibility, remains in `wait_customer` beyond the agent's
+configured grace period, or eligible assigned work has a strictly higher
+priority. The goal is daemon-owned and read-only to the agent; see [Agents and
+the iteration loop](/docs/architecture/iteration-loop).
+
 Assignment, question, answer, and queue-triage events enter a transactional
 outbox and publish through the existing channels/messages bus. Agent
 notifications target its inbox channel; customer notifications target
@@ -111,17 +131,28 @@ The top-level **Tasks** tab is global. Each Agent workspace includes the same
 component with `scope_agent` fixed to that agent. The layout is Tree-first:
 
 - left rail: All, My, Waiting for me, Notifications, and Queues;
-- center: dense expandable tree ordered by priority at every depth, with inline
-  task/child creation and same-queue drag reparenting; manual before/after drag
+- remaining width: dense expandable tree ordered by priority at every depth,
+  with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain
   their existing row presentation. A small red indicator marks each task with
   an unread, non-dismissed customer question notification. The same state adds
   a red dot beside the agent that asked the question in the host's agent list;
   customer-authored questions do not add an agent dot. Both indicators clear
-  when the notification is read or dismissed;
-- right: persistent detail, priority, assignment, status, block reason,
-  comments, and open answer requests.
+  when the notification is read or dismissed.
+
+Clicking a task opens a fullscreen dialog with its description, priority,
+assignment, status, block reason, pull request URL, comments, and open answer
+requests. **Back** or **Close** returns to the tree with its expansion and
+scroll position preserved. Unsaved description or comment drafts require
+confirmation before being discarded. The list has no reserved detail sidebar
+or detail resize handle.
+
+Descriptions and comments render as Markdown. Their visual editor supports
+headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.
+Switch to **Source Markdown** to edit the source directly; content the visual editor
+cannot represent stays in source mode so unsupported syntax is preserved.
+Both modes save the same Markdown strings used by the API and `ttasks`.
 
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
@@ -174,41 +205,48 @@ plugins:
   - name: tasks
 ```
 
-When enabled, provisioning creates the agent-local `tasks` shim. Schema-v2
-images must also list the Tasks Store prompt explicitly in `prompts`; capability
-selection never injects prompt text automatically. When disabled,
-reprovisioning removes a stale shim. This reuses image capability resolution
-without installing or supervising a Tasks plugin. See the [`tasks` built-in
-reference](/docs/plugins/built-in/tasks) for the complete boundary.
+`tariboy-tasks` is installed globally as `ttasks`; it uses identity-bound agent
+mode only when `TARIBOY_TOOLS_SOCKET` is non-empty and otherwise uses the host
+Unix daemon socket as the customer actor. Agent mode fails closed rather than
+falling back to operator access. When enabled, the `tasks` capability also
+provisions the bare legacy `tasks` shim. Schema-v2 images must still package the
+Tasks Store skill; capability selection never packages instructions
+automatically. See the [Tasks built-in reference](/docs/plugins/built-in/tasks)
+for the complete boundary.
 
 Every agent mutation is identity-bound by its per-agent socket. Body fields
 cannot forge the author, customer, or acting principal.
 
-`tasks create --queue` works in any existing queue. In a queue the agent does
+Write task descriptions and comments as valid Markdown: use real newlines,
+blank lines before lists, closed code fences, and no raw HTML. Typed mentions
+and explicit `ttasks ask` retain their existing answer-tracking behavior.
+
+`ttasks create --queue` works in any existing queue. In a queue the agent does
 not run, omitting `--assignee` files an unassigned task the agent can no longer
 see; passing `--assignee` creates work owned by that agent without exposing the
 rest of the queue. `--group` remains forbidden there. See **Filing a task into
 a queue**.
 
 ```bash
-tasks mine
-tasks ready --claim
-tasks show TEST-12
-tasks create --queue TEST --title "Investigate failure" --priority P1
-tasks create --parent TEST-12 --title "Add regression test"
-tasks assign TEST-12 worker
-tasks update TEST-12 --priority P0
-tasks comment TEST-12 "Found the boundary"
-tasks ask TEST-12 user:login "Which behavior should win?"
-tasks move TEST-12 --parent TEST-3
-tasks move TEST-12 --to-root
-tasks block TEST-12 --by TEST-2
-tasks relate TEST-12 TEST-9
-tasks done TEST-12
+ttasks mine
+ttasks ready --claim
+ttasks show TEST-12
+ttasks create --queue TEST --title "Investigate failure" --priority P1
+ttasks create --parent TEST-12 --title "Add regression test"
+ttasks assign TEST-12 worker
+ttasks update TEST-12 --priority P0
+ttasks update TEST-12 --pull-request https://example.com/org/repo/pull/42
+ttasks comment TEST-12 "Found the boundary"
+ttasks ask TEST-12 user:login "Which behavior should win?"
+ttasks move TEST-12 --parent TEST-3
+ttasks move TEST-12 --to-root
+ttasks block TEST-12 --by TEST-2
+ttasks relate TEST-12 TEST-9
+ttasks done TEST-12
 ```
 
-For workflow-managed work, agents instead use `tasks work next`, `tasks work
-show`, `tasks artifacts add`, `tasks ask`, and `tasks work complete`. Direct
+For workflow-managed work, agents instead use `ttasks work next`, `ttasks work
+show`, `ttasks artifacts add`, `ttasks ask`, and `ttasks work complete`. Direct
 status/claim operations cannot bypass the pinned state machine.
 
 Create, comment, and relation actions accept stable idempotency keys internally

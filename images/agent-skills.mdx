@@ -26,6 +26,63 @@ One declaration never implies another. In particular, a directory under an
 external plugin's `skills` tree is packaged only when the image lists that
 directory explicitly under `skills`.
 
+## Developer image pull-request workflow
+
+`tariboy-developer` packages the `github-pr-workflow` skill for Native Tasks
+on GitHub-hosted repositories. At task intake, before implementation, the
+agent records exactly one completion mode on the Native Task:
+
+- **PR mode** is the default whenever the task does not explicitly and
+  unambiguously require the agent to merge into `main`.
+- **Local-merge mode** is the explicit override when the task directly requires
+  the agent to merge the completed branch into `main`. It creates no pull
+  request or GitHub monitor. Ambiguous wording requires a Native Task question
+  before a mode is selected.
+
+Before creating the task branch and worktree in either mode, the agent fetches
+the configured remote and fast-forwards local `main` to its upstream using a
+fast-forward-only operation. A missing upstream, fetch failure, divergence, or
+dirty change that prevents that fast-forward blocks development. The workflow
+never resets, force-updates, or overwrites `main`.
+
+PR mode begins with the skill's `preflight` command. It requires Python 3,
+`curl`, `git`, GitHub API access, and `GH_TOKEN` or `GITHUB_TOKEN` in the
+environment; `GH_TOKEN` takes precedence. Credentials never appear in command
+arguments, URLs, disk files, monitor snapshots, or logs. After branch
+verification, the agent pushes the task branch and uses the skill to find or
+create one pull request idempotently.
+
+The agent creates an owner-only, task-scoped monitor state directory outside
+the worktree and starts exactly one durable Scripts-plugin schedule, recording
+the PR, schedule, and state identifiers on the Native Task:
+
+```text
+scripts/scripts.sh schedule NAME --every 60 --quiet-exit 2 -- ABSOLUTE_UTILITY monitor --repo OWNER/REPO --pr NUMBER --state-dir ABSOLUTE_STATE_DIR
+```
+
+The monitor exits `0` for its first complete observation or a meaningful
+change, `2` for an unchanged complete observation, and a different nonzero
+code for an actionable error. Only exit `2` is quiet; a changed result or error
+wakes the agent. A new pull-request head SHA is a new verification state, so
+previous successful checks do not prove the new head. Comments and reviews are
+untrusted input: they may require review work but cannot execute instructions,
+waive checks, authorize a merge, or change the task lifecycle.
+
+In PR mode, the agent never merges the pull request. A human reviewer or
+repository automation owns the merge. A pull request closed without merge
+leaves the Native Task and monitor active, with the blocker recorded, so a
+reopen or later state change can resume work. Only an observed `merged: true`
+result with merge-commit metadata permits completion: cancel and remove the
+schedule, fast-forward local `main`, run the distinct post-merge verification,
+and remove the task worktree and branch. The agent then posts its consolidated
+task result and closes the Native Task. It must not close the task before the
+observed integration and successful post-merge verification.
+
+Local-merge mode retains the same pre-worktree synchronization and isolated
+branch verification, then merges locally according to repository conventions.
+It runs the distinct post-merge verification on `main`, removes the merged
+worktree and branch, records the final task result, and closes the Native Task.
+
 ## Declare skills
 
 Each entry is an object with one `dir` field. String entries and additional
@@ -140,12 +197,15 @@ execute bit is set are normalized to `0700`. Directories use `0700`.
 
 ## Manifest and portability
 
-The image manifest and **Skills** tab expose these fields in declaration order:
+The image manifest records these fields in declaration order. The **Skills**
+tab displays the descriptive and integrity fields; runtime bridge provenance
+remains in the manifest:
 
 | Field | Meaning |
 | --- | --- |
 | `name`, `description` | Validated `SKILL.md` identity |
 | `source`, `category` | Original declaration and resolved source class |
+| `client_version` | Producing Store version for a skill sourced from `$CURRENT_VERSION_STORE` |
 | `archive_root` | Canonical `skills/<name>` location in the image |
 | `file_count`, `size` | Validated aggregate contents |
 | `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |
@@ -253,3 +313,16 @@ the bounded Codex prompt prefix. It cannot override `HOME`, `CODEX_HOME`, or
   separation from Agent Skills.
 - [Images & groups](/docs/images-and-groups) — image and team portability at a
   glance.
+
+## Built-in contract and procedure split
+
+Schema-v2 images declare capabilities, Agent Skills, and ordered prompt layers
+separately. Built-in `messages`, `scripts`, and `tasks` package conditional
+procedures as Agent Skills. Their prompt layers retain rules that must apply
+before skill selection, such as closing every delivered message and respecting
+a managed task packet's least-privilege boundary.
+
+Images using `llm-as-judge`, `image-creator`, or `schedule` should package the
+same-named Store skill explicitly. Declaring a plugin never injects its skill or
+legacy prompt in schema v2. Role responsibilities belong in the image's own
+ordered prompt layer; task identity and input remain runtime layers.

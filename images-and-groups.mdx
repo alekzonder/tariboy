@@ -22,7 +22,8 @@ See [Images](/docs/images) for the complete schema and path roots.
 The daemon provides two reserved images:
 
 - **basic** — the daemon-provided general-purpose default (context, status,
-  managed-workdir instructions, scripts, current-task, and native Tasks). It
+  managed-workdir instructions, scripts, Goal attribution, native Tasks, and
+  `runtime: goal`). It
   deliberately excludes all external provider integrations. Every
   packaged daemon installs or refreshes `basic:latest` when its version is
   activated.
@@ -37,6 +38,27 @@ auto-provision channels and subscriptions: every member subscribes to
 subscribes to `group:<g>:inbox`. Group members can share a working directory.
 Native Tasks stays daemon-owned and applies live group membership when checking
 task visibility.
+
+The Judge page can create or repair the fixed `judges` group when it is missing
+the configured lead or workers. It creates missing agents from the applied
+Judge image, reapplies automation so the daemon restores their runtime
+settings, and assigns all three configured roles on the selected server.
+
+The Judge rubric is owned by the Judge image as `rubric.md`, so rebuilding a
+mutable Judge tag can publish new review criteria without changing daemon code.
+Each new run pins every eligible worker's image ref, digest, and prompt-template
+hash. The run detail shows those pinned versions in both whole-run and
+target-only views; older runs without this snapshot say **Image provenance
+unavailable** and never substitute an agent's current image. Multiple pinned
+workers describe the eligible pool, not completed analyses: manual review still
+requires one analysis per target by default.
+
+A worker whose active image identity does not match the run cannot claim its
+assignments. The run reports an actionable diagnostic to create a new run after
+the intended image has activated; already compatible workers and completed
+historical evidence remain available. Existing same-version Store installations
+may require the release-time versioned asset transition after the bundled rubric
+move; Store verification remains strict and must not be bypassed.
 
 ## Historical group Usage
 
@@ -68,6 +90,12 @@ lead changed in **Advanced → Groups**.
 The creation wizard creates custom teams directly. Each member independently
 selects its name, image, harness, model, effort, cwd, interactive mode,
 Autopilot setting, environment, and external plugins.
+
+Controlled improvement rollout is currently safe for one named agent at a time:
+it requires an exact release-hash approval and activates at that agent's next
+iteration boundary. Do not combine independent single-agent rollouts and call
+the result an atomic team revision; mixed role/message contracts can become
+visible. Whole-team revision coordination remains a separate capability.
 
 **Copy YAML** emits `tariboy-compose.yaml` for text-only transfer. **Import
 YAML** recreates the group and agents when referenced images already exist.

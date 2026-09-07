@@ -1,6 +1,6 @@
 ---
 title: Command reference
-description: The full command reference — operator commands and agent tools, generated from the binary registry.
+description: The full command reference — operator commands and agent capability scripts.
 sidebar:
   label: Commands
   icon: terminal
@@ -16,10 +16,11 @@ tariboy has three command surfaces:
    human or CI against the daemon. Global flags: `--json`, `--help`,
    `--help-json`, `--version`. This is the authoritative list, generated from the
    binary's registry (`tariboy --help-json`).
-2. **Agent tools** — `tools <group> <command>`, run *inside* an agent (the
-   `tools` shim talks to the per-agent socket `$TARIBOY_TOOLS_SOCKET`).
-3. **Native Tasks** — optional `tasks <verb>`, run inside an enabled agent
-   against daemon-owned work.
+2. **Agent capability scripts** — the applicable packaged skill's
+   `scripts/*.sh` launcher, run *inside* an agent over `$TARIBOY_TOOLS_SOCKET`.
+3. **Native Tasks** — `tariboy-tasks`, installed as `ttasks`, runs shared task
+   verbs for an operator or an identity-bound agent. `ttasks --version` reports
+   its build and `ttasks --json …` requests JSON output.
 
 ## Operator commands
 
@@ -61,18 +62,33 @@ tariboy has three command surfaces:
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
-| `tariboy image build --path DIR --name NAME [--tag TAG]` | Build an immutable image from an original directory; tag defaults to `latest` |
+| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build an immutable image and source snapshot; optional Git provenance must be provided as a pair |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest` |
 | `tariboy image inspect` | Show an image manifest |
 | `tariboy image ls` | List built agent images |
 | `tariboy image prompt` | Print an image's assembled prompt |
+| `tariboy image provenance REF` | Show local source and immutable snapshot Git provenance |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
+| `tariboy image-release inspect` | Show immutable image release provenance |
+| `tariboy image-release rollback` | Stage the prior immutable image from a completed rollout |
+| `tariboy image-release rollout approve` | Approve an exact image release rollout |
+| `tariboy image-release rollout reject` | Reject an exact image release rollout |
+| `tariboy image-release rollout stage` | Stage an approved release for one agent |
+| `tariboy improvement inspect` | Show an agent improvement proposal |
+| `tariboy improvement ls` | List agent improvement proposals |
+| `tariboy improvement plan approve` | Approve an exact improvement plan revision |
+| `tariboy improvement plan reject` | Reject an exact improvement plan revision |
 | `tariboy judge cancel` | Cancel an LLM-as-Judge run while preserving immutable artifacts |
 | `tariboy judge evidence` | Read immutable judge evidence by stable locator |
 | `tariboy judge inspect` | Show an LLM-as-Judge run, targets, analyses, summaries and target usage |
 | `tariboy judge ls` | List LLM-as-Judge runs |
+| `tariboy judge review --iteration ID [--iteration ID] [--judges-per-iteration N]` | Review explicit terminal iterations with the configured Judge team |
 | `tariboy judge retry` | Retry failed assignments in an LLM-as-Judge run |
+| `tariboy judge automation get` | Read the active Judge automation revision |
+| `tariboy judge automation validate --json JSON` | Validate raw JSON in `tariboyd` without applying it |
+| `tariboy judge automation apply --json JSON` | Apply JSON, create `JUDGE`/`IMPROVE`, and reconcile the recurring schedule without starting a review |
+| `tariboy judge automation run-once --limit N` | Queue one immediate cycle through the existing scheduler |
 | `tariboy iteration inspect` | Show one iteration |
 | `tariboy iteration logs` | Print an iteration's harness logs |
 | `tariboy iteration ls` | List an agent's iterations |
@@ -101,6 +117,7 @@ tariboy has three command surfaces:
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
 | `tariboy secret set` | Set a secret; value from --value or stdin |
+| `ttasks queue create` | Create a task queue |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
 | `tariboy user-prompt get` | Read the agent's standing user-prompt |
 | `tariboy user-prompt set` | Set the agent's standing user-prompt |
@@ -108,72 +125,111 @@ tariboy has three command surfaces:
 
 > Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
 
-## Agent tools (`tools …`)
+`judge review` creates one bounded run for only the listed terminal iteration
+IDs. It uses the lead and workers from the active Judge configuration even when
+its cron schedule is disabled; it does not enable agents or loops. One worker
+reviews each iteration by default. `--judges-per-iteration` must be between one
+and the number of configured workers. Unknown, nonterminal, or empty selections
+and invalid configured roles are rejected without creating a run.
+
+The command pins each eligible worker's image ref, resolved digest, and
+prompt-template hash with the run. Results are
+evidence-backed assessments, not calibrated probabilities: confidence values
+express the judge's support from the available evidence and must not be read as
+measured error rates. When every independent review is `uncertain`, consensus
+remains `uncertain`; missing evidence is not a disagreement or a failure.
+
+## Agent capability scripts
 
 Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 
 | Tool | Purpose |
 | --- | --- |
-| `tools whoami` | Print agent, cwd and current iteration |
-| `tools status` | Print the agent status |
-| `tools loop done` | Signal this iteration is finished (i-am-done) |
-| `tools context get` | Print the durable working memory (CONTEXT.md) |
-| `tools context set <text>` | Overwrite the durable working memory |
-| `tools message send --channel C [--type T] [--subject k=v,…] [--text … \| --data JSON]` | Publish a message to a channel |
-| `tools channel subscribe C [--matcher JSON] [--type globs]` | Subscribe to a channel |
-| `tools channel unsubscribe ID` | Remove a subscription |
-| `tools channel ls` | List your subscriptions |
-| `tools sources` | List available channels |
-| `tools schedule add --kind cron\|oneshot --spec S [--channel C] [--message JSON]` | Schedule a future wake-up |
-| `tools schedule ls` | List your schedules |
-| `tools schedule cancel ID` | Cancel a schedule |
-| `tools script ls` | List your scripts |
-| `tools script run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
-| `tools script schedule NAME --every SECONDS [--quiet-exit CODE] -- COMMAND` | Run now and repeat after each completion |
-| `tools script runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
-| `tools script rerun SCRIPT_ID` | Rerun a completed one-shot definition |
-| `tools script cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
-| `tools image build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
-| `tools help` | Show tool help |
+| `scripts/whoami.sh` | Print agent, cwd and current iteration |
+| `scripts/status.sh` | Print the agent status |
+| `scripts/loop.sh done` | Signal this iteration is finished (i-am-done) |
+| `scripts/context.sh get` | Print the durable working memory (CONTEXT.md) |
+| `scripts/context.sh set <text>` | Overwrite the durable working memory |
+| `scripts/messages.sh message send --channel C [--type T] [--subject k=v,…] [--text … \| --data JSON]` | Publish a message to a channel |
+| `scripts/messages.sh channel subscribe C [--matcher JSON] [--type globs]` | Subscribe to a channel |
+| `scripts/messages.sh channel unsubscribe ID` | Remove a subscription |
+| `scripts/messages.sh channel ls` | List your subscriptions |
+| `scripts/messages.sh sources` | List available channels |
+| `scripts/schedule.sh add --kind cron\|oneshot --spec S [--channel C] [--message JSON]` | Schedule a future wake-up |
+| `scripts/schedule.sh ls` | List your schedules |
+| `scripts/schedule.sh cancel ID` | Cancel a schedule |
+| `scripts/scripts.sh ls` | List your scripts |
+| `scripts/scripts.sh run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
+| `scripts/scripts.sh schedule NAME --every SECONDS [--quiet-exit CODE] -- COMMAND` | Run now and repeat after each completion |
+| `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
+| `scripts/scripts.sh rerun SCRIPT_ID` | Rerun a completed one-shot definition |
+| `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
+| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
 
-## Native Tasks (`tasks …`)
+## Native Tasks (`ttasks …`)
 
-An image enables this command with `plugins: [{name: tasks}]`. All mutations
-derive the agent identity from its socket.
+`tariboy-tasks` is the real executable and `ttasks` its managed alias. A
+non-empty `TARIBOY_TOOLS_SOCKET` selects agent mode; it uses only that socket
+and fails closed if it cannot connect. Without the variable, the client uses
+the host Unix daemon socket as the customer actor. The bare `tasks` command is
+only the optional capability-controlled legacy agent shim.
 
-| Command | Purpose |
-| --- | --- |
-| `tasks mine` | List tasks visible/assigned to this agent |
-| `tasks ready [--queue Q] [--claim]` | List ready work or atomically claim one |
-| `tasks show KEY` | Show task detail, comments, waits, and relations |
-| `tasks create --queue Q --title T [--assignee A]` | Create a queue-root task; in a queue the agent does not run, an omitted assignee files it for triage while an explicit assignee owns only that task tree |
-| `tasks create --parent KEY --title T` | Create a child inheriting queue/context |
-| `tasks update KEY [--title T] [--description D] [--status S]` | Update fields with optimistic revision |
-| `tasks assign KEY ASSIGNEE` | Hand work to a known or arbitrary agent name |
-| `tasks comment KEY TEXT` | Add a task comment |
-| `tasks ask KEY agent:name\|user:login TEXT` | Mention a principal and record an open answer wait |
-| `tasks move KEY [--parent KEY] [--before KEY] [--to-root]` | Reparent/reorder in the same queue, or detach into a root with `--to-root` |
-| `tasks block KEY BLOCKER` | Add a directed, cycle-checked blocking relation |
-| `tasks relate KEY OTHER` | Add a symmetric related link |
-| `tasks done KEY [--complete-anyway]` | Complete, optionally overriding active descendants |
-
-Workflow-managed queues add an assignment-scoped surface:
+These shared verbs are available in both modes; in agent mode every mutation
+derives identity from the socket.
 
 | Command | Purpose |
 | --- | --- |
-| `tasks work next [--queue Q] --idempotency-key K` | Atomically claim eligible work and return its least-context packet |
-| `tasks work show ASSIGNMENT` | Refresh the current packet and revisions |
-| `tasks work complete ASSIGNMENT --outcome O ...` | Submit one declared outcome |
-| `tasks work release ASSIGNMENT ...` | Release a leased attempt |
-| `tasks artifacts add ASSIGNMENT --name N --type T ...` | Attach a required typed output |
-| `tasks artifacts show ASSIGNMENT ARTIFACT --task KEY` | Read one packet-visible artifact |
-| `tasks ask ASSIGNMENT --question Q --context C --blocking-scope S ...` | Ask a universal workflow question and optionally hold work |
-| `tasks questions ASSIGNMENT` | List questions visible in the packet |
-| `tasks answer QUESTION --assignment ASSIGNMENT --answer TEXT ...` | Answer a routed question assignment |
-| `tasks observe subscribe ASSIGNMENT PATTERN ...` | Create a policy-bounded observation subscription |
-| `tasks observe list ASSIGNMENT` | List its workflow subscriptions |
-| `tasks observe cancel ASSIGNMENT SUBSCRIPTION ...` | Cancel one subscription |
+| `ttasks mine` | List visible tasks |
+| `ttasks ready [--queue Q] [--claim]` | List ready work; `--claim` requires agent mode |
+| `ttasks show KEY` | Show task detail, comments, waits, and relations |
+| `ttasks create --queue Q --title T [--assignee A]` | Create a queue-root task |
+| `ttasks create --parent KEY --title T` | Create a child inheriting queue/context |
+| `ttasks update KEY [--title T] [--description D] [--status S]` | Update fields with optimistic revision |
+| `ttasks assign KEY ASSIGNEE` | Hand work to an agent name |
+| `ttasks comment KEY TEXT` | Add a task comment |
+| `ttasks ask KEY agent:name\|user:login TEXT` | Mention a principal and record an open answer wait |
+| `ttasks move KEY [--parent KEY] [--before KEY] [--to-root]` | Reparent/reorder in the same queue |
+| `ttasks block KEY --by BLOCKER` | Add a directed, cycle-checked blocking relation |
+| `ttasks relate KEY OTHER` | Add a symmetric related link |
+| `ttasks done KEY [--complete-anyway]` | Complete, optionally overriding active descendants |
+
+Workflow-managed queues add an assignment-scoped surface that requires agent mode:
+
+| Command | Purpose |
+| --- | --- |
+| `ttasks work next [--queue Q] --idempotency-key K` | Atomically claim eligible work and return its least-context packet |
+| `ttasks work show ASSIGNMENT` | Refresh the current packet and revisions |
+| `ttasks work complete ASSIGNMENT --outcome O ...` | Submit one declared outcome |
+| `ttasks work release ASSIGNMENT ...` | Release a leased attempt |
+| `ttasks artifacts add ASSIGNMENT --name N --type T ...` | Attach a required typed output |
+| `ttasks artifacts show ASSIGNMENT ARTIFACT --task KEY` | Read one packet-visible artifact |
+| `ttasks ask ASSIGNMENT --question Q --context C --blocking-scope S ...` | Ask a universal workflow question and optionally hold work |
+| `ttasks questions ASSIGNMENT` | List questions visible in the packet |
+| `ttasks answer QUESTION --assignment ASSIGNMENT --answer TEXT ...` | Answer a routed question assignment |
+| `ttasks observe subscribe ASSIGNMENT PATTERN ...` | Create a policy-bounded observation subscription |
+| `ttasks observe list ASSIGNMENT` | List its workflow subscriptions |
+| `ttasks observe cancel ASSIGNMENT SUBSCRIPTION ...` | Cancel one subscription |
 
 Mutations represented by `...` require current task/assignment revisions and a
 stable idempotency key. Exact semantics and operator REST routes are in
 [Configurable task workflows](/docs/task-workflows).
+
+The following administration roots are operator-only and are documented by
+`ttasks --help-json`: `queue` (including pools, workflow bindings, and
+triggers), `workflows`, `workflow` task history and artifacts, `events`,
+`principals`, and `notifications`. They are unavailable to agent mode.
+
+Resource identifiers are positional (or named flags), for example:
+
+```bash
+ttasks queue get OPS
+ttasks queue update OPS --name Operations --revision 2
+ttasks workflows get review 1
+ttasks workflow get OPS-1
+ttasks notifications read 1
+ttasks events OPS-1 --after 7 --limit 10
+```
+
+`ttasks workflows create --definition JSON` accepts a workflow definition as a
+JSON object; malformed JSON and non-object values fail before contacting the
+daemon. Use each administration command's `--help` for its required fields.

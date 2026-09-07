@@ -47,6 +47,8 @@ adoption revokes the remaining lease when its shim finishes.
 - Soft and hard timeouts bound an iteration.
 - Rate/model policy rules constrain calls.
 - Budgets constrain spend.
+- Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
+  zero is unlimited, and an exhausted request is rejected before upstream access.
 - Usage and per-iteration audit make outcomes reviewable.
 
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
@@ -57,9 +59,10 @@ daemons running. Treat both behaviors as continuity features, not stop controls.
 Local data defaults to `~/.tariboy`; runtime files default to
 `~/.tariboyd`. Remote binaries live in versioned directories under
 `~/.local/lib/tariboy`; managed symlinks live in `~/.local/bin`. The local
-Desktop installer preflights all four command paths before changing any of them
+Desktop installer preflights all six command paths before changing any of them
 and refuses regular files, directories, or symlinks not owned by the verified
-Tariboy app bundle.
+Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
+managed alias whose source is `tariboy-tasks`.
 
 Image builds resolve only literal `$STORE`, `$CURRENT_VERSION_STORE`, and
 `$PLUGINS` roots, source-relative paths, or explicit operator absolute paths.
@@ -67,6 +70,25 @@ They reject traversal, symlinks, missing or non-regular files, and oversized
 prompt files. Agent-authored builds additionally confine source and absolute
 references to that agent's workdir.
 Native host metadata and exported support archives use owner-only permissions.
+
+Controlled production publication is stricter than an ordinary operator build.
+Its external source uses only vendored `./` prompt and skill inputs, provides
+`tariboy.lock.yaml`, and matches every declared SHA-256. Upstream entries must
+match upstream bytes; forks require upstream and local hashes. Validation rejects
+traversal, duplicate paths, symlinks, non-regular or oversized files, and Git
+changes outside the approved allowlist.
+
+Judge evidence cannot authorize mutation. Plan and rollout approvals are
+operator-only, append-only rows bound to canonical proposal or release hashes;
+agent-supplied actor fields are ignored. Production and rollback refs are
+immutable, and `latest` is rejected.
+
+Automatic Judge configuration is parsed, semantically validated, revisioned,
+and applied only by `tariboyd`. Agent and image names come from that document;
+the customer principal comes from the daemon's `USER`. Scheduled actions remain
+bound to authenticated agent sockets and active iterations. A Judge proposal
+still cannot mutate a repository: only explicit plan approval creates an
+`IMPROVE` task.
 
 ## Pricing catalog boundary
 
@@ -104,7 +126,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.39.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.50.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

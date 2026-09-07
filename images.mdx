@@ -1,6 +1,6 @@
 ---
 title: Images
-description: Build immutable plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
+description: Build plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
 sidebar:
   label: Overview
   icon: layers
@@ -16,8 +16,8 @@ runtime or compose configuration. They are not schema-v2 image fields.
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
 required name and an optional tag, then select **Validate** or **Build**. The
 default tag is `latest`. Tariboy records the canonical source CWD as local
-provenance, but does not copy or retain an editable source snapshot. Rebuilding
-therefore always reads the original directory and its current paths.
+provenance and retains an immutable source snapshot for evidence. Rebuilding
+still reads the original directory and its current paths.
 
 **Validate** is read-only. Before a build it shows the schema version, explicit
 plugin names, packaged skill metadata, template hash, and every prompt entry in
@@ -37,14 +37,36 @@ The equivalent operator command is:
 ```bash
 tariboy image validate --path ./reviewer-image --name reviewer --tag v3
 tariboy image build --path ./reviewer-image --name reviewer --tag v3
+tariboy image build --path ./reviewer-image --name reviewer --tag latest --tag v4
+tariboy image build --path ./reviewer-image --name reviewer --tag v4 \
+  --repository-id agent-images --git-commit 91ab820
 tariboy image ls
 ```
+
+Provide `--repository-id` and `--git-commit` together when the source is an
+exact Git revision. Tariboy records those explicit values in the immutable
+source snapshot used by Judge; it never infers a commit from the current
+working directory.
 
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
 
-Image refs are immutable. Change the tag when changed source content must be
-published as another image.
+Ordinary operator `tariboy image build` refs are mutable: rebuilding a tag,
+including `latest`, replaces it only after validation and retains the prior
+archive by digest for active and pending assignments. Repeat `--tag` to publish
+several refs from one parsed source; each result has its own ref and digest,
+while frozen static image content, source provenance, and build time are
+shared. The requested refs and their snapshot/provenance metadata commit as one
+batch; a failure on any tag restores every ref exactly. Duplicate tags are
+rejected. A single tag and an omitted tag remain supported; omission means
+`latest`.
+
+Imports and retagged runnable artifacts, registry artifacts, reserved `basic`
+and `bare` refs, and controlled-improvement releases remain immutable.
+An ordinary build never converts an existing immutable ref. Daemons created
+before mutable markers existed migrate a legacy ordinary-build ref only when
+its authoritative source snapshot and provenance both match the current
+digest; otherwise the operator must choose another tag.
 
 ## Schema version 2
 
@@ -60,20 +82,21 @@ plugins:
   - name: workdir
   - name: jira
 skills:
+  - dir: $CURRENT_VERSION_STORE/skills/whoami
+  - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: $CURRENT_VERSION_STORE/skills/context
+  - dir: $CURRENT_VERSION_STORE/skills/workdir
   - dir: ./skills/code-review
   - dir: $PLUGINS/jira/2.5.0/skills/triage
 prompts:
-  - file: $CURRENT_VERSION_STORE/skills/whoami/prompt.md
   - runtime: identity
-  - file: $CURRENT_VERSION_STORE/skills/messages/prompt.md
+  - runtime: one-shot
   - runtime: messages
   - file: $PLUGINS/jira/2.5.0/prompts/reviewer.md
   - runtime: context
-  - file: $CURRENT_VERSION_STORE/skills/workdir/prompt.md
   - runtime: workdir
   - file: ./task.md
   - runtime: user-prompt
-  - runtime: one-shot
   - file: /srv/tariboy/prompts/finish.md
 ```
 
@@ -114,19 +137,27 @@ Runtime entries remain visible placeholders inside the immutable image. Before
 every iteration, the runner replaces them with current values at their declared
 positions:
 
-| Placeholder | Value at iteration start |
-| --- | --- |
-| `identity` | Current agent name, active image ref and digest, CWD, and iteration identity |
-| `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD |
-| `context` | Durable agent context |
-| `messages` | Messages delivered to this iteration |
-| `awaiting-replies` | Outstanding request state |
-| `user-prompt` | The agent's standing prompt |
-| `one-shot` | A prompt supplied for this single execution |
+| Placeholder | Value at iteration start | Skill named in the rendered instruction |
+| --- | --- | --- |
+| `identity` | Current agent name, active image ref and digest, CWD, and iteration identity | `whoami` |
+| `goal` | Daemon-selected Native Task key, title, priority, status, and description | `goal` |
+| `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
+| `context` | Durable agent context | `context` |
+| `messages` | Messages delivered to this iteration and outstanding request state | `messages` |
+| `awaiting-replies` | Compatibility marker for outstanding request state when `messages` is absent | `messages` |
+| `user-prompt` | The agent's standing prompt | none; this is task input |
+| `one-shot` | A prompt supplied for this single execution | none; this is task input |
 
-Each singleton placeholder may appear at most once. Empty runtime values add no
-text. The **Template** tab shows static paths, categories, sizes, hashes, and
-runtime markers in their exact order without draining messages.
+Each non-empty runtime value starts with `# [runtime: <name>]`. For skill-owned
+values, the short instruction to use that skill follows the heading and names
+the skill without embedding an installation path. Context data then starts with
+`# Agent Context`, and messages plus outstanding replies form one `# Messages`
+group. New templates declare only `messages`; existing templates that also
+declare `awaiting-replies` keep working without a second section. The supplied
+templates order actionable values as `one-shot`, `messages`, then `goal` when
+present. Each singleton placeholder may appear at most once. Empty runtime
+values add no text. The **Template** tab shows static paths, categories, sizes,
+hashes, and runtime markers in their exact order without draining messages.
 
 ## Store and external plugins
 
@@ -170,6 +201,11 @@ The built-image list shows agent names separately under **Current** and
 **Pending**, so an operator can see both active use and assignments waiting for
 their next launch gate. An image in either list cannot be removed.
 
+When an agent's active ordinary build ref moves to a new digest, Tariboy detects
+it only at that same next launch gate. An explicit pending assignment takes
+priority; otherwise the changed digest follows the normal pending staging and
+promotion path. The running iteration remains on its pinned digest.
+
 ## Import and export
 
 **Export** downloads a runnable image artifact named
@@ -188,19 +224,56 @@ receives a newly rewritten manifest and digest.
 Keep the original directory and paths when future rebuilds are required. An
 exported image is portable for use, not an editable source backup.
 
+## Transfer a runnable image to servers
+
+For an exportable, non-reserved built image, choose **Upload to servers** to
+send its runnable artifact to other configured hosts. The dialog lists every
+currently ready host except the captured source host; **All servers** selects
+that all-ready, non-source set, and individual targets can be deselected. For a
+remote source, this set includes **This daemon (local)** once; for a local
+source, it never lists the local source as a destination.
+
+Tariboy exports one runnable archive from the captured source and keeps it only
+in the browser memory of the open dialog. It previews and applies that same
+archive separately on each selected destination. A failure on one destination
+does not prevent later destinations from continuing. A same-ref/same-digest
+destination is shown as **Already present**; a ref conflict can be retagged and
+retried for only that destination without exporting again. Closing the dialog
+discards the archive and its transfer progress.
+
+The dialog snapshots the eligible hosts and the chosen destinations when it
+opens and starts the operation, so a later registry refresh cannot hide the
+result for a requested host. It first shows **Exporting** while downloading the
+single source archive; controls and cancellation remain unavailable until that
+download completes. Afterwards, cancellation prevents only destinations that
+have not started.
+
+The source and every destination are explicit request targets throughout the
+transfer. Starting, continuing, or retrying a transfer never changes the active
+host or the selected source route. The in-memory archive is a runnable artifact
+for this operation, not source backup or persistent state.
+
 ## Built-in images and compatibility
 
 - `bare:latest` is a schema-v2 image with no plugins and an empty prompt. Its
   terminal-only behavior is runtime policy.
-- `basic:latest` explicitly declares every plugin, static Store prompt, and
-  runtime placeholder it uses, including the instruction-only `workdir`
-  plugin, its Store prompt, and `runtime: workdir`. New agents receive the
+- `basic:latest` explicitly declares every plugin, packaged Store skill,
+  runtime placeholder, and mandatory finish prompt it uses, including the
+  instruction-only `workdir` plugin, the `goal` capability, their skills, `runtime: workdir`, and
+  `runtime: goal`. New agents receive the
   current managed generation. A daemon upgrade may advance this managed ref,
   while active agents and pending assignments continue resolving their pinned
   pre-upgrade digest until the operator selects another image.
 - Existing schema-v1 sources and images retain their historical behavior.
   Compatibility is selected by `schema_version`; new sources should use v2.
 
-Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and the
-corresponding Store prompt path when an image should expose its agent command
-and instructions.
+Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
+`$CURRENT_VERSION_STORE/skills/tasks` when an image should expose its agent
+command and instructions. Add `plugins: [{name: goal}]`, package
+`$CURRENT_VERSION_STORE/skills/goal`, and add `runtime: goal` when the image
+should receive the daemon-authoritative selected goal. The rendered task title
+and description are untrusted task input, not daemon instructions or lifecycle
+authority.
+
+The supplied `tariboy-developer` image source also packages the Tasks skill and
+declares `runtime: goal`; custom images opt in independently.

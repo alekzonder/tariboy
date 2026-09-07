@@ -21,7 +21,8 @@ by the operator. The desktop does not implement a second SSH stack.
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
 
-Automatic installation requires a writable `~/.local` and `flock`. Preflight
+Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
+The Python runtime executes the standard-library agent tool scripts. Preflight
 also reports `tmux`, Claude, Codex, and OpenCode so you can see which workflows
 are available. At least one chosen harness must be installed on the remote host.
 
@@ -42,9 +43,11 @@ fails the daemon stays available with the inherited `PATH` and logs one stable
 warning naming only the class of failure — never the path or shell startup
 output.
 Before each iteration, Tariboy checks the selected harness executable using
-the final agent environment. An agent's explicit `PATH` overrides the daemon
-baseline; non-bare images then prepend their agent bin directory, while bare
-images do not.
+the final agent environment. For non-bare images it resolves `python3` from the
+same environment and passes that absolute interpreter to skill launchers. An
+agent's explicit `PATH` overrides the daemon baseline and therefore must retain
+both prerequisites; non-bare images then prepend their agent bin directory,
+while bare images do not.
 
 ## Add and provision
 
@@ -60,7 +63,7 @@ keys, `known_hosts`, and organization authentication. Tariboy never adds
 
 ## Install and update behavior
 
-Desktop uploads the four Linux binaries, a version marker, checksums, and a
+Desktop uploads five bundled binaries including the Tasks client and Telegram plugin, a version marker, checksums, and a
 fixed installer script to a staging directory. The remote installer:
 
 - validates checksums;
@@ -69,6 +72,10 @@ fixed installer script to a staging directory. The remote installer:
 - atomically switches managed CLI symlinks;
 - verifies the daemon reports the requested version;
 - rolls back the previous release on activation failure.
+
+Reactivating a release that predates `tariboy-tasks` removes both newer Tasks
+links transactionally. Selecting the newer release again restores them; every
+selected release must contain its required payloads before links switch.
 
 An update refuses to replace unrelated regular files in `~/.local/bin`.
 Choosing **Update Tariboy** authorizes the version switch and daemon restart;
@@ -115,7 +122,7 @@ action because they have no SSH identity.
 Missing harnesses and `tmux` are reported separately as agent workflow
 prerequisites. They do not make an otherwise successful Tariboy update
 appear failed. Platform, architecture, writable install root, and `flock`
-remain installation requirements.
+plus `python3` remain installation requirements.
 
 ## Connection lifecycle
 
@@ -137,12 +144,14 @@ To uninstall remotely after confirming no work is active:
 ```bash
 ssh build-box 'set -eu
 managed_cli=
-for name in tariboy tariboyd tariboy-shim tariboy-tools; do
+for managed in tariboy:tariboy tariboyd:tariboyd tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram; do
+  name=${managed%%:*}
+  source=${managed#*:}
   link=$HOME/.local/bin/$name
   if test -L "$link"; then
     target=$(readlink "$link")
     case "$target" in
-      "$HOME"/.local/lib/tariboy/*/"$name")
+      "$HOME"/.local/lib/tariboy/*/"$source")
         test "$name" != tariboy || managed_cli=$target
         ;;
       *) echo "refusing to remove unrelated link: $link -> $target" >&2; exit 1 ;;
@@ -154,7 +163,7 @@ for name in tariboy tariboyd tariboy-shim tariboy-tools; do
 done
 test -n "$managed_cli"
 "$managed_cli" daemon stop || true
-for name in tariboy tariboyd tariboy-shim tariboy-tools; do
+for name in tariboy tariboyd tariboy-tasks ttasks tariboy-shim tariboy-plugin-telegram; do
   link=$HOME/.local/bin/$name
   test ! -L "$link" || rm -- "$link"
 done

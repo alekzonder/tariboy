@@ -14,11 +14,11 @@ included in `basic:latest`.
 ## Capability surface
 
 ```bash
-tools status
-tools status set "running the focused regression test"
+scripts/status.sh
+scripts/status.sh set "running the focused regression test"
 ```
 
-`tools status` returns the agent's live state, loop-enabled flag, current
+`scripts/status.sh` returns the agent's live state, loop-enabled flag, current
 iteration, message, and update timestamp. `status set` replaces only the
 one-line message and timestamp. It does not finish the iteration, enable or
 disable the loop, or change an error reason.
@@ -36,17 +36,17 @@ through `tariboy agent status history`.
 
 ## Prompt integration
 
-The Store prompt teaches agents when to update the line:
+Package the Store skill to expose the procedure:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: status
-prompts:
-  - file: $CURRENT_VERSION_STORE/skills/status/prompt.md
+skills:
+  - dir: $CURRENT_VERSION_STORE/skills/status
 ```
 
 There is no status runtime placeholder. The current status is read on demand
-through `tools status`; enabling the capability does not inject it into the
+through `scripts/status.sh`; enabling the capability does not inject it into the
 prompt.
 
 ## Failure behavior

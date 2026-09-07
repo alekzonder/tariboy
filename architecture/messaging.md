@@ -44,13 +44,33 @@ Channel name prefixes: `agent`, `group`, `user`, `chat`. Well-known shapes:
 - `group:<g>:broadcast` — fan-out to all group members,
 - `group:<g>:inbox` — group lead inbox,
 - `chat:<name>` — chat / plugin-facing channel,
+- `chat:telegram:<agent>` — one bundled Telegram forum topic mapped to an agent,
 - `user:<name>` — user-facing channel.
 
-Native Tasks publishes `task.assigned`, `task.question`, `task.answered`, and
-`task.triage`. Agent recipients use their existing inbox channel and customer
+Native Tasks publishes `task.assigned`, `task.question`, `task.answered`,
+`task.triage`, and daemon-owned `task.goal`. Agent recipients use their existing inbox channel and customer
 recipients use `user:<login>`. Mentions and unresolved-answer state remain in
 the task itself; the channel message is the delivery mechanism, not the source
 of truth.
+
+The bundled Telegram process remains outside the daemon. It authorizes and
+maps forum updates, then publishes ordinary text through the authenticated
+plugin API onto `chat:telegram:<agent>`. Agent replies return through the
+existing channel-sink outbox, so bus persistence, wake coalescing,
+acknowledgement, redelivery, and DLQ behavior remain authoritative; Telegram
+does not introduce a second agent-delivery path.
+
+## Agent goal delivery
+
+The per-agent Goal reconciler publishes `task.goal` to
+`agent:<name>:inbox` with the selected task key and `selected` or
+`iteration_completed` reason. Its idempotency key includes the agent, task key,
+task revision, and terminal iteration identity, so recovery and repeated scans
+do not duplicate a generation. An unprocessed Goal delivery suppresses another
+publication; a positive per-agent cooldown then suppresses rapid repeats (60
+seconds by default). Delivery remains strictly
+`Publish -> delivery -> WakeMessage`; the reconciler never starts an iteration
+directly. Disabled agents or disabled loops receive no new goal wake.
 
 An agent's unfiltered subscription to its own inbox is protected system state.
 Agent creation provisions it, and daemon startup reconciles all persisted
