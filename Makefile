@@ -178,7 +178,7 @@ ui:
 
 tasks-ui-dev: build-basic-image
 	@test -d ui/node_modules || { echo "ui/node_modules is missing, run: cd ui && npm ci" >&2; exit 1; }
-	@bash -lc 'set -euo pipefail; cd ui; cleanup() { trap - EXIT INT TERM; kill "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; wait "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; }; trap cleanup EXIT INT TERM; node tests/tasks-e2e-daemon.mjs & daemon_pid=$$!; npx vite --config vite.tasks-test.config.ts & ui_pid=$$!; echo "Tasks UI: http://127.0.0.1:4175/tests/tasks-fixture.html#/servers/local/tasks"; echo "Isolated API: http://127.0.0.1:4176"; wait -n "$$daemon_pid" "$$ui_pid"'
+	@bash -lc 'set -euo pipefail; cd ui; cleanup() { trap - EXIT INT TERM; kill "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; wait "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; }; trap cleanup EXIT INT TERM; node tests/tasks-e2e-daemon.mjs & daemon_pid=$$!; npx vite --config vite.tasks-test.config.ts & ui_pid=$$!; echo "Tasks UI: http://127.0.0.1:4175/tests/tasks-fixture.html#/servers/local/tasks"; echo "Isolated API: http://127.0.0.1:4176"; while kill -0 "$$daemon_pid" 2>/dev/null && kill -0 "$$ui_pid" 2>/dev/null; do sleep 1; done'
 
 store-ui:
 	cd ui && npm ci && npm run build:store

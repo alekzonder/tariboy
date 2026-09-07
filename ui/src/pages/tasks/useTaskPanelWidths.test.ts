@@ -1,9 +1,8 @@
 import { act, renderHook } from "@testing-library/react"
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   defaultTaskDetailWidth,
   DEFAULT_TASK_NAVIGATION_WIDTH,
-  MAX_TASK_DETAIL_WIDTH,
   MIN_TASK_NAVIGATION_WIDTH,
   readTaskPanelWidths,
   TASK_PANEL_WIDTHS_KEY,
@@ -11,8 +10,15 @@ import {
 } from "./useTaskPanelWidths"
 
 beforeEach(() => localStorage.clear())
+afterEach(() => vi.unstubAllGlobals())
 
 describe("task panel width persistence", () => {
+  it("defaults the detail sheet to half of an ultrawide viewport", () => {
+    vi.stubGlobal("innerWidth", 3440)
+
+    expect(defaultTaskDetailWidth()).toBe(1720)
+  })
+
   it("defaults when the versioned record is malformed or incomplete", () => {
     for (const value of ["{", JSON.stringify({ schemaVersion: 2 }), JSON.stringify({ schemaVersion: 1, navigationWidth: 240 })]) {
       localStorage.setItem(TASK_PANEL_WIDTHS_KEY, value)
@@ -23,7 +29,8 @@ describe("task panel width persistence", () => {
     }
   })
 
-  it("clamps persisted values to usable desktop limits", () => {
+  it("clamps persisted values to usable minimums", () => {
+    vi.stubGlobal("innerWidth", 1000)
     localStorage.setItem(TASK_PANEL_WIDTHS_KEY, JSON.stringify({
       schemaVersion: 1,
       navigationWidth: -50,
@@ -32,7 +39,7 @@ describe("task panel width persistence", () => {
 
     expect(readTaskPanelWidths()).toEqual({
       navigationWidth: MIN_TASK_NAVIGATION_WIDTH,
-      detailWidth: MAX_TASK_DETAIL_WIDTH,
+      detailWidth: 920,
     })
   })
 

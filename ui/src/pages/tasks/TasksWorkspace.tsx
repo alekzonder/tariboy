@@ -50,7 +50,6 @@ import TasksNavigation, { type TasksView } from "./TasksNavigation"
 import {
   defaultTaskDetailWidth,
   DEFAULT_TASK_NAVIGATION_WIDTH,
-  MAX_TASK_DETAIL_WIDTH,
   MAX_TASK_NAVIGATION_WIDTH,
   MIN_TASK_DETAIL_WIDTH,
   MIN_TASK_NAVIGATION_WIDTH,
@@ -224,8 +223,8 @@ function TasksWorkspaceContent({
     : MAX_TASK_NAVIGATION_WIDTH
   const effectiveNavigationWidth = Math.min(navigationWidth, navigationMaximum)
   const detailMaximum = workspaceWidth > 0
-    ? Math.max(MIN_TASK_DETAIL_WIDTH, Math.min(MAX_TASK_DETAIL_WIDTH, workspaceWidth - 80))
-    : MAX_TASK_DETAIL_WIDTH
+    ? Math.max(MIN_TASK_DETAIL_WIDTH, workspaceWidth - 80)
+    : Math.max(MIN_TASK_DETAIL_WIDTH, (globalThis.innerWidth || 820) - 80)
   const effectiveDetailWidth = Math.min(detailWidth, detailMaximum)
   const [queues, setQueues] = useState<TaskQueue[]>([])
   const [principals, setPrincipals] = useState<TaskPrincipals | null>(null)

@@ -221,6 +221,7 @@ describe("TasksWorkspace", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     await userEvent.click(row)
     expect(await screen.findByRole("dialog")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Back/ })).toHaveFocus()
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } })
     await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement)
     expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
