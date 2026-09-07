@@ -141,12 +141,13 @@ component with `scope_agent` fixed to that agent. The layout is Tree-first:
   customer-authored questions do not add an agent dot. Both indicators clear
   when the notification is read or dismissed.
 
-Clicking a task opens a fullscreen dialog with its description, priority,
-assignment, status, block reason, pull request URL, comments, and open answer
-requests. **Back** or **Close** returns to the tree with its expansion and
-scroll position preserved. Unsaved description or comment drafts require
-confirmation before being discarded. The list has no reserved detail sidebar
-or detail resize handle.
+Clicking a task opens a right-side sheet over the tree with its description,
+priority, assignment, status, block reason, pull request URL, comments, and open
+answer requests. It starts at half the viewport width; drag its left separator
+or use its keyboard controls to resize it, and the chosen width survives reloads.
+**Back**, **Close**, Escape, or a backdrop click returns to the still-mounted
+tree with its expansion and scroll position preserved. Unsaved task, comment,
+or relation drafts require confirmation before being discarded.
 
 Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.

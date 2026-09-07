@@ -214,7 +214,7 @@ describe("TasksWorkspace", () => {
     fetchMock.mockRestore()
   })
 
-  it("opens details only on selection and protects an unsaved title on close", async () => {
+  it("opens details only on selection and protects an unsaved title on outside close", async () => {
     render(<TasksWorkspace />)
     const row = await screen.findByRole("button", { name: /Ship native tasks/ })
     expect(screen.queryByText("Select a task")).not.toBeInTheDocument()
@@ -222,12 +222,24 @@ describe("TasksWorkspace", () => {
     await userEvent.click(row)
     expect(await screen.findByRole("dialog")).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } })
-    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
+    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement)
     expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
+    expect(screen.getByText("Are you sure you want to close this task? Unsaved changes will be discarded.")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Keep editing" }))
     expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
     await userEvent.click(screen.getByRole("button", { name: "Discard changes" }))
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(row).toHaveFocus()
+  })
+
+  it("closes a clean task when the backdrop is clicked", async () => {
+    render(<TasksWorkspace />)
+    const row = await screen.findByRole("button", { name: /Ship native tasks/ })
+    await userEvent.click(row)
+
+    await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement)
+
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     expect(row).toHaveFocus()
   })
@@ -270,7 +282,7 @@ describe("TasksWorkspace", () => {
     }), undefined)
   })
 
-  it("restores navigation width without reserving a detail panel", async () => {
+  it("opens the detail sheet at half width and restores its persisted resize", async () => {
     localStorage.setItem("tasks:workspace:v1", JSON.stringify({
       schemaVersion: 1,
       navigationWidth: 280,
@@ -284,6 +296,21 @@ describe("TasksWorkspace", () => {
     expect(workspace.style.getPropertyValue("--tasks-detail-width")).toBe("")
     expect(screen.getByRole("separator", { name: "Resize task navigation" })).toHaveAttribute("aria-valuenow", "280")
     expect(screen.queryByRole("separator", { name: "Resize task details" })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+
+    expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute("aria-valuenow", "520")
+    expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("520px")
+  })
+
+  it("uses half the viewport for the first detail sheet", async () => {
+    vi.stubGlobal("innerWidth", 1200)
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+
+    expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute("aria-valuenow", "600")
+    expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("600px")
+    vi.unstubAllGlobals()
   })
 
   it("resizes navigation with the keyboard and retains the legacy storage record", async () => {
@@ -293,10 +320,10 @@ describe("TasksWorkspace", () => {
     fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task navigation" }), { key: "ArrowRight" })
 
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 216, detailWidth: 410 })
+      .toEqual({ schemaVersion: 1, navigationWidth: 216, detailWidth: 512 })
     fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task navigation" }), { key: "Home" })
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 410 })
+      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 512 })
   })
 
   it("drags panel handles, stops at pointer-up, and resets on double-click", async () => {
@@ -325,7 +352,7 @@ describe("TasksWorkspace", () => {
 
     fireEvent.doubleClick(navigationHandle)
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 410 })
+      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 512 })
   })
 
   it("cleans up an active resize on pointer cancellation and unmount", async () => {
@@ -373,7 +400,7 @@ describe("TasksWorkspace", () => {
     fireEvent.pointerUp(window, { pointerId: 9 })
 
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ navigationWidth: 360, detailWidth: 410 })
+      .toMatchObject({ navigationWidth: 360, detailWidth: 512 })
   })
 
   it("opens the task named by an initial deep-link key after loading the workspace", async () => {

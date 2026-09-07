@@ -6,18 +6,23 @@ export const TASK_PANEL_WIDTHS_SCHEMA_VERSION = 1 as const
 export const DEFAULT_TASK_NAVIGATION_WIDTH = 208
 export const MIN_TASK_NAVIGATION_WIDTH = 160
 export const MAX_TASK_NAVIGATION_WIDTH = 360
-export const DEFAULT_TASK_DETAIL_WIDTH = 410
 export const MIN_TASK_DETAIL_WIDTH = 320
-export const MAX_TASK_DETAIL_WIDTH = 640
+export const MAX_TASK_DETAIL_WIDTH = 1200
 
 export type TaskPanelWidths = {
   navigationWidth: number
   detailWidth: number
 }
 
-const defaults: TaskPanelWidths = {
-  navigationWidth: DEFAULT_TASK_NAVIGATION_WIDTH,
-  detailWidth: DEFAULT_TASK_DETAIL_WIDTH,
+export function defaultTaskDetailWidth(): number {
+  return clampTaskDetailWidth((globalThis.innerWidth || 820) / 2)
+}
+
+function defaults(): TaskPanelWidths {
+  return {
+    navigationWidth: DEFAULT_TASK_NAVIGATION_WIDTH,
+    detailWidth: defaultTaskDetailWidth(),
+  }
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -35,7 +40,7 @@ export function clampTaskDetailWidth(value: number): number {
 export function readTaskPanelWidths(): TaskPanelWidths {
   try {
     const raw = globalThis.localStorage?.getItem(TASK_PANEL_WIDTHS_KEY)
-    if (!raw) return defaults
+    if (!raw) return defaults()
     const value = JSON.parse(raw) as Record<string, unknown>
     if (
       value.schemaVersion !== TASK_PANEL_WIDTHS_SCHEMA_VERSION
@@ -43,13 +48,13 @@ export function readTaskPanelWidths(): TaskPanelWidths {
       || !Number.isFinite(value.navigationWidth)
       || typeof value.detailWidth !== "number"
       || !Number.isFinite(value.detailWidth)
-    ) return defaults
+    ) return defaults()
     return {
       navigationWidth: clampTaskNavigationWidth(value.navigationWidth),
       detailWidth: clampTaskDetailWidth(value.detailWidth),
     }
   } catch {
-    return defaults
+    return defaults()
   }
 }
 

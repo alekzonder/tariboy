@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it } from "vitest"
 import {
-  DEFAULT_TASK_DETAIL_WIDTH,
+  defaultTaskDetailWidth,
   DEFAULT_TASK_NAVIGATION_WIDTH,
   MAX_TASK_DETAIL_WIDTH,
   MIN_TASK_NAVIGATION_WIDTH,
@@ -18,7 +18,7 @@ describe("task panel width persistence", () => {
       localStorage.setItem(TASK_PANEL_WIDTHS_KEY, value)
       expect(readTaskPanelWidths()).toEqual({
         navigationWidth: DEFAULT_TASK_NAVIGATION_WIDTH,
-        detailWidth: DEFAULT_TASK_DETAIL_WIDTH,
+        detailWidth: defaultTaskDetailWidth(),
       })
     }
   })

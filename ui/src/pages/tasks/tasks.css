@@ -124,19 +124,13 @@
 .tasks-empty { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--muted-foreground); }
 
 .task-detail-dialog[data-slot="dialog-content"] {
-  inset: 0; width: 100vw; height: 100dvh; max-width: none;
-  /* Pairing this with transform: none lets minification drop the translate reset. */
+  top: 0; bottom: 0; inset-inline-start: auto; inset-inline-end: 0;
+  width: var(--tasks-detail-width, 50vw); height: 100dvh;
+  max-width: calc(100vw - 80px); grid-template-columns: 4px minmax(0, 1fr);
   translate: none; padding: 0; border-radius: 0; gap: 0;
 }
 .task-detail-panel { min-width: 0; min-height: 0; overflow: auto; background: var(--background); }
-.task-detail-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0 32px; max-width: 1440px; margin: 0 auto; padding: 24px 32px; }
-.task-detail-body > .task-metadata { grid-column: 2; grid-row: 1; }
-.task-main-fields { grid-column: 1; grid-row: 1 / span 2; }
-.task-properties { grid-column: 2; grid-row: 2; }
-.task-detail-body > .task-relations, .task-detail-body > .task-workflow, .task-detail-body > .task-history { grid-column: 2; }
-.task-detail-body > .task-comment-order, .task-detail-body > .task-comments, .task-detail-body > .task-response-description { grid-column: 1; }
-.task-detail-body > .task-comment-order { grid-row: 3; }
-.task-detail-body > .task-comments { grid-row: 4 / span 3; }
+.task-detail-body { min-width: 0; }
 .task-discard { display: flex; align-items: center; gap: 12px; padding: 12px 32px; background: var(--muted); }
 .task-description { display: grid; gap: 8px; min-width: 0; }
 .task-comment-order { padding: 16px 20px 0; font-size: 12px; }
@@ -217,8 +211,7 @@
 @media (max-width: 1000px) {
   .tasks-workspace { grid-template-columns: 180px 1fr; }
   .task-panel-resize-handle { display: none; }
-  .task-detail-body { grid-template-columns: minmax(0, 1fr); padding: 12px; }
-  .task-detail-body > *, .task-main-fields, .task-properties { grid-column: 1 !important; grid-row: auto !important; }
+  .task-detail-dialog[data-slot="dialog-content"] { width: 100vw; max-width: none; }
 }
 
 @media (max-width: 700px) {

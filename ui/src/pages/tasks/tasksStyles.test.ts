@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process"
 import { expect, it } from "vitest"
 
-it("preserves the fullscreen dialog translation reset after production CSS minification", () => {
+it("keeps the task dialog as a right-side sheet after production CSS minification", () => {
   const style = document.createElement("style")
-  // Start with the centered DialogContent translation that fullscreen must override.
-  style.textContent = '[data-slot="dialog-content"] { translate: -50% -50%; }\n'
+  // Start with the centered DialogContent position that the sheet must override.
+  style.textContent = '[data-slot="dialog-content"] { left: 50%; top: 50%; translate: -50% -50%; }\n'
   // Rolldown's native bindings need a real Node realm, outside Vitest's VM pool.
   style.textContent += execFileSync(process.execPath, ["--input-type=module", "-e", `
     import { build } from "vite";
@@ -25,8 +25,8 @@ it("preserves the fullscreen dialog translation reset after production CSS minif
   document.head.append(style)
   document.body.append(dialog)
   try {
-    // A transform reset cannot cancel the separate translate property used by Tailwind.
     expect(getComputedStyle(dialog).translate).toBe("none")
+    expect(getComputedStyle(dialog).width).toBe("var(--tasks-detail-width,50vw)")
   } finally {
     dialog.remove()
     style.remove()
