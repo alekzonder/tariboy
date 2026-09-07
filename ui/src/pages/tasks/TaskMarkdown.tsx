@@ -22,7 +22,7 @@ const extensions = [
 ]
 const markdownParser = unified().use(remarkParse).use(remarkGfm)
 const markdownStyles = [
-  "max-w-none text-sm leading-relaxed break-words [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+  "task-markdown max-w-none text-sm leading-relaxed [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
   "[&_:is(h1,h2,h3,h4,h5,h6)]:mt-4 [&_:is(h1,h2,h3,h4,h5,h6)]:mb-2 [&_:is(h1,h2,h3,h4,h5,h6)]:font-semibold [&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg",
   "[&_strong]:font-bold [&_em]:italic [&_del]:line-through [&_s]:line-through [&_a]:text-primary [&_a]:underline",
   "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1",
