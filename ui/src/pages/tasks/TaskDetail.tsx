@@ -1,5 +1,5 @@
 import { ArrowLeft, X } from "lucide-react"
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react"
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
 import type {
   TaskDetail as Detail,
   Task,
@@ -76,6 +76,7 @@ export default function TaskDetail({
   const managed = Boolean(task.workflow_version_id)
   const [baseline, setBaseline] = useState(task)
   const [returnFocus] = useState(() => document.activeElement as HTMLElement | null)
+  const initialFocusRef = useRef<HTMLButtonElement>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [commentDirty, setCommentDirty] = useState(false)
   const [title, setTitle] = useState(task.title)
@@ -173,11 +174,12 @@ export default function TaskDetail({
     <Dialog open onOpenChange={(open) => { if (!open) close() }}>
     <DialogContent className="task-detail-dialog" showCloseButton={false} aria-describedby={undefined}
       style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
+      onOpenAutoFocus={(event) => { event.preventDefault(); initialFocusRef.current?.focus() }}
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus() }}>
     {resizeHandle}
     <div className="task-detail-panel">
       <header className="task-detail-header">
-        <Button variant="ghost" onClick={close} disabled={pending}><ArrowLeft /> Back</Button>
+        <Button ref={initialFocusRef} variant="ghost" onClick={close} disabled={pending}><ArrowLeft /> Back</Button>
         <div>
           <DialogTitle asChild><h2>{task.key}</h2></DialogTitle>
           <span>{task.title}</span>

@@ -7,7 +7,6 @@ export const DEFAULT_TASK_NAVIGATION_WIDTH = 208
 export const MIN_TASK_NAVIGATION_WIDTH = 160
 export const MAX_TASK_NAVIGATION_WIDTH = 360
 export const MIN_TASK_DETAIL_WIDTH = 320
-export const MAX_TASK_DETAIL_WIDTH = 1200
 
 export type TaskPanelWidths = {
   navigationWidth: number
@@ -34,7 +33,7 @@ export function clampTaskNavigationWidth(value: number): number {
 }
 
 export function clampTaskDetailWidth(value: number): number {
-  return clamp(value, MIN_TASK_DETAIL_WIDTH, MAX_TASK_DETAIL_WIDTH)
+  return clamp(value, MIN_TASK_DETAIL_WIDTH, Math.max(MIN_TASK_DETAIL_WIDTH, (globalThis.innerWidth || 820) - 80))
 }
 
 export function readTaskPanelWidths(): TaskPanelWidths {
