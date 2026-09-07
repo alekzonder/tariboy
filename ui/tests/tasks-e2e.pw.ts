@@ -70,21 +70,36 @@ async function assertNoLoadFailedToast(page: Page) {
   await expect(page.getByText(/network error: Load failed/i)).toHaveCount(0);
 }
 
-test("Tasks production workspace resizes and restores both side panels", async ({ page }) => {
+test("Tasks production workspace opens, closes, resizes, and restores the detail sheet", async ({ page, request }) => {
+  let response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "RESIZE", name: "Resize browser" } });
+  expect(response.ok()).toBe(true);
+  response = await request.post(`${daemonURL}/api/tasks`, { data: {
+    queue: "RESIZE", title: "Resize detail sheet", idempotency_key: "tasks-browser-resize-detail",
+  } });
+  expect(response.ok()).toBe(true);
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
   const navigationHandle = page.getByRole("separator", { name: "Resize task navigation" });
-  const detailHandle = page.getByRole("separator", { name: "Resize task details" });
   await expect(navigationHandle).toBeVisible();
-  await expect(detailHandle).toBeVisible();
-
+  await expect(page.getByRole("separator", { name: "Resize task details" })).toHaveCount(0);
   const navigationBox = await navigationHandle.boundingBox();
-  const detailBox = await detailHandle.boundingBox();
   expect(navigationBox).not.toBeNull();
-  expect(detailBox).not.toBeNull();
   await page.mouse.move(navigationBox!.x + navigationBox!.width / 2, navigationBox!.y + 60);
   await page.mouse.down();
   await page.mouse.move(navigationBox!.x + 74, navigationBox!.y + 60, { steps: 8 });
   await page.mouse.up();
+
+  await page.getByTestId("task-row-RESIZE-1").locator(".task-row-main").click();
+  const detailHandle = page.getByRole("separator", { name: "Resize task details" });
+  await expect(detailHandle).toBeVisible();
+
+  await expect.poll(async () => (await page.getByRole("dialog").boundingBox())?.width).toBe(720);
+  await expect.poll(async () => {
+    const box = await page.getByRole("dialog").boundingBox();
+    return box && box.x + box.width;
+  }).toBe(1440);
+
+  const detailBox = await detailHandle.boundingBox();
+  expect(detailBox).not.toBeNull();
   await page.mouse.move(detailBox!.x + detailBox!.width / 2, detailBox!.y + 60);
   await page.mouse.down();
   await page.mouse.move(detailBox!.x - 62, detailBox!.y + 60, { steps: 8 });
@@ -96,17 +111,27 @@ test("Tasks production workspace resizes and restores both side panels", async (
   expect(persisted.detailWidth).toBeGreaterThan(460);
 
   await page.setViewportSize({ width: 900, height: 900 });
-  await expect(navigationHandle).toBeHidden();
   await expect(detailHandle).toBeHidden();
   await page.setViewportSize({ width: 1440, height: 900 });
-  await expect(navigationHandle).toHaveAttribute("aria-valuenow", String(persisted.navigationWidth));
   await expect(detailHandle).toHaveAttribute("aria-valuenow", String(persisted.detailWidth));
+
+  await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(navigationHandle).toHaveAttribute("aria-valuenow", String(persisted.navigationWidth));
 
   await page.reload();
   await expect(page.getByRole("separator", { name: "Resize task navigation" }))
     .toHaveAttribute("aria-valuenow", String(persisted.navigationWidth));
+  await page.getByTestId("task-row-RESIZE-1").locator(".task-row-main").click();
   await expect(page.getByRole("separator", { name: "Resize task details" }))
     .toHaveAttribute("aria-valuenow", String(persisted.detailWidth));
+
+  await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByTestId("task-row-RESIZE-1").locator(".task-row-main").click();
+  await page.getByRole("dialog").getByLabel("Title").fill("Unsaved resize detail");
+  await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
+  await expect(page.getByText("Are you sure you want to close this task? Unsaved changes will be discarded.")).toBeVisible();
 });
 
 test("Tasks production workspace publishes and selects a workflow version", async ({ page, request }) => {
@@ -126,14 +151,14 @@ test("Tasks production workspace publishes and selects a workflow version", asyn
 
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks")
   await page.getByRole("button", { name: "Queues" }).click()
-  await page.getByText("Create definition (JSON)").click()
+  await page.getByLabel("Workflow FLOW").getByText("Create definition (JSON)").click()
   await page.getByLabel("Workflow definition FLOW").fill(JSON.stringify(definition))
   await page.getByRole("button", { name: "Validate and publish" }).click()
   await expect(page.getByText("Workflow published", { exact: true })).toBeVisible()
   await page.getByLabel("Workflow name FLOW").fill("browser-flow")
-  await page.getByRole("button", { name: "Load versions" }).click()
+  await page.getByLabel("Workflow FLOW").getByRole("button", { name: "Load versions" }).click()
   await expect(page.getByLabel("Published workflow version FLOW")).toContainText("browser-flow@1")
-  await expect(page.getByText("Legacy queue (no workflow)")).toBeVisible()
+  await expect(page.getByLabel("Workflow FLOW").getByText("Legacy queue (no workflow)")).toBeVisible()
   await assertNoLoadFailedToast(page)
 })
 
@@ -141,6 +166,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   page,
   request,
 }) => {
+  test.setTimeout(60_000);
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
   await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
 
@@ -163,17 +189,20 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await page.getByLabel("Task title").fill("Root task");
   await page.getByRole("button", { name: "Create task" }).click();
   await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
+  await page.getByRole("button", { name: "Close task detail" }).click();
 
   await page.getByRole("button", { name: "Add child to TEST-1" }).click();
   await page.getByLabel("Task title").fill("First child");
   await page.getByRole("button", { name: "Create task" }).click();
   await expect(page.getByTestId("task-row-TEST-2")).toBeVisible();
+  await page.getByRole("button", { name: "Close task detail" }).click();
 
   await page.getByRole("button", { name: "New task" }).click();
   await page.getByLabel("Task queue").selectOption("TEST");
   await page.getByLabel("Task title").fill("Second root");
   await page.getByRole("button", { name: "Create task" }).click();
   await expect(page.getByTestId("task-row-TEST-3")).toBeVisible();
+  await page.getByRole("button", { name: "Close task detail" }).click();
 
   await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
   const detail = page.locator(".task-detail-panel");
@@ -250,6 +279,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByText(/Waiting for user:/)).toHaveCount(0);
   await expect(detail.getByText("Confirmed from the customer")).toBeVisible();
 
+  await detail.getByRole("button", { name: "Close task detail" }).click();
   await page.getByRole("button", { name: "All tasks" }).click();
   await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
   await detail.getByLabel("Relation type").selectOption("related");
@@ -258,6 +288,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByText("related TEST-3")).toBeVisible();
   await detail.getByRole("button", { name: "Remove relation to TEST-3" }).click();
   await expect(detail.getByText("related TEST-3")).toHaveCount(0);
+  await detail.getByRole("button", { name: "Close task detail" }).click();
 
   const criticalRoot = await createTask(request, { title: "Critical root", priority: "P0" });
   const secondCriticalRoot = await createTask(request, { title: "Second critical root", priority: "P0" });

@@ -22,7 +22,7 @@ DESKTOP_INSTALL_UI_DEPS ?= 1
 
 export CGO_ENABLED=0
 
-.PHONY: build build-basic-image install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build build-basic-image install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui tasks-ui-dev store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build-basic-image:
 	$(GO) run ./internal/builtinimages/generate -source internal/builtinimages/source -output internal/builtinimages/generated -version $(VERSION)
@@ -175,6 +175,10 @@ full-smoke:
 ui:
 	@test -d ui/node_modules || { echo "ui/node_modules is missing, run: cd ui && npm ci" >&2; exit 1; }
 	cd ui && npm run build:desktop
+
+tasks-ui-dev: build-basic-image
+	@test -d ui/node_modules || { echo "ui/node_modules is missing, run: cd ui && npm ci" >&2; exit 1; }
+	@bash -lc 'set -euo pipefail; cd ui; cleanup() { trap - EXIT INT TERM; kill "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; wait "$${daemon_pid:-}" "$${ui_pid:-}" 2>/dev/null || true; }; trap cleanup EXIT INT TERM; node tests/tasks-e2e-daemon.mjs & daemon_pid=$$!; npx vite --config vite.tasks-test.config.ts & ui_pid=$$!; echo "Tasks UI: http://127.0.0.1:4175/tests/tasks-fixture.html#/servers/local/tasks"; echo "Isolated API: http://127.0.0.1:4176"; wait -n "$$daemon_pid" "$$ui_pid"'
 
 store-ui:
 	cd ui && npm ci && npm run build:store

@@ -48,8 +48,11 @@ import TaskNotifications from "./TaskNotifications"
 import TaskTree from "./TaskTree"
 import TasksNavigation, { type TasksView } from "./TasksNavigation"
 import {
+  defaultTaskDetailWidth,
   DEFAULT_TASK_NAVIGATION_WIDTH,
+  MAX_TASK_DETAIL_WIDTH,
   MAX_TASK_NAVIGATION_WIDTH,
+  MIN_TASK_DETAIL_WIDTH,
   MIN_TASK_NAVIGATION_WIDTH,
   useTaskPanelWidths,
 } from "./useTaskPanelWidths"
@@ -76,20 +79,23 @@ type TasksWorkspaceProps = {
 
 const TASK_CENTER_MIN_WIDTH = 360
 function TaskPanelResizeHandle({
+  panel,
   width,
   maximum,
   workspaceRef,
   onResize,
 }: {
+  panel: "navigation" | "detail"
   width: number
   maximum: number
   workspaceRef: React.RefObject<HTMLDivElement | null>
   onResize: (width: number) => void
 }) {
   const cleanupDragRef = useRef<(() => void) | null>(null)
-  const minimum = MIN_TASK_NAVIGATION_WIDTH
-  const defaultWidth = DEFAULT_TASK_NAVIGATION_WIDTH
-  const label = "Resize task navigation"
+  const navigation = panel === "navigation"
+  const minimum = navigation ? MIN_TASK_NAVIGATION_WIDTH : MIN_TASK_DETAIL_WIDTH
+  const defaultWidth = navigation ? DEFAULT_TASK_NAVIGATION_WIDTH : defaultTaskDetailWidth()
+  const label = navigation ? "Resize task navigation" : "Resize task details"
   const resize = (requestedWidth: number) => {
     onResize(Math.min(requestedWidth, maximum))
   }
@@ -110,7 +116,7 @@ function TaskPanelResizeHandle({
       if (isDifferentPointer(moveEvent.pointerId)) return
       const bounds = workspaceRef.current?.getBoundingClientRect()
       if (!bounds) return
-      resize(moveEvent.clientX - bounds.left)
+      resize(navigation ? moveEvent.clientX - bounds.left : bounds.right - moveEvent.clientX)
     }
     const cleanup = () => {
       if (finished) return
@@ -156,7 +162,7 @@ function TaskPanelResizeHandle({
   }
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    const step = event.shiftKey ? 32 : 8
+    const step = (event.shiftKey ? 32 : 8) * (navigation ? 1 : -1)
     if (event.key === "ArrowLeft") {
       event.preventDefault()
       resize(width - step)
@@ -195,7 +201,9 @@ function TasksWorkspaceContent({
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const {
     navigationWidth,
+    detailWidth,
     setNavigationWidth,
+    setDetailWidth,
   } = useTaskPanelWidths()
   const [workspaceWidth, setWorkspaceWidth] = useState(0)
   useEffect(() => {
@@ -215,6 +223,10 @@ function TasksWorkspaceContent({
     ? Math.min(MAX_TASK_NAVIGATION_WIDTH, Math.max(MIN_TASK_NAVIGATION_WIDTH, workspaceWidth - TASK_CENTER_MIN_WIDTH - 4))
     : MAX_TASK_NAVIGATION_WIDTH
   const effectiveNavigationWidth = Math.min(navigationWidth, navigationMaximum)
+  const detailMaximum = workspaceWidth > 0
+    ? Math.max(MIN_TASK_DETAIL_WIDTH, Math.min(MAX_TASK_DETAIL_WIDTH, workspaceWidth - 80))
+    : MAX_TASK_DETAIL_WIDTH
+  const effectiveDetailWidth = Math.min(detailWidth, detailMaximum)
   const [queues, setQueues] = useState<TaskQueue[]>([])
   const [principals, setPrincipals] = useState<TaskPrincipals | null>(null)
   const [metadataError, setMetadataError] = useState("")
@@ -601,6 +613,7 @@ function TasksWorkspaceContent({
         unread={unread}
       />
       <TaskPanelResizeHandle
+        panel="navigation"
         width={effectiveNavigationWidth}
         maximum={navigationMaximum}
         workspaceRef={workspaceRef}
@@ -703,6 +716,14 @@ function TasksWorkspaceContent({
           target={target}
           detail={detail}
           principals={principals}
+          width={effectiveDetailWidth}
+          resizeHandle={<TaskPanelResizeHandle
+            panel="detail"
+            width={effectiveDetailWidth}
+            maximum={detailMaximum}
+            workspaceRef={workspaceRef}
+            onResize={setDetailWidth}
+          />}
           onClose={() => {
             detailRequestRef.current += 1
             selectedKeyRef.current = ""

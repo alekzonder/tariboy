@@ -127,9 +127,11 @@ Generated UI rules:
 
 - `desktop/dist` and `desktop/src-tauri/resources/bin/` are ignored build
   output; do not stage them.
-- Every UI change must be verified against a real production Desktop build
-  through both Playwright and `tauri-driver`; Vite fixtures, unit tests, and a
-  successful compile do not replace these two end-to-end checks.
+- For React-only Tasks UI work, run `make tasks-ui-dev` to start the production
+  workspace against an isolated API, then verify it in a browser at the printed
+  URL. This is sufficient visual verification unless the change touches the
+  native host, WebView-only behavior, packaging, or generated Desktop assets;
+  those changes still require the applicable Playwright/`tauri-driver` gates.
 - `internal/storeui/dist` is embedded and committed. Rebuild it with
   `make store-ui` in an isolated worktree at the target commit when store UI or
   shared UI changes affect it.

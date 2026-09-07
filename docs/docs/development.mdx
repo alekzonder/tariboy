@@ -327,6 +327,19 @@ npm run test:workspace-browser
 npm run build:store
 ```
 
+For interactive visual checks of React-only Tasks changes, start the production
+Tasks workspace and its real API together:
+
+```bash
+make tasks-ui-dev
+```
+
+The target prints the browser URL, builds and starts a daemon with temporary
+isolated data and runtime directories on `127.0.0.1:4176`, and serves the UI on
+`127.0.0.1:4175`. Press Ctrl-C to stop both processes and remove the temporary
+daemon state. Use the native Desktop gates only when the change depends on the
+Tauri host, WebView behavior, packaging, or generated Desktop assets.
+
 Use the build target affected by the change during iteration. Run both when
 shared UI code is consumed by both applications. `npm run build:store` is a
 build, not a check: it regenerates the committed `internal/storeui/dist` bundle

@@ -1,5 +1,5 @@
 import { ArrowLeft, X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react"
 import type {
   TaskDetail as Detail,
   Task,
@@ -34,6 +34,8 @@ export default function TaskDetail({
   questionsLoading,
   questionsError,
   principals,
+  width,
+  resizeHandle,
   onClose,
   onSave,
   onComment,
@@ -53,6 +55,8 @@ export default function TaskDetail({
   questionsLoading: boolean
   questionsError: string
   principals: TaskPrincipals | null
+  width: number
+  resizeHandle: ReactNode
   onClose: () => void
   onSave: (input: {
     revision: number
@@ -168,8 +172,9 @@ export default function TaskDetail({
   return (
     <Dialog open onOpenChange={(open) => { if (!open) close() }}>
     <DialogContent className="task-detail-dialog" showCloseButton={false} aria-describedby={undefined}
-      onInteractOutside={(event) => event.preventDefault()}
+      style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus() }}>
+    {resizeHandle}
     <div className="task-detail-panel">
       <header className="task-detail-header">
         <Button variant="ghost" onClick={close} disabled={pending}><ArrowLeft /> Back</Button>
@@ -181,7 +186,7 @@ export default function TaskDetail({
         <Button variant="ghost" size="icon" aria-label="Close task detail" disabled={pending} onClick={close}><X /></Button>
       </header>
       {confirmClose && <div className="task-discard" role="alert">
-        <span>Discard unsaved changes?</span>
+        <span>Are you sure you want to close this task? Unsaved changes will be discarded.</span>
         <Button variant="outline" onClick={() => setConfirmClose(false)}>Keep editing</Button>
         <Button variant="destructive" onClick={onClose}>Discard changes</Button>
       </div>}
