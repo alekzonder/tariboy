@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/tasks"
-import { Textarea } from "@/components/ui/textarea"
+import { MarkdownEditor, MarkdownContent } from "./TaskMarkdown"
+import { Button } from "@/components/ui/button"
 
 function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `comment-${Date.now()}-${Math.random()}`
@@ -11,15 +12,18 @@ export default function TaskComments({
   waits,
   principals,
   onComment,
+  onDirtyChange,
 }: {
   comments: TaskComment[]
   waits: TaskWait[]
   principals: TaskPrincipals | null
+  onDirtyChange: (dirty: boolean) => void
   onComment: (body: string, idempotencyKey: string) => Promise<void>
 }) {
   const [body, setBody] = useState("")
   const [ask, setAsk] = useState("")
   const [busy, setBusy] = useState(false)
+  useEffect(() => { onDirtyChange(Boolean(body.trim()) || busy) }, [body, busy, onDirtyChange])
   const openWaits = waits.filter((wait) => !wait.resolved_at)
   const choices = principals
     ? [principals.customer, ...principals.agents].filter(Boolean)
@@ -31,10 +35,12 @@ export default function TaskComments({
     setBusy(true)
     try {
       const principal = ask && !ask.includes(":") ? `agent:${ask}` : ask
-      const text = principal ? `@${principal} ${body.trim()}` : body.trim()
+      const text = principal ? `@${principal}\n\n${body.trim()}` : body.trim()
       await onComment(text, idempotencyKey())
       setBody("")
       setAsk("")
+    } catch {
+      // The workspace reports the failure; retain the comment for retry.
     } finally {
       setBusy(false)
     }
@@ -52,7 +58,7 @@ export default function TaskComments({
         {comments.map((comment) => (
           <article key={comment.id}>
             <header><strong>{comment.author}</strong><time>{new Date(comment.created_at).toLocaleString()}</time></header>
-            <p>{comment.body}</p>
+            <MarkdownContent>{comment.body}</MarkdownContent>
           </article>
         ))}
       </div>
@@ -64,11 +70,10 @@ export default function TaskComments({
             {choices.map((principal) => <option key={principal} value={principal}>{principal}</option>)}
           </select>
         </label>
-        <label>
-          Comment
-          <Textarea aria-label="Comment" value={body} onChange={(event) => setBody(event.target.value)} />
-        </label>
-        <button type="submit" disabled={busy || !body.trim()}>Send comment</button>
+        <div><label htmlFor="task-comment">Comment</label>
+          <MarkdownEditor id="task-comment" placeholder="Comment" value={body} onChange={setBody} disabled={busy} />
+        </div>
+        <Button type="submit" disabled={busy || !body.trim()}>Send comment</Button>
       </form>
     </section>
   )

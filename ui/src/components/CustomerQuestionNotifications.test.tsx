@@ -504,7 +504,7 @@ describe("CustomerQuestionNotifications", () => {
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/servers/remote-1/tasks?task=ASK-8%2Fneeds-answer"))
     expect(await screen.findByRole("heading", { name: taskKey })).toBeInTheDocument()
-    expect(screen.getByDisplayValue("The customer needs a decision")).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("The customer needs a decision")
     await expectAttention()
     expect(model.readAttempts).toEqual([{ notificationId: "notification-1", hostId: "remote-1" }])
   })

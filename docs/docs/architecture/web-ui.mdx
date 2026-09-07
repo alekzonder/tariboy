@@ -191,28 +191,42 @@ the saved automation document so the daemon restores its image and loop settings
 before group membership is reconciled. Every request uses that same explicit
 daemon target.
 
-Tasks uses one reusable three-region workspace at `/servers/:hostId/tasks` and
-inside each Agent tab. The server route shows every task visible on that host;
+Tasks uses one reusable workspace at `/servers/:hostId/tasks` and inside each
+Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
-`scope_agent=<name>` to render only that agent's inherited view. The center is
-an expandable tree ordered at every depth by priority, manual position, and
+`scope_agent=<name>` to render only that agent's inherited view. The tree fills
+all remaining width after task navigation and is expandable, ordered at every
+depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
 inside a task reparents it without changing priority. Compact priority markers
-appear in the tree and the right panel edits priority alongside the other task
-fields, comments, mentions, and answer waits.
+appear in the tree. Selecting a task opens its detail in a fullscreen shadcn
+dialog, with priority, other task fields, comments, mentions, and answer waits.
+Back and Close dismiss the dialog while preserving the mounted tree's expansion
+and scroll position. Dismissal protects unsaved description and comment drafts
+with a discard confirmation. There is no empty detail sidebar or detail resizer.
 Task Detail also offers `Wait customer` status and an editable Pull request URL;
 both use the existing optimistic revision and explicit-host request path.
-On desktop-width layouts, keyboard- and pointer-accessible separators resize
-the left task navigation and right task-detail panels. Arrow keys move a
-separator, Shift increases the step, Home and double-click restore its default,
-and both clamped widths persist together in the versioned WebView localStorage
+On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
+the left task navigation. Arrow keys move the separator, Shift increases the
+step, Home and double-click restore its default,
+and the clamped navigation width persists in the versioned WebView localStorage
 record `tasks:workspace:v1`. Route changes and app reloads restore that record.
-An active resize also reserves the center tree's minimum usable width and the
-other panel before accepting a new side-panel width.
-At the existing responsive breakpoints, the fixed navigation, overlay detail,
-and hidden mobile navigation behavior still takes precedence; inactive
-separators are hidden without discarding the stored desktop widths.
+An active resize reserves the tree's minimum usable width. At responsive
+breakpoints, fixed or hidden mobile navigation takes precedence; the inactive
+separator is hidden without discarding the stored desktop navigation width.
+
+Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
+with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
+links, lists, checklists, code, and tables are supported. Unsupported syntax
+keeps the editor in source mode rather than being silently converted or lost.
+Saved content renders through `react-markdown` and `remark-gfm`, without raw
+HTML execution. Markdown strings remain the API and persistence contract;
+editor documents are not stored. Dependency license notices are included in
+`ui/public/THIRD-PARTY-TIPTAP.txt`, copied into the Desktop assets by Vite.
+Existing typed mentions, explicit questions,
+and answer-wait semantics remain daemon-owned.
+
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task; it updates from the

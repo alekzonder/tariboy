@@ -1,7 +1,8 @@
-import { X } from "lucide-react"
-import { useState } from "react"
+import { ArrowLeft, X } from "lucide-react"
+import { useEffect, useState } from "react"
 import type {
   TaskDetail as Detail,
+  Task,
   TaskEvent,
   TaskPrincipals,
   TaskPriority,
@@ -13,7 +14,9 @@ import type {
 } from "@/lib/tasks"
 import TaskComments from "./TaskComments"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { MarkdownEditor, MarkdownContent } from "./TaskMarkdown"
 
 export default function TaskDetail({
   detail,
@@ -48,6 +51,7 @@ export default function TaskDetail({
   principals: TaskPrincipals | null
   onClose: () => void
   onSave: (input: {
+    revision: number
     title: string
     description: string
     pull_request: string
@@ -55,13 +59,17 @@ export default function TaskDetail({
     assignee?: string
     manual_block_reason?: string
     priority: TaskPriority
-  }) => Promise<void>
+  }) => Promise<Task>
   onComment: (body: string, idempotencyKey: string) => Promise<void>
   onAddRelation: (targetKey: string, type: TaskRelationType) => Promise<void>
   onDeleteRelation: (relationID: number) => Promise<void>
 }) {
   const task = detail.task
   const managed = Boolean(task.workflow_version_id)
+  const [baseline, setBaseline] = useState(task)
+  const [returnFocus] = useState(() => document.activeElement as HTMLElement | null)
+  const [confirmClose, setConfirmClose] = useState(false)
+  const [commentDirty, setCommentDirty] = useState(false)
   const [title, setTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description)
   const [status, setStatus] = useState<TaskStatus>(task.status)
@@ -75,6 +83,47 @@ export default function TaskDetail({
   const [relationBusy, setRelationBusy] = useState(false)
   const [relationError, setRelationError] = useState("")
   const [commentOrder, setCommentOrder] = useState<"newest" | "oldest">("newest")
+  const dirty = title !== baseline.title || description !== baseline.description
+    || status !== baseline.status || pullRequest !== (baseline.pull_request ?? "")
+    || priority !== baseline.priority || assignee !== baseline.assignee
+    || blockReason !== baseline.manual_block_reason
+  const hasDraft = dirty || commentDirty || Boolean(relationTarget.trim())
+  const adopt = (next: Task) => {
+    setBaseline(next)
+    setTitle(next.title)
+    setDescription(next.description)
+    setStatus(next.status)
+    setPullRequest(next.pull_request ?? "")
+    setPriority(next.priority)
+    setAssignee(next.assignee)
+    setBlockReason(next.manual_block_reason)
+  }
+  // Refresh pristine forms; keep the revision that an unsaved draft was based on.
+  if (baseline !== task && !dirty && !saving) adopt(task)
+  const close = () => {
+    if (saving) return
+    if (hasDraft) setConfirmClose(true)
+    else onClose()
+  }
+  useEffect(() => {
+    if (!hasDraft) return
+    const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = "" }
+    window.addEventListener("beforeunload", prevent)
+    return () => window.removeEventListener("beforeunload", prevent)
+  }, [hasDraft])
+  const keepEdits = () => {
+    const merged = { ...task,
+      title: title !== baseline.title ? title : task.title,
+      description: description !== baseline.description ? description : task.description,
+      status: status !== baseline.status ? status : task.status,
+      pull_request: pullRequest !== (baseline.pull_request ?? "") ? pullRequest : task.pull_request,
+      priority: priority !== baseline.priority ? priority : task.priority,
+      assignee: assignee !== baseline.assignee ? assignee : task.assignee,
+      manual_block_reason: blockReason !== baseline.manual_block_reason ? blockReason : task.manual_block_reason,
+    }
+    adopt(merged)
+    setBaseline(task)
+  }
   const comments = commentOrder === "newest" ? [...detail.comments].reverse() : detail.comments
   const submitRelation = () => {
     if (!relationTarget.trim()) return
@@ -89,7 +138,8 @@ export default function TaskDetail({
   const save = async () => {
     setSaving(true)
     try {
-      await onSave({
+      const updated = await onSave({
+        revision: baseline.revision,
         title: title.trim(),
         description,
         pull_request: pullRequest.trim(),
@@ -100,20 +150,48 @@ export default function TaskDetail({
           manual_block_reason: blockReason,
         }),
       })
+      adopt(updated)
+    } catch {
+      // The workspace reports the API error; keep the draft for retry.
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <aside className="task-detail-panel">
+    <Dialog open onOpenChange={(open) => { if (!open) close() }}>
+    <DialogContent className="task-detail-dialog" showCloseButton={false} aria-describedby={undefined}
+      onInteractOutside={(event) => event.preventDefault()}
+      onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus() }}>
+    <div className="task-detail-panel">
       <header className="task-detail-header">
+        <Button variant="ghost" onClick={close} disabled={saving}><ArrowLeft /> Back</Button>
         <div>
-          <h2>{task.key}</h2>
-          <span>rev {task.revision} · {task.author}</span>
+          <DialogTitle asChild><h2>{task.key}</h2></DialogTitle>
+          <span>{task.title}</span>
         </div>
-        <button type="button" aria-label="Close task detail" onClick={onClose}><X /></button>
+        {task.access !== "context" && task.access !== "respond" && <Button disabled={saving || !title.trim()} onClick={() => void save()}>Save task</Button>}
+        <Button variant="ghost" size="icon" aria-label="Close task detail" disabled={saving} onClick={close}><X /></Button>
       </header>
+      {confirmClose && <div className="task-discard" role="alert">
+        <span>Discard unsaved changes?</span>
+        <Button variant="outline" onClick={() => setConfirmClose(false)}>Keep editing</Button>
+        <Button variant="destructive" onClick={onClose}>Discard changes</Button>
+      </div>}
+      {dirty && baseline.revision !== task.revision && <div className="task-conflict" role="alert">
+        <p>This task changed while you were editing. Keep your edited fields over the latest values, or reload to discard your edits.</p>
+        <details><summary>Latest values</summary><dl>
+          <dt>Title</dt><dd>{task.title}</dd>
+          <dt>Description</dt><dd><MarkdownContent>{task.description}</MarkdownContent></dd>
+          <dt>Status</dt><dd>{task.status}</dd><dt>Priority</dt><dd>{task.priority}</dd>
+          <dt>Assignee</dt><dd>{task.assignee || "Unassigned"}</dd>
+          <dt>Pull request</dt><dd>{task.pull_request || "None"}</dd>
+          <dt>Block reason</dt><dd>{task.manual_block_reason || "None"}</dd>
+        </dl></details>
+        <Button variant="outline" disabled={saving} onClick={keepEdits}>Keep my edits</Button>
+        <Button variant="outline" disabled={saving} onClick={() => adopt(task)}>Reload task</Button>
+      </div>}
+      <div className="task-detail-body">
       {task.access === "context" ? (
         <div className="tasks-empty">Context ancestor — open a visible descendant to edit.</div>
       ) : (
@@ -125,9 +203,12 @@ export default function TaskDetail({
             <div><dt>Group</dt><dd>{task.group || "—"}</dd></div>
             <div><dt>Blocked</dt><dd>{task.blocked ? "Yes" : "No"}</dd></div>
           </dl>
-          {task.access !== "respond" ? <><div className="task-fields">
+          {task.access !== "respond" ? <><fieldset className="task-fields" disabled={saving}>
+            <div className="task-main-fields">
             <label>Title<Input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-            <label>Description<Textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+            <div className="task-description"><label htmlFor="task-description">Description</label><MarkdownEditor id="task-description" placeholder="Description" value={description} onChange={setDescription} disabled={saving} /></div>
+            </div>
+            <div className="task-properties">
             <div className="task-field-grid">
               {!managed && <label>Status
                 <select value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)}>
@@ -155,10 +236,8 @@ export default function TaskDetail({
             </div>
             <label>Pull request URL<Input value={pullRequest} onChange={(event) => setPullRequest(event.target.value)} /></label>
             {!managed && <label>Manual block reason<Input value={blockReason} onChange={(event) => setBlockReason(event.target.value)} /></label>}
-            <button type="button" className="task-primary-action" disabled={saving || !title.trim()} onClick={() => void save()}>
-              Save task
-            </button>
-          </div>
+            </div>
+          </fieldset>
           {managed && (
             <section className="task-workflow" aria-label="Workflow execution">
               <div className="task-section-title">Managed workflow</div>
@@ -234,14 +313,14 @@ export default function TaskDetail({
             </form>
             {relationError && <p role="alert">{relationError}</p>}
           </section>
-          </> : <div className="tasks-empty">Response access — comments only.</div>}
-          <label>Comment order
+          </> : <div className="task-response-description"><h3>{task.title}</h3><MarkdownContent>{task.description}</MarkdownContent><p>Response access — comments only.</p></div>}
+          <label className="task-comment-order">Comment order
             <select aria-label="Comment order" value={commentOrder} onChange={(event) => setCommentOrder(event.target.value as "newest" | "oldest")}>
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
             </select>
           </label>
-          <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} onComment={onComment} />
+          <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} onComment={onComment} onDirtyChange={setCommentDirty} />
           <section className="task-history">
             <div className="task-section-title">History <span>{events.length}</span></div>
             <ol>
@@ -257,7 +336,10 @@ export default function TaskDetail({
           </section>
         </>
       )}
-    </aside>
+    </div>
+    </div>
+    </DialogContent>
+    </Dialog>
   )
 }
 

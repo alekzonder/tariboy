@@ -185,7 +185,63 @@ beforeEach(() => {
 })
 
 describe("TasksWorkspace", () => {
-  it("restores persisted panel widths and exposes accessible resize handles", async () => {
+  it("opens details only on selection and protects an unsaved title on close", async () => {
+    render(<TasksWorkspace />)
+    const row = await screen.findByRole("button", { name: /Ship native tasks/ })
+    expect(screen.queryByText("Select a task")).not.toBeInTheDocument()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    await userEvent.click(row)
+    expect(await screen.findByRole("dialog")).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } })
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
+    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Keep editing" }))
+    expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
+    await userEvent.click(screen.getByRole("button", { name: "Discard changes" }))
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(row).toHaveFocus()
+  })
+
+  it("keeps unsaved fields through a remote revision and failed save", async () => {
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My draft" } })
+    api.getTask.mockResolvedValue({ ...detail, task: { ...root, revision: 3, title: "Remote title" } })
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }))
+    await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
+    expect(screen.getByDisplayValue("My draft")).toBeInTheDocument()
+    api.updateTask.mockRejectedValue(new Error("Save failed"))
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Save failed"))
+    expect(screen.getByDisplayValue("My draft")).toBeInTheDocument()
+  })
+
+  it("retains a draft when background detail refresh fails", async () => {
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Keep this draft" } })
+    api.getTask.mockRejectedValueOnce(new Error("Refresh failed"))
+    await act(async () => taskSocket.options?.onHint?.({ sequence: 12 }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Refresh failed"))
+    expect(screen.getByDisplayValue("Keep this draft")).toBeInTheDocument()
+  })
+
+  it("recovers a conflict explicitly while preserving draft and unrelated remote fields", async () => {
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My title" } })
+    api.getTask.mockResolvedValue({ ...detail, task: { ...root, title: "Remote title", priority: "P1", revision: 3 } })
+    api.updateTask.mockRejectedValueOnce(new ApiError(409, "conflict", "revision conflict"))
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Keep my edits" }))
+    await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+    expect(api.updateTask).toHaveBeenLastCalledWith(root.key, expect.objectContaining({
+      title: "My title", priority: "P1", revision: 3,
+    }), undefined)
+  })
+
+  it("restores navigation width without reserving a detail panel", async () => {
     localStorage.setItem("tasks:workspace:v1", JSON.stringify({
       schemaVersion: 1,
       navigationWidth: 280,
@@ -196,23 +252,22 @@ describe("TasksWorkspace", () => {
 
     const workspace = await screen.findByTestId("tasks-workspace")
     expect(workspace.style.getPropertyValue("--tasks-navigation-width")).toBe("280px")
-    expect(workspace.style.getPropertyValue("--tasks-detail-width")).toBe("520px")
+    expect(workspace.style.getPropertyValue("--tasks-detail-width")).toBe("")
     expect(screen.getByRole("separator", { name: "Resize task navigation" })).toHaveAttribute("aria-valuenow", "280")
-    expect(screen.getByRole("separator", { name: "Resize task details" })).toHaveAttribute("aria-valuenow", "520")
+    expect(screen.queryByRole("separator", { name: "Resize task details" })).not.toBeInTheDocument()
   })
 
-  it("resizes and persists both task panels with the keyboard", async () => {
+  it("resizes navigation with the keyboard and retains the legacy storage record", async () => {
     render(<TasksWorkspace />)
     await screen.findByTestId("tasks-workspace")
 
     fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task navigation" }), { key: "ArrowRight" })
-    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task details" }), { key: "ArrowLeft", shiftKey: true })
 
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 216, detailWidth: 442 })
+      .toEqual({ schemaVersion: 1, navigationWidth: 216, detailWidth: 410 })
     fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task navigation" }), { key: "Home" })
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 442 })
+      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 410 })
   })
 
   it("drags panel handles, stops at pointer-up, and resets on double-click", async () => {
@@ -231,7 +286,6 @@ describe("TasksWorkspace", () => {
     })
     fireEvent(window, new Event("resize"))
     const navigationHandle = screen.getByRole("separator", { name: "Resize task navigation" })
-    const detailHandle = screen.getByRole("separator", { name: "Resize task details" })
 
     fireEvent.pointerDown(navigationHandle, { pointerId: 1, button: 0, isPrimary: true })
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 420 })
@@ -240,14 +294,7 @@ describe("TasksWorkspace", () => {
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
       .toMatchObject({ navigationWidth: 320 })
 
-    fireEvent.pointerDown(detailHandle, { pointerId: 2, button: 0, isPrimary: true })
-    fireEvent.pointerMove(window, { pointerId: 2, clientX: 650 })
-    fireEvent.pointerUp(window, { pointerId: 2 })
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ detailWidth: 412 })
-
     fireEvent.doubleClick(navigationHandle)
-    fireEvent.doubleClick(detailHandle)
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
       .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 410 })
   })
@@ -279,7 +326,7 @@ describe("TasksWorkspace", () => {
     expect(document.body.style.userSelect).toBe("")
   })
 
-  it("clamps an active resize to preserve the center and other panel", async () => {
+  it("clamps navigation resize to preserve the tree", async () => {
     render(<TasksWorkspace />)
     const workspace = await screen.findByTestId("tasks-workspace")
     vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
@@ -288,7 +335,7 @@ describe("TasksWorkspace", () => {
     })
     fireEvent(window, new Event("resize"))
     expect(screen.getByRole("separator", { name: "Resize task navigation" }))
-      .toHaveAttribute("aria-valuemax", "322")
+      .toHaveAttribute("aria-valuemax", "360")
 
     fireEvent.pointerDown(screen.getByRole("separator", { name: "Resize task navigation" }), {
       pointerId: 9, button: 0, isPrimary: true,
@@ -297,7 +344,7 @@ describe("TasksWorkspace", () => {
     fireEvent.pointerUp(window, { pointerId: 9 })
 
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ navigationWidth: 322, detailWidth: 410 })
+      .toMatchObject({ navigationWidth: 360, detailWidth: 410 })
   })
 
   it("opens the task named by an initial deep-link key after loading the workspace", async () => {
@@ -309,7 +356,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace initialTaskKey="ASK-7" />)
 
     expect(await screen.findByRole("heading", { name: "ASK-7" })).toBeInTheDocument()
-    expect(screen.getByDisplayValue("Customer needs a date")).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Customer needs a date")
   })
 
   it("updates the selected task when the deep-link key changes", async () => {
@@ -327,7 +374,7 @@ describe("TasksWorkspace", () => {
     view.rerender(<TasksWorkspace initialTaskKey="ASK-8" />)
 
     expect(await screen.findByRole("heading", { name: "ASK-8" })).toBeInTheDocument()
-    expect(screen.getByDisplayValue("Second answer needed")).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Second answer needed")
   })
 
   it("shows newest comments first and can switch to oldest first", async () => {
@@ -355,6 +402,7 @@ describe("TasksWorkspace", () => {
     first.resolve(detail)
     await screen.findByRole("heading", { name: "TEST-1" })
     api.getTask.mockImplementation((key: string) => key === "TEST-2" ? second.promise : Promise.resolve(detail))
+    await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
     await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
     await userEvent.click(screen.getByRole("button", { name: /Desktop tree/ }))
     await act(async () => taskSocket.options?.onHint?.({ sequence: 11 }))
@@ -998,7 +1046,7 @@ describe("TasksWorkspace", () => {
     expect(toast.error).not.toHaveBeenCalledWith("obsolete failure")
   })
 
-  it("renders a reusable three-region tree and opens persistent task detail", async () => {
+  it("renders the shared tree and opens task detail", async () => {
     render(<TasksWorkspace scopeAgent="worker" />)
 
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
@@ -1009,7 +1057,7 @@ describe("TasksWorkspace", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
     expect(await screen.findByRole("heading", { name: "TEST-1" })).toBeInTheDocument()
-    expect(screen.getByDisplayValue("Central work system")).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveTextContent("Central work system")
     expect(screen.getByText("Starting now")).toBeInTheDocument()
   })
 
@@ -1025,6 +1073,7 @@ describe("TasksWorkspace", () => {
       undefined,
     )
 
+    await userEvent.click(await screen.findByRole("button", { name: "Close task detail" }))
     await userEvent.click(screen.getByRole("button", { name: "Add child to TEST-1" }))
     fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Child work" } })
     await userEvent.click(screen.getByRole("button", { name: "Create task" }))
@@ -1049,11 +1098,12 @@ describe("TasksWorkspace", () => {
     )
 
     await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner")
+    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Source Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Which release?" } })
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
     expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
-      "@user:owner Which release?",
+      "@user:owner\n\nWhich release?",
       undefined,
       expect.any(String),
     )
@@ -1065,12 +1115,13 @@ describe("TasksWorkspace", () => {
     await screen.findByRole("heading", { name: "TEST-1" })
 
     await userEvent.selectOptions(screen.getByLabelText("Ask"), "worker")
+    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Source Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
 
     expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
-      "@agent:worker Can you verify?",
+      "@agent:worker\n\nCan you verify?",
       undefined,
       expect.any(String),
     )
