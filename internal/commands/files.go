@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/api"
@@ -77,6 +79,75 @@ func agentCwdFor(c *registry.Ctx, name string) (string, error) {
 		return a.Cwd, nil
 	}
 	return agentdir.New(agentsDir(c), name).Workdir(), nil
+}
+
+// serverUpload stores operator uploads independently of agents and tasks.
+func serverUpload() registry.Command {
+	const maxUpload = 16 << 20
+	return registry.Command{
+		Path:    "files.upload",
+		Summary: "Upload a file to the server and return its absolute path",
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "file name"},
+			{Name: "content", Type: registry.String, Required: true, Help: "base64 file content (at most 16 MiB decoded)"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "PUT", Path: "/api/files", MaxBodyBytes: int64(base64.StdEncoding.EncodedLen(maxUpload)) + 4096},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			name := str(p, "name")
+			if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") || strings.ContainsFunc(name, unicode.IsControl) {
+				return nil, api.UserError{Code: "bad_path", Msg: "name must be a file name without directories or control characters"}
+			}
+			encoded := str(p, "content")
+			if len(encoded) > base64.StdEncoding.EncodedLen(maxUpload) {
+				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 16 MiB"}
+			}
+			raw, err := base64.StdEncoding.DecodeString(encoded)
+			if err != nil {
+				return nil, api.UserError{Code: "bad_content", Msg: "content is not valid base64"}
+			}
+			if len(raw) > maxUpload {
+				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 16 MiB"}
+			}
+			base, err := filepath.Abs(c.BaseDir)
+			if err != nil {
+				return nil, err
+			}
+			root, err := os.OpenRoot(base)
+			if err != nil {
+				return nil, err
+			}
+			defer root.Close()
+			if err := root.MkdirAll("files", 0o700); err != nil {
+				return nil, err
+			}
+			dir := filepath.Join("files", rand.Text())
+			if err := root.Mkdir(dir, 0o700); err != nil {
+				return nil, err
+			}
+			path := filepath.Join(dir, name)
+			saved := false
+			defer func() {
+				if !saved {
+					_ = root.Remove(path)
+					_ = root.Remove(dir)
+				}
+			}()
+			file, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+			if err != nil {
+				return nil, err
+			}
+			_, writeErr := file.Write(raw)
+			closeErr := file.Close()
+			if writeErr != nil {
+				return nil, writeErr
+			}
+			if closeErr != nil {
+				return nil, closeErr
+			}
+			saved = true
+			return map[string]any{"path": path, "abs": filepath.Join(base, path), "bytes": len(raw)}, nil
+		},
+	}
 }
 
 func agentPush() registry.Command {

@@ -455,19 +455,27 @@ export async function agentUploadFile(
   file: File,
   target?: ApiTarget,
 ): Promise<PushResult> {
-  const buf = new Uint8Array(await file.arrayBuffer());
-  let bin = "";
-  for (const b of buf) bin += String.fromCharCode(b);
-  const content = btoa(bin);
   return apiOn<PushResult>(
     resolveTarget(target),
     "PUT",
     agentApiPath(name, "files"),
-    {
-      path: `.tariboy/files/${file.name}`,
-      content,
-    },
+    { path: `.tariboy/files/${file.name}`, content: await fileBase64(file) },
   );
+}
+
+export async function serverUploadFile(file: File, target?: ApiTarget): Promise<PushResult> {
+  if (file.size > 16 * 1024 * 1024) throw new Error("File exceeds 16 MiB");
+  return apiOn<PushResult>(resolveTarget(target), "PUT", "/api/files", {
+    name: file.name,
+    content: await fileBase64(file),
+  });
+}
+
+async function fileBase64(file: File): Promise<string> {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let bin = "";
+  for (const b of buf) bin += String.fromCharCode(b);
+  return btoa(bin);
 }
 
 // ---- Live config setters (persist now; launch-mode changes apply next start) ----

@@ -1,11 +1,12 @@
-import { useRef, type ChangeEvent } from "react"
+import { useEffect, useRef, type ChangeEvent } from "react"
 import { FileUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSendFiles } from "@/hooks/useSendFiles"
 import type { Daemon } from "@/lib/daemons"
 
-/** Pick one or more files, upload each under the agent's cwd at
- * `.tariboy/files/`, and hand the saved absolute host paths to the caller.
+/** Pick files and hand their saved absolute host paths to the caller.
+ * With a name, uploads go under the agent's cwd at `.tariboy/files/`;
+ * without a name, they go to the server's shared files directory.
  * The caller decides where the paths go — injected into the live terminal
  * (interactive) or appended to the inbox message (non-interactive).
  * `daemon` targets a specific host (undefined = active daemon, null =
@@ -15,14 +16,19 @@ export function SendFilesButton({
   onUploaded,
   className,
   daemon,
+  disabled,
+  onUploadingChange,
 }: {
-  name: string
+  name?: string
   onUploaded: (paths: string[]) => void
   className?: string
   daemon?: Daemon | null
+  disabled?: boolean
+  onUploadingChange?: (uploading: boolean) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { uploading, sendFiles } = useSendFiles({ name, daemon, onUploaded })
+  useEffect(() => { onUploadingChange?.(uploading) }, [uploading, onUploadingChange])
 
   const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
@@ -38,6 +44,7 @@ export function SendFilesButton({
         type="file"
         multiple
         className="hidden"
+        disabled={disabled || uploading}
         onChange={(e) => void onPick(e)}
       />
       <Button
@@ -45,7 +52,7 @@ export function SendFilesButton({
         variant="outline"
         size="sm"
         className={className}
-        disabled={uploading}
+        disabled={disabled || uploading}
         onClick={() => inputRef.current?.click()}
       >
         <FileUp className="size-4" />

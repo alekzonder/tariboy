@@ -700,6 +700,7 @@ function TasksWorkspaceContent({
       {detail && (
         <TaskDetail
           key={detail.task.key}
+          target={target}
           detail={detail}
           principals={principals}
           onClose={() => {

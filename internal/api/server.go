@@ -443,8 +443,16 @@ func (s *Server) dispatch(cmd registry.Command, w http.ResponseWriter, r *http.R
 		}
 	} else if r.Body != nil {
 		defer r.Body.Close()
+		if cmd.HTTP.MaxBodyBytes > 0 {
+			r.Body = http.MaxBytesReader(w, r.Body, cmd.HTTP.MaxBodyBytes)
+		}
 		// An empty body (io.EOF) means "no params"; any other decode error is a bad request.
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil && !errors.Is(err, io.EOF) {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds the upload limit")
+				return
+			}
 			WriteErr(w, http.StatusBadRequest, "bad_json", "request body is not a JSON object: "+err.Error())
 			return
 		}

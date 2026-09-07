@@ -185,6 +185,35 @@ beforeEach(() => {
 })
 
 describe("TasksWorkspace", () => {
+  it("uploads files without an agent to the task host and appends only to the selected draft", async () => {
+    const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
+    api.getTask.mockResolvedValue({ ...detail, task: { ...root, assignee: "" } })
+    const upload = deferred<Response>()
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValue(upload.promise)
+    render(<TasksWorkspace target={target} />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    const description = screen.getByLabelText("Description").closest(".task-description")!
+    const comments = screen.getByText("Comments").closest("section")!
+    expect(within(description as HTMLElement).getByRole("button", { name: "Send files" })).toBeEnabled()
+    expect(within(comments).getByRole("button", { name: "Send files" })).toBeEnabled()
+    await userEvent.click(within(description as HTMLElement).getByRole("button", { name: "Source Markdown" }))
+    await userEvent.click(within(comments).getByRole("button", { name: "Source Markdown" }))
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Comment draft" } })
+    await userEvent.upload(description.querySelector('input[type="file"]') as HTMLInputElement, new File(["hello"], "notes.txt"))
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Still typing" } })
+    expect(screen.getByRole("button", { name: "Save task" })).toBeDisabled()
+    await act(async () => upload.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { path: "files/one/notes.txt", abs: "/server/files/one/notes.txt", bytes: 5 } }) } as Response))
+    await waitFor(() => expect(screen.getByLabelText("Description")).toHaveValue("Still typing\n/server/files/one/notes.txt"))
+    expect(screen.getByLabelText("Comment")).toHaveValue("Comment draft")
+    expect(fetchMock).toHaveBeenCalledWith("https://remote.example/api/files", expect.objectContaining({ method: "PUT", body: JSON.stringify({ name: "notes.txt", content: "aGVsbG8=" }) }))
+    await userEvent.upload(comments.querySelector('input[type="file"]') as HTMLInputElement, new File(["hello"], "notes.txt"))
+    await waitFor(() => expect(screen.getByLabelText("Comment")).toHaveValue("Comment draft\n/server/files/one/notes.txt"))
+    expect(screen.getByLabelText("Description")).toHaveValue("Still typing\n/server/files/one/notes.txt")
+    expect(api.updateTask).not.toHaveBeenCalled()
+    expect(api.addTaskComment).not.toHaveBeenCalled()
+    fetchMock.mockRestore()
+  })
+
   it("opens details only on selection and protects an unsaved title on close", async () => {
     render(<TasksWorkspace />)
     const row = await screen.findByRole("button", { name: /Ship native tasks/ })

@@ -17,9 +17,12 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { MarkdownEditor, MarkdownContent } from "./TaskMarkdown"
+import { SendFilesButton } from "@/components/SendFilesButton"
+import type { ApiTarget } from "@/lib/api"
 
 export default function TaskDetail({
   detail,
+  target,
   events,
   workflow,
   workflowArtifacts,
@@ -38,6 +41,7 @@ export default function TaskDetail({
   onDeleteRelation,
 }: {
   detail: Detail
+  target?: ApiTarget
   events: TaskEvent[]
   workflow: WorkflowExecutionView | null
   workflowArtifacts: WorkflowArtifact[]
@@ -78,6 +82,9 @@ export default function TaskDetail({
   const [assignee, setAssignee] = useState(task.assignee)
   const [blockReason, setBlockReason] = useState(task.manual_block_reason)
   const [saving, setSaving] = useState(false)
+  const [uploadingDescription, setUploadingDescription] = useState(false)
+  const [uploadingComment, setUploadingComment] = useState(false)
+  const pending = saving || uploadingDescription || uploadingComment
   const [relationType, setRelationType] = useState<TaskRelationType>("blocks")
   const [relationTarget, setRelationTarget] = useState("")
   const [relationBusy, setRelationBusy] = useState(false)
@@ -101,7 +108,7 @@ export default function TaskDetail({
   // Refresh pristine forms; keep the revision that an unsaved draft was based on.
   if (baseline !== task && !dirty && !saving) adopt(task)
   const close = () => {
-    if (saving) return
+    if (pending) return
     if (hasDraft) setConfirmClose(true)
     else onClose()
   }
@@ -165,13 +172,13 @@ export default function TaskDetail({
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus() }}>
     <div className="task-detail-panel">
       <header className="task-detail-header">
-        <Button variant="ghost" onClick={close} disabled={saving}><ArrowLeft /> Back</Button>
+        <Button variant="ghost" onClick={close} disabled={pending}><ArrowLeft /> Back</Button>
         <div>
           <DialogTitle asChild><h2>{task.key}</h2></DialogTitle>
           <span>{task.title}</span>
         </div>
-        {task.access !== "context" && task.access !== "respond" && <Button disabled={saving || !title.trim()} onClick={() => void save()}>Save task</Button>}
-        <Button variant="ghost" size="icon" aria-label="Close task detail" disabled={saving} onClick={close}><X /></Button>
+        {task.access !== "context" && task.access !== "respond" && <Button disabled={pending || !title.trim()} onClick={() => void save()}>Save task</Button>}
+        <Button variant="ghost" size="icon" aria-label="Close task detail" disabled={pending} onClick={close}><X /></Button>
       </header>
       {confirmClose && <div className="task-discard" role="alert">
         <span>Discard unsaved changes?</span>
@@ -206,7 +213,13 @@ export default function TaskDetail({
           {task.access !== "respond" ? <><fieldset className="task-fields" disabled={saving}>
             <div className="task-main-fields">
             <label>Title<Input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-            <div className="task-description"><label htmlFor="task-description">Description</label><MarkdownEditor id="task-description" placeholder="Description" value={description} onChange={setDescription} disabled={saving} /></div>
+            <div className="task-description">
+              <div className="flex items-center justify-between gap-2"><label htmlFor="task-description">Description</label>
+                <SendFilesButton daemon={target} disabled={saving} onUploadingChange={setUploadingDescription}
+                  onUploaded={(paths) => setDescription((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + paths.join("\n"))} />
+              </div>
+              <MarkdownEditor id="task-description" placeholder="Description" value={description} onChange={setDescription} disabled={saving} />
+            </div>
             </div>
             <div className="task-properties">
             <div className="task-field-grid">
@@ -320,7 +333,7 @@ export default function TaskDetail({
               <option value="oldest">Oldest first</option>
             </select>
           </label>
-          <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} formFirst={commentOrder === "newest"} onComment={onComment} onDirtyChange={setCommentDirty} />
+          <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} formFirst={commentOrder === "newest"} onComment={onComment} onDirtyChange={setCommentDirty} target={target} onUploadingChange={setUploadingComment} />
           <section className="task-history">
             <div className="task-section-title">History <span>{events.length}</span></div>
             <ol>

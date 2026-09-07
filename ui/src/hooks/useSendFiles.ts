@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react"
 import { toast } from "sonner"
-import { agentUploadFile, ApiError } from "@/lib/api"
+import { agentUploadFile, serverUploadFile, ApiError } from "@/lib/api"
 import type { Daemon } from "@/lib/daemons"
 
-/** Upload files to an agent's `.tariboy/files` directory and report their
+/** Upload files to an agent's `.tariboy/files` directory, or to the server
+ * when no agent name is supplied, and report their
  * saved absolute paths to the caller.  Buttons and drop targets share this
  * path so they retain identical progress and error behaviour. */
 export function useSendFiles({
@@ -11,7 +12,7 @@ export function useSendFiles({
   daemon,
   onUploaded,
 }: {
-  name: string
+  name?: string
   daemon?: Daemon | null
   onUploaded: (paths: string[]) => void
 }) {
@@ -20,16 +21,16 @@ export function useSendFiles({
   const sendFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return
     setUploading(true)
+    const paths: string[] = []
     try {
-      const paths: string[] = []
       for (const file of files) {
-        const { abs } = await agentUploadFile(name, file, daemon)
+        const { abs } = await (name === undefined ? serverUploadFile(file, daemon) : agentUploadFile(name, file, daemon))
         paths.push(abs)
       }
-      onUploaded(paths)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : String(err))
     } finally {
+      if (paths.length > 0) onUploaded(paths)
       setUploading(false)
     }
   }, [daemon, name, onUploaded])

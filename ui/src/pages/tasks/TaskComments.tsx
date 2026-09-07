@@ -2,6 +2,8 @@ import { useEffect, useState } from "react"
 import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/tasks"
 import { MarkdownEditor, MarkdownContent } from "./TaskMarkdown"
 import { Button } from "@/components/ui/button"
+import { SendFilesButton } from "@/components/SendFilesButton"
+import type { ApiTarget } from "@/lib/api"
 
 function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `comment-${Date.now()}-${Math.random()}`
@@ -14,6 +16,8 @@ export default function TaskComments({
   formFirst,
   onComment,
   onDirtyChange,
+  target,
+  onUploadingChange,
 }: {
   comments: TaskComment[]
   waits: TaskWait[]
@@ -21,11 +25,15 @@ export default function TaskComments({
   formFirst: boolean
   onDirtyChange: (dirty: boolean) => void
   onComment: (body: string, idempotencyKey: string) => Promise<void>
+  target?: ApiTarget
+  onUploadingChange: (uploading: boolean) => void
 }) {
   const [body, setBody] = useState("")
   const [ask, setAsk] = useState("")
   const [busy, setBusy] = useState(false)
-  useEffect(() => { onDirtyChange(Boolean(body.trim()) || busy) }, [body, busy, onDirtyChange])
+  const [uploading, setUploading] = useState(false)
+  useEffect(() => { onUploadingChange(uploading) }, [uploading, onUploadingChange])
+  useEffect(() => { onDirtyChange(Boolean(body.trim()) || busy || uploading) }, [body, busy, uploading, onDirtyChange])
   const openWaits = waits.filter((wait) => !wait.resolved_at)
   const choices = principals
     ? [principals.customer, ...principals.agents].filter(Boolean)
@@ -33,7 +41,7 @@ export default function TaskComments({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!body.trim()) return
+    if (busy || uploading || !body.trim()) return
     setBusy(true)
     try {
       const principal = ask && !ask.includes(":") ? `agent:${ask}` : ask
@@ -67,10 +75,13 @@ export default function TaskComments({
           {choices.map((principal) => <option key={principal} value={principal}>{principal}</option>)}
         </select>
       </label>
-      <div><label htmlFor="task-comment">Comment</label>
+      <div><div className="flex items-center justify-between gap-2"><label htmlFor="task-comment">Comment</label>
+        <SendFilesButton daemon={target} disabled={busy} onUploadingChange={setUploading}
+          onUploaded={(paths) => setBody((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + paths.join("\n"))} />
+        </div>
         <MarkdownEditor id="task-comment" placeholder="Comment" value={body} onChange={setBody} disabled={busy} />
       </div>
-      <Button type="submit" disabled={busy || !body.trim()}>Send comment</Button>
+      <Button type="submit" disabled={busy || uploading || !body.trim()}>Send comment</Button>
     </form>
   )
 
