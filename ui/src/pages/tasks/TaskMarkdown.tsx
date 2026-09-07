@@ -17,7 +17,7 @@ const extensions = [
   StarterKit.configure({ orderedList: false, underline: false, trailingNode: false, link: { openOnClick: false } }),
   OrderedList.extend({
     parseMarkdown(token, helpers) {
-      const parsed = this.parent?.(token, helpers)
+      const parsed = OrderedList.config.parseMarkdown?.call(this, token, helpers)
       if (parsed && !Array.isArray(parsed)) {
         // Tiptap's ordered-list parser omits the required paragraph for empty items.
         for (const item of parsed.content ?? []) {
