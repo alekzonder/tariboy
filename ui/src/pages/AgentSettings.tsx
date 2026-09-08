@@ -12,10 +12,12 @@ import type { AgentView } from "@/lib/types";
 import {
   Card,
   CardContent,
+  CardAction,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { GoalHelp } from "@/components/GoalHelp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -619,6 +621,7 @@ function GoalEditor({
         <CardDescription>
           Choose whether this agent follows one sticky Native Task goal.
         </CardDescription>
+        <CardAction><GoalHelp /></CardAction>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

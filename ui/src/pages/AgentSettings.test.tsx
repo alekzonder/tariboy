@@ -305,6 +305,17 @@ it("renders the current Goal task key in a disabled input", async () => {
   expect(screen.getByLabelText("Current goal task")).toBeDisabled();
 });
 
+it("explains how Goal is selected from the Goal section", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls);
+  renderPage();
+
+  fireEvent.click(await screen.findByRole("button", { name: "How Goal is selected" }));
+  expect(await screen.findByRole("dialog")).toHaveTextContent(
+    "Tariboy keeps the selected task until it is released",
+  );
+});
+
 it("edits a loop interval via POST loop/interval", async () => {
   const calls: Call[] = [];
   stubFetch(calls);
