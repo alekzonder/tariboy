@@ -126,6 +126,9 @@ function MainApp() {
             <Route path="files" element={<ImageFiles />} />
           </Route>
 
+          <Route path="/servers/:hostId/stores" element={<TerminalsPage serverView="stores" />} />
+          <Route path="/servers/:hostId/stores/:name" element={<TerminalsPage serverView="store-detail" />} />
+
           <Route path="/servers/:hostId/settings" element={<TerminalsPage serverView="settings" />}>
             <Route index element={<GeneralSettings />} />
             <Route path="hosts" element={<DaemonsPage />} />
