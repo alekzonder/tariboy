@@ -7,6 +7,9 @@ description: Use when sending requests or replies, subscribing to channels, or r
 
 This skill's `scripts/messages.sh` launcher lives inside this skill directory
 and calls the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+Execute the launcher when command execution is available. If it is unavailable,
+return the exact command instead; never claim a message was sent or handled
+unless the command succeeded.
 
 Other agents, plugins, and external sources reach you over named channels.
 Incoming messages arrive inline in the iteration prompt, batched per iteration,
