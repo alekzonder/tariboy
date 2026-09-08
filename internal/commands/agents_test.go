@@ -10,6 +10,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
@@ -96,7 +97,7 @@ func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
 	t.Cleanup(func() { s.Close() })
 	as := agent.NewStore(s)
 	fc := &fakeControl{agents: as}
-	return &registry.Ctx{Store: s, Control: fc, BaseDir: t.TempDir()}, as, fc
+	return &registry.Ctx{Store: s, Bus: bus.New(s, time.Now), Control: fc, BaseDir: t.TempDir()}, as, fc
 }
 
 func h(t *testing.T, path string) registry.HandlerFunc {
@@ -396,6 +397,29 @@ func TestAgentStatusIncludesActiveIterationDeadlines(t *testing.T) {
 	active, ok := out["active_iteration"].(map[string]any)
 	if !ok || active["id"] != "smoke-1" || active["effective_deadline"] != soft || active["timeout_period_s"] != 60 || out["server_now"] == "" {
 		t.Fatalf("status = %#v", out)
+	}
+}
+
+func TestAgentStatusIncludesMessageQueueSaturation(t *testing.T) {
+	c, agents, _ := ctxWithStore(t)
+	if err := agents.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", MessagesMaxQueue: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Bus.Subscribe("worker", bus.InboxChannel("worker"), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if _, err := c.Bus.Publish(bus.Message{Channel: bus.InboxChannel("worker"), Source: "operator"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := h(t, "agent.status.show")(c, registry.Params{"name": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := res.(map[string]any)
+	if got["messages_pending"] != 2 || got["messages_max_queue"] != 2 || got["messages_queue_full"] != true {
+		t.Fatalf("message queue status = %#v", got)
 	}
 }
 

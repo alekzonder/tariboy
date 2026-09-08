@@ -86,6 +86,9 @@ export interface AgentStatus {
   last_iteration_id: string | null;
   status_message: string;
   status_updated: string;
+  messages_pending?: number;
+  messages_max_queue?: number;
+  messages_queue_full?: boolean;
   // Why the daemon halted this agent's loop.  Both are absent unless the daemon
   // has a halt to report: halt_kind is "error" or "idle_limit".
   halt_kind?: string;

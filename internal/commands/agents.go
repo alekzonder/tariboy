@@ -537,6 +537,14 @@ func agentStatus() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			b, err := requireBus(c)
+			if err != nil {
+				return nil, err
+			}
+			messagesPending, err := b.PendingCount(a.Name)
+			if err != nil {
+				return nil, err
+			}
 			state, _ := c.Control.LiveState(a.Name)
 			its, _ := agentStore(c).ListIterations(a.Name)
 			last, lastID := "", ""
@@ -547,7 +555,9 @@ func agentStatus() registry.Command {
 			out := map[string]any{"name": a.Name, "state": state, "loop_enabled": a.LoopEnabled, "enabled": a.Enabled,
 				"iterations": len(its), "last_iteration": last, "last_iteration_id": lastID,
 				"status_message": a.StatusMessage, "status_updated": a.StatusUpdated,
-				"server_now": time.Now().UTC().Format(time.RFC3339Nano)}
+				"messages_pending": messagesPending, "messages_max_queue": a.MessagesMaxQueue,
+				"messages_queue_full": messagesPending >= a.MessagesMaxQueue,
+				"server_now":          time.Now().UTC().Format(time.RFC3339Nano)}
 			if budget, err := agentBudgetView(c, a.Name); err != nil {
 				return nil, err
 			} else {
