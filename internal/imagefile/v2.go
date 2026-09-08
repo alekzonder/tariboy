@@ -35,6 +35,7 @@ type SkillEntry struct {
 }
 
 type V2 struct {
+	ImageVersion  string        `yaml:"image_version,omitempty" json:"image_version,omitempty"`
 	SchemaVersion int           `yaml:"schema_version" json:"schema_version"`
 	Plugins       []V2Plugin    `yaml:"plugins" json:"plugins"`
 	Skills        []SkillEntry  `yaml:"skills" json:"skills"`
@@ -82,6 +83,9 @@ func ParseV2(path string) (*V2, error) {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	out.Dir = filepath.Dir(path)
+	if err := validateVersionField(data); err != nil {
+		return nil, err
+	}
 	if out.SchemaVersion != 2 {
 		return nil, fmt.Errorf("imagefile schema_version must be 2, got %d", out.SchemaVersion)
 	}

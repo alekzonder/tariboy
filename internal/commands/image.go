@@ -36,7 +36,7 @@ func imageBuild() registry.Command {
 		Summary: "Build an agent image from a Tariboyfile.yaml",
 		Args: []registry.Arg{
 			{Name: "name", Flag: "name", Type: registry.String, Required: true, Help: "target image name"},
-			{Name: "tag", Flag: "tag", Type: registry.String, Default: "latest", Repeatable: true, Help: "target image tag (default latest)"},
+			{Name: "tag", Flag: "tag", Type: registry.String, Repeatable: true, Help: "target image tag (default image_version, or latest when absent)"},
 			{Name: "path", Flag: "path", Type: registry.String, Required: true, Help: "Tariboyfile.yaml or its directory"},
 			{Name: "repository-id", Flag: "repository-id", Type: registry.String, Help: "source repository ID"},
 			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
@@ -62,30 +62,11 @@ func imageBuild() registry.Command {
 			if name == "" {
 				return nil, api.UserError{Code: "missing_name", Msg: "image name is required", Status: http.StatusBadRequest}
 			}
-			if len(tags) == 0 {
-				tags = []string{"latest"}
-			}
 			repositoryID, gitCommit := strings.TrimSpace(str(p, "repository-id")), strings.TrimSpace(str(p, "git-commit"))
 			if (repositoryID == "") != (gitCommit == "") || (gitCommit != "" && !gitCommitPattern.MatchString(gitCommit)) {
 				return nil, api.UserError{Code: "bad_provenance", Msg: "repository-id and a 7-64 character hexadecimal git-commit must be provided together", Status: http.StatusBadRequest}
 			}
 			path, _ := p["path"].(string)
-			refs := make([]image.Ref, 0, len(tags))
-			seen := make(map[string]bool, len(tags))
-			for _, tag := range tags {
-				ref, err := image.ParseRef(name + ":" + tag)
-				if err != nil {
-					return nil, api.UserError{Code: "bad_ref", Msg: err.Error()}
-				}
-				if seen[ref.String()] {
-					return nil, api.UserError{Code: "duplicate_tag", Msg: "duplicate image tag " + tag}
-				}
-				if image.IsReserved(ref) {
-					return nil, api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd"}
-				}
-				seen[ref.String()] = true
-				refs = append(refs, ref)
-			}
 			sourceCWD, sourceErr := canonicalSourceDir(path)
 			if sourceErr != nil {
 				return nil, api.UserError{Code: "bad_source_path", Msg: sourceErr.Error(), Status: http.StatusBadRequest}
@@ -105,6 +86,34 @@ func imageBuild() registry.Command {
 			parsed, err := imagefile.ParseAny(frozenDir)
 			if err != nil {
 				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
+			}
+			if len(tags) == 0 {
+				imageVersion := ""
+				if parsed.Version == 2 {
+					imageVersion = parsed.V2.ImageVersion
+				} else {
+					imageVersion = parsed.V1.ImageVersion
+				}
+				if imageVersion == "" {
+					imageVersion = "latest"
+				}
+				tags = []string{imageVersion}
+			}
+			refs := make([]image.Ref, 0, len(tags))
+			seen := make(map[string]bool, len(tags))
+			for _, tag := range tags {
+				ref, err := image.ParseRef(name + ":" + tag)
+				if err != nil {
+					return nil, api.UserError{Code: "bad_ref", Msg: err.Error()}
+				}
+				if seen[ref.String()] {
+					return nil, api.UserError{Code: "duplicate_tag", Msg: "duplicate image tag " + tag}
+				}
+				if image.IsReserved(ref) {
+					return nil, api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd"}
+				}
+				seen[ref.String()] = true
+				refs = append(refs, ref)
 			}
 			layout := paths.Paths{Base: c.BaseDir}
 			pluginsDir := layout.PluginsDir()

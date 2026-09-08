@@ -146,6 +146,34 @@ func TestImageBuildV2RequiresNameAndDefaultsTag(t *testing.T) {
 	}
 }
 
+func TestImageBuildUsesSourceVersionUnlessTagExplicit(t *testing.T) {
+	for _, schema := range []string{"1", "2"} {
+		for _, explicit := range []string{"", "latest", "custom"} {
+			c := localCtx(t)
+			src := t.TempDir()
+			if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: "+schema+"\nimage_version: 1.2.3-RC.1+build.7\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			p := registry.Params{"name": "versioned", "path": src}
+			want := "1.2.3-RC.1+build.7"
+			if explicit != "" {
+				p["tag"] = explicit
+				want = explicit
+			}
+			result, err := cmdHandler(t, "image.build")(c, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := result.(map[string]any)["tag"]; got != want {
+				t.Fatalf("tag = %v, want %s", got, want)
+			}
+			if _, err := imageStore(c).Inspect(image.Ref{Name: "versioned", Tag: want}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
 func TestImageBuildRebuildsMutableTag(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
