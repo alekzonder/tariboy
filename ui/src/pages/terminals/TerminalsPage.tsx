@@ -21,6 +21,7 @@ import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 import ImagesPage from "@/pages/ImagesPage";
+import StoresPage from "@/pages/StoresPage";
 import { ImageLayout } from "@/components/ImageLayout";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
@@ -31,10 +32,10 @@ type CreateDialogState = {
   imageRef?: string;
   cloneSource?: CloneAgentSource;
 };
-export type ServerView = "tasks" | "images" | "image-detail" | "settings";
+export type ServerView = "tasks" | "images" | "image-detail" | "stores" | "store-detail" | "settings";
 
 export default function TerminalsPage({ serverView }: { serverView?: ServerView }) {
-  const { hostId: hostParam, agent: agentName, team: teamName } = useParams();
+  const { hostId: hostParam, agent: agentName, team: teamName, name: storeName } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -262,6 +263,15 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         ) : serverView === "image-detail" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
             <ImageLayout hostId={hostId} basePath={`${serverBasePath}/images`} />
+          </RouteHostBoundary>
+        ) : (serverView === "stores" || serverView === "store-detail") && hostId !== undefined ? (
+          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+            {(target) => <StoresPage
+              key={`${hostId}\u0000${storeName ?? ""}\u0000${target?.baseURL ?? "local"}`}
+              target={target}
+              name={storeName}
+              basePath={`${serverBasePath}/stores`}
+            />}
           </RouteHostBoundary>
         ) : serverView === "settings" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
