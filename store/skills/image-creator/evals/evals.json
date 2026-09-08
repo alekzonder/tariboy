@@ -8,19 +8,20 @@
       "files": [],
       "expectations": [
         "Uses the image-creator launcher to build the image.",
+        "Provides the manifest and build command instead of only promising to create them.",
         "Keeps plugin, skill, and prompt declarations explicit and preserves the requested prompt order.",
-        "Uses local relative source paths and the requested immutable tag."
+        "Uses local relative source paths and the requested tag."
       ]
     },
     {
       "id": 2,
       "prompt": "Prepare a reproducible production image, but reference /srv/shared/prompts/security.md and $STORE/skills/tasks, use the tag latest, and do not create a lock file.",
-      "expected_output": "Guidance or a revised manifest that vendors the shared dependencies under the source directory, uses ./ paths, records them in tariboy.lock.yaml, and selects an immutable tag.",
+      "expected_output": "Guidance or a revised manifest that vendors the shared dependencies under the source directory, uses ./ paths, records them in tariboy.lock.yaml, and explains that ordinary build refs remain mutable regardless of tag spelling.",
       "files": [],
       "expectations": [
         "Does not recommend absolute paths, $STORE, or $CURRENT_VERSION_STORE inputs for a reproducible production image.",
         "Calls for vendored dependencies and tariboy.lock.yaml.",
-        "Replaces the mutable latest tag with an immutable tag."
+        "Does not claim that a version-looking tag makes an ordinary build ref immutable."
       ]
     },
     {
