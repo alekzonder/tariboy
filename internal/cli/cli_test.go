@@ -259,6 +259,21 @@ func TestRunImageBuildRepeatableTags(t *testing.T) {
 	}
 }
 
+func TestRunImageBuildStoreSelectorIsPositional(t *testing.T) {
+	caller := &fakeCaller{result: json.RawMessage(`{}`)}
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), commands.BuildRegistry(), []string{
+		"image", "build", "team/reviewer", "--tag", "v2",
+	}, caller, nil, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit=%d err=%s", code, errOut.String())
+	}
+	body := caller.body.(registry.Params)
+	if body["source"] != "team/reviewer" || !reflect.DeepEqual(body["tag"], []string{"v2"}) {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
 func TestRunJudgeReviewRepeatableIterations(t *testing.T) {
 	caller := &fakeCaller{result: json.RawMessage(`{}`)}
 	var out, errOut bytes.Buffer

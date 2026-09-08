@@ -35,15 +35,34 @@ func imageBuild() registry.Command {
 		Path:    "image.build",
 		Summary: "Build an agent image from a Tariboyfile.yaml",
 		Args: []registry.Arg{
-			{Name: "name", Flag: "name", Type: registry.String, Required: true, Help: "target image name"},
+			{Name: "source", Type: registry.String, Help: "Store selector (store/image)"},
+			{Name: "name", Flag: "name", Type: registry.String, Help: "target image name"},
 			{Name: "tag", Flag: "tag", Type: registry.String, Repeatable: true, Help: "target image tag (default image_version, or latest when absent)"},
-			{Name: "path", Flag: "path", Type: registry.String, Required: true, Help: "Tariboyfile.yaml or its directory"},
+			{Name: "path", Flag: "path", Type: registry.String, Help: "Tariboyfile.yaml or its directory"},
 			{Name: "repository-id", Flag: "repository-id", Type: registry.String, Help: "source repository ID"},
 			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
 			name := str(p, "name")
+			path := str(p, "path")
+			selector := strings.TrimSpace(str(p, "source"))
+			if selector != "" {
+				if strings.TrimSpace(path) != "" {
+					return nil, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
+				}
+				prepared, release, err := storeCatalog(c).PrepareBuild(registry.RequestContext(p), selector)
+				if err != nil {
+					return nil, storeError(err)
+				}
+				defer release()
+				path = prepared.Path
+				if name == "" {
+					name = prepared.Name
+				}
+			} else if strings.TrimSpace(path) == "" {
+				return nil, api.UserError{Code: "missing_path", Msg: "image source path is required", Status: http.StatusBadRequest}
+			}
 			var tags []string
 			if tag, ok := p["tag"].(string); ok {
 				tags = []string{tag}
@@ -66,7 +85,6 @@ func imageBuild() registry.Command {
 			if (repositoryID == "") != (gitCommit == "") || (gitCommit != "" && !gitCommitPattern.MatchString(gitCommit)) {
 				return nil, api.UserError{Code: "bad_provenance", Msg: "repository-id and a 7-64 character hexadecimal git-commit must be provided together", Status: http.StatusBadRequest}
 			}
-			path, _ := p["path"].(string)
 			sourceCWD, sourceErr := canonicalSourceDir(path)
 			if sourceErr != nil {
 				return nil, api.UserError{Code: "bad_source_path", Msg: sourceErr.Error(), Status: http.StatusBadRequest}

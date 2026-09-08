@@ -74,13 +74,14 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 		return 2
 	}
 	if cmd.Path == "image.build" || cmd.Path == "image.validate" {
-		path, _ := params["path"].(string)
-		absolutePath, absErr := filepath.Abs(path)
-		if absErr != nil {
-			fmt.Fprintf(errOut, "%s: resolve --path: %v\n", strings.ReplaceAll(cmd.Path, ".", " "), absErr)
-			return 1
+		if path, ok := params["path"].(string); ok && path != "" {
+			absolutePath, absErr := filepath.Abs(path)
+			if absErr != nil {
+				fmt.Fprintf(errOut, "%s: resolve --path: %v\n", strings.ReplaceAll(cmd.Path, ".", " "), absErr)
+				return 1
+			}
+			params["path"] = absolutePath
 		}
-		params["path"] = absolutePath
 	}
 
 	// Follow mode: a command with a follow flag set runs a CLI-local
