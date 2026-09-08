@@ -156,7 +156,7 @@ func (c *Catalog) Refresh(ctx context.Context, name string) (Detail, error) {
 		}
 	}
 	if git {
-		if err := run(ctx, store.Path, "git", "pull", "--ff-only"); err != nil {
+		if err := run(ctx, store.Path, "git", "pull", "--ff-only", "--no-autostash"); err != nil {
 			return Detail{}, fmt.Errorf("refresh Store %s: %w", name, err)
 		}
 	}

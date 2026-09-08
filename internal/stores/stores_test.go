@@ -161,6 +161,7 @@ func TestCatalogClonesRefreshesAndSafelyRemovesGitStore(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(managed, "README.md"), []byte("local conflict\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	gitRun(t, "-C", managed, "config", "merge.autoStash", "true")
 	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("remote conflict\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
