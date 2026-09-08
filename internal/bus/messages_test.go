@@ -28,6 +28,60 @@ func deliverOne(t *testing.T, b *Bus, agent, channel, text string) Message {
 	return m
 }
 
+func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
+	b := newBusSeconds(t)
+	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref) VALUES ('alice', 'basic:latest'), ('bob', 'basic:latest')`); err != nil {
+		t.Fatal(err)
+	}
+	aliceInbox := InboxChannel("alice")
+	sharedChannel := ChatChannel("shared")
+	sub(t, b, "alice", aliceInbox)
+	sub(t, b, "alice", sharedChannel)
+	sub(t, b, "bob", sharedChannel)
+
+	unique := pub(t, b, aliceInbox, "note", "unique", nil)
+	shared := pub(t, b, sharedChannel, "note", "shared", nil)
+	processed := pub(t, b, aliceInbox, "note", "processed", nil)
+	if _, err := b.MarkProcessed("alice", processed.ID, "done"); err != nil {
+		t.Fatal(err)
+	}
+	dead := pub(t, b, aliceInbox, "note", "dead", nil)
+	if _, err := b.db.Exec(`UPDATE deliveries SET dlq=1 WHERE message_id=?`, dead.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := b.ClearPending("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DeletedDeliveries != 2 || got.DeletedMessages != 1 {
+		t.Fatalf("clear result = %+v, want 2 deliveries and 1 message", got)
+	}
+	for status, want := range map[string]string{"processed": processed.ID, "dlq": dead.ID} {
+		items, err := b.Inbox("alice", status, 10, "")
+		if err != nil || len(items) != 1 || items[0].ID != want {
+			t.Fatalf("alice %s = %+v, err=%v", status, items, err)
+		}
+	}
+	bob, err := b.Inbox("bob", "pending", 10, "")
+	if err != nil || len(bob) != 1 || bob[0].ID != shared.ID {
+		t.Fatalf("bob pending = %+v, err=%v", bob, err)
+	}
+	for _, id := range []string{unique.ID, shared.ID, processed.ID, dead.ID} {
+		var count int
+		if err := b.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE id=?`, id).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		want := 1
+		if id == unique.ID {
+			want = 0
+		}
+		if count != want {
+			t.Fatalf("message %s count=%d want %d", id, count, want)
+		}
+	}
+}
+
 func TestInboxStatusFiltering(t *testing.T) {
 	b := newBusSeconds(t)
 	ch := InboxChannel("bob")

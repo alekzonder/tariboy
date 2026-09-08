@@ -29,6 +29,88 @@ type InboxItem struct {
 	DLQ         bool
 }
 
+type ClearPendingResult struct {
+	DeletedDeliveries int64
+	DeletedMessages   int64
+}
+
+func (b *Bus) PendingCount(agent string) (int, error) {
+	var exists int
+	if err := b.db.QueryRow(`SELECT 1 FROM agents WHERE name=?`, agent).Scan(&exists); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, ErrNotFound
+		}
+		return 0, err
+	}
+	return pendingCount(b.db, agent)
+}
+
+// ClearPending physically removes one agent's unacknowledged, non-DLQ
+// deliveries and only message rows orphaned by that removal.
+func (b *Bus) ClearPending(agent string) (ClearPendingResult, error) {
+	tx, err := b.db.Begin()
+	if err != nil {
+		return ClearPendingResult{}, err
+	}
+	defer tx.Rollback()
+	var exists int
+	if err := tx.QueryRow(`SELECT 1 FROM agents WHERE name=?`, agent).Scan(&exists); err != nil {
+		if err == sql.ErrNoRows {
+			return ClearPendingResult{}, ErrNotFound
+		}
+		return ClearPendingResult{}, err
+	}
+	rows, err := tx.Query(`SELECT DISTINCT d.message_id
+		FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
+		WHERE s.agent=? AND d.acked_at IS NULL AND d.dlq=0`, agent)
+	if err != nil {
+		return ClearPendingResult{}, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return ClearPendingResult{}, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return ClearPendingResult{}, err
+	}
+	res, err := tx.Exec(`DELETE FROM deliveries WHERE rowid IN (
+		SELECT d.rowid FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
+		WHERE s.agent=? AND d.acked_at IS NULL AND d.dlq=0)`, agent)
+	if err != nil {
+		return ClearPendingResult{}, err
+	}
+	out := ClearPendingResult{}
+	out.DeletedDeliveries, err = res.RowsAffected()
+	if err != nil {
+		return ClearPendingResult{}, err
+	}
+	for _, id := range ids {
+		res, err := tx.Exec(`DELETE FROM messages WHERE id=?
+			AND NOT EXISTS (SELECT 1 FROM deliveries WHERE message_id=?)`, id, id)
+		if err != nil {
+			return ClearPendingResult{}, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return ClearPendingResult{}, err
+		}
+		out.DeletedMessages += n
+	}
+	if err := tx.Commit(); err != nil {
+		return ClearPendingResult{}, err
+	}
+	b.emitAudit(agent, "message_queue_cleared", auditJSON(map[string]string{
+		"deleted_deliveries": fmt.Sprint(out.DeletedDeliveries),
+		"deleted_messages":   fmt.Sprint(out.DeletedMessages),
+	}))
+	return out, nil
+}
+
 // Inbox returns an agent's messages filtered by delivery status, newest-first,
 // with cursor paging. status is one of "pending", "processed", "dlq", "all".
 // before, when non-empty, pages the archive: only messages strictly older than
