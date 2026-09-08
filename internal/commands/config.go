@@ -136,6 +136,40 @@ func agentEffort() registry.Command {
 	}
 }
 
+func agentMessageSetting(path, field string) registry.Command {
+	return registry.Command{
+		Path:    path,
+		Summary: "Set the agent " + strings.ReplaceAll(field, "_", " "),
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "value", Type: registry.Int, Required: true, Help: "positive whole number"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/messages/" + strings.TrimPrefix(path, "agent.messages.")},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			a, err := getAgent(c, str(p, "name"))
+			if err != nil {
+				return nil, err
+			}
+			value, err := agentIntParam(p, "value", "bad_"+field, 1)
+			if err != nil {
+				return nil, err
+			}
+			if field == "messages_batch" {
+				a.MessagesBatch = value
+			} else {
+				a.MessagesMaxQueue = value
+			}
+			if err := agentStore(c).Update(a); err != nil {
+				return nil, err
+			}
+			if control, ok := c.Control.(registry.LoopConfigControl); ok {
+				control.RefreshLoopConfig(a.Name)
+			}
+			return map[string]any{"name": a.Name, field: value}, nil
+		},
+	}
+}
+
 // agentAlias sets (POST) the agent's display alias. Omit value to read; empty
 // clears it. Persisted via the owned SetAlias setter (not Store.Update).
 func agentAlias() registry.Command {

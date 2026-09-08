@@ -828,7 +828,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	}
 	messagesMaxQueue := spec.MessagesMaxQueue
 	if messagesMaxQueue == 0 {
-		messagesMaxQueue = 1000
+		messagesMaxQueue = 100
 	}
 	goalEnabled := true
 	if spec.GoalEnabled != nil {

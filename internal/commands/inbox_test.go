@@ -3,6 +3,7 @@ package commands
 import (
 	"testing"
 
+	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
@@ -23,6 +24,25 @@ func seedInbox(t *testing.T, b *bus.Bus, agent, channel string, texts ...string)
 		out = append(out, m)
 	}
 	return out
+}
+
+func TestAgentInboxClear(t *testing.T) {
+	c, b := ctxWithBus(t)
+	if err := agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	seedInbox(t, b, "worker", "chat:room", "one", "two")
+	res, err := h(t, "agent.inbox.clear")(c, registry.Params{"name": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := res.(map[string]any)
+	if got["deleted_deliveries"] != int64(2) || got["deleted_messages"] != int64(2) {
+		t.Fatalf("clear result = %#v", got)
+	}
+	if _, err := h(t, "agent.inbox.clear")(c, registry.Params{"name": "missing"}); !isCode(err, "not_found") {
+		t.Fatalf("missing agent error = %v, want not_found", err)
+	}
 }
 
 func TestAgentInboxListAndStatus(t *testing.T) {

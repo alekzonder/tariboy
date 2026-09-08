@@ -354,7 +354,7 @@ func (s *Store) Create(a Agent) error {
 		a.MessagesBatch = 10
 	}
 	if a.MessagesMaxQueue == 0 {
-		a.MessagesMaxQueue = 1000
+		a.MessagesMaxQueue = 100
 	}
 	if a.GoalWaitCustomerTimeoutS == 0 {
 		a.GoalEnabled = true
