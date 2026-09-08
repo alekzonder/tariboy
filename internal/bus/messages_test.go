@@ -37,6 +37,9 @@ func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
 	sharedChannel := ChatChannel("shared")
 	sub(t, b, "alice", aliceInbox)
 	sub(t, b, "alice", sharedChannel)
+	if _, err := b.Subscribe("alice", sharedChannel, nil, []string{"note"}); err != nil {
+		t.Fatal(err)
+	}
 	sub(t, b, "bob", sharedChannel)
 
 	unique := pub(t, b, aliceInbox, "note", "unique", nil)
@@ -49,13 +52,18 @@ func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
 	if _, err := b.db.Exec(`UPDATE deliveries SET dlq=1 WHERE message_id=?`, dead.ID); err != nil {
 		t.Fatal(err)
 	}
+	orphan := pub(t, b, ChatChannel("orphan"), "note", "pre-existing orphan", nil)
+	if _, err := b.db.Exec(`UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT MAX(sequence) FROM task_workflow_message_sequence)`); err != nil {
+		t.Fatal(err)
+	}
+	unreconciled := pub(t, b, aliceInbox, "note", "workflow ingress still needs this", nil)
 
 	got, err := b.ClearPending("alice")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.DeletedDeliveries != 2 || got.DeletedMessages != 1 {
-		t.Fatalf("clear result = %+v, want 2 deliveries and 1 message", got)
+	if got.DeletedDeliveries != 4 || got.DeletedMessages != 1 {
+		t.Fatalf("clear result = %+v, want 4 deliveries and 1 message", got)
 	}
 	for status, want := range map[string]string{"processed": processed.ID, "dlq": dead.ID} {
 		items, err := b.Inbox("alice", status, 10, "")
@@ -67,7 +75,7 @@ func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
 	if err != nil || len(bob) != 1 || bob[0].ID != shared.ID {
 		t.Fatalf("bob pending = %+v, err=%v", bob, err)
 	}
-	for _, id := range []string{unique.ID, shared.ID, processed.ID, dead.ID} {
+	for _, id := range []string{unique.ID, shared.ID, processed.ID, dead.ID, orphan.ID, unreconciled.ID} {
 		var count int
 		if err := b.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE id=?`, id).Scan(&count); err != nil {
 			t.Fatal(err)
@@ -79,6 +87,42 @@ func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
 		if count != want {
 			t.Fatalf("message %s count=%d want %d", id, count, want)
 		}
+	}
+	if got, err := b.ClearPending("alice"); err != nil || got != (ClearPendingResult{}) {
+		t.Fatalf("idempotent clear = %+v, err=%v", got, err)
+	}
+}
+
+func TestClearPendingHandlesLargeQueue(t *testing.T) {
+	b := newBusSeconds(t)
+	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref) VALUES ('alice', 'basic:latest')`); err != nil {
+		t.Fatal(err)
+	}
+	s := sub(t, b, "alice", InboxChannel("alice"))
+	if _, err := b.db.Exec(`WITH RECURSIVE n(i) AS (
+		SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<18000
+	) INSERT INTO messages(id, channel, ts)
+	SELECT printf('bulk-%05d', i), ?, '2026-09-08T00:00:00Z' FROM n`, InboxChannel("alice")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.db.Exec(`INSERT INTO task_workflow_message_sequence(message_id)
+		SELECT id FROM messages WHERE id LIKE 'bulk-%' ORDER BY id`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.db.Exec(`UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT MAX(sequence) FROM task_workflow_message_sequence)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.db.Exec(`INSERT INTO deliveries(subscription_id, message_id)
+		SELECT ?, id FROM messages WHERE id LIKE 'bulk-%'`, s.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := b.ClearPending("alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DeletedDeliveries != 18000 || got.DeletedMessages != 18000 {
+		t.Fatalf("clear result = %+v, want 18000 deliveries and messages", got)
 	}
 }
 

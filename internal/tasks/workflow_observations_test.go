@@ -8,6 +8,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/bus"
+	basestore "github.com/alekzonder/tariboy/internal/store"
 )
 
 func observationWorkflowTask(t *testing.T) (*Service, Actor, Task, Assignment) {
@@ -173,6 +176,32 @@ func TestReconcileWorkflowObservationsRecoversCommittedBusMessage(t *testing.T) 
 	}
 	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil || n != 0 {
 		t.Fatalf("second reconcile = %d, %v", n, err)
+	}
+	var observations int
+	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_observations`).Scan(&observations); err != nil || observations != 1 {
+		t.Fatalf("observations = %d, %v", observations, err)
+	}
+}
+
+func TestClearPendingPreservesUnreconciledWorkflowObservation(t *testing.T) {
+	svc, _, task, assignment := observationWorkflowTask(t)
+	if _, err := svc.CreateWorkflowSubscription(context.Background(), AgentActor("dev-a"), assignmentID(assignment), CreateWorkflowSubscriptionInput{
+		TaskRevision: task.WorkflowRevision, AssignmentRevision: assignment.Revision, Pattern: "metrics:api", Reaction: "record_only", IdempotencyKey: "sub-clear-race",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b := bus.New(&basestore.Store{DB: svc.db}, svc.clock)
+	if _, err := b.Subscribe("dev-a", "metrics:api", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Publish(bus.Message{Channel: "metrics:api", Source: "plugin:metrics", Type: "metric.alert", Text: "queue pressure"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := b.ClearPending("dev-a"); err != nil || got.DeletedDeliveries != 1 || got.DeletedMessages != 0 {
+		t.Fatalf("clear result = %+v, err=%v", got, err)
+	}
+	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil || n != 1 {
+		t.Fatalf("reconcile = %d, %v", n, err)
 	}
 	var observations int
 	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_observations`).Scan(&observations); err != nil || observations != 1 {

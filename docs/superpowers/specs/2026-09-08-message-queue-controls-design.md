@@ -81,8 +81,10 @@ The operation begins one SQLite transaction and verifies that the agent exists.
 Within that transaction it identifies the selected agent's delivery rows where
 `acked_at IS NULL AND dlq = 0`, captures their distinct message IDs, deletes
 those delivery rows, then deletes only captured message IDs for which no
-delivery remains. Capturing the affected IDs prevents the operation from
-deleting unrelated messages that already had no deliveries.
+delivery remains and workflow ingress has already consumed the message.
+Capturing the affected IDs prevents the operation from deleting unrelated
+messages that already had no deliveries; the ingress check prevents queue
+cleanup from racing away a workflow observation.
 
 An agent can receive one message through several subscriptions. All live
 pending deliveries owned by that agent are removed. A DLQ or processed delivery

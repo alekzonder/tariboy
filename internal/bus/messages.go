@@ -60,22 +60,15 @@ func (b *Bus) ClearPending(agent string) (ClearPendingResult, error) {
 		}
 		return ClearPendingResult{}, err
 	}
-	rows, err := tx.Query(`SELECT DISTINCT d.message_id
-		FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
-		WHERE s.agent=? AND d.acked_at IS NULL AND d.dlq=0`, agent)
-	if err != nil {
+	if _, err := tx.Exec(`CREATE TEMP TABLE clear_pending_candidates (
+		message_id TEXT PRIMARY KEY
+	) WITHOUT ROWID`); err != nil {
 		return ClearPendingResult{}, err
 	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return ClearPendingResult{}, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Close(); err != nil {
+	if _, err := tx.Exec(`INSERT INTO clear_pending_candidates(message_id)
+		SELECT DISTINCT d.message_id
+		FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
+		WHERE s.agent=? AND d.acked_at IS NULL AND d.dlq=0`, agent); err != nil {
 		return ClearPendingResult{}, err
 	}
 	res, err := tx.Exec(`DELETE FROM deliveries WHERE rowid IN (
@@ -89,17 +82,24 @@ func (b *Bus) ClearPending(agent string) (ClearPendingResult, error) {
 	if err != nil {
 		return ClearPendingResult{}, err
 	}
-	for _, id := range ids {
-		res, err := tx.Exec(`DELETE FROM messages WHERE id=?
-			AND NOT EXISTS (SELECT 1 FROM deliveries WHERE message_id=?)`, id, id)
-		if err != nil {
-			return ClearPendingResult{}, err
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return ClearPendingResult{}, err
-		}
-		out.DeletedMessages += n
+	res, err = tx.Exec(`DELETE FROM messages
+		WHERE id IN (SELECT message_id FROM clear_pending_candidates)
+		AND NOT EXISTS (SELECT 1 FROM deliveries WHERE message_id=messages.id)
+		AND EXISTS (
+			SELECT 1 FROM task_workflow_message_sequence sequence
+			JOIN task_workflow_ingress_state ingress ON ingress.singleton=1
+			WHERE sequence.message_id=messages.id
+			AND sequence.sequence<=ingress.last_message_sequence
+		)`)
+	if err != nil {
+		return ClearPendingResult{}, err
+	}
+	out.DeletedMessages, err = res.RowsAffected()
+	if err != nil {
+		return ClearPendingResult{}, err
+	}
+	if _, err := tx.Exec(`DROP TABLE clear_pending_candidates`); err != nil {
+		return ClearPendingResult{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return ClearPendingResult{}, err
