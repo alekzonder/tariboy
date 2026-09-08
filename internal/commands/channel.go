@@ -410,6 +410,32 @@ func agentInboxProcessed() registry.Command {
 	}
 }
 
+func agentInboxClear() registry.Command {
+	return registry.Command{
+		Path:    "agent.inbox.clear",
+		Summary: "Physically clear an agent's pending inbox queue",
+		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
+		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/inbox/clear"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			b, err := requireBus(c)
+			if err != nil {
+				return nil, err
+			}
+			result, err := b.ClearPending(str(p, "name"))
+			if errors.Is(err, bus.ErrNotFound) {
+				return nil, api.UserError{Code: "not_found", Msg: "agent not found"}
+			}
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"deleted_deliveries": result.DeletedDeliveries,
+				"deleted_messages":   result.DeletedMessages,
+			}, nil
+		},
+	}
+}
+
 func agentInboxReply() registry.Command {
 	return registry.Command{
 		Path:    "agent.inbox.reply",

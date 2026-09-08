@@ -343,6 +343,12 @@ func agentRun() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			if _, present := p["messages_batch"]; !present {
+				messagesBatch = 10
+			}
+			if _, present := p["messages_max_queue"]; !present {
+				messagesMaxQueue = 100
+			}
 			onTimeout := str(p, "on_timeout")
 			if _, present := p["on_timeout"]; present && onTimeout != "restart" && onTimeout != "stop" {
 				return nil, api.UserError{Code: "bad_on_timeout", Msg: "on_timeout must be restart or stop"}

@@ -135,6 +135,16 @@ func TestAgentRunAndPs(t *testing.T) {
 	}
 }
 
+func TestAgentRunDefaultsMessageQueueToOneHundred(t *testing.T) {
+	c, _, fc := ctxWithStore(t)
+	if _, err := h(t, "agent.run")(c, registry.Params{"image": "basic:latest", "name": "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	if fc.ran.MessagesBatch != 10 || fc.ran.MessagesMaxQueue != 100 {
+		t.Fatalf("message defaults = %d/%d, want 10/100", fc.ran.MessagesBatch, fc.ran.MessagesMaxQueue)
+	}
+}
+
 // Catches the create handler dropping a clone field or lossy reparsing of
 // structured HTTP environment/plugin values before they reach the manager.
 func TestAgentRunMapsCompleteConfiguration(t *testing.T) {

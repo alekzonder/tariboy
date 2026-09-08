@@ -126,10 +126,12 @@ func TestAgentHarnessReadOnlyWhenNoValue(t *testing.T) {
 func TestConfigCommandsRegistered(t *testing.T) {
 	r := BuildRegistry()
 	want := map[string]string{
-		"agent.model":       "POST /api/agents/{name}/model",
-		"agent.effort":      "POST /api/agents/{name}/effort",
-		"agent.interactive": "POST /api/agents/{name}/interactive",
-		"agent.harness":     "POST /api/agents/{name}/harness",
+		"agent.model":              "POST /api/agents/{name}/model",
+		"agent.effort":             "POST /api/agents/{name}/effort",
+		"agent.interactive":        "POST /api/agents/{name}/interactive",
+		"agent.harness":            "POST /api/agents/{name}/harness",
+		"agent.messages.batch":     "POST /api/agents/{name}/messages/batch",
+		"agent.messages.max-queue": "POST /api/agents/{name}/messages/max-queue",
 	}
 	for path, route := range want {
 		cmd, ok := r.Get(path)
@@ -139,6 +141,26 @@ func TestConfigCommandsRegistered(t *testing.T) {
 		if cmd.HTTP == nil || cmd.HTTP.Method+" "+cmd.HTTP.Path != route {
 			t.Fatalf("%s route = %v, want %q", path, cmd.HTTP, route)
 		}
+	}
+}
+
+func TestAgentMessageSettingsValidateAndPersist(t *testing.T) {
+	c, agents := seedAgent(t)
+	for path, field := range map[string]string{
+		"agent.messages.batch":     "messages_batch",
+		"agent.messages.max-queue": "messages_max_queue",
+	} {
+		res, err := h(t, path)(c, registry.Params{"name": "a1", "value": float64(23)})
+		if err != nil || res.(map[string]any)[field] != 23 {
+			t.Fatalf("%s result=%#v err=%v", path, res, err)
+		}
+		if _, err := h(t, path)(c, registry.Params{"name": "a1", "value": float64(0)}); err == nil {
+			t.Fatalf("%s accepted zero", path)
+		}
+	}
+	a, err := agents.Get("a1")
+	if err != nil || a.MessagesBatch != 23 || a.MessagesMaxQueue != 23 {
+		t.Fatalf("stored message settings = %#v err=%v", a, err)
 	}
 }
 
