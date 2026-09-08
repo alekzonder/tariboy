@@ -92,6 +92,8 @@ func TestResolveSkillDirectorySupportsEveryPathForm(t *testing.T) {
 		category string
 	}{
 		{"./skills/local", filepath.Join(source, "skills", "local"), "source"},
+		{"../skills/shared", filepath.Join(base, "skills", "shared"), "source"},
+		{"./../skills/shared", filepath.Join(base, "skills", "shared"), "source"},
 		{"$STORE/skills/shared", filepath.Join(roots.Store, "skills", "shared"), "store"},
 		{"$CURRENT_VERSION_STORE/skills/builtin", filepath.Join(roots.CurrentVersionStore, "skills", "builtin"), "current-store"},
 		{"$PLUGINS/acme/1/skills/plugin", filepath.Join(roots.Plugins, "acme", "1", "skills", "plugin"), "plugin"},
@@ -140,7 +142,7 @@ func TestResolveSkillDirectoryRejectsUnsafeInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	roots := ResolveRoots{Store: store, CurrentVersionStore: filepath.Join(base, "current"), Plugins: plugins}
-	for _, value := range []string{"", "$HOME/x", "$PLUGINS", "$PLUGINS/../outside", "../outside", "./missing", "./linked", "./regular"} {
+	for _, value := range []string{"", "$HOME/x", "$PLUGINS", "$PLUGINS/../outside", "$STORE/../outside", "./missing", "./linked", "./regular"} {
 		if _, err := ResolveSkillDirectory(source, value, roots); err == nil {
 			t.Errorf("accepted %q", value)
 		}

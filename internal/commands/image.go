@@ -75,7 +75,15 @@ func imageBuild() registry.Command {
 			if c.Store != nil {
 				snapshotStore.DB = c.Store.DB
 			}
-			frozen, err := snapshotStore.Freeze(sourceCWD)
+			parsed, err := imagefile.ParseAny(sourceCWD)
+			if err != nil {
+				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
+			}
+			var skills []imagefile.SkillEntry
+			if parsed.Version == 2 {
+				skills = parsed.V2.Skills
+			}
+			frozen, err := snapshotStore.Freeze(sourceCWD, skills...)
 			if err != nil {
 				return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
 			}
@@ -83,7 +91,7 @@ func imageBuild() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
 			}
-			parsed, err := imagefile.ParseAny(frozenDir)
+			parsed, err = imagefile.ParseAny(frozenDir)
 			if err != nil {
 				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
 			}
@@ -151,7 +159,7 @@ func imageBuild() registry.Command {
 				var man image.Manifest
 				if i == 0 {
 					if parsed.Version == 2 {
-						man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), CurrentStoreVersion: productVersion, Plugins: pluginsDir}, ref, stagedStore, clock, resolver)
+						man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), CurrentStoreVersion: productVersion, Plugins: pluginsDir, SourceSkills: frozen.SourceSkills}, ref, stagedStore, clock, resolver)
 					} else {
 						man, err = image.Build(parsed.V1, ref, stagedStore, clock,
 							image.WithExternalPlugins(resolver),

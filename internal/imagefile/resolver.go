@@ -17,6 +17,9 @@ type ResolveRoots struct {
 	CurrentVersionStore string
 	CurrentStoreVersion string
 	Plugins             string
+	// SourceSkills pins source-relative declarations to an immutable snapshot.
+	// A non-nil map is exhaustive: missing declarations fail closed.
+	SourceSkills map[string]string
 }
 
 type ResolvedFile struct {
@@ -44,9 +47,14 @@ func resolveExplicitPath(sourceDir, value string, roots ResolveRoots, kind strin
 		root, suffix, category = roots.Plugins, strings.TrimPrefix(value, "$PLUGINS/"), "plugin"
 	case strings.HasPrefix(value, "./"):
 		root, suffix, category = sourceDir, strings.TrimPrefix(value, "./"), "source"
+	case kind == "skill" && strings.HasPrefix(value, "../"):
+		root, suffix, category = sourceDir, value, "source"
 	case filepath.IsAbs(value):
 		category = "absolute"
 	default:
+		if kind == "skill" {
+			return "", "", fmt.Errorf("skill path %q must use ./, ../, an absolute path, or a supported Store variable", value)
+		}
 		return "", "", fmt.Errorf("%s path %q must use ./, an absolute path, or a supported Store variable", kind, value)
 	}
 	var candidate string
@@ -62,7 +70,7 @@ func resolveExplicitPath(sourceDir, value string, roots ResolveRoots, kind strin
 		}
 		candidate = filepath.Join(rootAbs, filepath.FromSlash(suffix))
 		rel, err := filepath.Rel(rootAbs, candidate)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		if err != nil || ((rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))) && !(kind == "skill" && category == "source")) {
 			return "", "", fmt.Errorf("%s path %q escapes its root", kind, value)
 		}
 	}
@@ -112,9 +120,21 @@ func ResolvePromptFile(sourceDir, value string, roots ResolveRoots) (ResolvedFil
 }
 
 func ResolveSkillDirectory(sourceDir, value string, roots ResolveRoots) (ResolvedDirectory, error) {
-	abs, category, err := resolveExplicitPath(sourceDir, value, roots, "skill")
+	path := value
+	frozen := roots.SourceSkills != nil && (strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../"))
+	if frozen {
+		var ok bool
+		path, ok = roots.SourceSkills[value]
+		if !ok {
+			return ResolvedDirectory{}, fmt.Errorf("skill path %q is missing from the source snapshot", value)
+		}
+	}
+	abs, category, err := resolveExplicitPath(sourceDir, path, roots, "skill")
 	if err != nil {
 		return ResolvedDirectory{}, err
+	}
+	if frozen {
+		category = "source"
 	}
 	info, err := os.Lstat(abs)
 	if err != nil {

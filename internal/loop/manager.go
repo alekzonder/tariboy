@@ -2537,6 +2537,22 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	pluginsDir := layout.PluginsDir()
 	resolver := plugins.ResolveInstalled(pluginsDir)
 	if parsed.Version == 2 {
+		realWork, err := filepath.EvalSymlinks(workdir)
+		if err != nil {
+			return nil, err
+		}
+		for _, skill := range parsed.V2.Skills {
+			if strings.HasPrefix(skill.Dir, "$") {
+				continue // Store/plugin roots are checked by the image resolver.
+			}
+			path := skill.Dir
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(parsed.V2.Dir, path)
+			}
+			if err := confineReferencedPath(realWork, "skill", path); err != nil {
+				return nil, err
+			}
+		}
 		for _, prompt := range parsed.V2.Prompts {
 			if prompt.File != "" && filepath.IsAbs(prompt.File) {
 				if err := confineReferencedPath(workdir, "prompt", prompt.File); err != nil {
