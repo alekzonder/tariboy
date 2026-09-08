@@ -151,7 +151,12 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                   Open in VS Code
                 </Button>
               )}
-            </div>
+			</div>
+			{status?.messages_queue_full && (
+				<p className="mt-2 text-xs font-semibold text-destructive">
+					Message queue full: {status.messages_pending} / {status.messages_max_queue}
+				</p>
+			)}
 			{status?.budget && (status.budget.hour_usd > 0 || status.budget.day_usd > 0 || status.budget.week_usd > 0 || status.budget.month_usd > 0) && <div className="mt-2 text-xs" data-testid="agent-budget-header">
 				{exhaustedPeriods.length > 0 && <p className="font-semibold text-destructive">Out of budget: {exhaustedPeriods.join(", ")}</p>}
 				<p>Hour {status.budget.hour_spent_usd.toFixed(2)} / {status.budget.hour_usd || "Unlimited"} · Day {status.budget.day_spent_usd.toFixed(2)} / {status.budget.day_usd || "Unlimited"} · Week {status.budget.week_spent_usd.toFixed(2)} / {status.budget.week_usd || "Unlimited"} · Month {status.budget.month_spent_usd.toFixed(2)} / {status.budget.month_usd || "Unlimited"}</p>
