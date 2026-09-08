@@ -932,6 +932,12 @@ export const agentInboxList = (
     `inbox?${q.toString()}`,
   );
 };
+export const agentInboxClear = (name: string) =>
+  agentPost<{ deleted_deliveries: number; deleted_messages: number }>(
+    name,
+    "inbox/clear",
+    {},
+  );
 // Mark a pending row processed (operator ack). `result` is mandatory; the
 // backend prefixes it `operator:` so the audit trail distinguishes human acks.
 export const agentInboxProcessed = (name: string, id: string, result: string) =>

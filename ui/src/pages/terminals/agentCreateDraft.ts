@@ -53,7 +53,7 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     envText: "{}",
     plugins: [],
     messagesBatch: "10",
-    messagesMaxQueue: "1000",
+    messagesMaxQueue: "100",
     goalEnabled: true,
     goalWaitCustomerTimeoutS: "300",
     goalDeliveryCooldownS: "60",

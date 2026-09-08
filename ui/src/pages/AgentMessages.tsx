@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
 import {
   ApiError,
+  agentInboxClear,
   agentInboxList,
   agentInboxProcessed,
   agentInboxReply,
@@ -36,7 +37,8 @@ const VIEW_STATUS: Record<View, InboxStatus> = {
 // A pending Mark-processed / Reply dialog. A processed dialog without an item
 // applies to the captured pending queue.
 type DialogState =
-  | { mode: "processed"; item?: InboxItem }
+  | { mode: "clear" }
+  | { mode: "processed"; item: InboxItem }
   | { mode: "reply"; item: InboxItem }
   | null;
 
@@ -161,34 +163,24 @@ export default function AgentMessages() {
   };
 
   const openBulkDialog = () => {
-    setDialogText("");
-    setDialog({ mode: "processed" });
+    setDialog({ mode: "clear" });
   };
 
   const submitDialog = async () => {
     if (!dialog) return;
     const text = dialogText.trim();
-    if (!text) {
+    if (dialog.mode !== "clear" && !text) {
       toast.error(dialog.mode === "processed" ? "result is required" : "reply text is required");
       return;
     }
     setBusy(true);
     try {
-      if (dialog.mode === "processed") {
-        if (dialog.item) {
-          await agentInboxProcessed(name, dialog.item.id, text);
-          toast.success("marked processed");
-        } else {
-          const pending: InboxItem[] = [];
-          let before: string | undefined;
-          do {
-            const page = await agentInboxList(name, "pending", 100, before);
-            pending.push(...page.messages);
-            before = page.messages.at(-1)?.id;
-          } while (before && pending.length % 100 === 0);
-          for (const item of pending) await agentInboxProcessed(name, item.id, text);
-          toast.success(`marked ${pending.length} processed`);
-        }
+      if (dialog.mode === "clear") {
+        const result = await agentInboxClear(name);
+        toast.success(`deleted ${result.deleted_deliveries} deliveries and ${result.deleted_messages} messages`);
+      } else if (dialog.mode === "processed") {
+        await agentInboxProcessed(name, dialog.item.id, text);
+        toast.success("marked processed");
       } else {
         await agentInboxReply(name, dialog.item.id, text);
         toast.success("replied");
@@ -229,7 +221,7 @@ export default function AgentMessages() {
           </TabsList>
           {view === "queue" && items.length > 0 && (
             <Button size="sm" variant="outline" onClick={openBulkDialog} disabled={busy}>
-              Mark all processed
+              Clear queue
             </Button>
           )}
         </div>
@@ -260,27 +252,29 @@ export default function AgentMessages() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {dialog?.mode === "reply" ? "Reply" : dialog?.item ? "Mark processed" : "Mark all processed"}
+              {dialog?.mode === "reply" ? "Reply" : dialog?.mode === "clear" ? "Clear queue" : "Mark processed"}
             </DialogTitle>
             <DialogDescription>
-              {dialog?.mode === "reply"
+              {dialog?.mode === "clear"
+                ? "Every pending delivery for this agent is physically deleted and cannot be recovered. Archive and DLQ are not changed; shared messages needed by other agents are retained."
+                : dialog?.mode === "reply"
                 ? "Publish a reply — this also marks the message processed."
-                : dialog?.item
-                  ? "A non-empty result is required."
-                  : "Mark every currently pending message processed with the same required result."}
+                : "A non-empty result is required."}
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            autoFocus
-            value={dialogText}
-            onChange={(e) => setDialogText(e.target.value)}
-            placeholder={dialog?.mode === "reply" ? "reply text" : "result"}
-            rows={4}
-          />
+          {dialog?.mode !== "clear" && (
+            <Textarea
+              autoFocus
+              value={dialogText}
+              onChange={(e) => setDialogText(e.target.value)}
+              placeholder={dialog?.mode === "reply" ? "reply text" : "result"}
+              rows={4}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)} disabled={busy}>Cancel</Button>
-            <Button onClick={() => void submitDialog()} disabled={busy}>
-              {dialog?.mode === "reply" ? "Reply" : dialog?.item ? "Mark processed" : "Mark all processed"}
+            <Button variant={dialog?.mode === "clear" ? "destructive" : "default"} onClick={() => void submitDialog()} disabled={busy}>
+              {dialog?.mode === "reply" ? "Reply" : dialog?.mode === "clear" ? "Clear queue" : "Mark processed"}
             </Button>
           </DialogFooter>
         </DialogContent>

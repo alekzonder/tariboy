@@ -40,6 +40,8 @@ const view = {
   user_prompt: "hi",
   env: {},
   plugins: [],
+  messages_batch: 10,
+  messages_max_queue: 100,
   group: null,
   goal_enabled: true,
   goal_wait_customer_timeout_s: 300,
@@ -68,6 +70,8 @@ const SERVER_FIELD: Record<string, string> = {
   "/loop/max-idle": "max_idle_iterations",
   "/model": "model",
   "/effort": "effort",
+  "/messages/batch": "messages_batch",
+  "/messages/max-queue": "messages_max_queue",
 };
 
 // stubFetch answers every request this page makes from one mutable server-side
@@ -321,6 +325,40 @@ it("edits a loop interval via POST loop/interval", async () => {
   ).toBe(45);
   // The per-field commit points are gone: the section has one save, not six.
   expect(screen.queryByText("Set")).not.toBeInTheDocument();
+});
+
+it("saves Messages and Channels settings serially", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls);
+  renderPage();
+
+  fireEvent.change(await screen.findByLabelText("Messages per iteration"), {
+    target: { value: "12" },
+  });
+  fireEvent.change(screen.getByLabelText("Maximum pending queue"), {
+    target: { value: "80" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save message settings" }));
+
+  await waitFor(() => expect(posts(calls)).toEqual([
+    "/api/agents/alpha/messages/batch",
+    "/api/agents/alpha/messages/max-queue",
+  ]));
+  expect(screen.queryByRole("button", { name: "Save message settings" })).not.toBeInTheDocument();
+});
+
+it("rejects non-positive message settings before saving", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls);
+  renderPage();
+
+  fireEvent.change(await screen.findByLabelText("Maximum pending queue"), {
+    target: { value: "0" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save message settings" }));
+
+  expect(await screen.findByText("Enter a positive whole number.")).toBeInTheDocument();
+  expect(posts(calls)).toEqual([]);
 });
 
 it("sets max idle iterations via POST loop/max-idle", async () => {
@@ -752,6 +790,7 @@ it("renders one section per row in the design's order, with no second column", a
   const order = [
     "Goal",
     "Loop",
+    "Messages & Channels",
     "Runtime",
     "Secrets (write-only)",
     "Retention and cleanup",
