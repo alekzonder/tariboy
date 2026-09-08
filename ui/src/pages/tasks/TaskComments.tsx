@@ -44,21 +44,28 @@ export default function TaskComments({
     : []
   if (defaultAsk && !choices.includes(defaultAsk)) choices.push(defaultAsk)
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (busy || uploading || !body.trim()) return
+  const send = async (text: string, resetForm: boolean) => {
+    if (busy || uploading) return
     setBusy(true)
     try {
-      const principal = ask.principal && !ask.principal.includes(":") ? `agent:${ask.principal}` : ask.principal
-      const text = principal ? `@${principal}\n\n${body.trim()}` : body.trim()
       await onComment(text, idempotencyKey())
-      setBody("")
-      setAsk({ assignee, principal: defaultAsk })
+      if (resetForm) {
+        setBody("")
+        setAsk({ assignee, principal: defaultAsk })
+      }
     } catch {
       // The workspace reports the failure; retain the comment for retry.
     } finally {
       setBusy(false)
     }
+  }
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!body.trim()) return
+    const principal = ask.principal && !ask.principal.includes(":") ? `agent:${ask.principal}` : ask.principal
+    const text = principal ? `@${principal}\n\n${body.trim()}` : body.trim()
+    await send(text, true)
   }
 
   const commentList = (
@@ -86,7 +93,10 @@ export default function TaskComments({
         </div>
         <MarkdownEditor id="task-comment" placeholder="Comment" value={body} onChange={setBody} disabled={busy} />
       </div>
-      <Button type="submit" disabled={busy || uploading || !body.trim()}>Send comment</Button>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" disabled={busy || uploading} onClick={() => void send("Ok", false)}>Send Ok</Button>
+        <Button type="submit" disabled={busy || uploading || !body.trim()}>Send comment</Button>
+      </div>
     </form>
   )
 
