@@ -123,6 +123,35 @@ describe("interactive terminal + upload helpers", () => {
     expect(res.abs).toBe("/server/files/one/x.txt");
   });
 
+  it("serverUploadFile accepts files above the former 16 MiB limit", async () => {
+    vi.stubGlobal("fetch", mockFetch(200, {
+      ok: true,
+      result: { path: "files/one/x.bin", abs: "/server/files/one/x.bin", bytes: 1 },
+    }));
+    const arrayBuffer = vi.fn().mockResolvedValue(new Uint8Array([0]).buffer);
+    const file = {
+      name: "x.bin",
+      size: 17 * 1024 * 1024,
+      arrayBuffer,
+    } as unknown as File;
+
+    await serverUploadFile(file);
+    expect(arrayBuffer).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("serverUploadFile rejects files above 1 GiB before reading them", async () => {
+    const arrayBuffer = vi.fn();
+    const file = {
+      name: "x.bin",
+      size: 1024 * 1024 * 1024 + 1,
+      arrayBuffer,
+    } as unknown as File;
+
+    await expect(serverUploadFile(file)).rejects.toThrow("File exceeds 1 GiB");
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
   it("setAgentInteractive posts a boolean value", async () => {
     let seenInit: RequestInit = {};
     vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: { interactive: true } }, (_u, i) => (seenInit = i)));

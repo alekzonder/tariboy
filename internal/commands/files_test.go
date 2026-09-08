@@ -148,8 +148,12 @@ func TestServerUploadFiles(t *testing.T) {
 	if _, err := upload(c, registry.Params{"name": "bad.txt", "content": "!"}); err == nil {
 		t.Fatal("accepted invalid base64")
 	}
-	if _, err := upload(c, registry.Params{"name": "large.txt", "content": strings.Repeat("A", 24<<20)}); err == nil {
-		t.Fatal("accepted oversized upload")
+	large, err := upload(c, registry.Params{"name": "large.txt", "content": strings.Repeat("A", 24<<20)})
+	if err != nil {
+		t.Fatalf("rejected 18 MiB upload: %v", err)
+	}
+	if got := large.(map[string]any)["bytes"]; got != 18<<20 {
+		t.Fatalf("uploaded bytes = %v", got)
 	}
 	outside := t.TempDir()
 	symlinkBase := t.TempDir()
@@ -165,20 +169,20 @@ func TestServerUploadFiles(t *testing.T) {
 	}
 }
 
-func TestServerUploadRejectsOversizedHTTPBody(t *testing.T) {
+func TestServerUploadRejectsDeclaredOversizedHTTPBodyBeforeReading(t *testing.T) {
 	c := &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	server := api.NewServer(BuildRegistry(), c)
-	body := `{"name":"large.txt","content":"` + strings.Repeat("A", 24<<20) + `"}`
+	body := `{"name":"large.txt","content":"aGk="}`
 	reader := strings.NewReader(body)
 	request := httptest.NewRequest(http.MethodPut, "/api/files", reader)
-	request.ContentLength = -1 // The bound must also protect streamed requests.
+	request.ContentLength = serverUpload().HTTP.MaxBodyBytes + 1
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if reader.Len() == 0 {
-		t.Fatal("read the entire oversized body before rejecting it")
+	if reader.Len() != len(body) {
+		t.Fatal("read a body whose declared size exceeds the limit")
 	}
 	entries, err := os.ReadDir(c.BaseDir)
 	if err != nil || len(entries) != 0 {

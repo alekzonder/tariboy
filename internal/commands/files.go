@@ -83,13 +83,13 @@ func agentCwdFor(c *registry.Ctx, name string) (string, error) {
 
 // serverUpload stores operator uploads independently of agents and tasks.
 func serverUpload() registry.Command {
-	const maxUpload = 16 << 20
+	const maxUpload = 1 << 30
 	return registry.Command{
 		Path:    "files.upload",
 		Summary: "Upload a file to the server and return its absolute path",
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "file name"},
-			{Name: "content", Type: registry.String, Required: true, Help: "base64 file content (at most 16 MiB decoded)"},
+			{Name: "content", Type: registry.String, Required: true, Help: "base64 file content (at most 1 GiB decoded)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "PUT", Path: "/api/files", MaxBodyBytes: int64(base64.StdEncoding.EncodedLen(maxUpload)) + 4096},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -99,14 +99,14 @@ func serverUpload() registry.Command {
 			}
 			encoded := str(p, "content")
 			if len(encoded) > base64.StdEncoding.EncodedLen(maxUpload) {
-				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 16 MiB"}
+				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 1 GiB"}
 			}
 			raw, err := base64.StdEncoding.DecodeString(encoded)
 			if err != nil {
 				return nil, api.UserError{Code: "bad_content", Msg: "content is not valid base64"}
 			}
 			if len(raw) > maxUpload {
-				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 16 MiB"}
+				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 1 GiB"}
 			}
 			base, err := filepath.Abs(c.BaseDir)
 			if err != nil {
