@@ -101,7 +101,6 @@ class StoreSkillsTest(unittest.TestCase):
             "schedule": "scripts/schedule.sh",
             "scripts": "scripts/scripts.sh",
             "image-creator": "scripts/image_creator.sh",
-            "workdir": "scripts/scripts.sh",
         }
         for skill, entrypoint in expected.items():
             with self.subTest(skill=skill):

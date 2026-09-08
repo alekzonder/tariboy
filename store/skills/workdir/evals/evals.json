@@ -3,22 +3,22 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "The prompt says workdir: /srv/tariboy/project. Queue a durable script named lint to run that project's ./tools/lint.sh.",
-      "expected_output": "Uses the sibling Scripts launcher with the absolute workdir path after --.",
+      "prompt": "workdir: /srv/tariboy/project\n\nQueue a durable script named lint to run that project's ./tools/lint.sh.",
+      "expected_output": "Provides the absolute workdir command and directs durable execution to the Scripts skill without duplicating its command syntax.",
       "files": [],
       "expectations": [
-        "Invokes ../scripts/scripts/scripts.sh run lint -- /srv/tariboy/project/tools/lint.sh.",
-        "Uses the workdir path rather than assuming the current directory."
+        "Directs durable execution to the Scripts skill.",
+        "Provides /srv/tariboy/project/tools/lint.sh and does not invent a relative launcher path."
       ]
     },
     {
       "id": 2,
-      "prompt": "The configured workdir is /mnt/repos/app. Schedule the absolute command /mnt/repos/app/bin/reconcile every 600 seconds under the name reconcile.",
-      "expected_output": "Schedules the absolute workdir command through the sibling Scripts launcher.",
+      "prompt": "workdir: /mnt/repos/app\n\nSchedule the absolute command /mnt/repos/app/bin/reconcile every 600 seconds under the name reconcile.",
+      "expected_output": "Directs scheduling to the Scripts skill without duplicating its command syntax.",
       "files": [],
       "expectations": [
-        "Invokes ../scripts/scripts/scripts.sh schedule reconcile --every 600 -- /mnt/repos/app/bin/reconcile.",
-        "Places /mnt/repos/app/bin/reconcile after -- as an absolute path."
+        "Directs scheduling to the Scripts skill.",
+        "Does not invent a relative launcher path or duplicate run or schedule command syntax."
       ]
     },
     {

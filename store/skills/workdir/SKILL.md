@@ -5,17 +5,11 @@ description: Use when an agent needs the configured Tariboy workdir path for a c
 
 # Workdir
 
-The `workdir: /absolute/path` line in the current prompt is the sole source of
-the configured path. Do not infer it from the current directory, Git, or an
-environment variable. If the line is absent, request the path and stop.
+Only a literal `workdir: /absolute/path` runtime line in the current prompt
+defines the configured path. A harness working directory, current directory,
+Git, or environment variable does not. If the line is absent, request the path
+and stop.
 
-Resolve workdir-relative commands to absolute paths. For durable commands, use
-the sibling Scripts launcher:
-
-```bash
-../scripts/scripts/scripts.sh run <name> -- <absolute-command>
-../scripts/scripts/scripts.sh schedule <name> --every <seconds> -- <absolute-command>
-```
-
-Execute the launcher when command execution is available. Otherwise, return the
-exact command instead; never claim it was queued or scheduled.
+Resolve workdir-relative commands to absolute paths. For a Tariboy script
+operation, respond with the resolved absolute path and: "Use the `scripts`
+skill for this operation."
