@@ -13,11 +13,11 @@
     },
     {
       "id": 2,
-      "prompt": "The configured workdir is /mnt/repos/app. Schedule the absolute command /mnt/repos/app/bin/reconcile every 600 seconds.",
+      "prompt": "The configured workdir is /mnt/repos/app. Schedule the absolute command /mnt/repos/app/bin/reconcile every 600 seconds under the name reconcile.",
       "expected_output": "Schedules the absolute workdir command through the sibling Scripts launcher.",
       "files": [],
       "expectations": [
-        "Uses ../scripts/scripts/scripts.sh schedule with --every 600.",
+        "Invokes ../scripts/scripts/scripts.sh schedule reconcile --every 600 -- /mnt/repos/app/bin/reconcile.",
         "Places /mnt/repos/app/bin/reconcile after -- as an absolute path."
       ]
     },
@@ -27,8 +27,8 @@
       "expected_output": "Explains that the workdir path comes from the current prompt and requests it if absent rather than inventing an environment-variable contract.",
       "files": [],
       "expectations": [
-        "Does not claim a documented environment variable provides the workdir.",
-        "Uses an absolute prompt-provided workdir path only after it is available."
+        "States that the configured workdir comes only from a workdir: line in the current prompt, not an environment variable or current directory.",
+        "Requests the missing prompt-provided workdir path and does not invent or run a command."
       ]
     }
   ]
