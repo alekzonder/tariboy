@@ -5,4 +5,14 @@ description: Use when an agent needs to read or replace its durable Tariboy iter
 
 # Context
 
-Use `scripts/context.sh get` to read the durable handoff and `scripts/context.sh set "text"` to replace it. Keep only information needed by the next iteration.
+Resolve `scripts/context.sh` from this skill's directory, not from the agent's
+working directory.
+
+- Run `scripts/context.sh get` to read the durable handoff.
+- Run `scripts/context.sh set "text"` to replace the entire handoff.
+
+The handoff contains only actionable state, decisions, and blockers needed by
+the next iteration. Omit command logs, chronological diaries, transcripts, and
+internal reasoning. If a request supplies no new actionable information, leave
+the existing handoff unchanged; do not store an explanation of what was
+excluded.
