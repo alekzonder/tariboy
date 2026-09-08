@@ -444,6 +444,10 @@ func (s *Server) dispatch(cmd registry.Command, w http.ResponseWriter, r *http.R
 	} else if r.Body != nil {
 		defer r.Body.Close()
 		if cmd.HTTP.MaxBodyBytes > 0 {
+			if r.ContentLength > cmd.HTTP.MaxBodyBytes {
+				WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds the upload limit")
+				return
+			}
 			r.Body = http.MaxBytesReader(w, r.Body, cmd.HTTP.MaxBodyBytes)
 		}
 		// An empty body (io.EOF) means "no params"; any other decode error is a bad request.

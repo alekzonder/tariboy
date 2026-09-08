@@ -448,7 +448,7 @@ export interface PushResult {
 }
 
 export async function serverUploadFile(file: File, target?: ApiTarget): Promise<PushResult> {
-  if (file.size > 16 * 1024 * 1024) throw new Error("File exceeds 16 MiB");
+  if (file.size > 1024 * 1024 * 1024) throw new Error("File exceeds 1 GiB");
   return apiOn<PushResult>(resolveTarget(target), "PUT", "/api/files", {
     name: file.name,
     content: await fileBase64(file),
