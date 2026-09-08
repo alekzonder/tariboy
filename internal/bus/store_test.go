@@ -192,6 +192,31 @@ func TestPublishDeadLettersMessagesBeyondAgentQueueLimit(t *testing.T) {
 	}
 }
 
+func TestPendingCountDeduplicatesAndExcludesDLQ(t *testing.T) {
+	b := newBusSeconds(t)
+	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref) VALUES ('alice', 'basic:latest')`); err != nil {
+		t.Fatal(err)
+	}
+	channel := InboxChannel("alice")
+	sub(t, b, "alice", channel)
+	if _, err := b.Subscribe("alice", channel, nil, []string{"*"}); err != nil {
+		t.Fatal(err)
+	}
+	m := pub(t, b, channel, "note", "one message, two deliveries", nil)
+	if got, err := b.PendingCount("alice"); err != nil || got != 1 {
+		t.Fatalf("pending count=%d err=%v, want 1", got, err)
+	}
+	if _, err := b.db.Exec(`UPDATE deliveries SET dlq=1 WHERE message_id=?`, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := b.PendingCount("alice"); err != nil || got != 0 {
+		t.Fatalf("DLQ pending count=%d err=%v, want 0", got, err)
+	}
+	if _, err := b.PendingCount("missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing agent err=%v, want ErrNotFound", err)
+	}
+}
+
 // hasMsg reports whether any message in ms has id.
 func hasMsg(ms []Message, id string) bool {
 	for _, m := range ms {

@@ -370,13 +370,21 @@ func queueLimitReached(tx *sql.Tx, agent string) (bool, error) {
 		}
 		return false, err
 	}
-	var pending int
-	if err := tx.QueryRow(`SELECT COUNT(DISTINCT d.message_id)
-		FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
-		WHERE s.agent=? AND d.acked_at IS NULL AND d.dlq=0`, agent).Scan(&pending); err != nil {
+	pending, err := pendingCount(tx, agent)
+	if err != nil {
 		return false, err
 	}
 	return pending >= limit, nil
+}
+
+func pendingCount(x dbtx, agent string) (int, error) {
+	var pending int
+	if err := x.QueryRow(`SELECT COUNT(DISTINCT d.message_id)
+		FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
+		WHERE s.agent=? AND d.acked_at IS NULL AND d.dlq=0`, agent).Scan(&pending); err != nil {
+		return 0, err
+	}
+	return pending, nil
 }
 
 func (b *Bus) emitPublish(msg Message, delivered []string) {
