@@ -7,9 +7,11 @@
       "expected_output": "A Native Tasks command sequence that claims or inspects available work, shows TASK-42, assigns the subtask, records a Markdown comment, and uses done only after completion.",
       "files": [],
       "expectations": [
+        "Returns an executable ttasks sequence rather than a future-tense promise.",
         "Uses ttasks commands for discovery, inspection, assignment, comments, and completion.",
+        "Creates the documentation child before assignment, uses the returned child key, and passes the agent name without a principal prefix.",
         "Records the decision in a task comment.",
-        "Does not close the task before the requested work is complete."
+        "Separates completion commands into a conditional follow-up that runs only after show reports the delegated work done."
       ]
     },
     {
@@ -20,6 +22,7 @@
       "expectations": [
         "Uses actual line breaks rather than literal backslash-n text.",
         "Produces valid Markdown with a blank line before the list and a closed code fence.",
+        "Repairs the malformed requested text before passing it as one shell-safe comment argument.",
         "Does not use raw HTML."
       ]
     },
@@ -29,7 +32,8 @@
       "expected_output": "A correction that starts with ttasks work next and work show, follows only the assignment packet's declared actions and channel patterns, and avoids undeclared direct, group, or raw channel access.",
       "files": [],
       "expectations": [
-        "Begins workflow-managed work with ttasks work next and ttasks work show.",
+        "Returns the required ttasks commands rather than only summarizing the workflow rules.",
+        "Begins workflow-managed work with ttasks work next using an idempotency key and then ttasks work show.",
         "Treats the returned packet as the complete authority for actions, tools, outcomes, and channels.",
         "Does not use raw subscriptions or invent another principal's identity."
       ]
