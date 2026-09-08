@@ -49,8 +49,8 @@ tariboy has three command surfaces:
 | `tariboy channel tail` | Print recent messages on a channel (-f to follow) |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
 | `tariboy compose import` | Preview and import compose-only team/runtime configuration |
-| `tariboy files upload` | Upload base64 content to the server and return its absolute path |
-| `tariboy cp` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
+| `tariboy files upload` | Upload up to 16 MiB of base64 content to the server and return its absolute path |
+| `tariboy cp` | Stream a file up to 1 GiB to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -146,6 +147,65 @@ func TestUnknownRoute(t *testing.T) {
 	code, m := get(t, c, "http://unix/api/nope")
 	if code != 404 || m["ok"] != false {
 		t.Fatalf("code=%d body=%v", code, m)
+	}
+}
+
+func TestRawFileUploadStreamsAboveFormerLimit(t *testing.T) {
+	base := t.TempDir()
+	srv := NewServer(registry.New(), &registry.Ctx{BaseDir: base, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	body := bytes.NewReader(make([]byte, 17<<20))
+	req := httptest.NewRequest(http.MethodPut, "/api/files/raw?name=large.bin", body)
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var env struct {
+		Result UploadResult `json:"result"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(env.Result.Abs)
+	if err != nil || info.Size() != 17<<20 || info.Mode().Perm() != 0o600 {
+		t.Fatalf("uploaded file = %+v, err = %v", info, err)
+	}
+	if env.Result.Bytes != 17<<20 || filepath.Base(env.Result.Path) != "large.bin" {
+		t.Fatalf("result = %+v", env.Result)
+	}
+}
+
+func TestRawFileUploadRejectsDeclaredOversizeBeforeReading(t *testing.T) {
+	base := t.TempDir()
+	srv := NewServer(registry.New(), &registry.Ctx{BaseDir: base, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	body := strings.NewReader("unread")
+	req := httptest.NewRequest(http.MethodPut, "/api/files/raw?name=large.bin", body)
+	req.ContentLength = 1<<30 + 1
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge || body.Len() != len("unread") {
+		t.Fatalf("status = %d, unread = %d, body = %s", rr.Code, body.Len(), rr.Body.String())
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("oversized request wrote files: %v, %v", entries, err)
+	}
+}
+
+func TestSaveUploadedFileRemovesUnknownLengthOverflow(t *testing.T) {
+	base := t.TempDir()
+	_, err := SaveUploadedFile(base, "large.bin", strings.NewReader("12345"), 4)
+	var userErr UserError
+	if !errors.As(err, &userErr) || userErr.Code != "too_large" {
+		t.Fatalf("error = %v", err)
+	}
+	entries, readErr := os.ReadDir(filepath.Join(base, "files"))
+	if readErr != nil || len(entries) != 0 {
+		t.Fatalf("partial upload remains: %v, %v", entries, readErr)
 	}
 }
 

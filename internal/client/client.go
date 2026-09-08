@@ -100,11 +100,19 @@ func (c *Client) Call(method, route string, body any) (json.RawMessage, error) {
 // Upload sends a raw archive body to an operator API route over the daemon's
 // Unix socket and decodes the standard API envelope.
 func (c *Client) Upload(route string, body io.Reader, size int64) (json.RawMessage, error) {
-	req, err := http.NewRequest(http.MethodPost, "http://unix"+route, body)
+	return c.upload(http.MethodPost, route, "application/gzip", body, size)
+}
+
+func (c *Client) UploadFile(route string, body io.Reader, size int64) (json.RawMessage, error) {
+	return c.upload(http.MethodPut, route, "application/octet-stream", body, size)
+}
+
+func (c *Client) upload(method, route, contentType string, body io.Reader, size int64) (json.RawMessage, error) {
+	req, err := http.NewRequest(method, "http://unix"+route, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/gzip")
+	req.Header.Set("Content-Type", contentType)
 	req.ContentLength = size
 	resp, err := c.http.Do(req)
 	if err != nil {

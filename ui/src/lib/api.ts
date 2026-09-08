@@ -449,17 +449,22 @@ export interface PushResult {
 
 export async function serverUploadFile(file: File, target?: ApiTarget): Promise<PushResult> {
   if (file.size > 1024 * 1024 * 1024) throw new Error("File exceeds 1 GiB");
-  return apiOn<PushResult>(resolveTarget(target), "PUT", "/api/files", {
-    name: file.name,
-    content: await fileBase64(file),
-  });
-}
-
-async function fileBase64(file: File): Promise<string> {
-  const buf = new Uint8Array(await file.arrayBuffer());
-  let bin = "";
-  for (const b of buf) bin += String.fromCharCode(b);
-  return btoa(bin);
+  const response = await apiRawOn(
+    resolveTarget(target),
+    "PUT",
+    `/api/files/raw?name=${encodeURIComponent(file.name)}`,
+    file,
+  );
+  let env: Envelope<PushResult>;
+  try {
+    env = await response.json() as Envelope<PushResult>;
+  } catch {
+    throw new ApiError(response.status, "bad_response", `non-JSON response (HTTP ${response.status})`);
+  }
+  if (!env.ok || !env.result) {
+    throw new ApiError(response.status, "bad_response", `invalid response (HTTP ${response.status})`);
+  }
+  return env.result;
 }
 
 // ---- Live config setters (persist now; launch-mode changes apply next start) ----
