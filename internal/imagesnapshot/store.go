@@ -2,6 +2,7 @@
 package imagesnapshot
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/agentskills"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesource"
 )
 
@@ -41,6 +44,7 @@ type file struct {
 	rel  string
 	path string
 	mode os.FileMode
+	body []byte
 }
 
 type executor interface {
@@ -51,6 +55,7 @@ type executor interface {
 type FrozenSource struct {
 	SourceDigest string
 	RelativeDir  string
+	SourceSkills map[string]string
 }
 
 func (s Store) Capture(ctx context.Context, ref, imageDigest, sourceName, sourceDir string) (Snapshot, error) {
@@ -67,7 +72,7 @@ func (s Store) CaptureWithProvenance(ctx context.Context, ref, imageDigest, sour
 
 // Freeze copies and content-addresses a source tree once so several builds can
 // consume the identical files even if the original directory changes later.
-func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
+func (s Store) Freeze(sourceDir string, skills ...imagefile.SkillEntry) (FrozenSource, error) {
 	if s.Root == "" {
 		return FrozenSource{}, errors.New("image snapshot: incomplete freeze request")
 	}
@@ -76,6 +81,38 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 		return FrozenSource{}, fmt.Errorf("image snapshot: unsafe source root")
 	}
 	var files []file
+	sourceSkills := make(map[string]string)
+	var externalSkills []agentskills.Prepared
+	const skillRoot = ".tariboy-snapshot-skills"
+	for _, skill := range skills {
+		if !strings.HasPrefix(skill.Dir, "./") && !strings.HasPrefix(skill.Dir, "../") {
+			continue
+		}
+		resolved, err := imagefile.ResolveSkillDirectory(sourceDir, skill.Dir, imagefile.ResolveRoots{})
+		if err != nil {
+			return FrozenSource{}, err
+		}
+		rel := filepath.Clean(filepath.FromSlash(skill.Dir))
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			prepared, err := agentskills.Prepare(resolved)
+			if err != nil {
+				return FrozenSource{}, err
+			}
+			externalSkills = append(externalSkills, prepared)
+			if err := agentskills.ValidateSet(externalSkills); err != nil {
+				return FrozenSource{}, err
+			}
+			rel = filepath.Join(skillRoot, prepared.Metadata.Name)
+			for _, member := range prepared.Files {
+				mode := os.FileMode(0o600)
+				if member.Executable {
+					mode = 0o700
+				}
+				files = append(files, file{rel: filepath.ToSlash(filepath.Join(rel, member.RelativePath)), mode: mode, body: member.Body})
+			}
+		}
+		sourceSkills[skill.Dir] = rel
+	}
 	err = filepath.WalkDir(sourceDir, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -89,6 +126,9 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 		}
 		if filepath.ToSlash(rel) == imagesource.MetadataFilename {
 			return nil
+		}
+		if len(externalSkills) > 0 && rel == skillRoot {
+			return fmt.Errorf("image snapshot: source uses reserved directory %s", skillRoot)
 		}
 		entryInfo, err := entry.Info()
 		if err != nil {
@@ -134,9 +174,12 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 			return FrozenSource{}, err
 		}
-		in, err := os.Open(f.path)
-		if err != nil {
-			return FrozenSource{}, err
+		var in io.ReadCloser = io.NopCloser(bytes.NewReader(f.body))
+		if f.path != "" {
+			in, err = os.Open(f.path)
+			if err != nil {
+				return FrozenSource{}, err
+			}
 		}
 		out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 		if err != nil {
@@ -165,7 +208,10 @@ func (s Store) Freeze(sourceDir string) (FrozenSource, error) {
 	if err := os.Rename(stage, target); err != nil && !errors.Is(err, fs.ErrExist) {
 		return FrozenSource{}, err
 	}
-	return FrozenSource{SourceDigest: digest, RelativeDir: relativeDir}, nil
+	for source, rel := range sourceSkills {
+		sourceSkills[source] = filepath.Join(target, rel)
+	}
+	return FrozenSource{SourceDigest: digest, RelativeDir: relativeDir, SourceSkills: sourceSkills}, nil
 }
 
 func (s Store) OpenFrozen(frozen FrozenSource) (string, error) {

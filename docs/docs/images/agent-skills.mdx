@@ -123,22 +123,36 @@ the packaged skill metadata.
 
 ## Source paths
 
-Skill directories use the same five explicit source forms as static prompt
-files:
+Skill directories support these explicit source forms:
 
 | Form | Resolves from |
 | --- | --- |
 | `$STORE/...` | The common Store root across installed Tariboy versions |
 | `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
-| `./...` | The directory containing `Tariboyfile.yaml` |
+| `./...` or `../...` | The directory containing `Tariboyfile.yaml`, including sibling directories |
 | `/absolute/path/...` | An operator-supplied absolute Unix path |
 
 Only the literal variables in this table are expanded. Tariboy does not apply
 shell or general environment-variable expansion. Validation warns that an
 absolute source makes the original build host-bound. Agent-authored image
-builds further confine source and absolute references to that agent's managed
-workdir.
+builds further confine relative and absolute skill references to that agent's
+managed workdir. Store and plugin references cannot escape their declared
+roots. Prompt paths retain their existing traversal restrictions.
+
+For example, `store/images/reviewer/Tariboyfile.yaml` can package
+`store/skills/code-review` with:
+
+```yaml
+skills:
+  - dir: ../../skills/code-review
+```
+
+An ordinary build freezes explicitly referenced sibling skill directories
+alongside its source snapshot, without copying the whole parent directory.
+The image retains the original declaration and embeds the frozen skill bytes;
+moving or changing the original skill after the snapshot cannot change that
+build. A later rebuild reads the original paths again.
 
 ## `SKILL.md` contract
 

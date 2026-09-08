@@ -66,9 +66,12 @@ managed alias whose source is `tariboy-tasks`.
 
 Image builds resolve only literal `$STORE`, `$CURRENT_VERSION_STORE`, and
 `$PLUGINS` roots, source-relative paths, or explicit operator absolute paths.
-They reject traversal, symlinks, missing or non-regular files, and oversized
-prompt files. Agent-authored builds additionally confine source and absolute
-references to that agent's workdir.
+Prompt paths and Store/plugin references reject traversal outside their roots.
+Source-relative skill directories may use `../` to reference a sibling tree;
+ordinary builds freeze only those explicitly declared skills alongside the
+source snapshot. Symlinks, missing or non-regular files, and oversized prompt
+files are rejected. Agent-authored builds additionally confine source and all
+relative or absolute skill references to that agent's workdir.
 Native host metadata and exported support archives use owner-only permissions.
 
 Controlled production publication is stricter than an ordinary operator build.

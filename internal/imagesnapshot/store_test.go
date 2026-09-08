@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesource"
 	storedb "github.com/alekzonder/tariboy/internal/store"
 )
@@ -117,6 +120,68 @@ func TestFreezeKeepsOneSourceGeneration(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(root, frozen.RelativeDir, "prompt.md"))
 	if err != nil || string(data) != "first" {
 		t.Fatalf("frozen prompt = %q, %v", data, err)
+	}
+}
+
+func TestFreezePinsSiblingSkillForBuild(t *testing.T) {
+	base := t.TempDir()
+	source := filepath.Join(base, "images", "reviewer")
+	skill := filepath.Join(base, "skills", "review")
+	for _, dir := range []string{source, skill} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body := []byte("---\nname: review\ndescription: Review changes.\n---\nOriginal\n")
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill, "check.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills:\n  - dir: ../../skills/review\nprompts: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// An unrelated unsafe entry must not enter the snapshot's copy scope.
+	if err := os.Symlink("missing", filepath.Join(base, "unrelated")); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := imagefile.ParseV2(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshots := Store{Root: t.TempDir()}
+	frozen, err := snapshots.Freeze(source, parsed.Skills...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(base); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := snapshots.OpenFrozen(frozen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err = imagefile.ParseV2(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &image.Store{Dir: t.TempDir()}
+	ref := image.Ref{Name: "reviewer", Tag: "v1"}
+	if _, err := image.BuildV2(parsed, imagefile.ResolveRoots{SourceSkills: frozen.SourceSkills}, ref, store, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.ReadFile(ref, "skills/review/SKILL.md")
+	if err != nil || string(got) != string(body) {
+		t.Fatalf("frozen skill = %q, %v", got, err)
+	}
+	info, err := os.Stat(filepath.Join(frozen.SourceSkills["../../skills/review"], "check.sh"))
+	if err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("frozen script mode = %v, %v", info, err)
+	}
+	parsed.Skills[0].Dir = "../unfrozen/review"
+	if _, err := image.ValidateV2(parsed, imagefile.ResolveRoots{SourceSkills: frozen.SourceSkills}, nil); err == nil {
+		t.Fatal("accepted a source skill missing from the frozen declaration set")
 	}
 }
 

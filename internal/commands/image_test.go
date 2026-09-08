@@ -174,6 +174,75 @@ func TestImageBuildUsesSourceVersionUnlessTagExplicit(t *testing.T) {
 	}
 }
 
+func TestImageBuildV2PackagesSiblingSkill(t *testing.T) {
+	c := localCtx(t)
+	root := t.TempDir()
+	source := filepath.Join(root, "store", "images", "reviewer")
+	skill := filepath.Join(root, "store", "skills", "review")
+	body := []byte("---\nname: review\ndescription: Review changes.\n---\nOriginal skill\n")
+	for _, dir := range []string{source, skill} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills:\n  - dir: ../../skills/review\nprompts: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	params := registry.Params{"name": "reviewer", "tag": "v1", "path": source}
+	for _, command := range []string{"image.validate", "image.build"} {
+		result, err := cmdHandler(t, command)(c, params)
+		if err != nil {
+			t.Fatalf("%s: %v", command, err)
+		}
+		if command == "image.validate" && result.(map[string]any)["valid"] != true {
+			t.Fatalf("validation failed: %+v", result)
+		}
+	}
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	ref := image.Ref{Name: "reviewer", Tag: "v1"}
+	got, err := imageStore(c).ReadFile(ref, "skills/review/SKILL.md")
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("packaged skill = %q, %v", got, err)
+	}
+	manifest, err := imageStore(c).Inspect(ref)
+	if err != nil || len(manifest.Skills) != 1 || manifest.Skills[0].Source != "../../skills/review" || manifest.Skills[0].Category != "source" {
+		t.Fatalf("skill provenance = %+v, %v", manifest.Skills, err)
+	}
+	snapshots := imageSnapshotStore(c)
+	snapshot, found, err := snapshots.Lookup(context.Background(), ref.String())
+	if err != nil || !found {
+		t.Fatalf("snapshot = %+v, %v", snapshot, err)
+	}
+	frozen, err := snapshots.Open(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	if err := filepath.WalkDir(frozen, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.Name() == "SKILL.md" {
+			data, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(data, body) {
+				t.Fatalf("snapshot skill = %q, %v", data, err)
+			}
+			count++
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("snapshot contains %d skill files, want 1", count)
+	}
+}
+
 func TestImageBuildRebuildsMutableTag(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
