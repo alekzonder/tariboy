@@ -241,11 +241,13 @@ asset is packaged with the app and is not committed.
 The comment form defaults its Ask selector to the task assignee, while typed
 mentions, explicit questions, and answer-wait semantics remain daemon-owned.
 
-An agent's **Messages → Queue** view can mark one row or every currently
-pending row processed. The bulk action captures all pending pages before it
-starts processing, applies one required result through the existing idempotent
-per-message action, and then reloads the queue. Messages published after that
-snapshot remain pending.
+An agent's **Messages → Queue** view can still mark one row processed. Its
+**Clear queue** bulk action instead opens an in-app destructive confirmation:
+pending deliveries for the selected agent are physically deleted and cannot be
+recovered, while Archive, DLQ, shared messages, and other agents' deliveries
+remain. The dialog cannot be dismissed or submitted twice while the one bulk
+request is running. Success reports the server's delivery/message counters and
+reloads Queue; failure keeps the authoritative rows visible for retry.
 
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
@@ -348,6 +350,11 @@ operations: each selection is persisted without confirmation or an automatic
 restart, takes effect the next time the agent starts, and leaves the timing of
 any restart under the operator's control.
 
+The **Messages & Channels** section uses that same draft contract for the
+positive whole-number `messages_batch` and `messages_max_queue` fields.
+New-agent drafts use a maximum queue of 100, while Clone keeps the source
+agent's configured value.
+
 Configuration also renders the daemon-authoritative per-agent USD budget
 projection. Its four calendar rows pair each current spend with one editable
 limit (`spent / limit`), label zero as Unlimited, and save atomically against
@@ -355,6 +362,12 @@ the explicit agent-route host. The agent header and sidebar use the same
 projection; they show an explicit Out of budget state and every exhausted
 period rather than recomputing spend in the browser. Older daemons simply omit
 the additive projection.
+
+The workspace header also consumes daemon-authoritative message status. When
+`messages_queue_full` is true it displays
+**Message queue full: pending / limit** in destructive styling; it never
+recomputes queue state in the browser. The normal three-second status refresh
+removes the indicator after processing or clearing lowers the queue.
 
 When the daemon reports a halt reason for the agent, the Autopilot card shows
 it under the Running/Stopped line, toned as an error for an `error`

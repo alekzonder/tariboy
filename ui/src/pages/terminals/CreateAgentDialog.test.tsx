@@ -135,7 +135,7 @@ const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
   max_idle_iterations: 0,
   user_prompt: "",
   messages_batch: 10,
-  messages_max_queue: 1000,
+  messages_max_queue: 100,
   group: "",
   alias: "",
   notes: "",

@@ -56,6 +56,16 @@ a reason: with none, both keys are omitted entirely rather than emitted empty.
 An agent-authored status line is never reported as a halt reason, since only
 the idle prefix qualifies.
 
+## Message queue state
+
+Queue saturation is derived rather than persisted. The agent status endpoint
+counts distinct message IDs across that agent's unacknowledged, non-DLQ
+deliveries and returns `messages_pending`, the configured
+`messages_max_queue`, and `messages_queue_full`. The flag is true when the
+pending count is at or above the limit. Publish limiting, status, and physical
+queue clearing use the same delivery predicate so the UI never maintains a
+second estimate.
+
 ## Native task state
 
 Each agent row persists `goal_enabled` (default true), a positive
