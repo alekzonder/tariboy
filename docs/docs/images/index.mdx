@@ -69,6 +69,64 @@ before mutable markers existed migrate a legacy ordinary-build ref only when
 its authoritative source snapshot and provenance both match the current
 digest; otherwise the operator must choose another tag.
 
+## Stores on a server
+
+Open **Stores** beside **Images** to register a Git repository or an absolute
+directory on the selected server. Each `tariboyd` owns its own registrations
+and performs clone, refresh, and build on that server. A Store contains image
+sources at `images/<image_name>/Tariboyfile.yaml`.
+
+```bash
+tariboy store add team git@github.com:company/agent-images.git
+tariboy store add local /srv/company-images
+tariboy store list
+tariboy store show team
+tariboy store refresh team
+tariboy image build team/reviewer
+tariboy image build team/reviewer --name company-reviewer
+tariboy store remove team
+```
+
+Git sources are cloned under `<base-dir>/stores/<store_name>/`. For a daemon
+running as `agent` with defaults, `team` lives at
+`/home/agent/.tariboy/stores/team/`, and its reviewer source is
+`/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
+`TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
+A local source such as `/srv/company-images` is used in place, without a copy.
+These user Stores are separate from the built-in `store/versions/` tree and
+the `$STORE` prompt root.
+
+Only the registration's name and source are persisted in the daemon database.
+Viewing a Store reads the current disk inventory and `image_version` values;
+there is no saved image list to become stale. A missing `images/` directory
+shows an empty list. An invalid image reports its own error while valid sibling
+images remain visible.
+
+**Refresh** runs `git pull --ff-only` for both managed clones and local Git
+checkout roots, including Git worktrees. A local directory without its own
+`.git` entry is simply reread; Tariboy does not pull an ancestor repository.
+A conflict, missing
+upstream, or authentication failure is reported without resetting or stashing
+local edits. **Remove** unregisters the Store and deletes its managed clone;
+it preserves local source directories and already built images.
+
+Store builds use the existing image builder. The default result is
+`<image_name>:<image_version>`, or `latest` when the source has no version.
+Use `--name` to avoid a name collision between Stores, and `--tag` to override
+the version. Do not combine a Store selector with `--path`.
+
+Before freezing sources, the daemon runs `npx skills experimental_install` in
+the Store root when `skills-lock.json` exists there, then in the image directory
+when it has a separate lock. An installation failure stops the build before
+publication. Git must be installed on the daemon host; lock restoration also
+requires Node.js/npm and access to the skill sources. Private repositories use
+the server account's configured SSH or Git credential helpers. Configure access
+on that server before adding the Store; do not put credentials in its URL.
+
+The Store detail shows **Images**, their versions, and **Build** actions. Built
+artifacts appear in the existing **Images** workspace. Stores do not yet expose
+standalone skills or plugins.
+
 ## Image versions
 
 Set `image_version: 0.1.0` in `Tariboyfile.yaml` to version the image

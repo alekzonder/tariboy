@@ -70,7 +70,7 @@ The Agents sidebar partitions each host into expandable **Teams** and
 **Individual agents** without changing agent navigation or terminal drag
 identity. Server headings are selectable and open an explicit
 `/servers/:hostId/tasks` route. The persistent right-pane server row keeps
-**Tasks**, **Images**, and **Settings** scoped to that host even while an agent
+**Tasks**, **Images**, **Stores**, and **Settings** scoped to that host even while an agent
 is selected. The Groups workspace owns team creation and editing: arbitrary custom
 members, per-member runtime fields, rename/lead and membership controls,
 compose clipboard transfer, and portable archive
@@ -141,7 +141,16 @@ archive has its own **Exporting** phase: controls and cancellation are disabled
 until the one download completes, after which cancellation only skips
 unstarted destinations.
 
-The persistent server context places **Tasks** beside **Images** and **Settings**.
+The **Stores** workspace registers Git URLs or local absolute source directories
+on the route-selected daemon. Its detail shows the current disk-backed image
+inventory, versions and diagnostics, with Refresh, Remove and Build actions.
+Every request carries the explicit host target, including builds through the
+existing image-build endpoint. Requests for a previous route cannot replace the
+new Store view. Removal uses an in-app confirmation and preserves local sources
+and built images; pending operations disable duplicate actions. See
+[Images → Stores](/docs/images#stores-on-a-server) for paths and prerequisites.
+
+The persistent server context places **Tasks** beside **Images**, **Stores**, and **Settings**.
 Settings discovers declarative pages from enabled plugins on that explicit
 server and lists them under **Integrations**. One generic React renderer owns
 the supported form controls and forwards actions through the daemon's existing
@@ -297,7 +306,7 @@ Operator history remains available after completion. See
 
 The navigation hierarchy is **Workspace → Server → Agent**. **Workspace** is a
 global titlebar destination at `/workspace`; it is not scoped to the currently
-selected server. A selected server owns Tasks, Images, and Settings, and its
+selected server. A selected server owns Tasks, Images, Stores, and Settings, and its
 context row remains visible above the selected agent's Console, Autopilot,
 Activity, Tasks, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
