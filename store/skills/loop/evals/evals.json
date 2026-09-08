@@ -4,10 +4,11 @@
     {
       "id": 1,
       "prompt": "This iteration did no useful work and has no actionable task. Finish it as idle.",
-      "expected_output": "Runs `scripts/loop.sh done --idle` to emit the iteration completion signal.",
+      "expected_output": "Runs `scripts/loop.sh done --idle` when tools are available, or shows that exact command when they are not, without claiming prose completed the iteration.",
       "files": [],
       "expectations": [
-        "Uses the loop skill's done command with `--idle`.",
+        "Uses or shows the exact `scripts/loop.sh done --idle` command.",
+        "Does not substitute a prose completion claim for the command.",
         "Uses idle only because the iteration performed no useful work."
       ]
     },
