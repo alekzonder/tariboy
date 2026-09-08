@@ -242,6 +242,41 @@ const GOAL_FIELDS: readonly SectionField[] = [
   },
 ];
 
+const MESSAGE_FIELDS: readonly SectionField[] = [
+  {
+    key: "messages-batch",
+    label: "Messages per iteration",
+    helper: "Maximum pending messages added to one iteration.",
+    numeric: true,
+    minimum: 1,
+    read: (v) => String(v.messages_batch),
+    normalize: normalizeStr,
+    validate: (value) =>
+      Number.isInteger(Number(value)) && Number(value) > 0
+        ? ""
+        : "Enter a positive whole number.",
+    submit: (target, name, value) =>
+      agentPostOn(target, name, "messages/batch", { value: Number(value) }),
+  },
+  {
+    key: "messages-max-queue",
+    label: "Maximum pending queue",
+    helper: "New deliveries beyond this limit enter DLQ.",
+    numeric: true,
+    minimum: 1,
+    read: (v) => String(v.messages_max_queue),
+    normalize: normalizeStr,
+    validate: (value) =>
+      Number.isInteger(Number(value)) && Number(value) > 0
+        ? ""
+        : "Enter a positive whole number.",
+    submit: (target, name, value) =>
+      agentPostOn(target, name, "messages/max-queue", {
+        value: Number(value),
+      }),
+  },
+];
+
 const PARTIAL_FAILURE =
   "Some changes were not saved. Review the highlighted fields and try again.";
 
@@ -605,6 +640,43 @@ function GoalEditor({
   );
 }
 
+function MessageEditor({
+  name,
+  view,
+  reload,
+  target,
+}: {
+  name: string;
+  view: AgentView;
+  reload: () => Promise<AgentView | null>;
+  target: ApiTarget;
+}) {
+  const section = useSectionDraft(
+    target,
+    name,
+    view,
+    MESSAGE_FIELDS,
+    reload,
+    "Message settings saved",
+  );
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Messages & Channels</CardTitle>
+        <CardDescription>Control queue capacity and iteration batches.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {MESSAGE_FIELDS.map((field) => (
+            <DraftField key={field.key} field={field} section={section} />
+          ))}
+        </div>
+        <DraftFooter section={section} saveLabel="Save message settings" />
+      </CardContent>
+    </Card>
+  );
+}
+
 function RuntimeConfigEditor({
   name,
   view,
@@ -751,6 +823,7 @@ export default function AgentSettings({
     <div className="space-y-4">
       <GoalEditor name={name} view={view} reload={reload} target={target} />
       <LoopEditor name={name} view={view} reload={reload} target={target} />
+      <MessageEditor name={name} view={view} reload={reload} target={target} />
       {/* No remount key here: a reload must reconcile the Runtime draft rather
           than throw it away, which is what a key would do to a field whose save
           failed. */}

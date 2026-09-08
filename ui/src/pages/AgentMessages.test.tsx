@@ -13,6 +13,7 @@ interface StubOptions {
   dlq?: unknown[];
   pendingGate?: Promise<void>;
   postGate?: Promise<void>;
+  clearError?: boolean;
 }
 
 // Stub fetch for the P5 inbox endpoints. `queue` rows back the pending view;
@@ -24,6 +25,13 @@ function stubInbox(queue: unknown[], opts: StubOptions = {}) {
     let gate: Promise<void> | undefined;
     if (init?.method === "POST") {
       posts.push({ path, body: init?.body ? JSON.parse(init.body as string) : undefined });
+      if (opts.clearError && path.endsWith("/inbox/clear")) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          text: async () => JSON.stringify({ ok: false, error: { code: "internal", message: "clear failed" } }),
+        } as Response);
+      }
       result = { ok: true };
       gate = opts.postGate;
     } else if (path.includes("/inbox")) {
@@ -72,6 +80,18 @@ it("renders the queue newest-first as returned by the backend", async () => {
   expect(texts).toEqual(["newer message", "older message"]);
 });
 
+it("keeps authoritative queue rows when clear fails", async () => {
+  stubInbox([row("m1", "2026-07-12T10:00:00Z", "keep me")], { clearError: true });
+  renderPage();
+
+  await screen.findByText("keep me");
+  fireEvent.click(screen.getByRole("button", { name: "Clear queue" }));
+  fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Clear queue" }));
+
+  await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+  expect(screen.getByText("keep me")).toBeInTheDocument();
+});
+
 it("marks a queue row processed via the dialog (non-empty result required)", async () => {
   const posts = stubInbox([row("m1", "2026-07-12T10:00:00Z", "please ack")]);
   renderPage();
@@ -92,29 +112,27 @@ it("marks a queue row processed via the dialog (non-empty result required)", asy
   );
 });
 
-it("marks every captured pending message processed across pages", async () => {
-  const pending = Array.from({ length: 101 }, (_, index) =>
-    row(`m${index}`, `2026-07-12T10:00:${String(index % 60).padStart(2, "0")}Z`, `message ${index}`),
-  );
+it("physically clears the pending queue with one guarded request", async () => {
+  const pending = [row("m1", "2026-07-12T10:00:00Z", "message 1")];
   let releasePosts!: () => void;
   const posts = stubInbox(pending, { postGate: new Promise((resolve) => { releasePosts = resolve; }) });
   renderPage();
 
-  await waitFor(() => expect(screen.getByText("message 0")).toBeInTheDocument());
-  fireEvent.click(screen.getByRole("button", { name: "Mark all processed" }));
+  await waitFor(() => expect(screen.getByText("message 1")).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "Clear queue" }));
 
   const dialog = await screen.findByRole("dialog");
-  fireEvent.change(within(dialog).getByPlaceholderText("result"), { target: { value: "handled in bulk" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Mark all processed" }));
+  expect(dialog).toHaveTextContent("cannot be recovered");
+  expect(dialog).toHaveTextContent("Archive and DLQ are not changed");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Clear queue" }));
 
   await waitFor(() => expect(posts).toHaveLength(1));
   expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeDisabled();
   fireEvent.keyDown(document, { key: "Escape" });
   expect(dialog).toBeInTheDocument();
   releasePosts();
-  await waitFor(() => expect(posts).toHaveLength(101));
-  expect(posts.map((post) => post.path.split("/").at(-2))).toEqual(pending.map((item) => item.id));
-  expect(posts.every((post) => (post.body as { result?: string }).result === "handled in bulk")).toBe(true);
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(posts[0].path).toMatch(/\/inbox\/clear$/);
 });
 
 it("does not offer the bulk action for stale rows from another view", async () => {
@@ -128,7 +146,7 @@ it("does not offer the bulk action for stale rows from another view", async () =
   await waitFor(() => expect(screen.getByText("archived")).toBeInTheDocument());
   await userEvent.click(screen.getByRole("tab", { name: "Queue" }));
 
-  expect(screen.queryByRole("button", { name: "Mark all processed" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Clear queue" })).not.toBeInTheDocument();
 });
 
 it("replies to a queue row via the dialog", async () => {

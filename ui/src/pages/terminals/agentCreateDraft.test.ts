@@ -58,7 +58,7 @@ describe("newAgentDraft", () => {
       envText: "{}",
       plugins: [],
       messagesBatch: "10",
-      messagesMaxQueue: "1000",
+      messagesMaxQueue: "100",
       group: "",
       alias: "",
       notes: "",
