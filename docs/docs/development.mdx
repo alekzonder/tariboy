@@ -180,6 +180,11 @@ so one aggregate pass surfaces gofmt drift and a UI type error together.
 described below. These targets do not install them, because installing would
 rewrite a shared working tree.
 
+In a fresh checkout or worktree, also run `make build-basic-image` once before
+`make check`. It prepares the ignored embedded image used by in-process daemon
+tests without starting a daemon. PR CI performs this preparation before its
+read-only check step; the check itself does not generate the artifact.
+
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
 disposable SSH host (the first also requires explicit consent to destroying its
