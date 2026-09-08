@@ -7,6 +7,9 @@ description: Use when a local command must continue beyond the current Tariboy i
 
 This skill's `scripts/scripts.sh` launcher lives inside this skill directory
 and calls the identity-bound daemon through `TARIBOY_TOOLS_SOCKET`.
+Execute the launcher when command execution is available. If it is unavailable,
+return the exact command instead; never claim a script was queued, scheduled,
+cancelled, or removed unless the command succeeded.
 
 Run once with `scripts/scripts.sh run <name> -- <command>`. Queue it exactly once,
 finish the iteration, and consume the later `script.result` message instead of
