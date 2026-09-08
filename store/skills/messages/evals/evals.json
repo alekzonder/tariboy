@@ -8,7 +8,8 @@
       "files": [],
       "expectations": [
         "Sends a message through scripts/messages.sh message send.",
-        "Uses the releases channel and includes that the smoke test passed."
+        "Uses the releases channel and includes that the smoke test passed.",
+        "When tool execution is unavailable, returns the exact command and does not claim the message was sent."
       ]
     },
     {
