@@ -63,6 +63,7 @@ tariboy has three command surfaces:
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
 | `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build mutable image refs and an immutable source snapshot; repeat tags, or default to image_version (latest when absent); Git provenance must be paired |
+| `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and tag is image_version or latest |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest` |
 | `tariboy image version get [--path FILE_OR_DIR]` | Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required |
 | `tariboy image version update <major\|minor\|patch> [--path FILE_OR_DIR]` | Increment the local SemVer, reset lower components and remove suffixes; preserve YAML fields/comments |
@@ -119,6 +120,11 @@ tariboy has three command surfaces:
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
 | `tariboy secret set` | Set a secret; value from --value or stdin |
+| `tariboy store add NAME SOURCE` | Register a Git URL or absolute local directory on the daemon host |
+| `tariboy store list` | List this daemon's Store registrations |
+| `tariboy store show NAME` | Read current images, versions and diagnostics from disk |
+| `tariboy store refresh NAME` | Fast-forward pull a Git source, or reread a non-Git local directory |
+| `tariboy store remove NAME` | Unregister a Store and remove only its managed clone; preserve local sources and built images |
 | `ttasks queue create` | Create a task queue |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
 | `tariboy user-prompt get` | Read the agent's standing user-prompt |

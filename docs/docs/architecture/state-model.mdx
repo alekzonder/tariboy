@@ -107,6 +107,15 @@ persisted bus-ingress cursor. See [Configurable task workflows](/docs/task-workf
 
 ## Image assignment state
 
+User Store registrations belong to each daemon's SQLite database and persist
+only their unique name and source. Git clones live under
+`<base-dir>/stores/<name>/`; local absolute sources stay in place. Image names,
+versions, and diagnostics are read from `images/` on disk for every view, never
+stored as a second inventory. This catalog is separate from the built-in
+versioned `store/` assets. Store refresh and build preparation are serialized
+so a pull cannot race source freezing. Store builds then use the ordinary image
+snapshot and publication path below.
+
 Each agent row owns an active image ref/digest and a separate pending
 ref/digest/error. Selecting another image changes only the pending fields. The
 iteration launch gate validates and stages that artifact, reconciles image
