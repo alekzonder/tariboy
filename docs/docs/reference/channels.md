@@ -311,7 +311,8 @@ state such as `acked_at`, `attempts`, or DLQ.
 In an agent's Desktop **Messages → Queue** view, **Clear queue** physically
 removes every pending delivery for that agent after explicit destructive
 confirmation. Archive, DLQ, shared messages, and other agents' deliveries are
-unchanged. The idempotent response reports `deleted_deliveries` and
+unchanged; messages awaiting workflow ingestion are also retained. The
+idempotent response reports `deleted_deliveries` and
 `deleted_messages`; an empty Queue returns zeroes.
 
 The same operation is available to operators as:
