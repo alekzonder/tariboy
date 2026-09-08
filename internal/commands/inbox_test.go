@@ -32,6 +32,9 @@ func TestAgentInboxClear(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedInbox(t, b, "worker", "chat:room", "one", "two")
+	if _, err := c.Store.DB.Exec(`UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT MAX(sequence) FROM task_workflow_message_sequence)`); err != nil {
+		t.Fatal(err)
+	}
 	res, err := h(t, "agent.inbox.clear")(c, registry.Params{"name": "worker"})
 	if err != nil {
 		t.Fatal(err)
