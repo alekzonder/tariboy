@@ -35,6 +35,18 @@ only when the iteration finishes normally (`done` / `no_i_am_done`); harness
 errors, timeouts, and kills leave messages for redelivery until they hit the DLQ
 (max 5 attempts).
 
+`messages_max_queue` defaults to 100 for new agents. Reaching it keeps the
+existing overflow behavior: later deliveries for that agent are stored in DLQ
+with result `queue_limit`, so the limit bounds runnable pending work rather than
+all message storage. Agent status derives the distinct pending count and reports
+when it is at or above the configured limit.
+
+Operators can physically clear one agent's pending queue with
+`tariboy agent inbox clear NAME` or `POST /api/agents/{name}/inbox/clear`.
+The bus removes that agent's unacknowledged, non-DLQ deliveries in one SQLite
+transaction and deletes only message rows orphaned by that operation. Processed
+and DLQ deliveries, shared messages, and other agents' deliveries are retained.
+
 ## Channel names
 
 Channel name prefixes: `agent`, `group`, `user`, `chat`. Well-known shapes:
