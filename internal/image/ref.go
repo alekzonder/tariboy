@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/imagefile"
 )
 
 var (
@@ -29,8 +31,8 @@ func ParseRef(s string) (Ref, error) {
 	if !refPart.MatchString(name) {
 		return Ref{}, fmt.Errorf("invalid image name %q (allowed: a-z 0-9 . _ -)", name)
 	}
-	if !refPart.MatchString(tag) {
-		return Ref{}, fmt.Errorf("invalid image tag %q (allowed: a-z 0-9 . _ -)", tag)
+	if !refPart.MatchString(tag) && imagefile.ValidateImageVersion(tag) != nil {
+		return Ref{}, fmt.Errorf("invalid image tag %q (allowed: a-z 0-9 . _ -, or a SemVer version)", tag)
 	}
 	return Ref{Name: name, Tag: tag}, nil
 }

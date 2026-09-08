@@ -58,8 +58,9 @@ several refs from one parsed source; each result has its own ref and digest,
 while frozen static image content, source provenance, and build time are
 shared. The requested refs and their snapshot/provenance metadata commit as one
 batch; a failure on any tag restores every ref exactly. Duplicate tags are
-rejected. A single tag and an omitted tag remain supported; omission means
-`latest`.
+rejected. When the operator CLI omits `--tag`, the build uses `image_version`
+from the frozen source. Older files without a version fall back to `latest`.
+Explicit tags, including `--tag latest`, take priority.
 
 Imports and retagged runnable artifacts, registry artifacts, reserved `basic`
 and `bare` refs, and controlled-improvement releases remain immutable.
@@ -68,13 +69,41 @@ before mutable markers existed migrate a legacy ordinary-build ref only when
 its authoritative source snapshot and provenance both match the current
 digest; otherwise the operator must choose another tag.
 
+## Image versions
+
+Set `image_version: 0.1.0` in `Tariboyfile.yaml` to version the image
+independently of `schema_version` and the Tariboy product version. Both source
+schemas accept SemVer 2.0.0, including prerelease and build metadata, without a
+`v` prefix. Complete SemVer versions are also valid image tags.
+
+Read or increment the version locally, without a running daemon:
+
+```bash
+tariboy image version get
+tariboy image version get --path ./reviewer-image/Tariboyfile.yaml
+tariboy image version update patch --path ./reviewer-image
+tariboy image build --path ./reviewer-image --name reviewer
+```
+
+Both version commands default to `./Tariboyfile.yaml`; `--path` accepts a
+file or directory. They print only the resulting version (or a JSON string
+with `--json`). `update major`, `update minor`, and `update patch` increment
+that component, reset lower components to zero, and remove prerelease/build
+suffixes. For example, `1.2.3-rc.1+build.7` becomes `1.3.0` after `update minor`.
+
+Updates atomically replace the file while preserving its permissions, YAML
+fields, and comments; YAML formatting may change. Missing or invalid versions
+produce an error without changing the file. Old sources may omit the field
+for build compatibility, but version commands require it.
+
 ## Schema version 2
 
-Schema v2 is strict and accepts only `schema_version`, `plugins`, `skills`, and
-`prompts`:
+Schema v2 is strict and accepts only `schema_version`, `image_version`,
+`plugins`, `skills`, and `prompts`:
 
 ```yaml
 schema_version: 2
+image_version: 0.1.0
 plugins:
   - name: whoami
   - name: messages

@@ -75,6 +75,7 @@ func (p *Prompt) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type Imagefile struct {
+	ImageVersion    string
 	SchemaVersion   int
 	From            string
 	Plugins         []Plugin
@@ -89,6 +90,7 @@ type Imagefile struct {
 }
 
 type rawImagefile struct {
+	ImageVersion    string            `yaml:"image_version"`
 	SchemaVersion   int               `yaml:"schema_version"`
 	From            string            `yaml:"from"`
 	Plugins         []Plugin          `yaml:"plugins"`
@@ -126,7 +128,11 @@ func Parse(path string) (*Imagefile, error) {
 	if err := dec.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if err := validateVersionField(data); err != nil {
+		return nil, err
+	}
 	im := &Imagefile{
+		ImageVersion:    raw.ImageVersion,
 		SchemaVersion:   raw.SchemaVersion,
 		From:            raw.From,
 		Plugins:         raw.Plugins,
