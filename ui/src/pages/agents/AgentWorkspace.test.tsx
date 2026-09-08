@@ -30,6 +30,7 @@ const agent = {
   group: null,
   interactive: false,
   cwd: "/srv/worker project",
+  current_goal_task_key: "IMPROVE-37",
 };
 
 beforeEach(() => {
@@ -52,6 +53,42 @@ afterEach(() => {
 });
 
 describe("AgentWorkspace", () => {
+  it("links the current Goal task and explains how Goal is selected", async () => {
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    expect(await screen.findByRole("link", { name: "IMPROVE-37" })).toHaveAttribute(
+      "href",
+      "/agents/local/worker/tasks?task=IMPROVE-37",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "How Goal is selected" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Tariboy keeps the selected task until it is released",
+    );
+  });
+
+  it("shows Goal help when no task is currently selected", async () => {
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={{ ...agent, current_goal_task_key: "" }} refresh={vi.fn()} />} />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    expect(await screen.findByText("No current goal")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "How Goal is selected" })).toBeInTheDocument();
+  });
+
   it("shows daemon-authoritative message queue saturation", async () => {
     vi.mocked(agentGetOn).mockResolvedValue({
       name: "worker", state: "running", loop_enabled: false, iterations: 0,

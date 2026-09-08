@@ -22,6 +22,7 @@ export interface AgentSummary {
   color?: string; // per-agent accent hex (#rrggbb), empty/absent when unset
   interactive?: boolean;
   cwd?: string;
+  current_goal_task_key?: string;
   budget?: AgentBudgetStatus;
 }
 

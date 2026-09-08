@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { NavLink, Navigate, useParams } from "react-router-dom";
+import { Link, NavLink, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useDaemons } from "@/components/DaemonProvider";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import AgentAdvancedTab from "./AgentAdvancedTab";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
+import { GoalHelp } from "@/components/GoalHelp";
 
 const TABS = [
   ["console", "Console"],
@@ -35,6 +36,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   unavailable?: boolean;
 }) {
   const { tab = "console" } = useParams();
+  const [searchParams] = useSearchParams();
   const { activeId, daemons, select } = useDaemons();
   const [connection, setConnection] = useState<"selecting" | "ready" | "unavailable">("selecting");
   const [status, setStatus] = useState<AgentStatus | null>(null);
@@ -116,6 +118,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     : tab === "tasks" ? <TasksWorkspace
       scopeAgent={agent.name}
       target={target}
+      initialTaskKey={searchParams.get("task") ?? undefined}
       onNotificationsChanged={() => void refreshHost(hostId)}
     />
     : tab === "configuration" ? <AgentConfigurationTab target={target} refresh={refresh} />
@@ -131,6 +134,18 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
               <span className="text-sm text-muted-foreground">{agent.state}</span>
               <span className="text-sm text-muted-foreground">{hostLabel || (hostId ? hostId : "Local")}</span>
               <span className="min-w-0 truncate text-sm text-muted-foreground">{agent.image}</span>
+              <span className="flex items-center gap-0.5 text-sm">
+                <span className="text-muted-foreground">Goal:</span>
+                {agent.current_goal_task_key ? (
+                  <Link
+                    className="font-mono text-primary underline-offset-4 hover:underline"
+                    to={`${base}/tasks?task=${encodeURIComponent(agent.current_goal_task_key)}`}
+                  >
+                    {agent.current_goal_task_key}
+                  </Link>
+                ) : <span className="text-muted-foreground">No current goal</span>}
+                <GoalHelp />
+              </span>
             </div>
             <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
               <span className="font-mono text-muted-foreground">cwd:</span>
