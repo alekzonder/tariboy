@@ -405,10 +405,12 @@ environment values, tokens, secrets, cwd/workdir paths, or user files.
 Malformed state resets only the Workspace canvas.
 
 **Send files**, Attach, and terminal file drops all upload through the selected
-server's `PUT /api/files` endpoint. Uploads have no agent destination: files
-live in the server's shared files directory and the returned absolute paths
-are inserted into the corresponding draft or reported when no terminal is
-available. Console and every Workspace tile retain their explicit host target.
+server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
+The browser sends each `File` as the raw request body instead of building a
+base64/JSON copy. Uploads have no agent destination: files live in the server's
+shared files directory and the returned absolute paths are inserted into the
+corresponding draft or reported when no terminal is available. Console and
+every Workspace tile retain their explicit host target.
 
 The terminal compose draft is also non-persistent in Workspace: typed text and
 uploaded server paths remain in the mounted tile's memory and are discarded

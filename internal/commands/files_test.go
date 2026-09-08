@@ -148,12 +148,8 @@ func TestServerUploadFiles(t *testing.T) {
 	if _, err := upload(c, registry.Params{"name": "bad.txt", "content": "!"}); err == nil {
 		t.Fatal("accepted invalid base64")
 	}
-	large, err := upload(c, registry.Params{"name": "large.txt", "content": strings.Repeat("A", 24<<20)})
-	if err != nil {
-		t.Fatalf("rejected 18 MiB upload: %v", err)
-	}
-	if got := large.(map[string]any)["bytes"]; got != 18<<20 {
-		t.Fatalf("uploaded bytes = %v", got)
+	if _, err := upload(c, registry.Params{"name": "large.txt", "content": strings.Repeat("A", 24<<20)}); err == nil {
+		t.Fatal("legacy JSON route accepted an 18 MiB upload")
 	}
 	outside := t.TempDir()
 	symlinkBase := t.TempDir()
@@ -183,6 +179,29 @@ func TestServerUploadRejectsDeclaredOversizedHTTPBodyBeforeReading(t *testing.T)
 	}
 	if reader.Len() != len(body) {
 		t.Fatal("read a body whose declared size exceeds the limit")
+	}
+	entries, err := os.ReadDir(c.BaseDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("oversized request wrote files: %v, %v", entries, err)
+	}
+}
+
+func TestServerUploadRejectsOversizedStreamedHTTPBody(t *testing.T) {
+	c := &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	server := api.NewServer(BuildRegistry(), c)
+	body := `{"name":"large.txt","content":"` + strings.Repeat("A", 24<<20) + `"}`
+	reader := strings.NewReader(body)
+	request := httptest.NewRequest(http.MethodPut, "/api/files", reader)
+	request.ContentLength = -1
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if reader.Len() == 0 {
+		t.Fatal("read the entire oversized body before rejecting it")
 	}
 	entries, err := os.ReadDir(c.BaseDir)
 	if err != nil || len(entries) != 0 {
@@ -227,5 +246,39 @@ func TestCpSharedUpload(t *testing.T) {
 	server.Config.Handler.ServeHTTP(response, request)
 	if response.Code != http.StatusMethodNotAllowed && response.Code != http.StatusNotFound {
 		t.Fatalf("old upload route remains: %d", response.Code)
+	}
+}
+
+func TestCpSharedUploadUsesRawBody(t *testing.T) {
+	type seenRequest struct {
+		path, name, contentType, body string
+		contentLength                 int64
+	}
+	seen := make(chan seenRequest, 1)
+	socket := filepath.Join(t.TempDir(), "api.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		seen <- seenRequest{r.URL.Path, r.URL.Query().Get("name"), r.Header.Get("Content-Type"), string(body), r.ContentLength}
+		api.WriteOK(w, map[string]any{"path": "files/id/notes.txt", "abs": "/server/files/id/notes.txt", "bytes": len(body)})
+	}))
+	server.Listener.Close()
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+
+	src := filepath.Join(t.TempDir(), "notes #1.txt")
+	if err := os.WriteFile(src, []byte("shared"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cpCommand().Handler(&registry.Ctx{Socket: socket}, registry.Params{"src": src}); err != nil {
+		t.Fatal(err)
+	}
+	got := <-seen
+	if got.path != "/api/files/raw" || got.name != "notes #1.txt" || got.contentType != "application/octet-stream" || got.body != "shared" || got.contentLength != 6 {
+		t.Fatalf("request = %+v", got)
 	}
 }

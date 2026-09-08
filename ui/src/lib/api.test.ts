@@ -15,6 +15,7 @@ function mockFetch(status: number, body: unknown, capture?: (url: string, init: 
       ok: status >= 200 && status < 300,
       status,
       text: async () => JSON.stringify(body),
+      json: async () => body,
     } as unknown as Response);
   });
 }
@@ -106,20 +107,20 @@ describe("api extras (M11b carry-forward)", () => {
 });
 
 describe("interactive terminal + upload helpers", () => {
-  it("serverUploadFile targets the shared upload endpoint and returns abs", async () => {
+  it("serverUploadFile streams the File to the raw upload endpoint", async () => {
     let seenInit: RequestInit = {};
     let seenURL = "";
     vi.stubGlobal("fetch", mockFetch(200, {
       ok: true,
       result: { path: "files/one/x.txt", abs: "/server/files/one/x.txt", bytes: 2 },
     }, (u, i) => { seenURL = u; seenInit = i; }));
-    const file = new File(["hi"], "x.txt");
+    const arrayBuffer = vi.fn();
+    const file = { name: "x #.txt", size: 2, arrayBuffer } as unknown as File;
     const res = await serverUploadFile(file);
-    const body = JSON.parse(seenInit.body as string);
-    expect(seenURL).toBe("/api/files");
+    expect(seenURL).toBe("/api/files/raw?name=x%20%23.txt");
     expect(seenInit.method).toBe("PUT");
-    expect(body.name).toBe("x.txt");
-    expect(body.content).toBe(btoa("hi"));
+    expect(seenInit.body).toBe(file);
+    expect(arrayBuffer).not.toHaveBeenCalled();
     expect(res.abs).toBe("/server/files/one/x.txt");
   });
 
@@ -136,7 +137,7 @@ describe("interactive terminal + upload helpers", () => {
     } as unknown as File;
 
     await serverUploadFile(file);
-    expect(arrayBuffer).toHaveBeenCalledOnce();
+    expect(arrayBuffer).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledOnce();
   });
 

@@ -90,6 +90,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/image-imports/{id}/apply", s.serveImageImportApply)
 	mux.HandleFunc("GET /api/groups/{name}/export", s.serveTeamExport)
 	mux.HandleFunc("POST /api/team-imports", s.serveTeamImportPreview)
+	mux.HandleFunc("PUT /api/files/raw", s.serveFileUpload)
 	if s.tasks != nil {
 		mux.HandleFunc("GET /api/tasks/ws", s.serveTasks)
 	}
@@ -113,6 +114,30 @@ func (s *Server) Handler() http.Handler {
 		WriteErr(w, http.StatusNotFound, "not_found", "unknown route "+r.Method+" "+r.URL.Path)
 	})
 	return VersionHeader(s.accessLog(mux))
+}
+
+func (s *Server) serveFileUpload(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	if r.ContentLength > MaxFileUploadBytes {
+		WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "file exceeds 1 GiB")
+		return
+	}
+	result, err := SaveUploadedFile(s.cctx.BaseDir, r.URL.Query().Get("name"), r.Body, MaxFileUploadBytes)
+	if err != nil {
+		var userErr UserError
+		if errors.As(err, &userErr) {
+			status := userErr.Status
+			if status == 0 {
+				status = http.StatusBadRequest
+			}
+			WriteErr(w, status, userErr.Code, userErr.Msg)
+			return
+		}
+		s.cctx.Log.Error("file upload failed", "err", err)
+		WriteErr(w, http.StatusInternalServerError, "internal", "internal error, see daemon log")
+		return
+	}
+	WriteOK(w, result)
 }
 
 func (s *Server) serveScriptLogDownload(w http.ResponseWriter, r *http.Request) {

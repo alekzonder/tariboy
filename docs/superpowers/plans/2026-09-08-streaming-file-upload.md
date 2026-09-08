@@ -34,20 +34,20 @@
 - Produces: `PUT /api/files/raw?name=<url-encoded-name>` returning the standard envelope around `UploadResult`.
 - Preserves: registry command `files.upload` at `PUT /api/files` with a 16 MiB decoded limit.
 
-- [ ] **Step 1: Write failing raw-route tests**
+- [x] **Step 1: Write failing raw-route tests**
 
 Add tests that submit an 18 MiB streaming reader to `/api/files/raw`, verify
 the file bytes/permissions/result, reject a declared size above 1 GiB without
 reading, and call `SaveUploadedFile` with a small limit to prove an
 unknown-length overflow removes its partial directory.
 
-- [ ] **Step 2: Run the daemon tests to verify RED**
+- [x] **Step 2: Run the daemon tests to verify RED**
 
 Run: `go test ./internal/api ./internal/commands -run 'Upload|CpShared' -count=1`
 
 Expected: FAIL because `/api/files/raw` and `SaveUploadedFile` do not exist.
 
-- [ ] **Step 3: Implement the minimum streaming writer and route**
+- [x] **Step 3: Implement the minimum streaming writer and route**
 
 Implement one `io.LimitReader(body, maxBytes+1)` copy into an `os.Root`-opened
 `0600` file under a unique `0700` directory. Validate the filename before
@@ -58,7 +58,7 @@ the raw route in `Server.Handler`, reject oversized declared bodies first, map
 Set the legacy handler back to `16 << 20`; decode base64 as before and pass a
 `bytes.NewReader(raw)` to `SaveUploadedFile`.
 
-- [ ] **Step 4: Run the daemon tests to verify GREEN**
+- [x] **Step 4: Run the daemon tests to verify GREEN**
 
 Run: `go test ./internal/api ./internal/commands -run 'Upload|CpShared' -count=1`
 
@@ -80,20 +80,20 @@ Expected: PASS.
 - Produces: `client.UploadFile(route string, body io.Reader, size int64) (json.RawMessage, error)`.
 - Preserves: `client.Upload` as the compose gzip POST helper.
 
-- [ ] **Step 1: Write failing client contract tests**
+- [x] **Step 1: Write failing client contract tests**
 
 Change the UI test to require a `PUT` whose body is the exact `File`, whose URL
 contains the encoded name, and which never calls `arrayBuffer()`. Change the CLI
 test server to require the raw path, octet-stream content type, declared file
 size, and exact request bytes.
 
-- [ ] **Step 2: Run client tests to verify RED**
+- [x] **Step 2: Run client tests to verify RED**
 
 Run: `go test ./internal/commands -run 'CpShared' -count=1 && cd ui && npm test -- src/lib/api.test.ts`
 
 Expected: FAIL because both clients still create JSON/base64 bodies.
 
-- [ ] **Step 3: Implement minimum streaming clients**
+- [x] **Step 3: Implement minimum streaming clients**
 
 Make `serverUploadFile` pass the `File` to `apiRawOn`, decode the successful
 standard envelope, and remove `fileBase64`. Add a private raw-request helper in
@@ -101,7 +101,7 @@ the Go client, keep `Upload` as its POST/gzip wrapper, and add `UploadFile` as
 its PUT/octet-stream wrapper. In `cpCommand`, replace `os.ReadFile` with
 `os.Open`, `Stat`, and `UploadFile`.
 
-- [ ] **Step 4: Run client tests to verify GREEN**
+- [x] **Step 4: Run client tests to verify GREEN**
 
 Run: `go test ./internal/commands ./internal/client -run 'Upload|CpShared' -count=1 && cd ui && npm test -- src/lib/api.test.ts`
 
@@ -121,13 +121,13 @@ Expected: PASS.
 **Interfaces:**
 - Documents: raw 1 GiB UI/CLI flow and retained 16 MiB JSON/base64 compatibility route.
 
-- [ ] **Step 1: Update current product documentation**
+- [x] **Step 1: Update current product documentation**
 
 Describe `PUT /api/files/raw` as the path used by Desktop and `tariboy cp`, the
 1 GiB streaming bound and partial-file cleanup, and the retained 16 MiB limit
 for `files upload`/legacy JSON clients.
 
-- [ ] **Step 2: Run focused suites**
+- [x] **Step 2: Run focused suites**
 
 Run: `go test ./internal/api ./internal/commands ./internal/client -count=1`
 
@@ -135,7 +135,7 @@ Run: `cd ui && npm test -- src/lib/api.test.ts src/components/SendFilesButton.te
 
 Expected: PASS.
 
-- [ ] **Step 3: Run the final branch gate**
+- [x] **Step 3: Run the final branch gate**
 
 Run: `make check`
 
@@ -143,7 +143,7 @@ Run: `git diff --check`
 
 Expected: both exit 0. Do not run `make full-check`.
 
-- [ ] **Step 4: Inspect and commit**
+- [x] **Step 4: Inspect and commit**
 
 Inspect the complete diff, confirm no generated Desktop or unrelated files are
 present, and commit the implementation and documentation with a focused

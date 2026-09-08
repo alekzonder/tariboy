@@ -5,13 +5,15 @@ import { SendFilesButton } from "./SendFilesButton";
 import * as api from "@/lib/api";
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
     // Return a shared absolute path for each uploaded file name.
-    const rel = init?.body ? JSON.parse(init.body as string).name : "x";
+    const rel = new URL(url, "http://local").searchParams.get("name") ?? "x";
+    const envelope = { ok: true, result: { path: rel, abs: `/server/files/one/${rel}`, bytes: 2 } };
     return Promise.resolve({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ ok: true, result: { path: rel, abs: `/server/files/one/${rel}`, bytes: 2 } }),
+      text: async () => JSON.stringify(envelope),
+      json: async () => envelope,
     } as Response);
   }));
 });
@@ -21,9 +23,11 @@ describe("SendFilesButton", () => {
   it("keeps completed upload paths when a later file fails", async () => {
     const onUploaded = vi.fn();
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    const envelope = { ok: true, result: { abs: "/server/files/one/a.txt", path: "files/one/a.txt", bytes: 1 } };
     fetchMock.mockImplementationOnce(() => Promise.resolve({
       ok: true, status: 200,
-      text: async () => JSON.stringify({ ok: true, result: { abs: "/server/files/one/a.txt", path: "files/one/a.txt", bytes: 1 } }),
+      text: async () => JSON.stringify(envelope),
+      json: async () => envelope,
     } as Response)).mockRejectedValueOnce(new Error("Upload failed"));
     render(<SendFilesButton daemon={null} onUploaded={onUploaded} />);
     await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, [new File(["a"], "a.txt"), new File(["b"], "b.txt")]);
@@ -54,8 +58,8 @@ describe("SendFilesButton", () => {
 
     const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls).toHaveLength(2);
-    expect(calls[0][0]).toBe("/api/files");
-    expect(JSON.parse(calls[0][1].body as string).name).toBe("a.txt");
+    expect(calls[0][0]).toBe("/api/files/raw?name=a.txt");
+    expect(calls[0][1].body).toBe(a);
   });
 
   it("passes the target daemon to serverUploadFile", async () => {
