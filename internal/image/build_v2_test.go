@@ -534,3 +534,29 @@ func TestValidateV2RejectsAggregatePromptLayersAboveLimit(t *testing.T) {
 		t.Fatalf("ValidateV2 error = %v", err)
 	}
 }
+
+func TestValidateV2ReadsPromptFromDeclaredSiblingSkill(t *testing.T) {
+	base := t.TempDir()
+	source := filepath.Join(base, "images", "reviewer")
+	skill := writeTestSkill(t, filepath.Join(base, "skills"), "loop")
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill, "finish-iteration.md"), []byte("finish\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	validated, err := ValidateV2Detailed(&imagefile.V2{
+		SchemaVersion: 2,
+		Dir:           source,
+		Skills:        []imagefile.SkillEntry{{Dir: "../../skills/loop"}},
+		Prompts:       []imagefile.PromptEntry{{File: "../../skills/loop/finish-iteration.md"}},
+	}, imagefile.ResolveRoots{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := validated.Template.Entries[0]
+	if entry.Source != "../../skills/loop/finish-iteration.md" || entry.Category != "source" || entry.Size != 7 {
+		t.Fatalf("prompt entry = %#v", entry)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
@@ -39,6 +40,10 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 		plugins = append(plugins, ManifestPlugin{Name: plugin.Name})
 	}
 	skills := make([]agentskills.Prepared, 0, len(src.Skills))
+	sourceSkills := roots.SourceSkills
+	if sourceSkills == nil {
+		sourceSkills = make(map[string]string)
+	}
 	for i, skill := range src.Skills {
 		resolved, err := imagefile.ResolveSkillDirectory(src.Dir, skill.Dir, roots)
 		if err != nil {
@@ -58,6 +63,9 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 			}
 		}
 		skills = append(skills, prepared)
+		if roots.SourceSkills == nil && (strings.HasPrefix(skill.Dir, "./") || strings.HasPrefix(skill.Dir, "../")) {
+			sourceSkills[skill.Dir] = resolved.Path
+		}
 	}
 	if err := agentskills.ValidateSet(skills); err != nil {
 		return preparedV2{}, err
@@ -65,12 +73,14 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 	entries := make([]TemplateEntry, 0, len(src.Prompts))
 	layers := map[string][]byte{}
 	var totalPromptBytes int64
+	promptRoots := roots
+	promptRoots.SourceSkills = sourceSkills
 	for i, prompt := range src.Prompts {
 		if prompt.Runtime != "" {
 			entries = append(entries, TemplateEntry{Kind: "runtime", Runtime: prompt.Runtime})
 			continue
 		}
-		resolved, err := imagefile.ResolvePromptFile(src.Dir, prompt.File, roots)
+		resolved, err := imagefile.ResolvePromptFile(src.Dir, prompt.File, promptRoots)
 		if err != nil {
 			return preparedV2{}, fmt.Errorf("prompts[%d]: %w", i, err)
 		}

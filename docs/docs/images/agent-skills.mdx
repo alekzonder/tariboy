@@ -198,7 +198,9 @@ shell or general environment-variable expansion. Validation warns that an
 absolute source makes the original build host-bound. Agent-authored image
 builds further confine relative and absolute skill references to that agent's
 managed workdir. Store and plugin references cannot escape their declared
-roots. Prompt paths retain their existing traversal restrictions.
+roots. A prompt may use `../` only when its target remains below one of these
+explicitly declared source-relative skill directories; the build reads the
+file from the same frozen skill snapshot.
 
 For example, `store/images/reviewer/Tariboyfile.yaml` can package
 `store/skills/code-review` with:
@@ -206,6 +208,8 @@ For example, `store/images/reviewer/Tariboyfile.yaml` can package
 ```yaml
 skills:
   - dir: ../../skills/code-review
+prompts:
+  - file: ../../skills/code-review/review-policy.md
 ```
 
 An ordinary build freezes explicitly referenced sibling skill directories
