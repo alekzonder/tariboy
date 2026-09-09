@@ -7,7 +7,8 @@ sidebar:
 ---
 
 `whoami` exposes read-only identity information through the per-agent tools
-socket. It is a historical core capability and is included in `basic:latest`.
+socket. It is a historical core capability included in the official Store's
+`basic` source.
 Schema-v2 images must still declare it explicitly.
 
 ## Capability surface
@@ -32,14 +33,14 @@ drift on stderr without changing command output or the exit code.
 
 ## Prompt integration
 
-Package the Store skill and place the runtime `identity` marker where the live
+Package the image skill and place the runtime `identity` marker where the live
 identity block belongs:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: whoami
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/whoami
+  - dir: ../../skills/whoami
 prompts:
   - runtime: identity
 ```

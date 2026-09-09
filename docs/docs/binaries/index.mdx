@@ -1,6 +1,6 @@
 ---
 title: Binaries & commands
-description: Core binaries and the bundled Telegram plugin built by make build.
+description: Core binaries and the Telegram plugin built by make build.
 sidebar:
   label: Overview
   icon: terminal
@@ -20,11 +20,10 @@ Six real binaries are built by `make build`:
 The daemon installs or refreshes the Telegram plugin from its sibling binary at
 startup. Optional external plugins are built and distributed independently.
 
-`make build` also assembles the canonical
-`internal/builtinimages/source` image into an ignored bundle embedded in
-`tariboyd`. On activation the daemon atomically
-installs or refreshes the reserved `basic:latest` ref, so every binary-based
-installation path receives the same default image.
+`make build` does not embed agent image sources or skills. Register a Store such
+as `git@github.com:alekzonder/tariboy-store.git`, refresh it, and build the
+desired image on each daemon that needs it. The daemon synthesizes only the
+reserved empty `bare:latest` image.
 
 ## Client/daemon version drift
 
@@ -36,9 +35,9 @@ its own path, strictly on **stderr**. It does not
 change stdout or the exit code, so output parsing is unaffected. A daemon old
 enough to send no header produces no warning.
 
-This matters because packaged skill scripts and the legacy agent `tasks` /
-`i-am-done` compatibility shims select a versioned Store skill tree: without the warning, a script too old to know a
-newer flag looks like it simply did nothing.
+This matters because packaged skill scripts and the agent `tasks` / `i-am-done`
+compatibility shims execute from the active image bridge: without the warning,
+a script too old to know a newer flag looks like it simply did nothing.
 `scripts/whoami.sh` prints both `client_version` and `daemon_version` for exactly this
 reason — it is the first command to run when the tools behave strangely.
 

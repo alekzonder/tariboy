@@ -287,17 +287,12 @@ An explicit agent `PATH` override must retain a Tasks command location. When
 `TARIBOY_TOOLS_SOCKET` is non-empty, it uses that identity-bound socket and
 fails closed; when absent, it uses the host Unix daemon socket as the customer
 actor. Each compatibility shim `exec`s its owning skill script by an **absolute
-path** inside the running daemon's versioned Store. Every other capability is
-invoked through its packaged skill-local `scripts/*.sh` launcher.
+path** inside the active image bridge. Every other capability is invoked
+through its packaged skill-local `scripts/*.sh` launcher.
 
-Because the path is absolute, shims written at create time would otherwise
-outlive the daemon that wrote them, leaving every agent on a frozen client whose
-CLI predates the daemon's flags. So the daemon **rewrites the shims of every
-stored agent at startup**, before any engine or adoption starts — disabled
-agents included, since they may be enabled later. The rewrite is skipped when a
-file already holds exactly the wanted bytes, so restarting on the same version
-changes nothing on disk. A shim that cannot be written is logged against its
-agent and the rest of the startup continues.
+The launch gate validates that each required launcher exists inside the
+candidate image, is regular, and is executable before replacing the current
+bridge or shims. Failure leaves the previous image and its shims active.
 
 Lifecycle is normally driven through the `tariboy daemon` subcommands rather
 than launching the binary directly. See

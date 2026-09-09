@@ -9,7 +9,7 @@ sidebar:
 `status` gives an agent a small, operator-visible progress surface. Messages
 are intended to stay on one line, although the API stores the supplied string
 without enforcing that presentation convention. It is an optional capability
-included in `basic:latest`.
+included in the official Store's `basic` source.
 
 ## Capability surface
 
@@ -36,13 +36,13 @@ through `tariboy agent status history`.
 
 ## Prompt integration
 
-Package the Store skill to expose the procedure:
+Package the image skill to expose the procedure:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: status
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/status
+  - dir: ../../skills/status
 ```
 
 There is no status runtime placeholder. The current status is read on demand

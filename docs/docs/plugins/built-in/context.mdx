@@ -7,7 +7,7 @@ sidebar:
 ---
 
 `context` provides one durable working-memory document per agent. It is an
-optional capability included in `basic:latest`.
+optional capability included in the official Store's `basic` source.
 
 ## Capability surface
 
@@ -34,14 +34,14 @@ removal.
 
 ## Prompt integration
 
-The capability gates the route, the packaged Store skill explains replacement,
+The capability gates the route, the packaged image skill explains replacement,
 and the runtime marker inserts the current text:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: context
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/context
+  - dir: ../../skills/context
 prompts:
   - runtime: context
 ```

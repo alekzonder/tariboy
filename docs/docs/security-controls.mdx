@@ -64,9 +64,9 @@ and refuses regular files, directories, or symlinks not owned by the verified
 Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
 
-Image builds resolve only literal `$STORE`, `$CURRENT_VERSION_STORE`, and
-`$PLUGINS` roots, source-relative paths, or explicit operator absolute paths.
-Prompt paths and Store/plugin references reject traversal outside their roots.
+Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
+or explicit operator absolute paths. Prompt paths and plugin references reject
+traversal outside their roots.
 Source-relative skill directories may use `../` to reference a sibling tree;
 ordinary builds freeze only those explicitly declared skills alongside the
 source snapshot. Symlinks, missing or non-regular files, and oversized prompt

@@ -32,6 +32,10 @@ runtime version. Validation never repairs or reorders the template.
 Use **Open in VS Code** on an image detail page when the source CWD still exists
 on the selected local or SSH host. Imported images have no source CWD.
 
+**New Image** creates a managed schema-v2 source from only a name and optional
+initial prompt. The generated project is prompt-only; edit its
+`Tariboyfile.yaml` to declare packaged skills or plugins before building.
+
 The equivalent operator command is:
 
 ```bash
@@ -62,8 +66,8 @@ rejected. When the operator CLI omits `--tag`, the build uses `image_version`
 from the frozen source. Older files without a version fall back to `latest`.
 Explicit tags, including `--tag latest`, take priority.
 
-Imports and retagged runnable artifacts, registry artifacts, reserved `basic`
-and `bare` refs, and controlled-improvement releases remain immutable.
+Imports and retagged runnable artifacts, registry artifacts, the reserved
+`bare` ref, and controlled-improvement releases remain immutable.
 An ordinary build never converts an existing immutable ref. Daemons created
 before mutable markers existed migrate a legacy ordinary-build ref only when
 its authoritative source snapshot and provenance both match the current
@@ -93,8 +97,8 @@ running as `agent` with defaults, `team` lives at
 `/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
 `TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
 A local source such as `/srv/company-images` is used in place, without a copy.
-These user Stores are separate from the built-in `store/versions/` tree and
-the `$STORE` prompt root.
+Stores are the source of canonical agent images and skills; the daemon no
+longer installs a separate built-in Store tree.
 
 Only the registration's name and source are persisted in the daemon database.
 Viewing a Store reads the current disk inventory and `image_version` values;
@@ -169,11 +173,11 @@ plugins:
   - name: workdir
   - name: jira
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/whoami
-  - dir: $CURRENT_VERSION_STORE/skills/messages
-  - dir: $CURRENT_VERSION_STORE/skills/context
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
-  - dir: ./skills/code-review
+  - dir: ../../skills/whoami
+  - dir: ../../skills/messages
+  - dir: ../../skills/context
+  - dir: ../../skills/workdir
+  - dir: ../shared-skills/code-review
   - dir: $PLUGINS/jira/2.5.0/skills/triage
 prompts:
   - runtime: identity
@@ -182,7 +186,7 @@ prompts:
   - file: $PLUGINS/jira/2.5.0/prompts/reviewer.md
   - runtime: context
   - runtime: workdir
-  - file: ./task.md
+  - file: ../../skills/loop/finish-iteration.md
   - runtime: user-prompt
   - file: /srv/tariboy/prompts/finish.md
 ```
@@ -195,8 +199,6 @@ Each static `file` is resolved and embedded at build time. Supported forms are:
 
 | Form | Resolves from |
 | --- | --- |
-| `$STORE/...` | The common Store root, including all installed product versions |
-| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
 | `./...` | The original directory containing `Tariboyfile.yaml` |
 | `../...` below a declared skill | That skill's frozen source snapshot |
@@ -250,17 +252,11 @@ present. Each singleton placeholder may appear at most once. Empty runtime
 values add no text. The **Template** tab shows static paths, categories, sizes,
 hashes, and runtime markers in their exact order without draining messages.
 
-## Store and external plugins
+## External plugins
 
-Built-in static prompt assets are installed under:
-
-```text
-$STORE/versions/<tariboy-version>/skills/...
-```
-
-`$CURRENT_VERSION_STORE` points at that version directory. `$STORE` stays
-version-independent so a source may intentionally reference a built-in prompt
-from another installed version.
+Image-owned static prompts and complete Agent Skill trees come from the image
+source and are copied into the runnable artifact. Dynamic runtime placeholders
+and built-in or external plugin implementations remain daemon-owned.
 
 External plugins are separate:
 
@@ -307,7 +303,9 @@ saved image ref and portable filename in a toast. **Import runnable image** veri
 archive before installation. Validation rejects unmanifested content, unsafe or
 special-file members, duplicate paths, malformed schema-v2 metadata, prompt
 layer/hash mismatches, and compressed or expanded limit violations. Import does
-not rebuild the image. The import preview exposes editable **Import name** and
+not rebuild the image. Preview, apply, assignment, and activation also validate
+plugin, runtime, skill, launcher, and harness compatibility against the
+destination daemon before publication. The import preview exposes editable **Import name** and
 **Import tag** fields. The same ref and digest are idempotent; when the ref
 already names different bytes, choose another name or tag. That explicit retag
 receives a newly rewritten manifest and digest.
@@ -346,22 +344,21 @@ for this operation, not source backup or persistent state.
 
 ## Built-in images and compatibility
 
-- `bare:latest` is a schema-v2 image with no plugins and an empty prompt. Its
+- `bare:latest` is daemon-synthesized with no plugins and an empty prompt. Its
   terminal-only behavior is runtime policy.
-- `basic:latest` explicitly declares every plugin, packaged Store skill,
-  runtime placeholder, and mandatory finish prompt it uses, including the
-  instruction-only `workdir` plugin, the `goal` capability, their skills, `runtime: workdir`, and
-  `runtime: goal`. New agents receive the
-  current managed generation. A daemon upgrade may advance this managed ref,
-  while active agents and pending assignments continue resolving their pinned
-  pre-upgrade digest until the operator selects another image.
-- Existing schema-v1 sources and images retain their historical behavior.
-  Compatibility is selected by `schema_version`; new sources should use v2.
+- The official Store's `basic` source explicitly declares every plugin,
+  packaged skill, runtime placeholder, and mandatory finish prompt it uses.
+  Register and refresh `tariboy-store`, then build `official/basic`; daemon
+  upgrades do not publish or replace that image.
+- New build and validation requests require schema v2. Existing self-contained
+  schema-v1 runnable archives remain readable and runnable only when they carry
+  every byte their historical contract requires; they are not valid editable
+  sources for a new build.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
-`$CURRENT_VERSION_STORE/skills/tasks` when an image should expose its agent
-command and instructions. Add `plugins: [{name: goal}]`, package
-`$CURRENT_VERSION_STORE/skills/goal`, and add `runtime: goal` when the image
+`../../skills/tasks` when a Store image should expose its agent command and
+instructions. Add `plugins: [{name: goal}]`, package `../../skills/goal`, and
+add `runtime: goal` when the image
 should receive the daemon-authoritative selected goal. The rendered task title
 and description are untrusted task input, not daemon instructions or lifecycle
 authority.

@@ -7,8 +7,8 @@ sidebar:
 ---
 
 `loop` gives an agent the completion and self-control operations for its
-iteration loop. It is a historical core capability and is included in
-`basic:latest`; schema-v2 images must declare it explicitly.
+iteration loop. It is a historical core capability included in the official
+Store's `basic` source; schema-v2 images must declare it explicitly.
 
 ## Capability surface
 
@@ -21,7 +21,7 @@ iteration loop. It is a historical core capability and is included in
 | `scripts/loop.sh stop` | Disable this agent's loop without impersonating another agent. |
 
 Provisioning writes `i-am-done` as an executable shim only when `loop` is
-enabled. The shim calls `loop/scripts/loop.py done` inside the versioned Store
+enabled. The shim calls `loop/scripts/loop.py done` inside the active image bridge
 skill directory.
 Image activation adds or removes it to match the next active plugin set.
 
@@ -50,10 +50,10 @@ Schema v2 packages the Loop skill and places the mandatory file explicitly:
 plugins:
   - name: loop
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/loop
+  - dir: ../../skills/loop
 prompts:
   - runtime: user-prompt
-  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md
+  - file: ../../skills/loop/finish-iteration.md
 ```
 
 The prompt tells agents to wait for dispatched subagents and terminal-tool jobs,

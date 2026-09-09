@@ -84,10 +84,10 @@ messages bus, so notifications survive restarts and can wake enabled agents.
 plugins:
   - name: tasks
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/tasks
+  - dir: ../../skills/tasks
 ```
 
-The packaged Store skill teaches both flexible and workflow-managed operation. There is
+The packaged image skill teaches both flexible and workflow-managed operation. There is
 no general Tasks runtime marker: ordinary work is queried through `ttasks`, and
 a managed assignment supplies its work packet through the workflow launch
 path.

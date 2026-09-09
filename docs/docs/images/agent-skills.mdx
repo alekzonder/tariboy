@@ -187,8 +187,6 @@ Skill directories support these explicit source forms:
 
 | Form | Resolves from |
 | --- | --- |
-| `$STORE/...` | The common Store root across installed Tariboy versions |
-| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
 | `./...` or `../...` | The directory containing `Tariboyfile.yaml`, including sibling directories |
 | `/absolute/path/...` | An operator-supplied absolute Unix path |
@@ -197,13 +195,13 @@ Only the literal variables in this table are expanded. Tariboy does not apply
 shell or general environment-variable expansion. Validation warns that an
 absolute source makes the original build host-bound. Agent-authored image
 builds further confine relative and absolute skill references to that agent's
-managed workdir. Store and plugin references cannot escape their declared
-roots. A prompt may use `../` only when its target remains below one of these
+managed workdir. Plugin references cannot escape their declared root. A prompt
+may use `../` only when its target remains below one of these
 explicitly declared source-relative skill directories; the build reads the
 file from the same frozen skill snapshot.
 
-For example, `store/images/reviewer/Tariboyfile.yaml` can package
-`store/skills/code-review` with:
+For example, `images/reviewer/Tariboyfile.yaml` in a Store can package
+`skills/code-review` with:
 
 ```yaml
 skills:
@@ -283,7 +281,7 @@ remains in the manifest:
 | --- | --- |
 | `name`, `description` | Validated `SKILL.md` identity |
 | `source`, `category` | Original declaration and resolved source class |
-| `client_version` | Producing Store version for a skill sourced from `$CURRENT_VERSION_STORE` |
+| `client_version` | Legacy producer metadata, when present |
 | `archive_root` | Canonical `skills/<name>` location in the image |
 | `file_count`, `size` | Validated aggregate contents |
 | `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |
@@ -401,6 +399,6 @@ before skill selection, such as closing every delivered message and respecting
 a managed task packet's least-privilege boundary.
 
 Images using `llm-as-judge`, `image-creator`, or `schedule` should package the
-same-named Store skill explicitly. Declaring a plugin never injects its skill or
+same-named image skill explicitly. Declaring a plugin never injects its skill or
 legacy prompt in schema v2. Role responsibilities belong in the image's own
 ordered prompt layer; task identity and input remain runtime layers.

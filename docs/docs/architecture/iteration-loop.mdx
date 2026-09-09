@@ -11,8 +11,8 @@ directory and its own loop. It does not run continuously — it runs a series of
 **iterations**. On each iteration the daemon:
 
 1. prepares a prompt — schema v2 renders static image layers and current runtime
-   placeholders in their declared order; schema v1 keeps its historical
-   assembly behavior;
+   placeholders in their declared order; a self-contained legacy schema-v1
+   artifact keeps its historical assembly behavior;
 2. launches the harness (e.g. Claude) under the [shim](/docs/architecture/shim)
    for exactly one pass;
 3. records the outcome, iteration logs, AI usage, and audit timeline.
@@ -170,8 +170,8 @@ The built-in `workdir` plugin is instruction-only. The `goal` capability adds
 only `scripts/goal.sh set <TASK-KEY>`, allowing an agent that started without a
 Goal to select an active task assigned to itself and attribute subsequent AI
 requests. It cannot replace a different Goal already attached to that
-iteration. A schema-v2 image explicitly packages their Store skills and
-composes the matching runtime value. See
+iteration. A schema-v2 image explicitly packages their skills and composes the
+matching runtime value. See
 [built-in plugins](/docs/plugins/built-in).
 
 See [Built-in plugins](/docs/plugins/built-in) for the complete capability,
