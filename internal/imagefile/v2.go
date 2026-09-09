@@ -7,14 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"gopkg.in/yaml.v3"
 )
-
-var runtimePromptNames = map[string]bool{
-	"identity": true, "goal": true, "context": true, "messages": true,
-	"awaiting-replies": true, "user-prompt": true, "one-shot": true,
-	"workdir": true,
-}
 
 const (
 	maxV2PromptEntries = 1024
@@ -116,7 +111,7 @@ func ParseV2(path string) (*V2, error) {
 			return nil, fmt.Errorf("prompts[%d]: exactly one of file or runtime is required", i)
 		}
 		if prompt.Runtime != "" {
-			if !runtimePromptNames[prompt.Runtime] {
+			if _, ok := imagecontract.Runtime(prompt.Runtime); !ok {
 				return nil, fmt.Errorf("prompts[%d]: unknown runtime placeholder %q", i, prompt.Runtime)
 			}
 			if seenRuntime[prompt.Runtime] {

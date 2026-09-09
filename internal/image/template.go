@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/imagecontract"
 )
 
 const maxPromptTemplateEntries = 1024
@@ -56,11 +58,10 @@ func ValidatePromptTemplate(template PromptTemplate) error {
 	}
 	seenRuntime := map[string]bool{}
 	seenLayers := map[string]bool{}
-	validRuntime := map[string]bool{"identity": true, "goal": true, "context": true, "messages": true, "awaiting-replies": true, "user-prompt": true, "one-shot": true, "workdir": true}
 	for i, entry := range template.Entries {
 		switch entry.Kind {
 		case "runtime":
-			if !validRuntime[entry.Runtime] || entry.ArchivePath != "" || seenRuntime[entry.Runtime] {
+			if _, ok := imagecontract.Runtime(entry.Runtime); !ok || entry.ArchivePath != "" || seenRuntime[entry.Runtime] {
 				return fmt.Errorf("invalid runtime template entry %d", i)
 			}
 			seenRuntime[entry.Runtime] = true

@@ -368,12 +368,13 @@ func TestRetagPortableV2ArchivePreservesSkillModes(t *testing.T) {
 
 func TestBuildV2EmbedsStaticLayersInExactOrder(t *testing.T) {
 	source := t.TempDir()
+	writeTestSkill(t, filepath.Join(source, "skills"), "context")
 	for name, body := range map[string]string{"a.md": "A", "b.md": "B"} {
 		if err := os.WriteFile(filepath.Join(source, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	src := &imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./a.md"}, {Runtime: "context"}, {File: "./b.md"}}}
+	src := &imagefile.V2{SchemaVersion: 2, Dir: source, Plugins: []imagefile.V2Plugin{{Name: "context"}}, Skills: []imagefile.SkillEntry{{Dir: "./skills/context"}}, Prompts: []imagefile.PromptEntry{{File: "./a.md"}, {Runtime: "context"}, {File: "./b.md"}}}
 	store := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "ordered", Tag: "latest"}
 	manifest, err := BuildV2(src, imagefile.ResolveRoots{}, ref, store, func() time.Time { return time.Unix(1, 0) }, nil)
@@ -403,9 +404,15 @@ func TestBuildV2EmbedsStaticLayersInExactOrder(t *testing.T) {
 
 func TestBuildV2AddsNoImplicitContent(t *testing.T) {
 	for _, plugins := range [][]imagefile.V2Plugin{nil, {{Name: "context"}}} {
+		source := t.TempDir()
+		var skills []imagefile.SkillEntry
+		if len(plugins) != 0 {
+			writeTestSkill(t, filepath.Join(source, "skills"), "context")
+			skills = []imagefile.SkillEntry{{Dir: "./skills/context"}}
+		}
 		store := &Store{Dir: t.TempDir()}
 		ref := Ref{Name: "empty", Tag: "latest"}
-		manifest, err := BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir(), Plugins: plugins}, imagefile.ResolveRoots{}, ref, store, time.Now, nil)
+		manifest, err := BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Plugins: plugins, Skills: skills}, imagefile.ResolveRoots{}, ref, store, time.Now, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

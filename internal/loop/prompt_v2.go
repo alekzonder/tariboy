@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -89,10 +90,6 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 		"user-prompt": values.UserPrompt, "one-shot": values.OneShot,
 		"workdir": values.Workdir,
 	}
-	runtimeSkills := map[string]string{
-		"identity": "whoami", "goal": "goal", "workdir": "workdir", "context": "context",
-		"messages": "messages", "awaiting-replies": "messages",
-	}
 	root, err := filepath.Abs(imageDir)
 	if err != nil {
 		return "", err
@@ -119,7 +116,8 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 			}
 			if body != "" {
 				heading := "# [runtime: " + entry.Runtime + "]"
-				if skill := runtimeSkills[entry.Runtime]; skill != "" {
+				capability, _ := imagecontract.Runtime(entry.Runtime)
+				if skill := capability.Skill; skill != "" {
 					body = fmt.Sprintf("%s\n\nUse the `%s` skill for this runtime data.\n\n%s", heading, skill, body)
 				} else {
 					body = heading + "\n\n" + body

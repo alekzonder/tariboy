@@ -10,12 +10,12 @@ import (
 func TestReadTemplatePinnedRetainsImageIdentityAfterMutableRebuild(t *testing.T) {
 	s := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "judge", Tag: "latest"}
-	source := &imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "identity"}}}
+	source := &imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "user-prompt"}}}
 	first, err := BuildV2Mutable(source, imagefile.ResolveRoots{}, ref, s, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	source.Prompts = []imagefile.PromptEntry{{Runtime: "messages"}}
+	source.Prompts = []imagefile.PromptEntry{{Runtime: "one-shot"}}
 	second, err := BuildV2Mutable(source, imagefile.ResolveRoots{}, ref, s, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
