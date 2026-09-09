@@ -224,7 +224,9 @@ fi
 if test -n "$prompt" && test -f "$prompt"; then
   ids=$(sed -n 's/^- id \([^ ]*\).*/\1/p' "$prompt")
   for id in $ids; do
-    "$TARIBOY_ALPHA_E2E_MESSAGES" message processed "$id" "alpha-e2e-consumed" >/dev/null
+    curl -sf --unix-socket "$TARIBOY_TOOLS_SOCKET" -H 'content-type: application/json' \
+      -X POST http://localhost/tools/message/processed \
+      -d "{\"id\":\"$id\",\"result\":\"alpha-e2e-consumed\"}" >/dev/null
   done
 fi
 i-am-done >/dev/null
@@ -236,7 +238,6 @@ export TARIBOY_BASE_DIR=$base
 export TARIBOY_RUNTIME_DIR=$runtime
 export TARIBOY_STUB_HARNESS=$harness
 export TARIBOY_ALPHA_E2E_ROOT=$root
-export TARIBOY_ALPHA_E2E_MESSAGES=$base/store/versions/$version/skills/messages/scripts/messages.sh
 export TARIBOY_HTTP_ADDR=127.0.0.1:9990
 export TMUX_TMPDIR=$root/tmux
 unset TMUX

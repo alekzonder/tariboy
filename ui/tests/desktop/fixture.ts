@@ -460,6 +460,17 @@ export const test = base.extend<DesktopFixtures>({
         throw new Error(`Desktop must expose exactly one main window, got ${JSON.stringify(handles)}`);
       }
       await session.switchToWindow(handles[0]);
+      await waitForMainWindow(session);
+      const source = await createTestImageSource(baseDir);
+      const built = spawnSync(cli, ["image", "build", "--name", "basic", "--tag", "latest", "--path", source], {
+        env: environment,
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      log.append(`basic image build status=${String(built.status)} signal=${String(built.signal)} error=${String(built.error ?? "")}\n`);
+      log.append(built.stdout ?? "");
+      log.append(built.stderr ?? "");
+      if (built.status !== 0) throw new Error(`cannot seed basic Desktop image: ${built.stderr || built.stdout}`);
       await provide({
         client: session,
         log,

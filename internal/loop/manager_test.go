@@ -3251,6 +3251,60 @@ func TestReprovisionReplacesRatherThanOverlaysImageTree(t *testing.T) {
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("reprovision retained stale image content: %v", err)
 	}
+	shim, err := os.ReadFile(filepath.Join(l.BinDir(), "i-am-done"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(shim), filepath.Join(l.ImageDir(), "skills", "loop")) || strings.Contains(string(shim), ".reprovision-") {
+		t.Fatalf("reprovisioned shim points outside active image: %s", shim)
+	}
+}
+
+func TestReprovisionBridgeFailurePreservesIdentityAndTree(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	defer m.Shutdown()
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "bridge", Harness: "stub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before.HarnessType = "codex"
+	if err := as.Update(before); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, name)
+	marker := filepath.Join(l.ImageDir(), "old-marker")
+	if err := os.WriteFile(marker, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	shimBefore, err := os.ReadFile(filepath.Join(l.BinDir(), "i-am-done"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	buildBasic2(t, m.cfg.ImgStore)
+	m.cfg.PrepareImageBridge = func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
+		return errors.New("bridge rejected")
+	}
+
+	if err := m.Reprovision(name, "basic2:latest"); err == nil || !strings.Contains(err.Error(), "bridge rejected") {
+		t.Fatalf("Reprovision error = %v", err)
+	}
+	after, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.ImageRef != before.ImageRef || after.ImageDigest != before.ImageDigest {
+		t.Fatalf("identity changed from %s@%s to %s@%s", before.ImageRef, before.ImageDigest, after.ImageRef, after.ImageDigest)
+	}
+	if body, err := os.ReadFile(marker); err != nil || string(body) != "old" {
+		t.Fatalf("old image tree was not preserved: body=%q err=%v", body, err)
+	}
+	if shimAfter, err := os.ReadFile(filepath.Join(l.BinDir(), "i-am-done")); err != nil || string(shimAfter) != string(shimBefore) {
+		t.Fatalf("old shim changed: body=%q err=%v", shimAfter, err)
+	}
 }
 
 // buildBasic2 builds a second image "basic2:latest" for image-swap tests.

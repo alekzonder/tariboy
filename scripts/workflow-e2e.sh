@@ -6,11 +6,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$ROOT/scripts/test-image-fixture.sh"
 BIN="$ROOT/bin"
 SANDBOX="$(mktemp -d)"
 BASE="$SANDBOX/base"
 RUNTIME="$SANDBOX/runtime"
+TEST_IMAGE_SOURCE="$SANDBOX/test-image-source"
 mkdir -p "$BASE" "$RUNTIME"
+make_test_image_fixture "$TEST_IMAGE_SOURCE"
 export TARIBOY_BASE_DIR="$BASE"
 export TARIBOY_RUNTIME_DIR="$RUNTIME"
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
@@ -122,6 +125,9 @@ workflow_view() { api GET "/api/tasks/$1/workflow" | result; }
 
 echo "--- start isolated daemon (base=$BASE runtime=$RUNTIME http=127.0.0.1:$WEB_PORT)"
 start_daemon
+
+echo "--- build isolated basic image"
+sa image build --name basic --tag latest --path "$TEST_IMAGE_SOURCE" >/dev/null || fail "build basic image"
 
 echo "--- create four explicit workflow agents with long-lived test iterations"
 for agent in manager developer reviewer qa; do
