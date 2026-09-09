@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/script"
 )
 
@@ -21,11 +20,11 @@ import (
 // after the refresh cannot happen while this agent is being refreshed.
 func fifoShim(t *testing.T, agentsDir, name string) string {
 	t.Helper()
-	l := agentdir.New(agentsDir, name)
-	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
+	l := writeStaleShims(t, agentsDir, name)
+	path := filepath.Join(l.BinDir(), "i-am-done")
+	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(l.BinDir(), "i-am-done")
 	if err := syscall.Mkfifo(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -123,8 +122,8 @@ func TestStartAllRefreshesShimsBeforeScriptSupervisorStarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(seen), m.cfg.SkillsDir) {
-		t.Fatalf("due script ran against a shim that does not exec a live skill script from %q: %s", m.cfg.SkillsDir, seen)
+	if !strings.Contains(string(seen), filepath.Join(lWorker.ImageDir(), "skills")) {
+		t.Fatalf("due script ran against a shim outside the active image: %s", seen)
 	}
 	if strings.Contains(string(seen), "0.21.6") {
 		t.Fatalf("due script ran against the shim pinned to the provisioning release: %s", seen)

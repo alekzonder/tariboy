@@ -16,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/shim"
 )
 
@@ -90,6 +91,9 @@ func liveIterationOnDisk(t *testing.T, m *Manager, as *agent.Store, agentsDir, n
 	}
 	l := agentdir.New(agentsDir, name).WithRuntime(m.cfg.RuntimeDir)
 	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.cfg.ImgStore.Unpack(image.Ref{Name: "basic", Tag: "latest"}, l.ImageDir()); err != nil {
 		t.Fatal(err)
 	}
 	id := name + "-20260806170459-1"

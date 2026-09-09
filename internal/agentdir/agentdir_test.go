@@ -18,36 +18,25 @@ func buildImage(t *testing.T, st *image.Store, name string) {
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("BE A TEST AGENT"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	im := &imagefile.Imagefile{
-		SchemaVersion: 1,
-		Plugins:       []imagefile.Plugin{{Name: "context"}},
-		Prompts:       []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}},
-		Dir:           src,
+	for _, skill := range []string{"loop", "tasks"} {
+		dir := filepath.Join(src, "skills", skill)
+		if err := os.MkdirAll(filepath.Join(dir, "scripts"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+skill+"\ndescription: Test skill.\n---\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "scripts", skill+".sh"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := image.Build(im, image.Ref{Name: name, Tag: "latest"}, st,
-		func() (t2 time.Time) { return }, image.WithBuiltinStoreRoot(legacyPromptStore(t))); err != nil {
+	if _, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2, Dir: src,
+		Prompts: []imagefile.PromptEntry{{File: "./task.md"}},
+		Skills:  []imagefile.SkillEntry{{Dir: "./skills/loop"}, {Dir: "./skills/tasks"}},
+	}, imagefile.ResolveRoots{}, image.Ref{Name: name, Tag: "latest"}, st, time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func legacyPromptStore(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	for name, body := range map[string]string{
-		"whoami/prompt.md":   "whoami",
-		"messages/prompt.md": "messages",
-		"context/prompt.md":  "context",
-		"loop/finish.md":     "finish",
-	} {
-		path := filepath.Join(root, "skills", filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return root
 }
 
 func TestProvisionAndLayout(t *testing.T) {
@@ -56,13 +45,12 @@ func TestProvisionAndLayout(t *testing.T) {
 	buildImage(t, imgStore, "basic")
 
 	l := New(filepath.Join(base, "agents"), "smoke")
-	skills := skillScriptsFor(t)
 	a := agent.Agent{Name: "smoke", ImageRef: "basic:latest", Cwd: "", Plugins: []string{"whoami", "loop", "messages", "context"}}
-	if err := Provision(l, a, imgStore, image.Ref{Name: "basic", Tag: "latest"}, skills); err != nil {
+	if err := Provision(l, a, imgStore, image.Ref{Name: "basic", Tag: "latest"}); err != nil {
 		t.Fatal(err)
 	}
 	// image unpacked
-	if _, err := os.Stat(filepath.Join(l.ImageDir(), "PROMPT.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(l.ImageDir(), "prompt", "template.json")); err != nil {
 		t.Fatalf("image not unpacked: %v", err)
 	}
 	// config.json is dead (never read at runtime) — Provision must NOT write it
@@ -74,7 +62,7 @@ func TestProvisionAndLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(done), filepath.Join(skills, "loop/scripts/loop.sh")) {
+	if !strings.Contains(string(done), filepath.Join(l.ImageDir(), "skills/loop/scripts/loop.sh")) {
 		t.Fatalf("i-am-done shim does not exec the loop skill script: %s", done)
 	}
 	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
@@ -156,21 +144,20 @@ func TestProvisionReconcilesConditionalTasksShim(t *testing.T) {
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	buildImage(t, imgStore, "basic")
 	layout := New(filepath.Join(base, "agents"), "worker")
-	skills := skillScriptsFor(t)
 	ref := image.Ref{Name: "basic", Tag: "latest"}
 
 	enabled := agent.Agent{
 		Name: "worker", ImageRef: ref.String(),
 		Plugins: []string{"whoami", "loop", "messages", "tasks"},
 	}
-	if err := Provision(layout, enabled, imgStore, ref, skills); err != nil {
+	if err := Provision(layout, enabled, imgStore, ref); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(filepath.Join(layout.BinDir(), "tasks"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), filepath.Join(skills, "tasks/scripts/tasks.sh")) ||
+	if !strings.Contains(string(raw), filepath.Join(layout.ImageDir(), "skills/tasks/scripts/tasks.sh")) ||
 		!strings.Contains(string(raw), `"$@"`) {
 		t.Fatalf("tasks shim = %q", raw)
 	}
@@ -181,7 +168,7 @@ func TestProvisionReconcilesConditionalTasksShim(t *testing.T) {
 
 	disabled := enabled
 	disabled.Plugins = []string{"whoami", "loop", "messages"}
-	if err := Provision(layout, disabled, imgStore, ref, skills); err != nil {
+	if err := Provision(layout, disabled, imgStore, ref); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(layout.BinDir(), "tasks")); !os.IsNotExist(err) {

@@ -19,10 +19,6 @@ func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 	t.Cleanup(m.Shutdown)
 	var logs bytes.Buffer
 	m.cfg.Log = slog.New(slog.NewTextHandler(&logs, nil))
-	m.cfg.SkillsDir = testSkillsDir(t)
-	if err := os.Remove(filepath.Join(m.cfg.SkillsDir, "loop", "scripts", "loop.sh")); err != nil {
-		t.Fatal(err)
-	}
 
 	stale := agent.Agent{
 		Name: "stale", ImageRef: "basic:latest", HarnessType: "stub",
@@ -38,6 +34,9 @@ func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 		}
 	}
 	l := writeStaleShims(t, agentsDir, stale.Name)
+	if err := os.Remove(filepath.Join(l.ImageDir(), "skills", "loop", "scripts", "loop.sh")); err != nil {
+		t.Fatal(err)
+	}
 	before := map[string][]byte{}
 	for _, f := range []string{"tools", "i-am-done", "tasks"} {
 		before[f] = []byte(readShim(t, l, f))
@@ -53,7 +52,7 @@ func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 			t.Fatalf("%s/%s was rewritten against a missing client:\nbefore: %s\nafter:  %s", l.Name, f, want, got)
 		}
 	}
-	if got := readShim(t, lHealthy, "tasks"); !strings.Contains(got, filepath.Join(m.cfg.SkillsDir, "tasks/scripts/tasks.sh")) {
+	if got := readShim(t, lHealthy, "tasks"); !strings.Contains(got, filepath.Join(lHealthy.ImageDir(), "skills/tasks/scripts/tasks.sh")) {
 		t.Fatalf("healthy agent did not refresh against its direct script: %s", got)
 	}
 	if _, err := os.Stat(filepath.Join(lHealthy.BinDir(), "tools")); !os.IsNotExist(err) {
@@ -67,10 +66,6 @@ func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 func TestStartAllSkipsEnabledAgentMissingRequiredDirectScript(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
-	m.cfg.SkillsDir = testSkillsDir(t)
-	if err := os.Remove(filepath.Join(m.cfg.SkillsDir, "loop", "scripts", "loop.sh")); err != nil {
-		t.Fatal(err)
-	}
 
 	blocked := agent.Agent{Name: "blocked", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, Plugins: []string{"loop"}}
 	healthy := agent.Agent{Name: "healthy", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, Plugins: []string{"tasks"}}
@@ -79,6 +74,9 @@ func TestStartAllSkipsEnabledAgentMissingRequiredDirectScript(t *testing.T) {
 			t.Fatal(err)
 		}
 		writeStaleShims(t, agentsDir, a.Name)
+	}
+	if err := os.Remove(filepath.Join(agentsDir, blocked.Name, "image", "skills", "loop", "scripts", "loop.sh")); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := m.StartAll(context.Background()); err != nil {
@@ -101,9 +99,6 @@ func TestStartAllSkipsEnabledAgentMissingRequiredDirectScript(t *testing.T) {
 func TestRefreshShimsRewritesShimsWithDirectScripts(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
-	live := testSkillsDir(t)
-	m.cfg.SkillsDir = live
-
 	a := agent.Agent{
 		Name: "stale", ImageRef: "basic:latest", HarnessType: "stub",
 		Enabled: false, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
@@ -122,10 +117,10 @@ func TestRefreshShimsRewritesShimsWithDirectScripts(t *testing.T) {
 		if strings.Contains(got, "0.21.6") {
 			t.Fatalf("%s/%s still pinned to the provisioning release: %s", l.Name, f, got)
 		}
-		if !strings.Contains(got, filepath.Join(live, map[string]string{
+		if !strings.Contains(got, filepath.Join(l.ImageDir(), "skills", map[string]string{
 			"i-am-done": "loop/scripts/loop.sh", "tasks": "tasks/scripts/tasks.sh",
 		}[f])) {
-			t.Fatalf("%s/%s does not exec a script from %q: %s", l.Name, f, live, got)
+			t.Fatalf("%s/%s does not exec its active image script: %s", l.Name, f, got)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {

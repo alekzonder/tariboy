@@ -62,7 +62,6 @@ type ScriptResultNotifier interface {
 type ManagerConfig struct {
 	AgentsDir     string
 	RuntimeDir    string
-	SkillsDir     string
 	ShimBin       string
 	ImgStore      *image.Store
 	Store         *agent.Store
@@ -335,7 +334,7 @@ func (m *Manager) refreshShims(agents []agent.Agent) map[string]bool {
 	failed := make(map[string]bool)
 	for _, a := range agents {
 		l := agentdir.New(m.cfg.AgentsDir, a.Name)
-		if err := agentdir.WriteShims(l, a, m.cfg.SkillsDir); err != nil {
+		if err := agentdir.WriteShims(l, a); err != nil {
 			failed[a.Name] = true
 			m.cfg.Log.Error("refresh agent shims", "agent", a.Name, "err", err)
 		}
@@ -875,7 +874,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 		ag.Group = spec.Group
 	}
 	l := agentdir.New(m.cfg.AgentsDir, name)
-	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref, m.cfg.SkillsDir); err != nil {
+	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref); err != nil {
 		return "", err
 	}
 	if err := m.cfg.Store.Create(ag); err != nil {
@@ -2112,7 +2111,7 @@ func (m *Manager) reprovision(name, imageRef string) error {
 		return err
 	}
 	l := agentdir.New(m.cfg.AgentsDir, name)
-	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref, m.cfg.SkillsDir); err != nil {
+	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref); err != nil {
 		return err
 	}
 	// Bring the loop back up on the refreshed tree. Persist the enabled intent so
