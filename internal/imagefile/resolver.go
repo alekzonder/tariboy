@@ -13,10 +13,7 @@ import (
 const maxPromptFileSize = 4 << 20
 
 type ResolveRoots struct {
-	Store               string
-	CurrentVersionStore string
-	CurrentStoreVersion string
-	Plugins             string
+	Plugins string
 	// SourceSkills pins source-relative declarations to an immutable snapshot.
 	// A non-nil map is exhaustive: missing declarations fail closed.
 	SourceSkills map[string]string
@@ -39,10 +36,6 @@ type ResolvedDirectory struct {
 func resolveExplicitPath(sourceDir, value string, roots ResolveRoots, kind string) (string, string, error) {
 	var root, suffix, category string
 	switch {
-	case strings.HasPrefix(value, "$CURRENT_VERSION_STORE/"):
-		root, suffix, category = roots.CurrentVersionStore, strings.TrimPrefix(value, "$CURRENT_VERSION_STORE/"), "current-store"
-	case strings.HasPrefix(value, "$STORE/"):
-		root, suffix, category = roots.Store, strings.TrimPrefix(value, "$STORE/"), "store"
 	case strings.HasPrefix(value, "$PLUGINS/"):
 		root, suffix, category = roots.Plugins, strings.TrimPrefix(value, "$PLUGINS/"), "plugin"
 	case strings.HasPrefix(value, "./"):
@@ -53,9 +46,9 @@ func resolveExplicitPath(sourceDir, value string, roots ResolveRoots, kind strin
 		category = "absolute"
 	default:
 		if kind == "skill" {
-			return "", "", fmt.Errorf("skill path %q must use ./, ../, an absolute path, or a supported Store variable", value)
+			return "", "", fmt.Errorf("skill path %q must use ./, ../, an absolute path, or $PLUGINS", value)
 		}
-		return "", "", fmt.Errorf("%s path %q must use ./, an absolute path, or a supported Store variable", kind, value)
+		return "", "", fmt.Errorf("%s path %q must use ./, an absolute path, or $PLUGINS", kind, value)
 	}
 	var candidate string
 	if category == "absolute" {

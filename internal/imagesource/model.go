@@ -20,15 +20,9 @@ var (
 )
 
 type CreateRequest struct {
-	Name         string
-	From         string
-	Harness      string
-	Model        string
-	Effort       string
-	Interactive  *bool
-	Capabilities []string
-	Prompt       string
-	Provenance   Provenance
+	Name       string
+	Prompt     string
+	Provenance Provenance
 }
 
 type Provenance struct {

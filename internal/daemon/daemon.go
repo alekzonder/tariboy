@@ -22,7 +22,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/audit"
-	"github.com/alekzonder/tariboy/internal/builtinimages"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/evals"
@@ -50,7 +49,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/telemetry"
 	"github.com/alekzonder/tariboy/internal/userpath"
 	"github.com/alekzonder/tariboy/internal/version"
-	storeassets "github.com/alekzonder/tariboy/store"
 
 	"go.opentelemetry.io/otel"
 )
@@ -197,9 +195,6 @@ func Run(ctx context.Context, o Options) error {
 	if err := p.EnsureBase(); err != nil {
 		return fmt.Errorf("ensure base dir: %w", err)
 	}
-	if err := storeassets.Ensure(p, version.Version); err != nil {
-		return fmt.Errorf("install built-in Store assets: %w", err)
-	}
 	// Fail loudly at startup if the layout would produce an unbindable socket,
 	// instead of surfacing an opaque EINVAL later. Sockets live in the short
 	// home-rooted runtime dir, so this only trips on a pathological HOME.
@@ -286,9 +281,6 @@ func Run(ctx context.Context, o Options) error {
 	}
 	if err := image.EnsureBare(imgStore, time.Now); err != nil {
 		log.Error("seed bare image", "err", err)
-	}
-	if err := builtinimages.EnsureBasic(imgStore, log); err != nil {
-		log.Error("install builtin basic image", "err", err)
 	}
 	exeDir := "."
 	if exe, err := os.Executable(); err == nil {

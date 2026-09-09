@@ -23,8 +23,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
-	"github.com/alekzonder/tariboy/internal/version"
-	storeassets "github.com/alekzonder/tariboy/store"
 )
 
 func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
@@ -331,6 +329,13 @@ func TestRunServesAndShutsDown(t *testing.T) {
 	if st["base_dir"] != base {
 		t.Fatalf("status base_dir = %v", st["base_dir"])
 	}
+	images := &image.Store{Dir: paths.New(base).ImagesDir()}
+	if !images.Exists(image.BareRef) || images.Exists(image.Ref{Name: "basic", Tag: "latest"}) {
+		t.Fatalf("fresh daemon images: bare=%v basic=%v", images.Exists(image.BareRef), images.Exists(image.Ref{Name: "basic", Tag: "latest"}))
+	}
+	if _, err := os.Stat(filepath.Join(base, "store", "versions")); !os.IsNotExist(err) {
+		t.Fatalf("fresh daemon created versioned Store: %v", err)
+	}
 
 	cancel()
 	select {
@@ -367,9 +372,6 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 		Enabled: true, LoopEnabled: true, GoalEnabled: true, Plugins: []string{"context"},
 	}
 	if err := agent.NewStore(seed).Create(worker); err != nil {
-		t.Fatal(err)
-	}
-	if err := storeassets.Ensure(paths.New(base), version.Version); err != nil {
 		t.Fatal(err)
 	}
 	if err := agentdir.Provision(

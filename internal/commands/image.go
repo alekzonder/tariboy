@@ -173,17 +173,13 @@ func imageBuild() registry.Command {
 			}
 			staged := make([]stagedImage, 0, len(refs))
 			var sourceArchive []byte
+			if parsed.Version != 2 {
+				return nil, api.UserError{Code: "build_failed", Msg: imagefile.SchemaV1MigrationMessage}
+			}
 			for i, ref := range refs {
 				var man image.Manifest
 				if i == 0 {
-					if parsed.Version == 2 {
-						man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), CurrentStoreVersion: productVersion, Plugins: pluginsDir, SourceSkills: frozen.SourceSkills}, ref, stagedStore, clock, resolver)
-					} else {
-						man, err = image.Build(parsed.V1, ref, stagedStore, clock,
-							image.WithExternalPlugins(resolver),
-							image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(productVersion)),
-						)
-					}
+					man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir, SourceSkills: frozen.SourceSkills}, ref, stagedStore, clock, resolver)
 					if err == nil {
 						sourceArchive, err = stagedStore.ArchiveBytes(ref)
 					}
@@ -356,17 +352,11 @@ func imageValidate() registry.Command {
 			}
 			if parsed.Version == 2 {
 				layout := paths.Paths{Base: c.BaseDir}
-				productVersion := c.Version
-				if productVersion == "" {
-					productVersion = version.Version
-				}
 				var pluginStore *plugins.Store
 				if c.Store != nil {
 					pluginStore = plugins.NewStore(c.Store, time.Now)
 				}
-				validated, validateErr := image.ValidateV2Detailed(parsed.V2, imagefile.ResolveRoots{
-					Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(productVersion), CurrentStoreVersion: productVersion, Plugins: layout.PluginsDir(),
-				}, func() plugincaps.ExternalResolver {
+				validated, validateErr := image.ValidateV2Detailed(parsed.V2, imagefile.ResolveRoots{Plugins: layout.PluginsDir()}, func() plugincaps.ExternalResolver {
 					if pluginStore != nil {
 						return plugins.ResolveEnabledInstalledMetadata(layout.PluginsDir(), pluginStore)
 					}
@@ -381,7 +371,7 @@ func imageValidate() registry.Command {
 				}
 				return map[string]any{"valid": true, "schema_version": 2, "plugins": pluginNames, "skills": validated.Skills, "template": validated.Template, "diagnostics": []any{}, "warnings": v2ValidationWarnings(parsed.V2, validated, pluginStore)}, nil
 			}
-			return map[string]any{"valid": true, "schema_version": parsed.Version, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []any{}, "warnings": []any{}}, nil
+			return map[string]any{"valid": false, "schema_version": parsed.Version, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": imagefile.SchemaV1MigrationMessage}}, "warnings": []any{}}, nil
 		},
 	}
 }

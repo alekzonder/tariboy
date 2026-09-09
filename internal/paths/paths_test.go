@@ -145,13 +145,3 @@ func TestEnsureBase(t *testing.T) {
 		}
 	}
 }
-
-func TestStoreRoots(t *testing.T) {
-	p := Paths{Base: "/tmp/tariboy"}
-	if got, want := p.StoreDir(), "/tmp/tariboy/store"; got != want {
-		t.Fatalf("StoreDir = %q, want %q", got, want)
-	}
-	if got, want := p.CurrentVersionStoreDir("0.33.0"), "/tmp/tariboy/store/versions/0.33.0"; got != want {
-		t.Fatalf("CurrentVersionStoreDir = %q, want %q", got, want)
-	}
-}

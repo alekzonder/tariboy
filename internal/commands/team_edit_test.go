@@ -122,7 +122,7 @@ func TestApplyTeamImageBuildsTwoRefsFromOneImportedSource(t *testing.T) {
 	if err := os.MkdirAll(source, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\nprompts: [PROMPT.md]\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nprompts:\n  - file: ./PROMPT.md\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(source, "PROMPT.md"), []byte("shared\n"), 0o600); err != nil {
@@ -170,7 +170,7 @@ func TestApplyTeamImageWaitsForPublicationGate(t *testing.T) {
 	if err := os.MkdirAll(source, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	snapshots := imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}

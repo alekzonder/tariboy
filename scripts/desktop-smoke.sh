@@ -239,7 +239,7 @@ echo "--- native host state stays owner-only in isolated data/runtime roots"
 
 echo "--- source create, edit, validate, and immutable build"
 api POST /api/image-sources \
-  '{"name":"alpha-smoke","harness":"stub","interactive":true,"prompt":"Initial smoke prompt."}' >/dev/null
+  '{"name":"alpha-smoke","prompt":"Initial smoke prompt."}' >/dev/null
 api PUT /api/image-sources/alpha-smoke/files/PROMPT.md \
   '{"content":"Updated smoke prompt."}' >/dev/null
 VALIDATION="$(api POST /api/image-sources/alpha-smoke/validate '{}')"

@@ -1,5 +1,4 @@
-// Package plugincaps declares built-in capability metadata. Schema-v1 images
-// retain compatibility by rendering the same skill instructions schema v2 packages.
+// Package plugincaps declares built-in capability metadata.
 package plugincaps
 
 import (
@@ -10,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/imagecontract"
-	storeassets "github.com/alekzonder/tariboy/store"
 )
 
 var (
@@ -38,8 +36,7 @@ type Fragment struct {
 	Tail    bool
 }
 
-// fragments contains ordering and capability metadata only. The canonical text
-// is maintained under store/skills and installed into the current version Store.
+// fragments contains legacy schema-v1 ordering and capability metadata only.
 var fragments = []Fragment{
 	{Plugin: "whoami", Name: "system:whoami", Order: 10, Path: "skills/whoami/SKILL.md", Teaches: []string{"scripts/whoami.sh"}},
 	{Plugin: "messages", Name: "system:messages", Order: 20, Path: "skills/messages/SKILL.md", Teaches: []string{"scripts/messages.sh message", "scripts/messages.sh request", "scripts/messages.sh channel", "scripts/messages.sh sources"}},
@@ -147,14 +144,9 @@ func inSet(plugins []string, name string) bool {
 
 func readFragment(root, name string) ([]byte, error) {
 	if root == "" {
-		return storeassets.ReadBundled(name)
+		return nil, fmt.Errorf("legacy prompt Store is unavailable")
 	}
 	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
-	if os.IsNotExist(err) {
-		// Direct library/command tests can construct a temporary base without
-		// starting the daemon installer. Production startup verifies this root.
-		return storeassets.ReadBundled(name)
-	}
 	return body, err
 }
 
@@ -204,22 +196,4 @@ func BodyFragmentsFromStore(plugins []string, storeRoot string) ([]Fragment, err
 
 func TailFragmentsFromStore(plugins []string, storeRoot string) ([]Fragment, error) {
 	return selectFragments(plugins, true, storeRoot)
-}
-
-// BodyFragments and TailFragments are legacy convenience APIs for callers that
-// run before Store installation. Production image builds pass an installed root.
-func BodyFragments(plugins []string) []Fragment {
-	result, err := BodyFragmentsFromStore(plugins, "")
-	if err != nil {
-		panic(err)
-	}
-	return result
-}
-
-func TailFragments(plugins []string) []Fragment {
-	result, err := TailFragmentsFromStore(plugins, "")
-	if err != nil {
-		panic(err)
-	}
-	return result
 }

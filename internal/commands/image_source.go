@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/api"
@@ -16,7 +15,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/version"
 )
 
 func imageSourceStore(c *registry.Ctx) *imagesource.Store {
@@ -57,25 +55,6 @@ func imageSourceError(err error) error {
 	return err
 }
 
-func imageSourceCapabilities(v any) ([]string, bool) {
-	if raw, ok := v.(string); ok {
-		if strings.TrimSpace(raw) == "" {
-			return nil, true
-		}
-		parts := strings.Split(raw, ",")
-		out := make([]string, 0, len(parts))
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				return nil, false
-			}
-			out = append(out, part)
-		}
-		return out, true
-	}
-	return stringSlice(v)
-}
-
 func imageSourceLs() registry.Command {
 	return registry.Command{
 		Path:    "image.source.ls",
@@ -97,36 +76,13 @@ func imageSourceCreate() registry.Command {
 		Summary: "Create an editable image source",
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "source name"},
-			{Name: "from", Flag: "from", Type: registry.String, Help: "optional parent image ref"},
-			{Name: "harness", Flag: "harness", Type: registry.String, Help: "default agent harness"},
-			{Name: "model", Flag: "model", Type: registry.String, Help: "default model"},
-			{Name: "effort", Flag: "effort", Type: registry.String, Help: "default reasoning effort"},
-			{Name: "interactive", Flag: "interactive", Type: registry.Bool, Help: "default interactive mode"},
-			{Name: "capabilities", Flag: "capabilities", Type: registry.String, Help: "comma-separated capabilities"},
 			{Name: "prompt", Flag: "prompt", Type: registry.String, Help: "initial prompt"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/image-sources"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			capabilities, ok := imageSourceCapabilities(p["capabilities"])
-			if !ok {
-				return nil, api.UserError{
-					Code: "bad_source", Msg: "capabilities must be strings", Status: http.StatusBadRequest,
-				}
-			}
-			var interactive *bool
-			if value, exists := p["interactive"]; exists {
-				enabled := toBool(value)
-				interactive = &enabled
-			}
 			source, err := imageSourceStore(c).Create(imagesource.CreateRequest{
-				Name:         str(p, "name"),
-				From:         str(p, "from"),
-				Harness:      str(p, "harness"),
-				Model:        str(p, "model"),
-				Effort:       str(p, "effort"),
-				Interactive:  interactive,
-				Capabilities: capabilities,
-				Prompt:       str(p, "prompt"),
+				Name:   str(p, "name"),
+				Prompt: str(p, "prompt"),
 			})
 			if err != nil {
 				if userErr, ok := imageSourceUserError(err); ok {
@@ -289,21 +245,17 @@ func imageSourceBuild() registry.Command {
 			err = image.WithPublicationGate(func() error {
 				var err error
 				record, err = sources.RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
-					imgFile, err := imagefile.Parse(dir)
+					parsed, err := imagefile.ParseAny(dir)
 					if err != nil {
 						parseErr = err
 						return imagesource.BuildRecord{}, err
 					}
+					if parsed.Version != 2 {
+						return imagesource.BuildRecord{}, errors.New(imagefile.SchemaV1MigrationMessage)
+					}
 					layout := paths.Paths{Base: c.BaseDir}
 					pluginsDir := layout.PluginsDir()
-					manifest, err = image.Build(
-						imgFile,
-						ref,
-						store,
-						time.Now,
-						image.WithExternalPlugins(plugins.ResolveInstalled(pluginsDir)),
-						image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(version.Version)),
-					)
+					manifest, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, store, time.Now, plugins.ResolveInstalledMetadata(pluginsDir))
 					if err != nil {
 						return imagesource.BuildRecord{}, err
 					}

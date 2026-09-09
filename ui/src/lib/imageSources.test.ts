@@ -54,9 +54,6 @@ describe("managed image source client", () => {
     await listImageSources(target);
     await createImageSource({
       name: "reviewer dev",
-      harness: "codex",
-      interactive: false,
-      capabilities: ["context"],
       prompt: "Review.",
     }, target);
     await getImageSource("reviewer dev", target);
@@ -87,8 +84,7 @@ describe("managed image source client", () => {
     expect(calls.every((call) => call.authorization === "Bearer secret")).toBe(true);
     expect(calls[1].body).toMatchObject({
       name: "reviewer dev",
-      interactive: false,
-      capabilities: ["context"],
+      prompt: "Review.",
     });
     expect(calls[5].body).toEqual({ content: "# Review" });
     expect(calls[7].body).toEqual({ tag: "canary" });

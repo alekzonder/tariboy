@@ -29,12 +29,6 @@ export interface ImageDiagnostic {
 
 export interface CreateImageSource {
   name: string;
-  from?: string;
-  harness?: string;
-  model?: string;
-  effort?: string;
-  interactive?: boolean;
-  capabilities?: string[];
   prompt?: string;
 }
 

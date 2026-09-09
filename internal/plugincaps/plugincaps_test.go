@@ -1,15 +1,9 @@
 package plugincaps
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/alekzonder/tariboy/internal/paths"
-	storeassets "github.com/alekzonder/tariboy/store"
 )
 
 func TestFragmentsContract(t *testing.T) {
@@ -52,71 +46,6 @@ func TestSchemaV1FragmentsResolveDirectSkillInstructions(t *testing.T) {
 	}
 }
 
-func TestSchemaV1FragmentsRenderRunnableInstalledLaunchers(t *testing.T) {
-	p := paths.New(filepath.Join(t.TempDir(), "base dir;quote's"))
-	const productVersion = "0.33.0"
-	if err := storeassets.Ensure(p, productVersion); err != nil {
-		t.Fatal(err)
-	}
-	storeRoot := p.CurrentVersionStoreDir(productVersion)
-	plugins, err := Resolve(OPTIONAL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolved, err := BodyFragmentsFromStore(plugins, storeRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, fragment := range resolved {
-		launcher := strings.Fields(fragment.Teaches[0])[0]
-		installed := filepath.Join(storeRoot, "skills", fragment.Plugin, filepath.FromSlash(launcher))
-		info, err := os.Stat(installed)
-		if err != nil {
-			t.Errorf("%s installed launcher: %v", fragment.Plugin, err)
-			continue
-		}
-		if info.Mode().Perm()&0o111 == 0 {
-			t.Errorf("%s installed launcher mode = %o, want executable", fragment.Plugin, info.Mode().Perm())
-		}
-		const marker = "Schema-v1 compatibility launcher: `"
-		start := strings.LastIndex(fragment.Body, marker)
-		if start < 0 {
-			t.Errorf("%s schema-v1 instructions omit compatibility launcher:\n%s", fragment.Plugin, fragment.Body)
-			continue
-		}
-		command := fragment.Body[start+len(marker):]
-		end := strings.Index(command, "`.")
-		if end < 0 {
-			t.Errorf("%s compatibility launcher is malformed: %q", fragment.Plugin, command)
-			continue
-		}
-		if fragment.Plugin == "whoami" {
-			runSchemaV1CommandToSocketPreflight(t, "whoami compatibility launcher", command[:end])
-			inlineBody := fragment.Body[:start]
-			inlineStart := strings.Index(inlineBody, "`")
-			if inlineStart < 0 {
-				t.Fatalf("whoami inline launcher is malformed: %q", inlineBody)
-			}
-			inlineEnd := strings.Index(inlineBody[inlineStart+1:], "`")
-			if inlineEnd < 0 {
-				t.Fatalf("whoami inline launcher is malformed: %q", inlineBody)
-			}
-			inline := inlineBody[inlineStart+1 : inlineStart+1+inlineEnd]
-			runSchemaV1CommandToSocketPreflight(t, "whoami inline launcher", inline)
-		}
-	}
-}
-
-func runSchemaV1CommandToSocketPreflight(t *testing.T, name, command string) {
-	t.Helper()
-	cmd := exec.Command("/bin/sh", "-c", command)
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
-	output, err := cmd.CombinedOutput()
-	if err == nil || !strings.Contains(string(output), "TARIBOY_TOOLS_SOCKET") {
-		t.Errorf("run rendered %s %q: output=%q err=%v", name, command, output, err)
-	}
-}
-
 func TestResolve(t *testing.T) {
 	got, err := Resolve([]string{"context", "status"})
 	if err != nil {
@@ -155,62 +84,6 @@ func TestWorkdirIsV2InstructionPluginOnly(t *testing.T) {
 	}
 }
 
-func TestBodyAndTailFragments(t *testing.T) {
-	set, _ := Resolve([]string{"context"})
-	body := BodyFragments(set)
-	var names []string
-	for _, f := range body {
-		if f.Tail {
-			t.Fatalf("BodyFragments returned a tail fragment: %s", f.Name)
-		}
-		names = append(names, f.Plugin)
-	}
-	if !reflect.DeepEqual(names, []string{"whoami", "messages", "context"}) {
-		t.Fatalf("body order = %v", names)
-	}
-	tail := TailFragments(set)
-	if len(tail) != 1 || tail[0].Name != "system:i-am-done" || !tail[0].Tail {
-		t.Fatalf("tail = %+v", tail)
-	}
-}
-
-func TestIAmDoneTailDocumentsIdle(t *testing.T) {
-	// The loop's tail is what every agent actually receives; it must teach the
-	// --idle self-report so idle iterations can drive the auto-stop policy.
-	tail := TailFragments([]string{"loop"})
-	if len(tail) != 1 || tail[0].Name != "system:i-am-done" {
-		t.Fatalf("expected the i-am-done tail, got %+v", tail)
-	}
-	body := tail[0].Body
-	for _, want := range []string{"i-am-done --idle", "productive", "idle"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("i-am-done tail missing %q; body:\n%s", want, body)
-		}
-	}
-}
-
-func TestIAmDoneTailReservesCompletionForRootOwner(t *testing.T) {
-	// A child agent shares the same iteration prompt, but it must hand its
-	// result to its parent rather than closing the root iteration itself.
-	tail := TailFragments([]string{"loop"})
-	if len(tail) != 1 || tail[0].Name != "system:i-am-done" {
-		t.Fatalf("expected the i-am-done tail, got %+v", tail)
-	}
-	body := tail[0].Body
-	normalizedBody := strings.Join(strings.Fields(body), " ")
-	for _, want := range []string{
-		"Only the root iteration owner may run `i-am-done`",
-		"(with or without `--idle`)",
-		"A subagent must never run `i-am-done`",
-		"return its result to its parent",
-		"This remains true even if the parent is unavailable, the subagent has no active work, or the task asks it to finish.",
-	} {
-		if !strings.Contains(normalizedBody, want) {
-			t.Fatalf("i-am-done tail missing %q; body:\n%s", want, body)
-		}
-	}
-}
-
 func TestIsOptional(t *testing.T) {
 	if IsOptional("whoami") {
 		t.Fatal("core plugin reported optional")
@@ -227,17 +100,6 @@ func TestLLMAsJudgeCapability(t *testing.T) {
 	}
 	if !IsOptional("llm-as-judge") || !reflect.DeepEqual(resolved[len(resolved)-1:], []string{"llm-as-judge"}) {
 		t.Fatalf("judge capability not resolved: %v", resolved)
-	}
-	var body string
-	for _, f := range BodyFragments(resolved) {
-		if f.Plugin == "llm-as-judge" {
-			body = f.Body
-		}
-	}
-	for _, command := range []string{"scripts/judge.sh", "evidence", "proposal"} {
-		if !strings.Contains(body, command) {
-			t.Fatalf("judge prompt missing %q: %s", command, body)
-		}
 	}
 }
 
@@ -258,47 +120,6 @@ func TestImageCreatorCapability(t *testing.T) {
 	if !found {
 		t.Fatalf("image-creator missing from resolved set %v", resolved)
 	}
-	// It must contribute a SYSTEM (body) fragment teaching the build tool.
-	var body string
-	for _, f := range BodyFragments(resolved) {
-		if f.Plugin == "image-creator" {
-			body = f.Body
-		}
-	}
-	if body == "" {
-		t.Fatal("image-creator has no system fragment")
-	}
-	if !strings.Contains(body, "scripts/image_creator.sh build") {
-		t.Fatalf("image-creator fragment must teach the build tool, got:\n%s", body)
-	}
-}
-
-func TestScriptsPromptTeachesExplicitRunAndSchedule(t *testing.T) {
-	resolved, err := Resolve([]string{"scripts"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body string
-	for _, fragment := range BodyFragments(resolved) {
-		if fragment.Plugin == "scripts" {
-			body = fragment.Body
-		}
-	}
-	if !strings.Contains(body, "scripts/scripts.sh") {
-		t.Fatalf("scripts compatibility instructions omit the direct launcher:\n%s", body)
-	}
-	skill, err := storeassets.ReadBundled("skills/scripts/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"scripts/scripts.sh run", "scripts/scripts.sh schedule", "never overlap", "--quiet-exit", "Queue it exactly once"} {
-		if !strings.Contains(string(skill), want) {
-			t.Fatalf("scripts skill missing %q:\n%s", want, skill)
-		}
-	}
-	if strings.Contains(body, "tools script") {
-		t.Fatalf("scripts prompt still teaches removed add command:\n%s", body)
-	}
 }
 
 func TestTasksCapabilityIsOptionalAndContributesItsOwnPrompt(t *testing.T) {
@@ -309,55 +130,22 @@ func TestTasksCapabilityIsOptionalAndContributesItsOwnPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fragment *Fragment
-	for i := range BodyFragments(resolved) {
-		candidate := BodyFragments(resolved)[i]
-		if candidate.Plugin == "tasks" {
-			fragment = &candidate
-			break
+	found := false
+	for _, candidate := range resolved {
+		if candidate == "tasks" {
+			found = true
 		}
 	}
-	if fragment == nil || fragment.Name != "system:tasks" {
-		t.Fatalf("tasks fragment = %#v", fragment)
-	}
-	skill, err := storeassets.ReadBundled("skills/tasks/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, command := range []string{
-		"ttasks mine", "ttasks ready", "ttasks create", "ttasks comment",
-		"ttasks ask", "ttasks done", "ttasks work next", "ttasks work show", "ttasks observe",
-	} {
-		if !strings.Contains(fragment.Body+string(skill), command) {
-			t.Fatalf("tasks instructions missing %q", command)
-		}
+	if !found {
+		t.Fatalf("tasks missing from resolved set %v", resolved)
 	}
 	without, err := Resolve(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, candidate := range BodyFragments(without) {
-		if candidate.Plugin == "tasks" {
+	for _, candidate := range without {
+		if candidate == "tasks" {
 			t.Fatal("tasks prompt appears when capability is disabled")
-		}
-	}
-}
-
-func TestTasksPromptDistinguishesFlexibleAndWorkflowQuestions(t *testing.T) {
-	body, err := storeassets.ReadBundled("skills/tasks/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	normalized := strings.Join(strings.Fields(string(body)), " ")
-	for _, want := range []string{
-		"For a flexible task",
-		"ttasks ask <key> user:<login>|agent:<name> <text>",
-		"A comment is not a blocking question",
-		"For workflow-managed work",
-		"Treat its packet as the complete authority",
-	} {
-		if !strings.Contains(normalized, want) {
-			t.Fatalf("tasks skill missing %q:\n%s", want, body)
 		}
 	}
 }
@@ -371,14 +159,5 @@ func TestGoalCapabilityReplacesCurrentTask(t *testing.T) {
 	}
 	if !IsOptional("goal") {
 		t.Fatal("goal is not a capability")
-	}
-	body, err := storeassets.ReadBundled("skills/goal/SKILL.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"# Goal", "automatically attributes AI usage", "scripts/goal.sh set", "tasks"} {
-		if !strings.Contains(string(body), want) {
-			t.Fatalf("goal skill missing %q:\n%s", want, body)
-		}
 	}
 }

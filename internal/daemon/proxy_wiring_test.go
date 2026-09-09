@@ -184,11 +184,32 @@ func buildBasicImage(t *testing.T, dir string) {
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("BODY"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	im := &imagefile.Imagefile{SchemaVersion: 1,
-		Plugins: []imagefile.Plugin{{Name: "context"}},
-		Prompts: []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}}, Dir: src}
+	var skills []imagefile.SkillEntry
+	var plugins []imagefile.V2Plugin
+	for _, name := range []string{"whoami", "loop", "messages", "context"} {
+		skill := filepath.Join(src, "skills", name)
+		if err := os.MkdirAll(skill, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		body := "---\nname: " + name + "\ndescription: Test capability.\n---\n"
+		if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		skills = append(skills, imagefile.SkillEntry{Dir: skill})
+		plugins = append(plugins, imagefile.V2Plugin{Name: name})
+	}
+	launcher := filepath.Join(src, "skills", "loop", "scripts", "loop.sh")
+	if err := os.MkdirAll(filepath.Dir(launcher), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(launcher, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	st := &image.Store{Dir: dir}
-	if _, err := image.Build(im, image.Ref{Name: "basic", Tag: "latest"}, st, time.Now); err != nil {
+	if _, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2, Dir: src, Plugins: plugins, Skills: skills,
+		Prompts: []imagefile.PromptEntry{{File: "./task.md"}},
+	}, imagefile.ResolveRoots{}, image.Ref{Name: "basic", Tag: "latest"}, st, time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
 }

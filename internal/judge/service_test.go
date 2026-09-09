@@ -23,7 +23,7 @@ type recordingImprovements struct {
 func seedJudgeImages(t *testing.T, js *Store, names ...string) (*image.Store, image.Manifest) {
 	t.Helper()
 	images := &image.Store{Dir: t.TempDir()}
-	manifest, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Plugins: []imagefile.V2Plugin{{Name: "llm-as-judge"}}, Prompts: []imagefile.PromptEntry{{Runtime: "identity"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil)
+	manifest, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "one-shot"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,14 +43,14 @@ func TestImageIdentityFreezesActiveSnapshotForManualAndAgentRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Rebuilding the mutable tag must not mix active digest A with template B.
-	if _, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "messages"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil); err != nil {
+	if _, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "user-prompt"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
 	manual, _, err := s.OperatorReview(context.Background(), []string{"target"}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "context"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil); err != nil {
+	if _, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "one-shot"}}}, imagefile.ResolveRoots{}, image.Ref{Name: "effective-judge", Tag: "latest"}, images, time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
 	result, err := s.AgentAction(context.Background(), "lead", "lead-it", "run.create", map[string]any{

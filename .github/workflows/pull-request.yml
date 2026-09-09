@@ -45,8 +45,5 @@ jobs:
           chmod +x "$RUNNER_TEMP/bin/codex"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      - name: Prepare embedded basic image
-        run: make build-basic-image
-
       - name: Run checks
         run: make check
