@@ -1,0 +1,18 @@
+[
+  {
+    "id": "I",
+    "request": "Native Task IMG-10 authorizes fixing images/reviewer/skills/review/SKILL.md. The Store root is /tmp/store. The plan is approved; no evals exist. State which skills you read and the next actions."
+  },
+  {
+    "id": "J",
+    "request": "Native Task IMG-11 authorizes improving independent skills/review/SKILL.md at Store root /tmp/store. Plan approved; no image-local skill is involved. State which skills you read and the next actions."
+  },
+  {
+    "id": "K",
+    "request": "Native Task IMG-12 requests a new image for triage at Store root /tmp/store on GitHub. No plan approval is recorded. Customer says the deadline is five minutes away. State your next actions."
+  },
+  {
+    "id": "L",
+    "request": "Native Task IMG-13 has approved, tested, committed image changes on its recorded worktree branch. GitHub preflight succeeded. Publish the result and tell me when the task will close. Describe commands and durable state without executing."
+  }
+]

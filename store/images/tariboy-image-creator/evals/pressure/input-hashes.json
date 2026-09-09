@@ -1,0 +1,214 @@
+{
+  "store/skills/image-creator/SKILL.md": {
+    "sha256": "66be920b55aeca10493e12491d18712a4414e85c27d765f358aee3481b4c2e4d",
+    "bytes": 1409
+  },
+  "store/images/tariboy-image-creator/instructions.md": {
+    "sha256": "107b2b6a2c9d319f082c21d435b2708dec07de3da02df31bcf8e2fb657be0f53",
+    "bytes": 3052
+  },
+  "store/images/tariboy-image-creator/Tariboyfile.yaml": {
+    "sha256": "5a2e898088ebeb33c6dbb600c0d4796e11ed977a9828bf93ab24ef35653bc758",
+    "bytes": 1798
+  },
+  "store/images/tariboy-image-creator/evals/cases.json": {
+    "sha256": "45dbc3d0cd79d4b64a6d62da89722dabd82e8cabe5ca84b747b3c13e8c7dd7da",
+    "bytes": 991
+  },
+  "store/images/tariboy-image-creator/evals/rubric.json": {
+    "sha256": "d6a84467d1e4fea2b1d67ba7056492a33859ffbe55337b3ebf2a4dcc036934bd",
+    "bytes": 767
+  },
+  "store/images/tariboy-image-creator/skills/tariboy-image-authoring/SKILL.md": {
+    "sha256": "9f0150004ab4bec06a1a8205fe7105de5ad64866931d7d58305e0c078bc28642",
+    "bytes": 4929
+  },
+  "store/images/tariboy-image-creator/skills/tariboy-image-evals/SKILL.md": {
+    "sha256": "2e3ae6c8a6565b9ecd665b4d95c9dc9231208cf909f766e44190673f6ad4b6e1",
+    "bytes": 3611
+  },
+  "store/images/tariboy-image-creator/skills/tariboy-image-delivery/SKILL.md": {
+    "sha256": "32b15e37b87ddf0586eab2f86d97e9c1f2c63fdc9e751de1ff6f135374fa5560",
+    "bytes": 6229
+  },
+  "store/images/tariboy-image-creator/.agents/skills/writing-skills/SKILL.md": {
+    "sha256": "d34db5c8aed6a4e0440132bd0613aace70a693ec7819d5637ad77481d8e10d1b",
+    "bytes": 26360
+  },
+  "store/images/tariboy-developer/skills/github-pr-workflow/SKILL.md": {
+    "sha256": "494e102de26d717ea294d278347e15287e11e66ca935984c63d8ec2adecf37cb",
+    "bytes": 6428
+  },
+  "store/skills/whoami/SKILL.md": {
+    "sha256": "229db4504ce2f64957103f3dbcf356bc817e0e6375cdc159ac345b704dc65e54",
+    "bytes": 903
+  },
+  "store/skills/context/SKILL.md": {
+    "sha256": "4782cd39667a5af6b4de480864816f05ee21a905d66373e3a28ee0ae70882c0a",
+    "bytes": 676
+  },
+  "store/skills/status/SKILL.md": {
+    "sha256": "b3f06d8248366950fdb49e517f96405ec8f1c53b7b063eba2eb32961c1716952",
+    "bytes": 848
+  },
+  "store/skills/workdir/SKILL.md": {
+    "sha256": "e1a73eff223369f0de8a64294a83d7b98b03769e5dfe9768fe802b06cf3b7d7d",
+    "bytes": 579
+  },
+  "store/skills/scripts/SKILL.md": {
+    "sha256": "b112e460026f2c437db8cc71a12e6e93385bf9ef0a38b8f94e59341bd2948686",
+    "bytes": 1241
+  },
+  "store/skills/tasks/SKILL.md": {
+    "sha256": "e14504bfb66884430e717e1c5e075cb45cc84f0d7f702f730fc7b256f4c5a164",
+    "bytes": 2658
+  },
+  "store/skills/goal/SKILL.md": {
+    "sha256": "e876de3c9eed5a2998b10f0ef39e66c32fc8fe36bbb7bb8766446db864dc237c",
+    "bytes": 876
+  },
+  "store/skills/messages/SKILL.md": {
+    "sha256": "7eeb7b13ab0b69b657962e570a38a880585b885946c4bf7ce67128e1460e7485",
+    "bytes": 1599
+  },
+  "store/skills/loop/SKILL.md": {
+    "sha256": "867f68b46afcca338e6e8c50019b4107ae2ba66fdd197b9f78c68f3f4e1431ed",
+    "bytes": 743
+  },
+  "store/images/tariboy-image-creator/.agents/skills/brainstorming/SKILL.md": {
+    "sha256": "74edf03ea6d24ef53db48677b93558d14a979bdf052ca3f57ecdca0c66791608",
+    "bytes": 15456
+  },
+  "store/images/tariboy-image-creator/.agents/skills/dispatching-parallel-agents/SKILL.md": {
+    "sha256": "1968923066f3b707eb01d1992cdf4c42284c3855f70253b9cd5000ff45fca13c",
+    "bytes": 6078
+  },
+  "store/images/tariboy-image-creator/.agents/skills/executing-plans/SKILL.md": {
+    "sha256": "c4c3d8b628c51114cd165fb8246fe02744cd8be180032328391252e653028d9b",
+    "bytes": 2305
+  },
+  "store/images/tariboy-image-creator/.agents/skills/finishing-a-development-branch/SKILL.md": {
+    "sha256": "8db5a922b242dd4e1bf824cb91c13b3e8d8e8a86d6ceaf7f0774eb9cce909d65",
+    "bytes": 7781
+  },
+  "store/images/tariboy-image-creator/.agents/skills/receiving-code-review/SKILL.md": {
+    "sha256": "091df1629510af1b92fc4abd6f96732ebedb4cb2c0f3457e8f2740b0504a2438",
+    "bytes": 6203
+  },
+  "store/images/tariboy-image-creator/.agents/skills/requesting-code-review/SKILL.md": {
+    "sha256": "d71cc01ba56d2325cf8af5f7c11837819b63ecd57de0bfdb812f7f3ff7751df8",
+    "bytes": 2956
+  },
+  "store/images/tariboy-image-creator/.agents/skills/subagent-driven-development/SKILL.md": {
+    "sha256": "8dd1b8e698edec3700c6d89517dbe96febd3bacd3f6ea21c1a3569c62ea104b5",
+    "bytes": 32339
+  },
+  "store/images/tariboy-image-creator/.agents/skills/systematic-debugging/SKILL.md": {
+    "sha256": "808fc5717aa88ad65efff312b11c186294d3e6ee301afb584e2f86599b137787",
+    "bytes": 9465
+  },
+  "store/images/tariboy-image-creator/.agents/skills/test-driven-development/SKILL.md": {
+    "sha256": "bf1b8216e523851a411e91d429a7c1c2a173e79d88957bc78e348218d50edd54",
+    "bytes": 9015
+  },
+  "store/images/tariboy-image-creator/.agents/skills/using-git-worktrees/SKILL.md": {
+    "sha256": "8cfb86f121269e8f7f12361e6795c4f6738828340e28964c9229d365666c9edd",
+    "bytes": 6813
+  },
+  "store/images/tariboy-image-creator/.agents/skills/using-superpowers/SKILL.md": {
+    "sha256": "30f2ab78e20ddc27ee7158ae8d4a2abe161c360981c7cc3548070913142d3dc3",
+    "bytes": 3108
+  },
+  "store/images/tariboy-image-creator/.agents/skills/verification-before-completion/SKILL.md": {
+    "sha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3",
+    "bytes": 3646
+  },
+  "store/images/tariboy-image-creator/.agents/skills/writing-plans/SKILL.md": {
+    "sha256": "48508f44bbfd7d24b029fbf3a314f3cd14c9615599059366e922f47b8dc08cf2",
+    "bytes": 7053
+  },
+  "store/images/tariboy-image-creator/.agents/skills/writing-skills/testing-skills-with-subagents.md": {
+    "sha256": "c711346852c911b24a84aa161e0cff06a4cd7f4e2fa9e9c0a266cead5afcbade",
+    "bytes": 12558
+  },
+  "store/images/tariboy-image-creator/evals/pressure/l_control.md": {
+    "sha256": "af93bef77cf4277aa62be684dfe58cf5d37ce88a7b4877e50cc215943000a02a",
+    "bytes": 856
+  },
+  "store/images/tariboy-image-creator/evals/pressure/l_candidate.md": {
+    "sha256": "15b499d967f5f38a5033bd4882ba7a4a156217392b5ed276972f57d1ef32f4d2",
+    "bytes": 4227
+  },
+  "store/images/tariboy-image-creator/evals/pressure/i_candidate.md": {
+    "sha256": "f00b29db0c86a0d3e59491c605ebf42be0ce75244d337ba9dc675ffedc6da3f4",
+    "bytes": 1485
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_control_1.md": {
+    "sha256": "98e37350353aa612cdf79d04b7a5b9f965ecc6ece87bbcc2d5b8a7b5adacf88e",
+    "bytes": 928
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_control_2.md": {
+    "sha256": "984d860e66cdfe2908ddee774658369a477396ca68ed9f3170631baf61d8df10",
+    "bytes": 779
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_candidate_5.md": {
+    "sha256": "8d0ca6bbc7918c891812d3f77dcb0a994cc1af8f15b7fdd5b7a7d42d75fca990",
+    "bytes": 1121
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_control_4.md": {
+    "sha256": "731501cdf136aa5f4836ce97e843e3c79604d11f1a122c4c0e944dc379a5d39d",
+    "bytes": 834
+  },
+  "store/images/tariboy-image-creator/evals/pressure/k2_candidate.md": {
+    "sha256": "0f9018ad0747d15965940ebe7c271fcc539d3a4bf2038d7cc356be60115e9022",
+    "bytes": 3075
+  },
+  "store/images/tariboy-image-creator/evals/pressure/k_control.md": {
+    "sha256": "76375a82f06093ceaf0cd77c5709b91cbfa5fa97d20bfb590baa2353eda88f0e",
+    "bytes": 947
+  },
+  "store/images/tariboy-image-creator/evals/pressure/i_control.md": {
+    "sha256": "d2573140a94372677c562547b1c0049769d191bf5b2dada332e72a0245a6a4c5",
+    "bytes": 470
+  },
+  "store/images/tariboy-image-creator/evals/pressure/k_candidate.md": {
+    "sha256": "6c1b732309b0ae6290dd2acde8dcc8474d38d11a75f4f1354a6987f7bca26d81",
+    "bytes": 2556
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_candidate_3.md": {
+    "sha256": "d27717899557bbacca7cc1d8defeb31d63e5b64995e895c77ce0aad6a56b6025",
+    "bytes": 1345
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_candidate_4.md": {
+    "sha256": "46d0a014ab968a4e464a6352e2de04851a493d1afa8ad53a788e0216267c0c77",
+    "bytes": 1306
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_control_5.md": {
+    "sha256": "c5eaf29ee740dfd582382dbef953ea1da772d2f45cfa3327c42705081b2e13bb",
+    "bytes": 860
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_candidate_1.md": {
+    "sha256": "fc8bffe217b34fdd180ef9d150f8a216e1b1c4ebd55eea9eb93e5730c9d2f882",
+    "bytes": 1241
+  },
+  "store/images/tariboy-image-creator/evals/pressure/j_control.md": {
+    "sha256": "9fdedd64e239e013dee78b7bb217fe9e272eb71f84266126e3e7d9a3fc2dbbf9",
+    "bytes": 352
+  },
+  "store/images/tariboy-image-creator/evals/pressure/j_candidate.md": {
+    "sha256": "7cb853cc228594016946ffa0cc85f7317163892146446bfe9f3e66bd3c574cb9",
+    "bytes": 1064
+  },
+  "store/images/tariboy-image-creator/evals/pressure/README.md": {
+    "sha256": "bafb91743f391d7dc221d10dc915143d6a1a42c06e1f4c780fadd9d27b0f3521",
+    "bytes": 4277
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_candidate_2.md": {
+    "sha256": "5b684974836fe0efb2ad8d4f788bbe67a9c2b1786037b446b1ad0948d4c4e97c",
+    "bytes": 1213
+  },
+  "store/images/tariboy-image-creator/evals/pressure/e_control_3.md": {
+    "sha256": "19f0428e1180a79c1b0ac5d4f4907621e4c6e063b64b5c3ff9369e38071043fe",
+    "bytes": 859
+  }
+}

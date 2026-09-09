@@ -19,6 +19,9 @@ func TestShippedImagesOrderActionableRuntimes(t *testing.T) {
 		filepath.Join(root, "store", "images", "tariboy-developer"): {
 			{Runtime: "one-shot"}, {Runtime: "messages"}, {Runtime: "goal"},
 		},
+		filepath.Join(root, "store", "images", "tariboy-image-creator"): {
+			{Runtime: "one-shot"}, {Runtime: "messages"}, {Runtime: "goal"},
+		},
 		filepath.Join(root, "store", "images", "llm-as-judge"): {
 			{Runtime: "one-shot"}, {Runtime: "messages"}, {Runtime: "goal"},
 		},
