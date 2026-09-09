@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
+	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 )
@@ -68,6 +69,27 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 		}
 	}
 	if err := agentskills.ValidateSet(skills); err != nil {
+		return preparedV2{}, err
+	}
+	contract := imagecontract.Input{Plugins: make([]string, 0, len(plugins)), Skills: make([]imagecontract.Skill, 0, len(skills))}
+	for _, plugin := range plugins {
+		contract.Plugins = append(contract.Plugins, plugin.Name)
+	}
+	for _, skill := range skills {
+		executables := make(map[string]bool)
+		for _, file := range skill.Files {
+			if file.Executable {
+				executables[file.RelativePath] = true
+			}
+		}
+		contract.Skills = append(contract.Skills, imagecontract.Skill{Name: skill.Metadata.Name, Executables: executables})
+	}
+	for _, prompt := range src.Prompts {
+		if prompt.Runtime != "" {
+			contract.Runtimes = append(contract.Runtimes, prompt.Runtime)
+		}
+	}
+	if err := imagecontract.Validate(contract, resolver); err != nil {
 		return preparedV2{}, err
 	}
 	entries := make([]TemplateEntry, 0, len(src.Prompts))

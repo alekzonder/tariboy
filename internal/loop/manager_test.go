@@ -574,6 +574,16 @@ func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string
 func testSkillsDir(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	for _, name := range []string{"loop", "tasks"} {
+		dir := filepath.Join(root, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "---\nname: " + name + "\ndescription: Test " + name + " capability.\n---\n"
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, path := range []string{
 		"loop/scripts/loop.sh",
 		"tasks/scripts/tasks.sh",

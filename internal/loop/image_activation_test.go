@@ -714,10 +714,12 @@ func TestPendingImageActivationSwapsOnlyImageAndPromotes(t *testing.T) {
 		}
 		ref := image.Ref{Name: name, Tag: "latest"}
 		declared := make([]imagefile.V2Plugin, 0, len(pluginNames))
+		skills := make([]imagefile.SkillEntry, 0, len(pluginNames))
 		for _, pluginName := range pluginNames {
 			declared = append(declared, imagefile.V2Plugin{Name: pluginName})
+			skills = append(skills, imagefile.SkillEntry{Dir: filepath.Join(testSkillsDir(t), pluginName)})
 		}
-		man, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Plugins: declared, Prompts: []imagefile.PromptEntry{{File: "./p.md"}}}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+		man, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Plugins: declared, Skills: skills, Prompts: []imagefile.PromptEntry{{File: "./p.md"}}}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -851,11 +853,13 @@ func TestImageActivationCrashRecoveryReconcilesActiveShimsAfterCancel(t *testing
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	build := func(name string, plugins ...string) (image.Ref, image.Manifest) {
 		declared := make([]imagefile.V2Plugin, 0, len(plugins))
+		skills := make([]imagefile.SkillEntry, 0, len(plugins))
 		for _, plugin := range plugins {
 			declared = append(declared, imagefile.V2Plugin{Name: plugin})
+			skills = append(skills, imagefile.SkillEntry{Dir: filepath.Join(testSkillsDir(t), plugin)})
 		}
 		ref := image.Ref{Name: name, Tag: "latest"}
-		manifest, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Plugins: declared}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+		manifest, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Plugins: declared, Skills: skills}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -863,7 +867,7 @@ func TestImageActivationCrashRecoveryReconcilesActiveShimsAfterCancel(t *testing
 	}
 	aRef, aManifest := build("active", "loop")
 	bRef, _ := build("candidate")
-	ag := agent.Agent{Name: "worker", ImageRef: aRef.String(), ImageDigest: aManifest.Digest, Plugins: []string{"loop"}}
+	ag := agent.Agent{Name: "worker", ImageRef: aRef.String(), ImageDigest: aManifest.Digest, Plugins: []string{"loop"}, HarnessType: "codex"}
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
 	}

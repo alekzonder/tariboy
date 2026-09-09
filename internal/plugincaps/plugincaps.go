@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/imagecontract"
 	storeassets "github.com/alekzonder/tariboy/store"
 )
 
@@ -24,13 +25,8 @@ var (
 
 // ResolvedPlugin is the capability information schema-v1 image construction
 // needs from an installed external plugin. Schema v2 uses Installed only.
-type ResolvedPlugin struct {
-	Installed bool
-	Prompt    string
-	HasPrompt bool
-}
-
-type ExternalResolver func(name string) (ResolvedPlugin, error)
+type ResolvedPlugin = imagecontract.ResolvedPlugin
+type ExternalResolver = imagecontract.ExternalResolver
 
 type Fragment struct {
 	Plugin  string
@@ -68,15 +64,8 @@ func known(name string) bool {
 }
 
 func knownExplicit(name string) bool {
-	if known(name) {
-		return true
-	}
-	for _, instruction := range INSTRUCTION_ONLY {
-		if instruction == name {
-			return true
-		}
-	}
-	return false
+	_, ok := imagecontract.Builtin(name)
+	return ok
 }
 
 func IsOptional(name string) bool {
