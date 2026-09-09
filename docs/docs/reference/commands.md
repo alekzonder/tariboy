@@ -172,7 +172,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
 | `scripts/scripts.sh rerun SCRIPT_ID` | Rerun a completed one-shot definition |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
-| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
+| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from an agent-confined source directory (`image-creator` only) |
 
 ## Native Tasks (`ttasks …`)
 

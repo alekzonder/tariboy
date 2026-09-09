@@ -13,7 +13,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 
 ## Complete list
 
-| Plugin | Class | In `basic:latest` | Agent surface | Durable state |
+| Plugin | Class | In official `basic` | Agent surface | Durable state |
 | --- | --- | :---: | --- | --- |
 | [`whoami`](/docs/plugins/built-in/whoami) | Historical core | Yes | `scripts/whoami.sh` | None |
 | [`loop`](/docs/plugins/built-in/loop) | Historical core | Yes | `i-am-done`, `scripts/loop.sh …` | Iteration and loop state |
@@ -45,18 +45,18 @@ plugins:
   - name: context
   - name: workdir
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/whoami
-  - dir: $CURRENT_VERSION_STORE/skills/loop
-  - dir: $CURRENT_VERSION_STORE/skills/messages
-  - dir: $CURRENT_VERSION_STORE/skills/context
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
+  - dir: ../../skills/whoami
+  - dir: ../../skills/loop
+  - dir: ../../skills/messages
+  - dir: ../../skills/context
+  - dir: ../../skills/workdir
 prompts:
   - runtime: identity
   - runtime: messages
   - runtime: context
   - runtime: workdir
   - runtime: user-prompt
-  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md
+  - file: ../../skills/loop/finish-iteration.md
 ```
 
 Plugin order is preserved, duplicate names are rejected, and an unknown name is
@@ -65,21 +65,21 @@ prompt files and runtime placeholders remain separate from the plugin list.
 
 :::warning[Plugins do not inject schema-v2 prompts]
 Declaring `context` enables its route but does not package its skill or add the
-live context text. List the Store skill and `runtime: context` explicitly when
+live context text. List the image skill and `runtime: context` explicitly when
 the agent needs both. The same transparency rule applies to instruction-only
 `workdir` and `goal`.
 :::
 
 ## The default image
 
-The daemon-managed `basic:latest` image declares nine built-ins:
+The official Store's `basic` source declares nine built-ins:
 
 ```text
 whoami, loop, messages, context, status, workdir, scripts, goal, tasks
 ```
 
 It deliberately excludes `schedule`, `image-creator`, and
-`llm-as-judge`. New agents use the current managed generation. Existing agents
+`llm-as-judge`. Register and refresh the Store, then build it. Existing agents
 remain pinned to their assigned image digest until an image change is activated
 for a future iteration.
 
@@ -98,8 +98,8 @@ when the work packet grants it.
 
 ## Prompt and state ownership
 
-Canonical built-in skills and the mandatory finish prompt live under the
-versioned Store. A schema-v2 image packages each enabled skill and chooses the
+Canonical skills and the mandatory finish prompt live in the image source. A
+schema-v2 image packages each enabled skill and chooses the
 exact position of runtime values and mandatory prompt layers. Changing an image does not
 delete daemon-owned agent data such as context, audit, messages, schedules,
 scripts, Tasks, or judge artifacts.

@@ -111,8 +111,7 @@ entries. They may not override `HOME`, `CODEX_HOME`, or `XDG_CONFIG_HOME`.
 | `internal/` | Go domain logic, APIs, persistence, loop, bus, proxy, plugins, and embedded store UI. |
 | `ui/` | Shared React/TypeScript source and the Desktop and store UI build targets. |
 | `desktop/src-tauri/` | Rust/Tauri native host, daemon lifecycle, SSH, Keychain, tunnels, support export, and packaging resources. |
-| `internal/builtinimages/source/` | Canonical source for the embedded `basic:latest` image. |
-| `store/skills/` | Canonical Agent Skills installed under each versioned Store. |
+| `~/github/tariboy-store/` | Separate repository containing canonical image sources and Agent Skills. |
 | `scripts/` | Isolated smoke, end-to-end, packaging, and release verification. |
 | `docs/docs/` | Current product, operator, architecture, and development documentation. |
 | `docs/releases/` | Release notes and acceptance evidence. |
@@ -149,7 +148,7 @@ Use the smallest fast entry point that covers the change; the aggregate and
 heavy targets compose them:
 
 ```bash
-make backend-check   # Go, Store skills, and smoke contracts
+make backend-check   # Go and smoke contracts
 make frontend-check  # UI and documentation
 make check           # both fast checks
 make full-check      # heavy, tens of minutes, includes check
@@ -158,7 +157,7 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
-the Store skill tests, and smoke contracts. The frontend target runs UI
+Go unit tests and smoke contracts. The frontend target runs UI
 typecheck, lint, unit tests, branding, and the documentation checks. All three
 are read-only: they never install dependencies, write into `bin/`, or dirty
 `git status`. Each step reports its result and duration as it finishes.
@@ -179,11 +178,6 @@ so one aggregate pass surfaces gofmt drift and a UI type error together.
 `docs/node_modules` to exist; run `npm ci` in those directories once, as
 described below. These targets do not install them, because installing would
 rewrite a shared working tree.
-
-In a fresh checkout or worktree, also run `make build-basic-image` once before
-`make check`. It prepares the ignored embedded image used by in-process daemon
-tests without starting a daemon. PR CI performs this preparation before its
-read-only check step; the check itself does not generate the artifact.
 
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
@@ -231,20 +225,17 @@ the Go quality gate.
 `backend-check`; run `make fmt` yourself when it reports drift.
 
 `make build` produces the core binaries. It is not part of `check`, which
-writes nothing into `bin/`, and it is the first build step of `full-check`. It
-also builds the canonical `basic:latest` image bundle before the main binaries;
-optional external plugins have their own build under `plugins/`. Built-in
-skills and the mandatory finish prompt come from the versioned Store, not Go
-constants. The image build
-uses an isolated temporary store and never contacts a daemon. `desktop-binaries` runs
-the same image step before compiling its local and remote daemon payloads.
+writes nothing into `bin/`, and it is the first build step of `full-check`.
+Optional external plugins have their own build under `plugins/`. Canonical
+image sources, Agent Skills, and their static prompts are maintained in the
+separate `tariboy-store` repository rather than embedded in the binaries.
+`desktop-binaries` compiles the local and remote daemon payloads without
+building an agent image.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
-The Tasks mode E2E inside `backend-check` builds its five required binaries and
-basic image in temporary directories. A Go build overlay embeds that temporary
-image, so the check never regenerates workspace `bin/` or
-`internal/builtinimages/generated`.
+The Tasks mode E2E inside `backend-check` builds its five required binaries in
+temporary directories, so the check never regenerates workspace `bin/`.
 
 `make server-install` builds all six real server binaries, stages and verifies
 their checksums, publishes a versioned release under
@@ -254,8 +245,8 @@ their checksums, publishes a versioned release under
 
 Configurable Native Tasks workflow changes normally need focused tests under
 `internal/tasks`, the operator route/OpenAPI registry tests under
-`internal/commands`, and agent command parsing under
-`store/skills/test_store_skills.py`.
+`internal/commands`, and the agent command contracts in the separate
+`tariboy-store` repository's `make check`.
 Changes to queue-trigger or observation delivery also exercise bus/daemon
 recovery; Compose changes exercise `internal/compose`. The isolated product
 path is `scripts/workflow-e2e.sh` and is included by `make full-check`. Keep the
@@ -591,11 +582,6 @@ The two UI targets have different Git contracts:
   After a store UI or relevant shared UI change, run `make store-ui` in an
   isolated worktree at the target commit and commit only the intended generated
   store bundle with its source change.
-- `internal/builtinimages/generated` is ignored build output embedded in
-  `tariboyd`. `make build-basic-image` regenerates it from the canonical
-  source at `internal/builtinimages/source` before daemon compilation; do not
-  stage the archive or version marker.
-
 `tariboyd` is API/WebSocket only. It does not embed a Desktop UI, and there is
 no `internal/webui` tree.
 
