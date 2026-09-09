@@ -2,8 +2,7 @@ package cli_test
 
 import (
 	"encoding/json"
-	"path/filepath"
-	"runtime"
+	"os"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/client"
@@ -22,27 +21,19 @@ func mustCall(t *testing.T, c *client.Client, method, route string, body any) ma
 	return m
 }
 
-// repoRoot resolves the repository root from this test's own source path
-// (<repo>/internal/cli/groups_inproc_test.go), so the examples fixture is found
-// regardless of the working directory.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot locate test source file")
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-}
-
 func TestGroupCommandsProvisionSubscriptions(t *testing.T) {
 	_, _, c := startDaemon(t)
+	source := t.TempDir()
+	if err := os.WriteFile(source+"/Tariboyfile.yaml", []byte("schema_version: 2\nplugins: []\nskills: []\nprompts: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a group with a lead.
 	mustCall(t, c, "POST", "/api/groups", map[string]any{"name": "research", "lead": "scout"})
 
 	// Build the image the group agents run, then run two members.
 	mustCall(t, c, "POST", "/api/images/build", map[string]any{
-		"name": "stub", "tag": "latest", "path": filepath.Join(repoRoot(t), "internal", "builtinimages", "source"),
+		"name": "stub", "tag": "latest", "path": source,
 	})
 	mustCall(t, c, "POST", "/api/agents", map[string]any{
 		"image": "stub:latest", "name": "scout", "group": "research", "loop": false})

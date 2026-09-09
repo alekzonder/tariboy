@@ -20,13 +20,13 @@ func buildImage(t *testing.T, imagesDir string) (image.Ref, string) {
 	t.Helper()
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"),
-		[]byte("schema_version: 1\nprompts:\n  - task.md\n"), 0o600); err != nil {
+		[]byte("schema_version: 2\nplugins: []\nskills: []\nprompts:\n  - file: ./task.md\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("do the thing\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	imgFile, err := imagefile.Parse(src)
+	imgFile, err := imagefile.ParseAny(src)
 	if err != nil {
 		t.Fatalf("imagefile.Parse: %v", err)
 	}
@@ -35,7 +35,7 @@ func buildImage(t *testing.T, imagesDir string) (image.Ref, string) {
 		t.Fatal(err)
 	}
 	st := &image.Store{Dir: imagesDir}
-	man, err := image.Build(imgFile, ref, st, time.Now)
+	man, err := image.BuildV2(imgFile.V2, imagefile.ResolveRoots{}, ref, st, time.Now, nil)
 	if err != nil {
 		t.Fatalf("image.Build: %v", err)
 	}

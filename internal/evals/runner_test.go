@@ -30,6 +30,20 @@ func (f *fakeEvaluator) Evaluate(_ context.Context, req plugins.EvalRequestDTO) 
 
 func buildEvalImage(t *testing.T) (*image.Store, string) {
 	t.Helper()
+	legacyStore := t.TempDir()
+	for name, body := range map[string]string{
+		"skills/whoami/SKILL.md":      "# Whoami\n",
+		"skills/messages/SKILL.md":    "# Messages\n",
+		"prompts/iteration-finish.md": "Finish.\n",
+	} {
+		path := filepath.Join(legacyStore, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("task"), 0o644); err != nil {
 		t.Fatal(err)
@@ -51,7 +65,7 @@ evals:
 	}
 	st := &image.Store{Dir: t.TempDir()}
 	ref, _ := image.ParseRef("evaldemo:latest")
-	if _, err := image.Build(imgFile, ref, st, func() time.Time { return time.Unix(0, 0).UTC() }); err != nil {
+	if _, err := image.Build(imgFile, ref, st, func() time.Time { return time.Unix(0, 0).UTC() }, image.WithBuiltinStoreRoot(legacyStore)); err != nil {
 		t.Fatal(err)
 	}
 	return st, "evaldemo:latest"

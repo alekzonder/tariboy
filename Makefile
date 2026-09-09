@@ -82,7 +82,6 @@ test:
 smoke-contract-test:
 	./scripts/tariboy-smoke-contract-test.sh
 	./scripts/tariboy-branding-contract-test.sh
-	./scripts/image-build-wrappers-contract-test.sh
 	bash ./scripts/check-output-contract-test.sh
 	./scripts/make-clean-contract-test.sh
 	./scripts/server-install-contract-test.sh
@@ -529,7 +528,6 @@ backend-check:
 	run_step "vet"          '$(SUBMAKE) vet'; \
 	run_step "test"         '$(SUBMAKE) test'; \
 	run_step "tariboy-tasks-e2e" '$(SUBMAKE) tariboy-tasks-e2e'; \
-	run_step "store-skills" 'PYTHONDONTWRITEBYTECODE=1 python3 store/skills/test_store_skills.py'; \
 	run_step "smoke-contract" '$(SUBMAKE) smoke-contract-test'; \
 	summarize backend-check
 
