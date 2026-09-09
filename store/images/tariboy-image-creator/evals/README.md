@@ -45,7 +45,7 @@ in `results.json` and each skill’s `evals/results.json`.
 
 The skill type under test is reference/procedure guidance and rule adherence;
 no comparative wording optimization was performed in the initial run. The
-follow-up pressure runs below add five repetitions per delivery variant.
+follow-up summarized below adds five repetitions per delivery variant.
 Statistical robustness is not claimed. The initial control
 already resisted log injection and premature behavioral-success claims; these
 passing controls remain regression coverage rather than new improvements.
@@ -60,10 +60,15 @@ is verified separately by the real Go image builder below.
 ## Review follow-up
 
 The initial single-sample evidence did not satisfy the writing-skills repeated
-trial requirement for delivery rules. See [pressure/README.md](pressure/README.md)
-for five fresh legacy-control and five fresh candidate pressure runs, plus
-fresh per-case composition controls/candidates I–L. Raw prompts, responses,
-source hashes and strict criterion scores are preserved there.
+trial requirement for delivery rules. Five fresh legacy-control and five fresh
+candidate runs were therefore evaluated, plus fresh per-case composition
+controls/candidates I–L. The candidate delivery result was 5/5 complete against
+0/5 complete controls. Composition I, J and L passed; K retained a strict
+failure because it omitted future base synchronization while correctly waiting
+for approval. Supplemental K2, with approval already recorded, passed the
+required preflight → fetch/fast-forward-only → worktree order. Aggregated
+criteria, source hashes and limitations are in `results.json`; one-off actor
+transcripts are not maintained as image source.
 
 The fresh K response correctly waits for plan approval but omits explicit base
 synchronization from its abbreviated future plan; its strict rubric failure
