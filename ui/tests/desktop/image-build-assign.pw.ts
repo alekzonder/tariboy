@@ -1,17 +1,19 @@
-import { resolve } from "node:path";
-import { expect, test, waitForMainWindow } from "./fixture";
+import { expect, test, createTestImageSource, waitForMainWindow } from "./fixture";
 import type { W3CClient } from "./w3c";
-
-const sourceDir = resolve(process.cwd(), "../internal/builtinimages/source");
 
 async function bodyText(desktop: W3CClient): Promise<string> {
   return desktop.execute<string>("return document.body ? document.body.innerText : '';");
 }
 
-test("builds a transparent image from its original directory and assigns it to an existing agent", async ({ desktop }) => {
+test("builds a transparent image from its original directory and assigns it to an existing agent", async ({ desktop, desktopWorker }) => {
+  const sourceDir = await createTestImageSource(desktopWorker.baseDir);
   await waitForMainWindow(desktop);
   await desktop.execute(`window.__imageSetup = "pending";
     window.__TAURI_INTERNALS__.invoke("daemon_status").then(async (status) => {
+      await fetch(status.base_url + "/api/images/build", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "basic", tag: "latest", path: ${JSON.stringify(sourceDir)} }),
+      });
       const response = await fetch(status.base_url + "/api/agents", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ image: "basic:latest", name: "image-select-e2e", harness: "stub", loop: false }),
@@ -96,7 +98,7 @@ test("builds a transparent image from its original directory and assigns it to a
   await desktop.execute(`window.location.hash = "#/servers/local/images/transparent-e2e/latest/template";`);
   await expect.poll(() => bodyText(desktop)).toContain("Template");
   await expect.poll(() => bodyText(desktop)).toContain("identity");
-  await expect.poll(() => bodyText(desktop)).toContain("$CURRENT_VERSION_STORE/prompts/iteration-finish.md");
+  await expect.poll(() => bodyText(desktop)).toContain("./skills/loop/finish.md");
 
   await desktop.execute(`window.location.hash = "#/agents/local/image-select-e2e/configuration";`);
   await expect.poll(() => bodyText(desktop)).toContain("Agent image");

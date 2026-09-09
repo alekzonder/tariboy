@@ -1,11 +1,48 @@
-import { spawnSync } from "node:child_process";
-import { access, appendFile, cp, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { access, appendFile, chmod, mkdir, writeFile } from "node:fs/promises";
+import { request } from "node:http";
+import { join } from "node:path";
 
 import { expect, test, waitForMainWindow } from "./fixture";
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+async function createJudgeImageSource(root: string): Promise<string> {
+  const source = join(root, "judge-image-source");
+  await mkdir(join(source, "skills/loop/scripts"), { recursive: true });
+  await mkdir(join(source, "skills/llm-as-judge"), { recursive: true });
+  await writeFile(join(source, "skills/loop/SKILL.md"), "---\nname: loop\ndescription: Complete Judge iterations.\n---\n");
+  await writeFile(join(source, "skills/llm-as-judge/SKILL.md"), "---\nname: llm-as-judge\ndescription: Review immutable iteration evidence.\n---\n");
+  const launcher = join(source, "skills/loop/scripts/loop.sh");
+  await writeFile(launcher, "#!/bin/sh\nexit 0\n");
+  await chmod(launcher, 0o700);
+  await writeFile(join(source, "rubric.md"), "Review the supplied evidence.\n");
+  await writeFile(join(source, "Tariboyfile.yaml"), `schema_version: 2
+plugins:
+  - name: loop
+  - name: llm-as-judge
+skills:
+  - dir: ./skills/loop
+  - dir: ./skills/llm-as-judge
+prompts:
+  - file: ./rubric.md
+`);
+  return source;
+}
+
+function judgeAction(socketPath: string, action: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return new Promise((resolveAction, reject) => {
+    const payload = JSON.stringify(body);
+    const req = request({ socketPath, path: `/tools/judge/action/${action}`, method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(payload) } }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("end", () => {
+        const envelope = JSON.parse(Buffer.concat(chunks).toString());
+        if ((response.statusCode ?? 500) >= 300 || !envelope.ok) reject(new Error(envelope.error?.message ?? "Judge action failed"));
+        else resolveAction(envelope.result);
+      });
+    });
+    req.on("error", reject);
+    req.end(payload);
+  });
+}
 
 test("Judge table shows start time and linked IDs, newest first", async ({ desktop }) => {
   await waitForMainWindow(desktop);
@@ -46,12 +83,7 @@ test("Judge table shows start time and linked IDs, newest first", async ({ deskt
 
 test("reviews real iterations and keeps navigation on the fixture daemon", async ({ desktop, desktopWorker }) => {
   const agents = ["judge-one", "judge-two"];
-  const cli = join(repositoryRoot, "desktop/src-tauri/resources/bin/linux-x86_64/tariboy");
-  const version = spawnSync(cli, ["version"], { encoding: "utf8" });
-  expect(version.status, version.error?.message ?? version.stderr).toBe(0);
-  const clientVersion = version.stdout.trim();
-  const imageSource = join(desktopWorker.baseDir, "judge-image-source");
-  await cp(join(repositoryRoot, "store/images/llm-as-judge"), imageSource, { recursive: true });
+  const imageSource = await createJudgeImageSource(desktopWorker.baseDir);
   agents.forEach(desktopWorker.registerAgentForCleanup);
   await waitForMainWindow(desktop);
 
@@ -133,23 +165,16 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
   const worker = async (name: string, run: string, score: number, summary: string) => {
     const socket = join(desktopWorker.runtimeDir, `${name}.sock`);
     await expect.poll(async () => { try { await access(socket); return true; } catch { return false; } }, { timeout: 30_000 }).toBe(true);
-    const judge = join(repositoryRoot, "store/skills/llm-as-judge/scripts/judge.sh");
-    const env = { ...process.env, TARIBOY_TOOLS_SOCKET: socket, TARIBOY_CLIENT_VERSION: clientVersion };
-    const claimed = spawnSync(judge, ["--json", "work", "claim", "--run", run], { env, encoding: "utf8" });
-    expect(claimed.status, claimed.error?.message ?? claimed.stderr).toBe(0);
-    const assignment = JSON.parse(claimed.stdout).assignment;
+    const assignment = (await judgeAction(socket, "work.claim", { run_id: run })).assignment as { ID: string; TargetID: string };
     const assignmentID = assignment.ID;
-    const evidence = spawnSync(judge, ["--json", "evidence", "search", "--assignment", assignmentID, "--artifact", "metadata"], { env, encoding: "utf8" });
-    expect(evidence.status, evidence.stderr).toBe(0);
-    const bundleHash = JSON.parse(evidence.stdout).bundle_hash;
-    const file = join(desktopWorker.baseDir, `${assignmentID}.json`);
-    await writeFile(file, JSON.stringify({ schema_version: 1, verdict: score === 0 ? "fail" : "pass", score, confidence: 1, summary,
+    const bundleHash = (await judgeAction(socket, "evidence.search", { assignment_id: assignmentID, artifacts: ["metadata"] })).bundle_hash as string;
+    const result = { schema_version: 1, verdict: score === 0 ? "fail" : "pass", score, confidence: 1, summary,
       violations: score === 0 ? [{ criterion: "fixture", severity: "high", description: summary, citations: [{ bundle_hash: bundleHash, artifact: "metadata", locator: "metadata" }] }] : [],
       strengths: score === 0 ? [] : [{ description: summary, citations: [{ bundle_hash: bundleHash, artifact: "metadata", locator: "metadata" }] }],
       recommendations: [], evidence_gaps: [],
-    }));
-    const submitted = spawnSync(judge, ["--json", "analysis", "submit", "--assignment", assignmentID, "--file", file], { env, encoding: "utf8" });
-    expect(submitted.status, submitted.stderr).toBe(0);
+    };
+    await writeFile(join(desktopWorker.baseDir, `${assignmentID}.json`), JSON.stringify(result));
+    await judgeAction(socket, "analysis.submit", { assignment_id: assignmentID, result, raw_submission: JSON.stringify(result) });
     return assignment.TargetID;
   };
 
@@ -197,11 +222,8 @@ test("reviews real iterations and keeps navigation on the fixture daemon", async
     }
     await window.__judgeCall("POST", "/api/agents/judge-two/exec", { prompt: "activate Judge fixture generation B" });
   `);
-  const mismatched = spawnSync(join(repositoryRoot, "store/skills/llm-as-judge/scripts/judge.sh"), ["--json", "work", "claim", "--run", second.runID], {
-    env: { ...process.env, TARIBOY_TOOLS_SOCKET: join(desktopWorker.runtimeDir, "judge-two.sock"), TARIBOY_CLIENT_VERSION: clientVersion }, encoding: "utf8",
-  });
-  expect(mismatched.status).not.toBe(0);
-  expect(mismatched.stderr).toContain("worker image identity mismatch");
+  await expect(judgeAction(join(desktopWorker.runtimeDir, "judge-two.sock"), "work.claim", { run_id: second.runID }))
+    .rejects.toThrow("worker image identity mismatch");
   await expect.poll(() => desktop.execute<string>(`
     return (await window.__judgeCall("GET", "/api/judges/${second.runID}")).run.last_error;
   `)).toContain("create a new run after image activation");

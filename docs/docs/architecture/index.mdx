@@ -89,8 +89,8 @@ delivery hint.
 Path resolution lives in `internal/paths`:
 
 - **Data dir** — `$TARIBOY_BASE_DIR`, else `~/.tariboy`. Holds the DB,
-  agent working dirs, immutable images, the versioned built-in Store, and
-  side-by-side external plugin versions.
+  agent working dirs, immutable images, and side-by-side external plugin
+  versions.
 - **Runtime dir** — `$TARIBOY_RUNTIME_DIR`, else `~/.tariboyd`. Holds the
   control socket (`tariboyd.sock`), pidfile, and log.
 
@@ -134,7 +134,7 @@ sequenceDiagram
   O->>D: start with paths and listener options
   D->>D: resolve PATH, paths, socket guard, and PID file
   D->>S: open database and run migrations
-  D->>D: reconcile agent inboxes; seed images and proxy defaults
+  D->>D: reconcile agent inboxes; ensure the bare image and proxy defaults
   D->>D: read and validate local model-price cache
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations

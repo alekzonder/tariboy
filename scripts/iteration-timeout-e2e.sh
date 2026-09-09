@@ -14,6 +14,9 @@ export TARIBOY_RUNTIME_DIR="$RUNTIME"
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 chmod +x "$TARIBOY_STUB_HARNESS"
+. "$ROOT/scripts/test-image-fixture.sh"
+TEST_IMAGE_SOURCE="$BASE/test-image"
+make_test_image_fixture "$TEST_IMAGE_SOURCE"
 
 SOCK="$RUNTIME/tariboyd.sock"
 DPID=""
@@ -44,7 +47,7 @@ echo "--- start isolated daemon (base=$BASE runtime=$RUNTIME web=127.0.0.1:$WEB_
 start_daemon
 
 echo "--- build isolated test image and start a deliberately long stub iteration"
-sa image build --name timeout-e2e --tag latest --path "$ROOT/internal/builtinimages/source" | grep -q 'digest:' || fail "image build"
+sa image build --name timeout-e2e --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q 'digest:' || fail "image build"
 sa agent run timeout-e2e:latest --name timer --harness stub --loop false \
   --env 'STUB_SLEEP=75,STUB_CALL_DONE=0' | grep -q 'name: timer' || fail "agent run"
 # Startup does real prompt/tool preparation, so leave enough room to make the

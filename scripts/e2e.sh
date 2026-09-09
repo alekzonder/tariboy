@@ -14,6 +14,9 @@ trap 'kill "$DPID" 2>/dev/null || true; kill "${FAKE_PID:-}" 2>/dev/null || true
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 chmod +x "$TARIBOY_STUB_HARNESS"
+. "$ROOT/scripts/test-image-fixture.sh"
+TEST_IMAGE_SOURCE="$BASE/test-image"
+make_test_image_fixture "$TEST_IMAGE_SOURCE"
 
 # Steerable fake-upstream reply text (read per-request by fake-upstream.py). Must
 # be exported BEFORE the fake upstream launches so the subprocess inherits it; the
@@ -65,7 +68,7 @@ grep -q '"daemon"' <<<"$(sa --help-json)" || { echo "FAIL: --help-json"; exit 1;
 sa daemon config set --help | grep -q "Usage:" || { echo "FAIL: --help"; exit 1; }
 
 echo "--- image build (CLI-local, no daemon needed)"
-sa image build --name basic-example --tag latest --path "$ROOT/internal/builtinimages/source" | grep -q "digest:" \
+sa image build --name basic-example --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q "digest:" \
   || { echo "FAIL: image build"; exit 1; }
 
 echo "--- image ls"
@@ -81,9 +84,9 @@ sa image rm basic-example:latest >/dev/null
 if sa image ls | grep -q "basic-example"; then echo "FAIL: image not removed"; exit 1; fi
 
 echo "--- image build for run"
-sa image build --name basic-example --tag latest --path "$ROOT/internal/builtinimages/source" | grep -q "digest:" \
+sa image build --name basic-example --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q "digest:" \
   || { echo "FAIL: image build"; exit 1; }
-sa image build --name demo --tag latest --path "$ROOT/internal/builtinimages/source" | grep -q "digest:" \
+sa image build --name demo --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q "digest:" \
   || { echo "FAIL: demo image build"; exit 1; }
 
 echo "--- run agent with the stub harness"
@@ -281,7 +284,7 @@ sa agent rm retclone --force --purge >/dev/null || { echo "FAIL: rm retclone"; e
 
 echo "--- compose: groups end to end"
 # A real image the compose agents run.
-sa image build --name analyst --tag latest --path "$ROOT/internal/builtinimages/source" | grep -q "digest:" \
+sa image build --name analyst --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q "digest:" \
   || { echo "FAIL: compose image build"; exit 1; }
 
 # The two members run the stub harness so message-triggered iterations complete

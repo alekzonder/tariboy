@@ -14,10 +14,10 @@
 #   STUB_TASKS_MINE file to receive a direct ttasks mine result (default unset)
 set -eu
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MESSAGES="$ROOT/store/skills/messages/scripts/messages.sh"
-SCHEDULE="$ROOT/store/skills/schedule/scripts/schedule.sh"
-IMAGE_CREATOR="$ROOT/store/skills/image-creator/scripts/image_creator.sh"
+tool_post() {
+  curl -sf --unix-socket "$TARIBOY_TOOLS_SOCKET" -H 'content-type: application/json' \
+    -X POST "http://localhost$1" -d "$2"
+}
 
 if [ "${1:-}" = "--version" ]; then
   printf '%s\n' '2.1.227'
@@ -40,7 +40,7 @@ fi
 # Optional: subscribe this agent to a channel before finishing.
 #   STUB_SUBSCRIBE="chat:room"
 if [ -n "${STUB_SUBSCRIBE:-}" ]; then
-  "$MESSAGES" channel subscribe "$STUB_SUBSCRIBE" >/dev/null 2>&1 || true
+  tool_post /tools/channel/subscribe "{\"channel\":\"$STUB_SUBSCRIBE\"}" >/dev/null 2>&1 || true
 fi
 
 # Optional: emit a message before finishing.
@@ -48,7 +48,7 @@ fi
 if [ -n "${STUB_SEND:-}" ]; then
   SEND_CHANNEL="${STUB_SEND%%|*}"
   SEND_TEXT="${STUB_SEND#*|}"
-  "$MESSAGES" message send --channel "$SEND_CHANNEL" --text "$SEND_TEXT" >/dev/null 2>&1 || true
+  tool_post /tools/message/send "{\"channel\":\"$SEND_CHANNEL\",\"text\":\"$SEND_TEXT\"}" >/dev/null 2>&1 || true
 fi
 
 # Optional: arm a one-shot schedule N seconds ahead, exactly once (a marker in
@@ -57,7 +57,7 @@ fi
 if [ -n "${STUB_SCHEDULE:-}" ] && [ ! -f .stub_scheduled ]; then
   SPEC="$(date -u -d "+${STUB_SCHEDULE} seconds" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
   if [ -n "$SPEC" ]; then
-    "$SCHEDULE" add --kind oneshot --spec "$SPEC" >/dev/null 2>&1 || true
+    tool_post /tools/schedule/add "{\"kind\":\"oneshot\",\"spec\":\"$SPEC\"}" >/dev/null 2>&1 || true
     : > .stub_scheduled
   fi
 fi
@@ -72,7 +72,7 @@ if [ -n "${STUB_GROUP_REQUEST:-}" ] && [ ! -f .stub_group_req ]; then
   GR_REST="${STUB_GROUP_REQUEST#*|}"
   GR_TEXT="${GR_REST%%|*}"
   GR_DEADLINE="${GR_REST#*|}"
-  "$MESSAGES" group request "$GR_MEMBER" --text "$GR_TEXT" --deadline "$GR_DEADLINE" >/dev/null 2>&1 || true
+  tool_post /tools/group/request "{\"member\":\"$GR_MEMBER\",\"text\":\"$GR_TEXT\",\"deadline\":\"$GR_DEADLINE\"}" >/dev/null 2>&1 || true
   : > .stub_group_req
 fi
 
@@ -82,7 +82,7 @@ fi
 if [ -n "${STUB_IMAGE_BUILD:-}" ]; then
   IB_TAG="${STUB_IMAGE_BUILD%%|*}"
   IB_PATH="${STUB_IMAGE_BUILD#*|}"
-  "$IMAGE_CREATOR" build --name "${IB_TAG%%:*}" --tag "${IB_TAG#*:}" --path "$IB_PATH" >"${STUB_IMAGE_BUILD_OUT:-/dev/null}" 2>&1 || true
+  tool_post /tools/image/build "{\"name\":\"${IB_TAG%%:*}\",\"tag\":\"${IB_TAG#*:}\",\"path\":\"$IB_PATH\"}" >"${STUB_IMAGE_BUILD_OUT:-/dev/null}" 2>&1 || true
 fi
 
 # Optional: drive a real AI call through the proxy before finishing.
@@ -124,19 +124,18 @@ if [ -n "${STUB_REPLY_INBOX:-}" ] && [ -n "$PROMPT_PATH" ] && [ -f "$PROMPT_PATH
   IDS="$(sed -n 's/^- id \([^ ]*\).*/\1/p' "$PROMPT_PATH")"
   if [ -n "$IDS" ] && [ ! -f .stub_replied ]; then
     FIRST_ID="$(printf '%s\n' "$IDS" | head -n1)"
-    "$MESSAGES" message reply "$FIRST_ID" --text "$STUB_REPLY_INBOX" >"${STUB_REPLY_INBOX_OUT:-/dev/null}" 2>&1 || true
+    tool_post /tools/message/reply "{\"id\":\"$FIRST_ID\",\"text\":\"$STUB_REPLY_INBOX\"}" >"${STUB_REPLY_INBOX_OUT:-/dev/null}" 2>&1 || true
     : > .stub_replied
   fi
   # Drain any still-pending messages (the just-replied one auto-processed; a
   # no-op re-process is harmless).
   for MID in $IDS; do
-    "$MESSAGES" message processed "$MID" "e2e-drain" >/dev/null 2>&1 || true
+    tool_post /tools/message/processed "{\"id\":\"$MID\",\"result\":\"e2e-drain\"}" >/dev/null 2>&1 || true
   done
 fi
 
 if [ "${STUB_CALL_DONE:-1}" = "1" ]; then
-  # bin/i-am-done is the one PATH compatibility shim.
-  i-am-done >/dev/null 2>&1 || true
+  tool_post /tools/loop/done '{"idle":false}' >/dev/null 2>&1 || true
 fi
 
 exit "${STUB_EXIT:-0}"

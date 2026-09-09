@@ -1,6 +1,9 @@
 package loop
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -10,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -496,6 +500,68 @@ func buildTestImage(t *testing.T, st *image.Store, name, body string) {
 			{Dir: filepath.Join(skills, "tasks")},
 		},
 	}, imagefile.ResolveRoots{}, image.Ref{Name: name, Tag: "latest"}, st, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func buildContractInvalidImage(t *testing.T, st *image.Store, name string) {
+	t.Helper()
+	ref := image.Ref{Name: name, Tag: "latest"}
+	if _, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, st, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := st.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := gzip.NewReader(bytes.NewReader(archive))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer in.Close()
+	var out bytes.Buffer
+	gz := gzip.NewWriter(&out)
+	tw := tar.NewWriter(gz)
+	tr := tar.NewReader(in)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		copyHeader := *header
+		if header.Name == "manifest.json" {
+			var manifest map[string]any
+			if err := json.Unmarshal(body, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			manifest["plugins"] = []map[string]string{{"name": "loop"}}
+			body, err = json.Marshal(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			copyHeader.Size = int64(len(body))
+		}
+		if err := tw.WriteHeader(&copyHeader); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write(body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(st.Dir, name, "latest.tar.gz"), out.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1443,6 +1509,21 @@ func TestManagerRunProvisionsAndStops(t *testing.T) {
 		t.Fatal("agent not removed")
 	}
 	m.Shutdown()
+}
+
+func TestRunRejectsContractInvalidImageBeforeProvisioning(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	buildContractInvalidImage(t, m.cfg.ImgStore, "invalid")
+
+	if _, err := m.Run(registry.RunSpec{ImageRef: "invalid:latest", Name: "worker"}); err == nil || !strings.Contains(err.Error(), `plugin "loop" requires packaged skill "loop"`) {
+		t.Fatalf("Run error = %v", err)
+	}
+	if ok, _ := as.Exists("worker"); ok {
+		t.Fatal("contract-invalid image created an agent row")
+	}
+	if _, err := os.Stat(filepath.Join(agentsDir, "worker")); !os.IsNotExist(err) {
+		t.Fatalf("contract-invalid image published an agent tree: %v", err)
+	}
 }
 
 func TestRunV2UsesEnabledExternalPluginResolver(t *testing.T) {
@@ -2555,6 +2636,49 @@ func TestBuildImageForAgentConfinesPath(t *testing.T) {
 	}
 }
 
+func TestAgentAuthoredImageRejectsDisabledExternalPlugin(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "creator", Harness: "stub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.Plugins = append(ag.Plugins, "image-creator")
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, name)
+	source := filepath.Join(l.Workdir(), "authored")
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins:\n  - name: widget\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pluginDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins", "widget")
+	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"widget","version":"1.0.0","protocol_version":1,"types":["tool"],"exec":"run.sh","channels":{"publish":[],"subscribe":[]}}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "run.sh"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m.cfg.ExternalPlugins = func(string) (plugincaps.ResolvedPlugin, error) { return plugincaps.ResolvedPlugin{}, nil }
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/tools/image/build", strings.NewReader(`{"name":"authored","path":"authored"}`))
+	m.newToolsAPIServer(ag, l).Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `unknown plugin \"widget\"`) {
+		t.Fatalf("agent image build status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
 	workdir := t.TempDir()
 	source := filepath.Join(workdir, "authored")
@@ -3021,6 +3145,7 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	l := agentdir.New(agentsDir, name)
 	mustWrite(t, l.ContextPath(), "remember me")
 	mustWrite(t, l.AuditLog(), "{\"type\":\"status\"}\n")
+	mustWrite(t, filepath.Join(l.ImageDir(), "old-marker"), "stale")
 
 	// A second image version to swap onto.
 	buildBasic2(t, m.cfg.ImgStore)
@@ -3052,6 +3177,9 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
 		t.Fatalf("reprovision restored the removed central tools shim: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(l.ImageDir(), "old-marker")); !os.IsNotExist(err) {
+		t.Fatalf("reprovision retained stale image content: %v", err)
+	}
 	// New image recorded on the row.
 	got, _ := as.Get(name)
 	if got.ImageRef != "basic2:latest" {
@@ -3067,6 +3195,61 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	// Loop back up.
 	if st, _ := m.LiveState(name); st != "idle" {
 		t.Fatalf("after reprovision LiveState = %q, want idle (loop re-enabled)", st)
+	}
+}
+
+func TestReprovisionContractFailurePreservesIdentityAndTree(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	defer m.Shutdown()
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "keep", Harness: "stub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, name)
+	marker := filepath.Join(l.ImageDir(), "old-marker")
+	if err := os.WriteFile(marker, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	buildContractInvalidImage(t, m.cfg.ImgStore, "invalid")
+
+	if err := m.Reprovision(name, "invalid:latest"); err == nil || !strings.Contains(err.Error(), `plugin "loop" requires packaged skill "loop"`) {
+		t.Fatalf("Reprovision error = %v", err)
+	}
+	after, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.ImageRef != before.ImageRef || after.ImageDigest != before.ImageDigest {
+		t.Fatalf("identity changed from %s@%s to %s@%s", before.ImageRef, before.ImageDigest, after.ImageRef, after.ImageDigest)
+	}
+	if body, err := os.ReadFile(marker); err != nil || string(body) != "old" {
+		t.Fatalf("old image tree was not preserved: body=%q err=%v", body, err)
+	}
+}
+
+func TestReprovisionReplacesRatherThanOverlaysImageTree(t *testing.T) {
+	m, _, agentsDir, _ := newManager(t, &fakeRunner{})
+	defer m.Shutdown()
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "replace", Harness: "stub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, name)
+	marker := filepath.Join(l.ImageDir(), "old-marker")
+	if err := os.WriteFile(marker, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	buildBasic2(t, m.cfg.ImgStore)
+
+	if err := m.Reprovision(name, "basic2:latest"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("reprovision retained stale image content: %v", err)
 	}
 }
 
