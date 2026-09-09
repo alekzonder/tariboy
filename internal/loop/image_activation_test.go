@@ -1128,6 +1128,78 @@ func TestPendingImageActivationBridgeFailurePreservesActiveImage(t *testing.T) {
 	}
 }
 
+func TestPendingImageCompatibilityFailureDoesNotPublishBridge(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	as := agent.NewStore(db)
+	images := &image.Store{Dir: filepath.Join(base, "images")}
+	activeRef := image.Ref{Name: "active", Tag: "latest"}
+	active, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2}, imagefile.ResolveRoots{}, activeRef, images, time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	skillDir := filepath.Join(source, "skills", "review")
+	if err := os.MkdirAll(skillDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: review\ndescription: Review changes.\n---\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pendingRef := image.Ref{Name: "pending", Tag: "latest"}
+	pending, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2, Dir: source,
+		Plugins: []imagefile.V2Plugin{{Name: "external-widget"}},
+		Skills:  []imagefile.SkillEntry{{Dir: "./skills/review"}},
+	}, imagefile.ResolveRoots{}, pendingRef, images, time.Now, func(string) (plugincaps.ResolvedPlugin, error) {
+		return plugincaps.ResolvedPlugin{Installed: true}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag := agent.Agent{Name: "worker", ImageRef: activeRef.String(), ImageDigest: active.Digest, HarnessType: "claude"}
+	if err := as.Create(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(filepath.Join(base, "agents"), ag.Name)
+	if err := agentdir.Provision(l, ag, images, activeRef, testSkillsDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.SetPendingImage(ag.Name, pendingRef.String(), pending.Digest); err != nil {
+		t.Fatal(err)
+	}
+	bridgeCalled := false
+	m := &Manager{cfg: ManagerConfig{
+		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images, SkillsDir: testSkillsDir(t),
+		PrepareImageBridge: func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
+			bridgeCalled = true
+			return nil
+		},
+	}}
+	if _, err := m.activatePendingImage(&ag); err == nil || !strings.Contains(err.Error(), "external-widget") {
+		t.Fatalf("activation error = %v, want unavailable plugin", err)
+	}
+	if bridgeCalled {
+		t.Fatal("incompatible candidate bridge was published")
+	}
+	stored, err := as.Get(ag.Name)
+	if err != nil || stored.ImageRef != activeRef.String() || stored.ImageDigest != active.Digest {
+		t.Fatalf("active identity changed: %+v err=%v", stored, err)
+	}
+	localDigest, err := os.ReadFile(filepath.Join(l.ImageDir(), ".image-digest"))
+	if err != nil || strings.TrimSpace(string(localDigest)) != active.Digest {
+		t.Fatalf("active image bytes changed: %q err=%v", localDigest, err)
+	}
+	assignment, err := as.PendingImage(ag.Name)
+	if err != nil || assignment.Ref != pendingRef.String() || assignment.Digest != pending.Digest || !strings.Contains(assignment.Error, "external-widget") {
+		t.Fatalf("pending assignment = %+v err=%v", assignment, err)
+	}
+}
+
 func TestImageBridgeRestartReusesPublishedBridge(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))

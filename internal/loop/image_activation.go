@@ -166,12 +166,8 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 			return fail(fmt.Errorf("staged prompt template: %w", err))
 		}
 	}
-	skillLaunch, err := m.prepareImageSkillBridge(*ag, staged, stage)
-	if err != nil {
-		return fail(err)
-	}
-	requested := make([]string, 0, len(manifest.Plugins))
-	for _, plugin := range manifest.Plugins {
+	requested := make([]string, 0, len(staged.Plugins))
+	for _, plugin := range staged.Plugins {
 		requested = append(requested, plugin.Name)
 	}
 	baseDir := filepath.Dir(m.cfg.ImgStore.Dir)
@@ -179,9 +175,16 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 	if m.cfg.ExternalPlugins != nil {
 		resolver = m.cfg.ExternalPlugins
 	}
+	if err := image.ValidateUnpackedContract(staged, stage, resolver); err != nil {
+		return fail(err)
+	}
+	skillLaunch, err := m.prepareImageSkillBridge(*ag, staged, stage)
+	if err != nil {
+		return fail(err)
+	}
 	var nextPlugins []string
 	if manifest.SchemaVersion == 2 {
-		nextPlugins, err = plugincaps.ValidateExplicit(requested, resolver)
+		nextPlugins = requested
 	} else {
 		nextPlugins, err = plugincaps.ResolveWithExternal(requested, resolver)
 	}
