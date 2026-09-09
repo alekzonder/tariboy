@@ -214,6 +214,10 @@ harness="$root/alpha-harness.sh"
 cat >"$harness" <<'HARNESS'
 #!/bin/sh
 set -eu
+tool_post() {
+  curl -sf --unix-socket "$TARIBOY_TOOLS_SOCKET" -H 'content-type: application/json' \
+    -X POST "http://localhost$1" -d "$2"
+}
 prompt=${1:-}
 marker="$TARIBOY_ALPHA_E2E_ROOT/first-session"
 if test ! -f "$marker"; then
@@ -224,12 +228,11 @@ fi
 if test -n "$prompt" && test -f "$prompt"; then
   ids=$(sed -n 's/^- id \([^ ]*\).*/\1/p' "$prompt")
   for id in $ids; do
-    curl -sf --unix-socket "$TARIBOY_TOOLS_SOCKET" -H 'content-type: application/json' \
-      -X POST http://localhost/tools/message/processed \
-      -d "{\"id\":\"$id\",\"result\":\"alpha-e2e-consumed\"}" >/dev/null
+    tool_post /tools/message/processed \
+      "{\"id\":\"$id\",\"result\":\"alpha-e2e-consumed\"}" >/dev/null
   done
 fi
-i-am-done >/dev/null
+tool_post /tools/loop/done '{"idle":false}' >/dev/null
 HARNESS
 chmod 700 "$harness"
 
@@ -273,6 +276,36 @@ api POST /api/image-sources \
   '{"name":"alpha-remote","harness":"stub","interactive":true,"prompt":"Handle the pending event."}' >/dev/null
 api PUT /api/image-sources/alpha-remote/files/PROMPT.md \
   '{"content":"Handle exactly one pending event, then finish."}' >/dev/null
+source="$base/image-sources/alpha-remote"
+mkdir -p "$source/skills/messages" "$source/skills/loop/scripts"
+cat >"$source/Tariboyfile.yaml" <<'YAML'
+schema_version: 2
+plugins:
+  - name: messages
+  - name: loop
+skills:
+  - dir: ./skills/messages
+  - dir: ./skills/loop
+prompts:
+  - file: ./PROMPT.md
+YAML
+cat >"$source/skills/messages/SKILL.md" <<'MARKDOWN'
+---
+name: messages
+description: Process pending alpha-test messages.
+---
+MARKDOWN
+cat >"$source/skills/loop/SKILL.md" <<'MARKDOWN'
+---
+name: loop
+description: Complete the alpha-test iteration.
+---
+MARKDOWN
+cat >"$source/skills/loop/scripts/loop.sh" <<'SH'
+#!/bin/sh
+exit 0
+SH
+chmod 700 "$source/skills/loop/scripts/loop.sh"
 api POST /api/image-sources/alpha-remote/validate '{}' | grep -q '"valid":true'
 api POST /api/image-sources/alpha-remote/build '{"tag":"latest"}' | grep -q '"ref":"alpha-remote:latest"'
 
