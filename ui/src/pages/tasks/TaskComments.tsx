@@ -60,12 +60,15 @@ export default function TaskComments({
     }
   }
 
+  const askText = (text: string) => {
+    const principal = ask.principal && !ask.principal.includes(":") ? `agent:${ask.principal}` : ask.principal
+    return principal ? `@${principal}\n\n${text}` : text
+  }
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!body.trim()) return
-    const principal = ask.principal && !ask.principal.includes(":") ? `agent:${ask.principal}` : ask.principal
-    const text = principal ? `@${principal}\n\n${body.trim()}` : body.trim()
-    await send(text, true)
+    await send(askText(body.trim()), true)
   }
 
   const commentList = (
@@ -94,7 +97,7 @@ export default function TaskComments({
         <MarkdownEditor id="task-comment" placeholder="Comment" value={body} onChange={setBody} disabled={busy} />
       </div>
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" disabled={busy || uploading} onClick={() => void send("Ok", false)}>Send Ok</Button>
+        {!body.trim() && <Button type="button" variant="secondary" disabled={busy || uploading} onClick={() => void send(askText("Ok"), false)}>Send Ok</Button>}
         <Button type="submit" disabled={busy || uploading || !body.trim()}>Send comment</Button>
       </div>
     </form>
