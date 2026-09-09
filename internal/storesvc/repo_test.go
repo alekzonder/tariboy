@@ -20,18 +20,18 @@ func sha256hex(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToStri
 func validBlob(t *testing.T, ref image.Ref) ([]byte, string) {
 	t.Helper()
 	src := t.TempDir()
-	if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 1\nprompts:\n  - task.md\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills: []\nprompts:\n  - file: ./task.md\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("do it\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	f, err := imagefile.Parse(src)
+	f, err := imagefile.ParseAny(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	manifest, err := image.Build(f, ref, &image.Store{Dir: dir}, time.Now)
+	manifest, err := image.BuildV2(f.V2, imagefile.ResolveRoots{}, ref, &image.Store{Dir: dir}, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

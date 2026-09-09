@@ -33,14 +33,14 @@ func TestImageArchiveExportAndUploadPreview(t *testing.T) {
 	if err := os.Mkdir(source, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills: []\nprompts: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := imagefile.Parse(source)
+	parsed, err := imagefile.ParseAny(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := image.Build(parsed, image.Ref{Name: "demo", Tag: "v1"}, &image.Store{Dir: filepath.Join(base, "images")}, time.Now); err != nil {
+	if _, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{}, image.Ref{Name: "demo", Tag: "v1"}, &image.Store{Dir: filepath.Join(base, "images")}, time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
 	snapshots := imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}
@@ -94,7 +94,7 @@ func TestTeamArchiveExportAndUploadPreview(t *testing.T) {
 	if err := os.Mkdir(source, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills: []\nprompts: []\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	snapshots := imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}

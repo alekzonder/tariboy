@@ -17,21 +17,10 @@ DPID=""
 trap '"$BIN/tariboy" --socket "$SOCK" agent kill worker >/dev/null 2>&1 || true; kill "${DPID:-}" 2>/dev/null || true; wait "${DPID:-}" 2>/dev/null || true; rm -rf "$BASE" "$RUNTIME"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# Compile the current source and image without modifying workspace artifacts.
+# Compile the current source without modifying workspace artifacts.
 cd "$ROOT"
-VERSION="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)"
-go run ./internal/builtinimages/generate -source internal/builtinimages/source -output "$RUNTIME/generated" -version "$VERSION"
-python3 - "$ROOT" "$RUNTIME" <<'PY' >"$RUNTIME/overlay.json"
-import json, os, sys
-root, runtime = sys.argv[1:]
-print(json.dumps({"Replace": {
-    os.path.join(root, "internal/builtinimages/generated", name):
-    os.path.join(runtime, "generated", name)
-    for name in ("basic.tar.gz", "VERSION")
-}}))
-PY
 for name in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
-  go build -trimpath -overlay "$RUNTIME/overlay.json" -o "$BIN/$name" "./cmd/$name"
+  go build -trimpath -o "$BIN/$name" "./cmd/$name"
 done
 
 [ -x "$BIN/tariboy-tasks" ] || fail "missing $BIN/tariboy-tasks"
@@ -47,6 +36,29 @@ for _ in $(seq 1 200); do
   sleep 0.05
 done
 [ -S "$SOCK" ] || fail "isolated daemon did not start"
+
+IMAGE_SOURCE="$RUNTIME/tasks-image"
+mkdir -p "$IMAGE_SOURCE/skills/tasks/scripts"
+cat >"$IMAGE_SOURCE/Tariboyfile.yaml" <<'YAML'
+schema_version: 2
+plugins:
+  - name: tasks
+skills:
+  - dir: ./skills/tasks
+prompts: []
+YAML
+cat >"$IMAGE_SOURCE/skills/tasks/SKILL.md" <<'MARKDOWN'
+---
+name: tasks
+description: Exercise the identity-bound Tasks launcher.
+---
+MARKDOWN
+cat >"$IMAGE_SOURCE/skills/tasks/scripts/tasks.sh" <<'SH'
+#!/bin/sh
+exec ttasks "$@"
+SH
+chmod 0700 "$IMAGE_SOURCE/skills/tasks/scripts/tasks.sh"
+"$BIN/tariboy" --socket "$SOCK" image build --name tasks-test --tag latest --path "$IMAGE_SOURCE" >/dev/null
 
 echo "--- operator mode sees and updates both queues"
 ttasks queue create --prefix OPS --name "Operator Queue" >/dev/null
@@ -66,8 +78,8 @@ ttasks show OPS-1 --json | grep -q '"title":"operator updated"' || fail "operato
 ttasks show AGT-1 --json | grep -q '"title":"agent updated"' || fail "operator did not update AGT"
 
 echo "--- agent mode is identity-bound to its real tools socket"
-"$BIN/tariboy" --socket "$SOCK" agent run basic:latest --name worker --harness stub --loop false \
-  --plugins tasks --env "STUB_SLEEP=300,STUB_CALL_DONE=0,STUB_TASKS_MINE=$RUNTIME/agent-tasks.json" >/dev/null
+"$BIN/tariboy" --socket "$SOCK" agent run tasks-test:latest --name worker --harness stub --loop false \
+  --env "STUB_SLEEP=300,STUB_CALL_DONE=0,STUB_TASKS_MINE=$RUNTIME/agent-tasks.json" >/dev/null
 ttasks assign AGT-1 worker >/dev/null
 "$BIN/tariboy" --socket "$SOCK" agent exec worker >/dev/null
 for _ in $(seq 1 200); do
