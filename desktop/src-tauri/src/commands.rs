@@ -341,7 +341,7 @@ fn vscode_folder_uri(
     }
     let path = encode_uri_component(path, true);
     if host_id.is_empty() {
-        return Ok(format!("vscode://file{path}"));
+        return Ok(format!("vscode://file{path}?windowId=_blank"));
     }
 
     let host = registry.get(host_id)?;
@@ -349,7 +349,9 @@ fn vscode_folder_uri(
         return Err("VS Code folder opening requires a local or SSH host".into());
     }
     let alias = encode_uri_component(&host.ssh_alias, false);
-    Ok(format!("vscode://vscode-remote/ssh-remote+{alias}{path}"))
+    Ok(format!(
+        "vscode://vscode-remote/ssh-remote+{alias}{path}?windowId=_blank"
+    ))
 }
 
 #[tauri::command]
@@ -1456,18 +1458,18 @@ mod tests {
     struct FailingKeychain;
 
     #[test]
-    fn vscode_local_uri_encodes_the_absolute_folder_path() {
+    fn vscode_local_uri_opens_a_new_window_and_encodes_the_absolute_folder_path() {
         let dir = tempfile::tempdir().unwrap();
         let registry = hosts::Registry::new(dir.path().join("hosts.json"));
 
         assert_eq!(
             vscode_folder_uri(&registry, "", "/Users/alice/Agent #1").unwrap(),
-            "vscode://file/Users/alice/Agent%20%231"
+            "vscode://file/Users/alice/Agent%20%231?windowId=_blank"
         );
     }
 
     #[test]
-    fn vscode_ssh_uri_uses_the_saved_alias_and_encodes_uri_components() {
+    fn vscode_ssh_uri_opens_a_new_window_and_encodes_uri_components() {
         let dir = tempfile::tempdir().unwrap();
         let registry = hosts::Registry::new(dir.path().join("hosts.json"));
         let host = registry
@@ -1482,7 +1484,7 @@ mod tests {
 
         assert_eq!(
             vscode_folder_uri(&registry, &host.id, "/srv/Agent #1").unwrap(),
-            "vscode://vscode-remote/ssh-remote+gpu%20box%2Bprod/srv/Agent%20%231"
+            "vscode://vscode-remote/ssh-remote+gpu%20box%2Bprod/srv/Agent%20%231?windowId=_blank"
         );
     }
 
