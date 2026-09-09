@@ -27,6 +27,9 @@ export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 # agents. Smoke no longer stops the user's daemon, so it must not share its state.
 export TARIBOY_BASE_DIR="$(mktemp -d)"
 export TARIBOY_RUNTIME_DIR="$(mktemp -d)"
+. "$ROOT/scripts/test-image-fixture.sh"
+TEST_IMAGE_SOURCE="$TARIBOY_BASE_DIR/test-image"
+make_test_image_fixture "$TEST_IMAGE_SOURCE"
 # daemonctl appends TARIBOY_HTTP_ADDR as the authoritative --http-addr flag.
 # Bind an ephemeral loopback port so the smoke cannot collide with :9990 even
 # when the legacy wrapper's empty --web-addr alias is superseded.
@@ -556,8 +559,10 @@ run_compose_preserve_case() {
   # up-side image swap observable.
   local ctx; ctx="$(mktemp -d)"
   mkdir -p "$ctx/v1" "$ctx/v2"
-  cp "$ROOT/internal/builtinimages/source/Tariboyfile.yaml" "$ctx/v1/Tariboyfile.yaml"
-  grep -v 'name: status' "$ROOT/internal/builtinimages/source/Tariboyfile.yaml" > "$ctx/v2/Tariboyfile.yaml"
+  cp -R "$TEST_IMAGE_SOURCE/." "$ctx/v1/"
+  cp -R "$TEST_IMAGE_SOURCE/." "$ctx/v2/"
+  grep -v 'name: status' "$ctx/v1/Tariboyfile.yaml" > "$ctx/v2/Tariboyfile.yaml.tmp"
+  mv "$ctx/v2/Tariboyfile.yaml.tmp" "$ctx/v2/Tariboyfile.yaml"
   sa image build --name smoke-compose-v1 --tag latest --path "$ctx/v1" | grep -q "digest:" \
     || { echo "FAIL: build smoke-compose-v1" >&2; exit 1; }
   sa image build --name smoke-compose-v2 --tag latest --path "$ctx/v2" | grep -q "digest:" \
@@ -664,7 +669,7 @@ wait_daemon || { echo "FAIL: tariboyd did not become ready" >&2; exit 1; }
 run_restart_case
 
 echo "--- image: build ${IMAGE}"
-sa image build --name "${IMAGE%%:*}" --tag "${IMAGE#*:}" --path "$ROOT/internal/builtinimages/source" | grep -q "digest:" \
+sa image build --name "${IMAGE%%:*}" --tag "${IMAGE#*:}" --path "$TEST_IMAGE_SOURCE" | grep -q "digest:" \
   || { echo "FAIL: image build did not print digest" >&2; exit 1; }
 
 # Web-api surface (EPIC V): /api/fs/list path-autocomplete + agent/group create

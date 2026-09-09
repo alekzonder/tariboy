@@ -764,7 +764,11 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	man, err := m.cfg.ImgStore.Inspect(ref)
+	archive, err := m.cfg.ImgStore.ArchiveBytes(ref)
+	if err != nil {
+		return "", fmt.Errorf("image %s: %w", ref.String(), err)
+	}
+	man, err := image.ValidatePortableArchiveContract(archive, ref, m.imagePluginResolver())
 	if err != nil {
 		return "", fmt.Errorf("image %s: %w", ref.String(), err)
 	}
@@ -796,10 +800,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	resolver := plugins.ResolveInstalled(pluginsDir)
 	var resolvedPlugins []string
 	if man.SchemaVersion == 2 {
-		resolver = plugins.ResolveInstalledMetadata(pluginsDir)
-		if m.cfg.ExternalPlugins != nil {
-			resolver = m.cfg.ExternalPlugins
-		}
+		resolver = m.imagePluginResolver()
 		resolvedPlugins, err = plugincaps.ValidateExplicit(requested, resolver)
 	} else {
 		resolvedPlugins, err = plugincaps.ResolveWithExternal(requested, resolver)
@@ -1118,7 +1119,7 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 		CancelScriptTarget: func(id string) error { return m.CancelScriptTarget(agName, id) },
 		RemoveScript:       func(id string) error { return m.RemoveScript(agName, id) },
 		BuildImage: func(name, tag, path string) (map[string]any, error) {
-			return buildImageForAgent(m.cfg.ImgStore, cwdOf(ag, l), name, tag, path)
+			return buildImageForAgent(m.cfg.ImgStore, cwdOf(ag, l), name, tag, path, m.imagePluginResolver())
 		},
 		LoopControl: func(action string) (map[string]any, error) {
 			updated, err := m.toolsLoopControl(agName, action)
@@ -2098,30 +2099,99 @@ func (m *Manager) reprovision(name, imageRef string) error {
 	if err != nil {
 		return err
 	}
-	man, err := m.cfg.ImgStore.Inspect(ref)
+	archive, err := m.cfg.ImgStore.ArchiveBytes(ref)
 	if err != nil {
 		return fmt.Errorf("image %s: %w", ref.String(), err)
 	}
-	// Converge the row to the (possibly new) image before re-unpacking so the DB
-	// stays the single source of truth for what the tree holds.
-	ag.ImageRef = ref.String()
-	ag.ImageDigest = man.Digest
-	if err := m.cfg.Store.SetImageIdentity(ag.Name, ag.ImageRef, ag.ImageDigest); err != nil {
-		return err
+	man, err := image.ValidatePortableArchiveContract(archive, ref, m.imagePluginResolver())
+	if err != nil {
+		return fmt.Errorf("image %s: %w", ref.String(), err)
+	}
+	candidate := ag
+	candidate.Enabled = true
+	candidate.LoopEnabled = true
+	candidate.ImageRef = ref.String()
+	candidate.ImageDigest = man.Digest
+	if man.SchemaVersion == 2 {
+		candidate.Plugins = make([]string, 0, len(man.Plugins))
+		for _, plugin := range man.Plugins {
+			candidate.Plugins = append(candidate.Plugins, plugin.Name)
+		}
 	}
 	l := agentdir.New(m.cfg.AgentsDir, name)
-	if err := agentdir.Provision(l, ag, m.cfg.ImgStore, ref); err != nil {
+	if err := os.MkdirAll(l.Root, 0o700); err != nil {
 		return err
 	}
-	// Bring the loop back up on the refreshed tree. Persist the enabled intent so
-	// LiveState reports the agent running again after a preserving down.
-	ag.Enabled = true
-	ag.LoopEnabled = true
-	if err := m.cfg.Store.Update(ag); err != nil {
+	stageRoot, err := os.MkdirTemp(l.Root, ".reprovision-")
+	if err != nil {
 		return err
 	}
+	defer os.RemoveAll(stageRoot)
+	stage := agentdir.Layout{Root: stageRoot, Name: name}
+	if err := agentdir.Provision(stage, candidate, m.cfg.ImgStore, ref); err != nil {
+		return err
+	}
+	imageBackup, binBackup := filepath.Join(l.Root, ".image-backup"), filepath.Join(l.Root, ".bin-backup")
+	_ = os.RemoveAll(imageBackup)
+	_ = os.RemoveAll(binBackup)
+	hadImage, hadBin := false, false
+	if err := os.Rename(l.ImageDir(), imageBackup); err == nil {
+		hadImage = true
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Rename(l.BinDir(), binBackup); err == nil {
+		hadBin = true
+	} else if !os.IsNotExist(err) {
+		if hadImage {
+			_ = os.Rename(imageBackup, l.ImageDir())
+		}
+		return err
+	}
+	rollback := func() {
+		_ = os.RemoveAll(l.ImageDir())
+		_ = os.RemoveAll(l.BinDir())
+		if hadImage {
+			_ = os.Rename(imageBackup, l.ImageDir())
+		}
+		if hadBin {
+			_ = os.Rename(binBackup, l.BinDir())
+		}
+	}
+	if err := os.Rename(stage.ImageDir(), l.ImageDir()); err != nil {
+		rollback()
+		return err
+	}
+	if err := os.Rename(stage.BinDir(), l.BinDir()); err != nil {
+		rollback()
+		return err
+	}
+	for _, dir := range []string{l.Workdir(), l.IterationsDir()} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			rollback()
+			return err
+		}
+	}
+	if err := m.cfg.Store.SetImageIdentity(ag.Name, candidate.ImageRef, candidate.ImageDigest); err != nil {
+		rollback()
+		return err
+	}
+	if err := m.cfg.Store.Update(candidate); err != nil {
+		_ = m.cfg.Store.SetImageIdentity(ag.Name, ag.ImageRef, ag.ImageDigest)
+		rollback()
+		return err
+	}
+	_ = os.RemoveAll(imageBackup)
+	_ = os.RemoveAll(binBackup)
 	m.signalGoals()
-	return m.start(ag)
+	return m.start(candidate)
+}
+
+func (m *Manager) imagePluginResolver() plugincaps.ExternalResolver {
+	if m.cfg.ExternalPlugins != nil {
+		return m.cfg.ExternalPlugins
+	}
+	return plugins.ResolveInstalledMetadata(filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins"))
 }
 
 func (m *Manager) Screen(name string) (string, error) {
@@ -2504,17 +2574,17 @@ func (m *Manager) toolsLoopControl(name, action string) (agent.Agent, error) {
 // image.Build against the daemon's shared image store, exactly as
 // commands/image.go does, so a base `from:` image on this host resolves and the
 // result is runnable via `agent run`.
-func buildImageForAgent(imgStore *image.Store, workdir, name, tag, path string) (map[string]any, error) {
+func buildImageForAgent(imgStore *image.Store, workdir, name, tag, path string, externalPlugins ...plugincaps.ExternalResolver) (map[string]any, error) {
 	var result map[string]any
 	err := image.WithPublicationGate(func() error {
 		var err error
-		result, err = buildImageForAgentLocked(imgStore, workdir, name, tag, path)
+		result, err = buildImageForAgentLocked(imgStore, workdir, name, tag, path, externalPlugins...)
 		return err
 	})
 	return result, err
 }
 
-func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path string) (map[string]any, error) {
+func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path string, externalPlugins ...plugincaps.ExternalResolver) (map[string]any, error) {
 	if tag == "" {
 		tag = "latest"
 	}
@@ -2536,7 +2606,10 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	baseDir := filepath.Dir(imgStore.Dir)
 	layout := paths.Paths{Base: baseDir}
 	pluginsDir := layout.PluginsDir()
-	resolver := plugins.ResolveInstalled(pluginsDir)
+	resolver := plugins.ResolveInstalledMetadata(pluginsDir)
+	if len(externalPlugins) > 0 && externalPlugins[0] != nil {
+		resolver = externalPlugins[0]
+	}
 	realWork, err := filepath.EvalSymlinks(workdir)
 	if err != nil {
 		return nil, err

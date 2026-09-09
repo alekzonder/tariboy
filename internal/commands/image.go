@@ -30,6 +30,13 @@ func imageStore(c *registry.Ctx) *image.Store {
 	return &image.Store{Dir: paths.Paths{Base: c.BaseDir}.ImagesDir()}
 }
 
+func imagePluginResolver(c *registry.Ctx, pluginsDir string) plugincaps.ExternalResolver {
+	if c.Store == nil {
+		return plugins.ResolveInstalledMetadata(pluginsDir)
+	}
+	return plugins.ResolveEnabledInstalledMetadata(pluginsDir, plugins.NewStore(c.Store, time.Now))
+}
+
 func imageBuild() registry.Command {
 	return registry.Command{
 		Path:    "image.build",
@@ -145,11 +152,7 @@ func imageBuild() registry.Command {
 			pluginsDir := layout.PluginsDir()
 			resolver := plugins.ResolveInstalled(pluginsDir)
 			if parsed.Version == 2 {
-				if c.Store != nil {
-					resolver = plugins.ResolveEnabledInstalledMetadata(pluginsDir, plugins.NewStore(c.Store, time.Now))
-				} else {
-					resolver = plugins.ResolveInstalledMetadata(pluginsDir)
-				}
+				resolver = imagePluginResolver(c, pluginsDir)
 			}
 			productVersion := c.Version
 			if productVersion == "" {
@@ -356,12 +359,7 @@ func imageValidate() registry.Command {
 				if c.Store != nil {
 					pluginStore = plugins.NewStore(c.Store, time.Now)
 				}
-				validated, validateErr := image.ValidateV2Detailed(parsed.V2, imagefile.ResolveRoots{Plugins: layout.PluginsDir()}, func() plugincaps.ExternalResolver {
-					if pluginStore != nil {
-						return plugins.ResolveEnabledInstalledMetadata(layout.PluginsDir(), pluginStore)
-					}
-					return plugins.ResolveInstalledMetadata(layout.PluginsDir())
-				}())
+				validated, validateErr := image.ValidateV2Detailed(parsed.V2, imagefile.ResolveRoots{Plugins: layout.PluginsDir()}, imagePluginResolver(c, layout.PluginsDir()))
 				pluginNames := make([]string, 0, len(parsed.V2.Plugins))
 				for _, plugin := range parsed.V2.Plugins {
 					pluginNames = append(pluginNames, plugin.Name)

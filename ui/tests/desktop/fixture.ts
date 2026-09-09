@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { constants } from "node:fs";
-import { access, chmod, mkdir, mkdtemp, open, readFile, readdir, readlink, rm } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, open, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -96,6 +96,30 @@ export async function waitForMainWindow(desktop: W3CClient): Promise<void> {
     }
     return false;
   `), { timeout: 30_000 }).toBe(true);
+}
+
+export async function createTestImageSource(root: string): Promise<string> {
+  const source = join(root, "test-image-source");
+  await mkdir(join(source, "skills/loop/scripts"), { recursive: true, mode: 0o700 });
+  await mkdir(join(source, "skills/whoami"), { recursive: true, mode: 0o700 });
+  await writeFile(join(source, "skills/whoami/SKILL.md"), "---\nname: whoami\ndescription: Test identity capability.\n---\n");
+  await writeFile(join(source, "skills/loop/SKILL.md"), "---\nname: loop\ndescription: Test iteration completion.\n---\n");
+  await writeFile(join(source, "skills/loop/finish.md"), "Finish the iteration by calling i-am-done.\n");
+  const launcher = join(source, "skills/loop/scripts/loop.sh");
+  await writeFile(launcher, "#!/bin/sh\nexit 0\n");
+  await chmod(launcher, 0o700);
+  await writeFile(join(source, "Tariboyfile.yaml"), `schema_version: 2
+plugins:
+  - name: whoami
+  - name: loop
+skills:
+  - dir: ./skills/whoami
+  - dir: ./skills/loop
+prompts:
+  - runtime: identity
+  - file: ./skills/loop/finish.md
+`);
+  return source;
 }
 
 function executable(name: string, override?: string): string {

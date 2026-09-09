@@ -20,6 +20,9 @@ export TARIBOY_RUNTIME_DIR="$RUNTIME"
 export TARIBOY_SHIM_BIN="$BIN/tariboy-shim"
 export TARIBOY_STUB_HARNESS="$ROOT/scripts/stub-harness.sh"
 chmod +x "$TARIBOY_STUB_HARNESS"
+. "$ROOT/scripts/test-image-fixture.sh"
+TEST_IMAGE_SOURCE="$BASE/test-image"
+make_test_image_fixture "$TEST_IMAGE_SOURCE"
 
 SOCK="$RUNTIME/tariboyd.sock"
 trap 'kill "${DPID:-}" 2>/dev/null || true; rm -rf "$BASE" "$RUNTIME"' EXIT
@@ -33,7 +36,7 @@ for _ in $(seq 1 100); do [ -S "$SOCK" ] && break; sleep 0.1; done
 sa() { "$BIN/tariboy" --socket "$SOCK" "$@"; }
 
 echo "--- image build"
-sa image build --name basic-example --tag latest --path "$ROOT/internal/builtinimages/source" | grep -q "digest" \
+sa image build --name basic-example --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q "digest" \
   || { echo "FAIL: image build"; exit 1; }
 
 echo "--- group create (lead=manager)"

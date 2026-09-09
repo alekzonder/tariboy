@@ -2,6 +2,9 @@ package commands
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,5 +72,21 @@ func TestImageSourceBuildWaitsForPublicationGate(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestImageSourceBuildRejectsDisabledExternalPlugin(t *testing.T) {
+	c := localCtx(t)
+	installDisabledPlugin(t, c, "widget")
+	if _, err := imageSourceStore(c).Create(imagesource.CreateRequest{Name: "reviewer", Prompt: "Review the task."}); err != nil {
+		t.Fatal(err)
+	}
+	yaml := "schema_version: 2\nplugins:\n  - name: widget\n"
+	if err := os.WriteFile(filepath.Join(c.BaseDir, "image-sources", "reviewer", "Tariboyfile.yaml"), []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := imageSourceBuild().Handler(c, registry.Params{"name": "reviewer", "tag": "v1"}); err == nil || !strings.Contains(err.Error(), `unknown plugin "widget"`) {
+		t.Fatalf("image source build error = %v", err)
 	}
 }

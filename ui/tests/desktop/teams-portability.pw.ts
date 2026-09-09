@@ -1,8 +1,5 @@
-import { resolve } from "node:path";
-import { expect, test } from "./fixture";
+import { createTestImageSource, expect, test } from "./fixture";
 import type { W3CClient } from "./w3c";
-
-const sourceDir = resolve(process.cwd(), "../internal/builtinimages/source");
 
 async function openPath(desktop: W3CClient, path: string): Promise<void> {
   await desktop.execute(`window.location.hash = ${JSON.stringify(`#${path}`)};`);
@@ -12,7 +9,8 @@ async function bodyText(desktop: W3CClient): Promise<string> {
   return desktop.execute<string>("return document.body ? document.body.innerText : '';");
 }
 
-test("real Desktop creates, separates, copies, exports, previews, and imports a team", async ({ desktop }) => {
+test("real Desktop creates, separates, copies, exports, previews, and imports a team", async ({ desktop, desktopWorker }) => {
+  const sourceDir = await createTestImageSource(desktopWorker.baseDir);
   await desktop.execute(`window.__desktopApiBase = "";
     const originalFetch = window.fetch.bind(window);
     window.fetch = (input, init) => {

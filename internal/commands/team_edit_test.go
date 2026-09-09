@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,6 +157,34 @@ func TestApplyTeamImageBuildsTwoRefsFromOneImportedSource(t *testing.T) {
 	}
 	if err := applyTeamImage(c, preview, teamportable.Image{Ref: "shared:v3", SourceName: "shared", SourceDigest: "sha256:wrong"}, true, func() {}); err == nil {
 		t.Fatal("accepted staged source whose digest did not match archive metadata")
+	}
+}
+
+func TestApplyTeamImageRejectsDisabledExternalPlugin(t *testing.T) {
+	base := t.TempDir()
+	db, err := storedb.Open(filepath.Join(base, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	c := &registry.Ctx{Store: db, BaseDir: base}
+	installDisabledPlugin(t, c, "widget")
+	source := filepath.Join(base, "team-imports", "id", "images", "shared")
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins:\n  - name: widget\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := (imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}).Capture(context.Background(), "seed:v1", "seed", "seed", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview := teamportable.Preview{StagedDir: filepath.Join(base, "team-imports", "id")}
+	planned := teamportable.Image{Ref: "shared:v1", SourceName: "shared", SourceDigest: snapshot.SourceDigest}
+
+	if err := applyTeamImage(c, preview, planned, false, func() {}); err == nil || !strings.Contains(err.Error(), `unknown plugin "widget"`) {
+		t.Fatalf("team image build error = %v", err)
 	}
 }
 

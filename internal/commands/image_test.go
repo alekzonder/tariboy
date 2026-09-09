@@ -20,6 +20,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imageportable"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
+	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	storedb "github.com/alekzonder/tariboy/internal/store"
 )
@@ -36,6 +37,32 @@ func localCtx(t *testing.T) *registry.Ctx {
 		Store:   s,
 		BaseDir: base,
 		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+}
+
+func installDisabledPlugin(t *testing.T, c *registry.Ctx, name string) {
+	t.Helper()
+	version := "1.0.0"
+	dir := filepath.Join(c.BaseDir, "plugins", name, version)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"` + name + `","version":"` + version + `","protocol_version":1,"types":["tool"],"exec":"run.sh","channels":{"publish":[],"subscribe":[]}}`
+	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(c.BaseDir, "plugins", name, "active-version"), []byte(version+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := plugins.NewStore(c.Store, time.Now)
+	if err := store.Upsert(plugins.Record{Name: name, Version: version, ProtocolVersion: 1, Types: []string{"tool"}, Exec: "run.sh", Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetActiveVersion(name, version); err != nil {
+		t.Fatal(err)
 	}
 }
 

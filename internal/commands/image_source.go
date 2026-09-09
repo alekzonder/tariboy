@@ -13,7 +13,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/imagesource"
 	"github.com/alekzonder/tariboy/internal/paths"
-	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -255,7 +254,7 @@ func imageSourceBuild() registry.Command {
 					}
 					layout := paths.Paths{Base: c.BaseDir}
 					pluginsDir := layout.PluginsDir()
-					manifest, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, store, time.Now, plugins.ResolveInstalledMetadata(pluginsDir))
+					manifest, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, store, time.Now, imagePluginResolver(c, pluginsDir))
 					if err != nil {
 						return imagesource.BuildRecord{}, err
 					}
