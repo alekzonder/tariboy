@@ -143,7 +143,7 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	if hex.EncodeToString(actual[:]) != meta.Digest {
 		return Preview{}, errors.New("image portable: image digest mismatch")
 	}
-	inner, err := image.ValidatePortableArchive(body, ref)
+	inner, err := image.ValidatePortableArchiveContract(body, ref, s.ExternalPlugins)
 	if err != nil {
 		return Preview{}, fmt.Errorf("image portable: invalid runnable artifact: %w", err)
 	}
@@ -198,6 +198,17 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 	if err != nil || image.IsReserved(target) {
 		return Result{}, errors.New("image portable: invalid target ref")
 	}
+	body, err := os.ReadFile(filepath.Join(stage, "image.tar.gz"))
+	if err != nil {
+		return Result{}, err
+	}
+	source, err := image.ParseRef(preview.Ref)
+	if err != nil {
+		return Result{}, errors.New("image portable: invalid source ref")
+	}
+	if _, err := image.ValidatePortableArchiveContract(body, source, s.ExternalPlugins); err != nil {
+		return Result{}, fmt.Errorf("image portable: incompatible runnable artifact: %w", err)
+	}
 	store := s.imageStore()
 	targetExists := store.Exists(target)
 	if targetExists && target.String() == preview.Ref {
@@ -211,20 +222,12 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 		_ = os.RemoveAll(stage)
 		return Result{Ref: target.String(), Digest: manifest.Digest, Reused: true}, nil
 	}
-	body, err := os.ReadFile(filepath.Join(stage, "image.tar.gz"))
-	if err != nil {
-		return Result{}, err
-	}
 	if !targetExists && s.Snapshots != nil && s.Snapshots.DB != nil {
 		if err := (imageprovenance.Store{DB: s.Snapshots.DB}).Delete(target.String()); err != nil {
 			return Result{}, err
 		}
 	}
 	if target.String() != preview.Ref {
-		source, parseErr := image.ParseRef(preview.Ref)
-		if parseErr != nil {
-			return Result{}, errors.New("image portable: invalid source ref")
-		}
 		if _, err := store.RetagPortableArchive(source, target, body); err != nil {
 			return Result{}, err
 		}

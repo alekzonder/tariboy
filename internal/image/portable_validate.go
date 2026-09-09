@@ -10,13 +10,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
+	"github.com/alekzonder/tariboy/internal/imagecontract"
 )
 
 var portablePluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -50,6 +53,10 @@ type portableImageMember struct {
 // validatePortableArchive validates the runnable inner archive before it can
 // enter the immutable Store or be unpacked into an agent directory.
 func validatePortableArchive(archive []byte, ref Ref) (Manifest, error) {
+	return validatePortableArchiveContract(archive, ref, nil, false)
+}
+
+func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecontract.ExternalResolver, enforceContract bool) (Manifest, error) {
 	if int64(len(archive)) > maxPortableImageCompressed {
 		return Manifest{}, errors.New("image archive exceeds compressed size limit")
 	}
@@ -123,7 +130,7 @@ func validatePortableArchive(archive []byte, ref Ref) (Manifest, error) {
 		return Manifest{}, fmt.Errorf("archive ref %s:%s does not match %s", manifest.Name, manifest.Tag, ref.String())
 	}
 	if manifest.SchemaVersion == 2 {
-		if err := validateV2PortableMembers(manifestBody, members, ref, &manifest); err != nil {
+		if err := validateV2PortableMembers(manifestBody, members, ref, &manifest, resolver, enforceContract); err != nil {
 			return Manifest{}, err
 		}
 	} else {
@@ -147,7 +154,13 @@ func ValidatePortableArchive(archive []byte, ref Ref) (Manifest, error) {
 	return validatePortableArchive(archive, ref)
 }
 
-func validateV2PortableMembers(manifestBody []byte, members map[string]portableImageMember, ref Ref, manifest *Manifest) error {
+// ValidatePortableArchiveContract additionally checks daemon/plugin
+// compatibility before an archive may be imported on a destination.
+func ValidatePortableArchiveContract(archive []byte, ref Ref, resolver imagecontract.ExternalResolver) (Manifest, error) {
+	return validatePortableArchiveContract(archive, ref, resolver, true)
+}
+
+func validateV2PortableMembers(manifestBody []byte, members map[string]portableImageMember, ref Ref, manifest *Manifest, resolver imagecontract.ExternalResolver, enforceContract bool) error {
 	var strict v2PortableManifest
 	dec := json.NewDecoder(bytes.NewReader(manifestBody))
 	dec.DisallowUnknownFields()
@@ -265,7 +278,62 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 	if manifest.Skills == nil {
 		manifest.Skills = []ManifestSkill{}
 	}
+	if enforceContract {
+		return validateManifestContract(*manifest, template, func(skill ManifestSkill, launcher string) bool {
+			member, ok := members[skill.ArchiveRoot+"/"+launcher]
+			return ok && member.mode&0o111 != 0
+		}, resolver)
+	}
 	return nil
+}
+
+// ValidateUnpackedContract checks a staged schema-v2 image before any bridge,
+// shim, directory, or database publication occurs.
+func ValidateUnpackedContract(manifest Manifest, root string, resolver imagecontract.ExternalResolver) error {
+	if manifest.SchemaVersion != 2 {
+		return nil
+	}
+	body, err := os.ReadFile(filepath.Join(root, "prompt", "template.json"))
+	if err != nil {
+		return err
+	}
+	var template PromptTemplate
+	if err := json.Unmarshal(body, &template); err != nil {
+		return err
+	}
+	if err := ValidatePromptTemplate(template); err != nil {
+		return err
+	}
+	return validateManifestContract(manifest, template, func(skill ManifestSkill, launcher string) bool {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(skill.ArchiveRoot), filepath.FromSlash(launcher)))
+		return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
+	}, resolver)
+}
+
+func validateManifestContract(manifest Manifest, template PromptTemplate, executable func(ManifestSkill, string) bool, resolver imagecontract.ExternalResolver) error {
+	input := imagecontract.Input{
+		Plugins: make([]string, 0, len(manifest.Plugins)),
+		Skills:  make([]imagecontract.Skill, 0, len(manifest.Skills)),
+	}
+	for _, plugin := range manifest.Plugins {
+		input.Plugins = append(input.Plugins, plugin.Name)
+	}
+	for _, entry := range template.Entries {
+		if entry.Kind == "runtime" {
+			input.Runtimes = append(input.Runtimes, entry.Runtime)
+		}
+	}
+	for _, skill := range manifest.Skills {
+		executables := map[string]bool{}
+		for _, plugin := range manifest.Plugins {
+			capability, ok := imagecontract.Builtin(plugin.Name)
+			if ok && capability.Skill == skill.Name && capability.Launcher != "" && executable(skill, capability.Launcher) {
+				executables[capability.Launcher] = true
+			}
+		}
+		input.Skills = append(input.Skills, imagecontract.Skill{Name: skill.Name, Executables: executables})
+	}
+	return imagecontract.Validate(input, resolver)
 }
 
 func validSkillCategory(category string) bool {

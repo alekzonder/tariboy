@@ -5,11 +5,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/plugincaps"
 )
 
 func TestArtifactExportImportRunsWithoutSources(t *testing.T) {
@@ -54,6 +56,55 @@ func TestArtifactExportImportRunsWithoutSources(t *testing.T) {
 	if prompt, err := (&image.Store{Dir: filepath.Join(target, "images")}).RenderPrompt(ref); err != nil || prompt != "portable" {
 		t.Fatalf("prompt=%q err=%v", prompt, err)
 	}
+}
+
+func TestArtifactImportRejectsUnavailableDestinationPlugin(t *testing.T) {
+	origin := t.TempDir()
+	ref := image.Ref{Name: "external", Tag: "v1"}
+	store := &image.Store{Dir: filepath.Join(origin, "images")}
+	_, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2,
+		Plugins:       []imagefile.V2Plugin{{Name: "external-widget"}},
+	}, imagefile.ResolveRoots{}, ref, store, time.Now, func(string) (plugincaps.ResolvedPlugin, error) {
+		return plugincaps.ResolvedPlugin{Installed: true}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exporter := Service{BaseDir: origin, StagingRoot: filepath.Join(origin, "imports")}
+	var archive bytes.Buffer
+	if err := exporter.Export(context.Background(), ref.String(), &archive); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("preview", func(t *testing.T) {
+		target := t.TempDir()
+		importer := Service{BaseDir: target, StagingRoot: filepath.Join(target, "imports")}
+		if _, err := importer.Preview(context.Background(), bytes.NewReader(archive.Bytes()), int64(archive.Len())); err == nil || !strings.Contains(err.Error(), "external-widget") {
+			t.Fatalf("Preview error = %v, want unavailable plugin", err)
+		}
+	})
+
+	t.Run("apply", func(t *testing.T) {
+		target := t.TempDir()
+		importer := Service{
+			BaseDir: target, StagingRoot: filepath.Join(target, "imports"),
+			ExternalPlugins: func(string) (plugincaps.ResolvedPlugin, error) {
+				return plugincaps.ResolvedPlugin{Installed: true}, nil
+			},
+		}
+		preview, err := importer.Preview(context.Background(), bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		importer.ExternalPlugins = nil
+		if _, err := importer.Apply(context.Background(), preview.ImportID, ""); err == nil || !strings.Contains(err.Error(), "external-widget") {
+			t.Fatalf("Apply error = %v, want unavailable plugin", err)
+		}
+		if (&image.Store{Dir: filepath.Join(target, "images")}).Exists(ref) {
+			t.Fatal("incompatible image was published")
+		}
+	})
 }
 
 func TestArtifactExportImportRetainsPackagedSkillsWithoutSources(t *testing.T) {
