@@ -1189,15 +1189,13 @@ describe("TasksWorkspace", () => {
     )
   })
 
-  it("sends Ok from a secondary button before Send comment without changing the draft", async () => {
+  it("sends Ok with the selected question principal", async () => {
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     await screen.findByRole("heading", { name: "TEST-1" })
 
     const comments = screen.getByText("Comments").closest("section")!
     await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner")
-    await userEvent.click(within(comments).getByRole("button", { name: "Source Markdown" }))
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Keep this draft" } })
 
     const sendOk = within(comments).getByRole("button", { name: "Send Ok" })
     const sendComment = within(comments).getByRole("button", { name: "Send comment" })
@@ -1207,12 +1205,23 @@ describe("TasksWorkspace", () => {
 
     await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
       "TEST-1",
-      "Ok",
+      "@user:owner\n\nOk",
       undefined,
       expect.any(String),
     ))
-    expect(screen.getByLabelText("Comment")).toHaveValue("Keep this draft")
     expect(screen.getByLabelText("Ask")).toHaveValue("user:owner")
+  })
+
+  it("hides Send Ok when the comment contains text", async () => {
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    await screen.findByRole("heading", { name: "TEST-1" })
+
+    const comments = screen.getByText("Comments").closest("section")!
+    await userEvent.click(within(comments).getByRole("button", { name: "Source Markdown" }))
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Keep this draft" } })
+
+    expect(within(comments).queryByRole("button", { name: "Send Ok" })).not.toBeInTheDocument()
   })
 
   it("updates and restores the default question when the assignee changes", async () => {
