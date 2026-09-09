@@ -2,6 +2,8 @@
 
 Native Task: IMPROVE-34. Architecture approved by customer comment 1669
 on 2026-09-09. Completion mode for this repository task: PR.
+Customer revision 1679 requires reusing `writing-skills` for all skill
+creation and improvement; the revised written spec awaits review.
 
 ## Outcome
 
@@ -20,8 +22,9 @@ stage. Domain procedures live within the image directory:
 - `skills/tariboy-image-authoring/SKILL.md`: image model, source layout,
   explicit capabilities/skills/prompts, source dependencies, build/validation,
   version commands, and diagnosis from iteration logs.
-- `skills/tariboy-image-evals/SKILL.md`: separate skill and whole-image
-  behavioral evaluations, fixtures, baseline/candidate evidence and iteration.
+- `skills/tariboy-image-evals/SKILL.md`: whole-image behavioral evaluations
+  and composition/routing checks only. Skill authoring and skill evaluations
+  use the existing `writing-skills`, not a new procedure.
 - `skills/tariboy-image-delivery/SKILL.md`: Native Task intake, isolation,
   publication, customer mention, wait states, and integration completion.
 
@@ -38,6 +41,11 @@ workdir, status, loop, scripts and image-creator. Restore Superpowers skills
 using the image's `skills-lock.json`; ignored restored files are not committed
 dependencies. Put domain skills before the larger Superpowers catalog so Codex
 catalog truncation cannot hide the role entrypoints.
+Explicitly package the existing Superpowers `writing-skills` and put it with
+the required role entrypoints before the remaining catalog. The image prompt
+must require it whenever creating, improving or verifying any image-local or
+Store skill. Reuse its locked upstream source without copying or rewriting
+its authoring workflow in a domain skill.
 
 ## Authoring behavior
 
@@ -57,6 +65,11 @@ missing capability, stale image, CWD/path error, or tool/runtime failure.
 Keep the workflow in the image prompt; extract reusable stage details and
 repeatable scripts into skills inside the image. Shared Store skills remain
 independently editable. Preserve existing consumers and reuse available tools.
+The authoring skill owns Tariboy image knowledge, not a skill-writing method:
+when work touches a skill, it explicitly requires `writing-skills` for that
+work, including independent skill evals. The same requirement applies when
+the authoring skill is used outside this image; its consumer must provide
+`writing-skills` too.
 Use `tariboy image version get --path PATH` and `tariboy image version update
 patch|minor|major --path PATH` for existing image version changes. Explain the
 chosen increment; the Tariboy product version remains unchanged. New sources
@@ -113,6 +126,12 @@ Task immediately, and remove its context entry.
 
 ## Evaluation contract
 
+`writing-skills` owns creating, improving and evaluating individual skills,
+including its RED/GREEN/REFACTOR and pressure-scenario requirements. The local
+image-evals skill owns only image-level prompt behavior, skill selection and
+composition. It routes individual skill failures back to `writing-skills`
+instead of defining a parallel skill-evaluation process.
+
 Keep independent suites at each skill's `evals/` and the image's `evals/`.
 A skill suite supplies only that skill and necessary raw inputs; the role
 suite tests composition and routing with the role and its catalog. Every case
@@ -137,6 +156,9 @@ parse the manifest, resolve/prepare domain and reused skills, verify required
 capabilities and runtime markers, and verify packaged utilities are executable.
 Run RED before production files and GREEN afterwards. Behavioral baseline and
 candidate evidence covers each new skill independently and role orchestration.
+Role scenarios must prove that both image-local and independent Store skill
+requests invoke `writing-skills`, while whole-image scenarios use the
+image-evals skill. Packaging checks must include the restored `writing-skills`.
 Update product Agent Skills documentation with CWD, build dependencies,
 independent skill usage and completion behavior.
 
