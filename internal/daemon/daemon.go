@@ -304,8 +304,6 @@ func Run(ctx context.Context, o Options) error {
 			return err
 		}
 	}
-	skillsDir := filepath.Join(p.CurrentVersionStoreDir(version.Version), "skills")
-
 	schedStore := schedule.NewStore(st, time.Now)
 	scriptStore := script.NewStore(st, time.Now)
 	scriptPublisher := scriptnotify.New(st.DB, channelBus, time.Now, log)
@@ -619,7 +617,7 @@ func Run(ctx context.Context, o Options) error {
 	var _ loop.EvalRunner = evalRunner
 
 	manager := loop.NewManager(loop.ManagerConfig{
-		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), SkillsDir: skillsDir, ShimBin: shimBin,
+		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), ShimBin: shimBin,
 		ImgStore: imgStore, Store: as, Log: log, Clock: time.Now, Bus: channelBus,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: hub.Emit, Proxy: proxy,
 		Groups:             groupProv,

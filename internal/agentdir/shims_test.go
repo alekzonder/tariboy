@@ -20,9 +20,13 @@ func binDirFor(t *testing.T) Layout {
 	return l
 }
 
-func skillScriptsFor(t *testing.T) string {
+func skillScriptsFor(t *testing.T, l Layout) string {
 	t.Helper()
-	root := filepath.Join(t.TempDir(), "skills")
+	return writeSkillScriptsFor(t, filepath.Join(l.ImageDir(), "skills"))
+}
+
+func writeSkillScriptsFor(t *testing.T, root string) string {
+	t.Helper()
 	for _, name := range []string{
 		"loop/scripts/loop.sh",
 		"tasks/scripts/tasks.sh",
@@ -38,9 +42,27 @@ func skillScriptsFor(t *testing.T) string {
 	return root
 }
 
+func TestWriteShimsUsesActiveImageLaunchers(t *testing.T) {
+	l := binDirFor(t)
+	active := writeSkillScriptsFor(t, filepath.Join(l.ImageDir(), "skills"))
+	external := writeSkillScriptsFor(t, filepath.Join(t.TempDir(), "skills"))
+	if err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"i-am-done": filepath.Join(active, "loop", "scripts", "loop.sh"),
+		"tasks":     filepath.Join(active, "tasks", "scripts", "tasks.sh"),
+	} {
+		body, err := os.ReadFile(filepath.Join(l.BinDir(), name))
+		if err != nil || !strings.Contains(string(body), want) || strings.Contains(string(body), external) {
+			t.Fatalf("%s shim = %q err=%v, want active image launcher %q", name, body, err, want)
+		}
+	}
+}
+
 func TestDirectShimsForwardArgsToSkillLaunchers(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skills := skillScriptsFor(t, l)
 	argsPath := filepath.Join(t.TempDir(), "args")
 	for _, script := range []string{
 		filepath.Join(skills, "loop", "scripts", "loop.sh"),
@@ -51,7 +73,7 @@ func TestDirectShimsForwardArgsToSkillLaunchers(t *testing.T) {
 		}
 	}
 	t.Setenv("SHIM_ARGS", argsPath)
-	if err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}, skills); err != nil {
+	if err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}); err != nil {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{
@@ -74,9 +96,9 @@ func TestDirectShimsForwardArgsToSkillLaunchers(t *testing.T) {
 
 func TestWriteShimsDispatchesDirectlyToOwningSkillScripts(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skills := skillScriptsFor(t, l)
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}
-	if err := WriteShims(l, a, skills); err != nil {
+	if err := WriteShims(l, a); err != nil {
 		t.Fatal(err)
 	}
 	wants := map[string]string{
@@ -105,10 +127,10 @@ func TestWriteShimsDispatchesDirectlyToOwningSkillScripts(t *testing.T) {
 
 func TestWriteShimsDefersPython3CheckToIterationEnvironment(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skillScriptsFor(t, l)
 	t.Setenv("PATH", t.TempDir())
 
-	if err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop"}}, skills); err != nil {
+	if err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop"}}); err != nil {
 		t.Fatalf("WriteShims used daemon PATH for Python preflight: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(l.BinDir(), "i-am-done")); err != nil {
@@ -118,12 +140,12 @@ func TestWriteShimsDefersPython3CheckToIterationEnvironment(t *testing.T) {
 
 func TestWriteShimsRequiresExecutableDirectScriptsBeforeWriting(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skills := skillScriptsFor(t, l)
 	loop := filepath.Join(skills, "loop", "scripts", "loop.sh")
 	if err := os.Chmod(loop, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop"}}, skills)
+	err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop"}})
 	if err == nil || !strings.Contains(err.Error(), "skill script unavailable") {
 		t.Fatalf("WriteShims error = %v, want unavailable direct script", err)
 	}
@@ -146,8 +168,8 @@ func TestWriteShimsRepointsDirectSkillShimsAndRemovesManagedTools(t *testing.T) 
 		}
 	}
 
-	live := skillScriptsFor(t)
-	if err := WriteShims(l, a, live); err != nil {
+	live := skillScriptsFor(t, l)
+	if err := WriteShims(l, a); err != nil {
 		t.Fatal(err)
 	}
 
@@ -192,7 +214,7 @@ func TestWriteShimsKeepsUserOwnedToolsShim(t *testing.T) {
 	if err := os.WriteFile(tools, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteShims(l, agent.Agent{Name: "worker"}, skillScriptsFor(t)); err != nil {
+	if err := WriteShims(l, agent.Agent{Name: "worker"}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(tools)
@@ -208,7 +230,7 @@ func TestWriteShimsKeepsCustomWrapperThatMentionsLegacyDispatcher(t *testing.T) 
 	if err := os.WriteFile(tools, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteShims(l, agent.Agent{Name: "worker"}, skillScriptsFor(t)); err != nil {
+	if err := WriteShims(l, agent.Agent{Name: "worker"}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(tools)
@@ -224,7 +246,7 @@ func TestWriteShimsKeepsCustomWrapperAroundLegacyGoClient(t *testing.T) {
 	if err := os.WriteFile(tools, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteShims(l, agent.Agent{Name: "worker"}, skillScriptsFor(t)); err != nil {
+	if err := WriteShims(l, agent.Agent{Name: "worker"}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(tools)
@@ -236,11 +258,11 @@ func TestWriteShimsKeepsCustomWrapperAroundLegacyGoClient(t *testing.T) {
 // The tasks shim is conditional on the capability, in both directions.
 func TestWriteShimsReconcilesTasksCapability(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skillScriptsFor(t, l)
 	tasksPath := filepath.Join(l.BinDir(), "tasks")
 
 	with := agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}
-	if err := WriteShims(l, with, skills); err != nil {
+	if err := WriteShims(l, with); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(tasksPath)
@@ -252,7 +274,7 @@ func TestWriteShimsReconcilesTasksCapability(t *testing.T) {
 	}
 
 	without := agent.Agent{Name: "worker", Plugins: []string{"loop"}}
-	if err := WriteShims(l, without, skills); err != nil {
+	if err := WriteShims(l, without); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(tasksPath); !os.IsNotExist(err) {
@@ -265,18 +287,18 @@ func TestWriteShimsReconcilesTasksCapability(t *testing.T) {
 		t.Fatalf("agent-local ttasks shim exists: %v", err)
 	}
 	// And a second removal pass is not an error.
-	if err := WriteShims(l, without, skills); err != nil {
+	if err := WriteShims(l, without); err != nil {
 		t.Fatalf("removal is not idempotent: %v", err)
 	}
 }
 
 func TestWriteShimsReconcilesLoopCapability(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skillScriptsFor(t, l)
 	donePath := filepath.Join(l.BinDir(), "i-am-done")
 
 	with := agent.Agent{Name: "worker", Plugins: []string{"loop"}}
-	if err := WriteShims(l, with, skills); err != nil {
+	if err := WriteShims(l, with); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(donePath); err != nil {
@@ -284,7 +306,7 @@ func TestWriteShimsReconcilesLoopCapability(t *testing.T) {
 	}
 
 	without := agent.Agent{Name: "worker", Plugins: nil}
-	if err := WriteShims(l, without, skills); err != nil {
+	if err := WriteShims(l, without); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(donePath); !os.IsNotExist(err) {
@@ -293,7 +315,7 @@ func TestWriteShimsReconcilesLoopCapability(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
 		t.Fatalf("central tools shim exists: %v", err)
 	}
-	if err := WriteShims(l, without, skills); err != nil {
+	if err := WriteShims(l, without); err != nil {
 		t.Fatalf("loop shim removal is not idempotent: %v", err)
 	}
 }
@@ -302,9 +324,9 @@ func TestWriteShimsReconcilesLoopCapability(t *testing.T) {
 // same bytes, same mode, and not even a rewrite (mtime is preserved).
 func TestWriteShimsIsIdempotent(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skillScriptsFor(t, l)
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}
-	if err := WriteShims(l, a, skills); err != nil {
+	if err := WriteShims(l, a); err != nil {
 		t.Fatal(err)
 	}
 	type snap struct {
@@ -331,7 +353,7 @@ func TestWriteShimsIsIdempotent(t *testing.T) {
 		before[name] = snap{body: body, mode: info.Mode().Perm(), mtime: info.ModTime()}
 	}
 
-	if err := WriteShims(l, a, skills); err != nil {
+	if err := WriteShims(l, a); err != nil {
 		t.Fatal(err)
 	}
 	for name, was := range before {
@@ -360,16 +382,16 @@ func TestWriteShimsIsIdempotent(t *testing.T) {
 // WriteShims writes shims and nothing else: no image unpack, no tree creation.
 func TestWriteShimsWritesOnlyShims(t *testing.T) {
 	l := binDirFor(t)
-	skills := skillScriptsFor(t)
+	skillScriptsFor(t, l)
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop"}}
-	if err := WriteShims(l, a, skills); err != nil {
+	if err := WriteShims(l, a); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(l.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 1 || entries[0].Name() != "bin" {
+	if len(entries) != 2 || entries[0].Name() != "bin" || entries[1].Name() != "image" {
 		t.Fatalf("WriteShims created more than the bin shims: %v", entries)
 	}
 	names, err := os.ReadDir(l.BinDir())
@@ -385,9 +407,9 @@ func TestWriteShimsWritesOnlyShims(t *testing.T) {
 // silently conjures up.
 func TestWriteShimsFailsWithoutBinDir(t *testing.T) {
 	l := New(t.TempDir(), "ghost")
-	skills := skillScriptsFor(t)
+	skillScriptsFor(t, l)
 	a := agent.Agent{Name: "ghost", Plugins: []string{"loop"}}
-	if err := WriteShims(l, a, skills); err == nil {
+	if err := WriteShims(l, a); err == nil {
 		t.Fatal("WriteShims succeeded for an unprovisioned agent dir")
 	}
 }

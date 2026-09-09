@@ -74,7 +74,7 @@ func (l Layout) EnsureIteration(id string) error {
 // Provision creates the tree, unpacks the image, and writes the bin shims
 // (tasks -> tasks.sh; i-am-done -> loop.sh done). Agent config is
 // NOT snapshotted to disk — the DB is the single source of truth.
-func Provision(l Layout, a agent.Agent, imgStore *image.Store, ref image.Ref, skillsDir string) error {
+func Provision(l Layout, a agent.Agent, imgStore *image.Store, ref image.Ref) error {
 	for _, d := range []string{l.Root, l.Workdir(), l.ImageDir(), l.BinDir(), l.IterationsDir()} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
@@ -83,7 +83,7 @@ func Provision(l Layout, a agent.Agent, imgStore *image.Store, ref image.Ref, sk
 	if err := imgStore.Unpack(ref, l.ImageDir()); err != nil {
 		return fmt.Errorf("unpack image %s: %w", ref.String(), err)
 	}
-	return WriteShims(l, a, skillsDir)
+	return WriteShims(l, a)
 }
 
 func hasCapability(capabilities []string, name string) bool {

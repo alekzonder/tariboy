@@ -474,34 +474,30 @@ func TestStartScriptDoesNotLaunchCanceledPendingRecord(t *testing.T) {
 }
 
 func buildBasic(t *testing.T, st *image.Store) {
-	t.Helper()
-	src := t.TempDir()
-	os.WriteFile(filepath.Join(src, "task.md"), []byte("BODY"), 0o600)
-	im := &imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "context"}},
-		Prompts: []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}}, Dir: src}
-	if _, err := image.Build(im, image.Ref{Name: "basic", Tag: "latest"}, st, time.Now, image.WithBuiltinStoreRoot(legacyPromptStore(t))); err != nil {
-		t.Fatal(err)
-	}
+	buildTestImage(t, st, "basic", "BODY")
 }
 
-func legacyPromptStore(t *testing.T) string {
+func buildTestImage(t *testing.T, st *image.Store, name, body string) {
 	t.Helper()
-	root := t.TempDir()
-	for name, body := range map[string]string{
-		"whoami/prompt.md":   "whoami",
-		"messages/prompt.md": "messages",
-		"context/prompt.md":  "context",
-		"loop/finish.md":     "finish",
-	} {
-		path := filepath.Join(root, "skills", filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	return root
+	skills := testSkillsDir(t)
+	if _, err := image.BuildV2(&imagefile.V2{
+		SchemaVersion: 2, Dir: src,
+		Plugins: []imagefile.V2Plugin{{Name: "whoami"}, {Name: "loop"}, {Name: "messages"}, {Name: "context"}},
+		Prompts: []imagefile.PromptEntry{{File: "./task.md"}},
+		Skills: []imagefile.SkillEntry{
+			{Dir: filepath.Join(skills, "whoami")},
+			{Dir: filepath.Join(skills, "loop")},
+			{Dir: filepath.Join(skills, "messages")},
+			{Dir: filepath.Join(skills, "context")},
+			{Dir: filepath.Join(skills, "tasks")},
+		},
+	}, imagefile.ResolveRoots{}, image.Ref{Name: name, Tag: "latest"}, st, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func pinBasicImage(t *testing.T, m *Manager, ag *agent.Agent) {
@@ -551,6 +547,7 @@ func TestStartFailsLoudlyWhenToolsSocketUnbindable(t *testing.T) {
 
 func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string, *store.Store) {
 	t.Helper()
+	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
 	base := t.TempDir()
 	s, err := store.Open(filepath.Join(base, "x.db"))
 	if err != nil {
@@ -560,10 +557,9 @@ func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string
 	as := agent.NewStore(s)
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	buildBasic(t, imgStore)
-	skillsDir := testSkillsDir(t)
 	m := NewManager(ManagerConfig{
-		AgentsDir: filepath.Join(base, "agents"), SkillsDir: skillsDir,
-		ShimBin: "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
+		AgentsDir: filepath.Join(base, "agents"),
+		ShimBin:   "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
 		Bus:           bus.New(s, time.Now),
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
@@ -574,7 +570,7 @@ func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string
 func testSkillsDir(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	for _, name := range []string{"loop", "tasks"} {
+	for _, name := range []string{"whoami", "loop", "messages", "context", "tasks"} {
 		dir := filepath.Join(root, name)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -1417,7 +1413,7 @@ func TestManagerRunProvisionsAndStops(t *testing.T) {
 	}
 	_ = ctx
 	// dir provisioned
-	if _, err := os.Stat(filepath.Join(agentsDir, "smoke", "image", "PROMPT.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(agentsDir, "smoke", "image", "prompt", "template.json")); err != nil {
 		t.Fatalf("agent dir not provisioned: %v", err)
 	}
 	got, _ := as.Get("smoke")
@@ -1670,7 +1666,7 @@ func TestRunRejectsTraversalName(t *testing.T) {
 	if err != nil || name != "my-agent" {
 		t.Fatalf("Run(my-agent): name=%q err=%v", name, err)
 	}
-	if _, err := os.Stat(filepath.Join(agentsDir, "my-agent", "image", "PROMPT.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(agentsDir, "my-agent", "image", "prompt", "template.json")); err != nil {
 		t.Fatalf("valid agent not provisioned: %v", err)
 	}
 	// A generated name (empty --name) also works.
@@ -2002,7 +1998,7 @@ func TestStartAfterStopRestoresRunningState(t *testing.T) {
 
 	// A fresh manager over the same store/dir reattaches the running agent.
 	m2 := NewManager(ManagerConfig{
-		AgentsDir: agentsDir, SkillsDir: testSkillsDir(t), ShimBin: "/opt/tariboy-shim",
+		AgentsDir: agentsDir, ShimBin: "/opt/tariboy-shim",
 		Store: as, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
 	})
@@ -3050,7 +3046,7 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 		t.Fatalf("states at reprovision goal signals = %v, want [enabled=true loop=true]", goalStates)
 	}
 	// Tree re-unpacked, shims rewritten.
-	if _, err := os.Stat(filepath.Join(l.ImageDir(), "PROMPT.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(l.ImageDir(), "prompt", "template.json")); err != nil {
 		t.Fatalf("reprovision did not re-unpack the image: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(l.BinDir(), "tools")); !os.IsNotExist(err) {
@@ -3076,12 +3072,5 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 
 // buildBasic2 builds a second image "basic2:latest" for image-swap tests.
 func buildBasic2(t *testing.T, st *image.Store) {
-	t.Helper()
-	src := t.TempDir()
-	os.WriteFile(filepath.Join(src, "task.md"), []byte("BODY2"), 0o600)
-	im := &imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "context"}},
-		Prompts: []imagefile.Prompt{{Filepath: filepath.Join(src, "task.md")}}, Dir: src}
-	if _, err := image.Build(im, image.Ref{Name: "basic2", Tag: "latest"}, st, time.Now, image.WithBuiltinStoreRoot(legacyPromptStore(t))); err != nil {
-		t.Fatal(err)
-	}
+	buildTestImage(t, st, "basic2", "BODY2")
 }

@@ -14,12 +14,11 @@ import (
 // else: it neither unpacks the image nor creates the tree, so the bin dir must
 // already exist (Provision makes it).
 //
-// The absolute paths select the running daemon's versioned Store. The daemon
-// therefore calls this for every stored agent at startup, on top of
-// create/reprovision. Writing is skipped when the bytes already match.
-func WriteShims(l Layout, a agent.Agent, skillsDir string) error {
-	doneScript := filepath.Join(skillsDir, "loop", "scripts", "loop.sh")
-	tasksScript := filepath.Join(skillsDir, "tasks", "scripts", "tasks.sh")
+// The absolute paths select launchers in the agent's unpacked active image.
+// Writing is skipped when the bytes already match.
+func WriteShims(l Layout, a agent.Agent) error {
+	doneScript := filepath.Join(l.ImageDir(), "skills", "loop", "scripts", "loop.sh")
+	tasksScript := filepath.Join(l.ImageDir(), "skills", "tasks", "scripts", "tasks.sh")
 	var required []string
 	if hasCapability(a.Plugins, "loop") {
 		required = append(required, doneScript)
