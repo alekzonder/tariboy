@@ -34,7 +34,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
-	"github.com/alekzonder/tariboy/internal/version"
 	"golang.org/x/sys/unix"
 )
 
@@ -2531,89 +2530,37 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	if err != nil {
 		return nil, err
 	}
+	if parsed.Version != 2 {
+		return nil, errors.New(imagefile.SchemaV1MigrationMessage)
+	}
 	baseDir := filepath.Dir(imgStore.Dir)
 	layout := paths.Paths{Base: baseDir}
 	pluginsDir := layout.PluginsDir()
 	resolver := plugins.ResolveInstalled(pluginsDir)
-	if parsed.Version == 2 {
-		realWork, err := filepath.EvalSymlinks(workdir)
-		if err != nil {
+	realWork, err := filepath.EvalSymlinks(workdir)
+	if err != nil {
+		return nil, err
+	}
+	for _, skill := range parsed.V2.Skills {
+		if strings.HasPrefix(skill.Dir, "$PLUGINS/") {
+			continue
+		}
+		path := skill.Dir
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(parsed.V2.Dir, path)
+		}
+		if err := confineReferencedPath(realWork, "skill", path); err != nil {
 			return nil, err
 		}
-		for _, skill := range parsed.V2.Skills {
-			if strings.HasPrefix(skill.Dir, "$") {
-				continue // Store/plugin roots are checked by the image resolver.
-			}
-			path := skill.Dir
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(parsed.V2.Dir, path)
-			}
-			if err := confineReferencedPath(realWork, "skill", path); err != nil {
+	}
+	for _, prompt := range parsed.V2.Prompts {
+		if prompt.File != "" && filepath.IsAbs(prompt.File) {
+			if err := confineReferencedPath(workdir, "prompt", prompt.File); err != nil {
 				return nil, err
 			}
 		}
-		for _, prompt := range parsed.V2.Prompts {
-			if prompt.File != "" && filepath.IsAbs(prompt.File) {
-				if err := confineReferencedPath(workdir, "prompt", prompt.File); err != nil {
-					return nil, err
-				}
-			}
-		}
-		man, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{
-			Store: layout.StoreDir(), CurrentVersionStore: layout.CurrentVersionStoreDir(version.Version), CurrentStoreVersion: version.Version, Plugins: pluginsDir,
-		}, ref, imgStore, time.Now, resolver)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)}, nil
 	}
-	imgFile := parsed.V1
-	// Confine every path REFERENCED INSIDE the Tariboyfile to the agent
-	// workdir. Parse already resolved each to an absolute path exactly as
-	// resolveExisting does (absolute-as-is; relative joined to the Tariboyfile
-	// dir), so we clamp those resolved paths against realWork here. Without this,
-	// a semi-trusted image-creator agent could author skills:/prompts:/evals:
-	// pointing at /root/.ssh, /etc, or ../../<other-agent> and make the daemon
-	// pack arbitrary host files into a runnable image (M15 confused-deputy). This
-	// applies ONLY to the agent-driven build; the operator CLI path is trusted.
-	realWork := filepath.Clean(workdir)
-	if r, err := filepath.EvalSymlinks(realWork); err == nil {
-		realWork = r
-	}
-	for i := range imgFile.Skills {
-		if err := confineReferencedPath(realWork, "skill", imgFile.Skills[i]); err != nil {
-			return nil, err
-		}
-		// Even a legitimately-in-workdir skill dir is WALKED by image.Build
-		// (writeArchive: filepath.Walk + os.ReadFile per file, which
-		// DEREFERENCES symlinks). So an inner symlink the agent authored inside
-		// its own skill dir, pointing OUTSIDE the workdir (e.g.
-		// <workdir>/authored/skills/myskill/leak -> /root/.ssh/id_rsa), would
-		// make the daemon read and pack that outside file's content into the
-		// runnable image (M15 Critical residual). Reject before image.Build
-		// reads anything.
-		if err := rejectEscapingInnerSymlinks(realWork, imgFile.Skills[i]); err != nil {
-			return nil, err
-		}
-	}
-	for i := range imgFile.Prompts {
-		if err := confineReferencedPath(realWork, "prompt", imgFile.Prompts[i].Filepath); err != nil {
-			return nil, err
-		}
-	}
-	for i := range imgFile.Evals {
-		if imgFile.Evals[i].Prompt == "" {
-			continue
-		}
-		if err := confineReferencedPath(realWork, "eval", imgFile.Evals[i].Prompt); err != nil {
-			return nil, err
-		}
-	}
-	// <base>/plugins is the sibling of <base>/images (see internal/paths).
-	man, err := image.Build(imgFile, ref, imgStore, time.Now,
-		image.WithExternalPlugins(resolver),
-		image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(version.Version)),
-	)
+	man, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, imgStore, time.Now, resolver)
 	if err != nil {
 		return nil, err
 	}

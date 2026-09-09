@@ -54,15 +54,6 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 		if err != nil {
 			return preparedV2{}, fmt.Errorf("skills[%d]: %w", i, err)
 		}
-		if resolved.Category == "current-store" {
-			prepared.Metadata.ClientVersion = roots.CurrentStoreVersion
-			if prepared.Metadata.ClientVersion == "" {
-				currentStore := filepath.Clean(roots.CurrentVersionStore)
-				if filepath.Base(filepath.Dir(currentStore)) == "versions" {
-					prepared.Metadata.ClientVersion = filepath.Base(currentStore)
-				}
-			}
-		}
 		skills = append(skills, prepared)
 		if roots.SourceSkills == nil && (strings.HasPrefix(skill.Dir, "./") || strings.HasPrefix(skill.Dir, "../")) {
 			sourceSkills[skill.Dir] = resolved.Path

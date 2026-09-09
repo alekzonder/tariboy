@@ -25,7 +25,7 @@ func seed(t *testing.T, st *Store, name string) {
 		Prompts:       []imagefile.Prompt{{Filepath: filepath.Join(src, "b.md")}},
 		Dir:           src,
 	}
-	if _, err := Build(im, Ref{Name: name, Tag: "latest"}, st, fixedClock()); err != nil {
+	if _, err := buildLegacy(t, im, Ref{Name: name, Tag: "latest"}, st, fixedClock()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -127,7 +127,7 @@ func TestBuildNeverOverwritesAnExistingRef(t *testing.T) {
 		Prompts:       []imagefile.Prompt{{Filepath: prompt}},
 		Dir:           src,
 	}
-	if _, err := Build(im, ref, st, fixedClock()); !errors.Is(err, ErrExists) {
+	if _, err := buildLegacy(t, im, ref, st, fixedClock()); !errors.Is(err, ErrExists) {
 		t.Fatalf("rebuild error = %v, want ErrExists", err)
 	}
 
@@ -202,7 +202,7 @@ func TestBuildPacksSkillsDir(t *testing.T) {
 		Dir:           src,
 	}
 	ref := Ref{Name: "withskill", Tag: "latest"}
-	if _, err := Build(im, ref, st, fixedClock()); err != nil {
+	if _, err := buildLegacy(t, im, ref, st, fixedClock()); err != nil {
 		t.Fatal(err)
 	}
 

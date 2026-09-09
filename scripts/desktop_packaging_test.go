@@ -173,7 +173,7 @@ func TestDesktopBinariesCleanManagedPayloadDirectoriesBeforeBuilding(t *testing.
 	}
 	root := filepath.Dir(packageDir)
 	cmd := exec.Command(
-		"make", "-n", "-o", "desktop-version-check", "-o", "build-basic-image",
+		"make", "-n", "-o", "desktop-version-check",
 		"DESKTOP_DARWIN_BIN=/", "DESKTOP_LINUX_BIN=/tmp/untrusted-desktop-bin",
 		"desktop-binaries",
 	)

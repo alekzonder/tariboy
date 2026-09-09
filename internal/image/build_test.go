@@ -29,7 +29,7 @@ func TestBuildResolvesInstalledExternalPlugin(t *testing.T) {
 		Dir:           t.TempDir(),
 	}
 	ref := Ref{Name: "external", Tag: "latest"}
-	manifest, err := Build(imageSpec, ref, st, fixedClock(), WithExternalPlugins(resolver))
+	manifest, err := buildLegacy(t, imageSpec, ref, st, fixedClock(), WithExternalPlugins(resolver))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestBuildResolvesInstalledExternalPlugin(t *testing.T) {
 		Plugins:       []imagefile.Plugin{{Name: "missing-provider"}},
 		Dir:           t.TempDir(),
 	}
-	_, err = Build(missing, Ref{Name: "missing", Tag: "latest"}, st, fixedClock(), WithExternalPlugins(resolver))
+	_, err = buildLegacy(t, missing, Ref{Name: "missing", Tag: "latest"}, st, fixedClock(), WithExternalPlugins(resolver))
 	if err == nil || !strings.Contains(err.Error(), "unknown plugin") {
 		t.Fatalf("missing external plugin error = %v", err)
 	}
@@ -75,7 +75,7 @@ func TestBuildSingleImage(t *testing.T) {
 		Prompts:       []imagefile.Prompt{{Filepath: task}},
 		Dir:           src,
 	}
-	man, err := Build(im, Ref{Name: "app", Tag: "latest"}, st, fixedClock())
+	man, err := buildLegacy(t, im, Ref{Name: "app", Tag: "latest"}, st, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestBuildFromChain(t *testing.T) {
 		Prompts:       []imagefile.Prompt{{Filepath: promptFile(t, baseSrc, "base.md", "BASE BODY")}},
 		Dir:           baseSrc,
 	}
-	if _, err := Build(base, Ref{Name: "base", Tag: "latest"}, st, fixedClock()); err != nil {
+	if _, err := buildLegacy(t, base, Ref{Name: "base", Tag: "latest"}, st, fixedClock()); err != nil {
 		t.Fatal(err)
 	}
 	childSrc := t.TempDir()
@@ -133,7 +133,7 @@ func TestBuildFromChain(t *testing.T) {
 		Prompts:       []imagefile.Prompt{{Filepath: promptFile(t, childSrc, "child.md", "CHILD BODY")}},
 		Dir:           childSrc,
 	}
-	man, err := Build(child, Ref{Name: "child", Tag: "latest"}, st, fixedClock())
+	man, err := buildLegacy(t, child, Ref{Name: "child", Tag: "latest"}, st, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestBuildHarnessInheritsInteractiveWhenChildOmitsHarness(t *testing.T) {
 		},
 		Dir: t.TempDir(),
 	}
-	if _, err := Build(base, Ref{Name: "base", Tag: "latest"}, st, fixedClock()); err != nil {
+	if _, err := buildLegacy(t, base, Ref{Name: "base", Tag: "latest"}, st, fixedClock()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,7 +185,7 @@ func TestBuildHarnessInheritsInteractiveWhenChildOmitsHarness(t *testing.T) {
 		From:          "base:latest",
 		Dir:           t.TempDir(),
 	}
-	man, err := Build(child, Ref{Name: "child", Tag: "latest"}, st, fixedClock())
+	man, err := buildLegacy(t, child, Ref{Name: "child", Tag: "latest"}, st, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestBuildHarnessExplicitFalseOverridesInteractiveParent(t *testing.T) {
 		},
 		Dir: t.TempDir(),
 	}
-	if _, err := Build(base, Ref{Name: "base", Tag: "latest"}, st, fixedClock()); err != nil {
+	if _, err := buildLegacy(t, base, Ref{Name: "base", Tag: "latest"}, st, fixedClock()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -222,7 +222,7 @@ func TestBuildHarnessExplicitFalseOverridesInteractiveParent(t *testing.T) {
 		},
 		Dir: t.TempDir(),
 	}
-	man, err := Build(child, Ref{Name: "child", Tag: "latest"}, st, fixedClock())
+	man, err := buildLegacy(t, child, Ref{Name: "child", Tag: "latest"}, st, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestBuildHarnessExplicitFalseOverridesInteractiveParent(t *testing.T) {
 
 func TestBuildHarnessDefaultsToClaudeNonInteractive(t *testing.T) {
 	st := &Store{Dir: t.TempDir()}
-	man, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Dir: t.TempDir()},
+	man, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: t.TempDir()},
 		Ref{Name: "plain", Tag: "latest"}, st, fixedClock())
 	if err != nil {
 		t.Fatal(err)
@@ -254,7 +254,7 @@ func TestBuildOverride(t *testing.T) {
 		Prompts:       []imagefile.Prompt{{Name: "system:context", Filepath: over}},
 		Dir:           src,
 	}
-	if _, err := Build(im, Ref{Name: "o", Tag: "latest"}, st, fixedClock()); err != nil {
+	if _, err := buildLegacy(t, im, Ref{Name: "o", Tag: "latest"}, st, fixedClock()); err != nil {
 		t.Fatal(err)
 	}
 	prompt := readMember(t, st, Ref{Name: "o", Tag: "latest"}, "PROMPT.md")
@@ -267,18 +267,18 @@ func TestBuildErrors(t *testing.T) {
 	src := t.TempDir()
 	st := &Store{Dir: t.TempDir()}
 	// unknown plugin
-	if _, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "nope"}}, Dir: src},
+	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Plugins: []imagefile.Plugin{{Name: "nope"}}, Dir: src},
 		Ref{Name: "a", Tag: "latest"}, st, fixedClock()); err == nil {
 		t.Fatal("unknown plugin accepted")
 	}
 	// missing parent
-	if _, err := Build(&imagefile.Imagefile{SchemaVersion: 1, From: "ghost:latest", Dir: src},
+	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, From: "ghost:latest", Dir: src},
 		Ref{Name: "b", Tag: "latest"}, st, fixedClock()); err == nil || !strings.Contains(err.Error(), "not built") {
 		t.Fatalf("missing parent err = %v", err)
 	}
 	// override for a plugin not in the set
 	bad := promptFile(t, src, "x.md", "x")
-	if _, err := Build(&imagefile.Imagefile{SchemaVersion: 1,
+	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1,
 		Prompts: []imagefile.Prompt{{Name: "system:status", Filepath: bad}}, Dir: src},
 		Ref{Name: "c", Tag: "latest"}, st, fixedClock()); err == nil {
 		t.Fatal("override for absent plugin accepted")
@@ -292,7 +292,7 @@ func TestBuildMutableRetainsPinnedGeneration(t *testing.T) {
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 	imagefile := &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}
 
-	first, err := Build(imagefile, ref, store, fixedClock(), WithMutableRef())
+	first, err := buildLegacy(t, imagefile, ref, store, fixedClock(), WithMutableRef())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestBuildMutableRetainsPinnedGeneration(t *testing.T) {
 	if err := os.WriteFile(prompt, []byte("second generation"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := Build(imagefile, ref, store, fixedClock(), WithMutableRef())
+	second, err := buildLegacy(t, imagefile, ref, store, fixedClock(), WithMutableRef())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestBuildMutableArchiveReturnsPublishedBytes(t *testing.T) {
 	store := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 
-	manifest, archive, err := BuildMutableArchive(&imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, store, fixedClock())
+	manifest, archive, err := buildMutableLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, store, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,14 +346,14 @@ func TestBuildMutableRejectsUnmarkedExistingRef(t *testing.T) {
 	store := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 	imageSpec := &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}
-	first, err := Build(imageSpec, ref, store, fixedClock())
+	first, err := buildLegacy(t, imageSpec, ref, store, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(prompt, []byte("mutable generation"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Build(imageSpec, ref, store, fixedClock(), WithMutableRef()); err == nil {
+	if _, err := buildLegacy(t, imageSpec, ref, store, fixedClock(), WithMutableRef()); err == nil {
 		t.Fatal("mutable build replaced an unmarked immutable ref")
 	}
 	if current, err := store.Inspect(ref); err != nil || current.Digest != first.Digest {
@@ -370,7 +370,7 @@ func TestBuildMutableRejectsUnmarkedExistingRef(t *testing.T) {
 func TestBuildMutableRejectsReservedRef(t *testing.T) {
 	store := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "basic", Tag: "latest"}
-	if _, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Dir: t.TempDir()}, ref, store, fixedClock(), WithMutableRef()); err == nil {
+	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: t.TempDir()}, ref, store, fixedClock(), WithMutableRef()); err == nil {
 		t.Fatal("mutable build accepted daemon-managed ref")
 	}
 	if store.Exists(ref) || store.IsMutable(ref) {
@@ -385,7 +385,7 @@ func TestBuildMutableConcurrentPublishesRetainEveryGeneration(t *testing.T) {
 	storeDir := t.TempDir()
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 	baseSource := t.TempDir()
-	if _, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Dir: baseSource}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef()); err != nil {
+	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: baseSource}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef()); err != nil {
 		t.Fatal(err)
 	}
 	for round := 0; round < 6; round++ {
@@ -400,7 +400,7 @@ func TestBuildMutableConcurrentPublishesRetainEveryGeneration(t *testing.T) {
 			prompt := promptFile(t, source, "prompt.md", fmt.Sprintf("round %d worker %d", round, worker))
 			go func(source, prompt string) {
 				<-start
-				manifest, err := Build(&imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef())
+				manifest, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef())
 				results <- struct {
 					manifest Manifest
 					err      error

@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const SchemaV1MigrationMessage = "schema 1 image sources are no longer supported; migrate to schema 2"
+
 const (
 	maxV2PromptEntries = 1024
 	maxV2SkillEntries  = 128

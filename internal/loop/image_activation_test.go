@@ -16,7 +16,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
-	"github.com/alekzonder/tariboy/internal/builtinimages"
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -910,15 +909,19 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	managedArchive := func(version string) []byte {
-		source, err := filepath.Abs(filepath.Join("..", "builtinimages", "source"))
-		if err != nil {
+		store := &image.Store{Dir: t.TempDir()}
+		ref := image.Ref{Name: "basic", Tag: "latest"}
+		source := t.TempDir()
+		prompt := filepath.Join(source, "prompt.md")
+		if err := os.WriteFile(prompt, []byte(version), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		out := t.TempDir()
-		if err := builtinimages.Generate(source, out, version); err != nil {
+		if _, err := image.BuildV2(&imagefile.V2{
+			SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}},
+		}, imagefile.ResolveRoots{}, ref, store, time.Now, nil); err != nil {
 			t.Fatal(err)
 		}
-		archive, err := os.ReadFile(filepath.Join(out, "basic.tar.gz"))
+		archive, err := store.ArchiveBytes(ref)
 		if err != nil {
 			t.Fatal(err)
 		}

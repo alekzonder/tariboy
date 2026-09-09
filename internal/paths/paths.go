@@ -99,10 +99,6 @@ func (p Paths) ImageSourcesDir() string {
 	return filepath.Join(p.Base, "image-sources")
 }
 func (p Paths) PluginsDir() string { return filepath.Join(p.Base, "plugins") }
-func (p Paths) StoreDir() string   { return filepath.Join(p.Base, "store") }
-func (p Paths) CurrentVersionStoreDir(productVersion string) string {
-	return filepath.Join(p.StoreDir(), "versions", productVersion)
-}
 
 // JudgeRunsDir contains the logical manifests for LLM-as-Judge runs.
 func (p Paths) JudgeRunsDir() string { return filepath.Join(p.Base, "judge-runs") }
@@ -137,7 +133,6 @@ func (p Paths) EnsureBase() error {
 		p.ImagesDir(),
 		p.ImageSourcesDir(),
 		p.PluginsDir(),
-		p.StoreDir(),
 		p.RuntimeDir(),
 	}
 	for _, d := range dirs {

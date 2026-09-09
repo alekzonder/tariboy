@@ -65,7 +65,7 @@ func cmdHandler(t *testing.T, path string) registry.HandlerFunc {
 func writeExample(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	yaml := "schema_version: 1\nplugins: [ {name: context}, {name: status} ]\nprompts: [task.md]\n"
+	yaml := "schema_version: 2\nprompts:\n  - file: ./task.md\n"
 	if err := os.WriteFile(filepath.Join(dir, "Tariboyfile.yaml"), []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +73,17 @@ func writeExample(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+func TestImageBuildRejectsSchemaV1Source(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cmdHandler(t, "image.build")(localCtx(t), registry.Params{"tag": "legacy:latest", "path": dir})
+	if err == nil || !strings.Contains(err.Error(), "schema 2") {
+		t.Fatalf("image.build error = %v, want schema 2 migration", err)
+	}
 }
 
 func TestImageCommandLifecycle(t *testing.T) {
@@ -100,9 +111,8 @@ func TestImageCommandLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s := pr.(map[string]any)["prompt"].(string); !strings.Contains(s, "BE A TEST AGENT") ||
-		strings.LastIndex(s, "i-am-done") < strings.Index(s, "BE A TEST AGENT") {
-		t.Fatalf("prompt tail not last: %q", s)
+	if s := pr.(map[string]any)["prompt"].(string); !strings.Contains(s, "BE A TEST AGENT") {
+		t.Fatalf("prompt missing source content: %q", s)
 	}
 
 	if _, err := cmdHandler(t, "image.inspect")(c, registry.Params{"ref": "demo:latest"}); err != nil {
@@ -147,29 +157,27 @@ func TestImageBuildV2RequiresNameAndDefaultsTag(t *testing.T) {
 }
 
 func TestImageBuildUsesSourceVersionUnlessTagExplicit(t *testing.T) {
-	for _, schema := range []string{"1", "2"} {
-		for _, explicit := range []string{"", "latest", "custom"} {
-			c := localCtx(t)
-			src := t.TempDir()
-			if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: "+schema+"\nimage_version: 1.2.3-RC.1+build.7\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			p := registry.Params{"name": "versioned", "path": src}
-			want := "1.2.3-RC.1+build.7"
-			if explicit != "" {
-				p["tag"] = explicit
-				want = explicit
-			}
-			result, err := cmdHandler(t, "image.build")(c, p)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := result.(map[string]any)["tag"]; got != want {
-				t.Fatalf("tag = %v, want %s", got, want)
-			}
-			if _, err := imageStore(c).Inspect(image.Ref{Name: "versioned", Tag: want}); err != nil {
-				t.Fatal(err)
-			}
+	for _, explicit := range []string{"", "latest", "custom"} {
+		c := localCtx(t)
+		src := t.TempDir()
+		if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nimage_version: 1.2.3-RC.1+build.7\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		p := registry.Params{"name": "versioned", "path": src}
+		want := "1.2.3-RC.1+build.7"
+		if explicit != "" {
+			p["tag"] = explicit
+			want = explicit
+		}
+		result, err := cmdHandler(t, "image.build")(c, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := result.(map[string]any)["tag"]; got != want {
+			t.Fatalf("tag = %v, want %s", got, want)
+		}
+		if _, err := imageStore(c).Inspect(image.Ref{Name: "versioned", Tag: want}); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -273,11 +281,11 @@ func TestImageBuildRejectsImportedAndRetaggedRefs(t *testing.T) {
 		{name: "import", seed: func(t *testing.T, target *image.Store, ref image.Ref) string {
 			t.Helper()
 			source := &image.Store{Dir: t.TempDir()}
-			parsed, err := imagefile.Parse(writeExample(t))
+			parsed, err := imagefile.ParseV2(writeExample(t))
 			if err != nil {
 				t.Fatal(err)
 			}
-			manifest, err := image.Build(parsed, ref, source, time.Now)
+			manifest, err := image.BuildV2(parsed, imagefile.ResolveRoots{}, ref, source, time.Now, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -294,11 +302,11 @@ func TestImageBuildRejectsImportedAndRetaggedRefs(t *testing.T) {
 			t.Helper()
 			sourceStore := &image.Store{Dir: t.TempDir()}
 			sourceRef := image.Ref{Name: "portable-source", Tag: "v1"}
-			parsed, err := imagefile.Parse(writeExample(t))
+			parsed, err := imagefile.ParseV2(writeExample(t))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := image.Build(parsed, sourceRef, sourceStore, time.Now); err != nil {
+			if _, err := image.BuildV2(parsed, imagefile.ResolveRoots{}, sourceRef, sourceStore, time.Now, nil); err != nil {
 				t.Fatal(err)
 			}
 			archive, err := sourceStore.ArchiveBytes(sourceRef)
@@ -369,15 +377,15 @@ func TestImageBuildRejectsImmutableImportAfterMutableRefRemoval(t *testing.T) {
 	}
 }
 
-func TestImageBuildMigratesLegacyOrdinaryRefWithMatchingProvenance(t *testing.T) {
+func TestImageBuildMigratesUnmarkedOrdinaryRefWithMatchingProvenance(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "legacy", Tag: "latest"}
-	parsed, err := imagefile.Parse(src)
+	parsed, err := imagefile.ParseV2(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := image.Build(parsed, ref, imageStore(c), time.Now)
+	first, err := image.BuildV2(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,11 +536,11 @@ func TestImageBuildRecoversInterruptedPublicationFromCommittedMetadata(t *testin
 			if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("interrupted candidate"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			parsed, err := imagefile.Parse(src)
+			parsed, err := imagefile.ParseV2(src)
 			if err != nil {
 				t.Fatal(err)
 			}
-			candidate, err := image.Build(parsed, ref, imageStore(c), time.Now, image.WithMutableRef())
+			candidate, err := image.BuildV2Mutable(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -652,7 +660,7 @@ func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("uncommitted candidate"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := imagefile.Parse(src)
+	parsed, err := imagefile.ParseV2(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -661,7 +669,7 @@ func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
 	locked := make(chan error, 1)
 	go func() {
 		locked <- image.WithPublicationGate(func() error {
-			_, buildErr := image.Build(parsed, ref, imageStore(c), time.Now, image.WithMutableRef())
+			_, buildErr := image.BuildV2Mutable(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 			published <- buildErr
 			if buildErr != nil {
 				return buildErr
@@ -791,11 +799,11 @@ func TestImageBuildRestoresImmutableRefWhenProvenanceFails(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "imported", Tag: "v1"}
-	file, err := imagefile.Parse(src)
+	file, err := imagefile.ParseV2(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := image.Build(file, ref, imageStore(c), time.Now)
+	first, err := image.BuildV2(file, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -987,7 +995,7 @@ func TestImageValidateV2ReturnsOrderedResolvedTemplate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "role.md"), []byte("review carefully"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	yaml := "schema_version: 2\nplugins: []\nprompts:\n  - runtime: identity\n  - file: ./role.md\n  - runtime: context\n"
+	yaml := "schema_version: 2\nplugins: []\nprompts:\n  - runtime: one-shot\n  - file: ./role.md\n  - runtime: user-prompt\n"
 	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1003,7 +1011,7 @@ func TestImageValidateV2ReturnsOrderedResolvedTemplate(t *testing.T) {
 	if !ok || len(template.Entries) != 3 {
 		t.Fatalf("template = %#v", result["template"])
 	}
-	if template.Entries[0].Runtime != "identity" || template.Entries[1].Source != "./role.md" || template.Entries[1].Category != "source" || template.Entries[1].Size != int64(len("review carefully")) || template.Entries[1].SHA256 == "" || template.Entries[2].Runtime != "context" {
+	if template.Entries[0].Runtime != "one-shot" || template.Entries[1].Source != "./role.md" || template.Entries[1].Category != "source" || template.Entries[1].Size != int64(len("review carefully")) || template.Entries[1].SHA256 == "" || template.Entries[2].Runtime != "user-prompt" {
 		t.Fatalf("entries = %#v", template.Entries)
 	}
 	if plugins, ok := result["plugins"].([]string); !ok || len(plugins) != 0 {
@@ -1069,12 +1077,12 @@ func TestImageCommandsRejectReservedBasicRef(t *testing.T) {
 		t.Fatalf("reserved build error = %#v, want reserved_image", err)
 	}
 
-	imgFile, err := imagefile.Parse(src)
+	imgFile, err := imagefile.ParseV2(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ref := image.Ref{Name: "basic", Tag: "latest"}
-	if _, err := image.Build(imgFile, ref, imageStore(c), time.Now); err != nil {
+	if _, err := image.BuildV2(imgFile, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
 	_, err = cmdHandler(t, "image.rm")(c, registry.Params{"ref": ref.String()})

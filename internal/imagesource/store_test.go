@@ -45,16 +45,9 @@ func TestImportTreePublishesValidatedEditableSource(t *testing.T) {
 }
 
 func testCreateRequest(name string) CreateRequest {
-	interactive := true
 	return CreateRequest{
-		Name:         name,
-		From:         "base:latest",
-		Harness:      "codex",
-		Model:        "gpt-5",
-		Effort:       "high",
-		Interactive:  &interactive,
-		Capabilities: []string{"context", "status"},
-		Prompt:       "Review the current change.",
+		Name:   name,
+		Prompt: "Review the current change.",
 	}
 }
 
@@ -77,7 +70,7 @@ func TestStoreCreateListGetDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if alpha.SchemaVersion != 1 || alpha.Name != "alpha" ||
+	if alpha.SchemaVersion != 2 || alpha.Name != "alpha" ||
 		alpha.CreatedAt != "2026-07-29T12:00:00Z" ||
 		alpha.UpdatedAt != alpha.CreatedAt || alpha.LastBuild != nil {
 		t.Fatalf("alpha metadata = %+v", alpha)
@@ -119,17 +112,12 @@ func TestStoreCreateGeneratesValidSourceFiles(t *testing.T) {
 	}
 
 	dir := filepath.Join(s.Root, src.Name)
-	im, err := imagefile.Parse(dir)
+	im, err := imagefile.ParseV2(dir)
 	if err != nil {
 		t.Fatalf("generated image source does not parse: %v", err)
 	}
-	if im.From != "base:latest" || im.Harness.Type != "codex" ||
-		im.Harness.Model != "gpt-5" || im.Harness.Effort != "high" ||
-		!im.Harness.Interactive {
+	if im.SchemaVersion != 2 || len(im.Prompts) != 1 || im.Prompts[0].File != "./PROMPT.md" {
 		t.Fatalf("generated imagefile = %+v", im)
-	}
-	if len(im.Plugins) != 2 || im.Plugins[0].Name != "context" || im.Plugins[1].Name != "status" {
-		t.Fatalf("generated capabilities = %+v", im.Plugins)
 	}
 	prompt, err := os.ReadFile(filepath.Join(dir, "PROMPT.md"))
 	if err != nil {
@@ -150,25 +138,6 @@ func TestStoreCreateGeneratesValidSourceFiles(t *testing.T) {
 		if st.Mode().Perm() != 0o600 {
 			t.Fatalf("%s mode = %o, want 600", path, st.Mode().Perm())
 		}
-	}
-}
-
-func TestStoreCreatePreservesExplicitInteractiveFalse(t *testing.T) {
-	s := testStore(t)
-	interactive := false
-	if _, err := s.Create(CreateRequest{
-		Name:        "reviewer",
-		Harness:     "claude",
-		Interactive: &interactive,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(filepath.Join(s.Root, "reviewer", "Tariboyfile.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), "interactive: false") {
-		t.Fatalf("generated Tariboyfile lost explicit false:\n%s", data)
 	}
 }
 

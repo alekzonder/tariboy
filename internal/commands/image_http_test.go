@@ -58,8 +58,8 @@ func TestImageLsInspectRmViaHandler(t *testing.T) {
 		t.Fatalf("ls: %v", ls)
 	}
 	images := ls.(map[string]any)["images"].([]map[string]any)
-	if images[0]["schema_version"] != 1 {
-		t.Fatalf("ls image schema_version = %v, want 1", images[0]["schema_version"])
+	if images[0]["schema_version"] != 2 {
+		t.Fatalf("ls image schema_version = %v, want 2", images[0]["schema_version"])
 	}
 
 	if _, err := routed(t, "image.inspect")(c, registry.Params{"ref": "demo:latest"}); err != nil {
@@ -97,7 +97,7 @@ func TestImagePromptFilesReadViaHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := fl.(map[string]any)
-	if m["count"].(int) < 4 {
+	if m["count"].(int) < 3 {
 		t.Fatalf("files count too low: %v", m)
 	}
 	files := m["files"].([]image.FileEntry)

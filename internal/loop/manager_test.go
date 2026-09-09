@@ -2508,7 +2508,7 @@ func TestBuildImageForAgentConfinesPath(t *testing.T) {
 	if err := os.MkdirAll(authored, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sf := "schema_version: 1\nplugins:\n  - { name: context }\n"
+	sf := "schema_version: 2\n"
 	if err := os.WriteFile(filepath.Join(authored, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -2561,7 +2561,7 @@ func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
 	if err := os.MkdirAll(source, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	store := &image.Store{Dir: filepath.Join(t.TempDir(), "images")}
@@ -2615,7 +2615,7 @@ func TestBuildImageForAgentConfinesReferencedPaths(t *testing.T) {
 	if err := os.MkdirAll(inSkill, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(inSkill, "SKILL.md"), []byte("ok"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(inSkill, "SKILL.md"), []byte("---\nname: myskill\ndescription: Test skill.\n---\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	secret := filepath.Join(base, "secret")
@@ -2628,7 +2628,7 @@ func TestBuildImageForAgentConfinesReferencedPaths(t *testing.T) {
 	authored := filepath.Join(workdir, "authored")
 
 	writeSF := func(skill string) {
-		sf := "schema_version: 1\nplugins:\n  - { name: context }\nskills:\n  - " + skill + "\n"
+		sf := "schema_version: 2\nskills:\n  - dir: " + skill + "\n"
 		if err := os.WriteFile(filepath.Join(authored, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -2665,7 +2665,7 @@ func TestBuildImageForAgentConfinesReferencedPaths(t *testing.T) {
 	}
 
 	// (3) A legitimate in-workdir skill reference still builds.
-	writeSF("myskill")
+	writeSF("./myskill")
 	if _, err := buildImageForAgent(imgStore, workdir, "good", "latest", "authored"); err != nil {
 		t.Fatalf("legitimate in-workdir skill build must succeed: %v", err)
 	}
@@ -2706,7 +2706,7 @@ func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
 	if err := os.MkdirAll(inSkill, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(inSkill, "SKILL.md"), []byte("ok"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(inSkill, "SKILL.md"), []byte("---\nname: myskill\ndescription: Test skill.\n---\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(secret, "id_rsa"), filepath.Join(inSkill, "leak")); err != nil {
@@ -2714,7 +2714,7 @@ func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
 	}
 
 	writeSF := func(skill string) {
-		sf := "schema_version: 1\nplugins:\n  - { name: context }\nskills:\n  - " + skill + "\n"
+		sf := "schema_version: 2\nskills:\n  - dir: " + skill + "\n"
 		if err := os.WriteFile(filepath.Join(authored, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -2722,7 +2722,7 @@ func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
 
 	// The in-workdir skill dir with an outside-pointing inner symlink is
 	// REJECTED before image.Build reads/packs anything.
-	writeSF("myskill")
+	writeSF("./myskill")
 	if _, err := buildImageForAgent(imgStore, workdir, "leak-inner", "latest", "authored"); err == nil {
 		t.Fatal("expected rejection of an in-workdir skill dir containing an outside-pointing inner symlink, got nil")
 	}
@@ -2741,7 +2741,7 @@ func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
 	if err := os.Remove(filepath.Join(inSkill, "leak")); err != nil {
 		t.Fatal(err)
 	}
-	writeSF("myskill")
+	writeSF("./myskill")
 	if _, err := buildImageForAgent(imgStore, workdir, "good-inner", "latest", "authored"); err != nil {
 		t.Fatalf("legitimate in-workdir skill (no escaping symlink) must still build: %v", err)
 	}

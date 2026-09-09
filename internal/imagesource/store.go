@@ -27,18 +27,8 @@ type Store struct {
 }
 
 type sourceFile struct {
-	SchemaVersion int                `yaml:"schema_version"`
-	From          string             `yaml:"from,omitempty"`
-	Plugins       []imagefile.Plugin `yaml:"plugins,omitempty"`
-	Harness       *sourceHarness     `yaml:"harness,omitempty"`
-	Prompts       []string           `yaml:"prompts"`
-}
-
-type sourceHarness struct {
-	Type        string `yaml:"type,omitempty"`
-	Model       string `yaml:"model,omitempty"`
-	Effort      string `yaml:"effort,omitempty"`
-	Interactive *bool  `yaml:"interactive,omitempty"`
+	SchemaVersion int                     `yaml:"schema_version"`
+	Prompts       []imagefile.PromptEntry `yaml:"prompts"`
 }
 
 func (s *Store) now() time.Time {
@@ -113,25 +103,9 @@ func (s *Store) Create(req CreateRequest) (Source, error) {
 		return Source{}, err
 	}
 
-	plugins := make([]imagefile.Plugin, 0, len(req.Capabilities))
-	for _, name := range req.Capabilities {
-		plugins = append(plugins, imagefile.Plugin{Name: name})
-	}
-	var harness *sourceHarness
-	if req.Harness != "" || req.Model != "" || req.Effort != "" || req.Interactive != nil {
-		harness = &sourceHarness{
-			Type:        req.Harness,
-			Model:       req.Model,
-			Effort:      req.Effort,
-			Interactive: req.Interactive,
-		}
-	}
 	config, err := yaml.Marshal(sourceFile{
-		SchemaVersion: 1,
-		From:          req.From,
-		Plugins:       plugins,
-		Harness:       harness,
-		Prompts:       []string{"PROMPT.md"},
+		SchemaVersion: 2,
+		Prompts:       []imagefile.PromptEntry{{File: "./PROMPT.md"}},
 	})
 	if err != nil {
 		return Source{}, fmt.Errorf("marshal Tariboyfile: %w", err)
@@ -139,7 +113,7 @@ func (s *Store) Create(req CreateRequest) (Source, error) {
 
 	created := s.now().UTC().Format(time.RFC3339)
 	src := Source{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		Name:          req.Name,
 		CreatedAt:     created,
 		UpdatedAt:     created,
@@ -154,7 +128,7 @@ func (s *Store) Create(req CreateRequest) (Source, error) {
 	if err := s.writeMetadataAt(stage, src); err != nil {
 		return Source{}, err
 	}
-	if _, err := imagefile.Parse(stage); err != nil {
+	if _, err := imagefile.ParseV2(stage); err != nil {
 		return Source{}, err
 	}
 	if err := os.Rename(stage, target); err != nil {
@@ -217,7 +191,7 @@ func (s *Store) Get(name string) (Source, error) {
 	if err := dec.Decode(&src); err != nil {
 		return Source{}, fmt.Errorf("decode %s metadata: %w", name, err)
 	}
-	if src.SchemaVersion != 1 || src.Name != name {
+	if (src.SchemaVersion != 1 && src.SchemaVersion != 2) || src.Name != name {
 		return Source{}, fmt.Errorf("%w: inconsistent metadata for %s", ErrUnsafeFile, name)
 	}
 	return src, nil
@@ -303,11 +277,12 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 	if err != nil {
 		return Source{}, err
 	}
-	if _, err := imagefile.Parse(stage); err != nil {
+	parsed, err := imagefile.ParseAny(stage)
+	if err != nil {
 		return Source{}, err
 	}
 	now := s.now().UTC().Format(time.RFC3339)
-	source := Source{SchemaVersion: 1, Name: name, CreatedAt: now, UpdatedAt: now}
+	source := Source{SchemaVersion: parsed.Version, Name: name, CreatedAt: now, UpdatedAt: now}
 	if err := s.writeMetadataAt(stage, source); err != nil {
 		return Source{}, err
 	}

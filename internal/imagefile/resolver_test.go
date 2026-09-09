@@ -9,11 +9,10 @@ import (
 func TestResolvePromptFileSupportsEveryPathForm(t *testing.T) {
 	base := t.TempDir()
 	source := filepath.Join(base, "source")
-	roots := ResolveRoots{Store: filepath.Join(base, "store"), CurrentVersionStore: filepath.Join(base, "current"), Plugins: filepath.Join(base, "plugins")}
+	roots := ResolveRoots{Plugins: filepath.Join(base, "plugins")}
 	paths := map[string]string{
-		"./local.md": source, "$STORE/shared.md": roots.Store,
-		"$CURRENT_VERSION_STORE/builtin.md": roots.CurrentVersionStore,
-		"$PLUGINS/acme/1/prompt.md":         roots.Plugins,
+		"./local.md":                source,
+		"$PLUGINS/acme/1/prompt.md": roots.Plugins,
 	}
 	for value, root := range paths {
 		if err := os.MkdirAll(root, 0o700); err != nil {
@@ -38,7 +37,7 @@ func TestResolvePromptFileSupportsEveryPathForm(t *testing.T) {
 		t.Fatal(err)
 	}
 	paths[abs] = ""
-	wantCategory := map[string]string{"./local.md": "source", "$STORE/shared.md": "store", "$CURRENT_VERSION_STORE/builtin.md": "current-store", "$PLUGINS/acme/1/prompt.md": "plugin", abs: "absolute"}
+	wantCategory := map[string]string{"./local.md": "source", "$PLUGINS/acme/1/prompt.md": "plugin", abs: "absolute"}
 	for value := range paths {
 		got, err := ResolvePromptFile(source, value, roots)
 		if err != nil {
@@ -53,11 +52,7 @@ func TestResolvePromptFileSupportsEveryPathForm(t *testing.T) {
 func TestResolvePromptFileRejectsUnsafeInputs(t *testing.T) {
 	base := t.TempDir()
 	source := filepath.Join(base, "source")
-	store := filepath.Join(base, "store")
 	if err := os.MkdirAll(source, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(store, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	outside := filepath.Join(base, "secret.md")
@@ -70,8 +65,8 @@ func TestResolvePromptFileRejectsUnsafeInputs(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(source, "dir"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	roots := ResolveRoots{Store: store, CurrentVersionStore: filepath.Join(base, "current"), Plugins: filepath.Join(base, "plugins")}
-	for _, value := range []string{"relative.md", "../secret.md", "./missing.md", "./link.md", "./dir", "$STORE/../secret.md", "$UNKNOWN/x.md", "$STORE"} {
+	roots := ResolveRoots{Plugins: filepath.Join(base, "plugins")}
+	for _, value := range []string{"relative.md", "../secret.md", "./missing.md", "./link.md", "./dir", "$STORE/shared.md", "$CURRENT_VERSION_STORE/builtin.md", "$UNKNOWN/x.md", "$STORE"} {
 		if _, err := ResolvePromptFile(source, value, roots); err == nil {
 			t.Errorf("accepted %q", value)
 		}
@@ -85,11 +80,7 @@ func TestResolvePromptFileRejectsUnsafeInputs(t *testing.T) {
 func TestResolveSkillDirectorySupportsEveryPathForm(t *testing.T) {
 	base := t.TempDir()
 	source := filepath.Join(base, "source")
-	roots := ResolveRoots{
-		Store:               filepath.Join(base, "store"),
-		CurrentVersionStore: filepath.Join(base, "current"),
-		Plugins:             filepath.Join(base, "plugins"),
-	}
+	roots := ResolveRoots{Plugins: filepath.Join(base, "plugins")}
 	tests := []struct {
 		value    string
 		path     string
@@ -98,8 +89,6 @@ func TestResolveSkillDirectorySupportsEveryPathForm(t *testing.T) {
 		{"./skills/local", filepath.Join(source, "skills", "local"), "source"},
 		{"../skills/shared", filepath.Join(base, "skills", "shared"), "source"},
 		{"./../skills/shared", filepath.Join(base, "skills", "shared"), "source"},
-		{"$STORE/skills/shared", filepath.Join(roots.Store, "skills", "shared"), "store"},
-		{"$CURRENT_VERSION_STORE/skills/builtin", filepath.Join(roots.CurrentVersionStore, "skills", "builtin"), "current-store"},
 		{"$PLUGINS/acme/1/skills/plugin", filepath.Join(roots.Plugins, "acme", "1", "skills", "plugin"), "plugin"},
 		{filepath.Join(base, "absolute"), filepath.Join(base, "absolute"), "absolute"},
 	}
@@ -127,9 +116,8 @@ func TestResolveSkillDirectorySupportsEveryPathForm(t *testing.T) {
 func TestResolveSkillDirectoryRejectsUnsafeInputs(t *testing.T) {
 	base := t.TempDir()
 	source := filepath.Join(base, "source")
-	store := filepath.Join(base, "store")
 	plugins := filepath.Join(base, "plugins")
-	for _, dir := range []string{source, store, plugins} {
+	for _, dir := range []string{source, plugins} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -145,8 +133,8 @@ func TestResolveSkillDirectoryRejectsUnsafeInputs(t *testing.T) {
 	if err := os.WriteFile(regular, []byte("not a directory"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	roots := ResolveRoots{Store: store, CurrentVersionStore: filepath.Join(base, "current"), Plugins: plugins}
-	for _, value := range []string{"", "$HOME/x", "$PLUGINS", "$PLUGINS/../outside", "$STORE/../outside", "./missing", "./linked", "./regular"} {
+	roots := ResolveRoots{Plugins: plugins}
+	for _, value := range []string{"", "$HOME/x", "$PLUGINS", "$PLUGINS/../outside", "$STORE/skills/shared", "$CURRENT_VERSION_STORE/skills/builtin", "./missing", "./linked", "./regular"} {
 		if _, err := ResolveSkillDirectory(source, value, roots); err == nil {
 			t.Errorf("accepted %q", value)
 		}

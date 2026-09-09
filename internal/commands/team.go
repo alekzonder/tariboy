@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -17,7 +18,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/teamportable"
-	"github.com/alekzonder/tariboy/internal/version"
 	"gopkg.in/yaml.v3"
 )
 
@@ -216,15 +216,15 @@ func applyTeamImageLocked(c *registry.Ctx, preview teamportable.Preview, planned
 		onSourceReady()
 	}
 	managedSourceDir := filepath.Join(paths.Paths{Base: c.BaseDir}.ImageSourcesDir(), planned.SourceName)
-	parsed, err := imagefile.Parse(managedSourceDir)
+	parsed, err := imagefile.ParseAny(managedSourceDir)
 	if err != nil {
 		return err
 	}
+	if parsed.Version != 2 {
+		return registryError("image_build_failed", errors.New(imagefile.SchemaV1MigrationMessage))
+	}
 	layout := paths.Paths{Base: c.BaseDir}
-	manifest, err := image.Build(parsed, ref, imageStore(c), time.Now,
-		image.WithExternalPlugins(plugins.ResolveInstalled(layout.PluginsDir())),
-		image.WithBuiltinStoreRoot(layout.CurrentVersionStoreDir(version.Version)),
-	)
+	manifest, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: layout.PluginsDir()}, ref, imageStore(c), time.Now, plugins.ResolveInstalledMetadata(layout.PluginsDir()))
 	if err != nil {
 		return registryError("image_build_failed", err)
 	}

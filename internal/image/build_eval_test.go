@@ -31,7 +31,7 @@ evals:
 	}
 	st := &Store{Dir: t.TempDir()}
 	ref, _ := ParseRef("evaldemo:latest")
-	if _, err := Build(imgFile, ref, st, func() time.Time { return time.Unix(0, 0).UTC() }); err != nil {
+	if _, err := buildLegacy(t, imgFile, ref, st, func() time.Time { return time.Unix(0, 0).UTC() }); err != nil {
 		t.Fatal(err)
 	}
 	man, err := st.Inspect(ref)
