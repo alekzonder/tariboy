@@ -10,10 +10,6 @@ test("builds a transparent image from its original directory and assigns it to a
   await waitForMainWindow(desktop);
   await desktop.execute(`window.__imageSetup = "pending";
     window.__TAURI_INTERNALS__.invoke("daemon_status").then(async (status) => {
-      await fetch(status.base_url + "/api/images/build", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "basic", tag: "latest", path: ${JSON.stringify(sourceDir)} }),
-      });
       const response = await fetch(status.base_url + "/api/agents", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ image: "basic:latest", name: "image-select-e2e", harness: "stub", loop: false }),

@@ -2131,6 +2131,9 @@ func (m *Manager) reprovision(name, imageRef string) error {
 	if err := agentdir.Provision(stage, candidate, m.cfg.ImgStore, ref); err != nil {
 		return err
 	}
+	if _, err := m.prepareImageSkillBridge(candidate, man, stage.ImageDir()); err != nil {
+		return err
+	}
 	imageBackup, binBackup := filepath.Join(l.Root, ".image-backup"), filepath.Join(l.Root, ".bin-backup")
 	_ = os.RemoveAll(imageBackup)
 	_ = os.RemoveAll(binBackup)
@@ -2162,7 +2165,11 @@ func (m *Manager) reprovision(name, imageRef string) error {
 		rollback()
 		return err
 	}
-	if err := os.Rename(stage.BinDir(), l.BinDir()); err != nil {
+	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
+		rollback()
+		return err
+	}
+	if err := agentdir.WriteShims(l, candidate); err != nil {
 		rollback()
 		return err
 	}
