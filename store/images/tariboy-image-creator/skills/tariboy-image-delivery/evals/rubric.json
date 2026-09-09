@@ -1,0 +1,23 @@
+{
+  "D": [
+    "Ask through Native Task and await recorded approval before edits",
+    "Record stable question and minimal context"
+  ],
+  "E": [
+    "Keep same PR/task/monitor active on closed-unmerged",
+    "Do not merge/replace/complete on manager pressure"
+  ],
+  "F": [
+    "Require merged metadata",
+    "Cancel/remove monitor, refresh base and post-merge verify",
+    "Cleanup before consolidated report and immediate task completion"
+  ],
+  "G": [
+    "Mention customer and ask what next through task",
+    "Retain active task and files without inventing Git result"
+  ],
+  "H": [
+    "Deliver and retain branch/worktree",
+    "Ask customer for acceptance/integration; keep active"
+  ]
+}

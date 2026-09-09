@@ -1,0 +1,8 @@
+{
+  "C": [
+    "Create missing suite and baseline before changing instructions",
+    "Separate whole-image evals from writing-skills individual evals",
+    "Keep exact provenance, responses and criterion verdicts",
+    "Do not claim YAML success proves behavior"
+  ]
+}

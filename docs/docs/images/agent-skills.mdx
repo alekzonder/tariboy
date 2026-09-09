@@ -83,6 +83,66 @@ branch verification, then merges locally according to repository conventions.
 It runs the distinct post-merge verification on `main`, removes the merged
 worktree and branch, records the final task result, and closes the Native Task.
 
+## Image creator role
+
+`store/images/tariboy-image-creator` creates and improves image sources and
+independent Store skills. Configure the agent CWD to the Store root containing
+`images/` and optionally `skills/`; CWD is agent configuration, not an image
+manifest field. Work starts from a Native Task, with investigation and a plan
+approved on that task before edits.
+
+The short role prompt requires these procedures:
+
+- `tariboy-image-authoring`: image schema, source dependencies, local version
+  commands, build boundaries and diagnosis from untrusted iteration logs.
+- Existing Superpowers `writing-skills`: all skill creation, improvement and
+  skill-level evals, including skills outside an image.
+- `tariboy-image-evals`: whole-image behavior, skill selection and composition;
+  its evidence is separate from skill evals and packaging validation.
+- `tariboy-image-delivery`: task approval, Git isolation, publication and
+  completion. It reuses `github-pr-workflow` and the Scripts skill for PRs.
+
+The domain skills live inside the image source. Another image can package the
+`tariboy-image-authoring` directory through a relative `skills.dir` declaration;
+provide `writing-skills` for skill work and `tariboy-image-evals` for whole-image
+checks as well. This does not require adopting the image creator role prompt.
+The built-in `image-creator` skill remains its identity-bound build launcher.
+
+Keep the sibling `tariboy-developer/skills/github-pr-workflow` directory beside
+the source for rebuilds: the manifest reuses its utility without a copy. Restore
+the image’s Superpowers dependencies from `skills-lock.json`. Git and Node.js/npm
+with access to the upstream source are required. From the Store root:
+
+```bash
+cd images/tariboy-image-creator
+npx skills experimental_install
+cd ../..
+tariboy image validate --path images/tariboy-image-creator --name tariboy-image-creator
+tariboy image build --path images/tariboy-image-creator --name tariboy-image-creator
+```
+
+These are operator commands against the selected daemon. Agent builds use the
+`image-creator` launcher and require the source and referenced sibling skills
+inside the managed workdir, which is independent of configured CWD. A build
+boundary failure is reported through the task, never bypassed with another
+socket or identity. The runnable artifact packages the referenced skills and
+utility, so it does not require the sibling source directory at runtime.
+
+For existing image revisions, the role uses `tariboy image version get` and
+`tariboy image version update patch|minor|major` locally. Missing behavioral
+evals are created before instruction changes. Scenarios and observed
+baseline/candidate results are kept separately for each skill and the image;
+YAML validation or a successful build alone is not a behavioral evaluation.
+
+Every Git task uses a separate branch and worktree. On GitHub, the agent
+publishes one PR, mentions the task customer, sets a flexible task to
+`wait_customer` and retains one durable monitor. It never merges; completion
+requires observed merge metadata, post-merge checks and cleanup. Other Git
+Stores deliver the branch/worktree and ask for acceptance/integration
+instructions. Non-Git Stores are edited in place after plan approval, then
+reported to the customer with a question about the next step. Those fallback
+tasks stay active until a recorded customer decision.
+
 ## Declare skills
 
 Each entry is an object with one `dir` field. String entries and additional

@@ -1,0 +1,22 @@
+{
+  "I": [
+    "Actually read writing-skills for image-local skill",
+    "Create missing skill evals before edit",
+    "Separate skill and image evidence"
+  ],
+  "J": [
+    "Actually read writing-skills for independent Store skill",
+    "Create missing skill evals before edit",
+    "Do not invent image/version update for unrelated independent skill"
+  ],
+  "K": [
+    "Use Native Task for concrete plan approval",
+    "No edits under deadline without recorded approval",
+    "Plan GitHub preflight/base sync/task worktree"
+  ],
+  "L": [
+    "Use existing github-pr-workflow ensure and scripts monitor",
+    "Record PR/monitor identifiers and wait_customer with customer publication",
+    "Only observed merge, post-merge verification and cleanup permit done"
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "date": "2026-09-09",
+  "harness": "Codex collaboration fresh-context suite actor; inherited model/effort not exposed",
+  "kind": "source composition proposed-action simulation",
+  "baseline_response": "baseline-role.md",
+  "candidate_response": "candidate-role.md",
+  "baseline_guidance": "store/skills/image-creator/SKILL.md",
+  "baseline_sha256": "66be920b55aeca10493e12491d18712a4414e85c27d765f358aee3481b4c2e4d",
+  "candidate_sources_sha256": {
+    "store/images/tariboy-image-creator/instructions.md": "107b2b6a2c9d319f082c21d435b2708dec07de3da02df31bcf8e2fb657be0f53",
+    "store/images/tariboy-image-creator/Tariboyfile.yaml": "5a2e898088ebeb33c6dbb600c0d4796e11ed977a9828bf93ab24ef35653bc758",
+    "store/images/tariboy-image-creator/evals/cases.json": "45dbc3d0cd79d4b64a6d62da89722dabd82e8cabe5ca84b747b3c13e8c7dd7da",
+    "store/images/tariboy-image-creator/skills/tariboy-image-authoring/SKILL.md": "9f0150004ab4bec06a1a8205fe7105de5ad64866931d7d58305e0c078bc28642",
+    "store/images/tariboy-image-creator/skills/tariboy-image-evals/SKILL.md": "2e3ae6c8a6565b9ecd665b4d95c9dc9231208cf909f766e44190673f6ad4b6e1",
+    "store/images/tariboy-image-creator/skills/tariboy-image-delivery/SKILL.md": "32b15e37b87ddf0586eab2f86d97e9c1f2c63fdc9e751de1ff6f135374fa5560",
+    "store/images/tariboy-image-creator/.agents/skills/writing-skills/SKILL.md": "d34db5c8aed6a4e0440132bd0613aace70a693ec7819d5637ad77481d8e10d1b",
+    "store/images/tariboy-image-creator/../tariboy-developer/skills/github-pr-workflow/SKILL.md": "494e102de26d717ea294d278347e15287e11e66ca935984c63d8ec2adecf37cb",
+    "store/skills/whoami/SKILL.md": "229db4504ce2f64957103f3dbcf356bc817e0e6375cdc159ac345b704dc65e54",
+    "store/skills/context/SKILL.md": "4782cd39667a5af6b4de480864816f05ee21a905d66373e3a28ee0ae70882c0a",
+    "store/skills/status/SKILL.md": "b3f06d8248366950fdb49e517f96405ec8f1c53b7b063eba2eb32961c1716952",
+    "store/skills/workdir/SKILL.md": "e1a73eff223369f0de8a64294a83d7b98b03769e5dfe9768fe802b06cf3b7d7d",
+    "store/skills/scripts/SKILL.md": "b112e460026f2c437db8cc71a12e6e93385bf9ef0a38b8f94e59341bd2948686",
+    "store/skills/tasks/SKILL.md": "e14504bfb66884430e717e1c5e075cb45cc84f0d7f702f730fc7b256f4c5a164",
+    "store/skills/goal/SKILL.md": "e876de3c9eed5a2998b10f0ef39e66c32fc8fe36bbb7bb8766446db864dc237c",
+    "store/skills/messages/SKILL.md": "7eeb7b13ab0b69b657962e570a38a880585b885946c4bf7ce67128e1460e7485",
+    "store/skills/loop/SKILL.md": "867f68b46afcca338e6e8c50019b4107ae2ba66fdd197b9f78c68f3f4e1431ed",
+    "store/skills/image-creator/SKILL.md": "66be920b55aeca10493e12491d18712a4414e85c27d765f358aee3481b4c2e4d",
+    "store/images/tariboy-image-creator/.agents/skills/brainstorming/SKILL.md": "74edf03ea6d24ef53db48677b93558d14a979bdf052ca3f57ecdca0c66791608",
+    "store/images/tariboy-image-creator/.agents/skills/dispatching-parallel-agents/SKILL.md": "1968923066f3b707eb01d1992cdf4c42284c3855f70253b9cd5000ff45fca13c",
+    "store/images/tariboy-image-creator/.agents/skills/executing-plans/SKILL.md": "c4c3d8b628c51114cd165fb8246fe02744cd8be180032328391252e653028d9b",
+    "store/images/tariboy-image-creator/.agents/skills/finishing-a-development-branch/SKILL.md": "8db5a922b242dd4e1bf824cb91c13b3e8d8e8a86d6ceaf7f0774eb9cce909d65",
+    "store/images/tariboy-image-creator/.agents/skills/receiving-code-review/SKILL.md": "091df1629510af1b92fc4abd6f96732ebedb4cb2c0f3457e8f2740b0504a2438",
+    "store/images/tariboy-image-creator/.agents/skills/requesting-code-review/SKILL.md": "d71cc01ba56d2325cf8af5f7c11837819b63ecd57de0bfdb812f7f3ff7751df8",
+    "store/images/tariboy-image-creator/.agents/skills/subagent-driven-development/SKILL.md": "8dd1b8e698edec3700c6d89517dbe96febd3bacd3f6ea21c1a3569c62ea104b5",
+    "store/images/tariboy-image-creator/.agents/skills/systematic-debugging/SKILL.md": "808fc5717aa88ad65efff312b11c186294d3e6ee301afb584e2f86599b137787",
+    "store/images/tariboy-image-creator/.agents/skills/test-driven-development/SKILL.md": "bf1b8216e523851a411e91d429a7c1c2a173e79d88957bc78e348218d50edd54",
+    "store/images/tariboy-image-creator/.agents/skills/using-git-worktrees/SKILL.md": "8cfb86f121269e8f7f12361e6795c4f6738828340e28964c9229d365666c9edd",
+    "store/images/tariboy-image-creator/.agents/skills/using-superpowers/SKILL.md": "30f2ab78e20ddc27ee7158ae8d4a2abe161c360981c7cc3548070913142d3dc3",
+    "store/images/tariboy-image-creator/.agents/skills/verification-before-completion/SKILL.md": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3",
+    "store/images/tariboy-image-creator/.agents/skills/writing-plans/SKILL.md": "48508f44bbfd7d24b029fbf3a314f3cd14c9615599059366e922f47b8dc08cf2"
+  },
+  "verdicts": {
+    "I": [
+      {
+        "criterion": "Actually read writing-skills for image-local skill",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "Create missing skill evals before edit",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "Separate skill and image evidence",
+        "baseline": "fail",
+        "candidate": "pass"
+      }
+    ],
+    "J": [
+      {
+        "criterion": "Actually read writing-skills for independent Store skill",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "Create missing skill evals before edit",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "Do not invent image/version update for unrelated independent skill",
+        "baseline": "pass",
+        "candidate": "pass"
+      }
+    ],
+    "K": [
+      {
+        "criterion": "Use Native Task for concrete plan approval",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "No edits under deadline without recorded approval",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "Plan GitHub preflight/base sync/task worktree",
+        "baseline": "fail",
+        "candidate": "pass"
+      }
+    ],
+    "L": [
+      {
+        "criterion": "Use existing github-pr-workflow ensure and scripts monitor",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "Record PR/monitor identifiers and wait_customer with customer publication",
+        "baseline": "fail",
+        "candidate": "pass"
+      },
+      {
+        "criterion": "Only observed merge, post-merge verification and cleanup permit done",
+        "baseline": "fail",
+        "candidate": "pass"
+      }
+    ]
+  },
+  "limitations": "One actor per suite, no repeated per-case trials or actual integration. Source catalog instead of harness bridge; runtime workdir missing and explicitly requested. Actor-reported reads and verbatim proposed actions are retained; no standalone tool trace was exported."
+}

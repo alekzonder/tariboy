@@ -3,7 +3,7 @@
 Native Task: IMPROVE-34. Architecture approved by customer comment 1669
 on 2026-09-09. Completion mode for this repository task: PR.
 Customer revision 1679 requires reusing `writing-skills` for all skill
-creation and improvement; the revised written spec awaits review.
+creation and improvement; customer comment 1685 approves this revision.
 
 ## Outcome
 
@@ -162,8 +162,9 @@ image-evals skill. Packaging checks must include the restored `writing-skills`.
 Update product Agent Skills documentation with CWD, build dependencies,
 independent skill usage and completion behavior.
 
-Run `make check` on the task branch and the distinct post-merge state. The
-customer explicitly excludes `make full-check`. Do not change Desktop output,
+Customer comment 1685 narrows verification to image-related tests and checks
+on the task branch and distinct post-merge state. Do not run `make check` or
+`make full-check`. Do not change Desktop output,
 Go runtime behavior or the Tariboy product version.
 
 ## Initial behavioral baseline
