@@ -89,9 +89,17 @@ func resolveExplicitPath(sourceDir, value string, roots ResolveRoots, kind strin
 }
 
 func ResolvePromptFile(sourceDir, value string, roots ResolveRoots) (ResolvedFile, error) {
-	abs, category, err := resolveExplicitPath(sourceDir, value, roots, "prompt")
+	path := value
+	fromSourceSkill := false
+	if strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") {
+		path, fromSourceSkill = resolveSourceSkillFile(value, roots.SourceSkills)
+	}
+	abs, category, err := resolveExplicitPath(sourceDir, path, roots, "prompt")
 	if err != nil {
 		return ResolvedFile{}, err
+	}
+	if fromSourceSkill {
+		category = "source"
 	}
 	info, err := os.Lstat(abs)
 	if err != nil {
@@ -117,6 +125,25 @@ func ResolvePromptFile(sourceDir, value string, roots ResolveRoots) (ResolvedFil
 		return ResolvedFile{}, fmt.Errorf("prompt path %q exceeds %d bytes", value, maxPromptFileSize)
 	}
 	return ResolvedFile{Source: value, Path: abs, Category: category, Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
+}
+
+func resolveSourceSkillFile(value string, sourceSkills map[string]string) (string, bool) {
+	path := filepath.Clean(filepath.FromSlash(value))
+	var bestSource, bestRoot, bestRelative string
+	for source, root := range sourceSkills {
+		cleanSource := filepath.Clean(filepath.FromSlash(source))
+		relative, err := filepath.Rel(cleanSource, path)
+		if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if len(cleanSource) > len(bestSource) {
+			bestSource, bestRoot, bestRelative = cleanSource, root, relative
+		}
+	}
+	if bestSource == "" {
+		return value, false
+	}
+	return filepath.Join(bestRoot, bestRelative), true
 }
 
 func ResolveSkillDirectory(sourceDir, value string, roots ResolveRoots) (ResolvedDirectory, error) {

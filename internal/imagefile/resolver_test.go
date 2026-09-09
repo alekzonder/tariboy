@@ -76,6 +76,10 @@ func TestResolvePromptFileRejectsUnsafeInputs(t *testing.T) {
 			t.Errorf("accepted %q", value)
 		}
 	}
+	roots.SourceSkills = map[string]string{"../../skills/loop": filepath.Join(base, "skills", "loop")}
+	if _, err := ResolvePromptFile(source, "../../skills/other/secret.md", roots); err == nil {
+		t.Fatal("accepted prompt from an undeclared sibling skill")
+	}
 }
 
 func TestResolveSkillDirectorySupportsEveryPathForm(t *testing.T) {

@@ -199,11 +199,15 @@ Each static `file` is resolved and embedded at build time. Supported forms are:
 | `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
 | `./...` | The original directory containing `Tariboyfile.yaml` |
+| `../...` below a declared skill | That skill's frozen source snapshot |
 | `/absolute/path/...` | An operator-supplied absolute filesystem path |
 
 The builder expands only those literal variables; it never performs shell or
-environment expansion. Traversal, symlinks, missing files, non-regular files,
-and oversized prompt files are rejected.
+environment expansion. A prompt may use `../` only to read a file below a
+source-relative directory already declared in `skills`; validation reads that
+directory directly and build reads its immutable snapshot. Other traversal,
+symlinks, missing files, non-regular files, and oversized prompt files are
+rejected.
 
 ## Packaged Agent Skills
 

@@ -139,7 +139,10 @@ func TestFreezePinsSiblingSkillForBuild(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(skill, "check.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills:\n  - dir: ../../skills/review\nprompts: []\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(skill, "finish.md"), []byte("finish\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nskills:\n  - dir: ../../skills/review\nprompts:\n  - file: ../../skills/review/finish.md\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// An unrelated unsafe entry must not enter the snapshot's copy scope.
@@ -174,6 +177,10 @@ func TestFreezePinsSiblingSkillForBuild(t *testing.T) {
 	got, err := store.ReadFile(ref, "skills/review/SKILL.md")
 	if err != nil || string(got) != string(body) {
 		t.Fatalf("frozen skill = %q, %v", got, err)
+	}
+	got, err = store.ReadFile(ref, "prompt/layers/000-finish.md")
+	if err != nil || string(got) != "finish\n" {
+		t.Fatalf("frozen skill prompt = %q, %v", got, err)
 	}
 	info, err := os.Stat(filepath.Join(frozen.SourceSkills["../../skills/review"], "check.sh"))
 	if err != nil || info.Mode().Perm() != 0o700 {
