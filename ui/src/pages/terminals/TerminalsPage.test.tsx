@@ -6,6 +6,7 @@ import TerminalsPage from "./TerminalsPage";
 import { fetchAllAgents } from "@/lib/aggregate";
 import {
   agentGetOn,
+  apiOn,
   createAgent,
   imageManifestGet,
   listImages,
@@ -26,6 +27,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return {
     ...actual,
     agentGetOn: vi.fn(),
+    apiOn: vi.fn(),
     createAgent: vi.fn(),
     imageManifestGet: vi.fn(),
     listImages: vi.fn(),
@@ -84,6 +86,7 @@ const cloneProjection = {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  vi.mocked(apiOn).mockReset().mockResolvedValue(undefined);
   vi.mocked(fetchAllAgents).mockResolvedValue([
     {
       host: { id: "", label: "This daemon (local)" },
@@ -148,6 +151,25 @@ function renderAt(path: string, attention: ReadonlySet<string> = new Set()) {
 function RoutedLocation() {
   const location = useLocation();
   return <output data-testid="location">{location.pathname + location.search}</output>;
+}
+
+function mockRowRects(tops: Record<string, number>) {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+    const top = tops[this.getAttribute("aria-label") ?? ""] ?? 0;
+    return {
+      left: 0, top, width: 100, height: 20, right: 100, bottom: top + 20, x: 0, y: top,
+      toJSON: () => ({}),
+    };
+  });
+}
+
+async function keyboardMove(label: string, direction: "ArrowUp" | "ArrowDown") {
+  const row = screen.getByRole("button", { name: label });
+  fireEvent.keyDown(row, { code: "Space" });
+  await waitFor(() => expect(row).toHaveAttribute("aria-pressed", "true"));
+  fireEvent.keyDown(document, { code: direction });
+  fireEvent.keyDown(document, { code: "Space" });
+  await waitFor(() => expect(row).not.toHaveAttribute("aria-pressed"));
 }
 
 /** Register "prod" in the real (jsdom) registry under the id the mocked
@@ -354,6 +376,115 @@ describe("TerminalsPage", () => {
     const local = await screen.findByRole("button", { name: "Open server local" });
     expect(local).toHaveAttribute("aria-roledescription", "draggable");
     expect(screen.queryByRole("button", { name: /Move server/ })).toBeNull();
+  });
+
+  it("persists server order after a keyboard drag", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "local" }, agents: [], groups: [] },
+      { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
+    ]);
+    mockRowRects({ "Open server local": 0, "Open server prod": 30 });
+    renderAt("/");
+    await screen.findByRole("button", { name: "Open server local" });
+
+    await keyboardMove("Open server local", "ArrowDown");
+
+    expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!))
+      .toEqual({ version: 1, ids: ["d1", ""] });
+  });
+
+  it("persists team order after a keyboard drag", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([{
+      host: { id: "", label: "local" },
+      agents: [],
+      groups: [{ name: "a", lead: "", members: 0 }, { name: "b", lead: "", members: 0 }],
+    }]);
+    mockRowRects({ "Open team a": 0, "Open team b": 30 });
+    vi.mocked(apiOn).mockResolvedValueOnce(undefined);
+    renderAt("/");
+    await screen.findByRole("button", { name: "Open team a" });
+
+    await keyboardMove("Open team a", "ArrowDown");
+
+    await waitFor(() => expect(apiOn).toHaveBeenCalledWith(
+      null,
+      "POST",
+      "/api/daemon/config",
+      { key: "sidebar_order_v1", value: JSON.stringify({ version: 1, groups: ["b", "a"], agents: [] }) },
+    ));
+  });
+
+  it("rolls back agent order when daemon persistence fails", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([{
+      host: { id: "", label: "local" },
+      agents: [
+        { name: "a1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
+        { name: "a2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
+      ],
+      groups: [],
+    }]);
+    mockRowRects({ "Open a1": 0, "Open a2": 30 });
+    let rejectSave!: (cause: Error) => void;
+    vi.mocked(apiOn).mockImplementationOnce(() => new Promise<void>((_, reject) => {
+      rejectSave = reject;
+    }));
+    renderAt("/");
+    const a1 = await screen.findByRole("button", { name: "Open a1" });
+    const a2 = screen.getByRole("button", { name: "Open a2" });
+
+    await keyboardMove("Open a1", "ArrowDown");
+    expect(a2.compareDocumentPosition(a1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    rejectSave(new Error("offline"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save agents order");
+    expect(a1.compareDocumentPosition(a2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("serializes daemon order writes so an older request cannot finish last", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([{
+      host: { id: "", label: "local" },
+      agents: [
+        { name: "a1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "a", interactive: true },
+        { name: "a2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "a", interactive: true },
+        { name: "b1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "b", interactive: true },
+        { name: "b2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "b", interactive: true },
+      ],
+      groups: [{ name: "a", lead: "", members: 2 }, { name: "b", lead: "", members: 2 }],
+    }]);
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    vi.mocked(apiOn)
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { finishSecond = resolve; }));
+    mockRowRects({ "Open a1": 0, "Open a2": 30, "Open b1": 60, "Open b2": 90 });
+    renderAt("/");
+    const a1 = await screen.findByRole("button", { name: "Open a1" });
+
+    fireEvent.keyDown(a1, { code: "Space" });
+    await waitFor(() => expect(a1).toHaveAttribute("aria-pressed", "true"));
+    fireEvent.keyDown(document, { code: "ArrowDown" });
+    fireEvent.keyDown(document, { code: "Space" });
+    await waitFor(() => expect(apiOn).toHaveBeenCalledTimes(1));
+
+    const b1 = screen.getByRole("button", { name: "Open b1" });
+    fireEvent.keyDown(b1, { code: "Space" });
+    await waitFor(() => expect(b1).toHaveAttribute("aria-pressed", "true"));
+    fireEvent.keyDown(document, { code: "ArrowDown" });
+    fireEvent.keyDown(document, { code: "Space" });
+    await waitFor(() => expect(b1).not.toHaveAttribute("aria-pressed"));
+    await act(async () => {});
+
+    expect(apiOn).toHaveBeenCalledTimes(1);
+    finishFirst();
+    await waitFor(() => expect(apiOn).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "Open a2" })
+      .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open b2" })
+      .compareDocumentPosition(screen.getByRole("button", { name: "Open b1" }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    finishSecond();
+    await act(async () => {});
   });
 
   it("honors a hidden sidebar from the shared persisted state", async () => {

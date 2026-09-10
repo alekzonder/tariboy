@@ -92,6 +92,8 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const [sidebarOrderOverrides, setSidebarOrderOverrides] = useState(
     () => new Map<string, NonNullable<HostAgents["sidebarOrder"]>>(),
   );
+  const sidebarSaveQueues = useRef(new Map<string, Promise<unknown>>());
+  const sidebarSaveVersions = useRef(new Map<string, number>());
   const createHosts = useMemo(() => {
     const aggregateById = new Map(hosts.map((entry) => [entry.host.id, entry]));
     const metadataById = new Map(daemons.map((entry) => [entry.id, entry]));
@@ -213,25 +215,37 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     if (!host) return;
     const previous = host.sidebarOrder ?? { version: 1, groups: [], agents: [] };
     const next = { ...previous, [kind]: ids };
+    const version = (sidebarSaveVersions.current.get(id) ?? 0) + 1;
+    sidebarSaveVersions.current.set(id, version);
     setSidebarOrderOverrides((current) => new Map(current).set(id, next));
-    try {
-      await apiOn(await resolveDaemon(id), "POST", "/api/daemon/config", {
+    const save = (sidebarSaveQueues.current.get(id) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(async () => apiOn(await resolveDaemon(id), "POST", "/api/daemon/config", {
         key: "sidebar_order_v1",
         value: JSON.stringify(next),
-      });
-      await refresh();
-      setSidebarOrderOverrides((current) => {
-        const copy = new Map(current);
-        copy.delete(id);
-        return copy;
-      });
+      }));
+    sidebarSaveQueues.current.set(id, save);
+    try {
+      await save;
+      if (sidebarSaveVersions.current.get(id) === version) {
+        await refresh();
+        setSidebarOrderOverrides((current) => {
+          const copy = new Map(current);
+          copy.delete(id);
+          return copy;
+        });
+      }
     } catch (cause) {
-      setSidebarOrderOverrides((current) => {
-        const copy = new Map(current);
-        copy.delete(id);
-        return copy;
-      });
-      setHostError(`Could not save ${kind} order: ${String(cause)}`);
+      if (sidebarSaveVersions.current.get(id) === version) {
+        setSidebarOrderOverrides((current) => {
+          const copy = new Map(current);
+          copy.delete(id);
+          return copy;
+        });
+        setHostError(`Could not save ${kind} order: ${String(cause)}`);
+      }
+    } finally {
+      if (sidebarSaveQueues.current.get(id) === save) sidebarSaveQueues.current.delete(id);
     }
   };
 
