@@ -206,6 +206,22 @@ func TestImageBuildUsesSourceVersionUnlessTagExplicit(t *testing.T) {
 		if _, err := imageStore(c).Inspect(image.Ref{Name: "versioned", Tag: want}); err != nil {
 			t.Fatal(err)
 		}
+		_, latestErr := imageStore(c).Inspect(image.Ref{Name: "versioned", Tag: "latest"})
+		_, versionErr := imageStore(c).Inspect(image.Ref{Name: "versioned", Tag: "1.2.3-RC.1+build.7"})
+		switch explicit {
+		case "":
+			if latestErr != nil || versionErr != nil {
+				t.Fatalf("default build refs: latest err=%v, version err=%v", latestErr, versionErr)
+			}
+		case "latest":
+			if versionErr == nil {
+				t.Fatal("explicit latest unexpectedly published the source version")
+			}
+		case "custom":
+			if latestErr == nil || versionErr == nil {
+				t.Fatalf("explicit custom build refs: latest err=%v, version err=%v", latestErr, versionErr)
+			}
+		}
 	}
 }
 

@@ -44,7 +44,7 @@ func imageBuild() registry.Command {
 		Args: []registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/image)"},
 			{Name: "name", Flag: "name", Type: registry.String, Help: "target image name"},
-			{Name: "tag", Flag: "tag", Type: registry.String, Repeatable: true, Help: "target image tag (default image_version, or latest when absent)"},
+			{Name: "tag", Flag: "tag", Type: registry.String, Repeatable: true, Help: "target image tag (default image_version and latest, or only latest when absent)"},
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Tariboyfile.yaml or its directory"},
 			{Name: "repository-id", Flag: "repository-id", Type: registry.String, Help: "source repository ID"},
 			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
@@ -120,7 +120,8 @@ func imageBuild() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
 			}
-			if len(tags) == 0 {
+			defaultTags := len(tags) == 0
+			if defaultTags {
 				imageVersion := ""
 				if parsed.Version == 2 {
 					imageVersion = parsed.V2.ImageVersion
@@ -131,6 +132,9 @@ func imageBuild() registry.Command {
 					imageVersion = "latest"
 				}
 				tags = []string{imageVersion}
+				if imageVersion != "latest" {
+					tags = append(tags, "latest")
+				}
 			}
 			refs := make([]image.Ref, 0, len(tags))
 			seen := make(map[string]bool, len(tags))
@@ -286,7 +290,7 @@ func imageBuild() registry.Command {
 				if err := publication.Complete(); err != nil {
 					return api.UserError{Code: "build_failed", Msg: err.Error()}
 				}
-				if len(results) == 1 {
+				if len(results) == 1 || defaultTags {
 					result = results[0]
 				} else {
 					result = map[string]any{"images": results}
