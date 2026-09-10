@@ -29,6 +29,23 @@ func TestLoopIntervalGetSet(t *testing.T) {
 	}
 }
 
+func TestLoopAIStallTimeoutGetSet(t *testing.T) {
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h(t, "loop.ai-stall-timeout")(c, registry.Params{"name": "smoke", "value": 420}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := as.Get("smoke")
+	if got.AIStallTimeoutS != 420 {
+		t.Fatalf("AI stall timeout = %d, want 420", got.AIStallTimeoutS)
+	}
+	if _, err := h(t, "loop.ai-stall-timeout")(c, registry.Params{"name": "smoke", "value": 0}); err == nil {
+		t.Fatal("zero AI stall timeout accepted")
+	}
+}
+
 func TestLoopEnableDisable(t *testing.T) {
 	c, as, control := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", LoopEnabled: true, OnTimeout: "restart", OnError: "restart"})

@@ -37,6 +37,7 @@ const view = {
   on_timeout: "restart",
   on_error: "restart",
   max_idle_iterations: 0,
+  ai_stall_timeout_s: 300,
   user_prompt: "hi",
   env: {},
   plugins: [],
@@ -68,6 +69,7 @@ const SERVER_FIELD: Record<string, string> = {
   "/loop/on-timeout": "on_timeout",
   "/loop/on-error": "on_error",
   "/loop/max-idle": "max_idle_iterations",
+  "/loop/ai-stall-timeout": "ai_stall_timeout_s",
   "/model": "model",
   "/effort": "effort",
   "/messages/batch": "messages_batch",
@@ -488,6 +490,22 @@ it("sends only the changed loop fields, serially, in the section's render order"
     "/api/agents/alpha/loop/on-error",
     "/api/agents/alpha/loop/max-idle",
   ]);
+});
+
+it("saves the per-agent AI stall timeout with the Loop settings", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls);
+  renderPage();
+
+  const input = await screen.findByLabelText("AI inactivity timeout");
+  expect(input).toHaveValue(300);
+  fireEvent.change(input, { target: { value: "420" } });
+  fireEvent.click(screen.getByText("Save loop settings"));
+
+  await waitFor(() =>
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument(),
+  );
+  expect(posts(calls)).toEqual(["/api/agents/alpha/loop/ai-stall-timeout"]);
 });
 
 it("reloads after a successful loop save and adopts the server's canonical values", async () => {

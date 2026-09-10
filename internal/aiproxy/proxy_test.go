@@ -61,6 +61,35 @@ func TestAuthAcceptsTokenAndReachesForward(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedRequestRecordsActivityBeforeForward(t *testing.T) {
+	p := testProxy(t)
+	called := false
+	p.cfg.Activity = func(agent, iteration string, at time.Time) error {
+		called = true
+		if agent != "alice" || iteration != "alice-1" || !at.Equal(p.cfg.Clock()) {
+			t.Fatalf("activity = %q %q %s", agent, iteration, at)
+		}
+		return nil
+	}
+	p.forward = func(ex *Exchange) error {
+		if !called {
+			t.Fatal("forward reached before activity was recorded")
+		}
+		ex.Status = "ok"
+		ex.W.WriteHeader(http.StatusOK)
+		return nil
+	}
+	p.rebuild()
+	tok, _ := p.Mint(Attribution{Agent: "alice", Iteration: "alice-1"})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/_tariboy/"+tok+"/v1/messages", strings.NewReader(`{"model":"x"}`))
+	req.Header.Set("x-api-key", "real-provider-key")
+	p.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+}
+
 func TestProviderDetection(t *testing.T) {
 	p := testProxy(t)
 	var provider string

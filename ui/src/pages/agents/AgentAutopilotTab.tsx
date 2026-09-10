@@ -48,6 +48,9 @@ export default function AgentAutopilotTab() {
                   {status.halt_reason}
                 </div>
               )}
+              {status?.error_reason && !status.halt_reason && (
+                <div className="text-sm text-destructive">{status.error_reason}</div>
+              )}
             </div>
             <LoopToggle
               name={name}

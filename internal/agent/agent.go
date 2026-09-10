@@ -106,6 +106,7 @@ type Agent struct {
 	// idle. The setter/reconcile arrive in later idle-autostop tasks; for now the
 	// column is loaded read-only.
 	MaxIdleIterations int
+	AIStallTimeoutS   int
 }
 
 type Iteration struct {
@@ -134,6 +135,7 @@ type Iteration struct {
 	ImageRef             string
 	ImageDigest          string
 	PromptTemplateSHA256 string
+	LastAIRequestAt      string
 }
 
 type ImageAssignment struct {
@@ -366,6 +368,9 @@ func (s *Store) Create(a Agent) error {
 	if a.GoalDeliveryCooldownS == 0 {
 		a.GoalDeliveryCooldownS = 60
 	}
+	if a.AIStallTimeoutS == 0 {
+		a.AIStallTimeoutS = 300
+	}
 	if a.GoalDeliveryCooldownS < 1 {
 		return ErrInvalidGoalWaitCustomerTimeout
 	}
@@ -373,13 +378,13 @@ func (s *Store) Create(a Agent) error {
 		(name, image_ref, image_digest, error_reason, cwd, harness_type, model, effort,
 		 interactive, loop_enabled, enabled, interval_s, timeout_s, hard_timeout_s,
 		 on_timeout, on_error, user_prompt, env, plugins, messages_batch, messages_max_queue, "group", alias, notes, color,
-		 max_idle_iterations, goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, current_goal_task_key)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`,
+			 max_idle_iterations, goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, current_goal_task_key)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`,
 		a.Name, a.ImageRef, a.ImageDigest, a.ErrorReason, a.Cwd, a.HarnessType, a.Model, a.Effort,
 		b2i(a.Interactive), b2i(a.LoopEnabled), b2i(a.Enabled), a.IntervalS, a.TimeoutS, a.HardTimeoutS,
 		a.OnTimeout, a.OnError, a.UserPrompt, string(env), string(plugins),
 		a.MessagesBatch, a.MessagesMaxQueue, a.Group, a.Alias, a.Notes, a.Color, a.MaxIdleIterations,
-		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS, a.GoalDeliveryCooldownS)
+		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS, a.GoalDeliveryCooldownS, a.AIStallTimeoutS)
 	return err
 }
 
@@ -400,13 +405,13 @@ func (s *Store) Update(a Agent) error {
 		interactive=?, loop_enabled=?, enabled=?, interval_s=?, timeout_s=?, hard_timeout_s=?,
 		on_timeout=?, on_error=?, user_prompt=?, env=?, plugins=?,
 		messages_batch=?, messages_max_queue=?, max_idle_iterations=?,
-		goal_enabled=?, goal_wait_customer_timeout_s=?, goal_delivery_cooldown_s=?,
+		goal_enabled=?, goal_wait_customer_timeout_s=?, goal_delivery_cooldown_s=?, ai_stall_timeout_s=?,
 		current_goal_task_key=CASE WHEN ? THEN current_goal_task_key ELSE '' END WHERE name=?`,
 		a.Cwd, a.HarnessType, a.Model, a.Effort,
 		b2i(a.Interactive), b2i(a.LoopEnabled), b2i(a.Enabled), a.IntervalS, a.TimeoutS, a.HardTimeoutS,
 		a.OnTimeout, a.OnError, a.UserPrompt, string(env), string(plugins),
 		a.MessagesBatch, a.MessagesMaxQueue, a.MaxIdleIterations,
-		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS, a.GoalDeliveryCooldownS, b2i(a.GoalEnabled), a.Name)
+		b2i(a.GoalEnabled), a.GoalWaitCustomerTimeoutS, a.GoalDeliveryCooldownS, a.AIStallTimeoutS, b2i(a.GoalEnabled), a.Name)
 	if err != nil {
 		return err
 	}
@@ -549,7 +554,7 @@ func (s *Store) Get(name string) (Agent, error) {
 		harness_type, model, effort, interactive, loop_enabled, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, last_goal_delivery_at, current_goal_task_key
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key
 		FROM agents WHERE name=?`, name)
 	return scanAgent(row)
 }
@@ -559,7 +564,7 @@ func (s *Store) List() ([]Agent, error) {
 		harness_type, model, effort, interactive, loop_enabled, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, last_goal_delivery_at, current_goal_task_key
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key
 		FROM agents ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -661,7 +666,7 @@ func (s *Store) ListByGroup(group string) ([]Agent, error) {
 		harness_type, model, effort, interactive, loop_enabled, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, last_goal_delivery_at, current_goal_task_key
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key
 		FROM agents WHERE "group"=? ORDER BY name`, group)
 	if err != nil {
 		return nil, err
@@ -702,6 +707,14 @@ func (s *Store) CreateIteration(it Iteration) error {
 	return err
 }
 
+// RecordAIRequest updates only the matching live iteration. Requests arriving
+// after completion or with stale attribution are intentionally ignored.
+func (s *Store) RecordAIRequest(agentName, iterationID string, at time.Time) error {
+	_, err := s.db.Exec(`UPDATE iterations SET last_ai_request_at=? WHERE agent=? AND id=? AND status='running'`,
+		at.UTC().Format(time.RFC3339Nano), agentName, iterationID)
+	return err
+}
+
 // InitializeIterationTimeout persists the timeout snapshot from the one clock
 // sample made immediately before shim spawn. A zero soft period has no soft
 // deadline; a non-positive hard period has no explicit hard deadline.
@@ -735,7 +748,7 @@ func (s *Store) ExtendIterationTimeout(agentName, id string, now time.Time) (Ite
 	row := tx.QueryRow(`SELECT id, agent, trigger, status, started_at, ended_at,
 		exit_code, done_flag, productive, prompt_path, cpu_ms, mem_peak_kb,
 			timeout_period_s, timeout_deadline, hard_timeout_deadline,
-			timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256
+			timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256, last_ai_request_at
 		FROM iterations WHERE agent=? AND id=?`, agentName, id)
 	it, err := scanIteration(row)
 	if err != nil {
@@ -853,7 +866,7 @@ func (s *Store) GetIteration(agentName, id string) (Iteration, error) {
 	row := s.db.QueryRow(`SELECT id, agent, trigger, status, started_at, ended_at,
 		exit_code, done_flag, productive, prompt_path, cpu_ms, mem_peak_kb,
 		timeout_period_s, timeout_deadline, hard_timeout_deadline,
-		timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256
+		timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256, last_ai_request_at
 		FROM iterations WHERE agent=? AND id=?`, agentName, id)
 	return scanIteration(row)
 }
@@ -862,7 +875,7 @@ func (s *Store) ListIterations(agentName string) ([]Iteration, error) {
 	rows, err := s.db.Query(`SELECT id, agent, trigger, status, started_at, ended_at,
 		exit_code, done_flag, productive, prompt_path, cpu_ms, mem_peak_kb,
 		timeout_period_s, timeout_deadline, hard_timeout_deadline,
-		timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256
+		timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256, last_ai_request_at
 		FROM iterations WHERE agent=? ORDER BY started_at, id`, agentName)
 	if err != nil {
 		return nil, err
@@ -974,7 +987,7 @@ func scanAgent(row scanner) (Agent, error) {
 		&a.HarnessType, &a.Model, &a.Effort, &interactive, &loopEnabled, &enabled, &a.IntervalS,
 		&a.TimeoutS, &a.HardTimeoutS, &a.OnTimeout, &a.OnError, &a.UserPrompt, &env, &plugins,
 		&a.MessagesBatch, &a.MessagesMaxQueue, &a.Group, &a.StatusMessage, &a.StatusUpdated, &a.Alias, &a.Notes, &a.Color,
-		&a.MaxIdleIterations, &goalEnabled, &a.GoalWaitCustomerTimeoutS, &a.GoalDeliveryCooldownS, &a.LastGoalDeliveryAt, &a.CurrentGoalTaskKey)
+		&a.MaxIdleIterations, &goalEnabled, &a.GoalWaitCustomerTimeoutS, &a.GoalDeliveryCooldownS, &a.AIStallTimeoutS, &a.LastGoalDeliveryAt, &a.CurrentGoalTaskKey)
 	if err == sql.ErrNoRows {
 		return Agent{}, ErrNotFound
 	}
@@ -1000,7 +1013,7 @@ func scanIteration(row scanner) (Iteration, error) {
 	err := row.Scan(&it.ID, &it.Agent, &it.Trigger, &it.Status, &it.StartedAt, &it.EndedAt,
 		&it.ExitCode, &done, &productive, &it.PromptPath, &it.CPUMs, &it.MemPeakKB,
 		&it.TimeoutPeriodS, &it.TimeoutDeadline, &it.HardTimeoutDeadline,
-		&it.TimeoutExtensions, &it.TimeoutTriggeredAt, &it.ImageRef, &it.ImageDigest, &it.PromptTemplateSHA256)
+		&it.TimeoutExtensions, &it.TimeoutTriggeredAt, &it.ImageRef, &it.ImageDigest, &it.PromptTemplateSHA256, &it.LastAIRequestAt)
 	if err == sql.ErrNoRows {
 		return Iteration{}, ErrNotFound
 	}

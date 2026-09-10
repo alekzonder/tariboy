@@ -11,6 +11,15 @@ The **SQLite DB is the single source of configuration.** There is no
 (`running` / `idle` / `stopped` / `error`) is **computed** from the DB config
 plus what is actually running, not persisted.
 
+A running iteration also has persisted AI-proxy liveness evidence. Its
+`started_at` time is the initial activity point, and every authenticated request
+for that exact agent and iteration updates `last_ai_request_at` before upstream
+work begins. When the newest point is at least the agent's positive
+`ai_stall_timeout_s` old (300 seconds by default), live state is derived as
+`error` with an informational `error_reason`; the loop and iteration continue.
+The next attributed request updates the timestamp and live state derives as
+`running` again. Stale requests for older or completed iterations are ignored.
+
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
 

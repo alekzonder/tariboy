@@ -44,17 +44,24 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, er
 		"current_goal_task_key": a.CurrentGoalTaskKey,
 		"group":                 a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
 		"max_idle_iterations": a.MaxIdleIterations,
+		"ai_stall_timeout_s":  a.AIStallTimeoutS,
 	}
 	budget, err := agentBudgetView(c, a.Name)
 	if err != nil {
 		return nil, err
 	}
 	v["budget"] = budget
-	if a.ErrorReason != "" {
-		v["error_reason"] = a.ErrorReason
-	}
+	addErrorReason(v, a, state)
 	addHaltReason(v, a)
 	return v, nil
+}
+
+func addErrorReason(v map[string]any, a agent.Agent, state string) {
+	if a.ErrorReason != "" {
+		v["error_reason"] = a.ErrorReason
+	} else if state == "error" && a.AIStallTimeoutS > 0 {
+		v["error_reason"] = fmt.Sprintf("agent stalled - no AI-proxy requests for %d seconds", a.AIStallTimeoutS)
+	}
 }
 
 func agentImageSet() registry.Command {
@@ -422,6 +429,7 @@ func agentPs() registry.Command {
 					"color": a.Color, "cwd": a.Cwd, "timeout_s": a.TimeoutS,
 					"interval_s": a.IntervalS, "on_timeout": a.OnTimeout, "on_error": a.OnError,
 					"max_idle_iterations": a.MaxIdleIterations,
+					"ai_stall_timeout_s":  a.AIStallTimeoutS,
 					"interactive":         a.Interactive,
 					"goal_enabled":        a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS,
 					"current_goal_task_key": a.CurrentGoalTaskKey,
@@ -431,6 +439,7 @@ func agentPs() registry.Command {
 				} else {
 					row["budget"] = budget
 				}
+				addErrorReason(row, a, state)
 				addHaltReason(row, a)
 				rows = append(rows, row)
 			}
@@ -563,6 +572,7 @@ func agentStatus() registry.Command {
 			} else {
 				out["budget"] = budget
 			}
+			addErrorReason(out, a, state)
 			addHaltReason(out, a)
 			for i := len(its) - 1; i >= 0; i-- {
 				it := its[i]

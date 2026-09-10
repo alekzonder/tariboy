@@ -88,3 +88,16 @@ it("renders no halt-reason element when the reason is an empty string", async ()
   expect(await screen.findByText("Stopped")).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByTestId("halt-reason")).not.toBeInTheDocument());
 });
+
+it("shows an informational AI stall reason without reporting a halt", async () => {
+  renderAutopilot({
+    ...stopped,
+    state: "error",
+    loop_enabled: true,
+    error_reason: "agent stalled - no AI-proxy requests for 300 seconds",
+  });
+  expect(
+    await screen.findByText("agent stalled - no AI-proxy requests for 300 seconds"),
+  ).toHaveClass("text-destructive");
+  expect(screen.queryByTestId("halt-reason")).not.toBeInTheDocument();
+});

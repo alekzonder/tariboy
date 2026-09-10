@@ -25,6 +25,13 @@ and is separate from the legacy global/group rolling budgets. When one or more
 non-zero limits are exhausted from immutable `ai_requests.cost_usd` history,
 the proxy denies the next request before upstream provider access.
 
+After token authentication establishes both agent and iteration attribution,
+the proxy records that iteration's activity timestamp before forwarding the
+request. This drives the non-blocking stalled-agent signal described in the
+[state model](/docs/architecture/state-model): it never rejects, cancels, or
+otherwise changes the request or iteration lifecycle, and a recording failure
+is diagnostic-only.
+
 Before starting a harness, the daemon reads its selected Goal once, resolves
 the task's top-level root through Native Tasks as that agent, and stamps the
 AI-proxy lease with `task_id` and `epic_id`. All requests in the iteration are

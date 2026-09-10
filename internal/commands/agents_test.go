@@ -204,6 +204,27 @@ func TestAgentGoalSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
+	c, _, _ := ctxWithStore(t)
+	a := agent.Agent{Name: "worker", AIStallTimeoutS: 300}
+	got, err := agentView(c, a, "error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["error_reason"] != "agent stalled - no AI-proxy requests for 300 seconds" {
+		t.Fatalf("derived error reason = %q", got["error_reason"])
+	}
+
+	a.ErrorReason = "halted: boom"
+	got, err = agentView(c, a, "error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["error_reason"] != "halted: boom" {
+		t.Fatalf("persisted error reason = %q", got["error_reason"])
+	}
+}
+
 // Catches Goal updates bypassing Store.Update (which owns sticky-key clearing)
 // or failing to use the existing configuration refresh/goal signal hook.
 func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
