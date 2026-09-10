@@ -21,7 +21,10 @@ interface Props {
 export function ShellScriptEditor({ title, description, load, save }: Props) {
   const [saved, setSaved] = useState("");
   const [draft, setDraft] = useState("");
-  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState<(() => Promise<string>) | null>(null);
+  const [errorState, setErrorState] = useState<{ load: Props["load"]; message: string } | null>(null);
+  const ready = loaded === load;
+  const error = errorState?.load === load ? errorState.message : "";
   const id = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -34,11 +37,12 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
         if (!current) return;
         setSaved(script);
         setDraft(script);
-        setError("");
+        setLoaded(() => load);
       },
       (cause) => {
-        if (current)
-          setError(cause instanceof Error ? cause.message : String(cause));
+        if (current) {
+          setErrorState({ load, message: cause instanceof Error ? cause.message : String(cause) });
+        }
       },
     );
     return () => {
@@ -47,17 +51,18 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
   }, [load]);
 
   const saveDraft = async () => {
-    setError("");
+    if (!ready) return;
+    setErrorState(null);
     try {
       await save(draft);
       setSaved(draft);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setErrorState({ load, message: cause instanceof Error ? cause.message : String(cause) });
     }
   };
 
   return (
-    <Card>
+    <Card aria-busy={!ready}>
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -67,7 +72,8 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
         <Textarea
           id={id}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => { if (ready) setDraft(event.target.value); }}
+          disabled={!ready}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${id}-error` : undefined}
           className="min-h-40 font-mono"
@@ -89,7 +95,7 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
             variant="outline"
             onClick={() => {
               setDraft(saved);
-              setError("");
+              setErrorState(null);
             }}
           >
             Discard changes
@@ -99,6 +105,7 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
           type="button"
           onClick={() => void saveDraft()}
           aria-label={`Save ${title.toLowerCase()}`}
+          disabled={!ready}
         >
           Save
         </Button>
