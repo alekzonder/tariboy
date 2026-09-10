@@ -15,9 +15,11 @@ runtime or compose configuration. They are not schema-v2 image fields.
 
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
 required name and an optional tag, then select **Validate** or **Build**. The
-default tag is `latest`. Tariboy records the canonical source CWD as local
-provenance and retains an immutable source snapshot for evidence. Rebuilding
-still reads the original directory and its current paths.
+default build publishes both the source `image_version` and `latest`, or only
+`latest` when the source has no version. An explicit tag publishes only that
+tag. Tariboy records the canonical source CWD as local provenance and retains
+an immutable source snapshot for evidence. Rebuilding still reads the original
+directory and its current paths.
 
 **Validate** is read-only. Before a build it shows the schema version, explicit
 plugin names, packaged skill metadata, template hash, and every prompt entry in
@@ -62,9 +64,11 @@ several refs from one parsed source; each result has its own ref and digest,
 while frozen static image content, source provenance, and build time are
 shared. The requested refs and their snapshot/provenance metadata commit as one
 batch; a failure on any tag restores every ref exactly. Duplicate tags are
-rejected. When the operator CLI omits `--tag`, the build uses `image_version`
-from the frozen source. Older files without a version fall back to `latest`.
-Explicit tags, including `--tag latest`, take priority.
+rejected. When the operator CLI omits `--tag`, a frozen source with
+`image_version` publishes both that version and `latest`; the existing
+single-result output reports the versioned ref. Older files without a version
+publish only `latest`. Explicit tags, including `--tag latest`, take priority
+and do not add another ref.
 
 Imports and retagged runnable artifacts, registry artifacts, the reserved
 `bare` ref, and controlled-improvement releases remain immutable.
@@ -114,10 +118,11 @@ upstream, or authentication failure is reported without resetting or stashing
 local edits. **Remove** unregisters the Store and deletes its managed clone;
 it preserves local source directories and already built images.
 
-Store builds use the existing image builder. The default result is
-`<image_name>:<image_version>`, or `latest` when the source has no version.
-Use `--name` to avoid a name collision between Stores, and `--tag` to override
-the version. Do not combine a Store selector with `--path`.
+Store builds use the existing image builder. By default, a versioned source
+publishes both `<image_name>:<image_version>` and `<image_name>:latest`, while a
+source without a version publishes only `latest`. Use `--name` to avoid a name
+collision between Stores, and `--tag` to publish only an explicit tag. Do not
+combine a Store selector with `--path`.
 
 Before freezing sources, the daemon runs `npx skills experimental_install` in
 the Store root when `skills-lock.json` exists there, then in the image directory
