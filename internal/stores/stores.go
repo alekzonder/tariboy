@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -35,9 +36,11 @@ type Store struct {
 }
 
 type StoreImage struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Error   string `json:"error,omitempty"`
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	BuiltVersion string `json:"built_version"`
+	UpdateNeeded bool   `json:"update_needed"`
+	Error        string `json:"error,omitempty"`
 }
 
 type Detail struct {
@@ -245,7 +248,73 @@ func (c *Catalog) detail(ctx context.Context, name string) (Detail, error) {
 	if err != nil {
 		return Detail{}, err
 	}
+	manifests, err := builtManifests(&image.Store{Dir: filepath.Join(c.BaseDir, "images")}, images)
+	if err != nil {
+		return Detail{}, err
+	}
+	built := builtVersions(manifests)
+	for i := range images {
+		if images[i].Error == "" {
+			images[i].BuiltVersion = built[images[i].Name]
+			images[i].UpdateNeeded = images[i].BuiltVersion != images[i].Version
+		}
+	}
 	return Detail{Name: store.Name, Source: store.Source, Path: store.Path, Images: images}, nil
+}
+
+func builtManifests(store *image.Store, sources []StoreImage) ([]image.Manifest, error) {
+	var manifests []image.Manifest
+	for _, source := range sources {
+		if source.Error != "" {
+			continue
+		}
+		entries, err := os.ReadDir(filepath.Join(store.Dir, source.Name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			if !strings.HasSuffix(entry.Name(), ".tar.gz") {
+				continue
+			}
+			manifest, err := store.Inspect(image.Ref{Name: source.Name, Tag: strings.TrimSuffix(entry.Name(), ".tar.gz")})
+			if err != nil {
+				return nil, err
+			}
+			manifests = append(manifests, manifest)
+		}
+	}
+	return manifests, nil
+}
+
+func builtVersions(manifests []image.Manifest) map[string]string {
+	newest := make(map[string]image.Manifest)
+	for _, candidate := range manifests {
+		current, exists := newest[candidate.Name]
+		candidateTime, candidateErr := time.Parse(time.RFC3339, candidate.BuiltAt)
+		currentTime, currentErr := time.Parse(time.RFC3339, current.BuiltAt)
+		replace := !exists
+		if exists && candidateErr == nil {
+			replace = currentErr != nil || candidateTime.After(currentTime) ||
+				(candidateTime.Equal(currentTime) && sameBuiltPayload(candidate, current) && current.Tag == "latest" && candidate.Tag != "latest")
+		}
+		if replace {
+			newest[candidate.Name] = candidate
+		}
+	}
+	versions := make(map[string]string, len(newest))
+	for name, manifest := range newest {
+		versions[name] = manifest.Tag
+	}
+	return versions
+}
+
+func sameBuiltPayload(a, b image.Manifest) bool {
+	a.Name, a.Tag, a.Digest = "", "", ""
+	b.Name, b.Tag, b.Digest = "", "", ""
+	return reflect.DeepEqual(a, b)
 }
 
 func (c *Catalog) get(name string) (Store, error) {

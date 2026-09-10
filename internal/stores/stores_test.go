@@ -8,7 +8,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 	storedb "github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -77,7 +80,7 @@ func TestCatalogPersistsAndRereadsLocalInventory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(detail.Images) != 4 || detail.Images[0] != (StoreImage{Name: "alpha", Version: "1.2.3"}) {
+	if len(detail.Images) != 4 || detail.Images[0] != (StoreImage{Name: "alpha", Version: "1.2.3", UpdateNeeded: true}) {
 		t.Fatalf("initial inventory = %#v", detail.Images)
 	}
 	for _, image := range detail.Images[1:] {
@@ -99,6 +102,114 @@ func TestCatalogPersistsAndRereadsLocalInventory(t *testing.T) {
 	}
 	if got, err := catalog.List(context.Background()); err != nil || len(got) != 0 {
 		t.Fatalf("List after Remove = %#v, %v", got, err)
+	}
+}
+
+func TestCatalogDetailReportsNewestBuiltVersionAndUpdateNeed(t *testing.T) {
+	base, source := t.TempDir(), t.TempDir()
+	writeImage(t, source, "alpha", "2.0.0")
+	beta := filepath.Join(source, "images", "beta")
+	if err := os.MkdirAll(beta, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(beta, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := imagefile.ParseAny(filepath.Join(source, "images", "alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	built := &image.Store{Dir: filepath.Join(base, "images")}
+	for tag, builtAt := range map[string]string{
+		"1.2.3": "2026-09-08T10:00:00Z",
+		"1.5.0": "2026-09-09T10:00:00Z",
+	} {
+		when, _ := time.Parse(time.RFC3339, builtAt)
+		if _, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{}, image.Ref{Name: "alpha", Tag: tag}, built, func() time.Time { return when }, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	catalog, db := openCatalog(t, base)
+	defer db.Close()
+	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := catalog.Detail(context.Background(), "team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []StoreImage{
+		{Name: "alpha", Version: "2.0.0", BuiltVersion: "1.5.0", UpdateNeeded: true},
+		{Name: "beta", Version: "latest", UpdateNeeded: true},
+	}
+	if !reflect.DeepEqual(detail.Images, want) {
+		t.Fatalf("images = %#v, want %#v", detail.Images, want)
+	}
+	when, _ := time.Parse(time.RFC3339, "2026-09-10T10:00:00Z")
+	if _, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{}, image.Ref{Name: "alpha", Tag: "2.0.0"}, built, func() time.Time { return when }, nil); err != nil {
+		t.Fatal(err)
+	}
+	detail, err = catalog.Detail(context.Background(), "team")
+	if err != nil || detail.Images[0].BuiltVersion != "2.0.0" || detail.Images[0].UpdateNeeded {
+		t.Fatalf("current built version = %#v, %v", detail.Images[0], err)
+	}
+}
+
+func TestBuiltVersionsCompareRFC3339TimesAndPreferConcreteTagForSameBuild(t *testing.T) {
+	source := t.TempDir()
+	writeImage(t, source, "alpha", "2.0.0")
+	parsed, err := imagefile.ParseAny(filepath.Join(source, "images", "alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &image.Store{Dir: filepath.Join(t.TempDir(), "images")}
+	latestRef, concreteRef := image.Ref{Name: "beta", Tag: "latest"}, image.Ref{Name: "beta", Tag: "2.0.0"}
+	when, _ := time.Parse(time.RFC3339, "2026-09-09T10:00:00.123Z")
+	latest, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{}, latestRef, store, func() time.Time { return when }, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive, err := store.ArchiveBytes(latestRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RetagPortableArchive(latestRef, concreteRef, archive); err != nil {
+		t.Fatal(err)
+	}
+	concrete, err := store.Inspect(concreteRef)
+	if err != nil || concrete.Digest == latest.Digest {
+		t.Fatalf("retagged manifest = %#v, %v", concrete, err)
+	}
+	got := builtVersions([]image.Manifest{
+		{Name: "alpha", Tag: "old", Digest: "old", BuiltAt: "2026-09-09T10:00:00+02:00"},
+		{Name: "alpha", Tag: "new", Digest: "new", BuiltAt: "2026-09-09T09:00:00Z"},
+		latest,
+		concrete,
+	})
+	if got["alpha"] != "new" || got["beta"] != "2.0.0" {
+		t.Fatalf("built versions = %#v", got)
+	}
+}
+
+func TestCatalogDetailIgnoresCorruptBuiltArtifactForAnotherImage(t *testing.T) {
+	base, source := t.TempDir(), t.TempDir()
+	writeImage(t, source, "alpha", "1.0.0")
+	unrelated := filepath.Join(base, "images", "unrelated")
+	if err := os.MkdirAll(unrelated, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unrelated, "latest.tar.gz"), []byte("broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	catalog, db := openCatalog(t, base)
+	defer db.Close()
+	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := catalog.Detail(context.Background(), "team")
+	if err != nil || len(detail.Images) != 1 || detail.Images[0].Name != "alpha" {
+		t.Fatalf("Detail() = %#v, %v", detail, err)
 	}
 }
 

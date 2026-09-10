@@ -146,7 +146,9 @@ unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
 on the route-selected daemon. Its detail shows the current disk-backed image
-inventory, versions and diagnostics, with Refresh, Remove and Build actions.
+inventory, source and newest built versions, update highlighting, and
+diagnostics, with Refresh, Remove and Build actions. A successful build reloads
+the detail so its version and update state reflect the daemon immediately.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
