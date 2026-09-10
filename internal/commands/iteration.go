@@ -97,7 +97,7 @@ func iterationInspect() registry.Command {
 				"started_at": it.StartedAt, "ended_at": it.EndedAt, "done": it.DoneFlag,
 				"productive":  it.Productive,
 				"prompt_path": it.PromptPath,
-				"image_ref":   it.ImageRef, "image_digest": it.ImageDigest,
+				"image_ref":   it.ImageRef, "image_version": it.ImageVersion, "image_digest": it.ImageDigest,
 				"prompt_template_sha256": it.PromptTemplateSHA256,
 			}
 			reviews, err := iterationJudgeReviews(c, []string{it.ID})

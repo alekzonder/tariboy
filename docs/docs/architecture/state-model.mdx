@@ -131,8 +131,10 @@ Each agent row owns an active image ref/digest and a separate pending
 ref/digest/error. Selecting another image changes only the pending fields. The
 iteration launch gate validates and stages that artifact, reconciles image
 capabilities, and promotes active plus pending state in one guarded transaction.
-Every new iteration snapshots its image ref, digest, and prompt-template hash,
-so later switches cannot rewrite historical execution identity.
+Every new iteration snapshots its image ref, source `image_version` when
+present, digest, and prompt-template hash, so later switches cannot rewrite
+historical execution identity. Historical iterations and legacy images keep an
+empty version instead of inheriting a mutable ref's current value.
 
 The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the

@@ -137,7 +137,7 @@ func promptGet() registry.Command {
 					}
 				}
 				prompt, err = loop.RenderPromptTemplate(template, l.ImageDir(), loop.RuntimePromptValues{
-					Identity: loop.FormatRuntimeIdentity(a.Name, a.ImageRef, a.ImageDigest, cwd, ""), Goal: goal, Context: string(contextText),
+					Identity: loop.FormatRuntimeIdentity(a.Name, a.ImageRef, man.ImageVersion, a.ImageDigest, cwd, ""), Goal: goal, Context: string(contextText),
 					Messages: "[runtime: messages]", UserPrompt: a.UserPrompt, OneShot: "[runtime: one-shot]",
 				})
 				if err != nil {

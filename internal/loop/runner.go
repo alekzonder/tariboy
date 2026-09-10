@@ -779,7 +779,7 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 				}
 			}
 			prompt, err = RenderPromptTemplate(template, l.ImageDir(), RuntimePromptValues{
-				Identity: FormatRuntimeIdentity(ag.Name, ag.ImageRef, ag.ImageDigest, agentCwd(ag, l), iterationID),
+				Identity: FormatRuntimeIdentity(ag.Name, ag.ImageRef, iteration.ImageVersion, ag.ImageDigest, agentCwd(ag, l), iterationID),
 				Goal:     goal,
 				Workdir:  workdir,
 				Context:  contextText, Messages: FormatMessages(batch), AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()), UserPrompt: ag.UserPrompt, OneShot: oneShot,

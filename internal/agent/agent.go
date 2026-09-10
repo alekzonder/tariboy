@@ -133,6 +133,7 @@ type Iteration struct {
 	TimeoutExtensions    int
 	TimeoutTriggeredAt   *string
 	ImageRef             string
+	ImageVersion         string
 	ImageDigest          string
 	PromptTemplateSHA256 string
 	LastAIRequestAt      string
@@ -312,8 +313,8 @@ func (s *Store) PromotePendingImageWithPlugins(name, expectedRef, expectedDigest
 	}
 	return tx.Commit()
 }
-func (s *Store) SnapshotIterationImage(iterationID, ref, digest, templateSHA string) error {
-	res, err := s.db.Exec(`UPDATE iterations SET image_ref=?,image_digest=?,prompt_template_sha256=? WHERE id=?`, ref, digest, templateSHA, iterationID)
+func (s *Store) SnapshotIterationImage(iterationID, ref, version, digest, templateSHA string) error {
+	res, err := s.db.Exec(`UPDATE iterations SET image_ref=?,image_version=?,image_digest=?,prompt_template_sha256=? WHERE id=?`, ref, version, digest, templateSHA, iterationID)
 	if err != nil {
 		return err
 	}
@@ -699,11 +700,11 @@ func (s *Store) CreateIteration(it Iteration) error {
 	// explicit `i-am-done --idle` flips it via SetIterationDone.
 	_, err := s.db.Exec(`INSERT INTO iterations
 		(id, agent, trigger, status, started_at, ended_at, exit_code, done_flag, prompt_path, cpu_ms, mem_peak_kb,
-		 image_ref, image_digest, prompt_template_sha256)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 image_ref, image_version, image_digest, prompt_template_sha256)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		it.ID, it.Agent, it.Trigger, it.Status, it.StartedAt, it.EndedAt,
 		it.ExitCode, b2i(it.DoneFlag), it.PromptPath, it.CPUMs, it.MemPeakKB,
-		it.ImageRef, it.ImageDigest, it.PromptTemplateSHA256)
+		it.ImageRef, it.ImageVersion, it.ImageDigest, it.PromptTemplateSHA256)
 	return err
 }
 
@@ -751,7 +752,7 @@ func (s *Store) ExtendIterationTimeout(agentName, id string, now time.Time) (Ite
 	row := tx.QueryRow(`SELECT id, agent, trigger, status, started_at, ended_at,
 		exit_code, done_flag, productive, prompt_path, cpu_ms, mem_peak_kb,
 			timeout_period_s, timeout_deadline, hard_timeout_deadline,
-			timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256, last_ai_request_at
+			timeout_extensions, timeout_triggered_at, image_ref, image_version, image_digest, prompt_template_sha256, last_ai_request_at
 		FROM iterations WHERE agent=? AND id=?`, agentName, id)
 	it, err := scanIteration(row)
 	if err != nil {
@@ -869,7 +870,7 @@ func (s *Store) GetIteration(agentName, id string) (Iteration, error) {
 	row := s.db.QueryRow(`SELECT id, agent, trigger, status, started_at, ended_at,
 		exit_code, done_flag, productive, prompt_path, cpu_ms, mem_peak_kb,
 		timeout_period_s, timeout_deadline, hard_timeout_deadline,
-		timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256, last_ai_request_at
+		timeout_extensions, timeout_triggered_at, image_ref, image_version, image_digest, prompt_template_sha256, last_ai_request_at
 		FROM iterations WHERE agent=? AND id=?`, agentName, id)
 	return scanIteration(row)
 }
@@ -878,7 +879,7 @@ func (s *Store) ListIterations(agentName string) ([]Iteration, error) {
 	rows, err := s.db.Query(`SELECT id, agent, trigger, status, started_at, ended_at,
 		exit_code, done_flag, productive, prompt_path, cpu_ms, mem_peak_kb,
 		timeout_period_s, timeout_deadline, hard_timeout_deadline,
-		timeout_extensions, timeout_triggered_at, image_ref, image_digest, prompt_template_sha256, last_ai_request_at
+		timeout_extensions, timeout_triggered_at, image_ref, image_version, image_digest, prompt_template_sha256, last_ai_request_at
 		FROM iterations WHERE agent=? ORDER BY started_at, id`, agentName)
 	if err != nil {
 		return nil, err
@@ -1016,7 +1017,7 @@ func scanIteration(row scanner) (Iteration, error) {
 	err := row.Scan(&it.ID, &it.Agent, &it.Trigger, &it.Status, &it.StartedAt, &it.EndedAt,
 		&it.ExitCode, &done, &productive, &it.PromptPath, &it.CPUMs, &it.MemPeakKB,
 		&it.TimeoutPeriodS, &it.TimeoutDeadline, &it.HardTimeoutDeadline,
-		&it.TimeoutExtensions, &it.TimeoutTriggeredAt, &it.ImageRef, &it.ImageDigest, &it.PromptTemplateSHA256, &it.LastAIRequestAt)
+		&it.TimeoutExtensions, &it.TimeoutTriggeredAt, &it.ImageRef, &it.ImageVersion, &it.ImageDigest, &it.PromptTemplateSHA256, &it.LastAIRequestAt)
 	if err == sql.ErrNoRows {
 		return Iteration{}, ErrNotFound
 	}

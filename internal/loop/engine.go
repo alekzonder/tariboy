@@ -592,7 +592,7 @@ func (e *Engine) runOnceGuarded(
 	it := agent.Iteration{
 		ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "running",
 		StartedAt: now.Format(time.RFC3339), ImageRef: e.ag.ImageRef,
-		ImageDigest: e.ag.ImageDigest, PromptTemplateSHA256: activated.PromptTemplateSHA256,
+		ImageVersion: activated.ImageVersion, ImageDigest: e.ag.ImageDigest, PromptTemplateSHA256: activated.PromptTemplateSHA256,
 	}
 	if err := e.store.CreateIteration(it); err != nil {
 		e.log.Error("create iteration", "agent", e.ag.Name, "err", err)
@@ -614,7 +614,10 @@ func (e *Engine) runOnceGuarded(
 	releaseLaunch()
 	e.log.Info("iteration started", "agent", e.ag.Name, "id", id, "trigger", trigger)
 	e.emitIteration(id, trigger, "running", "start")
-	e.recordAudit("iteration_started", "system", id, map[string]any{"trigger": trigger})
+	e.recordAudit("iteration_started", "system", id, map[string]any{
+		"trigger": trigger, "image_ref": e.ag.ImageRef,
+		"image_version": activated.ImageVersion, "image_digest": e.ag.ImageDigest,
+	})
 	tr := otel.Tracer("tariboy/loop")
 	spanStart := e.clock()
 	runCtx, span := tr.Start(runCtx, "iteration", oteltrace.WithAttributes(

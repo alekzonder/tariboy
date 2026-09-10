@@ -37,7 +37,7 @@ func TestIterationLsInspectLogs(t *testing.T) {
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 	id := "smoke-20260706100000-1"
 	as.CreateIteration(agent.Iteration{ID: id, Agent: "smoke", Trigger: "interval",
-		Status: "done", StartedAt: time.Now().Format(time.RFC3339)})
+		Status: "done", StartedAt: time.Now().Format(time.RFC3339), ImageVersion: "1.2.3"})
 
 	ls, err := h(t, "iteration.ls")(c, registry.Params{"name": "smoke"})
 	if err != nil || ls.(map[string]any)["count"].(int) != 1 {
@@ -46,6 +46,9 @@ func TestIterationLsInspectLogs(t *testing.T) {
 	insp, err := h(t, "iteration.inspect")(c, registry.Params{"name": "smoke", "id": id})
 	if err != nil || insp.(map[string]any)["status"] != "done" {
 		t.Fatalf("inspect: %v err=%v", insp, err)
+	}
+	if insp.(map[string]any)["image_version"] != "1.2.3" {
+		t.Fatalf("inspect image_version = %v", insp.(map[string]any)["image_version"])
 	}
 
 	// write logs on disk

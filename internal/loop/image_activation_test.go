@@ -123,6 +123,66 @@ func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
 	}
 }
 
+func TestMutableRefIterationsSnapshotSourceVersion(t *testing.T) {
+	m, as, _, _ := newManager(t, &imageBoundaryRunner{calls: make(chan imageBoundaryCall, 2)})
+	t.Cleanup(m.Shutdown)
+	recorder := &captureRecorder{}
+	m.cfg.AuditFor = func(string) Recorder { return recorder }
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	source := t.TempDir()
+	build := func(version string) image.Manifest {
+		manifest, err := image.BuildV2Mutable(&imagefile.V2{
+			SchemaVersion: 2, ImageVersion: version, Dir: source,
+		}, imagefile.ResolveRoots{}, ref, m.cfg.ImgStore, time.Now, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return manifest
+	}
+	wait := func(count int) []agent.Iteration {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			iterations, err := as.ListIterations("worker")
+			if err == nil && len(iterations) == count && iterations[count-1].Status == "done" {
+				return iterations
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("iterations = %#v, err = %v", iterations, err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	first := build("1.0.0")
+	if _, err := m.Run(registry.RunSpec{ImageRef: ref.String(), Name: "worker", Harness: "stub"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Exec("worker", "first"); err != nil {
+		t.Fatal(err)
+	}
+	wait(1)
+	second := build("2.0.0")
+	if _, err := m.Exec("worker", "second"); err != nil {
+		t.Fatal(err)
+	}
+	iterations := wait(2)
+	for i, want := range []struct{ version, digest string }{{"1.0.0", first.Digest}, {"2.0.0", second.Digest}} {
+		if got := iterations[i]; got.ImageRef != ref.String() || got.ImageVersion != want.version || got.ImageDigest != want.digest {
+			t.Fatalf("iteration %d image snapshot = %#v", i, got)
+		}
+	}
+	var started []capturedEvent
+	for _, event := range recorder.snapshot() {
+		if event.typ == "iteration_started" {
+			started = append(started, event)
+		}
+	}
+	if len(started) != 2 || started[0].data["image_version"] != "1.0.0" || started[0].data["image_digest"] != first.Digest || started[1].data["image_version"] != "2.0.0" || started[1].data["image_digest"] != second.Digest || started[0].data["image_ref"] != ref.String() || started[1].data["image_ref"] != ref.String() {
+		t.Fatalf("iteration_started audits = %#v", started)
+	}
+}
+
 func TestMutableActivationWaitsForPublicationRollback(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))
@@ -570,7 +630,7 @@ func TestPendingImageActivationWaitsForActiveIterationAndSnapshotsNextImage(t *t
 			t.Fatal(err)
 		}
 		manifest, err := image.BuildV2(
-			&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}},
+			&imagefile.V2{SchemaVersion: 2, ImageVersion: map[string]string{"image-a": "1.0.0", "image-b": "2.0.0"}[name], Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}},
 			imagefile.ResolveRoots{}, image.Ref{Name: name, Tag: "latest"}, m.cfg.ImgStore, time.Now, nil,
 		)
 		if err != nil {
@@ -628,10 +688,10 @@ func TestPendingImageActivationWaitsForActiveIterationAndSnapshotsNextImage(t *t
 	for {
 		iterations, err := as.ListIterations("worker")
 		if err == nil && len(iterations) == 2 && iterations[1].Status == "done" {
-			if iterations[0].ImageRef != "image-a:latest" || iterations[0].ImageDigest != aManifest.Digest {
+			if iterations[0].ImageRef != "image-a:latest" || iterations[0].ImageVersion != "1.0.0" || iterations[0].ImageDigest != aManifest.Digest {
 				t.Fatalf("first iteration snapshot = %#v", iterations[0])
 			}
-			if iterations[1].ImageRef != "image-b:latest" || iterations[1].ImageDigest != bManifest.Digest || iterations[1].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
+			if iterations[1].ImageRef != "image-b:latest" || iterations[1].ImageVersion != "2.0.0" || iterations[1].ImageDigest != bManifest.Digest || iterations[1].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
 				t.Fatalf("second iteration snapshot = %#v", iterations[1])
 			}
 			break
@@ -685,7 +745,7 @@ func TestPendingImageActivationWaitsForActiveIterationAndSnapshotsNextImage(t *t
 	for {
 		iterations, listErr := targetAgents.ListIterations("imported-worker")
 		if listErr == nil && len(iterations) == 1 && iterations[0].Status == "done" {
-			if iterations[0].ImageRef != imported.Ref || iterations[0].ImageDigest != imported.Digest || iterations[0].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
+			if iterations[0].ImageRef != imported.Ref || iterations[0].ImageVersion != "2.0.0" || iterations[0].ImageDigest != imported.Digest || iterations[0].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
 				t.Fatalf("imported iteration snapshot = %#v", iterations[0])
 			}
 			break

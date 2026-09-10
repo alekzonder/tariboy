@@ -48,6 +48,7 @@ type Layer struct {
 // sidecar .digest file after build; it is empty inside the archived copy.
 type Manifest struct {
 	SchemaVersion        int               `json:"schema_version"`
+	ImageVersion         string            `json:"image_version,omitempty"`
 	Name                 string            `json:"name"`
 	Tag                  string            `json:"tag"`
 	Digest               string            `json:"digest,omitempty"`

@@ -43,8 +43,12 @@ type RuntimePromptValues struct {
 	OneShot         string
 }
 
-func FormatRuntimeIdentity(agentName, imageRef, imageDigest, cwd, iterationID string) string {
-	lines := []string{"# You are agent " + agentName, "image: " + imageRef, "image-digest: " + imageDigest, "cwd: " + cwd}
+func FormatRuntimeIdentity(agentName, imageRef, imageVersion, imageDigest, cwd, iterationID string) string {
+	lines := []string{"# You are agent " + agentName, "image: " + imageRef}
+	if imageVersion != "" {
+		lines = append(lines, "image-version: "+imageVersion)
+	}
+	lines = append(lines, "image-digest: "+imageDigest, "cwd: "+cwd)
 	if iterationID != "" {
 		lines = append(lines, "iteration: "+iterationID)
 	}
