@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -78,5 +79,25 @@ func TestAuditExportRejectsInvalidAgentAndIterationNames(t *testing.T) {
 		if rr.Code != 400 || !strings.Contains(rr.Body.String(), `"code":"bad_request"`) {
 			t.Fatalf("path %q: status=%d body=%s", path, rr.Code, rr.Body.String())
 		}
+	}
+}
+
+func TestAuditExportReportsFailureBeforeStreamingStarts(t *testing.T) {
+	base := t.TempDir()
+	layout := agentdir.New(paths.New(base).AgentsDir(), "alice")
+	if err := os.MkdirAll(layout.Root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(layout.AuditLog(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer(registry.New(), &registry.Ctx{BaseDir: base, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/agents/alice/audit-export", nil))
+	if rr.Code != 500 || !strings.Contains(rr.Body.String(), `"code":"audit_export_failed"`) {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if disposition := rr.Header().Get("Content-Disposition"); disposition != "" {
+		t.Fatalf("error content disposition = %q, want none", disposition)
 	}
 }

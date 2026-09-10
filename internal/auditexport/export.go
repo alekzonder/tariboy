@@ -3,6 +3,7 @@ package auditexport
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,23 +13,34 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/aiproxy/session"
 	"github.com/alekzonder/tariboy/internal/audit"
 )
 
 // WriteZIP writes audit.md for human review and audit.jsonl for lossless
 // machine analysis. An empty iteration includes every retained iteration.
-func WriteZIP(dst io.Writer, agentsDir, agent, iteration string) error {
-	markdown, jsonl, err := build(agentsDir, agent, iteration)
+func WriteZIP(ctx context.Context, dst io.Writer, agentsDir, agent, iteration string) error {
+	events, iterations, err := exportData(agentsDir, agent, iteration)
 	if err != nil {
 		return err
 	}
 	zw := zip.NewWriter(dst)
-	if err := writeZipFile(zw, "audit.md", markdown); err != nil {
+	markdown, err := createZipFile(zw, "audit.md")
+	if err != nil {
 		_ = zw.Close()
 		return err
 	}
-	if err := writeZipFile(zw, "audit.jsonl", jsonl); err != nil {
+	if err := writeMarkdown(ctx, markdown, agentsDir, agent, events, iterations); err != nil {
+		_ = zw.Close()
+		return err
+	}
+	jsonl, err := createZipFile(zw, "audit.jsonl")
+	if err != nil {
+		_ = zw.Close()
+		return err
+	}
+	if err := writeJSONL(ctx, jsonl, agentsDir, agent, events, iterations); err != nil {
 		_ = zw.Close()
 		return err
 	}
@@ -36,20 +48,19 @@ func WriteZIP(dst io.Writer, agentsDir, agent, iteration string) error {
 }
 
 // WriteMarkdown writes the same human-readable document included in WriteZIP.
-func WriteMarkdown(dst io.Writer, agentsDir, agent, iteration string) error {
-	markdown, _, err := build(agentsDir, agent, iteration)
+func WriteMarkdown(ctx context.Context, dst io.Writer, agentsDir, agent, iteration string) error {
+	events, iterations, err := exportData(agentsDir, agent, iteration)
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(dst, markdown)
-	return err
+	return writeMarkdown(ctx, dst, agentsDir, agent, events, iterations)
 }
 
-func build(agentsDir, agent, iteration string) (string, string, error) {
+func exportData(agentsDir, agent, iteration string) ([]audit.Event, []string, error) {
 	layout := agentdir.New(agentsDir, agent)
 	events, err := audit.ReadEvents(layout.AuditLog(), 0, 0)
 	if err != nil {
-		return "", "", err
+		return nil, nil, err
 	}
 	if iteration != "" {
 		filtered := events[:0]
@@ -62,37 +73,74 @@ func build(agentsDir, agent, iteration string) (string, string, error) {
 	}
 	iterations, err := iterationIDs(events, iteration, layout.IterationsDir())
 	if err != nil {
-		return "", "", err
+		return nil, nil, err
 	}
+	return events, iterations, nil
+}
 
-	var markdown strings.Builder
-	fmt.Fprintf(&markdown, "# Audit log — %s\n\n", agent)
-	markdown.WriteString("> Sensitive export: may contain prompts, reasoning, commands, tool arguments/results, model responses, and user data.\n\n")
-	var jsonl strings.Builder
+func writeJSONL(ctx context.Context, dst io.Writer, agentsDir, agent string, events []audit.Event, iterations []string) error {
 	for _, event := range events {
-		writeJSONLine(&jsonl, map[string]any{"record_type": "audit_event", "event": event})
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := writeJSONLine(dst, map[string]any{"record_type": "audit_event", "event": event}); err != nil {
+			return err
+		}
 	}
 	for _, id := range iterations {
-		fmt.Fprintf(&markdown, "## Iteration `%s`\n\n", id)
-		for _, event := range events {
-			if event.IterationID == id {
-				writeEventMarkdown(&markdown, event)
-			}
-		}
-		entries, readErr := session.ReadEntries(agentsDir, agent, id)
-		if readErr != nil {
-			return "", "", readErr
-		}
-		for index, entry := range entries {
-			writeJSONLine(&jsonl, map[string]any{
+		if err := session.WalkEntries(ctx, agentsDir, agent, id, func(index int, entry aiproxy.TranscriptEntry) error {
+			return writeJSONLine(dst, map[string]any{
 				"record_type": "proxy_transcript", "iteration_id": id, "call_index": index,
 				"meta": entry.Meta, "request": string(entry.Request), "response": string(entry.Response),
 			})
+		}); err != nil {
+			return err
 		}
-		writeCallsMarkdown(&markdown, session.Build(entries))
 	}
+	return nil
+}
 
-	return markdown.String(), jsonl.String(), nil
+func writeMarkdown(ctx context.Context, dst io.Writer, agentsDir, agent string, events []audit.Event, iterations []string) error {
+	if _, err := fmt.Fprintf(dst, "# Audit log — %s\n\n", agent); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(dst, "> Sensitive export: may contain prompts, reasoning, commands, tool arguments/results, model responses, and user data.\n\n"); err != nil {
+		return err
+	}
+	for _, id := range iterations {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(dst, "## Iteration `%s`\n\n", id); err != nil {
+			return err
+		}
+		for _, event := range events {
+			if event.IterationID == id {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if err := writeEventMarkdown(dst, event); err != nil {
+					return err
+				}
+			}
+		}
+		wroteCalls := false
+		if err := session.WalkCalls(ctx, agentsDir, agent, id, func(call session.Call) error {
+			if !wroteCalls {
+				wroteCalls = true
+				if _, err := io.WriteString(dst, "\n### Agent activity\n\n"); err != nil {
+					return err
+				}
+			}
+			return writeCallMarkdown(dst, call)
+		}); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(dst, "\n"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func iterationIDs(events []audit.Event, selected, iterationsDir string) ([]string, error) {
@@ -130,15 +178,16 @@ func safeIterationID(value string) bool {
 		!strings.ContainsAny(value, "/\\\x00")
 }
 
-func writeJSONLine(dst *strings.Builder, value any) {
+func writeJSONLine(dst io.Writer, value any) error {
 	raw, err := json.Marshal(value)
-	if err == nil {
-		dst.Write(raw)
-		dst.WriteByte('\n')
+	if err != nil {
+		return nil
 	}
+	_, err = dst.Write(append(raw, '\n'))
+	return err
 }
 
-func writeEventMarkdown(dst *strings.Builder, event audit.Event) {
+func writeEventMarkdown(dst io.Writer, event audit.Event) error {
 	value := func(key string) string {
 		if text, ok := event.Data[key].(string); ok {
 			return text
@@ -162,34 +211,36 @@ func writeEventMarkdown(dst *strings.Builder, event audit.Event) {
 		raw, _ := json.Marshal(event.Data)
 		detail = string(raw)
 	}
-	fmt.Fprintf(dst, "- `%s` **%s**", event.TS, label)
-	if detail != "" {
-		fmt.Fprintf(dst, " — %s", detail)
+	if _, err := fmt.Fprintf(dst, "- `%s` **%s**", event.TS, label); err != nil {
+		return err
 	}
-	dst.WriteString("\n")
+	if detail != "" {
+		if _, err := fmt.Fprintf(dst, " — %s", detail); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(dst, "\n")
+	return err
 }
 
-func writeCallsMarkdown(dst *strings.Builder, timeline session.SessionTimeline) {
-	if len(timeline.Calls) == 0 {
-		dst.WriteString("\n")
-		return
-	}
-	dst.WriteString("\n### Agent activity\n\n")
-	for _, call := range timeline.Calls {
-		for _, message := range call.Delta {
-			for _, block := range message.Blocks {
-				writeBlockMarkdown(dst, block)
+func writeCallMarkdown(dst io.Writer, call session.Call) error {
+	for _, message := range call.Delta {
+		for _, block := range message.Blocks {
+			if err := writeBlockMarkdown(dst, block); err != nil {
+				return err
 			}
 		}
-		for _, block := range call.Response.Blocks {
-			writeBlockMarkdown(dst, block)
-		}
-		fmt.Fprintf(dst, "  - AI call: `%s`, %d→%d tokens, $%.4f, %d ms\n", call.Model, call.Usage.Input, call.Usage.Output, call.CostUSD, call.LatencyMs)
 	}
-	dst.WriteString("\n")
+	for _, block := range call.Response.Blocks {
+		if err := writeBlockMarkdown(dst, block); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintf(dst, "  - AI call: `%s`, %d→%d tokens, $%.4f, %d ms\n", call.Model, call.Usage.Input, call.Usage.Output, call.CostUSD, call.LatencyMs)
+	return err
 }
 
-func writeBlockMarkdown(dst *strings.Builder, block session.Block) {
+func writeBlockMarkdown(dst io.Writer, block session.Block) error {
 	label, detail := "Message", block.Text
 	switch block.Type {
 	case "thinking":
@@ -200,8 +251,10 @@ func writeBlockMarkdown(dst *strings.Builder, block session.Block) {
 		label, detail = toolLabel(block.ToolName), toolDetail(block.Input)
 	}
 	if detail != "" {
-		fmt.Fprintf(dst, "- **%s** — %s\n", label, detail)
+		_, err := fmt.Fprintf(dst, "- **%s** — %s\n", label, detail)
+		return err
 	}
+	return nil
 }
 
 func toolLabel(name string) string {
@@ -258,13 +311,8 @@ func toolDetail(raw json.RawMessage) string {
 	return string(encoded)
 }
 
-func writeZipFile(zw *zip.Writer, name, content string) error {
+func createZipFile(zw *zip.Writer, name string) (io.Writer, error) {
 	header := &zip.FileHeader{Name: filepath.ToSlash(name), Method: zip.Deflate}
 	header.SetMode(0o600)
-	file, err := zw.CreateHeader(header)
-	if err != nil {
-		return err
-	}
-	_, err = io.WriteString(file, content)
-	return err
+	return zw.CreateHeader(header)
 }

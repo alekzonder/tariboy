@@ -3,7 +3,10 @@ package session
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +14,80 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 )
+
+type oneLineReader struct {
+	lines [][]byte
+	reads int
+}
+
+func (r *oneLineReader) Read(dst []byte) (int, error) {
+	if r.reads == len(r.lines) {
+		return 0, io.EOF
+	}
+	n := copy(dst, r.lines[r.reads])
+	r.reads++
+	return n, nil
+}
+
+func TestScanEntriesDoesNotReadAnotherRecordAfterCancellation(t *testing.T) {
+	entry := []byte(`{"meta":{"provider":"anthropic"}}` + "\n")
+	reader := &oneLineReader{lines: [][]byte{entry, entry}}
+	ctx, cancel := context.WithCancel(context.Background())
+	err := scanEntries(ctx, reader, func(_ int, _ aiproxy.TranscriptEntry) error {
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || reader.reads != 1 {
+		t.Fatalf("error = %v, reads = %d; want cancellation before the second read", err, reader.reads)
+	}
+}
+
+func TestWalkEntriesReturnsPreCanceledContextWhenTranscriptIsMissing(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := WalkEntries(ctx, t.TempDir(), "agent1", "missing", func(_ int, _ aiproxy.TranscriptEntry) error { return nil })
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context cancellation", err)
+	}
+}
+
+func TestWalkEntriesStopsAfterVisitorErrorOrCancellation(t *testing.T) {
+	agentsDir := t.TempDir()
+	if err := agentdir.New(agentsDir, "agent1").EnsureIteration("iter1"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		entry := entry(i, "anthropic", "", `{"system":"S"}`, `{"content":[]}`)
+		entry.Meta.Agent, entry.Meta.Iteration = "agent1", "iter1"
+		if err := aiproxy.AppendTranscript(agentsDir, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	stop := errors.New("stop")
+	visited := 0
+	err := WalkEntries(context.Background(), agentsDir, "agent1", "iter1", func(_ int, _ aiproxy.TranscriptEntry) error {
+		visited++
+		if visited == 2 {
+			return stop
+		}
+		return nil
+	})
+	if !errors.Is(err, stop) || visited != 2 {
+		t.Fatalf("visitor error = %v, visited = %d; want stop after 2", err, visited)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	visited = 0
+	err = WalkEntries(ctx, agentsDir, "agent1", "iter1", func(_ int, _ aiproxy.TranscriptEntry) error {
+		visited++
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || visited != 1 {
+		t.Fatalf("cancellation error = %v, visited = %d; want cancellation after 1", err, visited)
+	}
+}
 
 func entry(seq int, provider, sys string, req, resp string) aiproxy.TranscriptEntry {
 	return aiproxy.TranscriptEntry{

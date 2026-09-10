@@ -99,6 +99,7 @@ export async function apiOn<T>(
   method: string,
   path: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const headers: Record<string, string> = { ...authHeaders(daemon) };
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -109,6 +110,7 @@ export async function apiOn<T>(
       cache: "no-store",
       headers: Object.keys(headers).length ? headers : undefined,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
     });
   } catch (e) {
     if (e instanceof ApiError) throw e;
@@ -182,11 +184,12 @@ export async function api<T>(
   method: string,
   path: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
-  return apiOn<T>(activeDaemon, method, path, body);
+  return apiOn<T>(activeDaemon, method, path, body, signal);
 }
 
-export const apiGet = <T>(path: string) => api<T>("GET", path);
+export const apiGet = <T>(path: string, signal?: AbortSignal) => api<T>("GET", path, undefined, signal);
 export const apiPost = <T>(path: string, body?: unknown) =>
   api<T>("POST", path, body);
 export const apiPut = <T>(path: string, body?: unknown) =>
@@ -269,8 +272,8 @@ export function agentApiPath(name: string, rest: string): string {
   const base = `/api/agents/${encodeURIComponent(name)}`;
   return tail ? `${base}/${tail}` : base;
 }
-export const agentGet = <T>(name: string, rest: string) =>
-  apiGet<T>(agentApiPath(name, rest));
+export const agentGet = <T>(name: string, rest: string, signal?: AbortSignal) =>
+  apiGet<T>(agentApiPath(name, rest), signal);
 export const agentPost = <T>(name: string, rest: string, body?: unknown) =>
   apiPost<T>(agentApiPath(name, rest), body);
 export const agentPut = <T>(name: string, rest: string, body?: unknown) =>

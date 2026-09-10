@@ -186,6 +186,18 @@ that iteration's consensus, analyses, and immutable evidence, with breadcrumbs
 back to both the explicit-host Judge list and the originating Activity entry.
 Every poll, action, citation, and link stays pinned to the host in the route.
 
+Activity loads a terminal iteration's proxy transcript once when that iteration
+is selected. Running iterations may refresh from the timer or daemon events,
+but share one in-flight request; changing the agent or iteration aborts that
+request and stale results cannot replace the new selection.
+
+Audit ZIPs are generated and streamed by the daemon. Desktop still uses an
+authenticated `fetch` followed by `response.blob()` before saving, because a
+plain WebView download cannot attach the bearer token required by a remote
+daemon. The client therefore still needs memory proportional to the archive;
+streaming directly to a file requires a separate authenticated Desktop/Rust
+download API.
+
 Judge workers run in manual mode when Autopilot is disabled. Activity reports
 that configured state as the reason pending work is waiting; an unavailable
 status is reported as unknown rather than treated as disabled. Operators start

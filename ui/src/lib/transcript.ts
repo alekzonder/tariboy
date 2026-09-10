@@ -29,8 +29,11 @@ export interface Call {
 }
 export interface RawCall { seq: number; ts: string; request: string; response: string }
 
-export async function fetchTranscript(name: string, iteration: string): Promise<Call[]> {
-  const r = await agentGet<{ calls: Call[] }>(name, `iterations/${encodeURIComponent(iteration)}/transcript`);
+export async function fetchTranscript(name: string, iteration: string, signal?: AbortSignal): Promise<Call[]> {
+  const path = `iterations/${encodeURIComponent(iteration)}/transcript`;
+  const r = signal
+    ? await agentGet<{ calls: Call[] }>(name, path, signal)
+    : await agentGet<{ calls: Call[] }>(name, path);
   return r.calls ?? [];
 }
 

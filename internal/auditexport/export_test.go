@@ -3,6 +3,9 @@ package auditexport
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -37,7 +40,7 @@ func TestWriteZIPScopesIterationAndIncludesReadableAndRawRecords(t *testing.T) {
 	}
 
 	var selected bytes.Buffer
-	if err := WriteZIP(&selected, agentsDir, "codex-agent", "iter-1"); err != nil {
+	if err := WriteZIP(context.Background(), &selected, agentsDir, "codex-agent", "iter-1"); err != nil {
 		t.Fatal(err)
 	}
 	markdown, jsonl := zipContents(t, selected.Bytes())
@@ -56,7 +59,7 @@ func TestWriteZIPScopesIterationAndIncludesReadableAndRawRecords(t *testing.T) {
 	}
 
 	var all bytes.Buffer
-	if err := WriteZIP(&all, agentsDir, "codex-agent", ""); err != nil {
+	if err := WriteZIP(context.Background(), &all, agentsDir, "codex-agent", ""); err != nil {
 		t.Fatal(err)
 	}
 	allMarkdown, allJSONL := zipContents(t, all.Bytes())
@@ -64,6 +67,67 @@ func TestWriteZIPScopesIterationAndIncludesReadableAndRawRecords(t *testing.T) {
 		!strings.Contains(allMarkdown, "iter-with-transcript-only") || !strings.Contains(allJSONL, "iter-with-transcript-only") {
 		t.Fatalf("full export is incomplete:\n%s\n%s", allMarkdown, allJSONL)
 	}
+}
+
+func TestWriteZIPPreservesLargeTranscriptOrderAndBodies(t *testing.T) {
+	agentsDir := t.TempDir()
+	layout := agentdir.New(agentsDir, "large-agent")
+	if err := layout.EnsureIteration("iter-large"); err != nil {
+		t.Fatal(err)
+	}
+	const count = 2000
+	for i := 0; i < count; i++ {
+		entry := aiproxy.TranscriptEntry{
+			Meta:     aiproxy.AIRequest{ID: fmt.Sprintf("request-%04d", i), Agent: "large-agent", Iteration: "iter-large", Provider: "openai", Model: "gpt-test"},
+			Request:  []byte(fmt.Sprintf(`{"input":"request-%04d"}`, i)),
+			Response: []byte(fmt.Sprintf(`{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"response-%04d"}]}]}`, i)),
+		}
+		if err := aiproxy.AppendTranscript(agentsDir, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var output bytes.Buffer
+	if err := WriteZIP(context.Background(), &output, agentsDir, "large-agent", "iter-large"); err != nil {
+		t.Fatal(err)
+	}
+	_, jsonl := zipContents(t, output.Bytes())
+	lines := strings.Split(strings.TrimSpace(jsonl), "\n")
+	if len(lines) != count {
+		t.Fatalf("JSONL records = %d, want %d", len(lines), count)
+	}
+	for i, line := range lines {
+		if !strings.Contains(line, fmt.Sprintf(`"call_index":%d`, i)) || !strings.Contains(line, fmt.Sprintf("request-%04d", i)) || !strings.Contains(line, fmt.Sprintf("response-%04d", i)) {
+			t.Fatalf("record %d lost order or bodies: %s", i, line)
+		}
+	}
+}
+
+func TestWriteMarkdownStopsBetweenAuditEventsWhenCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	writer := &cancelAfterWriter{cancel: cancel, needle: "first"}
+	events := []audit.Event{
+		{IterationID: "iter-1", TS: "t1", Type: "status", Data: map[string]any{"message": "first"}},
+		{IterationID: "iter-1", TS: "t2", Type: "status", Data: map[string]any{"message": "second"}},
+	}
+	err := writeMarkdown(ctx, writer, t.TempDir(), "agent", events, []string{"iter-1"})
+	if !errors.Is(err, context.Canceled) || strings.Contains(writer.String(), "second") {
+		t.Fatalf("error = %v, output = %q; want cancellation before second event", err, writer.String())
+	}
+}
+
+type cancelAfterWriter struct {
+	bytes.Buffer
+	cancel func()
+	needle string
+}
+
+func (w *cancelAfterWriter) Write(body []byte) (int, error) {
+	n, err := w.Buffer.Write(body)
+	if strings.Contains(w.String(), w.needle) {
+		w.cancel()
+	}
+	return n, err
 }
 
 func TestToolDetailRendersLocalShellCommand(t *testing.T) {
