@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { getPluginContributionsOn, type ApiTarget, type PluginContribution } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useOutletContext } from "react-router-dom";
+import { getGlobalAgentShellScriptOn, getPluginContributionsOn, setGlobalAgentShellScriptOn, type ApiTarget, type PluginContribution } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { ShellScriptEditor } from "@/components/ShellScriptEditor";
 import { SupportBundle } from "@/components/SupportBundle";
 
 const SECTIONS = [
@@ -107,6 +108,9 @@ function Copy({ title, children }: { title: string; children: React.ReactNode })
 }
 
 export function GeneralSettings() {
+  const target = useOutletContext<ApiTarget>();
+  const load = useCallback(async () => (await getGlobalAgentShellScriptOn(target)).script, [target]);
+  const save = useCallback((script: string) => setGlobalAgentShellScriptOn(target, script), [target]);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="space-y-3">
@@ -115,6 +119,12 @@ export function GeneralSettings() {
           Tariboy keeps agent sessions, images, and host connections in one workspace.
         </p>
       </div>
+      <ShellScriptEditor
+        title="Global Agent Shell Script"
+        description="Bash commands sourced before every agent iteration on this host."
+        load={load}
+        save={save}
+      />
       <SupportBundle />
     </div>
   );

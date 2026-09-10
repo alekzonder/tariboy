@@ -93,6 +93,7 @@ function stubFetch(
   },
 ) {
   const server: Record<string, unknown> = { ...view, ...(opts?.view ?? {}) };
+  let shellScript = String(server.shell_script ?? "");
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((path: string, init?: RequestInit) => {
@@ -111,6 +112,9 @@ function stubFetch(
         } as Response);
       }
       if (init?.method === "POST") {
+        if (path.endsWith("/shell-script")) {
+          shellScript = (body as { script: string }).script;
+        }
         const key = Object.keys(SERVER_FIELD).find((suffix) =>
           path.endsWith(suffix),
         );
@@ -129,7 +133,8 @@ function stubFetch(
         opts?.apply?.(server, path, body);
       }
       let result: unknown = server;
-      if (path.endsWith("/secrets")) result = { keys: [], count: 0 };
+      if (path.endsWith("/shell-script")) result = { script: shellScript };
+      else if (path.endsWith("/secrets")) result = { keys: [], count: 0 };
       else if (path.endsWith("/retention"))
         result = {
           keep_iterations: 0,
@@ -201,6 +206,38 @@ it("saves Goal settings serially on the explicit host", async () => {
   ).toEqual([{ enabled: false }, { seconds: 120 }, { seconds: 90 }]);
   expect(calls.find((call) => call.method === "POST")?.headers).toMatchObject({
     Authorization: "Bearer secret",
+  });
+});
+
+it("loads and saves an agent shell script on the explicit host", async () => {
+  const target: Daemon = {
+    id: "remote",
+    label: "Remote",
+    baseURL: "https://remote.test",
+    token: "secret",
+  };
+  const calls: Call[] = [];
+  stubFetch(calls, { view: { shell_script: "export OLD=1" } });
+  renderPage(target);
+
+  const script = await screen.findByLabelText("Agent Shell Script");
+  await waitFor(() => expect(script).toHaveValue("export OLD=1"));
+  fireEvent.change(script, { target: { value: "export NEW=1" } });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Save agent shell script" }),
+  );
+
+  await waitFor(() =>
+    expect(posts(calls)).toContain(
+      "https://remote.test/api/agents/alpha/shell-script",
+    ),
+  );
+  expect(
+    calls.find(
+      (call) => call.method === "POST" && call.path.endsWith("/shell-script"),
+    )?.body,
+  ).toEqual({
+    script: "export NEW=1",
   });
 });
 

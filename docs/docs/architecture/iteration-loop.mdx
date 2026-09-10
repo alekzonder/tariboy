@@ -85,6 +85,13 @@ environment values, prompts, secrets, working directories, or user files. This
 preflight improves the diagnosis but cannot remove the normal race in which an
 executable disappears before process launch.
 
+Immediately before the unchanged harness command is executed, Bash sources
+`<base-dir>/global-agent-shell.sh`, then
+`<base-dir>/agents/<name>/agent-shell.sh`. Missing or empty files do nothing;
+exports and filesystem effects from either script are available to that
+iteration. A source-time failure prevents the harness from starting and follows
+the existing `harness_error` lifecycle.
+
 For a schema-v2 image with skills, the launch gate prepares
 `agents/<agent>/image-bridges/<image-digest>/<adapter-contract>/<harness>` before
 an image is promoted or an iteration row is created. The bridge contains copied

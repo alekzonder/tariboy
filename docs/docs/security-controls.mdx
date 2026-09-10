@@ -73,6 +73,10 @@ source snapshot. Symlinks, missing or non-regular files, and oversized prompt
 files are rejected. Agent-authored builds additionally confine source and all
 relative or absolute skill references to that agent's workdir.
 Native host metadata and exported support archives use owner-only permissions.
+The global `<base-dir>/global-agent-shell.sh` and per-agent
+`<base-dir>/agents/<name>/agent-shell.sh` scripts are owner-only, atomically
+written only after `bash -n` validation; a rejected value cannot replace the
+last valid script.
 
 User Stores clone Git sources on the selected daemon host into its own
 `<base-dir>/stores/<name>/`, or use an explicitly registered local directory.
@@ -174,8 +178,9 @@ files for the newest 10 iterations of each agent on that host. It reads only
 
 The collector never includes credentials or environment values (including
 `PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
-workdirs, configured cwd contents, image/plugin state, provisioning replies, or
-user files. It does not open agent environment configuration. Harness output can
+workdirs, configured cwd contents, global or agent shell scripts, image/plugin
+state, provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can
 nevertheless contain arbitrary private natural language, so inspect the ZIP
 before sending it under your organization's support data policy. Export does
 not upload anything automatically.
