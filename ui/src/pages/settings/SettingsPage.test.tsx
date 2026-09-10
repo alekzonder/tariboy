@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage, { GeneralSettings } from "./SettingsPage";
@@ -102,5 +102,58 @@ describe("SettingsPage", () => {
     );
     expect(getGlobalAgentShellScriptOn).toHaveBeenCalledWith(target);
     expect(setGlobalAgentShellScriptOn).toHaveBeenCalledWith(target, "if then");
+  });
+
+  it("blocks shell-script editing and saving until its initial load succeeds", async () => {
+    const target = {
+      id: "remote-1",
+      label: "Remote",
+      baseURL: "https://remote.test",
+      token: "secret",
+    };
+    let resolveLoad!: (value: { script: string }) => void;
+    vi.mocked(getGlobalAgentShellScriptOn).mockReturnValue(
+      new Promise((resolve) => { resolveLoad = resolve; }),
+    );
+    render(
+      <MemoryRouter>
+        <Routes>
+          <Route element={<Outlet context={target} />}>
+            <Route index element={<GeneralSettings />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const script = await screen.findByLabelText("Global Agent Shell Script");
+    const save = screen.getByRole("button", { name: "Save global agent shell script" });
+    expect(script).toBeDisabled();
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(setGlobalAgentShellScriptOn).not.toHaveBeenCalled();
+    fireEvent.change(script, { target: { value: "if then" } });
+    expect(script).toHaveValue("");
+
+    resolveLoad({ script: "export READY=1" });
+    await waitFor(() => expect(script).toBeEnabled());
+    expect(script).toHaveValue("export READY=1");
+    expect(save).toBeEnabled();
+  });
+
+  it("keeps shell-script editing and saving unavailable after load failure", async () => {
+    vi.mocked(getGlobalAgentShellScriptOn).mockRejectedValue(new Error("load failed"));
+    render(
+      <MemoryRouter>
+        <Routes>
+          <Route element={<Outlet context={null} />}>
+            <Route index element={<GeneralSettings />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("load failed");
+    expect(screen.getByLabelText("Global Agent Shell Script")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save global agent shell script" })).toBeDisabled();
   });
 });
