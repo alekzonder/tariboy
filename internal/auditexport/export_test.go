@@ -22,7 +22,7 @@ func TestWriteZIPScopesIterationAndIncludesReadableAndRawRecords(t *testing.T) {
 	layout := agentdir.New(agentsDir, "codex-agent")
 	clock := time.Date(2026, 8, 18, 16, 29, 10, 0, time.UTC)
 	log := audit.Open(layout.AuditLog(), func() time.Time { return clock })
-	log.Record("iteration_started", "system", "iter-1", map[string]any{"trigger": "manual"})
+	log.Record("iteration_started", "system", "iter-1", map[string]any{"trigger": "manual", "image_ref": "reviewer:latest", "image_version": "1.2.3", "image_digest": "sha256:abc"})
 	log.Record("status", "system", "iter-1", map[string]any{"message": "reviewing audit UI"})
 	log.Record("iteration_started", "system", "iter-2", map[string]any{"trigger": "timer"})
 	for _, id := range []string{"iter-1", "iter-2", "iter-with-transcript-only"} {
@@ -44,7 +44,7 @@ func TestWriteZIPScopesIterationAndIncludesReadableAndRawRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	markdown, jsonl := zipContents(t, selected.Bytes())
-	for _, want := range []string{"# Audit log — codex-agent", "Iteration `iter-1`", "reviewing audit UI", "Command", "rg --files"} {
+	for _, want := range []string{"# Audit log — codex-agent", "Iteration `iter-1`", "reviewer:latest", "1.2.3", "sha256:abc", "reviewing audit UI", "Command", "rg --files"} {
 		if !strings.Contains(markdown, want) {
 			t.Fatalf("audit.md missing %q:\n%s", want, markdown)
 		}
@@ -52,7 +52,7 @@ func TestWriteZIPScopesIterationAndIncludesReadableAndRawRecords(t *testing.T) {
 	if strings.Contains(markdown, "iter-2") || strings.Contains(jsonl, "iter-2") {
 		t.Fatalf("iteration export leaked another iteration:\n%s\n%s", markdown, jsonl)
 	}
-	for _, want := range []string{`"record_type":"audit_event"`, `"record_type":"proxy_transcript"`, `secret prompt`, `rg --files`} {
+	for _, want := range []string{`"record_type":"audit_event"`, `"image_version":"1.2.3"`, `"record_type":"proxy_transcript"`, `secret prompt`, `rg --files`} {
 		if !strings.Contains(jsonl, want) {
 			t.Fatalf("audit.jsonl missing %q:\n%s", want, jsonl)
 		}

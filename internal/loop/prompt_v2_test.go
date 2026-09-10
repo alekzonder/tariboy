@@ -191,8 +191,8 @@ func TestRenderPromptTemplateRejectsUnsafeLayerPath(t *testing.T) {
 }
 
 func TestFormatRuntimeIdentityUsesCurrentIterationImageAndCWD(t *testing.T) {
-	want := "# You are agent worker\nimage: reviewer:v3\nimage-digest: sha256:abc\ncwd: /srv/work\niteration: worker-1"
-	if got := FormatRuntimeIdentity("worker", "reviewer:v3", "sha256:abc", "/srv/work", "worker-1"); got != want {
+	want := "# You are agent worker\nimage: reviewer:latest\nimage-version: 3.4.5\nimage-digest: sha256:abc\ncwd: /srv/work\niteration: worker-1"
+	if got := FormatRuntimeIdentity("worker", "reviewer:latest", "3.4.5", "sha256:abc", "/srv/work", "worker-1"); got != want {
 		t.Fatalf("identity = %q, want %q", got, want)
 	}
 }

@@ -21,6 +21,7 @@ import (
 // message preparation begins.
 type activatedImage struct {
 	PromptTemplateSHA256 string
+	ImageVersion         string
 	Skills               harness.SkillLaunchConfig
 }
 
@@ -121,7 +122,7 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 				return activatedImage{}, err
 			}
 		}
-		return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, Skills: skills}, nil
+		return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, ImageVersion: manifest.ImageVersion, Skills: skills}, nil
 	}
 	// A crash can occur after candidate shims are written but before the
 	// candidate identity is promoted in the database. The database remains
@@ -228,7 +229,7 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 		return activatedImage{}, err
 	}
 	*ag = updated
-	return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, Skills: skillLaunch}, nil
+	return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, ImageVersion: manifest.ImageVersion, Skills: skillLaunch}, nil
 }
 
 func (m *Manager) prepareImageSkillBridge(ag agent.Agent, manifest image.Manifest, imageDir string) (harness.SkillLaunchConfig, error) {

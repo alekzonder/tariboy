@@ -92,7 +92,7 @@ tariboy has three command surfaces:
 | `tariboy judge automation validate --json JSON` | Validate raw JSON in `tariboyd` without applying it |
 | `tariboy judge automation apply --json JSON` | Apply JSON, create `JUDGE`/`IMPROVE`, and reconcile the recurring schedule without starting a review |
 | `tariboy judge automation run-once --limit N` | Queue one immediate cycle through the existing scheduler |
-| `tariboy iteration inspect` | Show one iteration |
+| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, and prompt-template hash |
 | `tariboy iteration logs` | Print an iteration's harness logs |
 | `tariboy iteration ls` | List an agent's iterations |
 | `tariboy logs` | Stream or print an agent's events (-f to follow) |

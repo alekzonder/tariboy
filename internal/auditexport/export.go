@@ -198,6 +198,11 @@ func writeEventMarkdown(dst io.Writer, event audit.Event) error {
 	switch event.Type {
 	case "iteration_started":
 		label, detail = "Started", value("trigger")
+		for _, field := range []struct{ label, value string }{{"image", value("image_ref")}, {"version", value("image_version")}, {"digest", value("image_digest")}} {
+			if field.value != "" {
+				detail += fmt.Sprintf("; %s: %s", field.label, field.value)
+			}
+		}
 	case "iteration_finished", "iteration_done":
 		label, detail = "Finished", value("status")
 	case "status":

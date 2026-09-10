@@ -20,6 +20,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagecontract"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 )
 
 var portablePluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -33,6 +34,7 @@ const (
 
 type v2PortableManifest struct {
 	SchemaVersion        int                `json:"schema_version"`
+	ImageVersion         string             `json:"image_version,omitempty"`
 	Name                 string             `json:"name"`
 	Tag                  string             `json:"tag"`
 	BuiltAt              string             `json:"built_at"`
@@ -173,6 +175,11 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 	if strict.SchemaVersion != 2 || strict.Name != ref.Name || strict.Tag != ref.Tag || strict.PromptTemplateSHA256 == "" {
 		return errors.New("invalid schema-v2 manifest identity")
 	}
+	if strict.ImageVersion != "" {
+		if err := imagefile.ValidateImageVersion(strict.ImageVersion); err != nil {
+			return err
+		}
+	}
 	if _, err := time.Parse(time.RFC3339, strict.BuiltAt); err != nil {
 		return errors.New("invalid schema-v2 manifest built_at")
 	}
@@ -271,6 +278,7 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 		}
 	}
 	manifest.Plugins = make([]ManifestPlugin, 0, len(strict.Plugins))
+	manifest.ImageVersion = strict.ImageVersion
 	for _, plugin := range strict.Plugins {
 		manifest.Plugins = append(manifest.Plugins, ManifestPlugin{Name: plugin.Name})
 	}

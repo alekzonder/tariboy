@@ -180,7 +180,7 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	if err != nil {
 		return Manifest{}, err
 	}
-	manifest := Manifest{SchemaVersion: 2, Name: ref.Name, Tag: ref.Tag, BuiltAt: clock().UTC().Format(time.RFC3339), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
+	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, Name: ref.Name, Tag: ref.Tag, BuiltAt: clock().UTC().Format(time.RFC3339), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
 	if manifest.Plugins == nil {
 		manifest.Plugins = []ManifestPlugin{}
 	}
@@ -209,13 +209,14 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 	tw := tar.NewWriter(gz)
 	manifestJSON, err := json.MarshalIndent(struct {
 		SchemaVersion        int              `json:"schema_version"`
+		ImageVersion         string           `json:"image_version,omitempty"`
 		Name                 string           `json:"name"`
 		Tag                  string           `json:"tag"`
 		BuiltAt              string           `json:"built_at"`
 		Plugins              []ManifestPlugin `json:"plugins"`
 		Skills               []ManifestSkill  `json:"skills"`
 		PromptTemplateSHA256 string           `json:"prompt_template_sha256"`
-	}{man.SchemaVersion, man.Name, man.Tag, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256}, "", "  ")
+	}{man.SchemaVersion, man.ImageVersion, man.Name, man.Tag, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256}, "", "  ")
 	if err != nil {
 		tmp.Close()
 		return "", err

@@ -158,6 +158,12 @@ fields, and comments; YAML formatting may change. Missing or invalid versions
 produce an error without changing the file. Old sources may omit the field
 for build compatibility, but version commands require it.
 
+The runnable manifest preserves `image_version` independently of its ref tag.
+For mutable refs such as `latest`, every new iteration snapshots the source
+version with the ref and digest, exposes it through `iteration inspect`, and
+includes it in `runtime: identity` and iteration audit exports. Older runnable
+images and historical iterations simply omit the version.
+
 ## Schema version 2
 
 Schema v2 is strict and accepts only `schema_version`, `image_version`,
@@ -274,8 +280,8 @@ path in `prompts`.
 Build the image in **Images**, then open the agent's **Configuration** tab and
 select it under **Agent image**. The choice is persisted as pending. Tariboy
 does not interrupt a running iteration: it validates and activates the image
-through the next iteration's launch gate, then snapshots the image ref, digest,
-and prompt-template hash for that iteration.
+through the next iteration's launch gate, then snapshots the image ref, source
+version, digest, and prompt-template hash for that iteration.
 
 Activation changes only image bytes, plugin capabilities, and image-owned
 shims. It preserves harness, model, effort, environment, interactive and loop

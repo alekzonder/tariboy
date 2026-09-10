@@ -189,6 +189,7 @@ func TestBuildV2PackagesCanonicalSkillsAndModes(t *testing.T) {
 	source := t.TempDir()
 	skillDir := writeTestSkill(t, filepath.Join(source, "skills"), "code-review")
 	src := &imagefile.V2{
+		ImageVersion:  "1.2.3",
 		SchemaVersion: 2,
 		Dir:           source,
 		Skills:        []imagefile.SkillEntry{{Dir: "./skills/code-review"}},
@@ -201,6 +202,9 @@ func TestBuildV2PackagesCanonicalSkillsAndModes(t *testing.T) {
 	}
 	if len(manifest.Skills) != 1 {
 		t.Fatalf("skills = %#v", manifest.Skills)
+	}
+	if manifest.ImageVersion != "1.2.3" {
+		t.Fatalf("image version = %q, want 1.2.3", manifest.ImageVersion)
 	}
 	got := manifest.Skills[0]
 	if got.Name != "code-review" || got.Description != "Use this skill for image tests." || got.Source != "./skills/code-review" || got.Category != "source" || got.ArchiveRoot != "skills/code-review" || got.FileCount != 2 || got.Size <= 0 || len(got.TreeSHA256) != 64 {
@@ -222,6 +226,24 @@ func TestBuildV2PackagesCanonicalSkillsAndModes(t *testing.T) {
 	}
 	if body, err := store.ReadFile(ref, "skills/code-review/scripts/check.sh"); err != nil || string(body) != "#!/bin/sh\nexit 0\n" {
 		t.Fatalf("packed script = %q, %v", body, err)
+	}
+}
+
+func TestPortableV2ArchiveRejectsInvalidImageVersion(t *testing.T) {
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "versioned", Tag: "latest"}
+	if _, err := BuildV2(&imagefile.V2{SchemaVersion: 2, ImageVersion: "1.2.3", Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, store, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := store.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive = rewriteArchiveMember(t, archive, "manifest.json", func(body []byte) []byte {
+		return bytes.Replace(body, []byte(`"image_version": "1.2.3"`), []byte(`"image_version": "latest"`), 1)
+	})
+	if _, err := ValidatePortableArchive(archive, ref); err == nil || !strings.Contains(err.Error(), "image_version") {
+		t.Fatalf("ValidatePortableArchive error = %v", err)
 	}
 }
 
@@ -337,7 +359,7 @@ func TestRetagPortableV2ArchivePreservesSkillModes(t *testing.T) {
 	writeTestSkill(t, filepath.Join(source, "skills"), "retag-skill")
 	store := &Store{Dir: t.TempDir()}
 	original := Ref{Name: "original-skill", Tag: "v1"}
-	if _, err := BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Skills: []imagefile.SkillEntry{{Dir: "./skills/retag-skill"}}}, imagefile.ResolveRoots{}, original, store, time.Now, nil); err != nil {
+	if _, err := BuildV2(&imagefile.V2{SchemaVersion: 2, ImageVersion: "1.2.3", Dir: source, Skills: []imagefile.SkillEntry{{Dir: "./skills/retag-skill"}}}, imagefile.ResolveRoots{}, original, store, time.Now, nil); err != nil {
 		t.Fatal(err)
 	}
 	archive, err := store.ArchiveBytes(original)
@@ -354,6 +376,9 @@ func TestRetagPortableV2ArchivePreservesSkillModes(t *testing.T) {
 	}
 	if got := archiveHeaders(t, retagged)["skills/retag-skill/scripts/check.sh"].Mode; got != 0o700 {
 		t.Fatalf("retagged executable mode = %#o", got)
+	}
+	if manifest, err := store.Inspect(target); err != nil || manifest.ImageVersion != "1.2.3" {
+		t.Fatalf("retagged image version = %q, %v", manifest.ImageVersion, err)
 	}
 }
 
