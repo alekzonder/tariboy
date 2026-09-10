@@ -4,7 +4,9 @@ import { useAgentName } from "@/lib/agent";
 import {
   agentGetOn,
   agentPostOn,
+  getAgentShellScriptOn,
   getActiveDaemon,
+  setAgentShellScriptOn,
   type ApiTarget,
 } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
@@ -24,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { SecretsPanel } from "@/components/SecretsPanel";
 import { RetentionPanel } from "@/components/RetentionPanel";
+import { ShellScriptEditor } from "@/components/ShellScriptEditor";
 
 // Operator-selectable harnesses. This is intentionally a SUBSET of the backend
 // allowlist (internal/harness.Get() = claude | codex | opencode | stub): 'stub'
@@ -821,6 +824,14 @@ export default function AgentSettings({
       return null;
     }
   }, [name, target]);
+  const loadShellScript = useCallback(
+    async () => (await getAgentShellScriptOn(target, name)).script,
+    [name, target],
+  );
+  const saveShellScript = useCallback(
+    (script: string) => setAgentShellScriptOn(target, name, script),
+    [name, target],
+  );
   // Deferred a microtask so the initial load is not a synchronous setState
   // inside the effect (the same pattern the Configuration tab uses).
   useEffect(() => {
@@ -845,6 +856,12 @@ export default function AgentSettings({
         view={view}
         reload={reload}
         target={target}
+      />
+      <ShellScriptEditor
+        title="Agent Shell Script"
+        description="Bash commands sourced after the global script before this agent starts an iteration."
+        load={loadShellScript}
+        save={saveShellScript}
       />
       <SecretsPanel name={name} />
       <RetentionPanel name={name} />

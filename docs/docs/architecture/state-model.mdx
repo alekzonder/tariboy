@@ -23,6 +23,14 @@ The next attributed request updates the timestamp and live state derives as
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
 
+## Filesystem-backed shell scripts
+
+The global pre-iteration script at `<base-dir>/global-agent-shell.sh` and an
+agent script at `<base-dir>/agents/<name>/agent-shell.sh` are intentionally not
+SQLite fields. The daemon validates a complete submitted value with `bash -n`
+before atomically replacing an owner-only file. A rejected value leaves the
+previous file unchanged; a missing or empty file is a no-op at launch.
+
 ## Pricing and Usage snapshots
 
 Model-price state has three layers with distinct ownership. Operator-managed

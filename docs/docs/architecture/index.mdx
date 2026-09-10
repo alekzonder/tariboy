@@ -112,7 +112,11 @@ and removes its partial file and unique directory after any failed upload.
 The data directory also holds each agent's working/configuration files and
 iteration evidence. SQLite owns agents, iterations, channels/deliveries, tasks,
 workflow execution history, idempotency keys, and durable outboxes. The
-owner-only proxy handoff file (`aiproxy-handoff.json`) intentionally sits
+global agent shell script is the deliberate filesystem-backed exception:
+`<base-dir>/global-agent-shell.sh`; an agent may additionally have
+`<base-dir>/agents/<name>/agent-shell.sh`. Both are owner-only files, written
+atomically after Bash validation, rather than SQLite configuration.
+The owner-only proxy handoff file (`aiproxy-handoff.json`) intentionally sits
 outside SQLite, audit logs, and support bundles because it contains active,
 short-lived proxy leases required to adopt live harnesses after restart.
 The same data directory contains `model-prices-litellm.json`, an owner-only

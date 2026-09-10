@@ -291,6 +291,17 @@ export const agentPostOn = <T>(
 ) => apiOn<T>(resolveTarget(target), "POST", agentApiPath(name, rest), body);
 export const agentGetOn = <T>(target: ApiTarget, name: string, rest: string) =>
   apiOn<T>(resolveTarget(target), "GET", agentApiPath(name, rest));
+export interface AgentShellScript {
+  script: string;
+}
+export const getGlobalAgentShellScriptOn = (target: ApiTarget) =>
+  apiOn<AgentShellScript>(resolveTarget(target), "GET", "/api/daemon/agent-shell-script");
+export const setGlobalAgentShellScriptOn = (target: ApiTarget, script: string) =>
+  apiOn<AgentShellScript>(resolveTarget(target), "POST", "/api/daemon/agent-shell-script", { script });
+export const getAgentShellScriptOn = (target: ApiTarget, name: string) =>
+  agentGetOn<AgentShellScript>(target, name, "shell-script");
+export const setAgentShellScriptOn = (target: ApiTarget, name: string, script: string) =>
+  agentPostOn<AgentShellScript>(target, name, "shell-script", { script });
 // force=true kills a live agent so it can be removed at all (a plain DELETE
 // 400s on a running/idle agent: "stop it first or use --force"). purge=true
 // hard-deletes the DB row + durable data (iterations/audit) + whole tree, so the
