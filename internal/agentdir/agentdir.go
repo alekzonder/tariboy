@@ -44,6 +44,7 @@ func (l Layout) ImageBridgesDir() string { return filepath.Join(l.Root, "image-b
 func (l Layout) BinDir() string          { return filepath.Join(l.Root, "bin") }
 func (l Layout) Sock() string            { return filepath.Join(l.sockDir(), l.Name+".sock") }
 func (l Layout) ContextPath() string     { return filepath.Join(l.Root, "CONTEXT.md") }
+func (l Layout) ShellScriptPath() string { return filepath.Join(l.Root, "agent-shell.sh") }
 func (l Layout) IterationsDir() string   { return filepath.Join(l.Root, "iterations") }
 
 // AuditLog is the per-agent append-only audit log (spans iterations). Kept at the
