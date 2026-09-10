@@ -2932,6 +2932,35 @@ func TestLiveState(t *testing.T) {
 	assertLiveState(t, m, "ls", "error") // error_reason wins
 }
 
+func TestLiveStateReportsAndClearsAIStall(t *testing.T) {
+	r := &fakeRunner{}
+	m, as, _, _ := newManager(t, r)
+	now := time.Date(2026, 9, 10, 2, 10, 0, 0, time.UTC)
+	m.cfg.Clock = func() time.Time { return now }
+	a := agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true, LoopEnabled: true,
+		HarnessType: "stub", AIStallTimeoutS: 300}
+	if err := as.Create(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.CreateIteration(agent.Iteration{
+		ID: "worker-1", Agent: "worker", Status: "running",
+		StartedAt: now.Add(-6 * time.Minute).Format(time.RFC3339Nano),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "worker-1"}
+	assertLiveState(t, m, "worker", "error")
+
+	if err := as.RecordAIRequest("worker", "worker-1", now); err != nil {
+		t.Fatal(err)
+	}
+	assertLiveState(t, m, "worker", "running")
+	stored, _ := as.Get("worker")
+	if !stored.LoopEnabled {
+		t.Fatal("informational AI stall disabled the loop")
+	}
+}
+
 func assertLiveState(t *testing.T, m *Manager, name, want string) {
 	t.Helper()
 	got, err := m.LiveState(name)

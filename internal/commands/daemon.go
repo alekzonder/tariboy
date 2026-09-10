@@ -62,6 +62,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, loopStrSetting("loop.on-timeout", "on-timeout", []string{"restart", "stop"}))
 	mustRegister(r, loopStrSetting("loop.on-error", "on-error", []string{"restart", "stop"}))
 	mustRegister(r, loopIntSetting("loop.max-idle", "max-idle"))
+	mustRegister(r, loopIntSetting("loop.ai-stall-timeout", "ai-stall-timeout"))
 	mustRegister(r, userPromptGet())
 	mustRegister(r, userPromptSet())
 	mustRegister(r, contextGet())

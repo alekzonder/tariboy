@@ -173,6 +173,15 @@ const LOOP_FIELDS: readonly SectionField[] = [
     read: (v) => String(v.max_idle_iterations ?? 0),
     ...loopInt("max-idle", 0),
   },
+  {
+    key: "ai-stall-timeout",
+    label: "AI inactivity timeout",
+    helper: "Seconds without an AI-proxy request before showing an informational error.",
+    numeric: true,
+    minimum: 1,
+    read: (v) => String(v.ai_stall_timeout_s ?? 300),
+    ...loopInt("ai-stall-timeout", 1),
+  },
 ];
 
 const RUNTIME_FIELDS: readonly SectionField[] = [
@@ -558,7 +567,7 @@ function LoopEditor({
     reload,
     "Loop settings saved",
   );
-  const [interval, timeout, hard, onTimeout, onError, maxIdle] = LOOP_FIELDS;
+  const [interval, timeout, hard, onTimeout, onError, maxIdle, aiStall] = LOOP_FIELDS;
 
   return (
     <Card>
@@ -586,6 +595,7 @@ function LoopEditor({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <DraftField field={maxIdle} section={section} />
+          <DraftField field={aiStall} section={section} />
         </div>
 
         <DraftFooter section={section} saveLabel="Save loop settings" />

@@ -435,6 +435,7 @@ func Run(ctx context.Context, o Options) error {
 		Tokens: proxyTokens, Pricing: pricing, Store: aiStore, Router: router,
 		AgentsDir: p.AgentsDir(), Clock: time.Now, Log: log,
 		Ingest:        ingester.Enqueue,
+		Activity:      as.RecordAIRequest,
 		GroupSnapshot: aiStore.CurrentGroup,
 		Budget:        budgetCache,
 		Policy:        policyCache,

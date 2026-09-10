@@ -365,6 +365,13 @@ operations: each selection is persisted without confirmation or an automatic
 restart, takes effect the next time the agent starts, and leaves the timing of
 any restart under the operator's control.
 
+The Loop section also exposes the positive **AI inactivity timeout** in seconds,
+defaulting to 300 per agent. When a running iteration exceeds it without an
+attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
+card shows the informational reason. The controls remain enabled because this
+signal does not stop the loop or iteration; the next request restores
+`state=running`.
+
 The **Messages & Channels** section uses that same draft contract for the
 positive whole-number `messages_batch` and `messages_max_queue` fields.
 New-agent drafts use a maximum queue of 100, while Clone keeps the source

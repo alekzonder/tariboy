@@ -59,6 +59,7 @@ type Config struct {
 	// GroupSnapshot resolves membership once while finalizing request metadata.
 	// An error is diagnostic-only; the request remains recorded as ungrouped.
 	GroupSnapshot func(agent string) (id, name string, err error)
+	Activity      func(agent, iteration string, at time.Time) error
 
 	Ingest func(AIRequest)                         // Task 7
 	Emit   func(agent string, data map[string]any) // Task 9
@@ -501,6 +502,11 @@ func pathAtOrBelow(path, base string) bool {
 func (p *Proxy) auth(next Handler) Handler {
 	return func(ex *Exchange) error {
 		if ex.Attr.Agent != "" && ex.Attr.Iteration != "" {
+			if p.cfg.Activity != nil {
+				if err := p.cfg.Activity(ex.Attr.Agent, ex.Attr.Iteration, ex.Start); err != nil {
+					p.cfg.Log.Warn("record proxy activity", "agent", ex.Attr.Agent, "iteration", ex.Attr.Iteration, "err", err)
+				}
+			}
 			return next(ex)
 		}
 		ex.Status = "auth_error"

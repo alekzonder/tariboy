@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -48,8 +50,12 @@ func loopIntSetting(path, field string) registry.Command {
 			}
 			key := fieldKey(field)
 			if v, ok := asInt(p["value"]); ok {
-				if v < 0 {
-					return nil, api.UserError{Code: "bad_value", Msg: field + " must be >= 0"}
+				min := 0
+				if field == "ai-stall-timeout" {
+					min = 1
+				}
+				if v < min {
+					return nil, api.UserError{Code: "bad_value", Msg: fmt.Sprintf("%s must be >= %d", field, min)}
 				}
 				setIntField(&a, field, v)
 				if err := agentStore(c).Update(a); err != nil {
@@ -169,6 +175,8 @@ func fieldKey(field string) string {
 		return "on_error"
 	case "max-idle":
 		return "max_idle_iterations"
+	case "ai-stall-timeout":
+		return "ai_stall_timeout_s"
 	}
 	return field
 }
@@ -183,6 +191,8 @@ func setIntField(a *agent.Agent, field string, v int) {
 		a.HardTimeoutS = v
 	case "max-idle":
 		a.MaxIdleIterations = v
+	case "ai-stall-timeout":
+		a.AIStallTimeoutS = v
 	}
 }
 
@@ -196,6 +206,8 @@ func getIntField(a agent.Agent, field string) int {
 		return a.HardTimeoutS
 	case "max-idle":
 		return a.MaxIdleIterations
+	case "ai-stall-timeout":
+		return a.AIStallTimeoutS
 	}
 	return 0
 }

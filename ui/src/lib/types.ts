@@ -62,6 +62,7 @@ export interface AgentView {
   on_timeout: string;
   on_error: string;
   max_idle_iterations: number;
+  ai_stall_timeout_s?: number;
   user_prompt: string;
   env: Record<string, string>;
   plugins: string[];
@@ -94,6 +95,7 @@ export interface AgentStatus {
   // has a halt to report: halt_kind is "error" or "idle_limit".
   halt_kind?: string;
   halt_reason?: string;
+  error_reason?: string;
   // Present while an iteration is running.  The daemon's clock accompanies the
   // snapshot so countdowns do not assume the browser clock is correct.
   server_now?: string;

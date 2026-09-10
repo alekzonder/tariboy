@@ -2285,7 +2285,8 @@ func (m *Manager) currentIterationTargetLocked(name string) (iterationTarget, er
 // else, reporting "stopped" regardless of a stale error_reason or
 // loop_enabled intent; then error_reason wins; then an actually-executing
 // iteration (a live engine with a current id, or a live iteration on disk
-// during the post-crash adopt window) reports "running"; otherwise an
+// during the post-crash adopt window) reports "running" unless its AI-proxy
+// activity is stale; otherwise an
 // enabled agent with nothing live is "idle".
 func (m *Manager) LiveState(name string) (string, error) {
 	a, err := m.cfg.Store.Get(name)
@@ -2301,9 +2302,26 @@ func (m *Manager) LiveState(name string) (string, error) {
 		return "error", nil
 	}
 	m.mu.Lock()
-	rt := m.runs[name]
+	iterationID := ""
+	if rt := m.runs[name]; rt != nil {
+		iterationID = rt.engine.CurrentIterationID()
+	}
+	if iterationID == "" {
+		iterationID = m.adopting[name].ID
+	}
 	m.mu.Unlock()
-	if rt != nil && rt.engine.CurrentIterationID() != "" {
+	if iterationID != "" {
+		it, err := m.cfg.Store.GetIteration(name, iterationID)
+		if err == nil {
+			last := it.StartedAt
+			if it.LastAIRequestAt != "" {
+				last = it.LastAIRequestAt
+			}
+			if at, err := time.Parse(time.RFC3339Nano, last); err == nil &&
+				m.cfg.Clock().Sub(at) >= time.Duration(a.AIStallTimeoutS)*time.Second {
+				return "error", nil
+			}
+		}
 		return "running", nil
 	}
 	if m.hasLiveIterationOnDisk(name) {

@@ -20,6 +20,44 @@ func openStore(t *testing.T) *Store {
 	return NewStore(s)
 }
 
+func TestAIStallSettingsAndActivityPersist(t *testing.T) {
+	s := openStore(t)
+	if err := s.Create(Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.Get("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.AIStallTimeoutS != 300 {
+		t.Fatalf("default AI stall timeout = %d, want 300", a.AIStallTimeoutS)
+	}
+
+	it := Iteration{ID: "worker-1", Agent: "worker", Status: "running", StartedAt: "2026-09-10T02:00:00Z"}
+	if err := s.CreateIteration(it); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 9, 10, 2, 4, 0, 0, time.UTC)
+	if err := s.RecordAIRequest("worker", "worker-1", want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetIteration("worker", "worker-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastAIRequestAt != want.Format(time.RFC3339Nano) {
+		t.Fatalf("last AI request = %q, want %q", got.LastAIRequestAt, want.Format(time.RFC3339Nano))
+	}
+
+	if err := s.RecordAIRequest("worker", "other-iteration", want.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetIteration("worker", "worker-1")
+	if got.LastAIRequestAt != want.Format(time.RFC3339Nano) {
+		t.Fatalf("mismatched iteration changed activity to %q", got.LastAIRequestAt)
+	}
+}
+
 func TestSetPendingImageIfEmptyPreservesExistingAssignment(t *testing.T) {
 	st := openStore(t)
 	if err := st.Create(sampleAgent()); err != nil {
