@@ -196,6 +196,13 @@ func BuildEnv(base []string, agentBin, agentName, iterationID, toolsSock string,
 	return out
 }
 
+const agentShellPrelude = `set -e; for script in "$1" "$2"; do [[ ! -f "$script" ]] || source "$script"; done; shift 2; exec "$@"`
+
+func agentShellCommand(bash, baseDir string, layout agentdir.Layout, harnessArgv []string) []string {
+	argv := []string{bash, "-c", agentShellPrelude, "tariboy-agent-shell", filepath.Join(baseDir, "global-agent-shell.sh"), layout.ShellScriptPath()}
+	return append(argv, harnessArgv...)
+}
+
 func mergeSkillLaunchEnv(base, overlay []string) ([]string, error) {
 	m := make(map[string]string, len(base)+len(overlay))
 	for _, kv := range base {
@@ -948,6 +955,14 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			return fail(err)
 		}
 	}
+	bash, err := harness.FindExecutable("bash", env, cwd)
+	if err != nil {
+		if proxyToken != "" {
+			r.cfg.Proxy.RevokeToken(proxyToken)
+		}
+		return fail(errors.New("bash is required in the iteration environment for agent shell scripts"))
+	}
+	hargv = agentShellCommand(bash, filepath.Dir(r.cfg.AgentsDir), l, hargv)
 
 	// Compose the shim command.
 	tmuxSession := ""
