@@ -51,7 +51,11 @@ function SortableButton({ dragKey, disabled, style, className, ...props }: Butto
     ref={(node) => { drag.setNodeRef(node); drop.setNodeRef(node); }}
     disabled={disabled}
     style={{ ...style, opacity: drag.isDragging ? 0.45 : undefined }}
-    className={cn("cursor-grab active:cursor-grabbing", className)}
+    className={cn(
+      "cursor-grab active:cursor-grabbing",
+      drop.isOver && "ring-1 ring-primary",
+      className,
+    )}
     {...props}
     {...drag.attributes}
     {...drag.listeners}
@@ -150,7 +154,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
         <section key={h.host.id || "__local__"} className="px-2 pb-2">
           <div className="flex items-center justify-between">
             <SortableButton
-              dragKey={dragId("servers", "", h.host.id)}
+              dragKey={dragId("servers", "", h.host.id, undefined, h.host.label)}
               type="button"
               aria-label={`Open server ${h.host.label}`}
               aria-current={selectedHostId === h.host.id ? "page" : undefined}

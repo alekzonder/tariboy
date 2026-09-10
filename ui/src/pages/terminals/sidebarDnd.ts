@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/core";
 
 export type ReorderKind = "servers" | "groups" | "agents";
-export type DragIdentity = [ReorderKind, string, string, string?];
+export type DragIdentity = [ReorderKind, string, string, string?, string?];
 
 export const dragId = (...identity: DragIdentity) => JSON.stringify(identity);
 export const identityFor = (id: string | number) => JSON.parse(String(id)) as DragIdentity;
@@ -13,8 +13,8 @@ export const sameScope = (left: DragIdentity, right: DragIdentity) =>
   left[0] === right[0] && left[1] === right[1] && left[3] === right[3];
 
 const readableDragId = (id: string | number) => {
-  const [kind, , name] = identityFor(id);
-  return `${kind === "groups" ? "team" : kind.slice(0, -1)} ${name}`;
+  const [kind, , name, , label] = identityFor(id);
+  return `${kind === "groups" ? "team" : kind.slice(0, -1)} ${label ?? name}`;
 };
 
 export const rowCollision: typeof closestCenter = (args) => {
@@ -33,7 +33,7 @@ export const sidebarAnnouncements: Announcements = {
   onDragOver: ({ active, over }) => over
     ? `${readableDragId(active.id)} is over ${readableDragId(over.id)}.`
     : `${readableDragId(active.id)} is not over a compatible row.`,
-  onDragEnd: ({ active, over }) => over
+  onDragEnd: ({ active, over }) => over && active.id !== over.id
     ? `Moved ${readableDragId(active.id)} to ${readableDragId(over.id)}.`
     : `Did not move ${readableDragId(active.id)}.`,
   onDragCancel: ({ active }) => `Cancelled moving ${readableDragId(active.id)}.`,

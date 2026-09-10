@@ -239,7 +239,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
       if (sidebarSaveVersions.current.get(id) === version) {
         setSidebarOrderOverrides((current) => {
           const copy = new Map(current);
-          copy.delete(id);
+          copy.set(id, previous);
           return copy;
         });
         setHostError(`Could not save ${kind} order: ${String(cause)}`);
