@@ -234,9 +234,6 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	key := fmt.Sprintf("%s-%d", queue, next)
 	assignee := normalizeAssignee(in.Assignee)
 	status := StatusOpen
-	if pullRequest != "" && strings.HasPrefix(assignee, "agent:") {
-		status = StatusWaitCustomer
-	}
 	var workflowVersionID any
 	var workflowStatus any
 	var workflowRevision any

@@ -169,7 +169,7 @@ func TestUpdateTaskAcceptsWaitCustomer(t *testing.T) {
 	}
 }
 
-func TestUpdateTaskPullRequestMovesAssignedTaskToWaitCustomer(t *testing.T) {
+func TestUpdateTaskPullRequestKeepsStatus(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
@@ -180,19 +180,19 @@ func TestUpdateTaskPullRequestMovesAssignedTaskToWaitCustomer(t *testing.T) {
 	}
 	url := "https://example.test/org/repo/pull/1"
 	updated, err := svc.UpdateTask(ctx, actor, task.Key, UpdateTaskInput{PullRequest: &url, Revision: task.Revision})
-	if err != nil || updated.Status != StatusWaitCustomer {
+	if err != nil || updated.Status != StatusOpen {
 		t.Fatalf("updated = %#v, %v", updated, err)
 	}
 }
 
-func TestCreateTaskPullRequestMovesAssignedTaskToWaitCustomer(t *testing.T) {
+func TestCreateTaskPullRequestKeepsStatus(t *testing.T) {
 	svc := newTestService(t)
 	ctx := context.Background()
 	actor := CustomerActor("customer")
 	_, _ = svc.CreateQueue(ctx, actor, CreateQueueInput{Prefix: "PRCREATE", Name: "PR creates"})
 	url := "https://example.test/org/repo/pull/1"
 	task, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "PRCREATE", Title: "ship", Assignee: "agent:worker", PullRequest: url})
-	if err != nil || task.Status != StatusWaitCustomer {
+	if err != nil || task.Status != StatusOpen {
 		t.Fatalf("created = %#v, %v", task, err)
 	}
 }

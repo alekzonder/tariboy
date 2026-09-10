@@ -32,7 +32,8 @@ export function GoalHelp() {
             key. Tariboy keeps the selected task until it is released by
             completion, cancellation, reassignment, deletion or loss of access,
             disabling Goal, or a customer wait that exceeds the configured
-            timeout. A pull request URL does not affect Goal selection or release.
+            timeout. Strictly higher-priority eligible work can preempt it. A pull
+            request URL does not affect Goal selection or release.
           </DialogDescription>
         </DialogHeader>
       </DialogContent>
