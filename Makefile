@@ -22,7 +22,7 @@ DESKTOP_INSTALL_UI_DEPS ?= 1
 
 export CGO_ENABLED=0
 
-.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev store-ui docs clean up start down attach a desktop desktop-alpha desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev store-ui docs clean up start down attach a desktop desktop-mac desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -431,10 +431,10 @@ desktop-e2e-build: desktop-e2e-tools-check desktop-tools-check desktop-binaries 
 desktop-e2e: desktop-e2e-build
 	cd ui && npm run test:desktop-e2e -- --workers=$(DESKTOP_E2E_WORKERS) $(DESKTOP_E2E_ARGS)
 
-# Produce the reviewed, static internal-alpha release directory. Packaging is a
+# Produce the checked macOS release directory. Packaging is a
 # macOS Apple Silicon operation; portable version/syntax gates remain available
 # through desktop-version-check and bash -n on every development host.
-desktop-alpha:
+desktop-mac:
 	./scripts/package-alpha.sh
 
 # Isolated integration check for the packaged app. Never touches the live daemon:

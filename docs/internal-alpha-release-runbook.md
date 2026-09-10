@@ -53,7 +53,7 @@ behavior: the packaging step creates them.
 git status --short
 git rev-parse HEAD
 . "$HOME/.cargo/env"
-make desktop-alpha
+make desktop-mac
 ```
 
 The target builds both binary platforms and the SPA, creates ad-hoc-signed app
@@ -90,30 +90,27 @@ The release owner and backup reviewer each verify:
 - [ ] a disposable-host product acceptance run is attached;
 - [ ] no live user host or base directory was used for acceptance.
 
-Both approvers record their GitHub usernames and timestamp on the release issue.
+Both approvers record their GitHub usernames and timestamp on the release issue
+before the release tag is pushed.
 
 ## Publication gate
 
-Publication is blocked until an authorized release owner supplies and reviews
-the exact internal HTTPS destination and upload semantics. Neither the GitHub
-remote nor repository configuration provides that information, so this runbook
-does not invent an upload URL, credential name, or `curl` command.
+After both approvals, push an exact tag whose version matches the release:
 
-The approved command is recorded on the access-controlled release issue and
-must:
+```bash
+git tag -a v0.55.0 -m 'Tariboy 0.55.0'
+git push origin v0.55.0
+```
 
-- use HTTPS;
-- upload exactly the three checked files;
-- preserve the full versioned filename;
-- avoid credentials in shell history and logs;
-- be reviewed by the backup reviewer before execution.
+`.github/workflows/desktop-release.yml` validates the tag against
+`internal/version/version.go` and `scripts/release-version.txt`, runs `make
+desktop-mac` on `macos-15`, and creates the matching GitHub Release with
+generated notes. It uploads exactly the versioned DMG, `SHA256SUMS`, and
+`release.json` using the workflow's `contents: write` token.
 
-GitHub Releases, public object storage, personal file sharing, and unreviewed
-chat attachments are not substitutes for the approved internal destination.
-
-After upload, a reviewer downloads into a new directory, verifies
-`SHA256SUMS`, and compares `release.json` commit SHA before invitations are
-sent.
+After publication, a reviewer downloads all three files into a new directory,
+verifies `SHA256SUMS`, and confirms that the `release.json` commit SHA is the
+tagged, reviewed commit before invitations are sent.
 
 ## Design-partner rollout
 
@@ -133,7 +130,8 @@ Use the [demo script](internal-alpha-demo-script.md) for kickoff and the
 
 ## Incident and rollback
 
-1. Release owner disables further downloads at the internal destination.
+1. Release owner marks the affected GitHub Release unavailable and records the
+   reason on the release issue.
 2. Ask affected users to disable Autopilot; use Kill only for unsafe active work.
 3. Preserve non-sensitive logs and export support bundles with user review.
 4. Reinstall the previous verified DMG.

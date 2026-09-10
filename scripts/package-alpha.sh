@@ -96,7 +96,7 @@ document = {
     "artifact_sha256": digest,
     "git_commit": commit,
     "built_at": built_at,
-    "publication": "manual-reviewed-internal-https",
+    "publication": "github-release",
 }
 with open(path, "w", encoding="utf-8", newline="\n") as output:
     json.dump(document, output, indent=2, sort_keys=True)

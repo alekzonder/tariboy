@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify a static Tariboy internal-alpha directory before manual publication.
+# Verify a static Tariboy internal-alpha directory before publication.
 set -euo pipefail
 trap 'echo "FAIL: command failed at ${BASH_SOURCE[0]}:${LINENO}" >&2' ERR
 
@@ -141,7 +141,7 @@ expected = {
     "architecture": "aarch64",
     "signing": "ad-hoc",
     "artifact": artifact,
-    "publication": "manual-reviewed-internal-https",
+    "publication": "github-release",
 }
 for key, value in expected.items():
     if metadata.get(key) != value:

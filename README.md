@@ -73,9 +73,9 @@ Transfer runnable images separately; keep their original sources for rebuilds.
 ## Get started
 
 You need an Apple Silicon Mac running macOS 12+, `Tariboy_0.55.0_aarch64.dmg` and
-its checksums from the release owner, and a supported harness installed where
-your agent will run. Remote use also needs a Linux x86_64 host reachable through
-your existing SSH configuration.
+its checksums from the matching GitHub Release, and a supported harness
+installed where your agent will run. Remote use also needs a Linux x86_64 host
+reachable through your existing SSH configuration.
 
 1. **Install Tariboy.** Verify the checksum, move the app to Applications, and
    open it. Follow the [quickstart](https://alekzonder.github.io/tariboy/quickstart) for the alpha
