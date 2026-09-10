@@ -75,6 +75,8 @@ describe("Stores workspace", () => {
     ]);
     const calls: Call[] = [];
     let removeAttempts = 0;
+    let detailReads = 0;
+    let detailReloadFails = false;
     let finishBuild!: (response: Response) => void;
     const buildResponse = new Promise<Response>((resolve) => { finishBuild = resolve; });
     const imageBuilt = vi.fn();
@@ -96,11 +98,16 @@ describe("Stores workspace", () => {
         return Promise.resolve(envelope({ name: "design", source: "git@example.com:design.git", path: "/stores/design" }));
       }
       if (url.endsWith("/api/stores/design") && method === "GET") {
+        if (detailReloadFails) return Promise.resolve(envelope("reload failed", false));
+        detailReads++;
         return Promise.resolve(envelope({
           name: "design",
           source: "git@example.com:design.git",
           path: "/stores/design",
-          images: [{ name: "reviewer", version: "1.2.3" }, { name: "broken", version: "latest", error: "invalid Tariboyfile" }],
+          images: [
+            { name: "reviewer", version: "1.2.3", built_version: detailReads === 1 ? "1.0.0" : "1.2.3", update_needed: detailReads === 1 },
+            { name: "broken", version: "latest", error: "invalid Tariboyfile" },
+          ],
         }));
       }
       if (url.endsWith("/api/stores/design/refresh")) {
@@ -133,7 +140,11 @@ describe("Stores workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "design" })).toBeInTheDocument();
     expect(await screen.findByText("1.2.3")).toBeInTheDocument();
+    const reviewerRow = screen.getByText("reviewer").closest("tr");
+    expect(reviewerRow).toHaveTextContent("1.0.0");
+    expect(reviewerRow).toHaveClass("bg-amber-50");
     expect(screen.getByText("invalid Tariboyfile")).toBeInTheDocument();
+    expect(screen.getByText("broken").closest("tr")).toHaveTextContent("—");
     expect(calls).toContainEqual({
       url: "https://store.example/api/stores",
       method: "POST",
@@ -164,7 +175,15 @@ describe("Stores workspace", () => {
 
     finishBuild(envelope({ name: "reviewer", tag: "1.2.3", digest: "sha256:new", layers: 2 }));
     expect(await screen.findByText("Built reviewer:1.2.3.")).toBeInTheDocument();
+    await waitFor(() => expect(detailReads).toBe(2));
+    expect(screen.getByText("reviewer").closest("tr")).not.toHaveClass("bg-amber-50");
     expect(imageBuilt).toHaveBeenCalledOnce();
+
+    detailReloadFails = true;
+    fireEvent.click(screen.getByRole("button", { name: "Build reviewer" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("reload failed");
+    expect(screen.getByText("Built reviewer:1.2.3.")).toBeInTheDocument();
+    expect(imageBuilt).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove store" }));
     const dialog = await screen.findByRole("alertdialog");

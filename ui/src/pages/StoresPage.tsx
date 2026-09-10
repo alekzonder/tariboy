@@ -111,6 +111,12 @@ export default function StoresPage({ target, name, basePath }: {
         setStatus(`Built ${built.name}:${built.tag}.`);
         window.dispatchEvent(new Event("tariboy:image-built"));
       }
+      try {
+        const refreshed = await getStore(target, name);
+        if (mounted.current) setDetail(refreshed);
+      } catch (cause) {
+        if (mounted.current) setError(message(cause));
+      }
     } catch (cause) {
       if (mounted.current) setError(message(cause));
     } finally {
@@ -191,14 +197,15 @@ export default function StoresPage({ target, name, basePath }: {
         <div className="overflow-x-auto rounded border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr><th className="px-3 py-2">Image</th><th className="px-3 py-2">Version</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr>
+              <tr><th className="px-3 py-2">Image</th><th className="px-3 py-2">Version</th><th className="px-3 py-2">Built version</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr>
             </thead>
             <tbody>
-              {detail.images.map((image) => <tr key={image.name} className="border-t">
+              {detail.images.map((image) => <tr key={image.name} className={`border-t ${image.update_needed ? "bg-amber-50 dark:bg-amber-950/30" : ""}`}>
                 <td className="px-3 py-2 font-mono">{image.name}</td>
                 <td className="px-3 py-2 font-mono text-xs">{image.version}</td>
+                <td className="px-3 py-2 font-mono text-xs">{image.built_version || "—"}</td>
                 <td className={`px-3 py-2 text-xs ${image.error ? "text-destructive" : "text-muted-foreground"}`}>
-                  {image.error ?? "Ready"}
+                  {image.error ?? (image.update_needed ? "Update needed" : "Ready")}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!image.error && <Button
@@ -210,7 +217,7 @@ export default function StoresPage({ target, name, basePath }: {
                   </Button>}
                 </td>
               </tr>)}
-              {detail.images.length === 0 && <tr><td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">No images in this Store.</td></tr>}
+              {detail.images.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No images in this Store.</td></tr>}
             </tbody>
           </table>
         </div>

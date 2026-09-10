@@ -102,9 +102,12 @@ longer installs a separate built-in Store tree.
 
 Only the registration's name and source are persisted in the daemon database.
 Viewing a Store reads the current disk inventory and `image_version` values;
-there is no saved image list to become stale. A missing `images/` directory
-shows an empty list. An invalid image reports its own error while valid sibling
-images remain visible.
+there is no saved image list to become stale. For each valid source, the detail
+also shows the newest built version with the same default image name and marks
+the source when that newest version is absent or differs from its declared
+version. A successful **Build** reloads that inventory. A missing `images/`
+directory shows an empty list. An invalid image reports its own error while
+valid sibling images remain visible.
 
 **Refresh** runs `git pull --ff-only` for both managed clones and local Git
 checkout roots, including Git worktrees. A local directory without its own
@@ -127,9 +130,9 @@ requires Node.js/npm and access to the skill sources. Private repositories use
 the server account's configured SSH or Git credential helpers. Configure access
 on that server before adding the Store; do not put credentials in its URL.
 
-The Store detail shows **Images**, their versions, and **Build** actions. Built
-artifacts appear in the existing **Images** workspace. Stores do not yet expose
-standalone skills or plugins.
+The Store detail shows **Images**, their source and built versions, update
+highlighting, and **Build** actions. Built artifacts appear in the existing
+**Images** workspace. Stores do not yet expose standalone skills or plugins.
 
 ## Image versions
 

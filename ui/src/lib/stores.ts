@@ -10,6 +10,8 @@ export interface Store {
 export interface StoreImage {
   name: string;
   version: string;
+  built_version: string;
+  update_needed: boolean;
   error?: string;
 }
 
