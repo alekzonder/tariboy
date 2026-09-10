@@ -456,7 +456,14 @@ describe("TerminalsPage", () => {
     vi.mocked(apiOn)
       .mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirst = resolve; }))
       .mockImplementationOnce(() => new Promise<void>((_, reject) => { failSecond = reject; }));
-    mockRowRects({ "Open a1": 0, "Open a2": 30, "Open b1": 60, "Open b2": 90 });
+    mockRowRects({
+      "Open a1": 0,
+      "Open a2": 30,
+      "Open b1": 60,
+      "Open b2": 90,
+      "Open team a": 120,
+      "Open team b": 150,
+    });
     renderAt("/");
     const a1 = await screen.findByRole("button", { name: "Open a1" });
 
@@ -485,6 +492,26 @@ describe("TerminalsPage", () => {
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     failSecond(new Error("offline"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save agents order");
+    expect(screen.getByRole("button", { name: "Open a2" })
+      .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open b1" })
+      .compareDocumentPosition(screen.getByRole("button", { name: "Open b2" }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    let failThird!: (cause: Error) => void;
+    let failFourth!: (cause: Error) => void;
+    vi.mocked(apiOn)
+      .mockImplementationOnce(() => new Promise<void>((_, reject) => { failThird = reject; }))
+      .mockImplementationOnce(() => new Promise<void>((_, reject) => { failFourth = reject; }));
+    await keyboardMove("Open b1", "ArrowDown");
+    await waitFor(() => expect(apiOn).toHaveBeenCalledTimes(3));
+    await keyboardMove("Open team a", "ArrowDown");
+    expect(apiOn).toHaveBeenCalledTimes(3);
+    failThird(new Error("offline"));
+    await waitFor(() => expect(apiOn).toHaveBeenCalledTimes(4));
+    failFourth(new Error("offline"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not save groups order"));
     expect(screen.getByRole("button", { name: "Open a2" })
       .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" }))
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
