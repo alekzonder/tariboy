@@ -1,0 +1,65 @@
+name: Desktop release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  release:
+    name: Build and publish macOS DMG
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Verify tag version
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          canonical_version="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)"
+          release_version="$(cat scripts/release-version.txt)"
+          test "$tag_version" = "$canonical_version" || {
+            echo "tag version $tag_version does not match canonical version $canonical_version" >&2
+            exit 1
+          }
+          test "$tag_version" = "$release_version" || {
+            echo "tag version $tag_version does not match declared release version $release_version" >&2
+            exit 1
+          }
+
+      - name: Install release verification tools
+        run: brew install tmux ripgrep qemu
+
+      - name: Build and verify DMG
+        run: make desktop-mac
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          release_dir="dist/releases/$version"
+          gh release create "$GITHUB_REF_NAME" \
+            "$release_dir/Tariboy_${version}_aarch64.dmg" \
+            "$release_dir/SHA256SUMS" \
+            "$release_dir/release.json" \
+            --verify-tag \
+            --generate-notes \
+            --title "Tariboy $version"

@@ -38,7 +38,7 @@ Install only the toolchains needed for the area you are changing:
 - **Desktop native host:** Rust (minimum package version 1.77), Cargo, the Tauri
   prerequisites, and platform build tools.
 - **macOS packaging:** Apple Silicon macOS 12+, Xcode command-line tools,
-  `codesign`, `hdiutil`, and the other checks reported by `make desktop-alpha`.
+  `codesign`, `hdiutil`, and the other checks reported by `make desktop-mac`.
 - **Agent smoke suites:** `tmux` is checked by both `make smoke` and
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
@@ -441,7 +441,7 @@ On Darwin arm64:
 ```bash
 make desktop PLATFORM=darwin  # .app and .dmg
 make desktop-smoke
-make desktop-alpha
+make desktop-mac
 ```
 
 The Darwin recipe sets `CI=true` only for `cargo tauri build`. This
@@ -458,8 +458,10 @@ make desktop PLATFORM=linux  # .deb and .AppImage
 The preflight rejects unknown platform values, unsupported host architectures,
 and a platform that does not match the current host before compiling payloads.
 
-`make desktop-alpha` packages and verifies the alpha; publication is a
-separate manual action.
+`make desktop-mac` packages and verifies the alpha. Pushing an exact `vX.Y.Z`
+tag whose version matches both canonical declarations runs the same target on
+GitHub's `macos-15` runner and publishes the checked DMG, `SHA256SUMS`, and
+`release.json` to the matching GitHub Release.
 
 The tray action **Install/Update CLI** owns the local five-file payload and
 six-command-path install. It preflights and atomically switches `tariboyd`,

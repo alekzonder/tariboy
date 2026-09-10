@@ -157,6 +157,13 @@ Do not disable Gatekeeper globally, change system-wide `spctl` policy, or remove
 quarantine recursively from Applications. Developer ID signing, notarization,
 and signed updater artifacts are later release work.
 
+An exact `vX.Y.Z` tag triggers the repository's GitHub Actions workflow on a
+macOS runner. The workflow rejects a tag that differs from either canonical
+version declaration, builds and verifies the release through `make
+desktop-mac`, and publishes only the DMG, `SHA256SUMS`, and `release.json` with
+the job-scoped `contents: write` permission. GitHub publication does not change
+the ad-hoc-signing or Gatekeeper constraints above.
+
 The alpha deliberately enables Tauri WebView developer tools in its
 release build for local diagnosis. DevTools exposes the current WebView state
 to the person operating the local Desktop session; it does not relax daemon
