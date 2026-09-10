@@ -242,18 +242,18 @@ describe("TerminalsPage", () => {
       .toHaveAttribute("aria-current", "page");
   });
 
-  it("adds and focuses a sidebar agent in Workspace without duplicating it", async () => {
+  it("opens a sidebar agent in Console instead of adding it to Workspace", async () => {
     renderAt("/workspace");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Open a1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open a1" }));
 
-    expect(screen.getAllByRole("tab", { name: "a1" })).toHaveLength(1);
-    expect(screen.getByTestId("location")).toHaveTextContent("/workspace");
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/a1/console"),
+    );
   });
 
-  it("opens a non-interactive sidebar agent in Configuration from Workspace", async () => {
+  it("opens a non-interactive sidebar agent in Console from Workspace", async () => {
     renderAt("/workspace");
     await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
 
@@ -261,13 +261,13 @@ describe("TerminalsPage", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("location"))
-        .toHaveTextContent("/agents/local/a2/configuration"),
+        .toHaveTextContent("/agents/local/a2/console"),
     );
     expect(await screen.findByRole("navigation", { name: "Agent workspace" }))
       .toBeInTheDocument();
   });
 
-  it("starts a real pointer drag only from an interactive Workspace row", async () => {
+  it("does not start the Workspace drag gesture from an agent row", async () => {
     renderAt("/workspace");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     const root = screen.getByTestId("terminal-workspace");
@@ -297,9 +297,9 @@ describe("TerminalsPage", () => {
       clientY: 10,
     });
     fireEvent.pointerMove(window, { pointerId: 9, clientX: 200, clientY: 200 });
-    expect(screen.getByTestId("workspace-drop-preview")).toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-drop-preview")).toBeNull();
     fireEvent.pointerUp(window, { pointerId: 9, clientX: 200, clientY: 200 });
-    expect(screen.getAllByRole("tab", { name: "a1" })).toHaveLength(1);
+    expect(screen.queryByRole("tab", { name: "a1" })).toBeNull();
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Open a2" }), {
       button: 0,
@@ -309,6 +309,51 @@ describe("TerminalsPage", () => {
     });
     fireEvent.pointerMove(window, { pointerId: 10, clientX: 200, clientY: 200 });
     expect(screen.queryByTestId("workspace-drop-preview")).toBeNull();
+  });
+
+  it("restores server, team, and agent order", async () => {
+    localStorage.setItem("terminals:server-order:v1", JSON.stringify({
+      version: 1,
+      ids: ["d1", ""],
+    }));
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "local" },
+        groups: [{ name: "alpha", lead: "", members: 1 }, { name: "beta", lead: "", members: 1 }],
+        agents: [
+          { name: "a1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "alpha", interactive: true },
+          { name: "b1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "beta", interactive: true },
+          { name: "solo1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
+          { name: "solo2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
+        ],
+        sidebarOrder: { version: 1, groups: ["beta", "alpha"], agents: ["solo2", "solo1"] },
+      },
+      { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
+    ] as unknown as Awaited<ReturnType<typeof fetchAllAgents>>);
+
+    renderAt("/");
+
+    const prod = await screen.findByRole("button", { name: "Open server prod" });
+    const local = screen.getByRole("button", { name: "Open server local" });
+    expect(prod.compareDocumentPosition(local) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const beta = screen.getByRole("button", { name: "Open team beta" });
+    const alpha = screen.getByRole("button", { name: "Open team alpha" });
+    expect(beta.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const solo2 = screen.getByRole("button", { name: "Open solo2" });
+    const solo1 = screen.getByRole("button", { name: "Open solo1" });
+    expect(solo2.compareDocumentPosition(solo1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("uses the whole server row as an accessible drag surface", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "local" }, agents: [], groups: [] },
+      { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
+    ]);
+    renderAt("/");
+
+    const local = await screen.findByRole("button", { name: "Open server local" });
+    expect(local).toHaveAttribute("aria-roledescription", "draggable");
+    expect(screen.queryByRole("button", { name: /Move server/ })).toBeNull();
   });
 
   it("honors a hidden sidebar from the shared persisted state", async () => {

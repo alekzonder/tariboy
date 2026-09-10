@@ -1,10 +1,9 @@
-import { NavLink, Navigate, Route, Routes, useLocation, useOutletContext, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DaemonBanner } from "@/components/DaemonBanner";
 import { DaemonProvider, useDaemons } from "@/components/DaemonProvider";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import ImageOverview from "@/pages/ImageOverview";
 import ImageTemplate from "@/pages/images/ImageTemplate";
@@ -86,19 +85,6 @@ function MainApp() {
                 : <PanelLeftClose className="size-4" />}
             </Button>
           )}
-          <nav aria-label="Primary" className="flex gap-1">
-            <NavLink
-              to="/workspace"
-              className={({ isActive }) =>
-                cn(
-                  "rounded px-3 py-1.5 text-sm hover:bg-accent",
-                  isActive && "bg-accent font-medium",
-                )
-              }
-            >
-              Workspace
-            </NavLink>
-          </nav>
         </div>
         <div
           aria-hidden="true"

@@ -70,30 +70,17 @@ afterEach(() => {
 });
 
 describe("product routing", () => {
-  it("keeps only Workspace beside the sidebar control in the titlebar", () => {
+  it("hides Workspace and keeps the sidebar control in the titlebar", () => {
     renderAt("/");
 
     const titlebar = screen.getByTestId("app-titlebar");
-    expect(within(titlebar).getByRole("link", { name: "Workspace" }))
-      .toHaveAttribute("href", "/workspace");
-    for (const label of ["Agents", "Tasks", "Images", "Settings"]) {
+    for (const label of ["Workspace", "Agents", "Tasks", "Images", "Settings"]) {
       expect(within(titlebar).queryByRole("link", { name: label })).toBeNull();
     }
     expect(within(titlebar).getByRole("button", { name: "Hide agents" }))
       .toBeInTheDocument();
     expect(within(titlebar).getByRole("button", { name: "Toggle theme" }))
       .toBeInTheDocument();
-  });
-
-  it("opens the global terminal canvas from Workspace", async () => {
-    renderAt("/");
-
-    fireEvent.click(screen.getByRole("link", { name: "Workspace" }));
-
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/workspace"),
-    );
-    expect(screen.getByTestId("terminal-workspace")).toBeInTheDocument();
   });
 
   it("renders Tasks inside an explicit server workspace", async () => {
@@ -127,9 +114,6 @@ describe("product routing", () => {
     renderAt("/");
 
     const toggle = screen.getByRole("button", { name: "Hide agents" });
-    const workspace = screen.getByRole("link", { name: "Workspace" });
-    expect(toggle.compareDocumentPosition(workspace) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
 
     fireEvent.click(toggle);
 
