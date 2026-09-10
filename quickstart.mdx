@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.51.0` alpha on an Apple Silicon Mac.
+This path is for the `0.55.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.51.0_aarch64.dmg`;
+- a verified `Tariboy_0.55.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -75,7 +75,9 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 
 Open **Images**:
 
-- choose an existing built image for the shortest path; or
+- register `git@github.com:alekzonder/tariboy-store.git` as a Store named
+  `official`, refresh it, then build `official/basic`; or
+- choose an existing built image; or
 - enter the path to an original directory containing `Tariboyfile.yaml`, set a
   required name such as `reviewer`, validate the exact plugin/prompt template,
   and build `reviewer:latest`.

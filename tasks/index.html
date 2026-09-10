@@ -82,11 +82,12 @@ mentioned principal’s next comment resolves only its own open wait. This makes
 “where is my answer required?” directly filterable for both agents and the
 customer.</p>
 <p>An enabled agent normally follows one sticky assigned task as its Goal. It
-releases that selection when the task is done, cancelled, has a pull request,
-loses assignment or visibility, remains in <code>wait_customer</code> beyond the agent’s
-configured grace period, or eligible assigned work has a strictly higher
-priority. The goal is daemon-owned and read-only to the agent; see <a href="/tariboy/docs/architecture/iteration-loop">Agents and
-the iteration loop</a>.</p>
+releases that selection when the task is done, cancelled, loses assignment or
+visibility, remains in <code>wait_customer</code> beyond the agent’s configured grace
+period, or eligible assigned work has a strictly higher priority. A task’s pull
+request URL does not affect Goal selection or release. The goal is daemon-owned
+and read-only to the agent; see <a href="/tariboy/docs/architecture/iteration-loop">Agents and the iteration
+loop</a>.</p>
 <p>Assignment, question, answer, and queue-triage events enter a transactional
 outbox and publish through the existing channels/messages bus. Agent
 notifications target its inbox channel; customer notifications target
@@ -131,9 +132,10 @@ not save the task or send the comment; use <strong>Save task</strong> or <strong
 If a later file fails, paths for files already uploaded are kept in the draft.</p>
 <p>Files are stored on disk under <code>$TARIBOY_BASE_DIR/files</code> (normally
 <code>~/.tariboy/files</code>), with a unique directory per upload so matching names never
-overwrite earlier files. Each file is limited to 16 MiB. Files remain after a
+overwrite earlier files. Each file is limited to 1 GiB. Files remain after a
 draft is discarded or a task is closed; remove unneeded files manually on the
-server when their paths are no longer needed.</p>
+server when their paths are no longer needed. Desktop streams each selected
+file directly rather than creating a base64/JSON copy in memory.</p>
 <p>The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
 dots without replaying stale native notifications. A question first observed
@@ -180,7 +182,7 @@ mode only when <code>TARIBOY_TOOLS_SOCKET</code> is non-empty and otherwise uses
 Unix daemon socket as the customer actor. Agent mode fails closed rather than
 falling back to operator access. When enabled, the <code>tasks</code> capability also
 provisions the bare legacy <code>tasks</code> shim. Schema-v2 images must still package the
-Tasks Store skill; capability selection never packages instructions
+Tasks image skill; capability selection never packages instructions
 automatically. See the <a href="/tariboy/docs/plugins/built-in/tasks">Tasks built-in reference</a>
 for the complete boundary.</p>
 <p>Every agent mutation is identity-bound by its per-agent socket. Body fields

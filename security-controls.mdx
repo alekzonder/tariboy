@@ -64,12 +64,32 @@ and refuses regular files, directories, or symlinks not owned by the verified
 Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
 
-Image builds resolve only literal `$STORE`, `$CURRENT_VERSION_STORE`, and
-`$PLUGINS` roots, source-relative paths, or explicit operator absolute paths.
-They reject traversal, symlinks, missing or non-regular files, and oversized
-prompt files. Agent-authored builds additionally confine source and absolute
-references to that agent's workdir.
+Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
+or explicit operator absolute paths. Prompt paths and plugin references reject
+traversal outside their roots.
+Source-relative skill directories may use `../` to reference a sibling tree;
+ordinary builds freeze only those explicitly declared skills alongside the
+source snapshot. Symlinks, missing or non-regular files, and oversized prompt
+files are rejected. Agent-authored builds additionally confine source and all
+relative or absolute skill references to that agent's workdir.
 Native host metadata and exported support archives use owner-only permissions.
+The global `<base-dir>/global-agent-shell.sh` and per-agent
+`<base-dir>/agents/<name>/agent-shell.sh` scripts are owner-only, atomically
+written only after `bash -n` validation; a rejected value cannot replace the
+last valid script.
+
+User Stores clone Git sources on the selected daemon host into its own
+`<base-dir>/stores/<name>/`, or use an explicitly registered local directory.
+Store names and image selectors are validated; image selection rejects path
+traversal and symlink escapes. Git uses the server account's existing SSH and
+credential helpers without weakening host verification. Credential-bearing
+URLs are rejected and subprocess output is not returned as error text.
+Refresh uses fast-forward-only pull and never resets or stashes user changes.
+Removing a Store preserves local source directories and built images.
+Building a Store with `skills-lock.json` invokes npm's skills installer on
+that host before freezing sources. Register and build sources you trust to
+install their declared skills. Store source contents remain outside the
+support-bundle allowlist.
 
 Controlled production publication is stricter than an ordinary operator build.
 Its external source uses only vendored `./` prompt and skill inputs, provides
@@ -126,7 +146,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.51.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.55.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -158,8 +178,9 @@ files for the newest 10 iterations of each agent on that host. It reads only
 
 The collector never includes credentials or environment values (including
 `PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
-workdirs, configured cwd contents, image/plugin state, provisioning replies, or
-user files. It does not open agent environment configuration. Harness output can
+workdirs, configured cwd contents, global or agent shell scripts, image/plugin
+state, provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can
 nevertheless contain arbitrary private natural language, so inspect the ZIP
 before sending it under your organization's support data policy. Export does
 not upload anything automatically.

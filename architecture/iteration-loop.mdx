@@ -11,8 +11,8 @@ directory and its own loop. It does not run continuously — it runs a series of
 **iterations**. On each iteration the daemon:
 
 1. prepares a prompt — schema v2 renders static image layers and current runtime
-   placeholders in their declared order; schema v1 keeps its historical
-   assembly behavior;
+   placeholders in their declared order; a self-contained legacy schema-v1
+   artifact keeps its historical assembly behavior;
 2. launches the harness (e.g. Claude) under the [shim](/docs/architecture/shim)
    for exactly one pass;
 3. records the outcome, iteration logs, AI usage, and audit timeline.
@@ -37,13 +37,14 @@ completion, exits, or reaches an enforced deadline.
 ### Agent Goals
 
 Goal is per-agent and enabled by default. The reconciler retains one assigned
-Native Task selection until it is released: `done` or `cancelled`, a non-empty
-pull request, lost assignment or visibility, Goal disabled, a `wait_customer`
-task whose oldest unanswered customer wait reaches the agent's positive
+Native Task selection until it is released: `done` or `cancelled`, lost
+assignment or visibility, Goal disabled, a `wait_customer` task whose oldest
+unanswered customer wait reaches the agent's positive
 `goal_wait_customer_timeout_s` (300 seconds by default), or eligible assigned
 work with a strictly higher priority. It orders replacements by priority (`P0`
 through `P3`), then `in_progress` before `open`, creation time, and task key.
-Equal-priority work does not displace a valid selection.
+Equal-priority work does not displace a valid selection. A task's pull request
+URL does not affect Goal selection or release.
 
 At startup, relevant task or agent changes, terminal iteration completion, and
 the bounded one-minute recovery cadence, the reconciler publishes one durable
@@ -84,6 +85,13 @@ preparation through the normal `harness_error` path without including
 environment values, prompts, secrets, working directories, or user files. This
 preflight improves the diagnosis but cannot remove the normal race in which an
 executable disappears before process launch.
+
+Immediately before the unchanged harness command is executed, Bash sources
+`<base-dir>/global-agent-shell.sh`, then
+`<base-dir>/agents/<name>/agent-shell.sh`. Missing or empty files do nothing;
+exports and filesystem effects from either script are available to that
+iteration. A source-time failure prevents the harness from starting and follows
+the existing `harness_error` lifecycle.
 
 For a schema-v2 image with skills, the launch gate prepares
 `agents/<agent>/image-bridges/<image-digest>/<adapter-contract>/<harness>` before
@@ -170,8 +178,8 @@ The built-in `workdir` plugin is instruction-only. The `goal` capability adds
 only `scripts/goal.sh set <TASK-KEY>`, allowing an agent that started without a
 Goal to select an active task assigned to itself and attribute subsequent AI
 requests. It cannot replace a different Goal already attached to that
-iteration. A schema-v2 image explicitly packages their Store skills and
-composes the matching runtime value. See
+iteration. A schema-v2 image explicitly packages their skills and composes the
+matching runtime value. See
 [built-in plugins](/docs/plugins/built-in).
 
 See [Built-in plugins](/docs/plugins/built-in) for the complete capability,
@@ -186,8 +194,9 @@ honors a pending image assignment. Without one, it checks whether the active
 ordinary mutable-build ref now resolves to a different digest and stages that
 digest as pending. It then validates the new artifact, prepares and verifies
 any native skill bridge, reconciles image-owned shims, atomically promotes the
-DB assignment, and records
-the iteration's image ref, digest, and template hash. A running iteration is
+DB assignment, and records the iteration's image ref, source version, digest,
+and template hash. The `runtime: identity` value renders that immutable source
+version when present. A running iteration is
 never interrupted. Backup and staging markers make an interrupted swap
 recoverable without changing durable agent state.
 Recovery compares the pinned digest, not only the ref. For daemon-managed and

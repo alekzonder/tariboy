@@ -18,6 +18,12 @@ hour, day, ISO week (Monday start), and month. Each defaults to <code>0</code> (
 and is separate from the legacy global/group rolling budgets. When one or more
 non-zero limits are exhausted from immutable <code>ai_requests.cost_usd</code> history,
 the proxy denies the next request before upstream provider access.</p>
+<p>After token authentication establishes both agent and iteration attribution,
+the proxy records that iteration’s activity timestamp before forwarding the
+request. This drives the non-blocking stalled-agent signal described in the
+<a href="/tariboy/docs/architecture/state-model">state model</a>: it never rejects, cancels, or
+otherwise changes the request or iteration lifecycle, and a recording failure
+is diagnostic-only.</p>
 <p>Before starting a harness, the daemon reads its selected Goal once, resolves
 the task’s top-level root through Native Tasks as that agent, and stamps the
 AI-proxy lease with <code>task_id</code> and <code>epic_id</code>. All requests in the iteration are

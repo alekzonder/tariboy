@@ -7,7 +7,7 @@ sidebar:
 ---
 
 `schedule` lets an agent arrange future bus events without keeping an iteration
-open. It is an optional capability and is not included in `basic:latest`.
+open. It is optional and is not included in the official Store's `basic` source.
 
 ## Capability surface
 
@@ -52,7 +52,7 @@ can consume it.
 plugins:
   - name: schedule
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/schedule
+  - dir: ../../skills/schedule
 ```
 
 There is no schedule runtime marker. The packaged skill teaches the commands;

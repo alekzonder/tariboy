@@ -40,8 +40,9 @@ An image packages **plugins, Agent Skills, and an ordered prompt template**.
 Build it from an original directory containing `Tariboyfile.yaml`, inspect
 exactly what the agent will receive, and reuse it across agents.
 
-Start with the bundled `basic:latest` image or build one for a specific role.
-Export runnable images to other hosts; keep the original source for rebuilds.
+Register the official `tariboy-store` repository and build `official/basic`,
+or build one for a specific role. Export runnable images to other hosts; keep
+the original source for rebuilds.
 Harness, model, and effort belong to agent configuration.
 
 [Explore images →](/images)
@@ -272,26 +273,34 @@ delivery hint.
 Path resolution lives in `internal/paths`:
 
 - **Data dir** — `$TARIBOY_BASE_DIR`, else `~/.tariboy`. Holds the DB,
-  agent working dirs, immutable images, the versioned built-in Store, and
-  side-by-side external plugin versions.
+  agent working dirs, immutable images, and side-by-side external plugin
+  versions.
 - **Runtime dir** — `$TARIBOY_RUNTIME_DIR`, else `~/.tariboyd`. Holds the
   control socket (`tariboyd.sock`), pidfile, and log.
 
 Operator `PUT /api/files` (`files upload`) accepts a file `name` and base64
 `content`, stores up to 16 MiB decoded under `files/<unique-directory>/<name>`
-in the data directory, and returns `path`, absolute `abs`, and `bytes`.
-All Send files, Attach, terminal-drop, and CLI uploads use this route.
+in the data directory, and remains available for compatible clients. Desktop
+Send files, Attach, terminal-drop, and `tariboy cp` instead stream raw bodies up
+to 1 GiB through `PUT /api/files/raw?name=...`. Both routes return `path`,
+absolute `abs`, and `bytes`.
 These uploads belong to the server independently of agents and tasks; agents
 on the same server can read the returned absolute paths. The former
 agent-scoped PUT route and `agent push` command are removed. Uploads
 are ordinary owner-only files, excluded from support bundles, with no automatic
 retention. The server rejects path components and control characters in names
-and confines filesystem operations with `os.Root`.
+and confines filesystem operations with `os.Root`. The raw route rejects a
+declared oversized body before reading it, also bounds unknown-length streams,
+and removes its partial file and unique directory after any failed upload.
 
 The data directory also holds each agent's working/configuration files and
 iteration evidence. SQLite owns agents, iterations, channels/deliveries, tasks,
 workflow execution history, idempotency keys, and durable outboxes. The
-owner-only proxy handoff file (`aiproxy-handoff.json`) intentionally sits
+global agent shell script is the deliberate filesystem-backed exception:
+`<base-dir>/global-agent-shell.sh`; an agent may additionally have
+`<base-dir>/agents/<name>/agent-shell.sh`. Both are owner-only files, written
+atomically after Bash validation, rather than SQLite configuration.
+The owner-only proxy handoff file (`aiproxy-handoff.json`) intentionally sits
 outside SQLite, audit logs, and support bundles because it contains active,
 short-lived proxy leases required to adopt live harnesses after restart.
 The same data directory contains `model-prices-litellm.json`, an owner-only
@@ -313,7 +322,7 @@ sequenceDiagram
   O->>D: start with paths and listener options
   D->>D: resolve PATH, paths, socket guard, and PID file
   D->>S: open database and run migrations
-  D->>D: reconcile agent inboxes; seed images and proxy defaults
+  D->>D: reconcile agent inboxes; ensure the bare image and proxy defaults
   D->>D: read and validate local model-price cache
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
@@ -466,17 +475,12 @@ An explicit agent `PATH` override must retain a Tasks command location. When
 `TARIBOY_TOOLS_SOCKET` is non-empty, it uses that identity-bound socket and
 fails closed; when absent, it uses the host Unix daemon socket as the customer
 actor. Each compatibility shim `exec`s its owning skill script by an **absolute
-path** inside the running daemon's versioned Store. Every other capability is
-invoked through its packaged skill-local `scripts/*.sh` launcher.
+path** inside the active image bridge. Every other capability is invoked
+through its packaged skill-local `scripts/*.sh` launcher.
 
-Because the path is absolute, shims written at create time would otherwise
-outlive the daemon that wrote them, leaving every agent on a frozen client whose
-CLI predates the daemon's flags. So the daemon **rewrites the shims of every
-stored agent at startup**, before any engine or adoption starts — disabled
-agents included, since they may be enabled later. The rewrite is skipped when a
-file already holds exactly the wanted bytes, so restarting on the same version
-changes nothing on disk. A shim that cannot be written is logged against its
-agent and the rest of the startup continues.
+The launch gate validates that each required launcher exists inside the
+candidate image, is regular, and is executable before replacing the current
+bridge or shims. Failure leaves the previous image and its shims active.
 
 Lifecycle is normally driven through the `tariboy daemon` subcommands rather
 than launching the binary directly. See
@@ -536,6 +540,13 @@ hour, day, ISO week (Monday start), and month. Each defaults to `0` (unlimited)
 and is separate from the legacy global/group rolling budgets. When one or more
 non-zero limits are exhausted from immutable `ai_requests.cost_usd` history,
 the proxy denies the next request before upstream provider access.
+
+After token authentication establishes both agent and iteration attribution,
+the proxy records that iteration's activity timestamp before forwarding the
+request. This drives the non-blocking stalled-agent signal described in the
+[state model](/docs/architecture/state-model): it never rejects, cancels, or
+otherwise changes the request or iteration lifecycle, and a recording failure
+is diagnostic-only.
 
 Before starting a harness, the daemon reads its selected Goal once, resolves
 the task's top-level root through Native Tasks as that agent, and stamps the
@@ -688,8 +699,8 @@ directory and its own loop. It does not run continuously — it runs a series of
 **iterations**. On each iteration the daemon:
 
 1. prepares a prompt — schema v2 renders static image layers and current runtime
-   placeholders in their declared order; schema v1 keeps its historical
-   assembly behavior;
+   placeholders in their declared order; a self-contained legacy schema-v1
+   artifact keeps its historical assembly behavior;
 2. launches the harness (e.g. Claude) under the [shim](/docs/architecture/shim)
    for exactly one pass;
 3. records the outcome, iteration logs, AI usage, and audit timeline.
@@ -714,13 +725,14 @@ completion, exits, or reaches an enforced deadline.
 ### Agent Goals
 
 Goal is per-agent and enabled by default. The reconciler retains one assigned
-Native Task selection until it is released: `done` or `cancelled`, a non-empty
-pull request, lost assignment or visibility, Goal disabled, a `wait_customer`
-task whose oldest unanswered customer wait reaches the agent's positive
+Native Task selection until it is released: `done` or `cancelled`, lost
+assignment or visibility, Goal disabled, a `wait_customer` task whose oldest
+unanswered customer wait reaches the agent's positive
 `goal_wait_customer_timeout_s` (300 seconds by default), or eligible assigned
 work with a strictly higher priority. It orders replacements by priority (`P0`
 through `P3`), then `in_progress` before `open`, creation time, and task key.
-Equal-priority work does not displace a valid selection.
+Equal-priority work does not displace a valid selection. A task's pull request
+URL does not affect Goal selection or release.
 
 At startup, relevant task or agent changes, terminal iteration completion, and
 the bounded one-minute recovery cadence, the reconciler publishes one durable
@@ -761,6 +773,13 @@ preparation through the normal `harness_error` path without including
 environment values, prompts, secrets, working directories, or user files. This
 preflight improves the diagnosis but cannot remove the normal race in which an
 executable disappears before process launch.
+
+Immediately before the unchanged harness command is executed, Bash sources
+`<base-dir>/global-agent-shell.sh`, then
+`<base-dir>/agents/<name>/agent-shell.sh`. Missing or empty files do nothing;
+exports and filesystem effects from either script are available to that
+iteration. A source-time failure prevents the harness from starting and follows
+the existing `harness_error` lifecycle.
 
 For a schema-v2 image with skills, the launch gate prepares
 `agents/<agent>/image-bridges/<image-digest>/<adapter-contract>/<harness>` before
@@ -847,8 +866,8 @@ The built-in `workdir` plugin is instruction-only. The `goal` capability adds
 only `scripts/goal.sh set <TASK-KEY>`, allowing an agent that started without a
 Goal to select an active task assigned to itself and attribute subsequent AI
 requests. It cannot replace a different Goal already attached to that
-iteration. A schema-v2 image explicitly packages their Store skills and
-composes the matching runtime value. See
+iteration. A schema-v2 image explicitly packages their skills and composes the
+matching runtime value. See
 [built-in plugins](/docs/plugins/built-in).
 
 See [Built-in plugins](/docs/plugins/built-in) for the complete capability,
@@ -863,8 +882,9 @@ honors a pending image assignment. Without one, it checks whether the active
 ordinary mutable-build ref now resolves to a different digest and stages that
 digest as pending. It then validates the new artifact, prepares and verifies
 any native skill bridge, reconciles image-owned shims, atomically promotes the
-DB assignment, and records
-the iteration's image ref, digest, and template hash. A running iteration is
+DB assignment, and records the iteration's image ref, source version, digest,
+and template hash. The `runtime: identity` value renders that immutable source
+version when present. A running iteration is
 never interrupted. Backup and staging markers make an interrupted swap
 recoverable without changing durable agent state.
 Recovery compares the pinned digest, not only the ref. For daemon-managed and
@@ -905,6 +925,19 @@ to `messages_batch` (default 10) — into the prompt. Delivered messages are ack
 only when the iteration finishes normally (`done` / `no_i_am_done`); harness
 errors, timeouts, and kills leave messages for redelivery until they hit the DLQ
 (max 5 attempts).
+
+`messages_max_queue` defaults to 100 for new agents. Reaching it keeps the
+existing overflow behavior: later deliveries for that agent are stored in DLQ
+with result `queue_limit`, so the limit bounds runnable pending work rather than
+all message storage. Agent status derives the distinct pending count and reports
+when it is at or above the configured limit.
+
+Operators can physically clear one agent's pending queue with
+`tariboy agent inbox clear NAME` or `POST /api/agents/{name}/inbox/clear`.
+The bus removes that agent's unacknowledged, non-DLQ deliveries in one SQLite
+transaction and deletes only message rows orphaned by that operation. Processed
+and DLQ deliveries, shared messages, other agents' deliveries, and messages not
+yet consumed by workflow ingress are retained.
 
 ## Channel names
 
@@ -1095,8 +1128,25 @@ The **SQLite DB is the single source of configuration.** There is no
 (`running` / `idle` / `stopped` / `error`) is **computed** from the DB config
 plus what is actually running, not persisted.
 
+A running iteration also has persisted AI-proxy liveness evidence. Its
+`started_at` time is the initial activity point, and every authenticated request
+for that exact agent and iteration updates `last_ai_request_at` before upstream
+work begins. When the newest point is at least the agent's positive
+`ai_stall_timeout_s` old (300 seconds by default), live state is derived as
+`error` with an informational `error_reason`; the loop and iteration continue.
+The next attributed request updates the timestamp and live state derives as
+`running` again. Stale requests for older or completed iterations are ignored.
+
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
+
+## Filesystem-backed shell scripts
+
+The global pre-iteration script at `<base-dir>/global-agent-shell.sh` and an
+agent script at `<base-dir>/agents/<name>/agent-shell.sh` are intentionally not
+SQLite fields. The daemon validates a complete submitted value with `bash -n`
+before atomically replacing an owner-only file. A rejected value leaves the
+previous file unchanged; a missing or empty file is a no-op at launch.
 
 ## Pricing and Usage snapshots
 
@@ -1140,6 +1190,16 @@ a reason: with none, both keys are omitted entirely rather than emitted empty.
 An agent-authored status line is never reported as a halt reason, since only
 the idle prefix qualifies.
 
+## Message queue state
+
+Queue saturation is derived rather than persisted. The agent status endpoint
+counts distinct message IDs across that agent's unacknowledged, non-DLQ
+deliveries and returns `messages_pending`, the configured
+`messages_max_queue`, and `messages_queue_full`. The flag is true when the
+pending count is at or above the limit. Publish limiting, status, and physical
+queue clearing use the same delivery predicate so the UI never maintains a
+second estimate.
+
 ## Native task state
 
 Each agent row persists `goal_enabled` (default true), a positive
@@ -1181,20 +1241,32 @@ persisted bus-ingress cursor. See [Configurable task workflows](/docs/task-workf
 
 ## Image assignment state
 
+User Store registrations belong to each daemon's SQLite database and persist
+only their unique name and source. Git clones live under
+`<base-dir>/stores/<name>/`; local absolute sources stay in place. Image names,
+versions, and diagnostics are read from `images/` on disk for every view, never
+stored as a second inventory. Store refresh and build preparation are
+serialized so a pull cannot race source freezing. Store builds then use the
+ordinary image snapshot and publication path below.
+
+Directories left under `<base-dir>/store/versions/` by an older release are
+untouched legacy data. Current daemons neither read nor refresh them.
+
 Each agent row owns an active image ref/digest and a separate pending
 ref/digest/error. Selecting another image changes only the pending fields. The
 iteration launch gate validates and stages that artifact, reconciles image
 capabilities, and promotes active plus pending state in one guarded transaction.
-Every new iteration snapshots its image ref, digest, and prompt-template hash,
-so later switches cannot rewrite historical execution identity.
+Every new iteration snapshots its image ref, source `image_version` when
+present, digest, and prompt-template hash, so later switches cannot rewrite
+historical execution identity. Historical iterations and legacy images keep an
+empty version instead of inheriting a mutable ref's current value.
 
 The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
 already-promoted image digest matches the row. Each unpacked image carries a
-daemon-owned digest marker, so two generations of a managed ref such as
-`basic:latest` cannot be confused. Managed and ordinary mutable-build archive
-generations are retained by digest, so active and pending assignments survive a
-daemon upgrade or a rebuilt ordinary ref. Harness,
+daemon-owned digest marker, so two generations of one mutable ref cannot be
+confused. Ordinary mutable-build archive generations are retained by digest,
+so active and pending assignments survive a rebuilt ref. Harness,
 model, effort, environment,
 CWD, context, workdir, messages, history, group, and subscriptions are not image
 assignment fields.
@@ -1258,10 +1330,10 @@ Rollback stages the recorded prior immutable assignment through the same gate.
 A running iteration is owned by `tariboy-shim`, not by the lifetime of the
 daemon process. During a graceful daemon restart, cancellation detaches the old
 engine observer without changing the durable iteration row from `running`.
-Before any of that, the replacement daemon repoints every stored agent's bin
-shims at its own versioned Store skill scripts (see
-[Agent bin shims](/docs/architecture#agent-bin-shims)), so an adopted or
-newly-started agent never calls the client of the release that provisioned it.
+Before any of that, the replacement daemon reconciles each stored agent's bin
+shims against its active image (see
+[Agent bin shims](/docs/architecture#agent-bin-shims)), so adopted work
+continues with the launchers pinned by that image.
 The replacement daemon enumerates live shim sockets before starting loop
 engines, adopts each matching iteration, and finalizes the existing row when
 `result.json` appears. It never launches a duplicate shim while adoption is in
@@ -1351,6 +1423,9 @@ Agent creation, clone, and **Configuration** carry the per-agent Goal settings:
 an enabled-by-default switch, a positive whole-second customer-wait timeout
 (300 by default), and a positive Goal delivery cooldown (60 seconds by
 default). Configuration shows the daemon-selected goal key read-only.
+The agent header links that key to its task detail, or shows **No current goal**
+when none is selected. A question-mark action in both the header and the
+Configuration Goal section explains the sticky selection and release rules.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
@@ -1374,10 +1449,18 @@ These local suggestions are an operator convenience, not a capability check
 for the selected host; failed creates do not add values.
 
 The Agents sidebar partitions each host into expandable **Teams** and
-**Individual agents** without changing agent navigation or terminal drag
-identity. Server headings are selectable and open an explicit
+**Individual agents** without changing agent navigation or membership.
+Server headings, team headings, and agent rows are themselves
+pointer- and keyboard-accessible drag surfaces; no separate drag handle is
+rendered. A drop reorders only like siblings, so it never changes team
+membership. The daemon stores each host's team and agent order in the
+versioned `sidebar_order_v1` value under `daemon_config`; missing or newly
+created names retain their current stable order. The Desktop WebView stores
+the cross-host order, including the implicit local host, in
+`terminals:server-order:v1`. Failed daemon writes restore the previous order
+and report the failure. Server headings are selectable and open an explicit
 `/servers/:hostId/tasks` route. The persistent right-pane server row keeps
-**Tasks**, **Images**, and **Settings** scoped to that host even while an agent
+**Tasks**, **Images**, **Stores**, and **Settings** scoped to that host even while an agent
 is selected. The Groups workspace owns team creation and editing: arbitrary custom
 members, per-member runtime fields, rename/lead and membership controls,
 compose clipboard transfer, and portable archive
@@ -1411,9 +1494,9 @@ changes.
 
 Every Agent workspace header shows the agent's complete effective working
 directory. A following **Open in VS Code** action opens local paths as local
-folders and SSH-host paths through VS Code Remote SSH. The native Desktop host
-resolves the saved SSH alias and constructs the editor URI; the WebView never
-supplies an alias. HTTPS hosts do not render this action.
+folders and SSH-host paths through VS Code Remote SSH in a new editor window.
+The native Desktop host resolves the saved SSH alias and constructs the editor
+URI; the WebView never supplies an alias. HTTPS hosts do not render this action.
 
 The **Images** workspace owns validation, directory builds, runnable artifact
 import/export, and transparent template inspection. It shows the original
@@ -1448,13 +1531,31 @@ archive has its own **Exporting** phase: controls and cancellation are disabled
 until the one download completes, after which cancellation only skips
 unstarted destinations.
 
-The persistent server context places **Tasks** beside **Images** and **Settings**.
+The **Stores** workspace registers Git URLs or local absolute source directories
+on the route-selected daemon. Its detail shows the current disk-backed image
+inventory, source and newest built versions, update highlighting, and
+diagnostics, with Refresh, Remove and Build actions. A successful build reloads
+the detail so its version and update state reflect the daemon immediately.
+Every request carries the explicit host target, including builds through the
+existing image-build endpoint. Requests for a previous route cannot replace the
+new Store view. Removal uses an in-app confirmation and preserves local sources
+and built images; pending operations disable duplicate actions. See
+[Images → Stores](/docs/images#stores-on-a-server) for paths and prerequisites.
+
+The persistent server context places **Tasks** beside **Images**, **Stores**, and **Settings**.
 Settings discovers declarative pages from enabled plugins on that explicit
 server and lists them under **Integrations**. One generic React renderer owns
 the supported form controls and forwards actions through the daemon's existing
 plugin bridge; plugin-provided executable UI, HTML, and styles are never loaded.
 Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
+
+**Settings → General** edits the selected host's **Global Agent Shell Script**;
+an agent's **Configuration** edits its **Agent Shell Script**. Both controls use
+the route's explicit host target, retain an invalid draft and accessible Bash
+error after rejection, and keep drafts only in React memory. Save and Discard
+remain unavailable until loading succeeds and while a save is pending, so saves
+cannot overlap. Edits made during a save remain an unsaved draft.
 
 A completed Judge run lists its evidence-linked improvement proposals. Opening
 one shows the repository and base commit, approved file scope, acceptance
@@ -1480,6 +1581,18 @@ History links open the run at that exact target. The target view contains only
 that iteration's consensus, analyses, and immutable evidence, with breadcrumbs
 back to both the explicit-host Judge list and the originating Activity entry.
 Every poll, action, citation, and link stays pinned to the host in the route.
+
+Activity loads a terminal iteration's proxy transcript once when that iteration
+is selected. Running iterations may refresh from the timer or daemon events,
+but share one in-flight request; changing the agent or iteration aborts that
+request and stale results cannot replace the new selection.
+
+Audit ZIPs are generated and streamed by the daemon. Desktop still uses an
+authenticated `fetch` followed by `response.blob()` before saving, because a
+plain WebView download cannot attach the bearer token required by a remote
+daemon. The client therefore still needs memory proportional to the archive;
+streaming directly to a file requires a separate authenticated Desktop/Rust
+download API.
 
 Judge workers run in manual mode when Autopilot is disabled. Activity reports
 that configured state as the reason pending work is waiting; an unavailable
@@ -1531,17 +1644,33 @@ Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
 links, lists, checklists, code, and tables are supported. Unsupported syntax
 keeps the editor in source mode rather than being silently converted or lost.
+Empty numbered-list items remain editable in rich text, including immediately
+after Enter adds a new item; they do not add an extra visible paragraph.
 The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
 editor documents are not stored. Long text and links wrap within the task
 panel, while wide tables and code blocks scroll inside their own Markdown
-block. Vite's `build.license` generates bundled
+block. In Desktop, absolute `http://` and `https://` links in descriptions and
+comments open through the native system-browser command instead of navigating
+the WebView; relative links and ordinary browser builds keep normal anchor
+behavior. Vite's `build.license` generates bundled
 JavaScript dependency license texts and copyright notices in
 `desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
 asset is packaged with the app and is not committed.
 The comment form defaults its Ask selector to the task assignee, while typed
 mentions, explicit questions, and answer-wait semantics remain daemon-owned.
+Beside **Send comment**, a secondary **Send Ok** action includes the selected
+Ask mention and posts `Ok` without changing the Ask selection. It is hidden
+as soon as the comment contains text.
+
+An agent's **Messages → Queue** view can still mark one row processed. Its
+**Clear queue** bulk action instead opens an in-app destructive confirmation:
+pending deliveries for the selected agent are physically deleted and cannot be
+recovered, while Archive, DLQ, shared messages, and other agents' deliveries
+remain. The dialog cannot be dismissed or submitted twice while the one bulk
+request is running. Success reports the server's delivery/message counters and
+reloads Queue; failure keeps the authoritative rows visible for retry.
 
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
@@ -1587,9 +1716,10 @@ HTTP projections; the UI does not infer phases from title prefixes or assignee.
 Operator history remains available after completion. See
 [Configurable task workflows](/docs/task-workflows).
 
-The navigation hierarchy is **Workspace → Server → Agent**. **Workspace** is a
-global titlebar destination at `/workspace`; it is not scoped to the currently
-selected server. A selected server owns Tasks, Images, and Settings, and its
+The navigation hierarchy is **Server → Agent**. The existing Workspace canvas
+and `/workspace` route remain available for retained layouts and possible
+future use, but the titlebar entry and agent-list add/drag gesture are hidden.
+A selected server owns Tasks, Images, Stores, and Settings, and its
 context row remains visible above the selected agent's Console, Autopilot,
 Activity, Tasks, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
@@ -1605,11 +1735,10 @@ target, other server navigation remains available, and a missing host still
 fails closed rather than falling back to local authority.
 
 Workspace is one global tmux-like canvas whose split tree may contain
-several interactive agent terminals from different hosts. An agent can be
-dragged from the shared left list to a tile edge, added with the keyboard
-action, moved by its tile header, and resized with splitters. Tariboy owns
-this pointer gesture rather than relying on WebView HTML5 `DataTransfer`.
-Crossing the drag threshold reveals a half-pane left/right/top/bottom preview;
+several interactive agent terminals from different hosts. Existing tiles can
+be moved by their headers and resized with splitters. Tariboy owns this pointer
+gesture rather than relying on WebView HTML5 `DataTransfer`. Crossing the drag
+threshold reveals a half-pane left/right/top/bottom preview;
 edge distance is normalized to the current leaf dimensions so wide and tall
 panes dock consistently. Dropping relative to any leaf creates arbitrarily
 nested horizontal and vertical splits without center tab stacks. Pointer
@@ -1644,6 +1773,19 @@ operations: each selection is persisted without confirmation or an automatic
 restart, takes effect the next time the agent starts, and leaves the timing of
 any restart under the operator's control.
 
+The Loop section also exposes the positive **AI inactivity timeout** in seconds,
+defaulting to 300 per agent. When a running iteration exceeds it without an
+attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
+card shows the informational reason. The controls remain enabled because this
+signal does not stop the loop or iteration; the next request restores
+`state=running`. Ordinary creation starts at 300 seconds, while Clone preserves
+the source agent's configured value.
+
+The **Messages & Channels** section uses that same draft contract for the
+positive whole-number `messages_batch` and `messages_max_queue` fields.
+New-agent drafts use a maximum queue of 100, while Clone keeps the source
+agent's configured value.
+
 Configuration also renders the daemon-authoritative per-agent USD budget
 projection. Its four calendar rows pair each current spend with one editable
 limit (`spent / limit`), label zero as Unlimited, and save atomically against
@@ -1651,6 +1793,12 @@ the explicit agent-route host. The agent header and sidebar use the same
 projection; they show an explicit Out of budget state and every exhausted
 period rather than recomputing spend in the browser. Older daemons simply omit
 the additive projection.
+
+The workspace header also consumes daemon-authoritative message status. When
+`messages_queue_full` is true it displays
+**Message queue full: pending / limit** in destructive styling; it never
+recomputes queue state in the browser. The normal three-second status refresh
+removes the indicator after processing or clearing lowers the queue.
 
 When the daemon reports a halt reason for the agent, the Autopilot card shows
 it under the Running/Stopped line, toned as an error for an `error`
@@ -1662,8 +1810,7 @@ extra is rendered at all — no empty element and no placeholder.
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
 main Tauri window retains native traffic lights under an overlay titlebar, and
 the sidebar icon is immediately after their reserved area in the global
-toolbar. The only other titlebar controls are the global **Workspace** link and
-theme icon. Empty toolbar space is draggable, while daemon status banners remain
+toolbar. The only other titlebar control is the theme icon. Empty toolbar space is draggable, while daemon status banners remain
 below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Workspace
 xterm content is square and flush inside the single FlexLayout pane border; the
@@ -1686,10 +1833,12 @@ environment values, tokens, secrets, cwd/workdir paths, or user files.
 Malformed state resets only the Workspace canvas.
 
 **Send files**, Attach, and terminal file drops all upload through the selected
-server's `PUT /api/files` endpoint. Uploads have no agent destination: files
-live in the server's shared files directory and the returned absolute paths
-are inserted into the corresponding draft or reported when no terminal is
-available. Console and every Workspace tile retain their explicit host target.
+server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
+The browser sends each `File` as the raw request body instead of building a
+base64/JSON copy. Uploads have no agent destination: files live in the server's
+shared files directory and the returned absolute paths are inserted into the
+corresponding draft or reported when no terminal is available. Console and
+every Workspace tile retain their explicit host target.
 
 The terminal compose draft is also non-persistent in Workspace: typed text and
 uploaded server paths remain in the mounted tile's memory and are discarded
@@ -1885,11 +2034,10 @@ Six real binaries are built by `make build`:
 The daemon installs or refreshes the Telegram plugin from its sibling binary at
 startup. Optional external plugins are built and distributed independently.
 
-`make build` also assembles the canonical
-`internal/builtinimages/source` image into an ignored bundle embedded in
-`tariboyd`. On activation the daemon atomically
-installs or refreshes the reserved `basic:latest` ref, so every binary-based
-installation path receives the same default image.
+`make build` does not embed agent image sources or skills. Register a Store such
+as `git@github.com:alekzonder/tariboy-store.git`, refresh it, and build the
+desired image on each daemon that needs it. The daemon synthesizes only the
+reserved empty `bare:latest` image.
 
 ## Client/daemon version drift
 
@@ -1901,9 +2049,9 @@ its own path, strictly on **stderr**. It does not
 change stdout or the exit code, so output parsing is unaffected. A daemon old
 enough to send no header produces no warning.
 
-This matters because packaged skill scripts and the legacy agent `tasks` /
-`i-am-done` compatibility shims select a versioned Store skill tree: without the warning, a script too old to know a
-newer flag looks like it simply did nothing.
+This matters because packaged skill scripts and the agent `tasks` / `i-am-done`
+compatibility shims execute from the active image bridge: without the warning,
+a script too old to know a newer flag looks like it simply did nothing.
 `scripts/whoami.sh` prints both `client_version` and `daemon_version` for exactly this
 reason — it is the first command to run when the tools behave strangely.
 
@@ -2214,11 +2362,14 @@ Inspect and list output also reports the daemon-selected read-only
 
 ## File transfer
 
-`tariboy cp LOCAL_FILE` uploads a local file through `PUT /api/files` and
+`tariboy cp LOCAL_FILE` streams a local file through `PUT /api/files/raw` and
 prints the returned absolute server path. Files are stored beneath
 `$TARIBOY_BASE_DIR/files`, with a unique directory for each upload and a
-16 MiB per-file limit. Agents on that server can read the same uploaded file;
+1 GiB per-file limit. Agents on that server can read the same uploaded file;
 uploading does not require an agent or write into an agent's working directory.
+
+The lower-level `tariboy files upload` command remains a JSON/base64
+compatibility surface with a 16 MiB decoded-file limit.
 
 `tariboy cp AGENT:SRC LOCAL_DST` still downloads from the agent's working
 directory. The former upload syntax `cp SRC AGENT:DST` and `agent push`
@@ -2360,8 +2511,7 @@ entries. They may not override `HOME`, `CODEX_HOME`, or `XDG_CONFIG_HOME`.
 | `internal/` | Go domain logic, APIs, persistence, loop, bus, proxy, plugins, and embedded store UI. |
 | `ui/` | Shared React/TypeScript source and the Desktop and store UI build targets. |
 | `desktop/src-tauri/` | Rust/Tauri native host, daemon lifecycle, SSH, Keychain, tunnels, support export, and packaging resources. |
-| `internal/builtinimages/source/` | Canonical source for the embedded `basic:latest` image. |
-| `store/skills/` | Canonical Agent Skills installed under each versioned Store. |
+| `~/github/tariboy-store/` | Separate repository containing canonical image sources and Agent Skills. |
 | `scripts/` | Isolated smoke, end-to-end, packaging, and release verification. |
 | `docs/docs/` | Current product, operator, architecture, and development documentation. |
 | `docs/releases/` | Release notes and acceptance evidence. |
@@ -2398,7 +2548,7 @@ Use the smallest fast entry point that covers the change; the aggregate and
 heavy targets compose them:
 
 ```bash
-make backend-check   # Go, Store skills, and smoke contracts
+make backend-check   # Go and smoke contracts
 make frontend-check  # UI and documentation
 make check           # both fast checks
 make full-check      # heavy, tens of minutes, includes check
@@ -2407,7 +2557,7 @@ make full-check      # heavy, tens of minutes, includes check
 Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
-the Store skill tests, and smoke contracts. The frontend target runs UI
+Go unit tests and smoke contracts. The frontend target runs UI
 typecheck, lint, unit tests, branding, and the documentation checks. All three
 are read-only: they never install dependencies, write into `bin/`, or dirty
 `git status`. Each step reports its result and duration as it finishes.
@@ -2475,20 +2625,17 @@ the Go quality gate.
 `backend-check`; run `make fmt` yourself when it reports drift.
 
 `make build` produces the core binaries. It is not part of `check`, which
-writes nothing into `bin/`, and it is the first build step of `full-check`. It
-also builds the canonical `basic:latest` image bundle before the main binaries;
-optional external plugins have their own build under `plugins/`. Built-in
-skills and the mandatory finish prompt come from the versioned Store, not Go
-constants. The image build
-uses an isolated temporary store and never contacts a daemon. `desktop-binaries` runs
-the same image step before compiling its local and remote daemon payloads.
+writes nothing into `bin/`, and it is the first build step of `full-check`.
+Optional external plugins have their own build under `plugins/`. Canonical
+image sources, Agent Skills, and their static prompts are maintained in the
+separate `tariboy-store` repository rather than embedded in the binaries.
+`desktop-binaries` compiles the local and remote daemon payloads without
+building an agent image.
 `make install` installs the resulting commands under `$HOME/.local/bin`; it is
 not required for normal unit-test work.
 
-The Tasks mode E2E inside `backend-check` builds its five required binaries and
-basic image in temporary directories. A Go build overlay embeds that temporary
-image, so the check never regenerates workspace `bin/` or
-`internal/builtinimages/generated`.
+The Tasks mode E2E inside `backend-check` builds its five required binaries in
+temporary directories, so the check never regenerates workspace `bin/`.
 
 `make server-install` builds all six real server binaries, stages and verifies
 their checksums, publishes a versioned release under
@@ -2498,8 +2645,8 @@ their checksums, publishes a versioned release under
 
 Configurable Native Tasks workflow changes normally need focused tests under
 `internal/tasks`, the operator route/OpenAPI registry tests under
-`internal/commands`, and agent command parsing under
-`store/skills/test_store_skills.py`.
+`internal/commands`, and the agent command contracts in the separate
+`tariboy-store` repository's `make check`.
 Changes to queue-trigger or observation delivery also exercise bus/daemon
 recovery; Compose changes exercise `internal/compose`. The isolated product
 path is `scripts/workflow-e2e.sh` and is included by `make full-check`. Keep the
@@ -2835,11 +2982,6 @@ The two UI targets have different Git contracts:
   After a store UI or relevant shared UI change, run `make store-ui` in an
   isolated worktree at the target commit and commit only the intended generated
   store bundle with its source change.
-- `internal/builtinimages/generated` is ignored build output embedded in
-  `tariboyd`. `make build-basic-image` regenerates it from the canonical
-  source at `internal/builtinimages/source` before daemon compilation; do not
-  stage the archive or version marker.
-
 `tariboyd` is API/WebSocket only. It does not embed a Desktop UI, and there is
 no `internal/webui` tree.
 
@@ -2924,9 +3066,11 @@ runtime or compose configuration. They are not schema-v2 image fields.
 
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
 required name and an optional tag, then select **Validate** or **Build**. The
-default tag is `latest`. Tariboy records the canonical source CWD as local
-provenance and retains an immutable source snapshot for evidence. Rebuilding
-still reads the original directory and its current paths.
+default build publishes both the source `image_version` and `latest`, or only
+`latest` when the source has no version. An explicit tag publishes only that
+tag. Tariboy records the canonical source CWD as local provenance and retains
+an immutable source snapshot for evidence. Rebuilding still reads the original
+directory and its current paths.
 
 **Validate** is read-only. Before a build it shows the schema version, explicit
 plugin names, packaged skill metadata, template hash, and every prompt entry in
@@ -2940,6 +3084,10 @@ runtime version. Validation never repairs or reorders the template.
 
 Use **Open in VS Code** on an image detail page when the source CWD still exists
 on the selected local or SSH host. Imported images have no source CWD.
+
+**New Image** creates a managed schema-v2 source from only a name and optional
+initial prompt. The generated project is prompt-only; edit its
+`Tariboyfile.yaml` to declare packaged skills or plugins before building.
 
 The equivalent operator command is:
 
@@ -2967,23 +3115,122 @@ several refs from one parsed source; each result has its own ref and digest,
 while frozen static image content, source provenance, and build time are
 shared. The requested refs and their snapshot/provenance metadata commit as one
 batch; a failure on any tag restores every ref exactly. Duplicate tags are
-rejected. A single tag and an omitted tag remain supported; omission means
-`latest`.
+rejected. When the operator CLI omits `--tag`, a frozen source with
+`image_version` publishes both that version and `latest`; the existing
+single-result output reports the versioned ref. Older files without a version
+publish only `latest`. Explicit tags, including `--tag latest`, take priority
+and do not add another ref.
 
-Imports and retagged runnable artifacts, registry artifacts, reserved `basic`
-and `bare` refs, and controlled-improvement releases remain immutable.
+Imports and retagged runnable artifacts, registry artifacts, the reserved
+`bare` ref, and controlled-improvement releases remain immutable.
 An ordinary build never converts an existing immutable ref. Daemons created
 before mutable markers existed migrate a legacy ordinary-build ref only when
 its authoritative source snapshot and provenance both match the current
 digest; otherwise the operator must choose another tag.
 
+## Stores on a server
+
+Open **Stores** beside **Images** to register a Git repository or an absolute
+directory on the selected server. Each `tariboyd` owns its own registrations
+and performs clone, refresh, and build on that server. A Store contains image
+sources at `images/<image_name>/Tariboyfile.yaml`.
+
+```bash
+tariboy store add team git@github.com:company/agent-images.git
+tariboy store add local /srv/company-images
+tariboy store list
+tariboy store show team
+tariboy store refresh team
+tariboy image build team/reviewer
+tariboy image build team/reviewer --name company-reviewer
+tariboy store remove team
+```
+
+Git sources are cloned under `<base-dir>/stores/<store_name>/`. For a daemon
+running as `agent` with defaults, `team` lives at
+`/home/agent/.tariboy/stores/team/`, and its reviewer source is
+`/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
+`TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
+A local source such as `/srv/company-images` is used in place, without a copy.
+Stores are the source of canonical agent images and skills; the daemon no
+longer installs a separate built-in Store tree.
+
+Only the registration's name and source are persisted in the daemon database.
+Viewing a Store reads the current disk inventory and `image_version` values;
+there is no saved image list to become stale. For each valid source, the detail
+also shows the newest built version with the same default image name and marks
+the source when that newest version is absent or differs from its declared
+version. A successful **Build** reloads that inventory. A missing `images/`
+directory shows an empty list. An invalid image reports its own error while
+valid sibling images remain visible.
+
+**Refresh** runs `git pull --ff-only` for both managed clones and local Git
+checkout roots, including Git worktrees. A local directory without its own
+`.git` entry is simply reread; Tariboy does not pull an ancestor repository.
+A conflict, missing
+upstream, or authentication failure is reported without resetting or stashing
+local edits. **Remove** unregisters the Store and deletes its managed clone;
+it preserves local source directories and already built images.
+
+Store builds use the existing image builder. By default, a versioned source
+publishes both `<image_name>:<image_version>` and `<image_name>:latest`, while a
+source without a version publishes only `latest`. Use `--name` to avoid a name
+collision between Stores, and `--tag` to publish only an explicit tag. Do not
+combine a Store selector with `--path`.
+
+Before freezing sources, the daemon runs `npx skills experimental_install` in
+the Store root when `skills-lock.json` exists there, then in the image directory
+when it has a separate lock. An installation failure stops the build before
+publication. Git must be installed on the daemon host; lock restoration also
+requires Node.js/npm and access to the skill sources. Private repositories use
+the server account's configured SSH or Git credential helpers. Configure access
+on that server before adding the Store; do not put credentials in its URL.
+
+The Store detail shows **Images**, their source and built versions, update
+highlighting, and **Build** actions. Built artifacts appear in the existing
+**Images** workspace. Stores do not yet expose standalone skills or plugins.
+
+## Image versions
+
+Set `image_version: 0.1.0` in `Tariboyfile.yaml` to version the image
+independently of `schema_version` and the Tariboy product version. Both source
+schemas accept SemVer 2.0.0, including prerelease and build metadata, without a
+`v` prefix. Complete SemVer versions are also valid image tags.
+
+Read or increment the version locally, without a running daemon:
+
+```bash
+tariboy image version get
+tariboy image version get --path ./reviewer-image/Tariboyfile.yaml
+tariboy image version update patch --path ./reviewer-image
+tariboy image build --path ./reviewer-image --name reviewer
+```
+
+Both version commands default to `./Tariboyfile.yaml`; `--path` accepts a
+file or directory. They print only the resulting version (or a JSON string
+with `--json`). `update major`, `update minor`, and `update patch` increment
+that component, reset lower components to zero, and remove prerelease/build
+suffixes. For example, `1.2.3-rc.1+build.7` becomes `1.3.0` after `update minor`.
+
+Updates atomically replace the file while preserving its permissions, YAML
+fields, and comments; YAML formatting may change. Missing or invalid versions
+produce an error without changing the file. Old sources may omit the field
+for build compatibility, but version commands require it.
+
+The runnable manifest preserves `image_version` independently of its ref tag.
+For mutable refs such as `latest`, every new iteration snapshots the source
+version with the ref and digest, exposes it through `iteration inspect`, and
+includes it in `runtime: identity` and iteration audit exports. Older runnable
+images and historical iterations simply omit the version.
+
 ## Schema version 2
 
-Schema v2 is strict and accepts only `schema_version`, `plugins`, `skills`, and
-`prompts`:
+Schema v2 is strict and accepts only `schema_version`, `image_version`,
+`plugins`, `skills`, and `prompts`:
 
 ```yaml
 schema_version: 2
+image_version: 0.1.0
 plugins:
   - name: whoami
   - name: messages
@@ -2991,11 +3238,11 @@ plugins:
   - name: workdir
   - name: jira
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/whoami
-  - dir: $CURRENT_VERSION_STORE/skills/messages
-  - dir: $CURRENT_VERSION_STORE/skills/context
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
-  - dir: ./skills/code-review
+  - dir: ../../skills/whoami
+  - dir: ../../skills/messages
+  - dir: ../../skills/context
+  - dir: ../../skills/workdir
+  - dir: ../shared-skills/code-review
   - dir: $PLUGINS/jira/2.5.0/skills/triage
 prompts:
   - runtime: identity
@@ -3004,7 +3251,7 @@ prompts:
   - file: $PLUGINS/jira/2.5.0/prompts/reviewer.md
   - runtime: context
   - runtime: workdir
-  - file: ./task.md
+  - file: ../../skills/loop/finish-iteration.md
   - runtime: user-prompt
   - file: /srv/tariboy/prompts/finish.md
 ```
@@ -3017,15 +3264,17 @@ Each static `file` is resolved and embedded at build time. Supported forms are:
 
 | Form | Resolves from |
 | --- | --- |
-| `$STORE/...` | The common Store root, including all installed product versions |
-| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
 | `./...` | The original directory containing `Tariboyfile.yaml` |
+| `../...` below a declared skill | That skill's frozen source snapshot |
 | `/absolute/path/...` | An operator-supplied absolute filesystem path |
 
 The builder expands only those literal variables; it never performs shell or
-environment expansion. Traversal, symlinks, missing files, non-regular files,
-and oversized prompt files are rejected.
+environment expansion. A prompt may use `../` only to read a file below a
+source-relative directory already declared in `skills`; validation reads that
+directory directly and build reads its immutable snapshot. Other traversal,
+symlinks, missing files, non-regular files, and oversized prompt files are
+rejected.
 
 ## Packaged Agent Skills
 
@@ -3068,17 +3317,11 @@ present. Each singleton placeholder may appear at most once. Empty runtime
 values add no text. The **Template** tab shows static paths, categories, sizes,
 hashes, and runtime markers in their exact order without draining messages.
 
-## Store and external plugins
+## External plugins
 
-Built-in static prompt assets are installed under:
-
-```text
-$STORE/versions/<tariboy-version>/skills/...
-```
-
-`$CURRENT_VERSION_STORE` points at that version directory. `$STORE` stays
-version-independent so a source may intentionally reference a built-in prompt
-from another installed version.
+Image-owned static prompts and complete Agent Skill trees come from the image
+source and are copied into the runnable artifact. Dynamic runtime placeholders
+and built-in or external plugin implementations remain daemon-owned.
 
 External plugins are separate:
 
@@ -3096,8 +3339,8 @@ path in `prompts`.
 Build the image in **Images**, then open the agent's **Configuration** tab and
 select it under **Agent image**. The choice is persisted as pending. Tariboy
 does not interrupt a running iteration: it validates and activates the image
-through the next iteration's launch gate, then snapshots the image ref, digest,
-and prompt-template hash for that iteration.
+through the next iteration's launch gate, then snapshots the image ref, source
+version, digest, and prompt-template hash for that iteration.
 
 Activation changes only image bytes, plugin capabilities, and image-owned
 shims. It preserves harness, model, effort, environment, interactive and loop
@@ -3125,7 +3368,9 @@ saved image ref and portable filename in a toast. **Import runnable image** veri
 archive before installation. Validation rejects unmanifested content, unsafe or
 special-file members, duplicate paths, malformed schema-v2 metadata, prompt
 layer/hash mismatches, and compressed or expanded limit violations. Import does
-not rebuild the image. The import preview exposes editable **Import name** and
+not rebuild the image. Preview, apply, assignment, and activation also validate
+plugin, runtime, skill, launcher, and harness compatibility against the
+destination daemon before publication. The import preview exposes editable **Import name** and
 **Import tag** fields. The same ref and digest are idempotent; when the ref
 already names different bytes, choose another name or tag. That explicit retag
 receives a newly rewritten manifest and digest.
@@ -3164,22 +3409,21 @@ for this operation, not source backup or persistent state.
 
 ## Built-in images and compatibility
 
-- `bare:latest` is a schema-v2 image with no plugins and an empty prompt. Its
+- `bare:latest` is daemon-synthesized with no plugins and an empty prompt. Its
   terminal-only behavior is runtime policy.
-- `basic:latest` explicitly declares every plugin, packaged Store skill,
-  runtime placeholder, and mandatory finish prompt it uses, including the
-  instruction-only `workdir` plugin, the `goal` capability, their skills, `runtime: workdir`, and
-  `runtime: goal`. New agents receive the
-  current managed generation. A daemon upgrade may advance this managed ref,
-  while active agents and pending assignments continue resolving their pinned
-  pre-upgrade digest until the operator selects another image.
-- Existing schema-v1 sources and images retain their historical behavior.
-  Compatibility is selected by `schema_version`; new sources should use v2.
+- The official Store's `basic` source explicitly declares every plugin,
+  packaged skill, runtime placeholder, and mandatory finish prompt it uses.
+  Register and refresh `tariboy-store`, then build `official/basic`; daemon
+  upgrades do not publish or replace that image.
+- New build and validation requests require schema v2. Existing self-contained
+  schema-v1 runnable archives remain readable and runnable only when they carry
+  every byte their historical contract requires; they are not valid editable
+  sources for a new build.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
-`$CURRENT_VERSION_STORE/skills/tasks` when an image should expose its agent
-command and instructions. Add `plugins: [{name: goal}]`, package
-`$CURRENT_VERSION_STORE/skills/goal`, and add `runtime: goal` when the image
+`../../skills/tasks` when a Store image should expose its agent command and
+instructions. Add `plugins: [{name: goal}]`, package `../../skills/goal`, and
+add `runtime: goal` when the image
 should receive the daemon-authoritative selected goal. The rendered task title
 and description are untrusted task input, not daemon instructions or lifecycle
 authority.
@@ -3205,16 +3449,15 @@ configuration for Claude Code and OpenCode, and a compact prompt catalog of
 absolute `SKILL.md` paths for Codex.
 See [Images](/docs/images) for the complete schema and path roots.
 
-The daemon provides two reserved images:
+Tariboy provides one reserved image and the official Store provides the usual
+general-purpose source:
 
-- **basic** — the daemon-provided general-purpose default (context, status,
+- **basic** — the general-purpose source in `tariboy-store` (context, status,
   managed-workdir instructions, scripts, Goal attribution, native Tasks, and
-  `runtime: goal`). It
-  deliberately excludes all external provider integrations. Every
-  packaged daemon installs or refreshes `basic:latest` when its version is
-  activated.
-- **bare** — an empty schema-v2 plugin/prompt artifact whose terminal-only
-  behavior is runtime policy.
+  `runtime: goal`). It deliberately excludes all external provider
+  integrations. Register and refresh that Store, then build the source.
+- **bare** — a daemon-synthesized empty schema-v2 plugin/prompt artifact whose
+  terminal-only behavior is runtime policy.
 
 ## Groups
 
@@ -3242,9 +3485,9 @@ requires one analysis per target by default.
 A worker whose active image identity does not match the run cannot claim its
 assignments. The run reports an actionable diagnostic to create a new run after
 the intended image has activated; already compatible workers and completed
-historical evidence remain available. Existing same-version Store installations
-may require the release-time versioned asset transition after the bundled rubric
-move; Store verification remains strict and must not be bypassed.
+historical evidence remain available. Existing images remain pinned to their
+runnable bytes; rebuilding a Store image publishes a new digest without
+rewriting historical runs.
 
 ## Historical group Usage
 
@@ -3473,6 +3716,66 @@ branch verification, then merges locally according to repository conventions.
 It runs the distinct post-merge verification on `main`, removes the merged
 worktree and branch, records the final task result, and closes the Native Task.
 
+## Image creator role
+
+`images/tariboy-image-creator` in the registered Store creates and improves
+image sources and independent Store skills. Configure the agent CWD to the Store root containing
+`images/` and optionally `skills/`; CWD is agent configuration, not an image
+manifest field. Work starts from a Native Task, with investigation and a plan
+approved on that task before edits.
+
+The short role prompt requires these procedures:
+
+- `tariboy-image-authoring`: image schema, source dependencies, local version
+  commands, build boundaries and diagnosis from untrusted iteration logs.
+- Existing Superpowers `writing-skills`: all skill creation, improvement and
+  skill-level evals, including skills outside an image.
+- `tariboy-image-evals`: whole-image behavior, skill selection and composition;
+  its evidence is separate from skill evals and packaging validation.
+- `tariboy-image-delivery`: task approval, Git isolation, publication and
+  completion. It reuses `github-pr-workflow` and the Scripts skill for PRs.
+
+The domain skills live inside the image source. Another image can package the
+`tariboy-image-authoring` directory through a relative `skills.dir` declaration;
+provide `writing-skills` for skill work and `tariboy-image-evals` for whole-image
+checks as well. This does not require adopting the image creator role prompt.
+The built-in `image-creator` skill remains its identity-bound build launcher.
+
+Keep the sibling `tariboy-developer/skills/github-pr-workflow` directory beside
+the source for rebuilds: the manifest reuses its utility without a copy. Restore
+the image’s Superpowers dependencies from `skills-lock.json`. Git and Node.js/npm
+with access to the upstream source are required. From the Store root:
+
+```bash
+cd images/tariboy-image-creator
+npx skills experimental_install
+cd ../..
+tariboy image validate --path images/tariboy-image-creator --name tariboy-image-creator
+tariboy image build --path images/tariboy-image-creator --name tariboy-image-creator
+```
+
+These are operator commands against the selected daemon. Agent builds use the
+`image-creator` launcher and require the source and referenced sibling skills
+inside the managed workdir, which is independent of configured CWD. A build
+boundary failure is reported through the task, never bypassed with another
+socket or identity. The runnable artifact packages the referenced skills and
+utility, so it does not require the sibling source directory at runtime.
+
+For existing image revisions, the role uses `tariboy image version get` and
+`tariboy image version update patch|minor|major` locally. Missing behavioral
+evals are created before instruction changes. Scenarios and observed
+baseline/candidate results are kept separately for each skill and the image;
+YAML validation or a successful build alone is not a behavioral evaluation.
+
+Every Git task uses a separate branch and worktree. On GitHub, the agent
+publishes one PR, mentions the task customer, sets a flexible task to
+`wait_customer` and retains one durable monitor. It never merges; completion
+requires observed merge metadata, post-merge checks and cleanup. Other Git
+Stores deliver the branch/worktree and ask for acceptance/integration
+instructions. Non-Git Stores are edited in place after plan approval, then
+reported to the customer with a question about the next step. Those fallback
+tasks stay active until a recorded customer decision.
+
 ## Declare skills
 
 Each entry is an object with one `dir` field. String entries and additional
@@ -3513,22 +3816,38 @@ the packaged skill metadata.
 
 ## Source paths
 
-Skill directories use the same five explicit source forms as static prompt
-files:
+Skill directories support these explicit source forms:
 
 | Form | Resolves from |
 | --- | --- |
-| `$STORE/...` | The common Store root across installed Tariboy versions |
-| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
-| `./...` | The directory containing `Tariboyfile.yaml` |
+| `./...` or `../...` | The directory containing `Tariboyfile.yaml`, including sibling directories |
 | `/absolute/path/...` | An operator-supplied absolute Unix path |
 
 Only the literal variables in this table are expanded. Tariboy does not apply
 shell or general environment-variable expansion. Validation warns that an
 absolute source makes the original build host-bound. Agent-authored image
-builds further confine source and absolute references to that agent's managed
-workdir.
+builds further confine relative and absolute skill references to that agent's
+managed workdir. Plugin references cannot escape their declared root. A prompt
+may use `../` only when its target remains below one of these
+explicitly declared source-relative skill directories; the build reads the
+file from the same frozen skill snapshot.
+
+For example, `images/reviewer/Tariboyfile.yaml` in a Store can package
+`skills/code-review` with:
+
+```yaml
+skills:
+  - dir: ../../skills/code-review
+prompts:
+  - file: ../../skills/code-review/review-policy.md
+```
+
+An ordinary build freezes explicitly referenced sibling skill directories
+alongside its source snapshot, without copying the whole parent directory.
+The image retains the original declaration and embeds the frozen skill bytes;
+moving or changing the original skill after the snapshot cannot change that
+build. A later rebuild reads the original paths again.
 
 ## `SKILL.md` contract
 
@@ -3595,7 +3914,7 @@ remains in the manifest:
 | --- | --- |
 | `name`, `description` | Validated `SKILL.md` identity |
 | `source`, `category` | Original declaration and resolved source class |
-| `client_version` | Producing Store version for a skill sourced from `$CURRENT_VERSION_STORE` |
+| `client_version` | Legacy producer metadata, when present |
 | `archive_root` | Canonical `skills/<name>` location in the image |
 | `file_count`, `size` | Validated aggregate contents |
 | `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |
@@ -3713,7 +4032,7 @@ before skill selection, such as closing every delivered message and respecting
 a managed task packet's least-privilege boundary.
 
 Images using `llm-as-judge`, `image-creator`, or `schedule` should package the
-same-named Store skill explicitly. Declaring a plugin never injects its skill or
+same-named image skill explicitly. Declaring a plugin never injects its skill or
 legacy prompt in schema v2. Role responsibilities belong in the image's own
 ordered prompt layer; task identity and input remain runtime layers.
 
@@ -3758,7 +4077,7 @@ complete manifest contract.
 Prompt assets and Agent Skills are separate declarations. A plugin directory
 such as `$PLUGINS/jira/2.5.0/skills/triage` becomes a packaged Agent Skill only
 when an image lists it under `skills: [{dir: ...}]`; placing content under a
-plugin's `store/skills` does not opt it in automatically. At runtime Tariboy
+plugin's own skills directory does not opt it in automatically. At runtime Tariboy
 uses a generated local plugin for Claude Code, a bounded prompt catalog for
 Codex CLI, and an isolated config overlay for OpenCode. These integrations are
 additive to each harness's normal global and CWD discovery. Native duplicate
@@ -3939,7 +4258,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 
 ## Complete list
 
-| Plugin | Class | In `basic:latest` | Agent surface | Durable state |
+| Plugin | Class | In official `basic` | Agent surface | Durable state |
 | --- | --- | :---: | --- | --- |
 | [`whoami`](/docs/plugins/built-in/whoami) | Historical core | Yes | `scripts/whoami.sh` | None |
 | [`loop`](/docs/plugins/built-in/loop) | Historical core | Yes | `i-am-done`, `scripts/loop.sh …` | Iteration and loop state |
@@ -3971,18 +4290,18 @@ plugins:
   - name: context
   - name: workdir
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/whoami
-  - dir: $CURRENT_VERSION_STORE/skills/loop
-  - dir: $CURRENT_VERSION_STORE/skills/messages
-  - dir: $CURRENT_VERSION_STORE/skills/context
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
+  - dir: ../../skills/whoami
+  - dir: ../../skills/loop
+  - dir: ../../skills/messages
+  - dir: ../../skills/context
+  - dir: ../../skills/workdir
 prompts:
   - runtime: identity
   - runtime: messages
   - runtime: context
   - runtime: workdir
   - runtime: user-prompt
-  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md
+  - file: ../../skills/loop/finish-iteration.md
 ```
 
 Plugin order is preserved, duplicate names are rejected, and an unknown name is
@@ -3991,21 +4310,21 @@ prompt files and runtime placeholders remain separate from the plugin list.
 
 :::warning[Plugins do not inject schema-v2 prompts]
 Declaring `context` enables its route but does not package its skill or add the
-live context text. List the Store skill and `runtime: context` explicitly when
+live context text. List the image skill and `runtime: context` explicitly when
 the agent needs both. The same transparency rule applies to instruction-only
 `workdir` and `goal`.
 :::
 
 ## The default image
 
-The daemon-managed `basic:latest` image declares nine built-ins:
+The official Store's `basic` source declares nine built-ins:
 
 ```text
 whoami, loop, messages, context, status, workdir, scripts, goal, tasks
 ```
 
 It deliberately excludes `schedule`, `image-creator`, and
-`llm-as-judge`. New agents use the current managed generation. Existing agents
+`llm-as-judge`. Register and refresh the Store, then build it. Existing agents
 remain pinned to their assigned image digest until an image change is activated
 for a future iteration.
 
@@ -4024,8 +4343,8 @@ when the work packet grants it.
 
 ## Prompt and state ownership
 
-Canonical built-in skills and the mandatory finish prompt live under the
-versioned Store. A schema-v2 image packages each enabled skill and chooses the
+Canonical skills and the mandatory finish prompt live in the image source. A
+schema-v2 image packages each enabled skill and chooses the
 exact position of runtime values and mandatory prompt layers. Changing an image does not
 delete daemon-owned agent data such as context, audit, messages, schedules,
 scripts, Tasks, or judge artifacts.
@@ -4039,7 +4358,7 @@ external process plugins, see [Plugins](/docs/plugins#external-plugins).
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/context
 
 `context` provides one durable working-memory document per agent. It is an
-optional capability included in `basic:latest`.
+optional capability included in the official Store's `basic` source.
 
 ## Capability surface
 
@@ -4066,14 +4385,14 @@ removal.
 
 ## Prompt integration
 
-The capability gates the route, the packaged Store skill explains replacement,
+The capability gates the route, the packaged image skill explains replacement,
 and the runtime marker inserts the current text:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: context
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/context
+  - dir: ../../skills/context
 prompts:
   - runtime: context
 ```
@@ -4102,7 +4421,7 @@ prompts. Support bundles exclude `CONTEXT.md`.
 # goal
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/goal
 
-`goal` is a capability included in `basic:latest`. It provides one command:
+`goal` is included in the official Store's `basic` source. It provides one command:
 `scripts/goal.sh set <TASK-KEY>`.
 
 Before the harness starts, `tariboyd` reads the selected Goal once and stamps
@@ -4125,7 +4444,7 @@ Package the Goal skill and render the runtime value explicitly:
 plugins:
   - name: goal
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/goal
+  - dir: ../../skills/goal
 prompts:
   - runtime: goal
 ```
@@ -4140,7 +4459,8 @@ the authoritative Native Task.
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/image-creator
 
 `image-creator` allows an agent to publish a new immutable image to the current
-host's image store. It is optional and is not included in `basic:latest`.
+host's image store. It is optional and is not included in the official Store's
+`basic` source.
 
 ## Capability surface
 
@@ -4166,9 +4486,9 @@ resolves `--path` against the agent's effective working directory and rejects:
 - absolute paths outside that workdir;
 - `..` traversal that escapes it;
 - a symlinked path whose real target escapes it;
-- schema-v1 skill, prompt, or eval paths outside it;
-- inner symlinks in schema-v1 skill directories that resolve outside it;
-- absolute schema-v2 prompt paths outside it.
+- skill or prompt paths outside it;
+- inner symlinks in skill directories that resolve outside it;
+- absolute prompt paths outside it.
 
 These checks happen before the builder reads or archives outside content. The
 operator `tariboy image build` remains the trusted path for sources that
@@ -4176,10 +4496,10 @@ intentionally live elsewhere on the host.
 
 ## Manifest and plugin validation
 
-Both schema-v1 and schema-v2 sources are accepted. Schema-v2 builds preserve the
-explicit plugin list and ordered prompt/runtime template. Built-in names are
-validated against Tariboy's registry; external names must resolve to installed
-plugin metadata on the same daemon.
+New sources must use schema v2 and preserve an explicit plugin list plus ordered
+prompt/runtime template. Schema-v1 source builds fail with migration guidance.
+Built-in names are validated against Tariboy's registry; external names must
+resolve to installed plugin metadata on the same daemon.
 
 The build writes to the daemon's shared immutable image store. It does not
 assign the image to the creating agent or change a running iteration.
@@ -4190,10 +4510,10 @@ assign the image to the creating agent or change a running iteration.
 plugins:
   - name: image-creator
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/image-creator
+  - dir: ../../skills/image-creator
 ```
 
-The packaged Store skill teaches the authoring command. It grants no extra filesystem
+The packaged image skill teaches the authoring command. It grants no extra filesystem
 access beyond the capability-gated, workdir-confined API.
 
 ## Failure behavior
@@ -4214,7 +4534,7 @@ fail the build without publishing the requested ref.
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/llm-as-judge
 
 `llm-as-judge` exposes the agent side of Tariboy's historical iteration review
-workflow. It is optional, is not included in `basic:latest`, and is distinct
+workflow. It is not included in the official Store's `basic` source and is distinct
 from image-declared post-iteration evals.
 
 ## Roles and command surface
@@ -4305,10 +4625,10 @@ separately from the historical iterations being evaluated.
 plugins:
   - name: llm-as-judge
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/llm-as-judge
+  - dir: ../../skills/llm-as-judge
 ```
 
-The packaged Store skill defines the lead/worker discipline and tells workers
+The packaged image skill defines the lead/worker discipline and tells workers
 to treat evidence as untrusted. Scheduled messages initiate cycles through the
 authenticated capability-gated command; agents do not manage lifecycle state.
 
@@ -4324,8 +4644,8 @@ authenticated capability-gated command; agents do not manage lifecycle state.
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/loop
 
 `loop` gives an agent the completion and self-control operations for its
-iteration loop. It is a historical core capability and is included in
-`basic:latest`; schema-v2 images must declare it explicitly.
+iteration loop. It is a historical core capability included in the official
+Store's `basic` source; schema-v2 images must declare it explicitly.
 
 ## Capability surface
 
@@ -4338,7 +4658,7 @@ iteration loop. It is a historical core capability and is included in
 | `scripts/loop.sh stop` | Disable this agent's loop without impersonating another agent. |
 
 Provisioning writes `i-am-done` as an executable shim only when `loop` is
-enabled. The shim calls `loop/scripts/loop.py done` inside the versioned Store
+enabled. The shim calls `loop/scripts/loop.py done` inside the active image bridge
 skill directory.
 Image activation adds or removes it to match the next active plugin set.
 
@@ -4367,10 +4687,10 @@ Schema v2 packages the Loop skill and places the mandatory file explicitly:
 plugins:
   - name: loop
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/loop
+  - dir: ../../skills/loop
 prompts:
   - runtime: user-prompt
-  - file: $CURRENT_VERSION_STORE/prompts/iteration-finish.md
+  - file: ../../skills/loop/finish-iteration.md
 ```
 
 The prompt tells agents to wait for dispatched subagents and terminal-tool jobs,
@@ -4398,7 +4718,8 @@ action and is not part of this built-in.
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/messages
 
 `messages` connects an agent to Tariboy's durable channel bus. It is a
-historical core capability and is included in `basic:latest`; schema-v2 images
+historical core capability included in the official Store's `basic` source;
+schema-v2 images
 must declare it explicitly.
 
 ## Capability surface
@@ -4442,7 +4763,7 @@ Package the skill and use the messages runtime marker:
 plugins:
   - name: messages
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: ../../skills/messages
 prompts:
   - runtime: messages
 ```
@@ -4479,7 +4800,7 @@ failure does not silently acknowledge work.
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/schedule
 
 `schedule` lets an agent arrange future bus events without keeping an iteration
-open. It is an optional capability and is not included in `basic:latest`.
+open. It is optional and is not included in the official Store's `basic` source.
 
 ## Capability surface
 
@@ -4524,7 +4845,7 @@ can consume it.
 plugins:
   - name: schedule
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/schedule
+  - dir: ../../skills/schedule
 ```
 
 There is no schedule runtime marker. The packaged skill teaches the commands;
@@ -4554,7 +4875,7 @@ cannot escape an assignment's live communication boundary.
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/scripts
 
 `scripts` runs local shell commands without keeping the current agent iteration
-open. It is an optional capability included in `basic:latest`. It does not
+open. It is included in the official Store's `basic` source. It does not
 publish arbitrary channel messages; the separate [`schedule`](/docs/plugins/built-in/schedule)
 plugin owns timed bus messages and is unchanged.
 
@@ -4675,8 +4996,8 @@ plugins:
   - name: scripts
   - name: workdir
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/scripts
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
+  - dir: ../../skills/scripts
+  - dir: ../../skills/workdir
 prompts:
   - runtime: workdir
 ```
@@ -4709,7 +5030,7 @@ Source: https://alekzonder.github.io/tariboy/plugins/built-in/status
 `status` gives an agent a small, operator-visible progress surface. Messages
 are intended to stay on one line, although the API stores the supplied string
 without enforcing that presentation convention. It is an optional capability
-included in `basic:latest`.
+included in the official Store's `basic` source.
 
 ## Capability surface
 
@@ -4736,13 +5057,13 @@ through `tariboy agent status history`.
 
 ## Prompt integration
 
-Package the Store skill to expose the procedure:
+Package the image skill to expose the procedure:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: status
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/status
+  - dir: ../../skills/status
 ```
 
 There is no status runtime placeholder. The current status is read on demand
@@ -4845,10 +5166,10 @@ messages bus, so notifications survive restarts and can wake enabled agents.
 plugins:
   - name: tasks
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/tasks
+  - dir: ../../skills/tasks
 ```
 
-The packaged Store skill teaches both flexible and workflow-managed operation. There is
+The packaged image skill teaches both flexible and workflow-managed operation. There is
 no general Tasks runtime marker: ordinary work is queried through `ttasks`, and
 a managed assignment supplies its work packet through the workflow launch
 path.
@@ -4874,7 +5195,8 @@ before any request reaches the daemon.
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/whoami
 
 `whoami` exposes read-only identity information through the per-agent tools
-socket. It is a historical core capability and is included in `basic:latest`.
+socket. It is a historical core capability included in the official Store's
+`basic` source.
 Schema-v2 images must still declare it explicitly.
 
 ## Capability surface
@@ -4899,14 +5221,14 @@ drift on stderr without changing command output or the exit code.
 
 ## Prompt integration
 
-Package the Store skill and place the runtime `identity` marker where the live
+Package the image skill and place the runtime `identity` marker where the live
 identity block belongs:
 
 ```yaml Tariboyfile.yaml
 plugins:
   - name: whoami
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/whoami
+  - dir: ../../skills/whoami
 prompts:
   - runtime: identity
 ```
@@ -4942,7 +5264,7 @@ variable, or filesystem permission.
 
 ## Prompt composition
 
-Declare the instruction-only plugin, its Store skill, and its runtime value
+Declare the instruction-only plugin, its image skill, and its runtime value
 explicitly:
 
 ```yaml Tariboyfile.yaml
@@ -4950,7 +5272,7 @@ schema_version: 2
 plugins:
   - name: workdir
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
+  - dir: ../../skills/workdir
 prompts:
   - runtime: workdir
 ```
@@ -4994,7 +5316,7 @@ that contains images, iteration evidence, and daemon-owned files. The harness
 already runs as the daemon account, so rendering this path grants no additional
 access or sandboxing.
 
-`basic:latest` declares `workdir` for newly created agents. Existing agents
+The official Store's `basic` source declares `workdir`. Existing agents
 remain pinned to their current image digest until an operator selects another
 image.
 
@@ -5009,13 +5331,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.51.0` alpha on an Apple Silicon Mac.
+This path is for the `0.55.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.51.0_aarch64.dmg`;
+- a verified `Tariboy_0.55.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -5078,7 +5400,9 @@ handoff; legacy daemons fail closed when active work cannot be preserved.
 
 Open **Images**:
 
-- choose an existing built image for the shortest path; or
+- register `git@github.com:alekzonder/tariboy-store.git` as a Store named
+  `official`, refresh it, then build `official/basic`; or
+- choose an existing built image; or
 - enter the path to an original directory containing `Tariboyfile.yaml`, set a
   required name such as `reviewer`, validate the exact plugin/prompt template,
   and build `reviewer:latest`.
@@ -5454,6 +5778,19 @@ tariboy agent unsubscribe <agent> <channel>
 `channel tail` reads messages on a channel. It does not show per-agent delivery
 state such as `acked_at`, `attempts`, or DLQ.
 
+In an agent's Desktop **Messages → Queue** view, **Clear queue** physically
+removes every pending delivery for that agent after explicit destructive
+confirmation. Archive, DLQ, shared messages, and other agents' deliveries are
+unchanged; messages awaiting workflow ingestion are also retained. The
+idempotent response reports `deleted_deliveries` and
+`deleted_messages`; an empty Queue returns zeroes.
+
+The same operation is available to operators as:
+
+```bash
+tariboy agent inbox clear <agent>
+```
+
 ## Agent configuration that affects channels
 
 The agent row contains these message-related fields:
@@ -5461,7 +5798,8 @@ The agent row contains these message-related fields:
 - `messages_batch`: maximum number of pending messages inserted into one prompt.
   Default is `10`. If the runtime value is `<= 0`, the runner also falls back to
   `10`.
-- `messages_max_queue`: maximum pending messages for the agent, default `1000`.
+- `messages_max_queue`: maximum pending messages for the agent, default `100`
+  for new agents.
   A publish beyond the limit is retained in that agent's DLQ with result
   `queue_limit`; it is not added to the runnable pending queue.
 - `loop_enabled`: if false, publish can create pending deliveries but the agent
@@ -5497,8 +5835,9 @@ scripts/messages.sh channel subscribe <channel>
 scripts/messages.sh channel unsubscribe <subscription-id>
 ```
 
-There is currently no public CLI command dedicated to changing
-`messages_batch` or `messages_max_queue` after creation.
+Both fields are editable as positive whole numbers in Agent
+**Configuration → Messages & Channels**. Existing persisted values and values
+copied by Clone are not rewritten when the default changes.
 
 ## Common workflows
 
@@ -5601,8 +5940,8 @@ tariboy has three command surfaces:
 | `tariboy channel tail` | Print recent messages on a channel (-f to follow) |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
 | `tariboy compose import` | Preview and import compose-only team/runtime configuration |
-| `tariboy files upload` | Upload base64 content to the server and return its absolute path |
-| `tariboy cp` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
+| `tariboy files upload` | Upload up to 16 MiB of base64 content to the server and return its absolute path |
+| `tariboy cp` | Stream a file up to 1 GiB to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
@@ -5614,8 +5953,11 @@ tariboy has three command surfaces:
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
-| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build an immutable image and source snapshot; optional Git provenance must be provided as a pair |
+| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build mutable image refs and an immutable source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); Git provenance must be paired |
+| `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest` |
+| `tariboy image version get [--path FILE_OR_DIR]` | Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required |
+| `tariboy image version update <major\|minor\|patch> [--path FILE_OR_DIR]` | Increment the local SemVer, reset lower components and remove suffixes; preserve YAML fields/comments |
 | `tariboy image inspect` | Show an image manifest |
 | `tariboy image ls` | List built agent images |
 | `tariboy image prompt` | Print an image's assembled prompt |
@@ -5641,7 +5983,7 @@ tariboy has three command surfaces:
 | `tariboy judge automation validate --json JSON` | Validate raw JSON in `tariboyd` without applying it |
 | `tariboy judge automation apply --json JSON` | Apply JSON, create `JUDGE`/`IMPROVE`, and reconcile the recurring schedule without starting a review |
 | `tariboy judge automation run-once --limit N` | Queue one immediate cycle through the existing scheduler |
-| `tariboy iteration inspect` | Show one iteration |
+| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, and prompt-template hash |
 | `tariboy iteration logs` | Print an iteration's harness logs |
 | `tariboy iteration ls` | List an agent's iterations |
 | `tariboy logs` | Stream or print an agent's events (-f to follow) |
@@ -5669,6 +6011,11 @@ tariboy has three command surfaces:
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
 | `tariboy secret set` | Set a secret; value from --value or stdin |
+| `tariboy store add NAME SOURCE` | Register a Git URL or absolute local directory on the daemon host |
+| `tariboy store list` | List this daemon's Store registrations |
+| `tariboy store show NAME` | Read current images, versions and diagnostics from disk |
+| `tariboy store refresh NAME` | Fast-forward pull a Git source, or reread a non-Git local directory |
+| `tariboy store remove NAME` | Unregister a Store and remove only its managed clone; preserve local sources and built images |
 | `ttasks queue create` | Create a task queue |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
 | `tariboy user-prompt get` | Read the agent's standing user-prompt |
@@ -5716,7 +6063,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
 | `scripts/scripts.sh rerun SCRIPT_ID` | Rerun a completed one-shot definition |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
-| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
+| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from an agent-confined source directory (`image-creator` only) |
 
 ## Native Tasks (`ttasks …`)
 
@@ -5901,7 +6248,8 @@ release.
 
 Inside an SSH agent workspace, **Open in VS Code** opens the displayed effective
 working directory through VS Code Remote SSH using the same saved SSH config
-alias. Local agents open as ordinary local folders. HTTPS hosts do not show the
+alias in a new editor window. Local agents open as ordinary local folders in a
+new editor window. HTTPS hosts do not show the
 action because they have no SSH identity.
 
 Missing harnesses and `tmux` are reported separately as agent workflow
@@ -6022,12 +6370,32 @@ and refuses regular files, directories, or symlinks not owned by the verified
 Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
 
-Image builds resolve only literal `$STORE`, `$CURRENT_VERSION_STORE`, and
-`$PLUGINS` roots, source-relative paths, or explicit operator absolute paths.
-They reject traversal, symlinks, missing or non-regular files, and oversized
-prompt files. Agent-authored builds additionally confine source and absolute
-references to that agent's workdir.
+Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
+or explicit operator absolute paths. Prompt paths and plugin references reject
+traversal outside their roots.
+Source-relative skill directories may use `../` to reference a sibling tree;
+ordinary builds freeze only those explicitly declared skills alongside the
+source snapshot. Symlinks, missing or non-regular files, and oversized prompt
+files are rejected. Agent-authored builds additionally confine source and all
+relative or absolute skill references to that agent's workdir.
 Native host metadata and exported support archives use owner-only permissions.
+The global `<base-dir>/global-agent-shell.sh` and per-agent
+`<base-dir>/agents/<name>/agent-shell.sh` scripts are owner-only, atomically
+written only after `bash -n` validation; a rejected value cannot replace the
+last valid script.
+
+User Stores clone Git sources on the selected daemon host into its own
+`<base-dir>/stores/<name>/`, or use an explicitly registered local directory.
+Store names and image selectors are validated; image selection rejects path
+traversal and symlink escapes. Git uses the server account's existing SSH and
+credential helpers without weakening host verification. Credential-bearing
+URLs are rejected and subprocess output is not returned as error text.
+Refresh uses fast-forward-only pull and never resets or stashes user changes.
+Removing a Store preserves local source directories and built images.
+Building a Store with `skills-lock.json` invokes npm's skills installer on
+that host before freezing sources. Register and build sources you trust to
+install their declared skills. Store source contents remain outside the
+support-bundle allowlist.
 
 Controlled production publication is stricter than an ordinary operator build.
 Its external source uses only vendored `./` prompt and skill inputs, provides
@@ -6084,7 +6452,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.51.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.55.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6116,8 +6484,9 @@ files for the newest 10 iterations of each agent on that host. It reads only
 
 The collector never includes credentials or environment values (including
 `PATH`), SSH aliases/configuration, `PROMPT.md`, context, transcripts, audit,
-workdirs, configured cwd contents, image/plugin state, provisioning replies, or
-user files. It does not open agent environment configuration. Harness output can
+workdirs, configured cwd contents, global or agent shell scripts, image/plugin
+state, provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can
 nevertheless contain arbitrary private natural language, so inspect the ZIP
 before sending it under your organization's support data policy. Export does
 not upload anything automatically.
@@ -6155,7 +6524,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.51.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.55.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -7159,11 +7528,12 @@ mentioned principal's next comment resolves only its own open wait. This makes
 customer.
 
 An enabled agent normally follows one sticky assigned task as its Goal. It
-releases that selection when the task is done, cancelled, has a pull request,
-loses assignment or visibility, remains in `wait_customer` beyond the agent's
-configured grace period, or eligible assigned work has a strictly higher
-priority. The goal is daemon-owned and read-only to the agent; see [Agents and
-the iteration loop](/docs/architecture/iteration-loop).
+releases that selection when the task is done, cancelled, loses assignment or
+visibility, remains in `wait_customer` beyond the agent's configured grace
+period, or eligible assigned work has a strictly higher priority. A task's pull
+request URL does not affect Goal selection or release. The goal is daemon-owned
+and read-only to the agent; see [Agents and the iteration
+loop](/docs/architecture/iteration-loop).
 
 Assignment, question, answer, and queue-triage events enter a transactional
 outbox and publish through the existing channels/messages bus. Agent
@@ -7214,9 +7584,10 @@ If a later file fails, paths for files already uploaded are kept in the draft.
 
 Files are stored on disk under `$TARIBOY_BASE_DIR/files` (normally
 `~/.tariboy/files`), with a unique directory per upload so matching names never
-overwrite earlier files. Each file is limited to 16 MiB. Files remain after a
+overwrite earlier files. Each file is limited to 1 GiB. Files remain after a
 draft is discarded or a task is closed; remove unneeded files manually on the
-server when their paths are no longer needed.
+server when their paths are no longer needed. Desktop streams each selected
+file directly rather than creating a base64/JSON copy in memory.
 
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
@@ -7274,7 +7645,7 @@ mode only when `TARIBOY_TOOLS_SOCKET` is non-empty and otherwise uses the host
 Unix daemon socket as the customer actor. Agent mode fails closed rather than
 falling back to operator access. When enabled, the `tasks` capability also
 provisions the bare legacy `tasks` shim. Schema-v2 images must still package the
-Tasks Store skill; capability selection never packages instructions
+Tasks image skill; capability selection never packages instructions
 automatically. See the [Tasks built-in reference](/docs/plugins/built-in/tasks)
 for the complete boundary.
 

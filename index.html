@@ -4,8 +4,9 @@
 <nav class="progression" aria-label="From image to team"><a href="#image"><span class="step-number">01</span><strong>Image</strong><span>Define the workflow</span></a><a href="#agent"><span class="step-number">02</span><strong>Agent</strong><span>Give it a place to work</span></a><a href="#interactive"><span class="step-number">03</span><strong>Interactive</strong><span>Guide the work</span></a><a href="#autopilot"><span class="step-number">04</span><strong>Autopilot</strong><span>Let work continue</span></a><a href="#team"><span class="step-number">05</span><strong>Team</strong><span>Coordinate agents</span></a></nav>
 <section id="image" class="feature"><div><p class="eyebrow">01 / Define</p><h2>Image</h2><p class="feature-summary">A reusable definition of how an agent works.</p></div><div class="feature-detail"><p>An image packages <strong>plugins, Agent Skills, and an ordered prompt template</strong>.
 Build it from an original directory containing <code>Tariboyfile.yaml</code>, inspect
-exactly what the agent will receive, and reuse it across agents.</p><p>Start with the bundled <code>basic:latest</code> image or build one for a specific role.
-Export runnable images to other hosts; keep the original source for rebuilds.
+exactly what the agent will receive, and reuse it across agents.</p><p>Register the official <code>tariboy-store</code> repository and build <code>official/basic</code>,
+or build one for a specific role. Export runnable images to other hosts; keep
+the original source for rebuilds.
 Harness, model, and effort belong to agent configuration.</p><p><a href="/tariboy/images">Explore images →</a></p></div></section>
 <section id="agent" class="feature"><div><p class="eyebrow">02 / Configure</p><h2>Agent</h2><p class="feature-summary">A named agent, with its own runtime and working directory.</p></div><div class="feature-detail"><p>Create an agent from an image, then choose <strong>where it runs and which harness
 it uses</strong>. Configure its model, effort, working directory, and environment

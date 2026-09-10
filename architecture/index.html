@@ -137,25 +137,33 @@ delivery hint.</p>
 <p>Path resolution lives in <code>internal/paths</code>:</p>
 <ul>
 <li><strong>Data dir</strong> — <code>$TARIBOY_BASE_DIR</code>, else <code>~/.tariboy</code>. Holds the DB,
-agent working dirs, immutable images, the versioned built-in Store, and
-side-by-side external plugin versions.</li>
+agent working dirs, immutable images, and side-by-side external plugin
+versions.</li>
 <li><strong>Runtime dir</strong> — <code>$TARIBOY_RUNTIME_DIR</code>, else <code>~/.tariboyd</code>. Holds the
 control socket (<code>tariboyd.sock</code>), pidfile, and log.</li>
 </ul>
 <p>Operator <code>PUT /api/files</code> (<code>files upload</code>) accepts a file <code>name</code> and base64
 <code>content</code>, stores up to 16 MiB decoded under <code>files/&lt;unique-directory&gt;/&lt;name&gt;</code>
-in the data directory, and returns <code>path</code>, absolute <code>abs</code>, and <code>bytes</code>.
-All Send files, Attach, terminal-drop, and CLI uploads use this route.
+in the data directory, and remains available for compatible clients. Desktop
+Send files, Attach, terminal-drop, and <code>tariboy cp</code> instead stream raw bodies up
+to 1 GiB through <code>PUT /api/files/raw?name=...</code>. Both routes return <code>path</code>,
+absolute <code>abs</code>, and <code>bytes</code>.
 These uploads belong to the server independently of agents and tasks; agents
 on the same server can read the returned absolute paths. The former
 agent-scoped PUT route and <code>agent push</code> command are removed. Uploads
 are ordinary owner-only files, excluded from support bundles, with no automatic
 retention. The server rejects path components and control characters in names
-and confines filesystem operations with <code>os.Root</code>.</p>
+and confines filesystem operations with <code>os.Root</code>. The raw route rejects a
+declared oversized body before reading it, also bounds unknown-length streams,
+and removes its partial file and unique directory after any failed upload.</p>
 <p>The data directory also holds each agent’s working/configuration files and
 iteration evidence. SQLite owns agents, iterations, channels/deliveries, tasks,
 workflow execution history, idempotency keys, and durable outboxes. The
-owner-only proxy handoff file (<code>aiproxy-handoff.json</code>) intentionally sits
+global agent shell script is the deliberate filesystem-backed exception:
+<code>&lt;base-dir&gt;/global-agent-shell.sh</code>; an agent may additionally have
+<code>&lt;base-dir&gt;/agents/&lt;name&gt;/agent-shell.sh</code>. Both are owner-only files, written
+atomically after Bash validation, rather than SQLite configuration.
+The owner-only proxy handoff file (<code>aiproxy-handoff.json</code>) intentionally sits
 outside SQLite, audit logs, and support bundles because it contains active,
 short-lived proxy leases required to adopt live harnesses after restart.
 The same data directory contains <code>model-prices-litellm.json</code>, an owner-only
@@ -174,7 +182,7 @@ support bundles; see <a href="/tariboy/docs/security-controls#pricing-catalog-bo
   O->>D: start with paths and listener options
   D->>D: resolve PATH, paths, socket guard, and PID file
   D->>S: open database and run migrations
-  D->>D: reconcile agent inboxes; seed images and proxy defaults
+  D->>D: reconcile agent inboxes; ensure the bare image and proxy defaults
   D->>D: read and validate local model-price cache
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
@@ -336,16 +344,11 @@ An explicit agent <code>PATH</code> override must retain a Tasks command locatio
 <code>TARIBOY_TOOLS_SOCKET</code> is non-empty, it uses that identity-bound socket and
 fails closed; when absent, it uses the host Unix daemon socket as the customer
 actor. Each compatibility shim <code>exec</code>s its owning skill script by an <strong>absolute
-path</strong> inside the running daemon’s versioned Store. Every other capability is
-invoked through its packaged skill-local <code>scripts/*.sh</code> launcher.</p>
-<p>Because the path is absolute, shims written at create time would otherwise
-outlive the daemon that wrote them, leaving every agent on a frozen client whose
-CLI predates the daemon’s flags. So the daemon <strong>rewrites the shims of every
-stored agent at startup</strong>, before any engine or adoption starts — disabled
-agents included, since they may be enabled later. The rewrite is skipped when a
-file already holds exactly the wanted bytes, so restarting on the same version
-changes nothing on disk. A shim that cannot be written is logged against its
-agent and the rest of the startup continues.</p>
+path</strong> inside the active image bridge. Every other capability is invoked
+through its packaged skill-local <code>scripts/*.sh</code> launcher.</p>
+<p>The launch gate validates that each required launcher exists inside the
+candidate image, is regular, and is executable before replacing the current
+bridge or shims. Failure leaves the previous image and its shims active.</p>
 <p>Lifecycle is normally driven through the <code>tariboy daemon</code> subcommands rather
 than launching the binary directly. See
 <a href="/tariboy/docs/binaries/operator-cli">The operator CLI</a>.</p>

@@ -7,7 +7,7 @@ sidebar:
 ---
 
 `scripts` runs local shell commands without keeping the current agent iteration
-open. It is an optional capability included in `basic:latest`. It does not
+open. It is included in the official Store's `basic` source. It does not
 publish arbitrary channel messages; the separate [`schedule`](/docs/plugins/built-in/schedule)
 plugin owns timed bus messages and is unchanged.
 
@@ -128,8 +128,8 @@ plugins:
   - name: scripts
   - name: workdir
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/scripts
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
+  - dir: ../../skills/scripts
+  - dir: ../../skills/workdir
 prompts:
   - runtime: workdir
 ```

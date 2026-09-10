@@ -7,7 +7,8 @@ sidebar:
 ---
 
 `image-creator` allows an agent to publish a new immutable image to the current
-host's image store. It is optional and is not included in `basic:latest`.
+host's image store. It is optional and is not included in the official Store's
+`basic` source.
 
 ## Capability surface
 
@@ -33,9 +34,9 @@ resolves `--path` against the agent's effective working directory and rejects:
 - absolute paths outside that workdir;
 - `..` traversal that escapes it;
 - a symlinked path whose real target escapes it;
-- schema-v1 skill, prompt, or eval paths outside it;
-- inner symlinks in schema-v1 skill directories that resolve outside it;
-- absolute schema-v2 prompt paths outside it.
+- skill or prompt paths outside it;
+- inner symlinks in skill directories that resolve outside it;
+- absolute prompt paths outside it.
 
 These checks happen before the builder reads or archives outside content. The
 operator `tariboy image build` remains the trusted path for sources that
@@ -43,10 +44,10 @@ intentionally live elsewhere on the host.
 
 ## Manifest and plugin validation
 
-Both schema-v1 and schema-v2 sources are accepted. Schema-v2 builds preserve the
-explicit plugin list and ordered prompt/runtime template. Built-in names are
-validated against Tariboy's registry; external names must resolve to installed
-plugin metadata on the same daemon.
+New sources must use schema v2 and preserve an explicit plugin list plus ordered
+prompt/runtime template. Schema-v1 source builds fail with migration guidance.
+Built-in names are validated against Tariboy's registry; external names must
+resolve to installed plugin metadata on the same daemon.
 
 The build writes to the daemon's shared immutable image store. It does not
 assign the image to the creating agent or change a running iteration.
@@ -57,10 +58,10 @@ assign the image to the creating agent or change a running iteration.
 plugins:
   - name: image-creator
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/image-creator
+  - dir: ../../skills/image-creator
 ```
 
-The packaged Store skill teaches the authoring command. It grants no extra filesystem
+The packaged image skill teaches the authoring command. It grants no extra filesystem
 access beyond the capability-gated, workdir-confined API.
 
 ## Failure behavior

@@ -7,7 +7,8 @@ sidebar:
 ---
 
 `messages` connects an agent to Tariboy's durable channel bus. It is a
-historical core capability and is included in `basic:latest`; schema-v2 images
+historical core capability included in the official Store's `basic` source;
+schema-v2 images
 must declare it explicitly.
 
 ## Capability surface
@@ -51,7 +52,7 @@ Package the skill and use the messages runtime marker:
 plugins:
   - name: messages
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/messages
+  - dir: ../../skills/messages
 prompts:
   - runtime: messages
 ```

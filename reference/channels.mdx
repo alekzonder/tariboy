@@ -308,6 +308,19 @@ tariboy agent unsubscribe <agent> <channel>
 `channel tail` reads messages on a channel. It does not show per-agent delivery
 state such as `acked_at`, `attempts`, or DLQ.
 
+In an agent's Desktop **Messages → Queue** view, **Clear queue** physically
+removes every pending delivery for that agent after explicit destructive
+confirmation. Archive, DLQ, shared messages, and other agents' deliveries are
+unchanged; messages awaiting workflow ingestion are also retained. The
+idempotent response reports `deleted_deliveries` and
+`deleted_messages`; an empty Queue returns zeroes.
+
+The same operation is available to operators as:
+
+```bash
+tariboy agent inbox clear <agent>
+```
+
 ## Agent configuration that affects channels
 
 The agent row contains these message-related fields:
@@ -315,7 +328,8 @@ The agent row contains these message-related fields:
 - `messages_batch`: maximum number of pending messages inserted into one prompt.
   Default is `10`. If the runtime value is `<= 0`, the runner also falls back to
   `10`.
-- `messages_max_queue`: maximum pending messages for the agent, default `1000`.
+- `messages_max_queue`: maximum pending messages for the agent, default `100`
+  for new agents.
   A publish beyond the limit is retained in that agent's DLQ with result
   `queue_limit`; it is not added to the runnable pending queue.
 - `loop_enabled`: if false, publish can create pending deliveries but the agent
@@ -351,8 +365,9 @@ scripts/messages.sh channel subscribe <channel>
 scripts/messages.sh channel unsubscribe <subscription-id>
 ```
 
-There is currently no public CLI command dedicated to changing
-`messages_batch` or `messages_max_queue` after creation.
+Both fields are editable as positive whole numbers in Agent
+**Configuration → Messages & Channels**. Existing persisted values and values
+copied by Clone are not rewritten when the default changes.
 
 ## Common workflows
 

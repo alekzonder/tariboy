@@ -11,8 +11,25 @@ The **SQLite DB is the single source of configuration.** There is no
 (`running` / `idle` / `stopped` / `error`) is **computed** from the DB config
 plus what is actually running, not persisted.
 
+A running iteration also has persisted AI-proxy liveness evidence. Its
+`started_at` time is the initial activity point, and every authenticated request
+for that exact agent and iteration updates `last_ai_request_at` before upstream
+work begins. When the newest point is at least the agent's positive
+`ai_stall_timeout_s` old (300 seconds by default), live state is derived as
+`error` with an informational `error_reason`; the loop and iteration continue.
+The next attributed request updates the timestamp and live state derives as
+`running` again. Stale requests for older or completed iterations are ignored.
+
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
+
+## Filesystem-backed shell scripts
+
+The global pre-iteration script at `<base-dir>/global-agent-shell.sh` and an
+agent script at `<base-dir>/agents/<name>/agent-shell.sh` are intentionally not
+SQLite fields. The daemon validates a complete submitted value with `bash -n`
+before atomically replacing an owner-only file. A rejected value leaves the
+previous file unchanged; a missing or empty file is a no-op at launch.
 
 ## Pricing and Usage snapshots
 
@@ -56,6 +73,16 @@ a reason: with none, both keys are omitted entirely rather than emitted empty.
 An agent-authored status line is never reported as a halt reason, since only
 the idle prefix qualifies.
 
+## Message queue state
+
+Queue saturation is derived rather than persisted. The agent status endpoint
+counts distinct message IDs across that agent's unacknowledged, non-DLQ
+deliveries and returns `messages_pending`, the configured
+`messages_max_queue`, and `messages_queue_full`. The flag is true when the
+pending count is at or above the limit. Publish limiting, status, and physical
+queue clearing use the same delivery predicate so the UI never maintains a
+second estimate.
+
 ## Native task state
 
 Each agent row persists `goal_enabled` (default true), a positive
@@ -97,20 +124,32 @@ persisted bus-ingress cursor. See [Configurable task workflows](/docs/task-workf
 
 ## Image assignment state
 
+User Store registrations belong to each daemon's SQLite database and persist
+only their unique name and source. Git clones live under
+`<base-dir>/stores/<name>/`; local absolute sources stay in place. Image names,
+versions, and diagnostics are read from `images/` on disk for every view, never
+stored as a second inventory. Store refresh and build preparation are
+serialized so a pull cannot race source freezing. Store builds then use the
+ordinary image snapshot and publication path below.
+
+Directories left under `<base-dir>/store/versions/` by an older release are
+untouched legacy data. Current daemons neither read nor refresh them.
+
 Each agent row owns an active image ref/digest and a separate pending
 ref/digest/error. Selecting another image changes only the pending fields. The
 iteration launch gate validates and stages that artifact, reconciles image
 capabilities, and promotes active plus pending state in one guarded transaction.
-Every new iteration snapshots its image ref, digest, and prompt-template hash,
-so later switches cannot rewrite historical execution identity.
+Every new iteration snapshots its image ref, source `image_version` when
+present, digest, and prompt-template hash, so later switches cannot rewrite
+historical execution identity. Historical iterations and legacy images keep an
+empty version instead of inheriting a mutable ref's current value.
 
 The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
 already-promoted image digest matches the row. Each unpacked image carries a
-daemon-owned digest marker, so two generations of a managed ref such as
-`basic:latest` cannot be confused. Managed and ordinary mutable-build archive
-generations are retained by digest, so active and pending assignments survive a
-daemon upgrade or a rebuilt ordinary ref. Harness,
+daemon-owned digest marker, so two generations of one mutable ref cannot be
+confused. Ordinary mutable-build archive generations are retained by digest,
+so active and pending assignments survive a rebuilt ref. Harness,
 model, effort, environment,
 CWD, context, workdir, messages, history, group, and subscriptions are not image
 assignment fields.
@@ -174,10 +213,10 @@ Rollback stages the recorded prior immutable assignment through the same gate.
 A running iteration is owned by `tariboy-shim`, not by the lifetime of the
 daemon process. During a graceful daemon restart, cancellation detaches the old
 engine observer without changing the durable iteration row from `running`.
-Before any of that, the replacement daemon repoints every stored agent's bin
-shims at its own versioned Store skill scripts (see
-[Agent bin shims](/docs/architecture#agent-bin-shims)), so an adopted or
-newly-started agent never calls the client of the release that provisioned it.
+Before any of that, the replacement daemon reconciles each stored agent's bin
+shims against its active image (see
+[Agent bin shims](/docs/architecture#agent-bin-shims)), so adopted work
+continues with the launchers pinned by that image.
 The replacement daemon enumerates live shim sockets before starting loop
 engines, adopts each matching iteration, and finalizes the existing row when
 `result.json` appears. It never launches a duplicate shim while adoption is in

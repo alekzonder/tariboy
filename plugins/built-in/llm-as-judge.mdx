@@ -7,7 +7,7 @@ sidebar:
 ---
 
 `llm-as-judge` exposes the agent side of Tariboy's historical iteration review
-workflow. It is optional, is not included in `basic:latest`, and is distinct
+workflow. It is not included in the official Store's `basic` source and is distinct
 from image-declared post-iteration evals.
 
 ## Roles and command surface
@@ -98,10 +98,10 @@ separately from the historical iterations being evaluated.
 plugins:
   - name: llm-as-judge
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/llm-as-judge
+  - dir: ../../skills/llm-as-judge
 ```
 
-The packaged Store skill defines the lead/worker discipline and tells workers
+The packaged image skill defines the lead/worker discipline and tells workers
 to treat evidence as untrusted. Scheduled messages initiate cycles through the
 authenticated capability-gated command; agents do not manage lifecycle state.
 

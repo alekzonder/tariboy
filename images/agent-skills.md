@@ -83,6 +83,66 @@ branch verification, then merges locally according to repository conventions.
 It runs the distinct post-merge verification on `main`, removes the merged
 worktree and branch, records the final task result, and closes the Native Task.
 
+## Image creator role
+
+`images/tariboy-image-creator` in the registered Store creates and improves
+image sources and independent Store skills. Configure the agent CWD to the Store root containing
+`images/` and optionally `skills/`; CWD is agent configuration, not an image
+manifest field. Work starts from a Native Task, with investigation and a plan
+approved on that task before edits.
+
+The short role prompt requires these procedures:
+
+- `tariboy-image-authoring`: image schema, source dependencies, local version
+  commands, build boundaries and diagnosis from untrusted iteration logs.
+- Existing Superpowers `writing-skills`: all skill creation, improvement and
+  skill-level evals, including skills outside an image.
+- `tariboy-image-evals`: whole-image behavior, skill selection and composition;
+  its evidence is separate from skill evals and packaging validation.
+- `tariboy-image-delivery`: task approval, Git isolation, publication and
+  completion. It reuses `github-pr-workflow` and the Scripts skill for PRs.
+
+The domain skills live inside the image source. Another image can package the
+`tariboy-image-authoring` directory through a relative `skills.dir` declaration;
+provide `writing-skills` for skill work and `tariboy-image-evals` for whole-image
+checks as well. This does not require adopting the image creator role prompt.
+The built-in `image-creator` skill remains its identity-bound build launcher.
+
+Keep the sibling `tariboy-developer/skills/github-pr-workflow` directory beside
+the source for rebuilds: the manifest reuses its utility without a copy. Restore
+the image’s Superpowers dependencies from `skills-lock.json`. Git and Node.js/npm
+with access to the upstream source are required. From the Store root:
+
+```bash
+cd images/tariboy-image-creator
+npx skills experimental_install
+cd ../..
+tariboy image validate --path images/tariboy-image-creator --name tariboy-image-creator
+tariboy image build --path images/tariboy-image-creator --name tariboy-image-creator
+```
+
+These are operator commands against the selected daemon. Agent builds use the
+`image-creator` launcher and require the source and referenced sibling skills
+inside the managed workdir, which is independent of configured CWD. A build
+boundary failure is reported through the task, never bypassed with another
+socket or identity. The runnable artifact packages the referenced skills and
+utility, so it does not require the sibling source directory at runtime.
+
+For existing image revisions, the role uses `tariboy image version get` and
+`tariboy image version update patch|minor|major` locally. Missing behavioral
+evals are created before instruction changes. Scenarios and observed
+baseline/candidate results are kept separately for each skill and the image;
+YAML validation or a successful build alone is not a behavioral evaluation.
+
+Every Git task uses a separate branch and worktree. On GitHub, the agent
+publishes one PR, mentions the task customer, sets a flexible task to
+`wait_customer` and retains one durable monitor. It never merges; completion
+requires observed merge metadata, post-merge checks and cleanup. Other Git
+Stores deliver the branch/worktree and ask for acceptance/integration
+instructions. Non-Git Stores are edited in place after plan approval, then
+reported to the customer with a question about the next step. Those fallback
+tasks stay active until a recorded customer decision.
+
 ## Declare skills
 
 Each entry is an object with one `dir` field. String entries and additional
@@ -123,22 +183,38 @@ the packaged skill metadata.
 
 ## Source paths
 
-Skill directories use the same five explicit source forms as static prompt
-files:
+Skill directories support these explicit source forms:
 
 | Form | Resolves from |
 | --- | --- |
-| `$STORE/...` | The common Store root across installed Tariboy versions |
-| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
-| `./...` | The directory containing `Tariboyfile.yaml` |
+| `./...` or `../...` | The directory containing `Tariboyfile.yaml`, including sibling directories |
 | `/absolute/path/...` | An operator-supplied absolute Unix path |
 
 Only the literal variables in this table are expanded. Tariboy does not apply
 shell or general environment-variable expansion. Validation warns that an
 absolute source makes the original build host-bound. Agent-authored image
-builds further confine source and absolute references to that agent's managed
-workdir.
+builds further confine relative and absolute skill references to that agent's
+managed workdir. Plugin references cannot escape their declared root. A prompt
+may use `../` only when its target remains below one of these
+explicitly declared source-relative skill directories; the build reads the
+file from the same frozen skill snapshot.
+
+For example, `images/reviewer/Tariboyfile.yaml` in a Store can package
+`skills/code-review` with:
+
+```yaml
+skills:
+  - dir: ../../skills/code-review
+prompts:
+  - file: ../../skills/code-review/review-policy.md
+```
+
+An ordinary build freezes explicitly referenced sibling skill directories
+alongside its source snapshot, without copying the whole parent directory.
+The image retains the original declaration and embeds the frozen skill bytes;
+moving or changing the original skill after the snapshot cannot change that
+build. A later rebuild reads the original paths again.
 
 ## `SKILL.md` contract
 
@@ -205,7 +281,7 @@ remains in the manifest:
 | --- | --- |
 | `name`, `description` | Validated `SKILL.md` identity |
 | `source`, `category` | Original declaration and resolved source class |
-| `client_version` | Producing Store version for a skill sourced from `$CURRENT_VERSION_STORE` |
+| `client_version` | Legacy producer metadata, when present |
 | `archive_root` | Canonical `skills/<name>` location in the image |
 | `file_count`, `size` | Validated aggregate contents |
 | `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |
@@ -323,6 +399,6 @@ before skill selection, such as closing every delivered message and respecting
 a managed task packet's least-privilege boundary.
 
 Images using `llm-as-judge`, `image-creator`, or `schedule` should package the
-same-named Store skill explicitly. Declaring a plugin never injects its skill or
+same-named image skill explicitly. Declaring a plugin never injects its skill or
 legacy prompt in schema v2. Role responsibilities belong in the image's own
 ordered prompt layer; task identity and input remain runtime layers.

@@ -19,16 +19,15 @@ configuration for Claude Code and OpenCode, and a compact prompt catalog of
 absolute `SKILL.md` paths for Codex.
 See [Images](/docs/images) for the complete schema and path roots.
 
-The daemon provides two reserved images:
+Tariboy provides one reserved image and the official Store provides the usual
+general-purpose source:
 
-- **basic** — the daemon-provided general-purpose default (context, status,
+- **basic** — the general-purpose source in `tariboy-store` (context, status,
   managed-workdir instructions, scripts, Goal attribution, native Tasks, and
-  `runtime: goal`). It
-  deliberately excludes all external provider integrations. Every
-  packaged daemon installs or refreshes `basic:latest` when its version is
-  activated.
-- **bare** — an empty schema-v2 plugin/prompt artifact whose terminal-only
-  behavior is runtime policy.
+  `runtime: goal`). It deliberately excludes all external provider
+  integrations. Register and refresh that Store, then build the source.
+- **bare** — a daemon-synthesized empty schema-v2 plugin/prompt artifact whose
+  terminal-only behavior is runtime policy.
 
 ## Groups
 
@@ -56,9 +55,9 @@ requires one analysis per target by default.
 A worker whose active image identity does not match the run cannot claim its
 assignments. The run reports an actionable diagnostic to create a new run after
 the intended image has activated; already compatible workers and completed
-historical evidence remain available. Existing same-version Store installations
-may require the release-time versioned asset transition after the bundled rubric
-move; Store verification remains strict and must not be bypassed.
+historical evidence remain available. Existing images remain pinned to their
+runnable bytes; rebuilding a Store image publishes a new digest without
+rewriting historical runs.
 
 ## Historical group Usage
 

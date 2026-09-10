@@ -42,7 +42,7 @@ complete manifest contract.
 Prompt assets and Agent Skills are separate declarations. A plugin directory
 such as `$PLUGINS/jira/2.5.0/skills/triage` becomes a packaged Agent Skill only
 when an image lists it under `skills: [{dir: ...}]`; placing content under a
-plugin's `store/skills` does not opt it in automatically. At runtime Tariboy
+plugin's own skills directory does not opt it in automatically. At runtime Tariboy
 uses a generated local plugin for Claude Code, a bounded prompt catalog for
 Codex CLI, and an isolated config overlay for OpenCode. These integrations are
 additive to each harness's normal global and CWD discovery. Native duplicate

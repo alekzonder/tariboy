@@ -31,7 +31,7 @@
 
 ## Binaries & commands
 
-- [Binaries & commands](https://alekzonder.github.io/tariboy/binaries): Core binaries and the bundled Telegram plugin built by make build.
+- [Binaries & commands](https://alekzonder.github.io/tariboy/binaries): Core binaries and the Telegram plugin built by make build.
 - [tariboy (operator CLI)](https://alekzonder.github.io/tariboy/binaries/operator-cli): The human/CI client that talks to the daemon over its socket, grouped by noun.
 - [Agent capability scripts](https://alekzonder.github.io/tariboy/binaries/agent-tools): Run packaged skill-local scripts inside an agent for identity, status, loop control, context, messaging, schedules, and durable work.
 - [The compose workflow](https://alekzonder.github.io/tariboy/binaries/compose): Bring up a whole set of images, groups, and agents declaratively from a tariboy-compose.yaml.

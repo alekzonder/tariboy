@@ -13,7 +13,7 @@ variable, or filesystem permission.
 
 ## Prompt composition
 
-Declare the instruction-only plugin, its Store skill, and its runtime value
+Declare the instruction-only plugin, its image skill, and its runtime value
 explicitly:
 
 ```yaml Tariboyfile.yaml
@@ -21,7 +21,7 @@ schema_version: 2
 plugins:
   - name: workdir
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
+  - dir: ../../skills/workdir
 prompts:
   - runtime: workdir
 ```
@@ -65,7 +65,7 @@ that contains images, iteration evidence, and daemon-owned files. The harness
 already runs as the daemon account, so rendering this path grants no additional
 access or sandboxing.
 
-`basic:latest` declares `workdir` for newly created agents. Existing agents
+The official Store's `basic` source declares `workdir`. Existing agents
 remain pinned to their current image digest until an operator selects another
 image.
 

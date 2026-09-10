@@ -49,8 +49,8 @@ tariboy has three command surfaces:
 | `tariboy channel tail` | Print recent messages on a channel (-f to follow) |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
 | `tariboy compose import` | Preview and import compose-only team/runtime configuration |
-| `tariboy files upload` | Upload base64 content to the server and return its absolute path |
-| `tariboy cp` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
+| `tariboy files upload` | Upload up to 16 MiB of base64 content to the server and return its absolute path |
+| `tariboy cp` | Stream a file up to 1 GiB to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
@@ -62,8 +62,11 @@ tariboy has three command surfaces:
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
-| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build an immutable image and source snapshot; optional Git provenance must be provided as a pair |
+| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build mutable image refs and an immutable source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); Git provenance must be paired |
+| `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest` |
+| `tariboy image version get [--path FILE_OR_DIR]` | Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required |
+| `tariboy image version update <major\|minor\|patch> [--path FILE_OR_DIR]` | Increment the local SemVer, reset lower components and remove suffixes; preserve YAML fields/comments |
 | `tariboy image inspect` | Show an image manifest |
 | `tariboy image ls` | List built agent images |
 | `tariboy image prompt` | Print an image's assembled prompt |
@@ -89,7 +92,7 @@ tariboy has three command surfaces:
 | `tariboy judge automation validate --json JSON` | Validate raw JSON in `tariboyd` without applying it |
 | `tariboy judge automation apply --json JSON` | Apply JSON, create `JUDGE`/`IMPROVE`, and reconcile the recurring schedule without starting a review |
 | `tariboy judge automation run-once --limit N` | Queue one immediate cycle through the existing scheduler |
-| `tariboy iteration inspect` | Show one iteration |
+| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, and prompt-template hash |
 | `tariboy iteration logs` | Print an iteration's harness logs |
 | `tariboy iteration ls` | List an agent's iterations |
 | `tariboy logs` | Stream or print an agent's events (-f to follow) |
@@ -117,6 +120,11 @@ tariboy has three command surfaces:
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
 | `tariboy secret set` | Set a secret; value from --value or stdin |
+| `tariboy store add NAME SOURCE` | Register a Git URL or absolute local directory on the daemon host |
+| `tariboy store list` | List this daemon's Store registrations |
+| `tariboy store show NAME` | Read current images, versions and diagnostics from disk |
+| `tariboy store refresh NAME` | Fast-forward pull a Git source, or reread a non-Git local directory |
+| `tariboy store remove NAME` | Unregister a Store and remove only its managed clone; preserve local sources and built images |
 | `ttasks queue create` | Create a task queue |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
 | `tariboy user-prompt get` | Read the agent's standing user-prompt |
@@ -164,7 +172,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
 | `scripts/scripts.sh rerun SCRIPT_ID` | Rerun a completed one-shot definition |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
-| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v1 or schema-v2 image from an agent-confined source directory (`image-creator` only) |
+| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from an agent-confined source directory (`image-creator` only) |
 
 ## Native Tasks (`ttasks …`)
 

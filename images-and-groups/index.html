@@ -11,16 +11,15 @@ projected through harness-specific integration at iteration launch: native
 configuration for Claude Code and OpenCode, and a compact prompt catalog of
 absolute <code>SKILL.md</code> paths for Codex.
 See <a href="/tariboy/docs/images">Images</a> for the complete schema and path roots.</p>
-<p>The daemon provides two reserved images:</p>
+<p>Tariboy provides one reserved image and the official Store provides the usual
+general-purpose source:</p>
 <ul>
-<li><strong>basic</strong> — the daemon-provided general-purpose default (context, status,
+<li><strong>basic</strong> — the general-purpose source in <code>tariboy-store</code> (context, status,
 managed-workdir instructions, scripts, Goal attribution, native Tasks, and
-<code>runtime: goal</code>). It
-deliberately excludes all external provider integrations. Every
-packaged daemon installs or refreshes <code>basic:latest</code> when its version is
-activated.</li>
-<li><strong>bare</strong> — an empty schema-v2 plugin/prompt artifact whose terminal-only
-behavior is runtime policy.</li>
+<code>runtime: goal</code>). It deliberately excludes all external provider
+integrations. Register and refresh that Store, then build the source.</li>
+<li><strong>bare</strong> — a daemon-synthesized empty schema-v2 plugin/prompt artifact whose
+terminal-only behavior is runtime policy.</li>
 </ul>
 <h2 id="groups"><a class="blume-heading-anchor" href="#groups">Groups</a></h2>
 <p>A <strong>group</strong> ties agents together with a designated <strong>lead</strong>. Groups
@@ -44,9 +43,9 @@ requires one analysis per target by default.</p>
 <p>A worker whose active image identity does not match the run cannot claim its
 assignments. The run reports an actionable diagnostic to create a new run after
 the intended image has activated; already compatible workers and completed
-historical evidence remain available. Existing same-version Store installations
-may require the release-time versioned asset transition after the bundled rubric
-move; Store verification remains strict and must not be bypassed.</p>
+historical evidence remain available. Existing images remain pinned to their
+runnable bytes; rebuilding a Store image publishes a new digest without
+rewriting historical runs.</p>
 <h2 id="historical-group-usage"><a class="blume-heading-anchor" href="#historical-group-usage">Historical group Usage</a></h2>
 <p>Group membership for AI Usage is intentionally historical rather than live.
 Every new proxied request stores the agent’s group identifier and display name

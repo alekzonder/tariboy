@@ -15,9 +15,11 @@ runtime or compose configuration. They are not schema-v2 image fields.
 
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
 required name and an optional tag, then select **Validate** or **Build**. The
-default tag is `latest`. Tariboy records the canonical source CWD as local
-provenance and retains an immutable source snapshot for evidence. Rebuilding
-still reads the original directory and its current paths.
+default build publishes both the source `image_version` and `latest`, or only
+`latest` when the source has no version. An explicit tag publishes only that
+tag. Tariboy records the canonical source CWD as local provenance and retains
+an immutable source snapshot for evidence. Rebuilding still reads the original
+directory and its current paths.
 
 **Validate** is read-only. Before a build it shows the schema version, explicit
 plugin names, packaged skill metadata, template hash, and every prompt entry in
@@ -31,6 +33,10 @@ runtime version. Validation never repairs or reorders the template.
 
 Use **Open in VS Code** on an image detail page when the source CWD still exists
 on the selected local or SSH host. Imported images have no source CWD.
+
+**New Image** creates a managed schema-v2 source from only a name and optional
+initial prompt. The generated project is prompt-only; edit its
+`Tariboyfile.yaml` to declare packaged skills or plugins before building.
 
 The equivalent operator command is:
 
@@ -58,23 +64,122 @@ several refs from one parsed source; each result has its own ref and digest,
 while frozen static image content, source provenance, and build time are
 shared. The requested refs and their snapshot/provenance metadata commit as one
 batch; a failure on any tag restores every ref exactly. Duplicate tags are
-rejected. A single tag and an omitted tag remain supported; omission means
-`latest`.
+rejected. When the operator CLI omits `--tag`, a frozen source with
+`image_version` publishes both that version and `latest`; the existing
+single-result output reports the versioned ref. Older files without a version
+publish only `latest`. Explicit tags, including `--tag latest`, take priority
+and do not add another ref.
 
-Imports and retagged runnable artifacts, registry artifacts, reserved `basic`
-and `bare` refs, and controlled-improvement releases remain immutable.
+Imports and retagged runnable artifacts, registry artifacts, the reserved
+`bare` ref, and controlled-improvement releases remain immutable.
 An ordinary build never converts an existing immutable ref. Daemons created
 before mutable markers existed migrate a legacy ordinary-build ref only when
 its authoritative source snapshot and provenance both match the current
 digest; otherwise the operator must choose another tag.
 
+## Stores on a server
+
+Open **Stores** beside **Images** to register a Git repository or an absolute
+directory on the selected server. Each `tariboyd` owns its own registrations
+and performs clone, refresh, and build on that server. A Store contains image
+sources at `images/<image_name>/Tariboyfile.yaml`.
+
+```bash
+tariboy store add team git@github.com:company/agent-images.git
+tariboy store add local /srv/company-images
+tariboy store list
+tariboy store show team
+tariboy store refresh team
+tariboy image build team/reviewer
+tariboy image build team/reviewer --name company-reviewer
+tariboy store remove team
+```
+
+Git sources are cloned under `<base-dir>/stores/<store_name>/`. For a daemon
+running as `agent` with defaults, `team` lives at
+`/home/agent/.tariboy/stores/team/`, and its reviewer source is
+`/home/agent/.tariboy/stores/team/images/reviewer/Tariboyfile.yaml`.
+`TARIBOY_BASE_DIR` or the daemon's `--base-dir` changes that root.
+A local source such as `/srv/company-images` is used in place, without a copy.
+Stores are the source of canonical agent images and skills; the daemon no
+longer installs a separate built-in Store tree.
+
+Only the registration's name and source are persisted in the daemon database.
+Viewing a Store reads the current disk inventory and `image_version` values;
+there is no saved image list to become stale. For each valid source, the detail
+also shows the newest built version with the same default image name and marks
+the source when that newest version is absent or differs from its declared
+version. A successful **Build** reloads that inventory. A missing `images/`
+directory shows an empty list. An invalid image reports its own error while
+valid sibling images remain visible.
+
+**Refresh** runs `git pull --ff-only` for both managed clones and local Git
+checkout roots, including Git worktrees. A local directory without its own
+`.git` entry is simply reread; Tariboy does not pull an ancestor repository.
+A conflict, missing
+upstream, or authentication failure is reported without resetting or stashing
+local edits. **Remove** unregisters the Store and deletes its managed clone;
+it preserves local source directories and already built images.
+
+Store builds use the existing image builder. By default, a versioned source
+publishes both `<image_name>:<image_version>` and `<image_name>:latest`, while a
+source without a version publishes only `latest`. Use `--name` to avoid a name
+collision between Stores, and `--tag` to publish only an explicit tag. Do not
+combine a Store selector with `--path`.
+
+Before freezing sources, the daemon runs `npx skills experimental_install` in
+the Store root when `skills-lock.json` exists there, then in the image directory
+when it has a separate lock. An installation failure stops the build before
+publication. Git must be installed on the daemon host; lock restoration also
+requires Node.js/npm and access to the skill sources. Private repositories use
+the server account's configured SSH or Git credential helpers. Configure access
+on that server before adding the Store; do not put credentials in its URL.
+
+The Store detail shows **Images**, their source and built versions, update
+highlighting, and **Build** actions. Built artifacts appear in the existing
+**Images** workspace. Stores do not yet expose standalone skills or plugins.
+
+## Image versions
+
+Set `image_version: 0.1.0` in `Tariboyfile.yaml` to version the image
+independently of `schema_version` and the Tariboy product version. Both source
+schemas accept SemVer 2.0.0, including prerelease and build metadata, without a
+`v` prefix. Complete SemVer versions are also valid image tags.
+
+Read or increment the version locally, without a running daemon:
+
+```bash
+tariboy image version get
+tariboy image version get --path ./reviewer-image/Tariboyfile.yaml
+tariboy image version update patch --path ./reviewer-image
+tariboy image build --path ./reviewer-image --name reviewer
+```
+
+Both version commands default to `./Tariboyfile.yaml`; `--path` accepts a
+file or directory. They print only the resulting version (or a JSON string
+with `--json`). `update major`, `update minor`, and `update patch` increment
+that component, reset lower components to zero, and remove prerelease/build
+suffixes. For example, `1.2.3-rc.1+build.7` becomes `1.3.0` after `update minor`.
+
+Updates atomically replace the file while preserving its permissions, YAML
+fields, and comments; YAML formatting may change. Missing or invalid versions
+produce an error without changing the file. Old sources may omit the field
+for build compatibility, but version commands require it.
+
+The runnable manifest preserves `image_version` independently of its ref tag.
+For mutable refs such as `latest`, every new iteration snapshots the source
+version with the ref and digest, exposes it through `iteration inspect`, and
+includes it in `runtime: identity` and iteration audit exports. Older runnable
+images and historical iterations simply omit the version.
+
 ## Schema version 2
 
-Schema v2 is strict and accepts only `schema_version`, `plugins`, `skills`, and
-`prompts`:
+Schema v2 is strict and accepts only `schema_version`, `image_version`,
+`plugins`, `skills`, and `prompts`:
 
 ```yaml
 schema_version: 2
+image_version: 0.1.0
 plugins:
   - name: whoami
   - name: messages
@@ -82,11 +187,11 @@ plugins:
   - name: workdir
   - name: jira
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/whoami
-  - dir: $CURRENT_VERSION_STORE/skills/messages
-  - dir: $CURRENT_VERSION_STORE/skills/context
-  - dir: $CURRENT_VERSION_STORE/skills/workdir
-  - dir: ./skills/code-review
+  - dir: ../../skills/whoami
+  - dir: ../../skills/messages
+  - dir: ../../skills/context
+  - dir: ../../skills/workdir
+  - dir: ../shared-skills/code-review
   - dir: $PLUGINS/jira/2.5.0/skills/triage
 prompts:
   - runtime: identity
@@ -95,7 +200,7 @@ prompts:
   - file: $PLUGINS/jira/2.5.0/prompts/reviewer.md
   - runtime: context
   - runtime: workdir
-  - file: ./task.md
+  - file: ../../skills/loop/finish-iteration.md
   - runtime: user-prompt
   - file: /srv/tariboy/prompts/finish.md
 ```
@@ -108,15 +213,17 @@ Each static `file` is resolved and embedded at build time. Supported forms are:
 
 | Form | Resolves from |
 | --- | --- |
-| `$STORE/...` | The common Store root, including all installed product versions |
-| `$CURRENT_VERSION_STORE/...` | `store/versions/<running Tariboy version>` |
 | `$PLUGINS/...` | The common external-plugin root |
 | `./...` | The original directory containing `Tariboyfile.yaml` |
+| `../...` below a declared skill | That skill's frozen source snapshot |
 | `/absolute/path/...` | An operator-supplied absolute filesystem path |
 
 The builder expands only those literal variables; it never performs shell or
-environment expansion. Traversal, symlinks, missing files, non-regular files,
-and oversized prompt files are rejected.
+environment expansion. A prompt may use `../` only to read a file below a
+source-relative directory already declared in `skills`; validation reads that
+directory directly and build reads its immutable snapshot. Other traversal,
+symlinks, missing files, non-regular files, and oversized prompt files are
+rejected.
 
 ## Packaged Agent Skills
 
@@ -159,17 +266,11 @@ present. Each singleton placeholder may appear at most once. Empty runtime
 values add no text. The **Template** tab shows static paths, categories, sizes,
 hashes, and runtime markers in their exact order without draining messages.
 
-## Store and external plugins
+## External plugins
 
-Built-in static prompt assets are installed under:
-
-```text
-$STORE/versions/<tariboy-version>/skills/...
-```
-
-`$CURRENT_VERSION_STORE` points at that version directory. `$STORE` stays
-version-independent so a source may intentionally reference a built-in prompt
-from another installed version.
+Image-owned static prompts and complete Agent Skill trees come from the image
+source and are copied into the runnable artifact. Dynamic runtime placeholders
+and built-in or external plugin implementations remain daemon-owned.
 
 External plugins are separate:
 
@@ -187,8 +288,8 @@ path in `prompts`.
 Build the image in **Images**, then open the agent's **Configuration** tab and
 select it under **Agent image**. The choice is persisted as pending. Tariboy
 does not interrupt a running iteration: it validates and activates the image
-through the next iteration's launch gate, then snapshots the image ref, digest,
-and prompt-template hash for that iteration.
+through the next iteration's launch gate, then snapshots the image ref, source
+version, digest, and prompt-template hash for that iteration.
 
 Activation changes only image bytes, plugin capabilities, and image-owned
 shims. It preserves harness, model, effort, environment, interactive and loop
@@ -216,7 +317,9 @@ saved image ref and portable filename in a toast. **Import runnable image** veri
 archive before installation. Validation rejects unmanifested content, unsafe or
 special-file members, duplicate paths, malformed schema-v2 metadata, prompt
 layer/hash mismatches, and compressed or expanded limit violations. Import does
-not rebuild the image. The import preview exposes editable **Import name** and
+not rebuild the image. Preview, apply, assignment, and activation also validate
+plugin, runtime, skill, launcher, and harness compatibility against the
+destination daemon before publication. The import preview exposes editable **Import name** and
 **Import tag** fields. The same ref and digest are idempotent; when the ref
 already names different bytes, choose another name or tag. That explicit retag
 receives a newly rewritten manifest and digest.
@@ -255,22 +358,21 @@ for this operation, not source backup or persistent state.
 
 ## Built-in images and compatibility
 
-- `bare:latest` is a schema-v2 image with no plugins and an empty prompt. Its
+- `bare:latest` is daemon-synthesized with no plugins and an empty prompt. Its
   terminal-only behavior is runtime policy.
-- `basic:latest` explicitly declares every plugin, packaged Store skill,
-  runtime placeholder, and mandatory finish prompt it uses, including the
-  instruction-only `workdir` plugin, the `goal` capability, their skills, `runtime: workdir`, and
-  `runtime: goal`. New agents receive the
-  current managed generation. A daemon upgrade may advance this managed ref,
-  while active agents and pending assignments continue resolving their pinned
-  pre-upgrade digest until the operator selects another image.
-- Existing schema-v1 sources and images retain their historical behavior.
-  Compatibility is selected by `schema_version`; new sources should use v2.
+- The official Store's `basic` source explicitly declares every plugin,
+  packaged skill, runtime placeholder, and mandatory finish prompt it uses.
+  Register and refresh `tariboy-store`, then build `official/basic`; daemon
+  upgrades do not publish or replace that image.
+- New build and validation requests require schema v2. Existing self-contained
+  schema-v1 runnable archives remain readable and runnable only when they carry
+  every byte their historical contract requires; they are not valid editable
+  sources for a new build.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
-`$CURRENT_VERSION_STORE/skills/tasks` when an image should expose its agent
-command and instructions. Add `plugins: [{name: goal}]`, package
-`$CURRENT_VERSION_STORE/skills/goal`, and add `runtime: goal` when the image
+`../../skills/tasks` when a Store image should expose its agent command and
+instructions. Add `plugins: [{name: goal}]`, package `../../skills/goal`, and
+add `runtime: goal` when the image
 should receive the daemon-authoritative selected goal. The rendered task title
 and description are untrusted task input, not daemon instructions or lifecycle
 authority.

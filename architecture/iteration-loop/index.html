@@ -5,8 +5,8 @@ directory and its own loop. It does not run continuously — it runs a series of
 <strong>iterations</strong>. On each iteration the daemon:</p>
 <ol>
 <li>prepares a prompt — schema v2 renders static image layers and current runtime
-placeholders in their declared order; schema v1 keeps its historical
-assembly behavior;</li>
+placeholders in their declared order; a self-contained legacy schema-v1
+artifact keeps its historical assembly behavior;</li>
 <li>launches the harness (e.g. Claude) under the <a href="/tariboy/docs/architecture/shim">shim</a>
 for exactly one pass;</li>
 <li>records the outcome, iteration logs, AI usage, and audit timeline.</li>
@@ -27,13 +27,14 @@ observation reaction advances durable workflow state, not receipt of the wake.</
 completion, exits, or reaches an enforced deadline.</p>
 <h3 id="agent-goals"><a class="blume-heading-anchor" href="#agent-goals">Agent Goals</a></h3>
 <p>Goal is per-agent and enabled by default. The reconciler retains one assigned
-Native Task selection until it is released: <code>done</code> or <code>cancelled</code>, a non-empty
-pull request, lost assignment or visibility, Goal disabled, a <code>wait_customer</code>
-task whose oldest unanswered customer wait reaches the agent’s positive
+Native Task selection until it is released: <code>done</code> or <code>cancelled</code>, lost
+assignment or visibility, Goal disabled, a <code>wait_customer</code> task whose oldest
+unanswered customer wait reaches the agent’s positive
 <code>goal_wait_customer_timeout_s</code> (300 seconds by default), or eligible assigned
 work with a strictly higher priority. It orders replacements by priority (<code>P0</code>
 through <code>P3</code>), then <code>in_progress</code> before <code>open</code>, creation time, and task key.
-Equal-priority work does not displace a valid selection.</p>
+Equal-priority work does not displace a valid selection. A task’s pull request
+URL does not affect Goal selection or release.</p>
 <p>At startup, relevant task or agent changes, terminal iteration completion, and
 the bounded one-minute recovery cadence, the reconciler publishes one durable
 <code>task.goal</code> inbox message. It follows <code>Publish -&gt; delivery -&gt; WakeMessage</code> and
@@ -69,6 +70,12 @@ preparation through the normal <code>harness_error</code> path without including
 environment values, prompts, secrets, working directories, or user files. This
 preflight improves the diagnosis but cannot remove the normal race in which an
 executable disappears before process launch.</p>
+<p>Immediately before the unchanged harness command is executed, Bash sources
+<code>&lt;base-dir&gt;/global-agent-shell.sh</code>, then
+<code>&lt;base-dir&gt;/agents/&lt;name&gt;/agent-shell.sh</code>. Missing or empty files do nothing;
+exports and filesystem effects from either script are available to that
+iteration. A source-time failure prevents the harness from starting and follows
+the existing <code>harness_error</code> lifecycle.</p>
 <p>For a schema-v2 image with skills, the launch gate prepares
 <code>agents/&lt;agent&gt;/image-bridges/&lt;image-digest&gt;/&lt;adapter-contract&gt;/&lt;harness&gt;</code> before
 an image is promoted or an iteration row is created. The bridge contains copied
@@ -158,8 +165,8 @@ installed external plugin capability.</li>
 only <code>scripts/goal.sh set &lt;TASK-KEY&gt;</code>, allowing an agent that started without a
 Goal to select an active task assigned to itself and attribute subsequent AI
 requests. It cannot replace a different Goal already attached to that
-iteration. A schema-v2 image explicitly packages their Store skills and
-composes the matching runtime value. See
+iteration. A schema-v2 image explicitly packages their skills and composes the
+matching runtime value. See
 <a href="/tariboy/docs/plugins/built-in">built-in plugins</a>.</p>
 <p>See <a href="/tariboy/docs/plugins/built-in">Built-in plugins</a> for the complete capability,
 command, prompt, and persistence reference.</p>
@@ -171,8 +178,9 @@ honors a pending image assignment. Without one, it checks whether the active
 ordinary mutable-build ref now resolves to a different digest and stages that
 digest as pending. It then validates the new artifact, prepares and verifies
 any native skill bridge, reconciles image-owned shims, atomically promotes the
-DB assignment, and records
-the iteration’s image ref, digest, and template hash. A running iteration is
+DB assignment, and records the iteration’s image ref, source version, digest,
+and template hash. The <code>runtime: identity</code> value renders that immutable source
+version when present. A running iteration is
 never interrupted. Backup and staging markers make an interrupted swap
 recoverable without changing durable agent state.
 Recovery compares the pinned digest, not only the ref. For daemon-managed and

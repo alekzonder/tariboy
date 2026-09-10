@@ -44,6 +44,9 @@ Agent creation, clone, and **Configuration** carry the per-agent Goal settings:
 an enabled-by-default switch, a positive whole-second customer-wait timeout
 (300 by default), and a positive Goal delivery cooldown (60 seconds by
 default). Configuration shows the daemon-selected goal key read-only.
+The agent header links that key to its task detail, or shows **No current goal**
+when none is selected. A question-mark action in both the header and the
+Configuration Goal section explains the sticky selection and release rules.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
@@ -67,10 +70,18 @@ These local suggestions are an operator convenience, not a capability check
 for the selected host; failed creates do not add values.
 
 The Agents sidebar partitions each host into expandable **Teams** and
-**Individual agents** without changing agent navigation or terminal drag
-identity. Server headings are selectable and open an explicit
+**Individual agents** without changing agent navigation or membership.
+Server headings, team headings, and agent rows are themselves
+pointer- and keyboard-accessible drag surfaces; no separate drag handle is
+rendered. A drop reorders only like siblings, so it never changes team
+membership. The daemon stores each host's team and agent order in the
+versioned `sidebar_order_v1` value under `daemon_config`; missing or newly
+created names retain their current stable order. The Desktop WebView stores
+the cross-host order, including the implicit local host, in
+`terminals:server-order:v1`. Failed daemon writes restore the previous order
+and report the failure. Server headings are selectable and open an explicit
 `/servers/:hostId/tasks` route. The persistent right-pane server row keeps
-**Tasks**, **Images**, and **Settings** scoped to that host even while an agent
+**Tasks**, **Images**, **Stores**, and **Settings** scoped to that host even while an agent
 is selected. The Groups workspace owns team creation and editing: arbitrary custom
 members, per-member runtime fields, rename/lead and membership controls,
 compose clipboard transfer, and portable archive
@@ -104,9 +115,9 @@ changes.
 
 Every Agent workspace header shows the agent's complete effective working
 directory. A following **Open in VS Code** action opens local paths as local
-folders and SSH-host paths through VS Code Remote SSH. The native Desktop host
-resolves the saved SSH alias and constructs the editor URI; the WebView never
-supplies an alias. HTTPS hosts do not render this action.
+folders and SSH-host paths through VS Code Remote SSH in a new editor window.
+The native Desktop host resolves the saved SSH alias and constructs the editor
+URI; the WebView never supplies an alias. HTTPS hosts do not render this action.
 
 The **Images** workspace owns validation, directory builds, runnable artifact
 import/export, and transparent template inspection. It shows the original
@@ -141,13 +152,31 @@ archive has its own **Exporting** phase: controls and cancellation are disabled
 until the one download completes, after which cancellation only skips
 unstarted destinations.
 
-The persistent server context places **Tasks** beside **Images** and **Settings**.
+The **Stores** workspace registers Git URLs or local absolute source directories
+on the route-selected daemon. Its detail shows the current disk-backed image
+inventory, source and newest built versions, update highlighting, and
+diagnostics, with Refresh, Remove and Build actions. A successful build reloads
+the detail so its version and update state reflect the daemon immediately.
+Every request carries the explicit host target, including builds through the
+existing image-build endpoint. Requests for a previous route cannot replace the
+new Store view. Removal uses an in-app confirmation and preserves local sources
+and built images; pending operations disable duplicate actions. See
+[Images → Stores](/docs/images#stores-on-a-server) for paths and prerequisites.
+
+The persistent server context places **Tasks** beside **Images**, **Stores**, and **Settings**.
 Settings discovers declarative pages from enabled plugins on that explicit
 server and lists them under **Integrations**. One generic React renderer owns
 the supported form controls and forwards actions through the daemon's existing
 plugin bridge; plugin-provided executable UI, HTML, and styles are never loaded.
 Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
+
+**Settings → General** edits the selected host's **Global Agent Shell Script**;
+an agent's **Configuration** edits its **Agent Shell Script**. Both controls use
+the route's explicit host target, retain an invalid draft and accessible Bash
+error after rejection, and keep drafts only in React memory. Save and Discard
+remain unavailable until loading succeeds and while a save is pending, so saves
+cannot overlap. Edits made during a save remain an unsaved draft.
 
 A completed Judge run lists its evidence-linked improvement proposals. Opening
 one shows the repository and base commit, approved file scope, acceptance
@@ -173,6 +202,18 @@ History links open the run at that exact target. The target view contains only
 that iteration's consensus, analyses, and immutable evidence, with breadcrumbs
 back to both the explicit-host Judge list and the originating Activity entry.
 Every poll, action, citation, and link stays pinned to the host in the route.
+
+Activity loads a terminal iteration's proxy transcript once when that iteration
+is selected. Running iterations may refresh from the timer or daemon events,
+but share one in-flight request; changing the agent or iteration aborts that
+request and stale results cannot replace the new selection.
+
+Audit ZIPs are generated and streamed by the daemon. Desktop still uses an
+authenticated `fetch` followed by `response.blob()` before saving, because a
+plain WebView download cannot attach the bearer token required by a remote
+daemon. The client therefore still needs memory proportional to the archive;
+streaming directly to a file requires a separate authenticated Desktop/Rust
+download API.
 
 Judge workers run in manual mode when Autopilot is disabled. Activity reports
 that configured state as the reason pending work is waiting; an unavailable
@@ -224,17 +265,33 @@ Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
 links, lists, checklists, code, and tables are supported. Unsupported syntax
 keeps the editor in source mode rather than being silently converted or lost.
+Empty numbered-list items remain editable in rich text, including immediately
+after Enter adds a new item; they do not add an extra visible paragraph.
 The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
 editor documents are not stored. Long text and links wrap within the task
 panel, while wide tables and code blocks scroll inside their own Markdown
-block. Vite's `build.license` generates bundled
+block. In Desktop, absolute `http://` and `https://` links in descriptions and
+comments open through the native system-browser command instead of navigating
+the WebView; relative links and ordinary browser builds keep normal anchor
+behavior. Vite's `build.license` generates bundled
 JavaScript dependency license texts and copyright notices in
 `desktop/dist/THIRD-PARTY-LICENSES.md` on each Desktop build; this generated
 asset is packaged with the app and is not committed.
 The comment form defaults its Ask selector to the task assignee, while typed
 mentions, explicit questions, and answer-wait semantics remain daemon-owned.
+Beside **Send comment**, a secondary **Send Ok** action includes the selected
+Ask mention and posts `Ok` without changing the Ask selection. It is hidden
+as soon as the comment contains text.
+
+An agent's **Messages → Queue** view can still mark one row processed. Its
+**Clear queue** bulk action instead opens an in-app destructive confirmation:
+pending deliveries for the selected agent are physically deleted and cannot be
+recovered, while Archive, DLQ, shared messages, and other agents' deliveries
+remain. The dialog cannot be dismissed or submitted twice while the one bulk
+request is running. Success reports the server's delivery/message counters and
+reloads Queue; failure keeps the authoritative rows visible for retry.
 
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
@@ -280,9 +337,10 @@ HTTP projections; the UI does not infer phases from title prefixes or assignee.
 Operator history remains available after completion. See
 [Configurable task workflows](/docs/task-workflows).
 
-The navigation hierarchy is **Workspace → Server → Agent**. **Workspace** is a
-global titlebar destination at `/workspace`; it is not scoped to the currently
-selected server. A selected server owns Tasks, Images, and Settings, and its
+The navigation hierarchy is **Server → Agent**. The existing Workspace canvas
+and `/workspace` route remain available for retained layouts and possible
+future use, but the titlebar entry and agent-list add/drag gesture are hidden.
+A selected server owns Tasks, Images, Stores, and Settings, and its
 context row remains visible above the selected agent's Console, Autopilot,
 Activity, Tasks, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
@@ -298,11 +356,10 @@ target, other server navigation remains available, and a missing host still
 fails closed rather than falling back to local authority.
 
 Workspace is one global tmux-like canvas whose split tree may contain
-several interactive agent terminals from different hosts. An agent can be
-dragged from the shared left list to a tile edge, added with the keyboard
-action, moved by its tile header, and resized with splitters. Tariboy owns
-this pointer gesture rather than relying on WebView HTML5 `DataTransfer`.
-Crossing the drag threshold reveals a half-pane left/right/top/bottom preview;
+several interactive agent terminals from different hosts. Existing tiles can
+be moved by their headers and resized with splitters. Tariboy owns this pointer
+gesture rather than relying on WebView HTML5 `DataTransfer`. Crossing the drag
+threshold reveals a half-pane left/right/top/bottom preview;
 edge distance is normalized to the current leaf dimensions so wide and tall
 panes dock consistently. Dropping relative to any leaf creates arbitrarily
 nested horizontal and vertical splits without center tab stacks. Pointer
@@ -337,6 +394,19 @@ operations: each selection is persisted without confirmation or an automatic
 restart, takes effect the next time the agent starts, and leaves the timing of
 any restart under the operator's control.
 
+The Loop section also exposes the positive **AI inactivity timeout** in seconds,
+defaulting to 300 per agent. When a running iteration exceeds it without an
+attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
+card shows the informational reason. The controls remain enabled because this
+signal does not stop the loop or iteration; the next request restores
+`state=running`. Ordinary creation starts at 300 seconds, while Clone preserves
+the source agent's configured value.
+
+The **Messages & Channels** section uses that same draft contract for the
+positive whole-number `messages_batch` and `messages_max_queue` fields.
+New-agent drafts use a maximum queue of 100, while Clone keeps the source
+agent's configured value.
+
 Configuration also renders the daemon-authoritative per-agent USD budget
 projection. Its four calendar rows pair each current spend with one editable
 limit (`spent / limit`), label zero as Unlimited, and save atomically against
@@ -344,6 +414,12 @@ the explicit agent-route host. The agent header and sidebar use the same
 projection; they show an explicit Out of budget state and every exhausted
 period rather than recomputing spend in the browser. Older daemons simply omit
 the additive projection.
+
+The workspace header also consumes daemon-authoritative message status. When
+`messages_queue_full` is true it displays
+**Message queue full: pending / limit** in destructive styling; it never
+recomputes queue state in the browser. The normal three-second status refresh
+removes the indicator after processing or clearing lowers the queue.
 
 When the daemon reports a halt reason for the agent, the Autopilot card shows
 it under the Running/Stopped line, toned as an error for an `error`
@@ -355,8 +431,7 @@ extra is rendered at all — no empty element and no placeholder.
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
 main Tauri window retains native traffic lights under an overlay titlebar, and
 the sidebar icon is immediately after their reserved area in the global
-toolbar. The only other titlebar controls are the global **Workspace** link and
-theme icon. Empty toolbar space is draggable, while daemon status banners remain
+toolbar. The only other titlebar control is the theme icon. Empty toolbar space is draggable, while daemon status banners remain
 below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Workspace
 xterm content is square and flush inside the single FlexLayout pane border; the
@@ -379,10 +454,12 @@ environment values, tokens, secrets, cwd/workdir paths, or user files.
 Malformed state resets only the Workspace canvas.
 
 **Send files**, Attach, and terminal file drops all upload through the selected
-server's `PUT /api/files` endpoint. Uploads have no agent destination: files
-live in the server's shared files directory and the returned absolute paths
-are inserted into the corresponding draft or reported when no terminal is
-available. Console and every Workspace tile retain their explicit host target.
+server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
+The browser sends each `File` as the raw request body instead of building a
+base64/JSON copy. Uploads have no agent destination: files live in the server's
+shared files directory and the returned absolute paths are inserted into the
+corresponding draft or reported when no terminal is available. Console and
+every Workspace tile retain their explicit host target.
 
 The terminal compose draft is also non-persistent in Workspace: typed text and
 uploaded server paths remain in the mounted tile's memory and are discarded

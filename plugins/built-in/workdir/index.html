@@ -5,13 +5,13 @@ absolute path of its managed <code>agents/&lt;agent&gt;/workdir</code> even when
 in a different configured CWD. It adds no command, API route, shim, environment
 variable, or filesystem permission.</p>
 <h2 id="prompt-composition"><a class="blume-heading-anchor" href="#prompt-composition">Prompt composition</a></h2>
-<p>Declare the instruction-only plugin, its Store skill, and its runtime value
+<p>Declare the instruction-only plugin, its image skill, and its runtime value
 explicitly:</p>
 <pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;overflow-x:auto" tabindex="0" data-language="yaml" data-icon data-title="Tariboyfile.yaml"><svg aria-hidden="true" class="blume-lang-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="m0 .97 4.111 6.453v4.09h2.638v-4.09L11.053.969H8.214L5.58 5.125 2.965.969Zm12.093.024-4.47 10.544h2.114l.97-2.345h4.775l.804 2.345h2.26L14.255.994Zm1.133 2.225 1.463 3.87h-3.096zm3.06 9.475v10.29H24v-2.199h-5.454v-8.091zm-12.175.002v10.335h2.217v-7.129l2.32 4.792h1.746l2.4-4.96v7.295h2.127V12.696h-2.904L9.44 17.37l-2.455-4.674Z"></path></svg><code><span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">schema_version</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">2</span></span>
 <span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">plugins</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">workdir</span></span>
 <span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">skills</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$CURRENT_VERSION_STORE/skills/workdir</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">../../skills/workdir</span></span>
 <span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">prompts</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">runtime</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">workdir</span></span></code></pre>
 <p>The declarations are independent. Naming the plugin does not inject either
@@ -39,7 +39,7 @@ control.</p>
 that contains images, iteration evidence, and daemon-owned files. The harness
 already runs as the daemon account, so rendering this path grants no additional
 access or sandboxing.</p>
-<p><code>basic:latest</code> declares <code>workdir</code> for newly created agents. Existing agents
+<p>The official Store’s <code>basic</code> source declares <code>workdir</code>. Existing agents
 remain pinned to their current image digest until an operator selects another
 image.</p>
 <h2 id="related-reference"><a class="blume-heading-anchor" href="#related-reference">Related reference</a></h2>

@@ -118,11 +118,11 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy files upload</code></td>
-<td>Upload base64 content to the server and return its absolute path</td>
+<td>Upload up to 16 MiB of base64 content to the server and return its absolute path</td>
 </tr>
 <tr>
 <td><code>tariboy cp</code></td>
-<td>Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST</td>
+<td>Stream a file up to 1 GiB to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST</td>
 </tr>
 <tr>
 <td><code>tariboy daemon config get</code></td>
@@ -170,11 +170,23 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]</code></td>
-<td>Build an immutable image and source snapshot; optional Git provenance must be provided as a pair</td>
+<td>Build mutable image refs and an immutable source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); Git provenance must be paired</td>
+</tr>
+<tr>
+<td><code>tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]</code></td>
+<td>Restore available skill locks and build from the selected daemon’s Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned</td>
 </tr>
 <tr>
 <td><code>tariboy image validate --path DIR --name NAME [--tag TAG]</code></td>
 <td>Validate the source and target ref without publishing; tag defaults to <code>latest</code></td>
+</tr>
+<tr>
+<td><code>tariboy image version get [--path FILE_OR_DIR]</code></td>
+<td>Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required</td>
+</tr>
+<tr>
+<td><code>tariboy image version update &lt;major|minor|patch&gt; [--path FILE_OR_DIR]</code></td>
+<td>Increment the local SemVer, reset lower components and remove suffixes; preserve YAML fields/comments</td>
 </tr>
 <tr>
 <td><code>tariboy image inspect</code></td>
@@ -278,7 +290,7 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy iteration inspect</code></td>
-<td>Show one iteration</td>
+<td>Show one iteration, including its snapshotted image ref, source version, digest, and prompt-template hash</td>
 </tr>
 <tr>
 <td><code>tariboy iteration logs</code></td>
@@ -387,6 +399,26 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <tr>
 <td><code>tariboy secret set</code></td>
 <td>Set a secret; value from –value or stdin</td>
+</tr>
+<tr>
+<td><code>tariboy store add NAME SOURCE</code></td>
+<td>Register a Git URL or absolute local directory on the daemon host</td>
+</tr>
+<tr>
+<td><code>tariboy store list</code></td>
+<td>List this daemon’s Store registrations</td>
+</tr>
+<tr>
+<td><code>tariboy store show NAME</code></td>
+<td>Read current images, versions and diagnostics from disk</td>
+</tr>
+<tr>
+<td><code>tariboy store refresh NAME</code></td>
+<td>Fast-forward pull a Git source, or reread a non-Git local directory</td>
+</tr>
+<tr>
+<td><code>tariboy store remove NAME</code></td>
+<td>Unregister a Store and remove only its managed clone; preserve local sources and built images</td>
 </tr>
 <tr>
 <td><code>ttasks queue create</code></td>
@@ -513,7 +545,7 @@ remains <code>uncertain</code>; missing evidence is not a disagreement or a fail
 </tr>
 <tr>
 <td><code>scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR</code></td>
-<td>Build a schema-v1 or schema-v2 image from an agent-confined source directory (<code>image-creator</code> only)</td>
+<td>Build a schema-v2 image from an agent-confined source directory (<code>image-creator</code> only)</td>
 </tr>
 </tbody>
 </table></div>

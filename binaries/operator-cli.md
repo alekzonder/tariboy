@@ -68,11 +68,14 @@ Inspect and list output also reports the daemon-selected read-only
 
 ## File transfer
 
-`tariboy cp LOCAL_FILE` uploads a local file through `PUT /api/files` and
+`tariboy cp LOCAL_FILE` streams a local file through `PUT /api/files/raw` and
 prints the returned absolute server path. Files are stored beneath
 `$TARIBOY_BASE_DIR/files`, with a unique directory for each upload and a
-16 MiB per-file limit. Agents on that server can read the same uploaded file;
+1 GiB per-file limit. Agents on that server can read the same uploaded file;
 uploading does not require an agent or write into an agent's working directory.
+
+The lower-level `tariboy files upload` command remains a JSON/base64
+compatibility surface with a 16 MiB decoded-file limit.
 
 `tariboy cp AGENT:SRC LOCAL_DST` still downloads from the agent's working
 directory. The former upload syntax `cp SRC AGENT:DST` and `agent push`

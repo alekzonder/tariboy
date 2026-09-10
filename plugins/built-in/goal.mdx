@@ -6,7 +6,7 @@ sidebar:
   icon: target
 ---
 
-`goal` is a capability included in `basic:latest`. It provides one command:
+`goal` is included in the official Store's `basic` source. It provides one command:
 `scripts/goal.sh set <TASK-KEY>`.
 
 Before the harness starts, `tariboyd` reads the selected Goal once and stamps
@@ -29,7 +29,7 @@ Package the Goal skill and render the runtime value explicitly:
 plugins:
   - name: goal
 skills:
-  - dir: $CURRENT_VERSION_STORE/skills/goal
+  - dir: ../../skills/goal
 prompts:
   - runtime: goal
 ```

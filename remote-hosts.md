@@ -116,7 +116,8 @@ release.
 
 Inside an SSH agent workspace, **Open in VS Code** opens the displayed effective
 working directory through VS Code Remote SSH using the same saved SSH config
-alias. Local agents open as ordinary local folders. HTTPS hosts do not show the
+alias in a new editor window. Local agents open as ordinary local folders in a
+new editor window. HTTPS hosts do not show the
 action because they have no SSH identity.
 
 Missing harnesses and `tmux` are reported separately as agent workflow

@@ -89,26 +89,34 @@ delivery hint.
 Path resolution lives in `internal/paths`:
 
 - **Data dir** — `$TARIBOY_BASE_DIR`, else `~/.tariboy`. Holds the DB,
-  agent working dirs, immutable images, the versioned built-in Store, and
-  side-by-side external plugin versions.
+  agent working dirs, immutable images, and side-by-side external plugin
+  versions.
 - **Runtime dir** — `$TARIBOY_RUNTIME_DIR`, else `~/.tariboyd`. Holds the
   control socket (`tariboyd.sock`), pidfile, and log.
 
 Operator `PUT /api/files` (`files upload`) accepts a file `name` and base64
 `content`, stores up to 16 MiB decoded under `files/<unique-directory>/<name>`
-in the data directory, and returns `path`, absolute `abs`, and `bytes`.
-All Send files, Attach, terminal-drop, and CLI uploads use this route.
+in the data directory, and remains available for compatible clients. Desktop
+Send files, Attach, terminal-drop, and `tariboy cp` instead stream raw bodies up
+to 1 GiB through `PUT /api/files/raw?name=...`. Both routes return `path`,
+absolute `abs`, and `bytes`.
 These uploads belong to the server independently of agents and tasks; agents
 on the same server can read the returned absolute paths. The former
 agent-scoped PUT route and `agent push` command are removed. Uploads
 are ordinary owner-only files, excluded from support bundles, with no automatic
 retention. The server rejects path components and control characters in names
-and confines filesystem operations with `os.Root`.
+and confines filesystem operations with `os.Root`. The raw route rejects a
+declared oversized body before reading it, also bounds unknown-length streams,
+and removes its partial file and unique directory after any failed upload.
 
 The data directory also holds each agent's working/configuration files and
 iteration evidence. SQLite owns agents, iterations, channels/deliveries, tasks,
 workflow execution history, idempotency keys, and durable outboxes. The
-owner-only proxy handoff file (`aiproxy-handoff.json`) intentionally sits
+global agent shell script is the deliberate filesystem-backed exception:
+`<base-dir>/global-agent-shell.sh`; an agent may additionally have
+`<base-dir>/agents/<name>/agent-shell.sh`. Both are owner-only files, written
+atomically after Bash validation, rather than SQLite configuration.
+The owner-only proxy handoff file (`aiproxy-handoff.json`) intentionally sits
 outside SQLite, audit logs, and support bundles because it contains active,
 short-lived proxy leases required to adopt live harnesses after restart.
 The same data directory contains `model-prices-litellm.json`, an owner-only
@@ -130,7 +138,7 @@ sequenceDiagram
   O->>D: start with paths and listener options
   D->>D: resolve PATH, paths, socket guard, and PID file
   D->>S: open database and run migrations
-  D->>D: reconcile agent inboxes; seed images and proxy defaults
+  D->>D: reconcile agent inboxes; ensure the bare image and proxy defaults
   D->>D: read and validate local model-price cache
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
@@ -283,17 +291,12 @@ An explicit agent `PATH` override must retain a Tasks command location. When
 `TARIBOY_TOOLS_SOCKET` is non-empty, it uses that identity-bound socket and
 fails closed; when absent, it uses the host Unix daemon socket as the customer
 actor. Each compatibility shim `exec`s its owning skill script by an **absolute
-path** inside the running daemon's versioned Store. Every other capability is
-invoked through its packaged skill-local `scripts/*.sh` launcher.
+path** inside the active image bridge. Every other capability is invoked
+through its packaged skill-local `scripts/*.sh` launcher.
 
-Because the path is absolute, shims written at create time would otherwise
-outlive the daemon that wrote them, leaving every agent on a frozen client whose
-CLI predates the daemon's flags. So the daemon **rewrites the shims of every
-stored agent at startup**, before any engine or adoption starts — disabled
-agents included, since they may be enabled later. The rewrite is skipped when a
-file already holds exactly the wanted bytes, so restarting on the same version
-changes nothing on disk. A shim that cannot be written is logged against its
-agent and the rest of the startup continues.
+The launch gate validates that each required launcher exists inside the
+candidate image, is regular, and is executable before replacing the current
+bridge or shims. Failure leaves the previous image and its shims active.
 
 Lifecycle is normally driven through the `tariboy daemon` subcommands rather
 than launching the binary directly. See

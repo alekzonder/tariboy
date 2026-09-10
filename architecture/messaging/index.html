@@ -24,6 +24,17 @@ to <code>messages_batch</code> (default 10) — into the prompt. Delivered messa
 only when the iteration finishes normally (<code>done</code> / <code>no_i_am_done</code>); harness
 errors, timeouts, and kills leave messages for redelivery until they hit the DLQ
 (max 5 attempts).</p>
+<p><code>messages_max_queue</code> defaults to 100 for new agents. Reaching it keeps the
+existing overflow behavior: later deliveries for that agent are stored in DLQ
+with result <code>queue_limit</code>, so the limit bounds runnable pending work rather than
+all message storage. Agent status derives the distinct pending count and reports
+when it is at or above the configured limit.</p>
+<p>Operators can physically clear one agent’s pending queue with
+<code>tariboy agent inbox clear NAME</code> or <code>POST /api/agents/{name}/inbox/clear</code>.
+The bus removes that agent’s unacknowledged, non-DLQ deliveries in one SQLite
+transaction and deletes only message rows orphaned by that operation. Processed
+and DLQ deliveries, shared messages, other agents’ deliveries, and messages not
+yet consumed by workflow ingress are retained.</p>
 <h2 id="channel-names"><a class="blume-heading-anchor" href="#channel-names">Channel names</a></h2>
 <p>Channel name prefixes: <code>agent</code>, <code>group</code>, <code>user</code>, <code>chat</code>. Well-known shapes:</p>
 <ul>

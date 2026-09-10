@@ -108,11 +108,12 @@ mentioned principal's next comment resolves only its own open wait. This makes
 customer.
 
 An enabled agent normally follows one sticky assigned task as its Goal. It
-releases that selection when the task is done, cancelled, has a pull request,
-loses assignment or visibility, remains in `wait_customer` beyond the agent's
-configured grace period, or eligible assigned work has a strictly higher
-priority. The goal is daemon-owned and read-only to the agent; see [Agents and
-the iteration loop](/docs/architecture/iteration-loop).
+releases that selection when the task is done, cancelled, loses assignment or
+visibility, remains in `wait_customer` beyond the agent's configured grace
+period, or eligible assigned work has a strictly higher priority. A task's pull
+request URL does not affect Goal selection or release. The goal is daemon-owned
+and read-only to the agent; see [Agents and the iteration
+loop](/docs/architecture/iteration-loop).
 
 Assignment, question, answer, and queue-triage events enter a transactional
 outbox and publish through the existing channels/messages bus. Agent
@@ -163,9 +164,10 @@ If a later file fails, paths for files already uploaded are kept in the draft.
 
 Files are stored on disk under `$TARIBOY_BASE_DIR/files` (normally
 `~/.tariboy/files`), with a unique directory per upload so matching names never
-overwrite earlier files. Each file is limited to 16 MiB. Files remain after a
+overwrite earlier files. Each file is limited to 1 GiB. Files remain after a
 draft is discarded or a task is closed; remove unneeded files manually on the
-server when their paths are no longer needed.
+server when their paths are no longer needed. Desktop streams each selected
+file directly rather than creating a base64/JSON copy in memory.
 
 The Desktop establishes a silent baseline when it first observes a host, and
 again when an unavailable host recovers. Existing unread questions appear as
@@ -223,7 +225,7 @@ mode only when `TARIBOY_TOOLS_SOCKET` is non-empty and otherwise uses the host
 Unix daemon socket as the customer actor. Agent mode fails closed rather than
 falling back to operator access. When enabled, the `tasks` capability also
 provisions the bare legacy `tasks` shim. Schema-v2 images must still package the
-Tasks Store skill; capability selection never packages instructions
+Tasks image skill; capability selection never packages instructions
 automatically. See the [Tasks built-in reference](/docs/plugins/built-in/tasks)
 for the complete boundary.
 

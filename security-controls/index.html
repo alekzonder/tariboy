@@ -50,12 +50,31 @@ Desktop installer preflights all six command paths before changing any of them
 and refuses regular files, directories, or symlinks not owned by the verified
 Tariboy app bundle. The bundle has five real payload files; <code>ttasks</code> is a
 managed alias whose source is <code>tariboy-tasks</code>.</p>
-<p>Image builds resolve only literal <code>$STORE</code>, <code>$CURRENT_VERSION_STORE</code>, and
-<code>$PLUGINS</code> roots, source-relative paths, or explicit operator absolute paths.
-They reject traversal, symlinks, missing or non-regular files, and oversized
-prompt files. Agent-authored builds additionally confine source and absolute
-references to that agent’s workdir.
-Native host metadata and exported support archives use owner-only permissions.</p>
+<p>Image builds resolve only the literal <code>$PLUGINS</code> root, source-relative paths,
+or explicit operator absolute paths. Prompt paths and plugin references reject
+traversal outside their roots.
+Source-relative skill directories may use <code>../</code> to reference a sibling tree;
+ordinary builds freeze only those explicitly declared skills alongside the
+source snapshot. Symlinks, missing or non-regular files, and oversized prompt
+files are rejected. Agent-authored builds additionally confine source and all
+relative or absolute skill references to that agent’s workdir.
+Native host metadata and exported support archives use owner-only permissions.
+The global <code>&lt;base-dir&gt;/global-agent-shell.sh</code> and per-agent
+<code>&lt;base-dir&gt;/agents/&lt;name&gt;/agent-shell.sh</code> scripts are owner-only, atomically
+written only after <code>bash -n</code> validation; a rejected value cannot replace the
+last valid script.</p>
+<p>User Stores clone Git sources on the selected daemon host into its own
+<code>&lt;base-dir&gt;/stores/&lt;name&gt;/</code>, or use an explicitly registered local directory.
+Store names and image selectors are validated; image selection rejects path
+traversal and symlink escapes. Git uses the server account’s existing SSH and
+credential helpers without weakening host verification. Credential-bearing
+URLs are rejected and subprocess output is not returned as error text.
+Refresh uses fast-forward-only pull and never resets or stashes user changes.
+Removing a Store preserves local source directories and built images.
+Building a Store with <code>skills-lock.json</code> invokes npm’s skills installer on
+that host before freezing sources. Register and build sources you trust to
+install their declared skills. Store source contents remain outside the
+support-bundle allowlist.</p>
 <p>Controlled production publication is stricter than an ordinary operator build.
 Its external source uses only vendored <code>./</code> prompt and skill inputs, provides
 <code>tariboy.lock.yaml</code>, and matches every declared SHA-256. Upstream entries must
@@ -102,7 +121,7 @@ paths are discarded when their tile unmounts. Pointer coordinates, drop
 previews, and drag ghost labels are transient React state and are never written
 to localStorage.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.51.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.55.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;
@@ -128,8 +147,9 @@ files for the newest 10 iterations of each agent on that host. It reads only
 <code>logs/harness.stderr.log</code>; it never recursively walks an agent directory.</p>
 <p>The collector never includes credentials or environment values (including
 <code>PATH</code>), SSH aliases/configuration, <code>PROMPT.md</code>, context, transcripts, audit,
-workdirs, configured cwd contents, image/plugin state, provisioning replies, or
-user files. It does not open agent environment configuration. Harness output can
+workdirs, configured cwd contents, global or agent shell scripts, image/plugin
+state, provisioning replies, or user files. It does not open agent environment
+configuration. Harness output can
 nevertheless contain arbitrary private natural language, so inspect the ZIP
 before sending it under your organization’s support data policy. Export does
 not upload anything automatically.</p>

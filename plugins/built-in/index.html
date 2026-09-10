@@ -10,7 +10,7 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.<
 <tr>
 <th>Plugin</th>
 <th>Class</th>
-<th style="text-align:center">In <code>basic:latest</code></th>
+<th style="text-align:center">In official <code>basic</code></th>
 <th>Agent surface</th>
 <th>Durable state</th>
 </tr>
@@ -115,30 +115,30 @@ receive them automatically.</p>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">context</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">workdir</span></span>
 <span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">skills</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$CURRENT_VERSION_STORE/skills/whoami</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$CURRENT_VERSION_STORE/skills/loop</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$CURRENT_VERSION_STORE/skills/messages</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$CURRENT_VERSION_STORE/skills/context</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$CURRENT_VERSION_STORE/skills/workdir</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">../../skills/whoami</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">../../skills/loop</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">../../skills/messages</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">../../skills/context</span></span>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">dir</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">../../skills/workdir</span></span>
 <span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">prompts</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">runtime</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">identity</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">runtime</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">messages</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">runtime</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">context</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">runtime</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">workdir</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">runtime</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">user-prompt</span></span>
-<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">file</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">$CURRENT_VERSION_STORE/prompts/iteration-finish.md</span></span></code></pre>
+<span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">file</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">../../skills/loop/finish-iteration.md</span></span></code></pre>
 <p>Plugin order is preserved, duplicate names are rejected, and an unknown name is
 accepted only when an installed external plugin manifest resolves it. Static
 prompt files and runtime placeholders remain separate from the plugin list.</p>
 <aside class="not-prose my-5 flex flex-row items-start gap-2 rounded-blume border px-4 py-3 font-sans text-muted-foreground text-sm leading-6 [&amp;_a]:underline [&amp;_a]:decoration-current/50 [&amp;_code]:font-mono border-amber-500/25 bg-amber-500/10"><span class="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"><svg aria-hidden="true" height="16" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4m0 4h.01"/></svg></span><div class="flex-1 [&amp;&gt;*]:mt-2! [&amp;&gt;*]:mb-0! [&amp;&gt;:first-child]:mt-0!"><p class="font-semibold text-foreground">Plugins do not inject schema-v2 prompts</p><p>Declaring <code>context</code> enables its route but does not package its skill or add the
-live context text. List the Store skill and <code>runtime: context</code> explicitly when
+live context text. List the image skill and <code>runtime: context</code> explicitly when
 the agent needs both. The same transparency rule applies to instruction-only
 <code>workdir</code> and <code>goal</code>.</p></div></aside>
 <h2 id="the-default-image"><a class="blume-heading-anchor" href="#the-default-image">The default image</a></h2>
-<p>The daemon-managed <code>basic:latest</code> image declares nine built-ins:</p>
+<p>The official Store’s <code>basic</code> source declares nine built-ins:</p>
 <pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;overflow-x:auto" tabindex="0" data-language="text"><code><span class="line"><span>whoami, loop, messages, context, status, workdir, scripts, goal, tasks</span></span></code></pre>
 <p>It deliberately excludes <code>schedule</code>, <code>image-creator</code>, and
-<code>llm-as-judge</code>. New agents use the current managed generation. Existing agents
+<code>llm-as-judge</code>. Register and refresh the Store, then build it. Existing agents
 remain pinned to their assigned image digest until an image change is activated
 for a future iteration.</p>
 <h2 id="capability-enforcement"><a class="blume-heading-anchor" href="#capability-enforcement">Capability enforcement</a></h2>
@@ -152,8 +152,8 @@ message and group tools, always replace raw channel subscriptions with
 assignment-scoped <code>tasks observe</code>, and allow scheduled channel publishing only
 when the work packet grants it.</p>
 <h2 id="prompt-and-state-ownership"><a class="blume-heading-anchor" href="#prompt-and-state-ownership">Prompt and state ownership</a></h2>
-<p>Canonical built-in skills and the mandatory finish prompt live under the
-versioned Store. A schema-v2 image packages each enabled skill and chooses the
+<p>Canonical skills and the mandatory finish prompt live in the image source. A
+schema-v2 image packages each enabled skill and chooses the
 exact position of runtime values and mandatory prompt layers. Changing an image does not
 delete daemon-owned agent data such as context, audit, messages, schedules,
 scripts, Tasks, or judge artifacts.</p>
