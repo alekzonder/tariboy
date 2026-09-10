@@ -201,12 +201,26 @@ func TestReconcileAgentOrdersCandidates(t *testing.T) {
 
 func TestReconcileAgentIgnoresPullRequest(t *testing.T) {
 	t.Run("candidate", func(t *testing.T) {
-		s := goalStore(t, goalNow)
-		seedTask(t, s, "T-1", "agent:worker", "P1", "in_progress", "2026-09-01T00:00:00Z")
-		updateTask(t, s, "T-1", "pull_request", "https://example.test/pull/1")
+		base := openGoalStore(t)
+		s := NewStore(base)
+		seedAgent(t, s, "worker", goalNow.Add(-time.Hour))
+		svc := tasks.NewService(base.DB, "customer", func() time.Time { return goalNow })
+		actor := tasks.CustomerActor("customer")
+		if _, err := svc.CreateQueue(context.Background(), actor, tasks.CreateQueueInput{Prefix: "GOAL", Name: "Tasks"}); err != nil {
+			t.Fatal(err)
+		}
+		task, err := svc.CreateTask(context.Background(), actor, tasks.CreateTaskInput{Queue: "GOAL", Title: "candidate", Assignee: "worker"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		status := tasks.StatusInProgress
+		pullRequest := "https://example.test/pull/1"
+		if _, err := svc.UpdateTask(context.Background(), actor, task.Key, tasks.UpdateTaskInput{Status: &status, PullRequest: &pullRequest, Revision: task.Revision}); err != nil {
+			t.Fatal(err)
+		}
 
 		goal, err := s.ReconcileAgent("worker", goalNow)
-		if err != nil || goal.TaskKey != "T-1" {
+		if err != nil || goal.TaskKey != task.Key {
 			t.Fatalf("goal=%#v err=%v, want task with pull request", goal, err)
 		}
 	})
