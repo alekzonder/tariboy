@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -83,6 +84,25 @@ func TestBuildEnv(t *testing.T) {
 	}
 	if m["APP_ENV"] != "prod" || m["TOKEN"] != "s3cr3t" {
 		t.Fatalf("env/secrets not injected: %v", m)
+	}
+}
+
+func TestAgentShellCommandSourcesGlobalThenAgent(t *testing.T) {
+	base := t.TempDir()
+	layout := agentdir.New(filepath.Join(base, "agents"), "a1")
+	if err := os.MkdirAll(layout.Root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "global-agent-shell.sh"), []byte("export ORDER=global\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(layout.ShellScriptPath(), []byte("export ORDER=$ORDER-agent\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	argv := agentShellCommand("/bin/bash", base, layout, []string{"/bin/bash", "-c", `printf %s "$ORDER"`})
+	output, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	if err != nil || string(output) != "global-agent" {
+		t.Fatalf("output=%q err=%v", output, err)
 	}
 }
 
@@ -904,8 +924,9 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 	if separator < 0 {
 		t.Fatalf("shim argv missing harness separator: %v", spawner.argv)
 	}
-	if got := spawner.argv[separator+1:]; !slices.Equal(got, wantHarnessArgv) {
-		t.Fatalf("harness argv = %v, want unchanged %v", got, wantHarnessArgv)
+	harnessArgv := spawner.argv[separator+1:]
+	if len(harnessArgv) < len(wantHarnessArgv) || !slices.Equal(harnessArgv[len(harnessArgv)-len(wantHarnessArgv):], wantHarnessArgv) {
+		t.Fatalf("harness argv = %v, want unchanged suffix %v", harnessArgv, wantHarnessArgv)
 	}
 	for i, arg := range spawner.argv[:separator] {
 		if arg == "--hard-deadline" {
@@ -1005,6 +1026,7 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 			}
 			writeHarnessExecutable(t, filepath.Join(binDir, tc.harnessType))
 			writeHarnessExecutable(t, filepath.Join(binDir, "python3"))
+			writeHarnessExecutable(t, filepath.Join(binDir, "bash"))
 			home := filepath.Join(base, "home")
 			cwd := filepath.Join(home, "project")
 			if err := os.MkdirAll(cwd, 0o700); err != nil {
@@ -1614,6 +1636,7 @@ func TestHarnessPreflightUsesAgentEffectivePath(t *testing.T) {
 	agentBin := t.TempDir()
 	writeHarnessExecutable(t, filepath.Join(agentBin, "claude"))
 	writeHarnessExecutable(t, filepath.Join(agentBin, "python3"))
+	writeHarnessExecutable(t, filepath.Join(agentBin, "bash"))
 	r, ag, l, spawner := newHarnessPreflightRunner(t, false, map[string]string{"PATH": agentBin})
 
 	if _, err := r.Run(context.Background(), ag, "manual", "path-agent-1", ""); err != nil {
@@ -1656,6 +1679,7 @@ func TestHarnessPreflightResolvesRelativePathFromIterationCwd(t *testing.T) {
 	}
 	writeHarnessExecutable(t, filepath.Join(relativeBin, "claude"))
 	writeHarnessExecutable(t, filepath.Join(relativeBin, "python3"))
+	writeHarnessExecutable(t, filepath.Join(relativeBin, "bash"))
 	r, ag, _, spawner := newHarnessPreflightRunner(t, false, map[string]string{"PATH": "relative-bin"})
 	ag.Cwd = cwd
 
@@ -1731,6 +1755,7 @@ func TestHarnessPreflightFailureRevokesProxyTokenBeforeSpawn(t *testing.T) {
 func TestHarnessPreflightSearchesAgentBin(t *testing.T) {
 	baseline := t.TempDir()
 	writeHarnessExecutable(t, filepath.Join(baseline, "python3"))
+	writeHarnessExecutable(t, filepath.Join(baseline, "bash"))
 	t.Setenv("PATH", baseline)
 	r, ag, l, spawner := newHarnessPreflightRunner(t, false, nil)
 	if err := os.MkdirAll(l.BinDir(), 0o755); err != nil {
@@ -1749,6 +1774,7 @@ func TestHarnessPreflightSearchesAgentBin(t *testing.T) {
 func TestHarnessPreflightBareUsesDaemonEffectivePath(t *testing.T) {
 	baseline := t.TempDir()
 	writeHarnessExecutable(t, filepath.Join(baseline, "claude"))
+	writeHarnessExecutable(t, filepath.Join(baseline, "bash"))
 	t.Setenv("PATH", baseline)
 	r, ag, l, spawner := newHarnessPreflightRunner(t, true, nil)
 
