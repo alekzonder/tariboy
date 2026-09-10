@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,6 +21,8 @@ interface Props {
 export function ShellScriptEditor({ title, description, load, save }: Props) {
   const [saved, setSaved] = useState("");
   const [draft, setDraft] = useState("");
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState<(() => Promise<string>) | null>(null);
   const [errorState, setErrorState] = useState<{ load: Props["load"]; message: string } | null>(null);
   const ready = loaded === load;
@@ -51,18 +53,23 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
   }, [load]);
 
   const saveDraft = async () => {
-    if (!ready) return;
+    if (!ready || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     setErrorState(null);
     try {
       await save(draft);
       setSaved(draft);
     } catch (cause) {
       setErrorState({ load, message: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
   return (
-    <Card aria-busy={!ready}>
+    <Card aria-busy={!ready || saving}>
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -93,6 +100,7 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
           <Button
             type="button"
             variant="outline"
+            disabled={!ready || saving}
             onClick={() => {
               setDraft(saved);
               setErrorState(null);
@@ -105,7 +113,7 @@ export function ShellScriptEditor({ title, description, load, save }: Props) {
           type="button"
           onClick={() => void saveDraft()}
           aria-label={`Save ${title.toLowerCase()}`}
-          disabled={!ready}
+          disabled={!ready || saving}
         >
           Save
         </Button>

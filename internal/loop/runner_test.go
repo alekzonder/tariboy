@@ -106,6 +106,55 @@ func TestAgentShellCommandSourcesGlobalThenAgent(t *testing.T) {
 	}
 }
 
+func TestAgentShellCommandStopsOnSourceFailure(t *testing.T) {
+	for _, location := range []string{"global", "agent"} {
+		for _, script := range []string{"set +e; return 7\n", "false\nprintf SCRIPT_CONTINUED\n"} {
+			t.Run(location+"/"+script, func(t *testing.T) {
+				base := t.TempDir()
+				layout := agentdir.New(filepath.Join(base, "agents"), "a1")
+				if err := os.MkdirAll(layout.Root, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				file := filepath.Join(base, "global-agent-shell.sh")
+				if location == "agent" {
+					file = layout.ShellScriptPath()
+				}
+				if err := os.WriteFile(file, []byte(script), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				argv := agentShellCommand("/bin/bash", base, layout, []string{"/bin/bash", "-c", "printf HARNESS_STARTED"})
+				output, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+				var exit *exec.ExitError
+				want := 1
+				if strings.Contains(script, "return 7") {
+					want = 7
+				}
+				if !errors.As(err, &exit) || exit.ExitCode() != want || len(output) != 0 {
+					t.Fatalf("output=%q err=%v, want no output and exit %d", output, err, want)
+				}
+			})
+		}
+	}
+}
+
+func TestAgentShellCommandPreservesArgvAfterSet(t *testing.T) {
+	base := t.TempDir()
+	layout := agentdir.New(filepath.Join(base, "agents"), "a1")
+	if err := os.MkdirAll(layout.Root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{filepath.Join(base, "global-agent-shell.sh"), layout.ShellScriptPath()} {
+		if err := os.WriteFile(file, []byte("set -- one two /usr/bin/printf WRONG_COMMAND\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	argv := agentShellCommand("/bin/bash", base, layout, []string{"/bin/bash", "-c", `printf '<%s>' "$@"`, "harness", "two words", "", "*", "line\nbreak"})
+	output, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+	if err != nil || string(output) != "<two words><><*><line\nbreak>" {
+		t.Fatalf("output=%q err=%v", output, err)
+	}
+}
+
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		exit   int

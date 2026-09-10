@@ -133,7 +133,7 @@ function stubFetch(
         opts?.apply?.(server, path, body);
       }
       let result: unknown = server;
-      if (path.endsWith("/shell-script")) result = { script: shellScript };
+      if (path.endsWith("/shell-script")) result = init?.method === "POST" ? { saved: true } : { script: shellScript };
       else if (path.endsWith("/secrets")) result = { keys: [], count: 0 };
       else if (path.endsWith("/retention"))
         result = {
@@ -222,7 +222,7 @@ it("loads and saves an agent shell script on the explicit host", async () => {
 
   const script = await screen.findByLabelText("Agent Shell Script");
   await waitFor(() => expect(script).toHaveValue("export OLD=1"));
-  fireEvent.change(script, { target: { value: "export NEW=1" } });
+  fireEvent.change(script, { target: { value: "  export NEW=1\n  printf '%s' \"$NEW\"\n" } });
   fireEvent.click(
     screen.getByRole("button", { name: "Save agent shell script" }),
   );
@@ -237,7 +237,7 @@ it("loads and saves an agent shell script on the explicit host", async () => {
       (call) => call.method === "POST" && call.path.endsWith("/shell-script"),
     )?.body,
   ).toEqual({
-    script: "export NEW=1",
+    script: "  export NEW=1\n  printf '%s' \"$NEW\"\n",
   });
 });
 

@@ -19,7 +19,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getGlobalAgentShellScriptOn).mockResolvedValue({ script: "export OK=1" });
   vi.mocked(getPluginContributionsOn).mockResolvedValue({ plugins: [], count: 0 });
-  vi.mocked(setGlobalAgentShellScriptOn).mockResolvedValue({ script: "export OK=1" });
+  vi.mocked(setGlobalAgentShellScriptOn).mockResolvedValue({ saved: true });
 });
 
 describe("SettingsPage", () => {
@@ -84,8 +84,10 @@ describe("SettingsPage", () => {
       </MemoryRouter>,
     );
 
+    const script = await screen.findByLabelText("Global Agent Shell Script");
+    await waitFor(() => expect(script).toBeEnabled());
     fireEvent.change(
-      await screen.findByLabelText("Global Agent Shell Script"),
+      script,
       {
         target: { value: "if then" },
       },
