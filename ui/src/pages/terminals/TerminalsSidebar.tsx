@@ -1,4 +1,8 @@
-import { useRef } from "react";
+import { useRef, type ButtonHTMLAttributes } from "react";
+import {
+  DndContext, KeyboardSensor, PointerSensor, closestCenter, pointerWithin, useDraggable, useDroppable,
+  useSensor, useSensors, type DragEndEvent,
+} from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,23 +15,62 @@ import { cn } from "@/lib/utils";
 import type { HostAgents } from "@/lib/aggregate";
 import type { DaemonMeta } from "@/lib/daemons";
 import { HostStatus } from "@/components/HostStatus";
-import type { TerminalIdentity } from "./workspaceState";
 import {
   DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH,
 } from "./useSidebarWidth";
 
-export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, workspaceMode, onBeginWorkspaceDrag, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
+function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
+  const rank = new Map(ids.map((value, index) => [value, index]));
+  return items
+    .map((item, index) => ({ item, index, rank: rank.get(id(item)) }))
+    .sort((left, right) => (left.rank ?? ids.length + left.index) - (right.rank ?? ids.length + right.index))
+    .map(({ item }) => item);
+}
+
+function move(ids: string[], active: string, over: string): string[] {
+  const from = ids.indexOf(active);
+  const to = ids.indexOf(over);
+  if (from < 0 || to < 0 || from === to) return ids;
+  const next = [...ids];
+  next.splice(to, 0, next.splice(from, 1)[0]);
+  return next;
+}
+
+type ReorderKind = "servers" | "groups" | "agents";
+type DragIdentity = [ReorderKind, string, string, string?];
+const dragId = (...identity: DragIdentity) => JSON.stringify(identity);
+const rowCollision: typeof closestCenter = (args) => {
+  const pointer = pointerWithin(args);
+  return pointer.length ? pointer : closestCenter(args);
+};
+
+/* @dnd-kit exposes callback refs and live attributes from its hooks for
+ * render-time spreading. */
+/* eslint-disable react-hooks/refs */
+function SortableButton({ dragKey, disabled, style, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
+  dragKey: string;
+}) {
+  const drag = useDraggable({ id: dragKey, disabled });
+  const drop = useDroppable({ id: dragKey, disabled });
+  return <button
+    ref={(node) => { drag.setNodeRef(node); drop.setNodeRef(node); }}
+    disabled={disabled}
+    style={{ ...style, opacity: drag.isDragging ? 0.45 : undefined }}
+    className={cn("cursor-grab active:cursor-grabbing", className)}
+    {...props}
+    {...drag.attributes}
+    {...drag.listeners}
+  />;
+}
+
+export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
   hosts: HostAgents[];
   selectedHostId?: string;
   selected?: { hostId: string; agent: string };
   onSelectHost: (hostId: string) => void;
   onSelect: (hostId: string, agent: string) => void;
   onSelectTeam: (hostId: string, team: string) => void;
-  workspaceMode: boolean;
-  onBeginWorkspaceDrag: (
-    identity: TerminalIdentity,
-    event: React.PointerEvent<HTMLButtonElement>,
-  ) => void;
+  onReorder: (kind: ReorderKind, hostId: string, ids: string[]) => void;
   onClone: (hostId: string, agentName: string) => void;
   onCreate: (hostId: string) => void;
   onAddServer: () => void;
@@ -41,6 +84,10 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
   onResize: (px: number) => void;
 }) {
   const asideRef = useRef<HTMLElement | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
 
   // Drag state lives on window listeners rather than pointer capture: capture
   // is spotty in jsdom, and window listeners keep tracking the drag when the
@@ -70,14 +117,40 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
     else if (e.key === "Home") { e.preventDefault(); onResize(DEFAULT_SIDEBAR_WIDTH); }
   };
 
+  const finishReorder = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const source = JSON.parse(String(active.id)) as DragIdentity;
+    const target = JSON.parse(String(over.id)) as DragIdentity;
+    if (source[0] !== target[0] || source[1] !== target[1] || source[3] !== target[3]) return;
+    if (source[0] === "servers") {
+      onReorder("servers", "", move(hosts.map((host) => host.host.id), source[2], target[2]));
+      return;
+    }
+    const host = hosts.find((entry) => entry.host.id === source[1]);
+    if (!host) return;
+    if (source[0] === "groups") {
+      const names = [...new Set([
+        ...(host.groups ?? []).map((group) => group.name),
+        ...host.agents.map((agent) => agent.group?.trim()).filter((name): name is string => Boolean(name)),
+      ])];
+      const current = ordered(names, host.sidebarOrder?.groups ?? [], (name) => name);
+      onReorder("groups", source[1], move(current, source[2], target[2]));
+      return;
+    }
+    const current = ordered(host.agents, host.sidebarOrder?.agents ?? [], (agent) => agent.name)
+      .map((agent) => agent.name);
+    onReorder("agents", source[1], move(current, source[2], target[2]));
+  };
+
   return (
-    <>
+    <DndContext sensors={sensors} collisionDetection={rowCollision} onDragEnd={finishReorder}>
     <aside ref={asideRef} style={{ width }} className="flex shrink-0 flex-col overflow-y-auto border-r">
       <div className="p-2 text-sm font-semibold">Agents</div>
       {hosts.map((h) => (
         <section key={h.host.id || "__local__"} className="px-2 pb-2">
           <div className="flex items-center justify-between">
-            <button
+            <SortableButton
+              dragKey={dragId("servers", "", h.host.id)}
               type="button"
               aria-label={`Open server ${h.host.label}`}
               aria-current={selectedHostId === h.host.id ? "page" : undefined}
@@ -89,7 +162,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
               title={h.host.label}
             >
               {h.host.label}
-            </button>
+            </SortableButton>
             <span className="flex shrink-0 items-center">
               {/* The implicit local host has no registry entry (id ""), so there
                   is nothing to edit or remove for it. */}
@@ -122,6 +195,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
           })()}
           {h.error && <div className="text-xs text-destructive">{h.error}</div>}
           {(() => {
+            const agentsInOrder = ordered(h.agents, h.sidebarOrder?.agents ?? [], (agent) => agent.name);
             const renderAgent = (a: (typeof h.agents)[number]) => {
             const interactive = a.interactive !== false;
             return (
@@ -133,19 +207,13 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
                       selected && selected.hostId === h.host.id && selected.agent === a.name && "bg-accent",
                     )}
                   >
-                    <button
+                    <SortableButton
+                      dragKey={dragId("agents", h.host.id, a.name, a.group?.trim() ?? "")}
                       type="button"
                       className="flex min-w-0 flex-1 items-center justify-between px-2 py-1 text-left"
                       aria-label={`Open ${a.name}`}
                       aria-current={selected?.hostId === h.host.id && selected.agent === a.name ? "page" : undefined}
                       disabled={Boolean(h.error)}
-                      onPointerDown={(event) => {
-                        if (event.button !== 0 || h.error || !workspaceMode || !interactive) return;
-                        onBeginWorkspaceDrag(
-                          { hostId: h.host.id, agentName: a.name },
-                          event,
-                        );
-                      }}
                       onClick={() => { if (!h.error) onSelect(h.host.id, a.name); }}
                     >
                       <span className="flex min-w-0 items-center gap-1">
@@ -165,7 +233,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
                         )}
                       </span>
 						{a.budget?.exhausted?.length ? <Badge variant="destructive" title={`Out of budget: ${a.budget.exhausted.join(", ")}`}>out of budget</Badge> : <Badge variant={a.state === "running" ? "default" : "secondary"}>{a.state}</Badge>}
-                    </button>
+                    </SortableButton>
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
@@ -176,14 +244,18 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
               </ContextMenu>
             );
             };
+            const groupNames = [...new Set([
+              ...(h.groups ?? []).map((group) => group.name),
+              ...agentsInOrder.map((agent) => agent.group?.trim()).filter((name): name is string => Boolean(name)),
+            ])];
             const teams = new Map<string, typeof h.agents>();
-            for (const group of h.groups ?? []) teams.set(group.name, []);
-            for (const agent of h.agents) {
+            for (const name of ordered(groupNames, h.sidebarOrder?.groups ?? [], (name) => name)) teams.set(name, []);
+            for (const agent of agentsInOrder) {
               const group = agent.group?.trim();
               if (!group) continue;
               teams.set(group, [...(teams.get(group) ?? []), agent]);
             }
-            const individuals = h.agents.filter((agent) => !agent.group?.trim());
+            const individuals = agentsInOrder.filter((agent) => !agent.group?.trim());
 
             return (
               <>
@@ -193,8 +265,14 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
                     {[...teams.entries()].map(([name, agents]) => (
                       <details key={name} open>
                         <summary className="cursor-pointer px-2 py-1 text-sm font-medium">
-                          <button type="button" aria-label={`Open team ${name}`} className="hover:underline" disabled={Boolean(h.error)}
-                            onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!h.error) onSelectTeam(h.host.id, name); }}>{name}</button>
+                          <SortableButton
+                            dragKey={dragId("groups", h.host.id, name)}
+                            type="button"
+                            aria-label={`Open team ${name}`}
+                            className="hover:underline"
+                            disabled={Boolean(h.error)}
+                            onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!h.error) onSelectTeam(h.host.id, name); }}
+                          >{name}</SortableButton>
                         </summary>
                         <div className="pl-2">{agents.map(renderAgent)}</div>
                       </details>
@@ -230,6 +308,6 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
       onDoubleClick={() => onResize(DEFAULT_SIDEBAR_WIDTH)}
       className="w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
     />
-    </>
+    </DndContext>
   );
 }

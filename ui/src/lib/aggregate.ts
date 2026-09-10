@@ -6,6 +6,7 @@ export interface HostAgents {
   host: { id: string; label: string };
   agents: AgentSummary[];
   groups?: Array<{ name: string; lead: string; members: number }>;
+  sidebarOrder?: { version: 1; groups: string[]; agents: string[] };
   error?: string;
 }
 
@@ -22,11 +23,28 @@ export async function fetchAllAgents(): Promise<HostAgents[]> {
     targets.map(async (t) => {
       try {
         const target = await resolveDaemon(t.id);
-        const [res, groupResult] = await Promise.all([
+        const [res, groupResult, config] = await Promise.all([
           apiOn<{ agents: AgentSummary[]; count: number }>(target, "GET", "/api/agents"),
           apiOn<{ groups: Array<{ name: string; lead: string; members: number }>; count: number }>(target, "GET", "/api/groups"),
+          apiOn<Record<string, string>>(target, "GET", "/api/daemon/config?key=sidebar_order_v1")
+            .catch((): Record<string, string> => ({})),
         ]);
-        return { host: t, agents: res.agents ?? [], groups: groupResult.groups ?? [] };
+        let sidebarOrder: HostAgents["sidebarOrder"];
+        try {
+          const parsed = JSON.parse(config.sidebar_order_v1 ?? "null") as HostAgents["sidebarOrder"];
+          if (
+            parsed?.version === 1
+            && Array.isArray(parsed.groups)
+            && parsed.groups.every((name) => typeof name === "string")
+            && Array.isArray(parsed.agents)
+            && parsed.agents.every((name) => typeof name === "string")
+          ) {
+            sidebarOrder = parsed;
+          }
+        } catch {
+          // Invalid optional UI state must not hide an otherwise healthy host.
+        }
+        return { host: t, agents: res.agents ?? [], groups: groupResult.groups ?? [], sidebarOrder };
       } catch (e) {
         // Surface the error code alongside the message (e.g. "unauthorized:
         // nope") so a degraded host is diagnosable without leaking the token.

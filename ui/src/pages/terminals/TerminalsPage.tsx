@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
 import { fetchAllAgents, type HostAgents } from "@/lib/aggregate";
@@ -8,7 +8,8 @@ import { useSharedSidebarState } from "./sidebarStateContext";
 import { CreateAgentDialog, type CloneAgentSource } from "./CreateAgentDialog";
 import { ServerDialog } from "./ServerDialog";
 import { useDaemons } from "@/components/DaemonProvider";
-import { listDaemons, removeDaemon, type DaemonMeta } from "@/lib/daemons";
+import { listDaemons, removeDaemon, resolveDaemon, type DaemonMeta } from "@/lib/daemons";
+import { apiOn } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { hostConnect } from "@/lib/desktop";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
@@ -74,8 +75,23 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const sidebar = useSharedSidebarState();
   const workspaceMode = location.pathname === "/workspace";
   const workspaceRef = useRef<TerminalWorkspaceHandle | null>(null);
-  const pendingWorkspaceAgent = useRef<TerminalIdentity | null>(null);
   const [hostError, setHostError] = useState("");
+  const [serverOrder, setServerOrder] = useState<string[]>(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("terminals:server-order:v1") ?? "null") as {
+        version?: number;
+        ids?: unknown;
+      } | null;
+      return parsed?.version === 1 && Array.isArray(parsed.ids)
+        ? parsed.ids.filter((id): id is string => typeof id === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [sidebarOrderOverrides, setSidebarOrderOverrides] = useState(
+    () => new Map<string, NonNullable<HostAgents["sidebarOrder"]>>(),
+  );
   const createHosts = useMemo(() => {
     const aggregateById = new Map(hosts.map((entry) => [entry.host.id, entry]));
     const metadataById = new Map(daemons.map((entry) => [entry.id, entry]));
@@ -152,6 +168,16 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     const snapshot = lastSuccessfulHostsById.get(entry.host.id);
     return snapshot ? { ...snapshot, error: entry.error } : entry;
   }), [hosts, lastSuccessfulHostsById]);
+  const orderedSidebarHosts = useMemo(() => {
+    const rank = new Map(serverOrder.map((id, index) => [id, index]));
+    return sidebarHosts
+      .map((entry, index) => ({ entry, index, rank: rank.get(entry.host.id) }))
+      .sort((left, right) => (left.rank ?? serverOrder.length + left.index) - (right.rank ?? serverOrder.length + right.index))
+      .map(({ entry }) => ({
+        ...entry,
+        sidebarOrder: sidebarOrderOverrides.get(entry.host.id) ?? entry.sidebarOrder,
+      }));
+  }, [serverOrder, sidebarHosts, sidebarOrderOverrides]);
   const selectedAgent = useMemo(() => {
     if (!agentName) return undefined;
     return selectedHost?.agents.find((a) => a.name === agentName);
@@ -164,55 +190,65 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     ?? (hostId === "" ? "This daemon (local)" : hostId);
   const routeUnavailable = Boolean(liveSelectedHost?.error);
 
-  const addToWorkspace = (identity: TerminalIdentity) => {
-    if (workspaceMode && workspaceRef.current) {
-      workspaceRef.current.addOrFocus(identity);
-      return;
-    }
-    pendingWorkspaceAgent.current = identity;
-    navigate("/workspace");
-  };
-
   const openConfiguration = (identity: TerminalIdentity) => {
     navigate(
       `/agents/${hostToParam(identity.hostId)}/${encodeURIComponent(identity.agentName)}/configuration`,
     );
   };
 
-  useEffect(() => {
-    if (!workspaceMode || !pendingWorkspaceAgent.current) return;
-    const identity = pendingWorkspaceAgent.current;
-    pendingWorkspaceAgent.current = null;
-    workspaceRef.current?.addOrFocus(identity);
-  }, [workspaceMode]);
+  const reorderSidebar = async (kind: "servers" | "groups" | "agents", id: string, ids: string[]) => {
+    setHostError("");
+    if (kind === "servers") {
+      const previous = serverOrder;
+      setServerOrder(ids);
+      try {
+        localStorage.setItem("terminals:server-order:v1", JSON.stringify({ version: 1, ids }));
+      } catch (cause) {
+        setServerOrder(previous);
+        setHostError(`Could not save server order: ${String(cause)}`);
+      }
+      return;
+    }
+    const host = orderedSidebarHosts.find((entry) => entry.host.id === id);
+    if (!host) return;
+    const previous = host.sidebarOrder ?? { version: 1, groups: [], agents: [] };
+    const next = { ...previous, [kind]: ids };
+    setSidebarOrderOverrides((current) => new Map(current).set(id, next));
+    try {
+      await apiOn(await resolveDaemon(id), "POST", "/api/daemon/config", {
+        key: "sidebar_order_v1",
+        value: JSON.stringify(next),
+      });
+      await refresh();
+      setSidebarOrderOverrides((current) => {
+        const copy = new Map(current);
+        copy.delete(id);
+        return copy;
+      });
+    } catch (cause) {
+      setSidebarOrderOverrides((current) => {
+        const copy = new Map(current);
+        copy.delete(id);
+        return copy;
+      });
+      setHostError(`Could not save ${kind} order: ${String(cause)}`);
+    }
+  };
 
   return (
     <div className="flex h-full">
       {!sidebar.hidden && <TerminalsSidebar
-        hosts={sidebarHosts}
+        hosts={orderedSidebarHosts}
         selectedHostId={hostId}
         selected={hostId !== undefined && agentName ? { hostId, agent: agentName } : undefined}
         onSelectHost={(id) => navigate(serverPath(id, "tasks"))}
         onSelect={(h, a) => {
-          const identity = { hostId: h, agentName: a };
-          const selected = hosts
-            .find((entry) => entry.host.id === h)
-            ?.agents.find((agent) => agent.name === a);
-          if (workspaceMode && selected?.interactive === false) {
-            openConfiguration(identity);
-          } else if (workspaceMode) {
-            addToWorkspace(identity);
-          } else {
-            navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/console`);
-          }
+          navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/console`);
         }}
         onSelectTeam={(h, team) => {
           navigate(`/agents/${hostToParam(h)}/teams/${encodeURIComponent(team)}`);
         }}
-        workspaceMode={workspaceMode}
-        onBeginWorkspaceDrag={(identity, event) => {
-          workspaceRef.current?.beginExternalPointerDrag(identity, event.nativeEvent);
-        }}
+        onReorder={(kind, id, ids) => void reorderSidebar(kind, id, ids)}
         onClone={(cloneHostId, cloneAgentName) => {
           const hostLabel = sidebarHosts.find((entry) => entry.host.id === cloneHostId)?.host.label
             ?? (cloneHostId === "" ? "This daemon (local)" : cloneHostId);

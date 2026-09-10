@@ -70,8 +70,16 @@ These local suggestions are an operator convenience, not a capability check
 for the selected host; failed creates do not add values.
 
 The Agents sidebar partitions each host into expandable **Teams** and
-**Individual agents** without changing agent navigation or terminal drag
-identity. Server headings are selectable and open an explicit
+**Individual agents** without changing agent navigation or membership.
+Server headings, team headings, and agent rows are themselves
+pointer- and keyboard-accessible drag surfaces; no separate drag handle is
+rendered. A drop reorders only like siblings, so it never changes team
+membership. The daemon stores each host's team and agent order in the
+versioned `sidebar_order_v1` value under `daemon_config`; missing or newly
+created names retain their current stable order. The Desktop WebView stores
+the cross-host order, including the implicit local host, in
+`terminals:server-order:v1`. Failed daemon writes restore the previous order
+and report the failure. Server headings are selectable and open an explicit
 `/servers/:hostId/tasks` route. The persistent right-pane server row keeps
 **Tasks**, **Images**, **Stores**, and **Settings** scoped to that host even while an agent
 is selected. The Groups workspace owns team creation and editing: arbitrary custom
@@ -320,9 +328,10 @@ HTTP projections; the UI does not infer phases from title prefixes or assignee.
 Operator history remains available after completion. See
 [Configurable task workflows](/docs/task-workflows).
 
-The navigation hierarchy is **Workspace → Server → Agent**. **Workspace** is a
-global titlebar destination at `/workspace`; it is not scoped to the currently
-selected server. A selected server owns Tasks, Images, Stores, and Settings, and its
+The navigation hierarchy is **Server → Agent**. The existing Workspace canvas
+and `/workspace` route remain available for retained layouts and possible
+future use, but the titlebar entry and agent-list add/drag gesture are hidden.
+A selected server owns Tasks, Images, Stores, and Settings, and its
 context row remains visible above the selected agent's Console, Autopilot,
 Activity, Tasks, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
@@ -338,11 +347,10 @@ target, other server navigation remains available, and a missing host still
 fails closed rather than falling back to local authority.
 
 Workspace is one global tmux-like canvas whose split tree may contain
-several interactive agent terminals from different hosts. An agent can be
-dragged from the shared left list to a tile edge, added with the keyboard
-action, moved by its tile header, and resized with splitters. Tariboy owns
-this pointer gesture rather than relying on WebView HTML5 `DataTransfer`.
-Crossing the drag threshold reveals a half-pane left/right/top/bottom preview;
+several interactive agent terminals from different hosts. Existing tiles can
+be moved by their headers and resized with splitters. Tariboy owns this pointer
+gesture rather than relying on WebView HTML5 `DataTransfer`. Crossing the drag
+threshold reveals a half-pane left/right/top/bottom preview;
 edge distance is normalized to the current leaf dimensions so wide and tall
 panes dock consistently. Dropping relative to any leaf creates arbitrarily
 nested horizontal and vertical splits without center tab stacks. Pointer
@@ -414,8 +422,7 @@ extra is rendered at all — no empty element and no placeholder.
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
 main Tauri window retains native traffic lights under an overlay titlebar, and
 the sidebar icon is immediately after their reserved area in the global
-toolbar. The only other titlebar controls are the global **Workspace** link and
-theme icon. Empty toolbar space is draggable, while daemon status banners remain
+toolbar. The only other titlebar control is the theme icon. Empty toolbar space is draggable, while daemon status banners remain
 below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Workspace
 xterm content is square and flush inside the single FlexLayout pane border; the
