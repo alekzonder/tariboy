@@ -154,7 +154,7 @@ function RoutedLocation() {
 }
 
 function mockRowRects(tops: Record<string, number>) {
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     const top = tops[this.getAttribute("aria-label") ?? ""] ?? 0;
     return {
       left: 0, top, width: 100, height: 20, right: 100, bottom: top + 20, x: 0, y: top,

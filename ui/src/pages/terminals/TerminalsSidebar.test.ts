@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rowCollision, sidebarAnnouncements } from "./TerminalsSidebar";
+import { rowCollision, sidebarAnnouncements } from "./sidebarDnd";
 
 const rect = (top: number) => ({
   left: 0,

@@ -1,7 +1,7 @@
 import { useRef, type ButtonHTMLAttributes } from "react";
 import {
-  DndContext, KeyboardSensor, PointerSensor, closestCenter, pointerWithin, useDraggable, useDroppable,
-  useSensor, useSensors, type Announcements, type DragEndEvent,
+  DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable,
+  useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,9 @@ import { HostStatus } from "@/components/HostStatus";
 import {
   DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH,
 } from "./useSidebarWidth";
+import {
+  dragId, identityFor, rowCollision, sameScope, sidebarAnnouncements, type ReorderKind,
+} from "./sidebarDnd";
 
 function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
   const rank = new Map(ids.map((value, index) => [value, index]));
@@ -35,39 +38,6 @@ function move(ids: string[], active: string, over: string): string[] {
   next.splice(to, 0, next.splice(from, 1)[0]);
   return next;
 }
-
-type ReorderKind = "servers" | "groups" | "agents";
-type DragIdentity = [ReorderKind, string, string, string?];
-const dragId = (...identity: DragIdentity) => JSON.stringify(identity);
-const identityFor = (id: string | number) => JSON.parse(String(id)) as DragIdentity;
-const sameScope = (left: DragIdentity, right: DragIdentity) =>
-  left[0] === right[0] && left[1] === right[1] && left[3] === right[3];
-const readableDragId = (id: string | number) => {
-  const [kind, , name] = identityFor(id);
-  return `${kind === "groups" ? "team" : kind.slice(0, -1)} ${name}`;
-};
-
-export const rowCollision: typeof closestCenter = (args) => {
-  const source = identityFor(args.active.id);
-  const droppableContainers = args.droppableContainers.filter((container) =>
-    sameScope(source, identityFor(container.id))
-  );
-  const compatibleArgs = { ...args, droppableContainers };
-  return args.pointerCoordinates
-    ? pointerWithin(compatibleArgs)
-    : closestCenter(compatibleArgs);
-};
-
-export const sidebarAnnouncements: Announcements = {
-  onDragStart: ({ active }) => `Picked up ${readableDragId(active.id)}.`,
-  onDragOver: ({ active, over }) => over
-    ? `${readableDragId(active.id)} is over ${readableDragId(over.id)}.`
-    : `${readableDragId(active.id)} is not over a compatible row.`,
-  onDragEnd: ({ active, over }) => over
-    ? `Moved ${readableDragId(active.id)} to ${readableDragId(over.id)}.`
-    : `Did not move ${readableDragId(active.id)}.`,
-  onDragCancel: ({ active }) => `Cancelled moving ${readableDragId(active.id)}.`,
-};
 
 /* @dnd-kit exposes callback refs and live attributes from its hooks for
  * render-time spreading. */
