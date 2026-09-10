@@ -196,7 +196,18 @@ func BuildEnv(base []string, agentBin, agentName, iterationID, toolsSock string,
 	return out
 }
 
-const agentShellPrelude = `set -e; for script in "$1" "$2"; do [[ ! -f "$script" ]] || source "$script"; done; shift 2; exec "$@"`
+const agentShellPrelude = `set -e
+readonly -a tariboy_harness_argv=("${@:3}")
+for script in "$1" "$2"; do
+  if [[ -f "$script" ]]; then
+    set -e
+    # Keep source outside a conditional so errexit also applies inside it.
+    source "$script"
+    status=$?
+    if [[ "$status" != 0 ]]; then exit "$status"; fi
+  fi
+done
+exec "${tariboy_harness_argv[@]}"`
 
 func agentShellCommand(bash, baseDir string, layout agentdir.Layout, harnessArgv []string) []string {
 	argv := []string{bash, "-c", agentShellPrelude, "tariboy-agent-shell", filepath.Join(baseDir, "global-agent-shell.sh"), layout.ShellScriptPath()}
