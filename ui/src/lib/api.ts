@@ -338,6 +338,7 @@ export interface CreateAgentSpec {
   on_timeout?: "restart" | "stop";
   on_error?: "restart" | "stop";
   max_idle_iterations?: number;
+  ai_stall_timeout_s?: number;
   user_prompt?: string;
   messages_batch?: number;
   messages_max_queue?: number;

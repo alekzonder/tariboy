@@ -710,8 +710,11 @@ func (s *Store) CreateIteration(it Iteration) error {
 // RecordAIRequest updates only the matching live iteration. Requests arriving
 // after completion or with stale attribution are intentionally ignored.
 func (s *Store) RecordAIRequest(agentName, iterationID string, at time.Time) error {
-	_, err := s.db.Exec(`UPDATE iterations SET last_ai_request_at=? WHERE agent=? AND id=? AND status='running'`,
-		at.UTC().Format(time.RFC3339Nano), agentName, iterationID)
+	ts := at.UTC().Format(time.RFC3339Nano)
+	_, err := s.db.Exec(`UPDATE iterations SET last_ai_request_at=?
+		WHERE agent=? AND id=? AND status='running'
+		AND (last_ai_request_at='' OR julianday(last_ai_request_at) < julianday(?))`,
+		ts, agentName, iterationID, ts)
 	return err
 }
 

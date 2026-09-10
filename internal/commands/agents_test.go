@@ -157,10 +157,11 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 		"interactive": true, "loop": false,
 		"interval_s": float64(12), "timeout_s": float64(34), "hard_timeout_s": float64(56),
 		"on_timeout": "stop", "on_error": "restart", "max_idle_iterations": float64(7),
-		"user_prompt":    "keep commas, equals=a=b, and\nnewlines",
-		"env":            map[string]any{"CSV": "a,b", "EQ": "a=b", "LINES": "one\ntwo"},
-		"plugins":        []any{"context", "custom"},
-		"messages_batch": float64(8), "messages_max_queue": float64(900),
+		"ai_stall_timeout_s": float64(420),
+		"user_prompt":        "keep commas, equals=a=b, and\nnewlines",
+		"env":                map[string]any{"CSV": "a,b", "EQ": "a=b", "LINES": "one\ntwo"},
+		"plugins":            []any{"context", "custom"},
+		"messages_batch":     float64(8), "messages_max_queue": float64(900),
 		"group": "reviewers", "alias": "Clone", "notes": "all fields", "color": "#123ABC",
 	})
 	if err != nil {
@@ -173,7 +174,7 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 		Env:     map[string]string{"CSV": "a,b", "EQ": "a=b", "LINES": "one\ntwo"},
 		Plugins: []string{"context", "custom"}, Loop: false,
 		IntervalS: 12, TimeoutS: 34, HardTimeoutS: 56,
-		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7,
+		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7, AIStallTimeoutS: 420,
 		UserPrompt:    "keep commas, equals=a=b, and\nnewlines",
 		MessagesBatch: 8, MessagesMaxQueue: 900,
 		GoalEnabled: &goalEnabled, GoalWaitCustomerTimeoutS: 300, GoalDeliveryCooldownS: 60,
@@ -311,7 +312,7 @@ func TestAgentGoalSettingsInspectAndListProjection(t *testing.T) {
 		inspect.(map[string]any),
 		mustAgentRows(t, ps, err)[0],
 	} {
-		if got["goal_enabled"] != true || got["goal_wait_customer_timeout_s"] != 120 || got["current_goal_task_key"] != "TARI-43" {
+		if got["goal_enabled"] != true || got["goal_wait_customer_timeout_s"] != 120 || got["current_goal_task_key"] != "TARI-43" || got["ai_stall_timeout_s"] != 300 {
 			t.Fatalf("Goal projection = %#v", got)
 		}
 	}
@@ -340,6 +341,7 @@ func TestAgentRunRejectsInvalidCompleteConfiguration(t *testing.T) {
 		{name: "negative timeout", key: "timeout_s", value: float64(-1), code: "bad_timeout"},
 		{name: "negative hard timeout", key: "hard_timeout_s", value: float64(-1), code: "bad_hard_timeout"},
 		{name: "negative idle limit", key: "max_idle_iterations", value: float64(-1), code: "bad_max_idle"},
+		{name: "zero AI stall timeout", key: "ai_stall_timeout_s", value: float64(0), code: "bad_ai_stall_timeout"},
 		{name: "zero message batch", key: "messages_batch", value: float64(0), code: "bad_messages_batch"},
 		{name: "zero message queue", key: "messages_max_queue", value: float64(0), code: "bad_messages_max_queue"},
 		{name: "timeout policy", key: "on_timeout", value: "continue", code: "bad_on_timeout"},

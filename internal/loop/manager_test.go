@@ -783,7 +783,7 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 		Harness: "codex", Model: "gpt-5", Effort: "high",
 		Interactive: true, Loop: false,
 		IntervalS: 12, TimeoutS: 34, HardTimeoutS: 56,
-		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7,
+		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7, AIStallTimeoutS: 420,
 		UserPrompt: "standing prompt", Env: map[string]string{"CSV": "a,b"},
 		Plugins: []string{"context"}, MessagesBatch: 8, MessagesMaxQueue: 900,
 		Alias: "Clone", Notes: "all fields", Color: "#123abc",
@@ -802,7 +802,7 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 	if got.Cwd != cwd || got.HarnessType != "codex" || got.Model != "gpt-5" ||
 		got.Effort != "high" || !got.Interactive || got.LoopEnabled || got.Enabled ||
 		got.IntervalS != 12 || got.TimeoutS != 34 || got.HardTimeoutS != 56 ||
-		got.OnTimeout != "stop" || got.OnError != "restart" || got.MaxIdleIterations != 7 ||
+		got.OnTimeout != "stop" || got.OnError != "restart" || got.MaxIdleIterations != 7 || got.AIStallTimeoutS != 420 ||
 		got.UserPrompt != "standing prompt" || got.Env["CSV"] != "a,b" ||
 		strings.Join(got.Plugins, ",") != "whoami,loop,messages,context" ||
 		got.MessagesBatch != 8 || got.MessagesMaxQueue != 900 ||
