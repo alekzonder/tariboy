@@ -165,33 +165,7 @@ func (s *Server) serveAuditExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	markdown := r.URL.Query().Get("format") == "markdown"
-	suffix := ".zip"
-	if markdown {
-		suffix = ".md"
-	}
-	temp, err := os.CreateTemp(s.cctx.BaseDir, ".audit-export-*"+suffix)
-	if err != nil {
-		WriteErr(w, http.StatusInternalServerError, "internal", "cannot stage audit export")
-		return
-	}
-	name := temp.Name()
-	defer os.Remove(name)
 	agentsDir := filepath.Join(s.cctx.BaseDir, "agents")
-	write := auditexport.WriteZIP
-	if markdown {
-		write = auditexport.WriteMarkdown
-	}
-	if err := write(temp, agentsDir, agentName, iteration); err != nil {
-		temp.Close()
-		WriteErr(w, http.StatusInternalServerError, "audit_export_failed", "cannot build audit export")
-		return
-	}
-	if _, err := temp.Seek(0, io.SeekStart); err != nil {
-		temp.Close()
-		WriteErr(w, http.StatusInternalServerError, "internal", "cannot read audit export")
-		return
-	}
-	defer temp.Close()
 	scope := iteration
 	if scope == "" {
 		scope = "all"
@@ -203,7 +177,36 @@ func (s *Server) serveAuditExport(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	}
-	_, _ = io.Copy(w, temp)
+	stream := &responseWriteTracker{ResponseWriter: w}
+	var err error
+	if markdown {
+		err = auditexport.WriteMarkdown(r.Context(), stream, agentsDir, agentName, iteration)
+	} else {
+		err = auditexport.WriteZIP(r.Context(), stream, agentsDir, agentName, iteration)
+	}
+	if err != nil {
+		if !stream.started {
+			w.Header().Del("Content-Disposition")
+			WriteErr(w, http.StatusInternalServerError, "audit_export_failed", "cannot build audit export")
+		} else {
+			s.cctx.Log.Error("audit export stream failed")
+		}
+	}
+}
+
+type responseWriteTracker struct {
+	http.ResponseWriter
+	started bool
+}
+
+func (w *responseWriteTracker) Write(body []byte) (int, error) {
+	w.started = true
+	return w.ResponseWriter.Write(body)
+}
+
+func (w *responseWriteTracker) WriteHeader(status int) {
+	w.started = true
+	w.ResponseWriter.WriteHeader(status)
 }
 
 func validAuditIterationID(value string) bool {

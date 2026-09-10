@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { AuditExportActions } from "@/components/AuditExportActions";
 import { setActiveDaemon, setLocalBaseURL } from "@/lib/api";
 
@@ -45,5 +46,23 @@ describe("AuditExportActions", () => {
       expect.objectContaining({ method: "GET" }),
     ));
     await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled());
+  });
+
+  it("uses the scoped filename", async () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click");
+    render(<AuditExportActions name="alice/team" iteration="iter 1" />);
+    await userEvent.click(screen.getByRole("button", { name: "Export audit log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    expect((clickSpy.mock.instances.at(-1) as HTMLAnchorElement | undefined)?.download).toBe("alice_team-iter_1-audit.zip");
+  });
+
+  it("reports download errors", async () => {
+    const errorSpy = vi.spyOn(toast, "error").mockImplementation(() => "" as never);
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("offline"));
+    render(<AuditExportActions name="alice" iteration="iter-1" />);
+    await userEvent.click(screen.getByRole("button", { name: "Export audit log" }));
+    await userEvent.click(screen.getByRole("button", { name: "Download ZIP" }));
+    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("offline")));
   });
 });
