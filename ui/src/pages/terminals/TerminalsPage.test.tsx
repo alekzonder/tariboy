@@ -452,10 +452,10 @@ describe("TerminalsPage", () => {
       groups: [{ name: "a", lead: "", members: 2 }, { name: "b", lead: "", members: 2 }],
     }]);
     let finishFirst!: () => void;
-    let finishSecond!: () => void;
+    let failSecond!: (cause: Error) => void;
     vi.mocked(apiOn)
       .mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirst = resolve; }))
-      .mockImplementationOnce(() => new Promise<void>((resolve) => { finishSecond = resolve; }));
+      .mockImplementationOnce(() => new Promise<void>((_, reject) => { failSecond = reject; }));
     mockRowRects({ "Open a1": 0, "Open a2": 30, "Open b1": 60, "Open b2": 90 });
     renderAt("/");
     const a1 = await screen.findByRole("button", { name: "Open a1" });
@@ -483,8 +483,14 @@ describe("TerminalsPage", () => {
     expect(screen.getByRole("button", { name: "Open b2" })
       .compareDocumentPosition(screen.getByRole("button", { name: "Open b1" }))
       & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    finishSecond();
-    await act(async () => {});
+    failSecond(new Error("offline"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save agents order");
+    expect(screen.getByRole("button", { name: "Open a2" })
+      .compareDocumentPosition(screen.getByRole("button", { name: "Open a1" }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open b1" })
+      .compareDocumentPosition(screen.getByRole("button", { name: "Open b2" }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("honors a hidden sidebar from the shared persisted state", async () => {

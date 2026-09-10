@@ -42,4 +42,12 @@ describe("sidebar row collision", () => {
     } as Parameters<typeof sidebarAnnouncements.onDragStart>[0]);
     expect(announcement).toBe("Picked up agent agent-a1.");
   });
+
+  it("announces the server label and does not claim a no-op moved", () => {
+    const id = '["servers","","",null,"This daemon (local)"]';
+    expect(sidebarAnnouncements.onDragStart({ active: { id } } as never))
+      .toBe("Picked up server This daemon (local).");
+    expect(sidebarAnnouncements.onDragEnd({ active: { id }, over: { id } } as never))
+      .toBe("Did not move server This daemon (local).");
+  });
 });
