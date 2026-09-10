@@ -200,7 +200,7 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			if valid {
 				err = tx.QueryRow(`SELECT EXISTS(
 					SELECT 1 FROM tasks t
-					WHERE t.assignee='agent:' || ? AND t.pull_request=''
+					WHERE t.assignee='agent:' || ?
 					  AND t.status IN ('in_progress','open') AND t.priority < ?
 					  AND t.manual_block_reason = '' AND NOT EXISTS (
 						SELECT 1 FROM task_relations r
@@ -225,7 +225,6 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			SELECT t.task_key, t.revision
 			FROM tasks t
 			WHERE t.assignee='agent:' || ?
-			  AND t.pull_request=''
 			  AND t.status IN ('in_progress','open')
 			  AND t.manual_block_reason = '' AND NOT EXISTS (
 				SELECT 1 FROM task_relations r
@@ -271,7 +270,7 @@ func readGoalTask(tx *sql.Tx, key, agent string) (tasks.Task, string, error) {
 }
 
 func validGoal(task tasks.Task, waitAt string, timeoutS int, now time.Time) (bool, bool, error) {
-	if task.PullRequest != "" || task.Blocked {
+	if task.Blocked {
 		return false, false, nil
 	}
 	switch task.Status {

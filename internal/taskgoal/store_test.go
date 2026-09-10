@@ -199,6 +199,48 @@ func TestReconcileAgentOrdersCandidates(t *testing.T) {
 	}
 }
 
+func TestReconcileAgentIgnoresPullRequest(t *testing.T) {
+	t.Run("candidate", func(t *testing.T) {
+		s := goalStore(t, goalNow)
+		seedTask(t, s, "T-1", "agent:worker", "P1", "in_progress", "2026-09-01T00:00:00Z")
+		updateTask(t, s, "T-1", "pull_request", "https://example.test/pull/1")
+
+		goal, err := s.ReconcileAgent("worker", goalNow)
+		if err != nil || goal.TaskKey != "T-1" {
+			t.Fatalf("goal=%#v err=%v, want task with pull request", goal, err)
+		}
+	})
+
+	t.Run("sticky", func(t *testing.T) {
+		s := goalStore(t, goalNow)
+		seedTask(t, s, "T-1", "agent:worker", "P1", "in_progress", "2026-09-01T00:00:00Z")
+		if goal, err := s.ReconcileAgent("worker", goalNow); err != nil || goal.TaskKey != "T-1" {
+			t.Fatalf("initial goal=%#v err=%v", goal, err)
+		}
+
+		updateTask(t, s, "T-1", "pull_request", "https://example.test/pull/1")
+		goal, err := s.ReconcileAgent("worker", goalNow)
+		if err != nil || goal.TaskKey != "T-1" {
+			t.Fatalf("goal=%#v err=%v, want sticky task with pull request", goal, err)
+		}
+	})
+
+	t.Run("higher_priority_candidate", func(t *testing.T) {
+		s := goalStore(t, goalNow)
+		seedTask(t, s, "T-2", "agent:worker", "P2", "in_progress", "2026-09-02T00:00:00Z")
+		if goal, err := s.ReconcileAgent("worker", goalNow); err != nil || goal.TaskKey != "T-2" {
+			t.Fatalf("initial goal=%#v err=%v", goal, err)
+		}
+
+		seedTask(t, s, "T-1", "agent:worker", "P1", "in_progress", "2026-09-01T00:00:00Z")
+		updateTask(t, s, "T-1", "pull_request", "https://example.test/pull/1")
+		goal, err := s.ReconcileAgent("worker", goalNow)
+		if err != nil || goal.TaskKey != "T-1" {
+			t.Fatalf("goal=%#v err=%v, want higher-priority task with pull request", goal, err)
+		}
+	})
+}
+
 func TestReconcileAgentReleasesInvalidStickyGoal(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -207,7 +249,6 @@ func TestReconcileAgentReleasesInvalidStickyGoal(t *testing.T) {
 	}{
 		{name: "done", mutate: func(t *testing.T, s *Store) { updateTask(t, s, "T-1", "status", "done") }, want: "T-2"},
 		{name: "cancelled", mutate: func(t *testing.T, s *Store) { updateTask(t, s, "T-1", "status", "cancelled") }, want: "T-2"},
-		{name: "pull_request", mutate: func(t *testing.T, s *Store) { updateTask(t, s, "T-1", "pull_request", "https://example.test/pull/1") }, want: "T-2"},
 		{name: "deleted", mutate: func(t *testing.T, s *Store) { execGoalSQL(t, s, `DELETE FROM tasks WHERE task_key='T-1'`) }, want: "T-2"},
 		{name: "reassigned", mutate: func(t *testing.T, s *Store) { updateTask(t, s, "T-1", "assignee", "agent:other") }, want: "T-2"},
 		{name: "goal_disabled", mutate: func(t *testing.T, s *Store) {
