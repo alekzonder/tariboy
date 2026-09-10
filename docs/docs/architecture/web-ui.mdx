@@ -370,7 +370,8 @@ defaulting to 300 per agent. When a running iteration exceeds it without an
 attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
 card shows the informational reason. The controls remain enabled because this
 signal does not stop the loop or iteration; the next request restores
-`state=running`.
+`state=running`. Ordinary creation starts at 300 seconds, while Clone preserves
+the source agent's configured value.
 
 The **Messages & Channels** section uses that same draft contract for the
 positive whole-number `messages_batch` and `messages_max_queue` fields.

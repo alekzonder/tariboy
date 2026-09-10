@@ -18,6 +18,7 @@ export interface AgentCreateDraft {
   onTimeout: AgentPolicy;
   onError: AgentPolicy;
   maxIdleIterations: string;
+  aiStallTimeoutS: string;
   userPrompt: string;
   envText: string;
   plugins: string[];
@@ -49,6 +50,7 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     onTimeout: "restart",
     onError: "restart",
     maxIdleIterations: "0",
+    aiStallTimeoutS: "300",
     userPrompt: "",
     envText: "{}",
     plugins: [],
@@ -72,6 +74,7 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     source.goal_enabled === undefined ||
     source.goal_wait_customer_timeout_s === undefined ||
     source.goal_delivery_cooldown_s === undefined
+    || source.ai_stall_timeout_s === undefined
   ) {
     throw new Error("Update the source host before making a complete clone");
   }
@@ -91,6 +94,7 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     onTimeout: source.on_timeout === "stop" ? "stop" : "restart",
     onError: source.on_error === "stop" ? "stop" : "restart",
     maxIdleIterations: String(source.max_idle_iterations),
+    aiStallTimeoutS: String(source.ai_stall_timeout_s),
     userPrompt: source.user_prompt,
     envText: JSON.stringify(source.env, null, 2),
     plugins: [...source.plugins],

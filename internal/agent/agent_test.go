@@ -48,6 +48,13 @@ func TestAIStallSettingsAndActivityPersist(t *testing.T) {
 	if got.LastAIRequestAt != want.Format(time.RFC3339Nano) {
 		t.Fatalf("last AI request = %q, want %q", got.LastAIRequestAt, want.Format(time.RFC3339Nano))
 	}
+	if err := s.RecordAIRequest("worker", "worker-1", want.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetIteration("worker", "worker-1")
+	if got.LastAIRequestAt != want.Format(time.RFC3339Nano) {
+		t.Fatalf("older request moved activity backwards to %q", got.LastAIRequestAt)
+	}
 
 	if err := s.RecordAIRequest("worker", "other-iteration", want.Add(time.Minute)); err != nil {
 		t.Fatal(err)

@@ -384,6 +384,7 @@ function CreateAgentDialogForm({
     let timeoutS: number;
     let hardTimeoutS: number;
     let maxIdleIterations: number;
+    let aiStallTimeoutS: number;
     let messagesBatch: number;
     let messagesMaxQueue: number;
     let goalWaitCustomerTimeoutS: number;
@@ -401,6 +402,11 @@ function CreateAgentDialogForm({
         draft.maxIdleIterations,
         "Maximum idle iterations",
         0,
+      );
+      aiStallTimeoutS = integerField(
+        draft.aiStallTimeoutS,
+        "AI inactivity timeout seconds",
+        1,
       );
       messagesBatch = integerField(
         draft.messagesBatch,
@@ -442,6 +448,7 @@ function CreateAgentDialogForm({
       on_timeout: draft.onTimeout,
       on_error: draft.onError,
       max_idle_iterations: maxIdleIterations,
+      ai_stall_timeout_s: aiStallTimeoutS,
       user_prompt: draft.userPrompt,
       messages_batch: messagesBatch,
       messages_max_queue: messagesMaxQueue,

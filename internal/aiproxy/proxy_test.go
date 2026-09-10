@@ -29,6 +29,18 @@ func testProxy(t *testing.T) *Proxy {
 	return p
 }
 
+type activityCheckedReader struct {
+	t      *testing.T
+	called *bool
+}
+
+func (r activityCheckedReader) Read([]byte) (int, error) {
+	if !*r.called {
+		r.t.Error("request body read before activity was recorded")
+	}
+	return 0, io.EOF
+}
+
 func TestAuthRejectsUnknownToken(t *testing.T) {
 	p := testProxy(t)
 	rr := httptest.NewRecorder()
@@ -82,7 +94,7 @@ func TestAuthenticatedRequestRecordsActivityBeforeForward(t *testing.T) {
 	p.rebuild()
 	tok, _ := p.Mint(Attribution{Agent: "alice", Iteration: "alice-1"})
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/_tariboy/"+tok+"/v1/messages", strings.NewReader(`{"model":"x"}`))
+	req := httptest.NewRequest(http.MethodPost, "/_tariboy/"+tok+"/v1/messages", activityCheckedReader{t: t, called: &called})
 	req.Header.Set("x-api-key", "real-provider-key")
 	p.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {

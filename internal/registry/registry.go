@@ -188,6 +188,7 @@ type RunSpec struct {
 	OnTimeout                string
 	OnError                  string
 	MaxIdleIterations        int
+	AIStallTimeoutS          int
 	UserPrompt               string
 	MessagesBatch            int
 	MessagesMaxQueue         int

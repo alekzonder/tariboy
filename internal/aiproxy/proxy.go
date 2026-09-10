@@ -312,6 +312,7 @@ func (p *Proxy) emitProxyEvent(ex *Exchange, row AIRequest) {
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ex := &Exchange{R: r, W: w, Path: r.URL.Path, Start: p.cfg.Clock()}
 	p.resolvePathToken(ex)
+	p.recordActivity(ex)
 	ex.Provider = providerFor(r.URL.Path)
 	body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
 	_ = r.Body.Close()
@@ -326,6 +327,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ex.ReqBody = body
 	_ = p.chain(ex)
 	ex.LatencyMs = int(p.cfg.Clock().Sub(ex.Start).Milliseconds())
+}
+
+func (p *Proxy) recordActivity(ex *Exchange) {
+	if p.cfg.Activity == nil || ex.Attr.Agent == "" || ex.Attr.Iteration == "" {
+		return
+	}
+	if err := p.cfg.Activity(ex.Attr.Agent, ex.Attr.Iteration, ex.Start); err != nil {
+		p.cfg.Log.Warn("record proxy activity", "agent", ex.Attr.Agent, "iteration", ex.Attr.Iteration, "err", err)
+	}
 }
 
 func (p *Proxy) resolvePathToken(ex *Exchange) {
@@ -502,11 +512,6 @@ func pathAtOrBelow(path, base string) bool {
 func (p *Proxy) auth(next Handler) Handler {
 	return func(ex *Exchange) error {
 		if ex.Attr.Agent != "" && ex.Attr.Iteration != "" {
-			if p.cfg.Activity != nil {
-				if err := p.cfg.Activity(ex.Attr.Agent, ex.Attr.Iteration, ex.Start); err != nil {
-					p.cfg.Log.Warn("record proxy activity", "agent", ex.Attr.Agent, "iteration", ex.Attr.Iteration, "err", err)
-				}
-			}
 			return next(ex)
 		}
 		ex.Status = "auth_error"

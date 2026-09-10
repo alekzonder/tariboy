@@ -21,6 +21,7 @@ const source = {
   on_timeout: "stop",
   on_error: "restart",
   max_idle_iterations: 7,
+  ai_stall_timeout_s: 420,
   user_prompt: "standing",
   env: { CSV: "a,b", EQ: "a=b", LINES: "one\ntwo" },
   plugins: ["context", "custom"],
@@ -54,6 +55,7 @@ describe("newAgentDraft", () => {
       onTimeout: "restart",
       onError: "restart",
       maxIdleIterations: "0",
+      aiStallTimeoutS: "300",
       userPrompt: "",
       envText: "{}",
       plugins: [],
@@ -88,6 +90,7 @@ describe("cloneAgentDraft", () => {
       onTimeout: "stop",
       onError: "restart",
       maxIdleIterations: "7",
+      aiStallTimeoutS: "420",
       userPrompt: "standing",
       envText: '{\n  "CSV": "a,b",\n  "EQ": "a=b",\n  "LINES": "one\\ntwo"\n}',
       plugins: ["context", "custom"],
@@ -110,6 +113,7 @@ describe("cloneAgentDraft", () => {
     "goal_enabled",
     "goal_wait_customer_timeout_s",
     "goal_delivery_cooldown_s",
+    "ai_stall_timeout_s",
   ] as const)("requires current daemon projection field %s", (field) => {
     const incomplete = { ...source } as Record<string, unknown>;
     delete incomplete[field];
