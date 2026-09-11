@@ -81,6 +81,7 @@ test:
 
 smoke-contract-test:
 	./scripts/tariboy-smoke-contract-test.sh
+	./scripts/package-alpha-contract-test.sh
 	./scripts/tariboy-branding-contract-test.sh
 	bash ./scripts/check-output-contract-test.sh
 	./scripts/make-clean-contract-test.sh

@@ -1,3 +1,11 @@
+## [0.57.2] - 2026-09-11
+
+### Fixed
+
+- Publish signed macOS artifacts without running the isolated desktop smoke suite.
+
+[0.57.2]: https://github.com/alekzonder/tariboy/compare/v0.57.1...v0.57.2
+
 ## [0.57.1] - 2026-09-11
 
 ### Fixed

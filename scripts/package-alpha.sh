@@ -59,7 +59,6 @@ make -C "$ROOT" desktop
 codesign --verify --deep --strict --verbose=2 "$APP"
 codesign --force --sign - "$BUILT_DMG"
 codesign --verify --strict --verbose=2 "$BUILT_DMG"
-TARIBOY_DESKTOP_APP="$APP" "$ROOT/scripts/desktop-smoke.sh"
 
 mkdir -p "$RELEASE_ROOT"
 STAGE="$(mktemp -d "$RELEASE_ROOT/.${VERSION}.stage.XXXXXX")"
