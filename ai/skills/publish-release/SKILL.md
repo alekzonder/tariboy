@@ -5,7 +5,7 @@ description: Use when cutting and publishing a Tariboy Git release with a patch,
 
 # Publish a Release
 
-Publish one reviewed `main` commit as one immutable annotated version tag. Never force-push, move a tag, or publish from another branch.
+Publish one reviewed `main` commit as one immutable annotated version tag, then publish its documentation after the GitHub Release succeeds. Never force-push, move a tag, or publish from another branch.
 
 ## Authorization and preflight
 
@@ -49,3 +49,21 @@ With the worktree still clean apart from the inspected bump:
 6. Use `git ls-remote` to verify remote `main` and the peeled annotated tag both resolve to the release commit.
 
 If any check or push fails, report the exact local commit, remote ref, and tag state. Preserve successful immutable state and resume only from the failed step; never use `--force`, delete a published tag, or silently select a different version.
+
+## Wait for the release, then publish documentation
+
+Pushing the tag starts publication; it does not complete it.
+
+1. Find the `Desktop release` run (`.github/workflows/desktop-release.yml`) for the exact pushed tag and release commit in the configured GitHub repository. Record its run ID and URL, wait for completion, and require conclusion `success`. A missing, pending, cancelled, or failed run does not permit documentation publication.
+2. Verify the GitHub Release for that exact tag exists, is not a draft, and has a publication timestamp. Record its URL. If publication failed or remains incomplete, report the run and release state and stop before `make docs`.
+3. Require a clean source worktree still at the release commit, and verify `origin` identifies the same GitHub repository: `make docs` pushes to `origin/docs`, regardless of the configured `main` remote. If the source or remote changed, stop instead of publishing unrelated documentation or resetting user work.
+4. From that release source root, run:
+
+   ```bash
+   make docs
+   ```
+
+   This uses `scripts/publish-docs.sh` to build the site and push the generated `docs` branch through a temporary worktree. Do not commit generated site files to `main`.
+5. Require a successful exit and use `git ls-remote origin refs/heads/docs` to confirm the remote branch matches the local `docs` commit produced or reused by the publisher. Report the release tag, release commit, workflow URL, GitHub Release URL, docs commit, and site URL `https://alekzonder.github.io/tariboy/`. A branch push alone does not prove GitHub Pages has finished deploying; report deployment as pending unless separately confirmed.
+
+If documentation build or push fails, preserve the published release and tag, report documentation as incomplete, and resume only the documentation step after resolving the failure. Do not bump the version again or rerun release publication to retry documentation. An unchanged documentation build is successful when the existing `docs` commit is verified remotely.
