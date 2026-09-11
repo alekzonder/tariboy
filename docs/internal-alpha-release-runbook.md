@@ -96,9 +96,10 @@ The tag workflow then derives the generated `.app.tar.gz` filename, requires
 its matching `.sig`, and runs:
 
 ```bash
+release_version=$(cat scripts/release-version.txt)
 python3 scripts/desktop-updater-manifest.py \
-  0.56.0 PATH/TO/Tariboy.app.tar.gz PATH/TO/Tariboy.app.tar.gz.sig \
-  dist/releases/0.56.0 desktop/src-tauri/tauri.conf.json
+  "$release_version" PATH/TO/Tariboy.app.tar.gz PATH/TO/Tariboy.app.tar.gz.sig \
+  "dist/releases/$release_version" desktop/src-tauri/tauri.conf.json
 ```
 
 That command rejects missing, empty, malformed, mismatched, or unsafe inputs
