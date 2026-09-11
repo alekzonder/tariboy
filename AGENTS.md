@@ -72,16 +72,18 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
   after every subtask.
 - Follow existing subsystem patterns and keep changes narrowly scoped.
 - Use `rg` or `rg --files` for repository search.
-- Choose the fast, read-only check by the files changed: run
+- Choose the fast check by the files changed: run
   `make backend-check` for backend-only changes and `make frontend-check` for
   frontend- or documentation-only changes. Run `make check`, which runs both,
   for mixed changes or whenever ownership is unclear. Backend checks cover
   `fmt-check`, `go vet`, Go unit tests, Store skills, and smoke contracts;
   frontend checks cover UI typecheck, lint, unit tests, branding, and the
-  documentation `doctor` plus `build`. These targets rewrite nothing and do
-  not dirty `git status`, so they are safe in a shared working tree. Successful
-  command output is suppressed; each step reports its result and duration as it
-  finishes, while a failure also prints its command and complete diagnostics.
+  documentation `doctor` plus `build`. Before checking, they download Go
+  modules and install locked UI and documentation dependencies with `npm ci`.
+  They do not rewrite tracked files or dirty `git status`. Successful
+  check-step output is suppressed; each step reports its result and duration
+  as it finishes, while a failure also prints its command and complete
+  diagnostics.
 - Run `make full-check` once before final handoff when the diff reaches e2e,
   packaging, or desktop behavior. It runs `check`, then `make build`, the four core E2E scripts,
   `full-smoke`, the browser suites, and the host's desktop gates, and it takes
