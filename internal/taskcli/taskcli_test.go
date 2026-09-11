@@ -186,7 +186,7 @@ func TestOperatorAskNormalizesBareAgentPrincipal(t *testing.T) {
 	if code := Run(context.Background(), []string{"ask", "DEV-1", "worker", "please", "review"}, operatorEnv(t), io.Discard, io.Discard); code != 0 {
 		t.Fatalf("code = %d, want 0", code)
 	}
-	if len(recorded.calls) != 1 || recorded.calls[0].route != "/api/tasks/DEV-1/comments" || !sameJSON(recorded.calls[0].body, map[string]any{"body": "@agent:worker please review", "idempotency_key": nil}) {
+	if len(recorded.calls) != 1 || recorded.calls[0].route != "/api/tasks/DEV-1/comments" || !sameJSON(recorded.calls[0].body, map[string]any{"body": "@agent:worker\n\nplease review", "idempotency_key": nil}) {
 		t.Fatalf("calls = %#v", recorded.calls)
 	}
 }

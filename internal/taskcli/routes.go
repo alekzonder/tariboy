@@ -56,7 +56,7 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 		if !strings.Contains(principal, ":") {
 			principal = "agent:" + principal
 		}
-		body = map[string]any{"body": "@" + principal + " " + fmt.Sprint(body["body"]), "idempotency_key": body["idempotency_key"]}
+		body = map[string]any{"body": "@" + principal + "\n\n" + fmt.Sprint(body["body"]), "idempotency_key": body["idempotency_key"]}
 	case "move":
 		if _, ok := body["revision"]; !ok {
 			revision, code := revisionFor(caller, key, stderr)

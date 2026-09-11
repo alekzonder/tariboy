@@ -223,7 +223,7 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 			return nil, domainError(http.StatusBadRequest, "missing_principal", "question principal is required")
 		}
 		return s.AddComment(ctx, actor, actionString(body, "key"), AddCommentInput{
-			Body:           "@" + principal + " " + actionString(body, "body"),
+			Body:           "@" + principal + "\n\n" + actionString(body, "body"),
 			IdempotencyKey: actionString(body, "idempotency_key"),
 		})
 	case "move":
