@@ -20,22 +20,43 @@ def regular_file(path: Path, description: str) -> None:
         raise ValueError(f"{description} is not a regular file: {path}")
 
 
-def decode_signature(value: str) -> None:
+def decode_signature(value: str) -> bytes:
     try:
         envelope = base64.b64decode(value, validate=True).decode("utf-8")
         lines = envelope.splitlines()
+        if (
+            len(lines) != 4
+            or not lines[0].startswith("untrusted comment:")
+            or not lines[2].startswith("trusted comment:")
+        ):
+            raise ValueError
         packet = base64.b64decode(lines[1], validate=True)
         global_signature = base64.b64decode(lines[3], validate=True)
-    except (binascii.Error, UnicodeDecodeError, IndexError) as error:
+    except (binascii.Error, UnicodeDecodeError, IndexError, ValueError) as error:
         raise ValueError("updater signature is not valid Tauri minisign encoding") from error
     if (
-        len(lines) != 4
-        or not lines[0].startswith("untrusted comment:")
-        or len(packet) != 74
-        or not lines[2].startswith("trusted comment:")
+        len(packet) != 74
+        or packet[:2] not in (b"Ed", b"ED")
         or len(global_signature) != 64
     ):
         raise ValueError("updater signature is not valid Tauri minisign encoding")
+    return packet[2:10]
+
+
+def decode_public_key(value: object) -> bytes:
+    try:
+        if not isinstance(value, str) or not value:
+            raise ValueError
+        envelope = base64.b64decode(value, validate=True).decode("utf-8")
+        lines = envelope.splitlines()
+        if len(lines) != 2 or not lines[0].startswith("untrusted comment:"):
+            raise ValueError
+        packet = base64.b64decode(lines[1], validate=True)
+    except (binascii.Error, UnicodeDecodeError, IndexError, ValueError) as error:
+        raise ValueError("updater public key is not valid Tauri minisign encoding") from error
+    if len(packet) != 42 or packet[:2] != b"Ed":
+        raise ValueError("updater public key is not valid Tauri minisign encoding")
+    return packet[2:10]
 
 
 def sha256(path: Path) -> str:
@@ -52,12 +73,14 @@ def main() -> None:
     parser.add_argument("archive", type=Path)
     parser.add_argument("signature", type=Path)
     parser.add_argument("release_dir", type=Path)
+    parser.add_argument("tauri_config", type=Path)
     args = parser.parse_args()
 
     version = args.version
     archive = args.archive
     signature_path = args.signature
     release_dir = args.release_dir
+    tauri_config = args.tauri_config
     if not VERSION_RE.fullmatch(version):
         raise ValueError("version must be an exact stable numeric version")
     if not release_dir.is_dir() or release_dir.is_symlink():
@@ -73,7 +96,16 @@ def main() -> None:
     signature = signature_path.read_text(encoding="utf-8").strip()
     if not signature:
         raise ValueError("updater signature is empty")
-    decode_signature(signature)
+    signature_key_id = decode_signature(signature)
+
+    regular_file(tauri_config, "Tauri configuration")
+    config = json.loads(tauri_config.read_text(encoding="utf-8"))
+    try:
+        public_key = config["plugins"]["updater"]["pubkey"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("Tauri configuration has no updater public key") from error
+    if signature_key_id != decode_public_key(public_key):
+        raise ValueError("updater signature key does not match pinned updater public key")
 
     metadata_path = release_dir / "release.json"
     checksums_path = release_dir / "SHA256SUMS"

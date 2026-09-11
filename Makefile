@@ -14,6 +14,10 @@ DESKTOP_E2E_WORKERS ?= 2
 # override this to 0 because `check` has already installed the locked UI
 # dependencies.
 DESKTOP_INSTALL_UI_DEPS ?= 1
+# Ordinary packages do not need the release owner's updater key. The release
+# packager opts in after checking both signing variables.
+DESKTOP_UPDATER_ARTIFACTS ?= false
+TAURI_UPDATER_CONFIG = {"bundle":{"createUpdaterArtifacts":$(DESKTOP_UPDATER_ARTIFACTS)}}
 
 # `go list ./...` descends into a Go package shipped by one UI dependency.
 # Test only packages owned by this module; node_modules is prepared tooling, not
@@ -374,11 +378,11 @@ desktop: desktop-preflight desktop-binaries desktop-lock-check
 	fi
 	$(MAKE) ui
 ifeq ($(PLATFORM),darwin)
-	cd $(TAURI_DIR) && CI=true TARIBOY_VERSION="$(VERSION)" cargo tauri build --bundles app,dmg
+	cd $(TAURI_DIR) && CI=true TARIBOY_VERSION="$(VERSION)" cargo tauri build --bundles app,dmg --config '$(TAURI_UPDATER_CONFIG)'
 	@echo "app: $(TAURI_DIR)/target/release/bundle/macos/Tariboy.app"
 	@echo "dmg: $(TAURI_DIR)/target/release/bundle/dmg/"
 else ifeq ($(PLATFORM),linux)
-	cd $(TAURI_DIR) && TARIBOY_VERSION="$(VERSION)" cargo tauri build --bundles deb,appimage
+	cd $(TAURI_DIR) && TARIBOY_VERSION="$(VERSION)" cargo tauri build --bundles deb,appimage --config '$(TAURI_UPDATER_CONFIG)'
 	@echo "deb: $(TAURI_DIR)/target/release/bundle/deb/"
 	@echo "AppImage: $(TAURI_DIR)/target/release/bundle/appimage/"
 else

@@ -36,6 +36,14 @@ trap cleanup EXIT
   echo "FAIL: expected numeric metadata $EXPECTED_NUMERIC_VERSION, found $NUMERIC_VERSION" >&2
   exit 1
 }
+[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || {
+  echo "FAIL: TAURI_SIGNING_PRIVATE_KEY is required" >&2
+  exit 1
+}
+[ -n "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ] || {
+  echo "FAIL: TAURI_SIGNING_PRIVATE_KEY_PASSWORD is required" >&2
+  exit 1
+}
 [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ] || {
   echo "FAIL: alpha DMG packaging requires macOS Apple Silicon" >&2
   exit 1
@@ -52,7 +60,7 @@ if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]; then
 fi
 
 make -C "$ROOT" desktop-version-check
-make -C "$ROOT" desktop
+make -C "$ROOT" DESKTOP_UPDATER_ARTIFACTS=true desktop
 
 [ -d "$APP" ] || { echo "FAIL: missing app bundle: $APP" >&2; exit 1; }
 [ -f "$BUILT_DMG" ] || { echo "FAIL: missing DMG: $BUILT_DMG" >&2; exit 1; }

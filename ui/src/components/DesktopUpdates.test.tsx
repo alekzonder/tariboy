@@ -121,19 +121,27 @@ describe("Desktop updates", () => {
     expect(bridge.download).toHaveBeenCalledTimes(3);
   });
 
-  it("persists disabling and leaves it disabled after remount", async () => {
+  it("cancels the mounted timer when disabled and leaves it disabled after remount", async () => {
+    vi.useFakeTimers();
     const first = renderUpdates();
-    await waitFor(() => expect(bridge.download).toHaveBeenCalledTimes(1));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.download).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("switch", {
       name: "Скачивать обновления автоматически",
     }));
     expect(localStorage.getItem(AUTO_DOWNLOAD_KEY)).toBe("false");
+    await act(async () => {
+      vi.advanceTimersByTime(SIX_HOURS);
+      await Promise.resolve();
+    });
+    expect(bridge.download).toHaveBeenCalledTimes(1);
     first.unmount();
 
     bridge.download.mockClear();
     renderUpdates();
-    await waitFor(() => expect(bridge.state).toHaveBeenCalledTimes(2));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.state).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("switch", {
       name: "Скачивать обновления автоматически",
     })).not.toBeChecked();

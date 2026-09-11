@@ -176,8 +176,11 @@ macOS runner. The workflow rejects a tag that differs from either canonical
 version declaration, builds and verifies the release through `make
 desktop-mac`, and publishes the DMG, signed updater archive and catalog,
 `SHA256SUMS`, and `release.json` with the job-scoped `contents: write`
-permission. GitHub publication does not change the ad-hoc-signing or Gatekeeper
-constraints above.
+permission. Before staging, the workflow rejects malformed signing packets or a
+signature key identifier that differs from the pinned updater public key. This
+catches an accidental wrong signing Secret; cryptographic archive verification
+remains the official updater's responsibility. GitHub publication does not change
+the ad-hoc-signing or Gatekeeper constraints above.
 
 The alpha deliberately enables Tauri WebView developer tools in its
 release build for local diagnosis. DevTools exposes the current WebView state

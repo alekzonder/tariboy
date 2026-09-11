@@ -61,9 +61,11 @@ git rev-parse HEAD
 make desktop-mac
 ```
 
-The target builds both binary platforms and the SPA, creates ad-hoc-signed app
-and DMG bundles, creates the Tauri updater archive and signature when the two
-signing variables are set, verifies signatures, and stages the DMG metadata:
+The target requires both updater signing variables, builds both binary platforms
+and the SPA, creates ad-hoc-signed app and DMG bundles plus the Tauri updater
+archive and signature, verifies signatures, and stages the DMG metadata. It fails
+before packaging when either signing variable is missing. Ordinary `make desktop`
+keeps updater artifacts disabled and does not require the release key.
 
 ```text
 dist/releases/0.57.5/
@@ -96,11 +98,14 @@ its matching `.sig`, and runs:
 ```bash
 python3 scripts/desktop-updater-manifest.py \
   0.56.0 PATH/TO/Tariboy.app.tar.gz PATH/TO/Tariboy.app.tar.gz.sig \
-  dist/releases/0.56.0
+  dist/releases/0.56.0 desktop/src-tauri/tauri.conf.json
 ```
 
 That command rejects missing, empty, malformed, mismatched, or unsafe inputs
-before staging the updater pair and `latest.json`. It appends both updater
+before staging the updater pair and `latest.json`. It also rejects a signature
+packet whose key identifier differs from the public key pinned in the supplied
+Tauri configuration. This key-identity gate catches an accidental wrong signing
+Secret; it does not cryptographically verify the archive. It appends both updater
 assets to `SHA256SUMS` without dropping the DMG entries.
 
 ## Two-person review

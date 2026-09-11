@@ -149,6 +149,39 @@ func TestDesktopLinuxPackagingBuildsDebAndAppImage(t *testing.T) {
 	}
 }
 
+func TestDesktopPackagingEnablesUpdaterArtifactsOnlyWhenRequested(t *testing.T) {
+	packageDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("resolve test working directory: %v", err)
+	}
+	root := filepath.Dir(packageDir)
+	for _, testCase := range []struct {
+		name string
+		arg  string
+		want string
+	}{
+		{name: "local", want: `"createUpdaterArtifacts":false`},
+		{name: "signed release", arg: "DESKTOP_UPDATER_ARTIFACTS=true", want: `"createUpdaterArtifacts":true`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			args := []string{"-n", "-o", "desktop-binaries", "-o", "ui", "HOST_OS=Darwin", "HOST_ARCH=arm64", "PLATFORM=darwin"}
+			if testCase.arg != "" {
+				args = append(args, testCase.arg)
+			}
+			cmd := exec.Command("make", append(args, "desktop")...)
+			cmd.Dir = root
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("dry-run Desktop packaging: %v\n%s", err, output)
+			}
+			line := findLine(string(output), "cargo tauri build")
+			if !strings.Contains(line, testCase.want) {
+				t.Fatalf("Desktop packaging is missing %s updater override:\n%s", testCase.name, line)
+			}
+		})
+	}
+}
+
 func TestDesktopPlatformDefaultsToTheNativeHost(t *testing.T) {
 	packageDir, err := os.Getwd()
 	if err != nil {
