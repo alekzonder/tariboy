@@ -1,3 +1,18 @@
+## [0.57.0] - 2026-09-11
+
+### Added
+
+- Run eligible saved scripts immediately, including idle recurring scripts.
+- Mark all unread task notifications as read from the Tasks inbox.
+- Register editable image-source API routes.
+
+### Fixed
+
+- Confine agent-authored image builds to each agent's managed workdir.
+- Register editable image-source routes.
+
+[0.57.0]: https://github.com/alekzonder/tariboy/compare/v0.56.0...v0.57.0
+
 ## [0.56.0] - 2026-09-11
 
 ### Added
