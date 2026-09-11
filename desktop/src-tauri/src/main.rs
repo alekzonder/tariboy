@@ -22,6 +22,7 @@ mod support_client;
 #[cfg(test)]
 mod testbin;
 mod tunnel;
+mod updater;
 
 use state::{AppState, DaemonView};
 use std::time::Duration;
@@ -59,7 +60,11 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            updater::desktop_update_state,
+            updater::desktop_update_download,
+            updater::desktop_update_install,
             commands::daemon_status,
             commands::daemon_start,
             commands::daemon_restart,
@@ -87,6 +92,9 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             notifications::init(&handle);
+            app.manage(updater::DesktopUpdateState::new(
+                app.package_info().version.to_string(),
+            ));
 
             // A base dir we cannot resolve or create is the ONE fatal case: there
             // is no useful window to show without it, so fail loudly instead of
