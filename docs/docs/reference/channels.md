@@ -216,13 +216,20 @@ The max attempts constant is currently `5`.
 The messages are written into the prompt under:
 
 ```text
-# Messages
+# Task Processing Order
+...
+## Messages
 Incoming messages for this iteration (newest last):
 ...
 ```
 
 Despite the section text saying "newest last", the practical result is
 chronological order: older messages appear first, newer messages later.
+This platform-owned block puts one-shot instructions before Messages and Goal
+after it, independently of the image template. With no incoming messages it
+says so explicitly; outstanding requests, if any, remain nested under
+`### Awaiting replies`. Preview keeps execution-time message placeholders and
+does not increment delivery attempts.
 
 ## Ack and redelivery
 

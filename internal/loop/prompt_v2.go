@@ -64,6 +64,30 @@ func FormatRuntimeGoalGuidance() string {
 	return "# Agent Goal\n\nUse the Native Task workflow for selected work. If a task is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself."
 }
 
+// FormatTaskProcessingOrder is platform-owned, independent of image placeholders.
+// Only generated headings are removed or nested; input text stays literal.
+func FormatTaskProcessingOrder(values RuntimePromptValues) string {
+	oneShot := values.OneShot
+	if strings.TrimSpace(oneShot) == "" {
+		oneShot = "No one-shot instruction for this iteration."
+	}
+	messages := strings.TrimPrefix(values.Messages, "# Messages\n")
+	if strings.TrimSpace(messages) == "" {
+		messages = "No incoming messages for this iteration."
+	}
+	if values.AwaitingReplies != "" {
+		messages += "\n\n### Awaiting replies\n" + strings.TrimPrefix(values.AwaitingReplies, "# Awaiting replies\n")
+	}
+	goal := strings.TrimPrefix(values.Goal, "# Agent Goal\n\n")
+	if strings.TrimSpace(goal) == "" {
+		goal = "No goal selected for this iteration.\n\n" + strings.TrimPrefix(FormatRuntimeGoalGuidance(), "# Agent Goal\n\n")
+	}
+	return "# Task Processing Order\n\n" +
+		"Process the following inputs in order: one-shot, then messages, then goal.\n" +
+		"If an input is absent, continue to the next section; do not run commands merely to look for that absent input.\n\n" +
+		"## One-shot\n\n" + oneShot + "\n\n## Messages\n\n" + messages + "\n\n## Goal\n\n" + goal
+}
+
 func FormatRuntimeWorkdir(path string) (string, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
@@ -76,29 +100,18 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 	if err := image.ValidatePromptTemplate(template); err != nil {
 		return "", err
 	}
-	messages := strings.TrimRight(values.Messages, "\n")
-	awaitingReplies := strings.TrimRight(values.AwaitingReplies, "\n")
-	for _, entry := range template.Entries {
-		if entry.Kind == "runtime" && entry.Runtime == "messages" {
-			if messages != "" && awaitingReplies != "" {
-				messages += "\n\n"
-			}
-			messages += awaitingReplies
-			awaitingReplies = ""
-			break
-		}
-	}
 	runtime := map[string]string{
-		"identity": values.Identity, "goal": values.Goal, "context": values.Context,
-		"messages": messages, "awaiting-replies": awaitingReplies,
-		"user-prompt": values.UserPrompt, "one-shot": values.OneShot,
-		"workdir": values.Workdir,
+		"identity": values.Identity, "context": values.Context,
+		// Older templates remain valid; these inputs are rendered once above them.
+		"goal": "", "messages": "", "awaiting-replies": "", "one-shot": "",
+		"user-prompt": values.UserPrompt,
+		"workdir":     values.Workdir,
 	}
 	root, err := filepath.Abs(imageDir)
 	if err != nil {
 		return "", err
 	}
-	parts := make([]string, 0, len(template.Entries))
+	parts := []string{FormatTaskProcessingOrder(values)}
 	for i, entry := range template.Entries {
 		var body string
 		switch entry.Kind {
@@ -112,10 +125,6 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 				switch entry.Runtime {
 				case "context":
 					body = "# Agent Context\n\n" + body
-				case "messages", "awaiting-replies":
-					if body != "# Messages" && !strings.HasPrefix(body, "# Messages\n") {
-						body = "# Messages\n\n" + body
-					}
 				}
 			}
 			if body != "" {
@@ -156,9 +165,6 @@ func RenderPromptTemplate(template image.PromptTemplate, imageDir string, values
 		if body != "" {
 			parts = append(parts, body)
 		}
-	}
-	if len(parts) == 0 {
-		return "", nil
 	}
 	return strings.Join(parts, "\n\n") + "\n", nil
 }

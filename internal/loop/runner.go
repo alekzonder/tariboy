@@ -40,12 +40,14 @@ type PromptParts struct {
 	AwaitingReplies string
 	UserPrompt      string
 	OneShot         string
+	Goal            string
 	Tail            string
 }
 
 func AssemblePrompt(p PromptParts) string {
 	header := fmt.Sprintf("# You are agent %s\ncwd: %s", p.Agent, p.Cwd)
-	sections := []string{header, p.ImagePrompt, p.Context, p.Messages, p.AwaitingReplies, p.UserPrompt, p.OneShot, p.Tail}
+	work := FormatTaskProcessingOrder(RuntimePromptValues{OneShot: p.OneShot, Messages: p.Messages, AwaitingReplies: p.AwaitingReplies, Goal: p.Goal})
+	sections := []string{header, p.ImagePrompt, p.Context, work, p.UserPrompt, p.Tail}
 	var kept []string
 	for _, s := range sections {
 		if strings.TrimSpace(s) != "" {
@@ -776,6 +778,10 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			}
 		}
 
+		goal := ""
+		if hasCurrentGoal {
+			goal = FormatRuntimeGoal(currentGoal)
+		}
 		if imageSchemaVersion == 2 {
 			template, err := ReadPromptTemplate(l.ImageDir(), iteration.PromptTemplateSHA256)
 			if err != nil {
@@ -785,17 +791,6 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			if err != nil {
 				return fail(err)
 			}
-			goal := ""
-			hasGoalRuntime := slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
-				return entry.Kind == "runtime" && entry.Runtime == "goal"
-			})
-			if hasGoalRuntime || slices.Contains(ag.Plugins, "goal") {
-				if hasCurrentGoal {
-					goal = FormatRuntimeGoal(currentGoal)
-				} else {
-					goal = FormatRuntimeGoalGuidance()
-				}
-			}
 			prompt, err = RenderPromptTemplate(template, l.ImageDir(), RuntimePromptValues{
 				Identity: FormatRuntimeIdentity(ag.Name, ag.ImageRef, iteration.ImageVersion, ag.ImageDigest, agentCwd(ag, l), iterationID),
 				Goal:     goal,
@@ -804,9 +799,6 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 			})
 			if err != nil {
 				return fail(err)
-			}
-			if goal != "" && !hasGoalRuntime {
-				prompt += "\n\n# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n" + goal + "\n"
 			}
 		} else {
 			imagePrompt, err := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT.md"))
@@ -818,7 +810,7 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 				Agent: ag.Name, Cwd: agentCwd(ag, l), ImagePrompt: string(imagePrompt),
 				Context: contextText, Messages: FormatMessages(batch),
 				AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()),
-				UserPrompt:      ag.UserPrompt, OneShot: oneShot, Tail: string(tail),
+				UserPrompt:      ag.UserPrompt, OneShot: oneShot, Goal: goal, Tail: string(tail),
 			})
 		}
 	}

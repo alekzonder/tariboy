@@ -42,7 +42,7 @@ func TestAssemblePromptOrder(t *testing.T) {
 	})
 	// Header first, tail last, in the documented order.
 	idx := func(s string) int { return strings.Index(got, s) }
-	order := []string{"# You are agent smoke", "SYSTEM+BODY", "CTX", "STANDING", "ONESHOT", "i-am-done"}
+	order := []string{"# You are agent smoke", "SYSTEM+BODY", "CTX", "ONESHOT", "STANDING", "i-am-done"}
 	for i := 1; i < len(order); i++ {
 		if idx(order[i-1]) < 0 || idx(order[i]) < 0 || idx(order[i-1]) >= idx(order[i]) {
 			t.Fatalf("section %q not before %q in:\n%s", order[i-1], order[i], got)
@@ -1263,7 +1263,7 @@ func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T)
 		t.Fatal(err)
 	}
 	prompt := string(body)
-	for _, want := range []string{"cwd: " + externalCwd, "workdir: " + l.Workdir(), "# Agent Goal", "wait for the customer answer"} {
+	for _, want := range []string{"cwd: " + externalCwd, "workdir: " + l.Workdir(), "## Goal", "No goal selected for this iteration.", "wait for the customer answer"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
 		}
@@ -1285,7 +1285,7 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
 	}
-	entries := []image.TemplateEntry{{Kind: "runtime", Runtime: "goal"}}
+	entries := []image.TemplateEntry{}
 	templateSHA, err := image.PromptTemplateHash(entries)
 	if err != nil {
 		t.Fatal(err)
@@ -1335,9 +1335,10 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n# Agent Goal\n\nA selected task is active work: complete it through its Native Task workflow. If it is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two\n"
-	if got := string(body); got != want {
-		t.Fatalf("prompt = %q, want %q", got, want)
+	for _, want := range []string{"# Task Processing Order", "## Goal", "key: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two", "do not merge it yourself"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("missing %q in %s", want, body)
+		}
 	}
 }
 

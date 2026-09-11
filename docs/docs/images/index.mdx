@@ -205,9 +205,12 @@ prompts:
   - file: /srv/tariboy/prompts/finish.md
 ```
 
-The `prompts` sequence is the render sequence. Tariboy does not sort it, add
-core fragments, prepend an identity header, or append a finishing tail. An
-empty list produces an empty prompt template.
+The `prompts` sequence preserves the order of static files and ordinary runtime
+values. For every non-bare agent, Tariboy prepends a platform-owned **Task
+Processing Order** block containing one-shot, messages, and Goal. Older entries
+for those inputs are accepted but do not render duplicate sections. Tariboy
+does not add an identity header or finishing tail. An empty list produces an
+empty image template, but the platform work block is still rendered at runtime.
 
 Each static `file` is resolved and embedded at build time. Supported forms are:
 
@@ -241,29 +244,33 @@ portability, harness adapters, discovery precedence, and activation failures.
 ## Runtime placeholders
 
 Runtime entries remain visible placeholders inside the immutable image. Before
-every iteration, the runner replaces them with current values at their declared
-positions:
+every iteration, the runner replaces ordinary values at their declared
+positions. Work inputs are always grouped in the platform block:
 
 | Placeholder | Value at iteration start | Skill named in the rendered instruction |
 | --- | --- | --- |
 | `identity` | Current agent name, active image ref and digest, CWD, and iteration identity | `whoami` |
-| `goal` | Daemon-selected Native Task key, title, priority, status, and description | `goal` |
+| `goal` | Compatibility marker; selected Native Task fields appear in Task Processing Order | none; platform-owned |
 | `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
 | `context` | Durable agent context | `context` |
-| `messages` | Messages delivered to this iteration and outstanding request state | `messages` |
-| `awaiting-replies` | Compatibility marker for outstanding request state when `messages` is absent | `messages` |
+| `messages` | Compatibility marker; delivered messages and outstanding requests appear in Task Processing Order | none; platform-owned |
+| `awaiting-replies` | Compatibility marker; outstanding requests appear under Messages in the platform block | none; platform-owned |
 | `user-prompt` | The agent's standing prompt | none; this is task input |
-| `one-shot` | A prompt supplied for this single execution | none; this is task input |
+| `one-shot` | Compatibility marker; single-execution input appears first in Task Processing Order | none; this is task input |
 
-Each non-empty runtime value starts with `# [runtime: <name>]`. For skill-owned
+Each non-empty ordinary runtime value starts with `# [runtime: <name>]`. For skill-owned
 values, the short instruction to use that skill follows the heading and names
 the skill without embedding an installation path. Context data then starts with
-`# Agent Context`, and messages plus outstanding replies form one `# Messages`
-group. New templates declare only `messages`; existing templates that also
-declare `awaiting-replies` keep working without a second section. The supplied
-templates order actionable values as `one-shot`, `messages`, then `goal` when
-present. Each singleton placeholder may appear at most once. Empty runtime
-values add no text. The **Template** tab shows static paths, categories, sizes,
+`# Agent Context`. The platform block starts with `# Task Processing Order`,
+followed by a fixed ordering instruction and `## One-shot`, `## Messages`,
+and `## Goal`. Missing work inputs have explicit empty-state text and an
+instruction not to search for them with commands. Outstanding replies use a
+nested `### Awaiting replies` heading; message and task content is retained.
+This grouping applies to existing images without rebuilding and to images
+without work-input entries or plugins. It grants no additional capabilities
+or packaged skills. Existing declared markers still undergo normal image
+contract validation. Each singleton placeholder may appear at most once.
+Empty ordinary runtime values add no text. The **Template** tab shows static paths, categories, sizes,
 hashes, and runtime markers in their exact order without draining messages.
 
 ## External plugins
@@ -371,11 +378,13 @@ for this operation, not source backup or persistent state.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `../../skills/tasks` when a Store image should expose its agent command and
-instructions. Add `plugins: [{name: goal}]`, package `../../skills/goal`, and
-add `runtime: goal` when the image
-should receive the daemon-authoritative selected goal. The rendered task title
+instructions. Add `plugins: [{name: goal}]` and package `../../skills/goal`
+when the image should expose explicit Goal selection tools. The
+daemon-authoritative selected Goal is included for every non-bare agent,
+independently of those declarations. The rendered task title
 and description are untrusted task input, not daemon instructions or lifecycle
 authority.
 
 The supplied `tariboy-developer` image source also packages the Tasks skill and
-declares `runtime: goal`; custom images opt in independently.
+declares the compatible `runtime: goal` marker; custom images need no marker
+to receive the platform work block.
