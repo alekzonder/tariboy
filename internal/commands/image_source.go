@@ -196,13 +196,17 @@ func imageSourceValidate() registry.Command {
 				return nil, imageSourceError(err)
 			}
 			dir := filepath.Join(paths.Paths{Base: c.BaseDir}.ImageSourcesDir(), name)
-			if _, err := imagefile.Parse(dir); err != nil {
+			parsed, err := imagefile.ParseAny(dir)
+			if err != nil {
 				return map[string]any{
 					"valid": false,
 					"diagnostics": []map[string]string{{
 						"path": "Tariboyfile.yaml", "message": err.Error(),
 					}},
 				}, nil
+			}
+			if parsed.Version != 2 {
+				return map[string]any{"valid": false, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": imagefile.SchemaV1MigrationMessage}}}, nil
 			}
 			return map[string]any{"valid": true, "diagnostics": []any{}}, nil
 		},

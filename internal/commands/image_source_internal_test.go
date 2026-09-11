@@ -13,6 +13,22 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
+func TestImageSourceValidateAcceptsNewV2Source(t *testing.T) {
+	c := localCtx(t)
+	if _, err := imageSourceStore(c).Create(imagesource.CreateRequest{Name: "reviewer", Prompt: "Review the task."}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := imageSourceValidate().Handler(c, registry.Params{"name": "reviewer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := result.(map[string]any)
+	if response["valid"] != true || len(response["diagnostics"].([]any)) != 0 {
+		t.Fatalf("validation response = %#v", response)
+	}
+}
+
 func TestImageSourceBuildCopiesGitProvenanceIntoSnapshot(t *testing.T) {
 	c := localCtx(t)
 	want := imagesource.Provenance{
