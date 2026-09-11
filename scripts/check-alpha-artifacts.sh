@@ -69,28 +69,6 @@ scan_secrets() {
   return 1
 }
 
-run_linux_version() {
-  local path="$1"
-  if [ -n "${TARIBOY_LINUX_AMD64_RUNNER:-}" ]; then
-    [ -x "$TARIBOY_LINUX_AMD64_RUNNER" ] || {
-      echo "FAIL: TARIBOY_LINUX_AMD64_RUNNER is not executable" >&2
-      return 1
-    }
-    "$TARIBOY_LINUX_AMD64_RUNNER" "$path" --version
-  elif command -v qemu-x86_64 >/dev/null 2>&1; then
-    qemu-x86_64 "$path" --version
-  elif command -v docker >/dev/null 2>&1 \
-    && docker image inspect alpine:3.22 >/dev/null 2>&1; then
-    docker run --rm --pull=never --platform linux/amd64 \
-      --volume "$(dirname "$path"):/bundle:ro" \
-      alpine:3.22 "/bundle/$(basename "$path")" --version
-  else
-    echo "FAIL: execute Linux x86_64 version checks with qemu-x86_64, a local" >&2
-    echo "      alpine:3.22 Docker image, or TARIBOY_LINUX_AMD64_RUNNER" >&2
-    return 1
-  fi
-}
-
 [ -n "$RELEASE_DIR" ] && [ -d "$RELEASE_DIR" ] || {
   echo "usage: $0 <release-directory>" >&2
   exit 2
@@ -224,11 +202,9 @@ for platform in darwin-arm64 linux-x86_64; do
       echo "FAIL: $path does not embed $VERSION" >&2; exit 1; }
     if [ "$platform" = "darwin-arm64" ]; then
       reported="$("$path" --version)"
-    else
-      reported="$(run_linux_version "$path")"
+      [ "$reported" = "$VERSION" ] || {
+        echo "FAIL: $path reports $reported, expected $VERSION" >&2; exit 1; }
     fi
-    [ "$reported" = "$VERSION" ] || {
-      echo "FAIL: $path reports $reported, expected $VERSION" >&2; exit 1; }
   done
   alias_path="$APP/Contents/Resources/bin/$platform/ttasks"
   [ ! -e "$alias_path" ] && [ ! -L "$alias_path" ] || {

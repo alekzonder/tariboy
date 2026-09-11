@@ -45,13 +45,10 @@ jobs:
           }
 
       - name: Install release verification tools
-        run: brew install tmux ripgrep qemu
+        run: brew install tmux ripgrep
 
       - name: Build and verify DMG
-        run: |
-          runner="$(brew --prefix qemu)/bin/qemu-x86_64"
-          test -x "$runner"
-          TARIBOY_LINUX_AMD64_RUNNER="$runner" make desktop-mac
+        run: make desktop-mac
 
       - name: Publish GitHub Release
         env:

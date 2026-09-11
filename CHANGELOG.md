@@ -1,3 +1,11 @@
+## [0.57.4] - 2026-09-11
+
+### Fixed
+
+- Publish macOS release artifacts without requiring Linux binary emulation.
+
+[0.57.4]: https://github.com/alekzonder/tariboy/compare/v0.57.3...v0.57.4
+
 ## [0.57.3] - 2026-09-11
 
 ### Fixed
