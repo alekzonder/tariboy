@@ -6,6 +6,9 @@ Release: `0.57.5`
 
 - Release owner and incident lead: repository owner
   [`alekzonder`](https://github.com/alekzonder).
+- Updater signing owner: `alekzonder`, who retains and securely backs up the
+  permanent Tauri private key. Installed applications pin its public key, so
+  rotation requires a separately planned release.
 - Backup reviewer: a repository collaborator other than `alekzonder`, recorded
   as the second approver on the release issue before publication.
 - Support intake: the repository issue system, restricted to non-sensitive
@@ -23,6 +26,9 @@ organization-specific artifact host or upload protocol.
 - Linux x86_64 payloads are checked for presence, ELF format, embedded version,
   and `VERSION` metadata; the macOS release gate does not execute them;
 - no production credentials in build environment or repository.
+- confirmed secure ownership and backup of the permanent updater private key;
+- GitHub Actions Secrets `TAURI_SIGNING_PRIVATE_KEY` and
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, configured by the release owner.
 
 ## Set the release version
 
@@ -56,7 +62,8 @@ make desktop-mac
 ```
 
 The target builds both binary platforms and the SPA, creates ad-hoc-signed app
-and DMG bundles, verifies signatures, and stages:
+and DMG bundles, creates the Tauri updater archive and signature when the two
+signing variables are set, verifies signatures, and stages the DMG metadata:
 
 ```text
 dist/releases/0.57.5/
@@ -82,6 +89,19 @@ Re-run the independent gate:
 ```bash
 scripts/check-alpha-artifacts.sh dist/releases/0.57.5
 ```
+
+The tag workflow then derives the generated `.app.tar.gz` filename, requires
+its matching `.sig`, and runs:
+
+```bash
+python3 scripts/desktop-updater-manifest.py \
+  0.56.0 PATH/TO/Tariboy.app.tar.gz PATH/TO/Tariboy.app.tar.gz.sig \
+  dist/releases/0.56.0
+```
+
+That command rejects missing, empty, malformed, mismatched, or unsafe inputs
+before staging the updater pair and `latest.json`. It appends both updater
+assets to `SHA256SUMS` without dropping the DMG entries.
 
 ## Two-person review
 
@@ -109,13 +129,19 @@ git push origin v0.57.5
 
 `.github/workflows/desktop-release.yml` validates the tag against
 `internal/version/version.go` and `scripts/release-version.txt`, runs `make
-desktop-mac` on `macos-15`, and creates the matching GitHub Release with
-generated notes. It uploads exactly the versioned DMG, `SHA256SUMS`, and
-`release.json` using the workflow's `contents: write` token.
+desktop-mac` on `macos-15`, and creates the matching GitHub Release as a draft
+with generated notes. It uploads the versioned DMG, generated updater archive
+and signature, `SHA256SUMS`, `release.json`, and `latest.json` using the
+workflow's job-scoped `contents: write` token, then makes the draft public. A
+failed build, validation, or upload therefore never becomes the latest public
+release. The signing Secrets are available only to the build step.
 
-After publication, a reviewer downloads all three files into a new directory,
-verifies `SHA256SUMS`, and confirms that the `release.json` commit SHA is the
-tagged, reviewed commit before invitations are sent.
+After publication, a reviewer downloads all six files into a new directory,
+verifies `SHA256SUMS`, confirms that `latest.json` names the versioned archive
+and `darwin-aarch64`, and confirms that the `release.json` commit SHA is the
+tagged, reviewed commit before invitations are sent. New users install this
+first updater-enabled version from the DMG; updater installation begins only
+with a later, higher signed version.
 
 ## Design-partner rollout
 
