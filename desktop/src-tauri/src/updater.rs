@@ -220,14 +220,14 @@ pub fn desktop_update_state(state: State<DesktopUpdateState>) -> UpdateView {
 pub async fn desktop_update_download(
     app: AppHandle,
     state: State<'_, DesktopUpdateState>,
-) -> UpdateView {
+) -> Result<UpdateView, String> {
     let Some(checking) = state.begin_check() else {
-        return state.view();
+        return Ok(state.view());
     };
     publish(&app, checking);
 
     if !supported_platform() {
-        return publish(&app, state.fail(UNAVAILABLE));
+        return Ok(publish(&app, state.fail(UNAVAILABLE)));
     }
 
     let updater = match app
@@ -240,50 +240,49 @@ pub async fn desktop_update_download(
         .build()
     {
         Ok(updater) => updater,
-        Err(_) => return publish(&app, state.fail(CHECK_FAILED)),
+        Err(_) => return Ok(publish(&app, state.fail(CHECK_FAILED))),
     };
     let mut update = match updater.check().await {
         Ok(Some(update)) => update,
-        Ok(None) => return publish(&app, state.up_to_date()),
-        Err(_) => return publish(&app, state.fail(CHECK_FAILED)),
+        Ok(None) => return Ok(publish(&app, state.up_to_date())),
+        Err(_) => return Ok(publish(&app, state.fail(CHECK_FAILED))),
     };
     if !is_newer_stable(&update.current_version, &update.version) {
-        return publish(&app, state.fail(INVALID_VERSION));
+        return Ok(publish(&app, state.fail(INVALID_VERSION)));
     }
     update.timeout = Some(NETWORK_TIMEOUT);
 
     let version = update.version.clone();
     publish(&app, state.begin_download(&version));
-    match update
-        .download(
-            |bytes, total| {
-                if let Some(view) = state.progress(bytes, total) {
-                    publish(&app, view);
-                }
-            },
-            || {},
-        )
-        .await
-    {
-        Ok(bytes) => publish(
-            &app,
-            state.finish_download(&version, Ok((update, bytes))),
-        ),
-        Err(_) => publish(&app, state.finish_download(&version, Err(()))),
-    }
+    Ok(
+        match update
+            .download(
+                |bytes, total| {
+                    if let Some(view) = state.progress(bytes, total) {
+                        publish(&app, view);
+                    }
+                },
+                || {},
+            )
+            .await
+        {
+            Ok(bytes) => publish(&app, state.finish_download(&version, Ok((update, bytes)))),
+            Err(_) => publish(&app, state.finish_download(&version, Err(()))),
+        },
+    )
 }
 
 #[tauri::command]
 pub async fn desktop_update_install(
     app: AppHandle,
     state: State<'_, DesktopUpdateState>,
-) -> UpdateView {
+) -> Result<UpdateView, String> {
     if !supported_platform() {
-        return publish(&app, state.fail(UNAVAILABLE));
+        return Ok(publish(&app, state.fail(UNAVAILABLE)));
     }
     let (package, installing) = match state.begin_install() {
         Ok(started) => started,
-        Err(view) => return publish(&app, view),
+        Err(view) => return Ok(publish(&app, view)),
     };
     publish(&app, installing);
 
@@ -297,7 +296,7 @@ pub async fn desktop_update_install(
     })
     .await;
 
-    match task {
+    Ok(match task {
         Ok((package, installed)) => {
             let (view, restart) = state.finish_install(package, installed);
             if restart {
@@ -306,7 +305,7 @@ pub async fn desktop_update_install(
             publish(&app, view)
         }
         Err(_) => publish(&app, state.fail(INSTALL_TASK_FAILED)),
-    }
+    })
 }
 
 #[cfg(test)]
