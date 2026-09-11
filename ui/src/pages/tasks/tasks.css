@@ -62,7 +62,7 @@
 .tasks-toolbar > div { margin-right: auto; }
 .tasks-toolbar h2, .task-inbox h2, .task-queues h2 { font-size: 16px; font-weight: 650; }
 .tasks-toolbar span { display: block; font-size: 11px; color: var(--muted-foreground); }
-.tasks-toolbar > button, .task-primary-action, .task-inline-form button,
+.tasks-toolbar > button, .task-primary-action, .task-inline-form button, .task-inbox > header button,
 .task-inbox article > div button, .task-queues button {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--border);
   border-radius: 7px; padding: 7px 10px; background: var(--background); font-size: 12px; font-weight: 560;
@@ -177,6 +177,7 @@
 
 .task-inbox, .task-queues { padding: 20px; }
 .task-inbox > header, .task-queues > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.task-inbox > header > div { display: flex; align-items: center; gap: 9px; }
 .task-inbox > header span { font-size: 11px; color: var(--muted-foreground); }
 .task-inbox article { display: flex; align-items: center; border-bottom: 1px solid var(--border); padding: 12px 4px; }
 .task-inbox article.is-read { opacity: .65; }

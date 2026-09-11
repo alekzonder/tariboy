@@ -294,7 +294,9 @@ request is running. Success reports the server's delivery/message counters and
 reloads Queue; failure keeps the authoritative rows visible for retry.
 
 Notifications and customer-only queue administration live in the same
-workspace. A small red indicator on a task row identifies an unread,
+workspace. **Mark as Read All** marks every currently unread notification read
+through the existing per-notification action and refreshes shared attention once.
+A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task; it updates from the
 same notification state used by the inbox. A route-independent coordinator
 also watches every configured host and projects agent-authored questions into
