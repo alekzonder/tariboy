@@ -142,6 +142,34 @@ func TestAgentWorkNextClaimsAndReturnsPacket(t *testing.T) {
 	}
 }
 
+func TestAgentAskSeparatesMentionFromMarkdownBody(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	if _, err := svc.CreateQueue(ctx, CustomerActor("customer"), CreateQueueInput{
+		Prefix: "ASK", Name: "Questions", Owners: []string{"alice"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := svc.CreateTask(ctx, AgentActor("alice"), CreateTaskInput{Queue: "ASK", Title: "Question"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := svc.AgentAction(ctx, AgentActor("alice"), "ask", map[string]any{
+		"key": task.Key, "principal": "user:customer", "body": "## Release workflow failed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	comment := result.(CommentResult)
+	if got := comment.Comment.Body; got != "@user:customer\n\n## Release workflow failed" {
+		t.Fatalf("comment body = %q", got)
+	}
+	if len(comment.CreatedWaits) != 1 || comment.CreatedWaits[0].ExpectedPrincipal != "user:customer" {
+		t.Fatalf("created waits = %#v", comment.CreatedWaits)
+	}
+}
+
 // A non-owner agent may file a report into any existing queue, but filing is not a way to
 // give itself work or a window into the queue: the report is unassigned, ungrouped, and
 // invisible to its author afterwards. Triage belongs to whoever owns the queue.
