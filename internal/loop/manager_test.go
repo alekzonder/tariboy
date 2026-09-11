@@ -2636,6 +2636,72 @@ func TestBuildImageForAgentConfinesPath(t *testing.T) {
 	}
 }
 
+func TestAgentImageBuildUsesManagedWorkdirWithExternalCWD(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "creator", Harness: "stub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.Cwd = t.TempDir()
+	ag.Plugins = append(ag.Plugins, "image-creator")
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir, name)
+	source := filepath.Join(l.Workdir(), "images", "authored")
+	skill := filepath.Join(l.Workdir(), "skills", "review")
+	for _, dir := range []string{source, skill} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte("---\nname: review\ndescription: Review changes.\n---\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nskills:\n  - dir: ../../skills/review\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ag.Cwd, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(ag.Cwd, filepath.Join(l.Workdir(), "outside")); err != nil {
+		t.Fatal(err)
+	}
+	handler := m.newToolsAPIServer(ag, l).Handler()
+	for _, tc := range []struct {
+		name, path string
+		allowed    bool
+	}{
+		{"absolute", source, true},
+		{"relative", "images/authored", true},
+		{"external-cwd", ag.Cwd, false},
+		{"symlink", "outside", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(map[string]string{"name": tc.name, "path": tc.path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/tools/image/build", bytes.NewReader(body)))
+			if tc.allowed {
+				if recorder.Code != http.StatusOK {
+					t.Fatalf("build status=%d body=%s", recorder.Code, recorder.Body.String())
+				}
+			} else if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "escapes the agent workdir") {
+				t.Fatalf("expected workdir rejection, status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+			if got := m.cfg.ImgStore.Exists(image.Ref{Name: tc.name, Tag: "latest"}); got != tc.allowed {
+				t.Fatalf("image published=%v, want %v", got, tc.allowed)
+			}
+		})
+	}
+}
+
 func TestAgentAuthoredImageRejectsDisabledExternalPlugin(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "creator", Harness: "stub"})
