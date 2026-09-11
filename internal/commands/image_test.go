@@ -926,19 +926,6 @@ func TestImageBuildRollsBackArtifactWhenProvenanceCannotCommit(t *testing.T) {
 	}
 }
 
-func TestRegistryDoesNotExposeManagedImageSourceSnapshots(t *testing.T) {
-	registry := BuildRegistry()
-	for _, command := range []string{
-		"image.source.ls", "image.source.create", "image.source.inspect", "image.source.rm",
-		"image.source.files", "image.source.file.get", "image.source.file.put",
-		"image.source.validate", "image.source.build",
-	} {
-		if _, ok := registry.Get(command); ok {
-			t.Fatalf("obsolete editable source command %s remains public", command)
-		}
-	}
-}
-
 func TestImageListReportsCurrentAndPendingAgents(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)

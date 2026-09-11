@@ -30,6 +30,15 @@ func TestImageRoutesRegistered(t *testing.T) {
 		{"image.files", "GET", "/api/images/{ref}/files"},
 		{"image.file", "GET", "/api/images/{ref}/files/{path...}"},
 		{"image.rm", "DELETE", "/api/images/{ref}"},
+		{"image.source.ls", "GET", "/api/image-sources"},
+		{"image.source.create", "POST", "/api/image-sources"},
+		{"image.source.inspect", "GET", "/api/image-sources/{name}"},
+		{"image.source.rm", "DELETE", "/api/image-sources/{name}"},
+		{"image.source.files", "GET", "/api/image-sources/{name}/files"},
+		{"image.source.file.get", "GET", "/api/image-sources/{name}/files/{path...}"},
+		{"image.source.file.put", "PUT", "/api/image-sources/{name}/files/{path...}"},
+		{"image.source.validate", "POST", "/api/image-sources/{name}/validate"},
+		{"image.source.build", "POST", "/api/image-sources/{name}/build"},
 	} {
 		cmd, ok := BuildRegistry().Get(tc.path)
 		if !ok {
