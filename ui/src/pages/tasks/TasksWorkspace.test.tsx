@@ -1300,6 +1300,49 @@ describe("TasksWorkspace", () => {
     expect(notificationsChanged).toHaveBeenCalledTimes(2)
   })
 
+  it("marks every unread notification read at once", async () => {
+    const notificationsChanged = vi.fn()
+    api.listTaskNotifications.mockResolvedValue({
+      notifications: [
+        notification,
+        { ...notification, id: "notification-2", task_key: child.key },
+        { ...notification, id: "notification-read", read_at: root.updated_at },
+      ],
+      count: 3,
+    })
+    render(<TasksWorkspace onNotificationsChanged={notificationsChanged} />)
+    await screen.findByText("Ship native tasks")
+
+    await userEvent.click(screen.getByRole("button", { name: /Notifications/ }))
+    await userEvent.click(screen.getByRole("button", { name: "Mark as Read All" }))
+
+    await waitFor(() => expect(screen.getByText("0 unread")).toBeVisible())
+    expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(2)
+    expect(api.markTaskNotificationRead).toHaveBeenNthCalledWith(1, "notification-1", undefined)
+    expect(api.markTaskNotificationRead).toHaveBeenNthCalledWith(2, "notification-2", undefined)
+    expect(notificationsChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps failed notifications unread when marking all", async () => {
+    const notificationsChanged = vi.fn()
+    api.listTaskNotifications.mockResolvedValue({
+      notifications: [notification, { ...notification, id: "notification-2", task_key: child.key }],
+      count: 2,
+    })
+    api.markTaskNotificationRead
+      .mockResolvedValueOnce({ ...notification, read_at: root.updated_at })
+      .mockRejectedValueOnce(new Error("read failed"))
+    render(<TasksWorkspace onNotificationsChanged={notificationsChanged} />)
+    await screen.findByText("Ship native tasks")
+
+    await userEvent.click(screen.getByRole("button", { name: /Notifications/ }))
+    await userEvent.click(screen.getByRole("button", { name: "Mark as Read All" }))
+
+    await waitFor(() => expect(screen.getByText("1 unread")).toBeVisible())
+    expect(toast.error).toHaveBeenCalledWith("read failed")
+    expect(notificationsChanged).toHaveBeenCalledTimes(1)
+  })
+
   it("creates and updates queues", async () => {
     render(<TasksWorkspace />)
     await screen.findByText("Ship native tasks")

@@ -698,6 +698,17 @@ function TasksWorkspaceContent({
               setNotifications((current) => current.map((item) => item.id === id ? { ...item, read_at: new Date().toISOString() } : item))
               onNotificationsChanged?.()
             }}
+            onReadAll={async (ids) => {
+              const results = await Promise.allSettled(ids.map((id) => markTaskNotificationRead(id, target)))
+              const readIds = new Set(ids.filter((_, index) => results[index]?.status === "fulfilled"))
+              if (readIds.size > 0) {
+                const readAt = new Date().toISOString()
+                setNotifications((current) => current.map((item) => readIds.has(item.id) ? { ...item, read_at: readAt } : item))
+                onNotificationsChanged?.()
+              }
+              const failed = results.find((result) => result.status === "rejected")
+              if (failed?.status === "rejected") toast.error(errorMessage(failed.reason))
+            }}
             onDismiss={async (id) => {
               await dismissTaskNotification(id, target)
               setNotifications((current) => current.filter((item) => item.id !== id))

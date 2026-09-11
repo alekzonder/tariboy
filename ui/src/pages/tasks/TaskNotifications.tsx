@@ -4,16 +4,30 @@ export default function TaskNotifications({
   notifications,
   onOpen,
   onRead,
+  onReadAll,
   onDismiss,
 }: {
   notifications: TaskNotification[]
   onOpen: (key: string) => void
   onRead: (id: string) => Promise<void>
+  onReadAll: (ids: string[]) => Promise<void>
   onDismiss: (id: string) => Promise<void>
 }) {
+  const unread = notifications.filter((item) => !item.read_at)
+
   return (
     <section className="task-inbox">
-      <header><h2>Notifications</h2><span>{notifications.filter((item) => !item.read_at).length} unread</span></header>
+      <header>
+        <h2>Notifications</h2>
+        <div>
+          <span>{unread.length} unread</span>
+          {unread.length > 0 && (
+            <button type="button" onClick={() => void onReadAll(unread.map((item) => item.id))}>
+              Mark as Read All
+            </button>
+          )}
+        </div>
+      </header>
       {notifications.map((item) => (
         <article key={item.id} className={item.read_at ? "is-read" : ""}>
           <button type="button" className="task-notification-main" onClick={() => onOpen(item.task_key)}>
