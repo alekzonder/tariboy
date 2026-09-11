@@ -75,6 +75,7 @@ func TestPullRequestsRunMakeCheckWithLockedDependencies(t *testing.T) {
 		{uses: "actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff"},
 		{uses: "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020"},
 		{run: "mkdir -p \"$RUNNER_TEMP/bin\"\nprintf '#!/bin/sh\\nexit 0\\n' > \"$RUNNER_TEMP/bin/codex\"\nchmod +x \"$RUNNER_TEMP/bin/codex\"\necho \"$RUNNER_TEMP/bin\" >> \"$GITHUB_PATH\"\n"},
+		{run: "sudo apt-get update\nsudo apt-get install -y ripgrep\n"},
 		{run: "make check"},
 	}
 	if len(job.Steps) != len(wantSteps) {
