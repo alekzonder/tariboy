@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react"
-import { EditorContent, useEditor } from "@tiptap/react"
+import { useEffect, useState, type MouseEvent } from "react"
+import { EditorContent, useEditor, type Editor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
+import CodeBlock from "@tiptap/extension-code-block"
 import { Markdown } from "@tiptap/markdown"
 import { OrderedList, TaskItem, TaskList } from "@tiptap/extension-list"
 import { TableKit } from "@tiptap/extension-table"
@@ -16,7 +17,14 @@ import { isDesktop, openExternalUrl } from "@/lib/desktop"
 import { toast } from "sonner"
 
 const extensions = [
-  StarterKit.configure({ orderedList: false, underline: false, trailingNode: false, link: { openOnClick: false } }),
+  StarterKit.configure({ codeBlock: false, orderedList: false, underline: false, trailingNode: false, link: { openOnClick: false } }),
+  CodeBlock.extend({
+    renderMarkdown(node, helpers) {
+      const content = node.content ? helpers.renderChildren(node.content) : ""
+      const fence = markdownFence(content)
+      return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`
+    },
+  }),
   OrderedList.extend({
     parseMarkdown(token, helpers) {
       const parsed = OrderedList.config.parseMarkdown?.call(this, token, helpers)
@@ -48,6 +56,27 @@ const markdownStyles = [
 
 function markdownStructure(value: string) {
   return JSON.stringify(markdownParser.parse(value), (key, field) => key === "position" ? undefined : field)
+}
+
+function markdownFence(content: string) {
+  return "`".repeat(Array.from(content.matchAll(/`+/g)).reduce((length, match) => Math.max(length, match[0].length + 1), 3))
+}
+
+function richMarkdown(value: string, editor: Editor) {
+  return editor.markdown?.instance.lexer(value).map((token) => {
+    const raw = token.raw ?? ""
+    if (!raw.trim()) return raw
+    try {
+      const parsed = editor.schema.nodeFromJSON(editor.markdown!.parse(raw))
+      parsed.check()
+      if (markdownStructure(raw) === markdownStructure(editor.markdown!.serialize(parsed.toJSON()))) return raw
+    } catch {
+      // Render any block Tiptap cannot parse safely as editable literal text.
+    }
+    const content = raw.replace(/\n+$/, "")
+    const fence = markdownFence(content)
+    return `${fence}\n${content}\n${fence}\n`
+  }).join("") ?? value
 }
 
 function openMarkdownLink(event: MouseEvent, href?: string) {
@@ -96,24 +125,15 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
     },
     onUpdate: ({ editor: current }) => onChange(current.getMarkdown()),
   })
-  const richSupported = useMemo(() => {
-    if (!editor?.markdown) return false
-    if (!value.trim()) return true
-    try {
-      const parsed = editor.schema.nodeFromJSON(editor.markdown.parse(value))
-      parsed.check()
-      return markdownStructure(value) === markdownStructure(editor.markdown.serialize(parsed.toJSON()))
-    } catch {
-      return false
-    }
-  }, [editor, value])
-  const showSource = source || !richSupported
+  const showSource = source
 
   useEffect(() => {
     if (!editor) return
     editor.setEditable(!disabled && !showSource, false)
-    if (!showSource && editor.getMarkdown() !== value) {
-      editor.commands.setContent(value, { contentType: "markdown", emitUpdate: false })
+    if (!showSource) {
+      const content = richMarkdown(value, editor)
+      if (editor.getMarkdown() === content) return
+      editor.commands.setContent(content, { contentType: "markdown", emitUpdate: false })
     }
   }, [editor, value, disabled, showSource])
 
@@ -151,11 +171,10 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
 
   return <div className="min-w-0 rounded-lg border border-input bg-background">
     <div className="flex flex-wrap items-center gap-1 border-b p-1" aria-label="Markdown editing mode">
-      <Button type="button" size="xs" variant={!showSource ? "secondary" : "ghost"} aria-pressed={!showSource} disabled={disabled || !richSupported} onClick={() => setSource(false)}>Rich text</Button>
+      <Button type="button" size="xs" variant={!showSource ? "secondary" : "ghost"} aria-pressed={!showSource} disabled={disabled} onClick={() => setSource(false)}>Rich text</Button>
       <Button type="button" size="xs" variant={showSource ? "secondary" : "ghost"} aria-pressed={showSource} disabled={disabled} onClick={() => { setSource(true); setShowLink(false) }}>Source Markdown</Button>
     </div>
     {showSource ? <>
-      {!richSupported && <p role="status" className="px-3 pt-2 text-xs text-muted-foreground">Source mode preserves Markdown that rich text cannot represent.</p>}
       <Textarea id={id} aria-label={placeholder} placeholder={placeholder} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="min-h-32 rounded-none border-0 font-mono" />
     </> : <>
       <div className="flex flex-wrap items-center gap-0.5 border-b p-1" role="group" aria-label="Markdown formatting">
