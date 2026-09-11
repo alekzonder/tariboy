@@ -540,6 +540,11 @@ the repository under **Settings → Pages** to use **Deploy from a branch**, the
 select the `docs` branch and `/ (root)` folder. GitHub Pages serves this project
 site at `https://alekzonder.github.io/tariboy/`.
 
+After a successful Desktop release, a separate workflow job runs `make docs`
+from the tagged commit and pushes the `docs` branch. Site deployment follows
+separately. If documentation publication fails, rerun the failed docs job; the
+already-published release remains intact.
+
 ### End-to-end suites
 
 `make full-check` runs all four core E2E scripts and `full-smoke`. The individual
