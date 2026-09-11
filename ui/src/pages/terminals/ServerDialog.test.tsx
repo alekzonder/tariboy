@@ -207,6 +207,14 @@ describe("ServerDialog desktop SSH flow", () => {
     expect(provision).not.toHaveBeenCalled();
 
     await events.state(nativeHost({
+      state: "failed",
+      phase: "connect",
+      message: "Host key verification failed.",
+    }));
+    expect(screen.getAllByTestId("host-progress-step")[0]).toHaveTextContent("failed");
+    expect(screen.getAllByTestId("host-progress-step")[1]).toHaveTextContent("pending");
+
+    await events.state(nativeHost({
       state: "ready",
       base_url: "http://127.0.0.1:18444",
       local_port: 18444,
@@ -262,6 +270,17 @@ describe("ServerDialog desktop SSH flow", () => {
       label: "gpu",
       ssh_alias: "gpu-box",
     });
+
+    await events.output({
+      operation_id: "op-install",
+      host_id: "ssh-1",
+      stream: "error",
+      text: "installation failed",
+      prompt: null,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add and connect" }));
+    await waitFor(() => expect(provision).toHaveBeenCalledTimes(2));
+    expect(connect).toHaveBeenCalledTimes(2);
   });
 
   it("renders one linear provisioning flow and keeps diagnostic output collapsed", async () => {
