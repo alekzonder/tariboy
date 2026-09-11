@@ -99,6 +99,27 @@ func TestPromptGetNotProvisioned(t *testing.T) {
 	}
 }
 
+func TestPromptPreviewBareHasNoTaskProcessingOrder(t *testing.T) {
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "bare", ImageRef: image.BareRef.String()}); err != nil {
+		t.Fatal(err)
+	}
+	l := agentdir.New(agentsDir(c), "bare")
+	if err := os.MkdirAll(l.ImageDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l.ImageDir(), "manifest.json"), []byte(`{"schema_version":2,"name":"bare","tag":"latest"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := h(t, "prompt.get")(c, registry.Params{"name": "bare"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.(map[string]any)["prompt"]; got != "" {
+		t.Fatalf("bare preview = %q", got)
+	}
+}
+
 func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T) {
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "v2", UserPrompt: "USER", Enabled: true, LoopEnabled: true, OnTimeout: "restart", OnError: "restart"})
@@ -107,7 +128,7 @@ func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T)
 		t.Fatal(err)
 	}
 	if _, err := taskService.CreateTask(context.Background(), tasks.CustomerActor("customer"), tasks.CreateTaskInput{
-		Queue: "NOGL", Title: "Must remain unselected", Assignee: "agent:v2",
+		Queue: "NOGL", Title: "Selected independently of template", Assignee: "agent:v2",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -141,11 +162,11 @@ func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T)
 	if !strings.Contains(prompt, "STATIC") || !strings.Contains(prompt, "[runtime: messages]") || strings.Contains(prompt, "[runtime: awaiting-replies]") || !strings.Contains(prompt, "USER") {
 		t.Fatalf("prompt = %q", prompt)
 	}
-	if strings.Count(prompt, "Use the `messages` skill") != 1 || strings.Count(prompt, "# Messages") != 1 {
+	if strings.Count(prompt, "# Task Processing Order") != 1 || strings.Count(prompt, "## Messages") != 1 {
 		t.Fatalf("messages runtime was not rendered as one group: %q", prompt)
 	}
-	if got, err := as.Get("v2"); err != nil || got.CurrentGoalTaskKey != "" {
-		t.Fatalf("template without runtime: goal selected %q, err=%v", got.CurrentGoalTaskKey, err)
+	if got, err := as.Get("v2"); err != nil || got.CurrentGoalTaskKey != "NOGL-1" {
+		t.Fatalf("template-independent goal selected %q, err=%v", got.CurrentGoalTaskKey, err)
 	}
 }
 
@@ -195,8 +216,10 @@ func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n# Agent Goal\n\nA selected task is active work: complete it through its Native Task workflow. If it is `wait_customer`, wait for the customer answer recorded on the task before resuming. After recording a Pull request, set the task status to Wait customer and monitor it; do not merge it yourself.\n\nkey: GOAL-1\ntitle: Render goal\npriority: P1\nstatus: open\ndescription: line one\nline two\n"
-	if got := res.(map[string]any)["prompt"].(string); got != want {
-		t.Fatalf("prompt = %q, want %q", got, want)
+	prompt := res.(map[string]any)["prompt"].(string)
+	for _, want := range []string{"# Task Processing Order", "## Goal", "key: GOAL-1\ntitle: Render goal\npriority: P1\nstatus: open\ndescription: line one\nline two", "do not merge it yourself"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("missing %q in %s", want, prompt)
+		}
 	}
 }

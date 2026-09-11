@@ -34,37 +34,6 @@ func runtimeTemplate(t *testing.T, name string) image.PromptTemplate {
 	return template
 }
 
-func TestRenderPromptTemplateGoal(t *testing.T) {
-	template := runtimeTemplate(t, "goal")
-	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{Goal: "# Agent Goal\n\nkey: TARI-43"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n# Agent Goal\n\nkey: TARI-43\n"
-	if got != want {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestRenderPromptTemplateEmptyGoalHasNoOutput(t *testing.T) {
-	got, err := RenderPromptTemplate(runtimeTemplate(t, "goal"), t.TempDir(), RuntimePromptValues{})
-	if err != nil || got != "" {
-		t.Fatalf("prompt = %q, %v", got, err)
-	}
-}
-
-func TestRenderPromptTemplateGoalPreservesDescriptionLines(t *testing.T) {
-	goal := "# Agent Goal\n\nkey: TARI-43\ntitle: Render goal\npriority: P1\nstatus: in_progress\ndescription: line one\nline two"
-	got, err := RenderPromptTemplate(runtimeTemplate(t, "goal"), t.TempDir(), RuntimePromptValues{Goal: goal})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n" + goal + "\n"
-	if got != want {
-		t.Fatalf("prompt = %q, want %q", got, want)
-	}
-}
-
 func TestFormatRuntimeGoalPreservesLiteralTaskText(t *testing.T) {
 	got := FormatRuntimeGoal(tasks.Task{
 		Key: "TARI-43", Title: "Render goal", Priority: tasks.PriorityP1,
@@ -85,7 +54,7 @@ func TestFormatRuntimeGoalExplainsCustomerAndPRHandoffs(t *testing.T) {
 	}
 }
 
-func TestRenderPromptTemplateUsesDeclaredOrderOnly(t *testing.T) {
+func TestRenderPromptTemplatePreservesOtherLayersOrder(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "prompt", "layers"), 0o700); err != nil {
 		t.Fatal(err)
@@ -112,16 +81,22 @@ func TestRenderPromptTemplateUsesDeclaredOrderOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "A\n\n# [runtime: identity]\n\nUse the `whoami` skill for this runtime data.\n\nID\n\nB\n\n# [runtime: context]\n\nUse the `context` skill for this runtime data.\n\n# Agent Context\n\nCTX\n\n# [runtime: workdir]\n\nUse the `workdir` skill for this runtime data.\n\nworkdir: /var/lib/tariboy/agents/worker/workdir\n\n# [runtime: one-shot]\n\nRUN\n"; got != want {
-		t.Fatalf("prompt = %q, want %q", got, want)
+	order := []string{"# Task Processing Order", "RUN", "A\n", "# [runtime: identity]", "ID", "B\n", "# [runtime: context]", "CTX", "# [runtime: workdir]", "workdir: /var/lib/tariboy/agents/worker/workdir"}
+	last := -1
+	for _, want := range order {
+		at := strings.Index(got, want)
+		if at <= last {
+			t.Fatalf("missing or misordered %q in %s", want, got)
+		}
+		last = at
 	}
 }
 
-func TestRenderPromptTemplateEmptyHasNoImplicitHeaderOrTail(t *testing.T) {
-	template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{}}
+func TestRenderPromptTemplateEmptyStillIncludesTaskProcessingOrder(t *testing.T) {
+	template := image.PromptTemplate{SchemaVersion: 2}
 	template.SHA256 = promptTemplateSHA(t, template)
 	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{})
-	if err != nil || got != "" {
+	if err != nil || !strings.HasPrefix(got, "# Task Processing Order\n") {
 		t.Fatalf("prompt = %q, %v", got, err)
 	}
 }
@@ -133,13 +108,9 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 		want    string
 	}{
 		{"identity", RuntimePromptValues{Identity: "identity data"}, "# [runtime: identity]\n\nUse the `whoami` skill for this runtime data.\n\nidentity data\n"},
-		{"goal", RuntimePromptValues{Goal: "goal data"}, "# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\ngoal data\n"},
 		{"workdir", RuntimePromptValues{Workdir: "workdir data"}, "# [runtime: workdir]\n\nUse the `workdir` skill for this runtime data.\n\nworkdir data\n"},
 		{"context", RuntimePromptValues{Context: "context data"}, "# [runtime: context]\n\nUse the `context` skill for this runtime data.\n\n# Agent Context\n\ncontext data\n"},
-		{"messages", RuntimePromptValues{Messages: "message data"}, "# [runtime: messages]\n\nUse the `messages` skill for this runtime data.\n\n# Messages\n\nmessage data\n"},
-		{"awaiting-replies", RuntimePromptValues{AwaitingReplies: "reply data"}, "# [runtime: awaiting-replies]\n\nUse the `messages` skill for this runtime data.\n\n# Messages\n\nreply data\n"},
 		{"user-prompt", RuntimePromptValues{UserPrompt: "user prompt"}, "# [runtime: user-prompt]\n\nuser prompt\n"},
-		{"one-shot", RuntimePromptValues{OneShot: "one shot"}, "# [runtime: one-shot]\n\none shot\n"},
 		{"context", RuntimePromptValues{Context: "\n"}, ""},
 	}
 	for _, tt := range tests {
@@ -150,27 +121,11 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != tt.want {
+			_, rest, found := strings.Cut(got, "\n# [runtime:")
+			if tt.want == "" && found || tt.want != "" && (!found || "# [runtime:"+rest != tt.want) {
 				t.Fatalf("prompt = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestRenderPromptTemplateGroupsMessagesAndAwaitingReplies(t *testing.T) {
-	template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{
-		{Kind: "runtime", Runtime: "messages"},
-		{Kind: "runtime", Runtime: "awaiting-replies"},
-	}}
-	template.SHA256 = promptTemplateSHA(t, template)
-	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{
-		Messages: "# Messages\nmessage data", AwaitingReplies: "# Awaiting replies\nreply data",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := "# [runtime: messages]\n\nUse the `messages` skill for this runtime data.\n\n# Messages\nmessage data\n\n# Awaiting replies\nreply data\n"; got != want {
-		t.Fatalf("prompt = %q, want %q", got, want)
 	}
 }
 

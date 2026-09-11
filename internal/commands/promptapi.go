@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
@@ -114,7 +113,17 @@ func promptGet() registry.Command {
 			}
 			var prompt string
 			var layers any = man.Layers
-			if man.SchemaVersion == 2 {
+			goal := ""
+			if a.ImageRef != image.BareRef.String() {
+				if task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
+					return nil, err
+				} else if ok {
+					goal = loop.FormatRuntimeGoal(task)
+				}
+			}
+			if a.ImageRef == image.BareRef.String() {
+				layers = []image.TemplateEntry{}
+			} else if man.SchemaVersion == 2 {
 				data, err := os.ReadFile(filepath.Join(l.ImageDir(), "prompt", "template.json"))
 				if err != nil {
 					return nil, api.UserError{Code: "not_provisioned", Msg: err.Error()}
@@ -123,28 +132,12 @@ func promptGet() registry.Command {
 				if err := json.Unmarshal(data, &template); err != nil {
 					return nil, err
 				}
-				goal := ""
-				hasGoalRuntime := slices.ContainsFunc(template.Entries, func(entry image.TemplateEntry) bool {
-					return entry.Kind == "runtime" && entry.Runtime == "goal"
-				})
-				if hasGoalRuntime || slices.Contains(a.Plugins, "goal") {
-					if task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
-						return nil, err
-					} else if ok {
-						goal = loop.FormatRuntimeGoal(task)
-					} else {
-						goal = loop.FormatRuntimeGoalGuidance()
-					}
-				}
 				prompt, err = loop.RenderPromptTemplate(template, l.ImageDir(), loop.RuntimePromptValues{
 					Identity: loop.FormatRuntimeIdentity(a.Name, a.ImageRef, man.ImageVersion, a.ImageDigest, cwd, ""), Goal: goal, Context: string(contextText),
 					Messages: "[runtime: messages]", UserPrompt: a.UserPrompt, OneShot: "[runtime: one-shot]",
 				})
 				if err != nil {
 					return nil, err
-				}
-				if goal != "" && !hasGoalRuntime {
-					prompt += "\n\n# [runtime: goal]\n\nUse the `goal` skill for this runtime data.\n\n" + goal + "\n"
 				}
 				layers = template.Entries
 			} else {
@@ -153,7 +146,7 @@ func promptGet() registry.Command {
 					return nil, api.UserError{Code: "not_provisioned", Msg: err.Error()}
 				}
 				tail, _ := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT_TAIL.md"))
-				prompt = loop.AssemblePrompt(loop.PromptParts{Agent: a.Name, Cwd: cwd, ImagePrompt: string(imagePrompt), Context: string(contextText), UserPrompt: a.UserPrompt, Tail: string(tail)})
+				prompt = loop.AssemblePrompt(loop.PromptParts{Agent: a.Name, Cwd: cwd, ImagePrompt: string(imagePrompt), Context: string(contextText), UserPrompt: a.UserPrompt, Goal: goal, Messages: "[runtime: messages]", OneShot: "[runtime: one-shot]", Tail: string(tail)})
 			}
 
 			out := map[string]any{"name": a.Name, "prompt": prompt, "layers": layers}
