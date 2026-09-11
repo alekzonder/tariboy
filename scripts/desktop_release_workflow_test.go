@@ -28,6 +28,39 @@ func TestDesktopMacTargetRunsTheReleasePackager(t *testing.T) {
 	}
 }
 
+func TestDesktopMacPackagerRequiresSigningSecrets(t *testing.T) {
+	root := repositoryRoot(t)
+	baseEnv := make([]string, 0, len(os.Environ()))
+	for _, value := range os.Environ() {
+		if !strings.HasPrefix(value, "TAURI_SIGNING_PRIVATE_KEY=") &&
+			!strings.HasPrefix(value, "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=") {
+			baseEnv = append(baseEnv, value)
+		}
+	}
+	for _, testCase := range []struct {
+		name     string
+		key      string
+		password string
+		want     string
+	}{
+		{name: "private key", password: "fixture", want: "TAURI_SIGNING_PRIVATE_KEY is required"},
+		{name: "password", key: "fixture", want: "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is required"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			cmd := exec.Command("bash", filepath.Join(root, "scripts", "package-alpha.sh"))
+			cmd.Dir = root
+			cmd.Env = append(baseEnv,
+				"TAURI_SIGNING_PRIVATE_KEY="+testCase.key,
+				"TAURI_SIGNING_PRIVATE_KEY_PASSWORD="+testCase.password,
+			)
+			output, err := cmd.CombinedOutput()
+			if err == nil || !strings.Contains(string(output), testCase.want) {
+				t.Fatalf("packager did not reject missing %s (err=%v):\n%s", testCase.name, err, output)
+			}
+		})
+	}
+}
+
 func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 	root := repositoryRoot(t)
 	path := filepath.Join(root, ".github", "workflows", "desktop-release.yml")
@@ -97,6 +130,7 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`brew install tmux ripgrep`,
 		`make desktop-mac`,
 		`scripts/desktop-updater-manifest.py`,
+		`desktop/src-tauri/tauri.conf.json`,
 		`*.app.tar.gz`,
 		`*.app.tar.gz.sig`,
 		`gh release create "$GITHUB_REF_NAME"`,

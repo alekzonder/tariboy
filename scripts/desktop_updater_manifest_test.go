@@ -13,19 +13,23 @@ import (
 )
 
 func TestDesktopUpdaterManifestRejectsInvalidInputs(t *testing.T) {
+	keyID := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	tests := []struct {
 		name      string
 		version   string
 		archive   string
 		signature string
+		publicKey string
 		metadata  string
 		wantError string
 	}{
 		{name: "empty signature", version: "1.2.3", archive: "Tariboy.app.tar.gz", metadata: `{"version":"1.2.3"}`},
-		{name: "version mismatch", version: "1.2.4", archive: "Tariboy.app.tar.gz", signature: updaterSignature(), metadata: `{"version":"1.2.3"}`, wantError: "release metadata version does not match updater version"},
-		{name: "missing archive", version: "1.2.3", archive: "missing.app.tar.gz", signature: updaterSignature(), metadata: `{"version":"1.2.3"}`},
+		{name: "version mismatch", version: "1.2.4", archive: "Tariboy.app.tar.gz", signature: updaterSignature(keyID), metadata: `{"version":"1.2.3"}`, wantError: "release metadata version does not match updater version"},
+		{name: "missing archive", version: "1.2.3", archive: "missing.app.tar.gz", signature: updaterSignature(keyID), metadata: `{"version":"1.2.3"}`},
 		{name: "malformed signature", version: "1.2.3", archive: "Tariboy.app.tar.gz", signature: "not base64!", metadata: `{"version":"1.2.3"}`},
-		{name: "unsafe archive basename", version: "1.2.3", archive: "Tariboy unsafe.app.tar.gz", signature: updaterSignature(), metadata: `{"version":"1.2.3"}`},
+		{name: "malformed public key", version: "1.2.3", archive: "Tariboy.app.tar.gz", signature: updaterSignature(keyID), publicKey: "not base64!", metadata: `{"version":"1.2.3"}`, wantError: "updater public key is not valid Tauri minisign encoding"},
+		{name: "wrong signing key", version: "1.2.3", archive: "Tariboy.app.tar.gz", signature: updaterSignature([]byte{8, 7, 6, 5, 4, 3, 2, 1}), metadata: `{"version":"1.2.3"}`, wantError: "updater signature key does not match pinned updater public key"},
+		{name: "unsafe archive basename", version: "1.2.3", archive: "Tariboy unsafe.app.tar.gz", signature: updaterSignature(keyID), metadata: `{"version":"1.2.3"}`},
 	}
 
 	for _, testCase := range tests {
@@ -41,6 +45,12 @@ func TestDesktopUpdaterManifestRejectsInvalidInputs(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(releaseDir, "SHA256SUMS"), []byte("existing  Tariboy_1.2.3_aarch64.dmg\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
+			publicKey := testCase.publicKey
+			if publicKey == "" {
+				publicKey = updaterPublicKey(keyID)
+			}
+			config := filepath.Join(dir, "tauri.conf.json")
+			writeUpdaterConfig(t, config, publicKey)
 			archive := filepath.Join(dir, testCase.archive)
 			if !strings.HasPrefix(testCase.archive, "missing") {
 				if err := os.WriteFile(archive, []byte("archive"), 0o644); err != nil {
@@ -53,7 +63,7 @@ func TestDesktopUpdaterManifestRejectsInvalidInputs(t *testing.T) {
 			}
 
 			cmd := exec.Command("python3", "desktop-updater-manifest.py",
-				testCase.version, archive, signature, releaseDir)
+				testCase.version, archive, signature, releaseDir, config)
 			output, err := cmd.CombinedOutput()
 			if err == nil {
 				t.Fatalf("accepted %s", testCase.name)
@@ -69,6 +79,7 @@ func TestDesktopUpdaterManifestRejectsInvalidInputs(t *testing.T) {
 }
 
 func TestDesktopUpdaterManifestStagesValidMetadata(t *testing.T) {
+	keyID := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	dir := t.TempDir()
 	releaseDir := filepath.Join(dir, "release")
 	if err := os.Mkdir(releaseDir, 0o755); err != nil {
@@ -85,14 +96,16 @@ func TestDesktopUpdaterManifestStagesValidMetadata(t *testing.T) {
 	if err := os.WriteFile(archive, archiveBytes, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	signatureValue := updaterSignature()
+	signatureValue := updaterSignature(keyID)
 	signatureBytes := []byte(signatureValue + "\n")
 	signature := archive + ".sig"
 	if err := os.WriteFile(signature, signatureBytes, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("python3", "desktop-updater-manifest.py", "1.2.3", archive, signature, releaseDir)
+	config := filepath.Join(dir, "tauri.conf.json")
+	writeUpdaterConfig(t, config, updaterPublicKey(keyID))
+	cmd := exec.Command("python3", "desktop-updater-manifest.py", "1.2.3", archive, signature, releaseDir, config)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("generate updater manifest: %v\n%s", err, output)
 	}
@@ -151,13 +164,38 @@ func TestDesktopUpdaterManifestStagesValidMetadata(t *testing.T) {
 	}
 }
 
-func updaterSignature() string {
+func updaterSignature(keyID []byte) string {
 	packet := make([]byte, 74)
 	copy(packet, "Ed")
+	copy(packet[2:10], keyID)
 	global := make([]byte, 64)
 	text := "untrusted comment: signature from minisign secret key\n" +
 		base64.StdEncoding.EncodeToString(packet) + "\n" +
 		"trusted comment: timestamp:1789084800\n" +
 		base64.StdEncoding.EncodeToString(global) + "\n"
 	return base64.StdEncoding.EncodeToString([]byte(text))
+}
+
+func updaterPublicKey(keyID []byte) string {
+	packet := make([]byte, 42)
+	copy(packet, "Ed")
+	copy(packet[2:10], keyID)
+	text := "untrusted comment: minisign public key\n" +
+		base64.StdEncoding.EncodeToString(packet) + "\n"
+	return base64.StdEncoding.EncodeToString([]byte(text))
+}
+
+func writeUpdaterConfig(t *testing.T, path, publicKey string) {
+	t.Helper()
+	contents, err := json.Marshal(map[string]any{
+		"plugins": map[string]any{
+			"updater": map[string]string{"pubkey": publicKey},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, contents, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -78,7 +78,8 @@ jobs:
             exit 1
           }
           python3 scripts/desktop-updater-manifest.py \
-            "$version" "$archive" "$signature" "$release_dir"
+            "$version" "$archive" "$signature" "$release_dir" \
+            desktop/src-tauri/tauri.conf.json
 
       - name: Publish GitHub Release
         env:

@@ -459,22 +459,30 @@ make desktop PLATFORM=linux  # .deb and .AppImage
 The preflight rejects unknown platform values, unsupported host architectures,
 and a platform that does not match the current host before compiling payloads.
 
-`make desktop-mac` packages and verifies the alpha. Tauri also creates a signed
-macOS updater archive when `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are present. The release owner permanently
-owns and backs up that private key; its matching public key is pinned in the
-Desktop bundle. Never print or commit the signing Secrets. Key rotation requires
-a separately planned release because installed applications trust the embedded
-public key.
+Ordinary `make desktop` packages keep Tauri updater artifacts disabled, so local
+macOS and Linux builds do not need the release owner's private key. The macOS
+path still creates the ad-hoc-signed app and DMG.
+
+`make desktop-mac` is the signed release path. It requires
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, enables the
+Tauri updater archive and signature explicitly, and fails before packaging when
+either variable is missing. The release owner permanently owns and backs up that
+private key; its matching public key is pinned in the Desktop bundle. Never print
+or commit the signing Secrets. Key rotation requires a separately planned
+release because installed applications trust the embedded public key.
 
 Pushing an exact `vX.Y.Z` tag whose version matches both canonical declarations
 runs the same target on GitHub's `macos-15` runner. The workflow requires both
 signing Secrets, finds the single generated `.app.tar.gz` and `.sig` pair, and
 stages them with the checked DMG, `SHA256SUMS`, `release.json`, and `latest.json`.
-It creates a draft GitHub Release, uploads the complete set, and only then makes
-the release public, so the latest catalog cannot reference missing assets. The
-first updater-enabled version must still be installed from the DMG; only later,
-higher signed versions can be installed by the updater.
+Before staging, the manifest gate rejects malformed packets or a signature key
+identifier that differs from the public key in `tauri.conf.json`. This identifies
+an accidental wrong signing Secret; cryptographic archive verification remains
+the installed updater's responsibility. The workflow creates a draft GitHub
+Release, uploads the complete set, and only then makes the release public, so the
+latest catalog cannot reference missing assets. The first updater-enabled version
+must still be installed from the DMG; only later, higher signed versions can be
+installed by the updater.
 
 The tray action **Install/Update CLI** owns the local five-file payload and
 six-command-path install. It preflights and atomically switches `tariboyd`,
