@@ -47,16 +47,35 @@ describe("task Markdown", () => {
     expect(container.querySelector('a[href^="javascript:"]')).toBeNull()
   })
 
-  it("keeps unsupported Markdown verbatim in source mode", () => {
-    const value = "# Plan\n\n<!-- keep this -->\n\nA footnote[^1].\n\n[^1]: preserve me\n"
+  it("keeps unsupported Markdown visible and editable in rich mode", () => {
+    const value = "# Plan\n\n<!-- keep this -->\n\nReference [Tariboy][site].\n\n[site]: https://example.com\n"
     const onChange = vi.fn()
     render(<MarkdownEditor id="description" value={value} onChange={onChange} />)
-    expect(screen.getByRole("textbox")).toHaveValue(value)
-    expect(screen.getByRole("button", { name: "Rich text" })).toBeDisabled()
-    expect(screen.getByRole("status")).toHaveTextContent(/preserv/i)
+    const textbox = screen.getByRole("textbox")
+    expect(textbox).toHaveAttribute("contenteditable", "true")
+    expect(textbox).toHaveTextContent("<!-- keep this -->")
+    expect(textbox).toHaveTextContent("[site]: https://example.com")
+    expect(screen.getByRole("button", { name: "Rich text" })).toHaveAttribute("aria-pressed", "true")
     expect(onChange).not.toHaveBeenCalled()
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: value + "More" } })
-    expect(onChange).toHaveBeenCalledWith(value + "More")
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor
+    act(() => { editor.commands.insertContentAt(editor.state.doc.content.size, "More") })
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("<!-- keep this -->"))
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("[site]: https://example.com"))
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining("More"))
+  })
+
+  it("preserves Markdown fences inside unsupported blocks", () => {
+    const value = "<!-- example\n```sh\necho hi\n```\n-->\n"
+    const onChange = vi.fn()
+    const { unmount } = render(<MarkdownEditor value={value} onChange={onChange} />)
+    const textbox = screen.getByRole("textbox")
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor
+    act(() => { editor.commands.insertContentAt(editor.state.doc.content.size, "More") })
+
+    const emitted = onChange.mock.lastCall?.[0]
+    unmount()
+    render(<MarkdownEditor value={emitted} onChange={() => {}} />)
+    expect(screen.getByRole("textbox").textContent).toContain("<!-- example\n```sh\necho hi\n```\n-->")
   })
 
   it("switches modes without changing source and emits Markdown for rich edits", () => {
@@ -101,7 +120,7 @@ describe("task Markdown", () => {
     expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "false")
     expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled()
     rerender(<MarkdownEditor value="<!-- source -->" onChange={() => {}} disabled />)
-    expect(screen.getByRole("textbox")).toBeDisabled()
+    expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "false")
   })
 
   it.each(["", " \n", "Hello\n", "* First\n* Second\n", "1. First\n2. ", "1. ", "1. First\n   1. Nested\n   2. ", "# Heading\n\nParagraph\n"])("allows harmless formatting normalization without changing %j", (value) => {
