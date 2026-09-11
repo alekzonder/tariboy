@@ -51,7 +51,7 @@ scan_old_version() {
 
 scan_secrets() {
   local status
-  if rg -uu -n \
+  if grep -IrnE \
     -e '-----BEGIN (OPENSSH |RSA |EC |DSA )?PRIVATE KEY-----' \
     -e 'ghp_[A-Za-z0-9]{20,}' \
     -e 'github_pat_[A-Za-z0-9_]{20,}' \
