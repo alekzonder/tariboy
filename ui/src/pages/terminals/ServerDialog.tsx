@@ -8,6 +8,7 @@ import {
   type DaemonMeta,
 } from "@/lib/daemons";
 import {
+  hostConnect,
   hostPromptReply,
   hostProvision,
   hostSaveSsh,
@@ -119,6 +120,7 @@ export function ServerDialog({
   );
   const [label, setLabel] = useState(server?.label ?? "");
   const [sshAlias, setSshAlias] = useState(server?.sshAlias ?? "");
+  const [sshSetup, setSshSetup] = useState<"install" | "connect">("install");
   const [baseURL, setBaseURL] = useState(server?.baseURL ?? "");
   const [token, setToken] = useState("");
   const [tokenStored, setTokenStored] = useState(false);
@@ -162,6 +164,7 @@ export function ServerDialog({
         setTransport(nextTransport);
         setLabel(server?.label ?? "");
         setSshAlias(server?.sshAlias ?? "");
+        setSshSetup("install");
         setBaseURL(server?.baseURL ?? "");
         setToken("");
         setTokenStored(stored);
@@ -203,16 +206,29 @@ export function ServerDialog({
             : current?.prerequisites ?? [],
       }));
       const phaseStep = hostStepForPhase(next.phase);
-      if (next.state === "failed" && operationRef.current.status !== "idle") {
+      const existingUnavailable = operationRef.current.kind === "connect"
+        && next.state === "connecting"
+        && next.message.startsWith("remote daemon health timed out:");
+      const existingNeedsAuth = operationRef.current.kind === "connect"
+        && next.state === "needs_auth";
+      if (
+        (next.state === "failed" || existingNeedsAuth || existingUnavailable)
+        && operationRef.current.status !== "idle"
+      ) {
         updateOperation((current) => ({
           ...current,
           status: "failed",
-          currentStep: phaseStep ?? current.currentStep ?? "connect",
-          error: formatHostOperationError(next.message),
+          currentStep: existingUnavailable ? "reconnect" : phaseStep ?? current.currentStep ?? "connect",
+          error: existingUnavailable
+            ? "Existing Tariboy is unavailable at 127.0.0.1:9990."
+            : formatHostOperationError(next.message),
         }));
       } else if (
         next.state === "ready"
-        && operationRef.current.status === "running"
+        && (
+          operationRef.current.status === "running"
+          || (operationRef.current.kind === "connect" && operationRef.current.status === "failed")
+        )
       ) {
         updateOperation((current) => ({
           ...current,
@@ -284,6 +300,9 @@ export function ServerDialog({
     || sshAlias.trim() !== (server?.sshAlias ?? "")
   );
   const stepStates = hostStepStates(operation.currentStep, operation.status);
+  const progressSteps = operation.kind === "connect"
+    ? HOST_PROGRESS_STEPS.filter((step) => step.id === "connect" || step.id === "reconnect")
+    : HOST_PROGRESS_STEPS;
   const prerequisites = displayHost?.prerequisites ?? [];
   const installRequirements = prerequisites.filter((item) =>
     INSTALL_REQUIREMENTS.has(item)
@@ -349,15 +368,15 @@ export function ServerDialog({
     }
   };
 
-  const submitSsh = async () => {
+  const submitSsh = async (setup = sshSetup) => {
     const cleanLabel = label.trim();
     const cleanAlias = sshAlias.trim();
     if (!cleanLabel) return setFormError("label is required");
     if (!cleanAlias) return setFormError("SSH alias is required");
-    beginOperation("provision");
+    beginOperation(setup === "connect" ? "connect" : "provision");
     try {
       const saved = await hostSaveSsh({
-        id: server?.id,
+        id: hostIdRef.current || server?.id,
         label: cleanLabel,
         ssh_alias: cleanAlias,
       });
@@ -365,9 +384,13 @@ export function ServerDialog({
       hostIdRef.current = saved.id;
       setHost(saved);
       onSaved();
-      const operation = await hostProvision(saved.id);
-      if (!operation) throw new Error("host_provision is unavailable outside the desktop shell");
-      rememberOperationId(operation.operation_id);
+      if (setup === "connect") {
+        await hostConnect(saved.id);
+      } else {
+        const operation = await hostProvision(saved.id);
+        if (!operation) throw new Error("host_provision is unavailable outside the desktop shell");
+        rememberOperationId(operation.operation_id);
+      }
     } catch (cause) {
       failOperation(cause);
     }
@@ -473,16 +496,62 @@ export function ServerDialog({
                 </p>
               </div>
 
+              {!editing && (
+                <fieldset className="space-y-2 rounded-lg border p-3" disabled={operation.status === "running"}>
+                  <legend className="px-1 text-sm font-medium">Setup</legend>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      aria-label="Install Tariboy"
+                      name="ssh-setup"
+                      value="install"
+                      checked={sshSetup === "install"}
+                      onChange={() => {
+                        setSshSetup("install");
+                        updateOperation(idleOperation("provision"));
+                      }}
+                    />
+                    <span>
+                      <span className="block font-medium">Install Tariboy</span>
+                      <span className="text-xs text-muted-foreground">Install and start the bundled version.</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="radio"
+                      aria-label="Connect to existing Tariboy"
+                      name="ssh-setup"
+                      value="connect"
+                      checked={sshSetup === "connect"}
+                      onChange={() => {
+                        setSshSetup("connect");
+                        updateOperation(idleOperation("connect"));
+                      }}
+                    />
+                    <span>
+                      <span className="block font-medium">Connect to existing Tariboy</span>
+                      <span className="text-xs text-muted-foreground">Connect without installing or restarting Tariboy.</span>
+                    </span>
+                  </label>
+                </fieldset>
+              )}
+
               <section className="min-w-0 space-y-2 rounded-lg border p-3">
                 <h3 className="text-sm font-medium">
-                  {operation.kind === "update" ? "Update Tariboy" : "Connect Tariboy"}
+                  {operation.kind === "update"
+                    ? "Update Tariboy"
+                    : operation.kind === "connect"
+                      ? "Connect to existing Tariboy"
+                      : "Connect Tariboy"}
                 </h3>
                 <ol className="space-y-1.5 text-sm">
-                  {HOST_PROGRESS_STEPS.map((step) => {
+                  {progressSteps.map((step) => {
                     const state = stepStates[step.id];
                     const label = operation.kind === "update"
                       ? step.updateLabel
-                      : step.provisionLabel;
+                      : operation.kind === "connect" && step.id === "reconnect"
+                        ? "Check existing Tariboy"
+                        : step.provisionLabel;
                     const marker = state === "complete"
                       ? "✓"
                       : state === "failed"
@@ -650,6 +719,15 @@ export function ServerDialog({
                 <Button type="button" onClick={() => void updateHost()}>
                   Retry update
                 </Button>
+              ) : operation.status === "failed" && operation.kind === "connect" ? (
+                <>
+                  <Button type="button" variant="outline" onClick={() => void submitSsh("connect")}>
+                    Retry connection
+                  </Button>
+                  <Button type="button" onClick={() => void submitSsh("install")}>
+                    Install Tariboy
+                  </Button>
+                </>
               ) : !editing ? (
                 <Button type="button" onClick={() => void submitSsh()}>
                   Add and connect

@@ -49,13 +49,28 @@ agent's explicit `PATH` overrides the daemon baseline and therefore must retain
 both prerequisites; non-bare images then prepend their agent bin directory,
 while bare images do not.
 
-## Add and provision
+## Add a host
 
 1. Confirm the alias works in Terminal: `ssh build-box`.
 2. Add the same alias under **Settings → Hosts**.
-3. Run preflight and review its output.
-4. Answer first-seen host-key or 2FA prompts in the desktop when requested.
-5. Install the matching version and wait for tunnel health to become Ready.
+3. Choose one of the two setup modes:
+   - **Install Tariboy** (default) runs preflight, uploads and installs the
+     matching release, starts the daemon, and connects the tunnel.
+   - **Connect to existing Tariboy** saves the host and connects without
+     uploading, installing, activating, starting, or restarting anything.
+
+Both modes use system OpenSSH and its existing host-key, ssh-agent, ProxyJump,
+and authentication rules. **Connect to existing Tariboy** creates an
+independent dynamic local forward from `127.0.0.1` to the remote daemon at
+`127.0.0.1:9990`, then checks daemon health through that tunnel. A successful
+probe marks the host Ready, and the ordinary saved-host reconnect restores the
+tunnel after Desktop restarts.
+
+If no daemon answers at the remote loopback port, Desktop keeps the saved host
+and does not install or start anything automatically. The dialog offers to
+retry the connection or run **Install Tariboy** explicitly. A daemon version
+different from Desktop is allowed to connect; the existing **Update** indicator
+reports the mismatch without triggering an update.
 
 System OpenSSH honors `~/.ssh/config`, ProxyJump, ssh-agent, hardware-backed
 keys, `known_hosts`, and organization authentication. Tariboy never adds
