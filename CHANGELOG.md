@@ -1,3 +1,11 @@
+## [0.57.1] - 2026-09-11
+
+### Fixed
+
+- Validate schema-v2 editable image sources before building them.
+
+[0.57.1]: https://github.com/alekzonder/tariboy/compare/v0.57.0...v0.57.1
+
 ## [0.57.0] - 2026-09-11
 
 ### Added
