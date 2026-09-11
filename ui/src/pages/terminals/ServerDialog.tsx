@@ -218,7 +218,11 @@ export function ServerDialog({
         updateOperation((current) => ({
           ...current,
           status: "failed",
-          currentStep: existingUnavailable ? "reconnect" : phaseStep ?? current.currentStep ?? "connect",
+          currentStep: existingUnavailable
+            ? "reconnect"
+            : current.kind === "connect"
+              ? "connect"
+              : phaseStep ?? current.currentStep ?? "connect",
           error: existingUnavailable
             ? "Existing Tariboy is unavailable at 127.0.0.1:9990."
             : formatHostOperationError(next.message),
@@ -373,6 +377,7 @@ export function ServerDialog({
     const cleanAlias = sshAlias.trim();
     if (!cleanLabel) return setFormError("label is required");
     if (!cleanAlias) return setFormError("SSH alias is required");
+    setSshSetup(setup);
     beginOperation(setup === "connect" ? "connect" : "provision");
     try {
       const saved = await hostSaveSsh({
