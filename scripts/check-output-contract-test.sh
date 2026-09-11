@@ -68,7 +68,7 @@ cat >"$fixture/bin/npx" <<'EOF'
 printf '%s:npx %s\n' "${PWD##*/}" "$*" >>../events
 EOF
 chmod +x "$fixture/bin/go" "$fixture/fake-goroot/bin/gofmt" "$fixture/bin/npm" "$fixture/bin/npx"
-for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh; do
+for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh package-alpha-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh; do
   printf '#!/bin/sh\nexit 0\n' >"$fixture/scripts/$script"
   chmod +x "$fixture/scripts/$script"
 done
