@@ -2,7 +2,7 @@ use semver::Version;
 use serde::Serialize;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 pub const STATE_EVENT: &str = "desktop://update-state";
@@ -200,7 +200,9 @@ fn publish(app: &AppHandle, view: UpdateView) -> UpdateView {
 
 fn is_newer_stable(current: &str, candidate: &str) -> bool {
     match (Version::parse(current), Version::parse(candidate)) {
-        (Ok(current), Ok(candidate)) => candidate.pre.is_empty() && candidate > current,
+        (Ok(current), Ok(candidate)) => {
+            candidate.pre.is_empty() && candidate.cmp_precedence(&current).is_gt()
+        }
         _ => false,
     }
 }
@@ -232,7 +234,8 @@ pub async fn desktop_update_download(
         .updater_builder()
         .timeout(NETWORK_TIMEOUT)
         .version_comparator(|current, release| {
-            release.version.pre.is_empty() && release.version > current
+            release.version.pre.is_empty()
+                && release.version.cmp_precedence(&current).is_gt()
         })
         .build()
     {
@@ -396,6 +399,8 @@ mod tests {
     fn only_higher_stable_versions_are_accepted() {
         assert!(is_newer_stable("1.0.0", "1.0.1"));
         assert!(!is_newer_stable("1.0.0", "1.0.0"));
+        assert!(!is_newer_stable("1.0.0", "1.0.0+build.1"));
+        assert!(!is_newer_stable("1.0.0+build.1", "1.0.0+build.2"));
         assert!(!is_newer_stable("1.0.0", "0.9.9"));
         assert!(!is_newer_stable("1.0.0", "1.1.0-beta.1"));
         assert!(!is_newer_stable("invalid", "1.0.1"));
