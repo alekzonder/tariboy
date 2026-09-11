@@ -94,3 +94,23 @@ jobs:
             --title "Tariboy $version"
           gh release upload "$GITHUB_REF_NAME" "$release_dir"/*
           gh release edit "$GITHUB_REF_NAME" --draft=false
+
+  docs:
+    name: Publish documentation
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Publish documentation branch
+        run: make docs
