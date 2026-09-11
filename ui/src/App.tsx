@@ -1,10 +1,10 @@
-import { Navigate, Route, Routes, useLocation, useOutletContext, useParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useOutletContext, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DaemonBanner } from "@/components/DaemonBanner";
 import { DaemonProvider, useDaemons } from "@/components/DaemonProvider";
 import { Button } from "@/components/ui/button";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import ImageOverview from "@/pages/ImageOverview";
 import ImageTemplate from "@/pages/images/ImageTemplate";
 import ImageSkills from "@/pages/images/ImageSkills";
@@ -34,15 +34,22 @@ import { useSharedSidebarState } from "@/pages/terminals/sidebarStateContext";
 import { hostToParam } from "@/lib/terminalsHost";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
 import type { ApiTarget } from "@/lib/api";
+import {
+  AppSettings,
+  DesktopUpdatesProvider,
+  UpdateBanner,
+} from "@/components/DesktopUpdates";
 
 export default function App() {
   return (
     <DaemonProvider>
       <CustomerQuestionNotifications>
         <SidebarStateProvider>
-          <div className="flex h-screen flex-col">
-            <MainApp />
-          </div>
+          <DesktopUpdatesProvider>
+            <div className="flex h-screen flex-col">
+              <MainApp />
+            </div>
+          </DesktopUpdatesProvider>
         </SidebarStateProvider>
       </CustomerQuestionNotifications>
       <Toaster richColors />
@@ -91,14 +98,22 @@ function MainApp() {
           className="h-full min-w-4 flex-1"
         />
         <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/app-settings" aria-label="Настройки приложения">
+              <Settings className="size-4" />
+              Настройки
+            </Link>
+          </Button>
           <ThemeToggle />
         </div>
       </header>
+      <UpdateBanner />
       <DaemonBanner />
       <main className="min-h-0 flex-1 overflow-hidden">
         <Routes>
           <Route path="/" element={<TerminalsPage />} />
           <Route path="/workspace" element={<TerminalsPage />} />
+          <Route path="/app-settings" element={<AppSettings />} />
           <Route path="/agents/new" element={<CanonicalCreateRedirect />} />
           <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
           <Route path="/agents/:hostId/:agent/:tab/*" element={<TerminalsPage />} />

@@ -29,6 +29,15 @@ adoption/start and saved-host reconnect continue independently in the
 background, so their existing status banners may be visible during startup.
 Dock reopen and the menu-bar Open action raise the same main window.
 
+Application settings live at `/app-settings` and remain available without a
+daemon connection. Desktop update checks use the native application host and
+never target the selected local or remote daemon. Automatic download is enabled
+by default, persists in WebView localStorage, runs on startup and then every six
+hours while enabled, and never installs automatically. A verified package stays
+only in Rust process memory, so quitting Desktop discards it. When one is ready,
+the route-independent banner below the titlebar requires an explicit install
+action and reports installation failures for retry.
+
 The primary agent dialog has **Target**, **Identity**, **Runtime**,
 **Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
 documented defaults and submits one complete create request; the daemon writes

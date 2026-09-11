@@ -83,6 +83,21 @@ describe("product routing", () => {
       .toBeInTheDocument();
   });
 
+  it("opens daemon-independent application settings from the titlebar", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("daemon down")));
+    renderAt("/");
+
+    const titlebar = screen.getByTestId("app-titlebar");
+    const settings = within(titlebar).getByRole("link", { name: "Настройки приложения" });
+    expect(settings).toHaveAttribute("href", "/app-settings");
+    fireEvent.click(settings);
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app-settings"));
+    expect(screen.getByRole("heading", { name: "Настройки приложения" })).toBeInTheDocument();
+    expect(screen.getByText("Обновления доступны только в приложении Desktop."))
+      .toBeInTheDocument();
+  });
+
   it("renders Tasks inside an explicit server workspace", async () => {
     renderAt("/servers/local/tasks");
 
