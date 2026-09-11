@@ -170,7 +170,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
 | `scripts/scripts.sh schedule NAME --every SECONDS [--quiet-exit CODE] -- COMMAND` | Run now and repeat after each completion |
 | `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
-| `scripts/scripts.sh rerun SCRIPT_ID` | Rerun a completed one-shot definition |
+| `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
 | `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from an agent-confined source directory (`image-creator` only) |
 

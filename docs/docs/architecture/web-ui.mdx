@@ -293,6 +293,11 @@ remain. The dialog cannot be dismissed or submitted twice while the one bulk
 request is running. Success reports the server's delivery/message counters and
 reloads Queue; failure keeps the authoritative rows visible for retry.
 
+An agent's **Scripts** view exposes **Exec** for a completed one-shot or an
+active recurring definition with no pending or running attempt. Exec queues the
+stored command through the ordinary script worker; recurring definitions resume
+their fixed post-completion delay after that manual run.
+
 Notifications and customer-only queue administration live in the same
 workspace. A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task; it updates from the

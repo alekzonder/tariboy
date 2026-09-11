@@ -95,7 +95,7 @@ func scriptCreateArgs(schedule bool) []registry.Arg {
 }
 
 func scriptRerun() registry.Command {
-	return scriptRunAction("script.rerun", "Rerun a completed one-shot script", "POST", "/api/agents/{name}/scripts/{id}/rerun", func(sc registry.ScriptControl, name, id string) (any, error) {
+	return scriptRunAction("script.rerun", "Run an eligible stored script immediately", "POST", "/api/agents/{name}/scripts/{id}/rerun", func(sc registry.ScriptControl, name, id string) (any, error) {
 		run, err := sc.RerunScript(name, id)
 		return scriptRunView(run), err
 	})
