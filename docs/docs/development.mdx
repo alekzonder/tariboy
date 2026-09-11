@@ -158,11 +158,13 @@ Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
 Go unit tests and smoke contracts. The frontend target runs UI
-typecheck, lint, unit tests, branding, and the documentation checks. All three
-are read-only: they never install dependencies, write into `bin/`, or dirty
-`git status`. Each step reports its result and duration as it finishes.
-Successful command output is suppressed; failed steps print their command and
-complete diagnostics, and every run ends with a compact summary.
+typecheck, lint, unit tests, branding, and the documentation checks. Before
+checking, `backend-check` runs `go mod download`, and `frontend-check` runs
+locked `npm ci` installs under both `ui/` and `docs/`. They do not write into
+`bin/` or dirty `git status`. Each step reports its result and duration as it
+finishes.
+Successful check-step output is suppressed; failed steps print their command
+and complete diagnostics, and every run ends with a compact summary.
 
 `make full-check` is the full set of checks that run unattended on a developer
 machine, not every check in the repository. It runs `check`, then `build`, the
@@ -170,14 +172,13 @@ four core E2E scripts, `full-smoke`, the two Playwright browser suites, and one
 desktop step for the host: `desktop-e2e` on Linux x86_64, `desktop` plus
 `desktop-smoke` on macOS arm64, and the version and lock gates alone elsewhere.
 
-The check targets do not stop at the first failure. Each step is timed and
-recorded, and the run ends with a summary table naming every step that failed,
-so one aggregate pass surfaces gofmt drift and a UI type error together.
+After dependency preparation succeeds, the check steps do not stop at the
+first failure. Each step is timed and recorded, and the run ends with a summary
+table naming every step that failed, so one aggregate pass surfaces gofmt drift
+and a UI type error together.
 
-`frontend-check`, `check`, and `full-check` require `ui/node_modules` and
-`docs/node_modules` to exist; run `npm ci` in those directories once, as
-described below. These targets do not install them, because installing would
-rewrite a shared working tree.
+`frontend-check`, `check`, and `full-check` refresh `ui/node_modules` and
+`docs/node_modules` from the committed lockfiles before running checks.
 
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
@@ -300,8 +301,8 @@ dedicated config.
 
 ### React UI
 
-Install the dependencies once; neither entry point does it for you, and both
-fail with an explicit `cd ui && npm ci` hint when `ui/node_modules` is missing:
+`frontend-check` and its aggregate entry points install the locked dependencies
+before checking. To install them directly while iterating:
 
 ```bash
 cd ui
@@ -433,8 +434,8 @@ binary payloads, and native packages for the selected platform. `PLATFORM`
 defaults to the supported native host and accepts `darwin` or `linux`; it does
 not enable cross-compilation. A standalone invocation runs `npm ci` when
 `ui/node_modules` is absent, using the committed lockfile before it builds the
-SPA. Verification entry points keep their prepared-dependency contract and do
-not install Node packages.
+SPA. Verification entry points already install Node packages, so their Desktop
+step skips that duplicate work.
 
 On Darwin arm64:
 
@@ -482,7 +483,8 @@ Other documentation pages keep the standard sidebar layout. Use site-root paths
 such as `/quickstart` in Markdown and Card links; Blume adds the deployment
 base to produce `/tariboy/quickstart`. Raw HTML anchors are not rewritten.
 
-Install the dependencies once, as for the UI:
+`frontend-check` and its aggregate entry points install the locked dependencies
+before checking. To install them directly while iterating:
 
 ```bash
 cd docs

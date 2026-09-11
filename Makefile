@@ -11,8 +11,8 @@ SA := $(BINDIR)/tariboy
 # stack. Callers with a constrained host can override this to 1.
 DESKTOP_E2E_WORKERS ?= 2
 # A standalone package build owns its UI bootstrap. Verification entry points
-# override this to 0 so their documented read-only dependency contract remains
-# intact in a shared working tree.
+# override this to 0 because `check` has already installed the locked UI
+# dependencies.
 DESKTOP_INSTALL_UI_DEPS ?= 1
 
 # `go list ./...` descends into a Go package shipped by one UI dependency.
@@ -450,9 +450,9 @@ desktop-smoke:
 # `backend-check` and `frontend-check` split the fast list; `check` composes both.
 # They do not replace the existing targets: every brick above stays callable.
 #
-# The fast checks are safe to run in a shared working tree: they only read. They
-# never rewrite files (`fmt` is deliberately NOT part of them — fmt-check is),
-# never install node modules, and never write into $(BINDIR).
+# The fast checks prepare locked dependencies before checking. They do not
+# rewrite tracked files (`fmt` is deliberately NOT part of them — fmt-check
+# is) or write into $(BINDIR).
 # `full-check` is the heavy one: it builds, runs the e2e scripts, full-smoke, the
 # browser suites and the desktop gates.
 #
@@ -469,7 +469,8 @@ SUBMAKE := $(MAKE) --no-print-directory
 # pass has to surface gofmt drift AND a ui type error at once, not one per pass.
 # summarize prints the table and owns the exit status. There is no fail-fast flag
 # by design. The subshell is what makes `cd ui && ...` steps safe to chain, and
-# eval (rather than sh -c) is what keeps need_node_modules visible inside it.
+# eval (rather than sh -c) keeps need_node_modules visible to full-check's
+# later browser steps.
 define STEP_RUNNER
 set +e; \
 rows=""; failed=0; __step=0; \
@@ -523,6 +524,7 @@ summarize() { \
 endef
 
 backend-check:
+	$(GO) mod download
 	@$(STEP_RUNNER); \
 	run_step "fmt-check"    '$(SUBMAKE) fmt-check'; \
 	run_step "vet"          '$(SUBMAKE) vet'; \
@@ -532,12 +534,14 @@ backend-check:
 	summarize backend-check
 
 frontend-check:
+	cd ui && npm ci
+	cd docs && npm ci
 	@$(STEP_RUNNER); \
-	run_step "ui-typecheck" 'need_node_modules ui && cd ui && npx tsc -b'; \
-	run_step "ui-lint"      'need_node_modules ui && cd ui && npm run lint'; \
-	run_step "ui-test"      'need_node_modules ui && cd ui && npm test'; \
-	run_step "ui-branding"  'need_node_modules ui && cd ui && npm run branding:check'; \
-	run_step "docs"         'need_node_modules docs && cd docs && npm run doctor && npm run build && ../scripts/docs-build-contract-test.sh'; \
+	run_step "ui-typecheck" 'cd ui && npx tsc -b'; \
+	run_step "ui-lint"      'cd ui && npm run lint'; \
+	run_step "ui-test"      'cd ui && npm test'; \
+	run_step "ui-branding"  'cd ui && npm run branding:check'; \
+	run_step "docs"         'cd docs && npm run doctor && npm run build && ../scripts/docs-build-contract-test.sh'; \
 	summarize frontend-check
 
 check:
@@ -580,10 +584,8 @@ endif
 # macOS arm64 the step reaches `ui` — desktop (macOS arm64) and
 # desktop-e2e-build (Linux x86_64) both call `$(MAKE) ui`. A standalone
 # `make desktop` bootstraps missing UI dependencies, but the macOS full-check
-# command disables that bootstrap so this gate keeps the same prepared
-# `ui/node_modules` contract as `check`. This keeps the full gate read-only with
-# respect to Node dependencies and confines a missing dependency failure to the
-# final desktop row. Do not reorder these lines for speed: the desktop step
+# command disables that bootstrap because `check` has already installed locked
+# UI dependencies. Do not reorder these lines for speed: the desktop step
 # remains last to keep generated desktop artifacts out of the earlier checks.
 full-check:
 	@$(STEP_RUNNER); \

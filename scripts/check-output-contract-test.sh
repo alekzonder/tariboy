@@ -43,3 +43,52 @@ make --no-print-directory -C "$fixture" GO=false VERSION=test tariboy-tasks-e2e
 test -f "$fixture/ran-e2e"
 test ! -e "$fixture/bin"
 echo "Tasks check build isolation contract ok"
+
+# Dependency preparation must finish before either fast check starts.
+mkdir -p "$fixture/bin" "$fixture/fake-goroot/bin" "$fixture/empty-go" "$fixture/ui" "$fixture/docs"
+cat >"$fixture/bin/go" <<'EOF'
+#!/bin/sh
+printf 'go:%s\n' "$*" >>events
+case "$*" in
+  'list -f {{.Dir}} ./...') printf '%s\n' "$PWD/empty-go" ;;
+  'env GOROOT') printf '%s\n' "$PWD/fake-goroot" ;;
+  'list ./...') printf '%s\n' example.invalid/pkg ;;
+esac
+EOF
+cat >"$fixture/fake-goroot/bin/gofmt" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat >"$fixture/bin/npm" <<'EOF'
+#!/bin/sh
+printf '%s:npm %s\n' "${PWD##*/}" "$*" >>../events
+EOF
+cat >"$fixture/bin/npx" <<'EOF'
+#!/bin/sh
+printf '%s:npx %s\n' "${PWD##*/}" "$*" >>../events
+EOF
+chmod +x "$fixture/bin/go" "$fixture/fake-goroot/bin/gofmt" "$fixture/bin/npm" "$fixture/bin/npx"
+for script in tariboy-tasks-e2e.sh tariboy-smoke-contract-test.sh tariboy-branding-contract-test.sh make-clean-contract-test.sh server-install-contract-test.sh publish-docs-contract-test.sh; do
+  printf '#!/bin/sh\nexit 0\n' >"$fixture/scripts/$script"
+  chmod +x "$fixture/scripts/$script"
+done
+cat >"$fixture/scripts/check-output-contract-test.sh" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat >"$fixture/scripts/docs-build-contract-test.sh" <<'EOF'
+#!/bin/sh
+printf 'docs:contract\n' >>../events
+EOF
+chmod +x "$fixture/scripts/check-output-contract-test.sh" "$fixture/scripts/docs-build-contract-test.sh"
+
+: >"$fixture/events"
+PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" GO=go backend-check
+test "$(sed -n '1p' "$fixture/events")" = 'go:mod download'
+
+: >"$fixture/events"
+PATH="$fixture/bin:$PATH" make --no-print-directory -C "$fixture" frontend-check
+test "$(sed -n '1p' "$fixture/events")" = 'ui:npm ci'
+test "$(sed -n '2p' "$fixture/events")" = 'docs:npm ci'
+test "$(sed -n '3p' "$fixture/events")" = 'ui:npx tsc -b'
+echo "Check dependency preparation contract ok"

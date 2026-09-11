@@ -29,14 +29,6 @@ jobs:
             ui/package-lock.json
             docs/package-lock.json
 
-      - name: Install UI dependencies
-        run: npm ci
-        working-directory: ui
-
-      - name: Install documentation dependencies
-        run: npm ci
-        working-directory: docs
-
       # Loop tests use a fake spawner but still validate the selected harness exists.
       - name: Provide Codex test harness
         run: |
