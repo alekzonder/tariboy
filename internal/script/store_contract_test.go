@@ -113,14 +113,20 @@ func TestCompleteRunSuppressesOnlyExplicitQuietExit(t *testing.T) {
 	}
 }
 
-func TestRerunRejectsRecurringAndActiveDefinitions(t *testing.T) {
+func TestRerunRejectsDefinitionsWithActiveRuns(t *testing.T) {
 	st := newContractStore(t, time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC))
 	recurring, _, err := st.CreateSchedule("alice", CreateSchedule{Name: "watch", Description: "watch", Command: "true", IntervalSeconds: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Rerun("alice", recurring.ID); !errors.Is(err, ErrMode) {
+	if _, err := st.Rerun("alice", recurring.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("recurring rerun error=%v", err)
+	}
+	if err := st.CancelDefinition("alice", recurring.ID, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Rerun("alice", recurring.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("cancelled recurring rerun error=%v", err)
 	}
 	once, _, err := st.CreateOnce("alice", CreateOnce{Name: "once", Description: "once", Command: "true"})
 	if err != nil {
@@ -165,6 +171,43 @@ func TestCompletedOneShotCanBeRerunAndListsNewestFirst(t *testing.T) {
 	runs, err := st.ListRuns("alice", definition.ID)
 	if err != nil || len(runs) != 2 || runs[0].ID != second.ID || runs[1].ID != first.ID {
 		t.Fatalf("runs=%#v err=%v", runs, err)
+	}
+}
+
+func TestRecurringScriptCanRunNowBetweenScheduledRuns(t *testing.T) {
+	now := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
+	st := newContractStore(t, now)
+	definition, first, err := st.CreateSchedule("alice", CreateSchedule{Name: "watch", Description: "watch", Command: "true", IntervalSeconds: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := st.ClaimRun("alice", first.ID, now.Format(time.RFC3339), "/tmp/first.log"); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	if _, err := st.CompleteRun("alice", first.ID, Completion{Status: RunSucceeded, ExitCode: intPtr(0), FinishedAt: now.Add(time.Second).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+
+	now = now.Add(10 * time.Second)
+	st.clock = func() time.Time { return now }
+	manual, err := st.Rerun("alice", definition.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetDefinition("alice", definition.ID)
+	if err != nil || manual.Status != RunPending || got.State != StateActive || got.NextRunAt != "" {
+		t.Fatalf("run=%#v definition=%#v err=%v", manual, got, err)
+	}
+	if claimed, err := st.ClaimRun("alice", manual.ID, now.Format(time.RFC3339), "/tmp/manual.log"); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	finished := now.Add(2 * time.Second)
+	if _, err := st.CompleteRun("alice", manual.ID, Completion{Status: RunSucceeded, ExitCode: intPtr(0), FinishedAt: finished.Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.GetDefinition("alice", definition.ID)
+	if err != nil || got.NextRunAt != finished.Add(30*time.Second).Format(time.RFC3339) {
+		t.Fatalf("definition=%#v err=%v", got, err)
 	}
 }
 

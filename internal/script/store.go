@@ -357,17 +357,23 @@ func (s *Store) Rerun(agent, scriptID string) (Run, error) {
 	if err != nil {
 		return Run{}, err
 	}
-	if definition.Mode != ModeOnce {
+	if definition.Mode != ModeOnce && definition.Mode != ModeEvery {
 		return Run{}, ErrMode
 	}
-	if definition.State == StateActive {
+	if definition.Mode == ModeOnce && definition.State == StateActive {
 		return Run{}, ErrActive
 	}
 	if definition.State == StateCancelled {
 		return Run{}, ErrConflict
 	}
+	if definition.Mode == ModeEvery && definition.State != StateActive {
+		return Run{}, ErrConflict
+	}
 	run, err := s.newPendingRun(tx, definition)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return Run{}, ErrConflict
+		}
 		return Run{}, err
 	}
 	if _, err := tx.Exec(`UPDATE scripts SET state=?,next_run_at=NULL WHERE agent=? AND id=?`, StateActive, agent, scriptID); err != nil {

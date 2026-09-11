@@ -1,24 +1,29 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AgentNameContext } from "@/lib/agent";
+import type { ScriptDefinition, ScriptRun } from "@/lib/api";
 import AgentScripts from "./AgentScripts";
 
 afterEach(() => vi.restoreAllMocks());
 
-const definition = {
+const latestRun: ScriptRun = {
+  id: "srun-alpha-2", script_id: "scr-alpha-1", agent: "alpha", status: "failed", exit_code: 2,
+  created_at: "2026-08-20T10:01:00Z", started_at: "2026-08-20T10:01:01Z", finished_at: "2026-08-20T10:01:03Z", log_path: "/data/agents/alpha/scripts/srun-alpha-2.log",
+};
+const definition: ScriptDefinition = {
   id: "scr-alpha-1", agent: "alpha", name: "nightly", description: "backup database",
   command: "backup --database primary --destination /mnt/archive/nightly", mode: "every", interval_seconds: 60, state: "active",
   created_at: "2026-08-20T10:00:00Z", next_run_at: "2026-08-20T10:02:00Z",
-  latest_run: { id: "srun-alpha-2", script_id: "scr-alpha-1", agent: "alpha", status: "failed", exit_code: 2, created_at: "2026-08-20T10:01:00Z", started_at: "2026-08-20T10:01:01Z", finished_at: "2026-08-20T10:01:03Z", log_path: "/data/agents/alpha/scripts/srun-alpha-2.log" },
+  latest_run: latestRun,
 };
 const olderRun = { ...definition.latest_run, id: "srun-alpha-1", status: "succeeded", exit_code: 0, created_at: "2026-08-20T10:00:00Z" };
 
-function stubFetch(calls: Array<{ path: string; method: string; body?: unknown }>) {
+function stubFetch(calls: Array<{ path: string; method: string; body?: unknown }>, definitions: ScriptDefinition[] = [definition]) {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((path: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     calls.push({ path, method, body: init?.body ? JSON.parse(init.body as string) : undefined });
     if (path.endsWith("/download")) return Promise.resolve({ ok: true, status: 200, blob: async () => new Blob(["full log"]) } as Response);
-    let result: unknown = { scripts: [definition], count: 1 };
+    let result: unknown = { scripts: definitions, count: definitions.length };
     if (path.endsWith("/runs")) result = { runs: [definition.latest_run, olderRun], count: 2 };
     if (path.endsWith("/logs")) result = { run: definition.latest_run, log: "make: checks failed" };
     return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }) } as Response);
@@ -57,6 +62,28 @@ it("shows the complete stored launch command in the script definition", async ()
   stubFetch(calls); renderPage();
 
   expect(await screen.findByText("backup --database primary --destination /mnt/archive/nightly")).toBeInTheDocument();
+});
+
+it("executes an idle recurring script immediately", async () => {
+  const calls: Array<{ path: string; method: string; body?: unknown }> = [];
+  stubFetch(calls); renderPage();
+
+  fireEvent.click(await screen.findByRole("button", { name: "Exec" }));
+
+  await waitFor(() => expect(calls.some((call) => call.path === "/api/agents/alpha/scripts/scr-alpha-1/rerun" && call.method === "POST")).toBe(true));
+});
+
+it.each([
+  ["a completed one-shot", { ...definition, mode: "once", state: "completed", next_run_at: undefined }, true],
+  ["a recurring script with a pending run", { ...definition, latest_run: { ...latestRun, status: "pending" } }, false],
+  ["a cancelled recurring script", { ...definition, state: "cancelled", next_run_at: undefined }, false],
+] as const)("shows Exec eligibility for %s", async (_label, candidate, expected) => {
+  const calls: Array<{ path: string; method: string; body?: unknown }> = [];
+  stubFetch(calls, [candidate]); renderPage();
+
+  await screen.findByRole("button", { name: /nightly/ });
+
+  expect(screen.queryByRole("button", { name: "Exec" }) !== null).toBe(expected);
 });
 
 it("lazy-loads runs and expands run metadata and log inline", async () => {

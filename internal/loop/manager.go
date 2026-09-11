@@ -1467,7 +1467,7 @@ func (m *Manager) Exec(name, prompt string) (string, error) {
 	return "queued", nil
 }
 
-// RerunScript queues another attempt for a completed one-shot definition.
+// RerunScript queues an immediate attempt for an eligible stored definition.
 func (m *Manager) RerunScript(agentName, scriptID string) (script.Run, error) {
 	if m.cfg.Scripts == nil {
 		return script.Run{}, fmt.Errorf("script store not configured")
