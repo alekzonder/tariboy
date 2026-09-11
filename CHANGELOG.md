@@ -1,3 +1,15 @@
+## [0.59.0] - 2026-09-11
+
+### Added
+
+- Connect a saved SSH host to an existing Tariboy daemon without installing, starting, or restarting remote software.
+
+### Fixed
+
+- Preserve the selected SSH setup mode while retrying an unavailable daemon or falling back to installation.
+
+[0.59.0]: https://github.com/alekzonder/tariboy/compare/v0.58.1...v0.59.0
+
 ## [0.58.1] - 2026-09-11
 
 ### Fixed
