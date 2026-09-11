@@ -105,6 +105,25 @@ export interface TaskNotificationResult {
   outcome: "shown" | "denied" | "unavailable";
 }
 
+export type DesktopUpdatePhase =
+  | "idle"
+  | "checking"
+  | "downloading"
+  | "up-to-date"
+  | "ready"
+  | "installing"
+  | "error";
+
+export interface DesktopUpdateSnapshot {
+  revision: number;
+  current_version: string;
+  phase: DesktopUpdatePhase;
+  version: string;
+  downloaded_bytes: number;
+  total_bytes: number | null;
+  error: string;
+}
+
 /** Tauri v2 injects __TAURI_INTERNALS__ into the webview before any app code runs. */
 export function isDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -159,6 +178,12 @@ export const hostUpdate = (id: string) =>
   invokeDesktop<HostOperationResult>("host_update", { id });
 export const hostPromptReply = (operationId: string, text: string) =>
   invokeDesktop<null>("host_prompt_reply", { operationId, text });
+export const desktopUpdateState = () =>
+  invokeDesktop<DesktopUpdateSnapshot>("desktop_update_state");
+export const desktopUpdateDownload = () =>
+  invokeDesktop<DesktopUpdateSnapshot>("desktop_update_download");
+export const desktopUpdateInstall = () =>
+  invokeDesktop<DesktopUpdateSnapshot>("desktop_update_install");
 
 export async function showTaskNotification(
   input: TaskNotificationInput,
@@ -192,7 +217,20 @@ export function onTaskNotificationActivated(
   return subscribeDesktop("desktop://task-notification-activated", cb);
 }
 
-function subscribeDesktop<T>(event: string, cb: (payload: T) => void): () => void {
+export function onDesktopUpdateState(
+  cb: (state: DesktopUpdateSnapshot) => void,
+  registered?: () => void,
+  failed?: () => void,
+): () => void {
+  return subscribeDesktop("desktop://update-state", cb, registered, failed);
+}
+
+function subscribeDesktop<T>(
+  event: string,
+  cb: (payload: T) => void,
+  registered?: () => void,
+  failed?: () => void,
+): () => void {
   if (!isDesktop()) return () => {};
   let un: (() => void) | null = null;
   let cancelled = false;
@@ -200,13 +238,17 @@ function subscribeDesktop<T>(event: string, cb: (payload: T) => void): () => voi
     .then(({ listen }) =>
       listen<T>(event, (e) => cb(e.payload)).then((f) => {
         if (cancelled) f();
-        else un = f;
+        else {
+          un = f;
+          registered?.();
+        }
       }),
     )
     .catch(() => {
       // The browser build and partially mocked desktop tests have no Tauri
       // event bridge. A missing bridge means no native events, not an
       // unhandled application error.
+      if (!cancelled) failed?.();
     });
   return () => {
     cancelled = true;
