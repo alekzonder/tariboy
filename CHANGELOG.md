@@ -1,3 +1,23 @@
+## [0.58.0] - 2026-09-11
+
+### Added
+
+- Download, signature-verify, and explicitly install Desktop updates from application settings.
+- Present one-shot instructions, messages, and Native Task goals in a platform-owned processing order for every non-bare agent.
+
+### Changed
+
+- Publish the checked DMG together with the signed updater archive, signature, and update catalog through an atomic draft-to-public release flow.
+- Prepare locked Go, UI, and documentation dependencies automatically before fast checks.
+
+### Fixed
+
+- Compare Desktop update versions by SemVer precedence.
+- Preserve Markdown headings in Native Task questions.
+- Remove the release artifact scanner’s ripgrep runtime dependency.
+
+[0.58.0]: https://github.com/alekzonder/tariboy/compare/v0.57.5...v0.58.0
+
 ## [0.57.5] - 2026-09-11
 
 ### Fixed
