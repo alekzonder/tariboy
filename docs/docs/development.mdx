@@ -459,10 +459,22 @@ make desktop PLATFORM=linux  # .deb and .AppImage
 The preflight rejects unknown platform values, unsupported host architectures,
 and a platform that does not match the current host before compiling payloads.
 
-`make desktop-mac` packages and verifies the alpha. Pushing an exact `vX.Y.Z`
-tag whose version matches both canonical declarations runs the same target on
-GitHub's `macos-15` runner and publishes the checked DMG, `SHA256SUMS`, and
-`release.json` to the matching GitHub Release.
+`make desktop-mac` packages and verifies the alpha. Tauri also creates a signed
+macOS updater archive when `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are present. The release owner permanently
+owns and backs up that private key; its matching public key is pinned in the
+Desktop bundle. Never print or commit the signing Secrets. Key rotation requires
+a separately planned release because installed applications trust the embedded
+public key.
+
+Pushing an exact `vX.Y.Z` tag whose version matches both canonical declarations
+runs the same target on GitHub's `macos-15` runner. The workflow requires both
+signing Secrets, finds the single generated `.app.tar.gz` and `.sig` pair, and
+stages them with the checked DMG, `SHA256SUMS`, `release.json`, and `latest.json`.
+It creates a draft GitHub Release, uploads the complete set, and only then makes
+the release public, so the latest catalog cannot reference missing assets. The
+first updater-enabled version must still be installed from the DMG; only later,
+higher signed versions can be installed by the updater.
 
 The tray action **Install/Update CLI** owns the local five-file payload and
 six-command-path install. It preflights and atomically switches `tariboyd`,

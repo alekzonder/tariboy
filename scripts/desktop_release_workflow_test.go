@@ -76,6 +76,7 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 	}
 	commands := make([]string, 0, len(job.Steps))
 	var publishEnv map[string]string
+	var buildEnv map[string]string
 	for _, step := range job.Steps {
 		commands = append(commands, step.Run)
 		if strings.HasPrefix(step.Uses, "actions/checkout@") && step.With["persist-credentials"] != false {
@@ -83,6 +84,9 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		}
 		if strings.Contains(step.Run, "gh release create") {
 			publishEnv = step.Env
+		}
+		if strings.Contains(step.Run, "make desktop-mac") {
+			buildEnv = step.Env
 		}
 	}
 	allCommands := strings.Join(commands, "\n")
@@ -92,19 +96,26 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`scripts/release-version.txt`,
 		`brew install tmux ripgrep`,
 		`make desktop-mac`,
+		`scripts/desktop-updater-manifest.py`,
+		`*.app.tar.gz`,
+		`*.app.tar.gz.sig`,
 		`gh release create "$GITHUB_REF_NAME"`,
-		`Tariboy_${version}_aarch64.dmg`,
-		`SHA256SUMS`,
-		`release.json`,
+		`--draft`,
+		`gh release upload "$GITHUB_REF_NAME" "$release_dir"/*`,
+		`gh release edit "$GITHUB_REF_NAME" --draft=false`,
 	} {
 		if !strings.Contains(allCommands, required) {
 			t.Errorf("release workflow is missing %q", required)
 		}
 	}
-	if got := strings.Count(allCommands, `"$release_dir/`); got != 3 {
-		t.Fatalf("release publishes %d assets, want exactly 3", got)
-	}
 	if publishEnv["GH_TOKEN"] != "${{ github.token }}" {
 		t.Fatalf("release GH_TOKEN = %q, want github.token", publishEnv["GH_TOKEN"])
+	}
+	if buildEnv["TAURI_SIGNING_PRIVATE_KEY"] != "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ||
+		buildEnv["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] != "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" {
+		t.Fatalf("release signing environment = %v, want signing Secrets on build step", buildEnv)
+	}
+	if publishEnv["TAURI_SIGNING_PRIVATE_KEY"] != "" || publishEnv["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] != "" {
+		t.Fatal("release signing Secrets are exposed to publication step")
 	}
 }
