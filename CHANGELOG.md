@@ -1,3 +1,11 @@
+## [0.58.1] - 2026-09-11
+
+### Fixed
+
+- Restore Desktop builds after adding the application updater.
+
+[0.58.1]: https://github.com/alekzonder/tariboy/compare/v0.58.0...v0.58.1
+
 ## [0.58.0] - 2026-09-11
 
 ### Added
