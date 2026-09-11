@@ -1120,7 +1120,7 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 		CancelScriptTarget: func(id string) error { return m.CancelScriptTarget(agName, id) },
 		RemoveScript:       func(id string) error { return m.RemoveScript(agName, id) },
 		BuildImage: func(name, tag, path string) (map[string]any, error) {
-			return buildImageForAgent(m.cfg.ImgStore, cwdOf(ag, l), name, tag, path, m.imagePluginResolver())
+			return buildImageForAgent(m.cfg.ImgStore, l.Workdir(), name, tag, path, m.imagePluginResolver())
 		},
 		LoopControl: func(action string) (map[string]any, error) {
 			updated, err := m.toolsLoopControl(agName, action)
