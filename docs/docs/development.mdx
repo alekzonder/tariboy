@@ -34,6 +34,9 @@ and npm dependencies.
 Install only the toolchains needed for the area you are changing:
 
 - **Go control plane:** Go 1.26, Make, a C toolchain where required by the host.
+- **Fast checks:** ripgrep (`rg`) for the packaging secret-scan contract in
+  `make backend-check` and `make check`. Install with `apt-get install ripgrep`
+  on Ubuntu or `brew install ripgrep` on macOS; the PR workflow installs it.
 - **React UI:** Node.js and npm.
 - **Desktop native host:** Rust (minimum package version 1.77), Cargo, the Tauri
   prerequisites, and platform build tools.
