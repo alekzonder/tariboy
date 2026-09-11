@@ -1,4 +1,4 @@
-export type HostOperationKind = "provision" | "update";
+export type HostOperationKind = "connect" | "provision" | "update";
 
 export type HostOperationStatus =
   | "idle"

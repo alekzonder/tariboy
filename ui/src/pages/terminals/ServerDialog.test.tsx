@@ -179,6 +179,89 @@ describe("ServerDialog desktop SSH flow", () => {
     expect(screen.getByLabelText("SSH alias")).toBeInTheDocument();
     expect(screen.queryByLabelText("Base URL")).toBeNull();
     expect(screen.getByRole("button", { name: "Advanced HTTPS" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Install Tariboy" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Connect to existing Tariboy" })).not.toBeChecked();
+  });
+
+  it("connects a saved SSH host without provisioning in existing-Tariboy mode", async () => {
+    const events = mockNativeEvents();
+    vi.spyOn(desktop, "hostSaveSsh").mockResolvedValue(nativeHost());
+    const connect = vi.spyOn(desktop, "hostConnect").mockResolvedValue(null);
+    const provision = vi.spyOn(desktop, "hostProvision").mockResolvedValue({ operation_id: "op-1" });
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Connect to existing Tariboy" }));
+    expect(screen.getAllByTestId("host-progress-step").map((node) => node.textContent)).toEqual([
+      expect.stringContaining("Connect to host"),
+      expect.stringContaining("Check existing Tariboy"),
+    ]);
+    expect(screen.queryByText("Upload release")).toBeNull();
+    expect(screen.queryByText("Install release")).toBeNull();
+    expect(screen.queryByText("Start Tariboy")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "gpu" } });
+    fireEvent.change(screen.getByLabelText("SSH alias"), { target: { value: "gpu-box" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add and connect" }));
+
+    await waitFor(() => expect(connect).toHaveBeenCalledWith("ssh-1"));
+    expect(provision).not.toHaveBeenCalled();
+
+    await events.state(nativeHost({
+      state: "ready",
+      base_url: "http://127.0.0.1:18444",
+      local_port: 18444,
+      last_daemon_version: "99.0.0",
+    }));
+    expect(screen.getByText("Host connected")).toBeInTheDocument();
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("keeps an unavailable existing host and offers retry or installation", async () => {
+    const events = mockNativeEvents();
+    const save = vi.spyOn(desktop, "hostSaveSsh").mockResolvedValue(nativeHost());
+    const connect = vi.spyOn(desktop, "hostConnect").mockResolvedValue(null);
+    const provision = vi.spyOn(desktop, "hostProvision").mockResolvedValue({ operation_id: "op-install" });
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Connect to existing Tariboy" }));
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "gpu" } });
+    fireEvent.change(screen.getByLabelText("SSH alias"), { target: { value: "gpu-box" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add and connect" }));
+    await waitFor(() => expect(connect).toHaveBeenCalledWith("ssh-1"));
+
+    await events.state(nativeHost({
+      state: "connecting",
+      message: "remote daemon health timed out: connection refused; retrying in 1s",
+    }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Existing Tariboy is unavailable at 127.0.0.1:9990.",
+    );
+    const retry = screen.getByRole("button", { name: "Retry connection" });
+    expect(screen.getByRole("button", { name: "Install Tariboy" })).toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(provision).not.toHaveBeenCalled();
+
+    fireEvent.click(retry);
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
+    expect(save).toHaveBeenLastCalledWith({
+      id: "ssh-1",
+      label: "gpu",
+      ssh_alias: "gpu-box",
+    });
+    await events.state(nativeHost({
+      state: "connecting",
+      message: "remote daemon health timed out: connection refused; retrying in 2s",
+    }));
+
+    const install = screen.getByRole("button", { name: "Install Tariboy" });
+    fireEvent.click(install);
+    await waitFor(() => expect(provision).toHaveBeenCalledWith("ssh-1"));
+    expect(save).toHaveBeenLastCalledWith({
+      id: "ssh-1",
+      label: "gpu",
+      ssh_alias: "gpu-box",
+    });
   });
 
   it("renders one linear provisioning flow and keeps diagnostic output collapsed", async () => {
@@ -216,6 +299,10 @@ describe("ServerDialog desktop SSH flow", () => {
       text: "Verification code:",
       prompt: "authentication",
     });
+    await events.state(nativeHost({
+      state: "needs_auth",
+      message: "authentication reply required",
+    }));
 
     const details = screen.getByText("Technical details").closest("details");
     expect(details).not.toHaveAttribute("open");
