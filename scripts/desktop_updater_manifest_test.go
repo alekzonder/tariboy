@@ -19,9 +19,10 @@ func TestDesktopUpdaterManifestRejectsInvalidInputs(t *testing.T) {
 		archive   string
 		signature string
 		metadata  string
+		wantError string
 	}{
 		{name: "empty signature", version: "1.2.3", archive: "Tariboy.app.tar.gz", metadata: `{"version":"1.2.3"}`},
-		{name: "version mismatch", version: "1.2.4", archive: "Tariboy.app.tar.gz", signature: updaterSignature(), metadata: `{"version":"1.2.3"}`},
+		{name: "version mismatch", version: "1.2.4", archive: "Tariboy.app.tar.gz", signature: updaterSignature(), metadata: `{"version":"1.2.3"}`, wantError: "release metadata version does not match updater version"},
 		{name: "missing archive", version: "1.2.3", archive: "missing.app.tar.gz", signature: updaterSignature(), metadata: `{"version":"1.2.3"}`},
 		{name: "malformed signature", version: "1.2.3", archive: "Tariboy.app.tar.gz", signature: "not base64!", metadata: `{"version":"1.2.3"}`},
 		{name: "unsafe archive basename", version: "1.2.3", archive: "Tariboy unsafe.app.tar.gz", signature: updaterSignature(), metadata: `{"version":"1.2.3"}`},
@@ -37,6 +38,9 @@ func TestDesktopUpdaterManifestRejectsInvalidInputs(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(releaseDir, "release.json"), []byte(testCase.metadata), 0o644); err != nil {
 				t.Fatal(err)
 			}
+			if err := os.WriteFile(filepath.Join(releaseDir, "SHA256SUMS"), []byte("existing  Tariboy_1.2.3_aarch64.dmg\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
 			archive := filepath.Join(dir, testCase.archive)
 			if !strings.HasPrefix(testCase.archive, "missing") {
 				if err := os.WriteFile(archive, []byte("archive"), 0o644); err != nil {
@@ -50,8 +54,12 @@ func TestDesktopUpdaterManifestRejectsInvalidInputs(t *testing.T) {
 
 			cmd := exec.Command("python3", "desktop-updater-manifest.py",
 				testCase.version, archive, signature, releaseDir)
-			if err := cmd.Run(); err == nil {
+			output, err := cmd.CombinedOutput()
+			if err == nil {
 				t.Fatalf("accepted %s", testCase.name)
+			}
+			if testCase.wantError != "" && !strings.Contains(string(output), testCase.wantError) {
+				t.Fatalf("error = %q, want %q", output, testCase.wantError)
 			}
 			if _, err := os.Stat(filepath.Join(releaseDir, "latest.json")); !os.IsNotExist(err) {
 				t.Fatal("published manifest for invalid release")
@@ -78,8 +86,9 @@ func TestDesktopUpdaterManifestStagesValidMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	signatureValue := updaterSignature()
+	signatureBytes := []byte(signatureValue + "\n")
 	signature := archive + ".sig"
-	if err := os.WriteFile(signature, []byte(signatureValue+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(signature, signatureBytes, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,10 +139,11 @@ func TestDesktopUpdaterManifestStagesValidMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	archiveDigest := sha256.Sum256(archiveBytes)
+	signatureDigest := sha256.Sum256(signatureBytes)
 	for _, want := range []string{
 		"existing  Tariboy_1.2.3_aarch64.dmg",
 		hex.EncodeToString(archiveDigest[:]) + "  Tariboy.app.tar.gz",
-		"  Tariboy.app.tar.gz.sig",
+		hex.EncodeToString(signatureDigest[:]) + "  Tariboy.app.tar.gz.sig",
 	} {
 		if !strings.Contains(string(checksums), want) {
 			t.Errorf("SHA256SUMS missing %q:\n%s", want, checksums)
