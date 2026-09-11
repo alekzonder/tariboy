@@ -1,3 +1,11 @@
+## [0.57.3] - 2026-09-11
+
+### Fixed
+
+- Use the installed QEMU runner when verifying Linux x86_64 release binaries on macOS.
+
+[0.57.3]: https://github.com/alekzonder/tariboy/compare/v0.57.2...v0.57.3
+
 ## [0.57.2] - 2026-09-11
 
 ### Fixed

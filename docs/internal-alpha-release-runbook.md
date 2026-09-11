@@ -1,6 +1,6 @@
 # Tariboy internal alpha release runbook
 
-Release: `0.57.2`
+Release: `0.57.3`
 
 ## Ownership
 
@@ -60,8 +60,8 @@ The target builds both binary platforms and the SPA, creates ad-hoc-signed app
 and DMG bundles, verifies signatures, and stages:
 
 ```text
-dist/releases/0.57.2/
-  Tariboy_0.57.2_aarch64.dmg
+dist/releases/0.57.3/
+  Tariboy_0.57.3_aarch64.dmg
   SHA256SUMS
   release.json
 ```
@@ -81,7 +81,7 @@ make desktop-smoke
 Re-run the independent gate:
 
 ```bash
-scripts/check-alpha-artifacts.sh dist/releases/0.57.2
+scripts/check-alpha-artifacts.sh dist/releases/0.57.3
 ```
 
 ## Two-person review
@@ -104,8 +104,8 @@ before the release tag is pushed.
 After both approvals, push an exact tag whose version matches the release:
 
 ```bash
-git tag -a v0.57.2 -m 'Tariboy 0.57.2'
-git push origin v0.57.2
+git tag -a v0.57.3 -m 'Tariboy 0.57.3'
+git push origin v0.57.3
 ```
 
 `.github/workflows/desktop-release.yml` validates the tag against

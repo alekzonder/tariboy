@@ -48,7 +48,10 @@ jobs:
         run: brew install tmux ripgrep qemu
 
       - name: Build and verify DMG
-        run: make desktop-mac
+        run: |
+          runner="$(brew --prefix qemu)/bin/qemu-x86_64"
+          test -x "$runner"
+          TARIBOY_LINUX_AMD64_RUNNER="$runner" make desktop-mac
 
       - name: Publish GitHub Release
         env:
