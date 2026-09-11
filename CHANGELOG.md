@@ -1,3 +1,11 @@
+## [0.57.5] - 2026-09-11
+
+### Fixed
+
+- Avoid false credential detections while verifying macOS release artifacts.
+
+[0.57.5]: https://github.com/alekzonder/tariboy/compare/v0.57.4...v0.57.5
+
 ## [0.57.4] - 2026-09-11
 
 ### Fixed

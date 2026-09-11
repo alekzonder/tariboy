@@ -90,7 +90,7 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`GITHUB_REF_NAME#v`,
 		`internal/version/version.go`,
 		`scripts/release-version.txt`,
-		`brew install tmux ripgrep qemu`,
+		`brew install tmux ripgrep`,
 		`make desktop-mac`,
 		`gh release create "$GITHUB_REF_NAME"`,
 		`Tariboy_${version}_aarch64.dmg`,
