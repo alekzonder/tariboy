@@ -1544,7 +1544,7 @@ func TestPrepareReRendersUntilProcessed(t *testing.T) {
 		}
 	}
 
-	// Once processed, it drops out of the batch and the section disappears.
+	// Once processed, it drops out of the batch and leaves the explicit empty state.
 	if _, err := bs.MarkProcessed(ag.Name, m.ID, "handled"); err != nil {
 		t.Fatal(err)
 	}
@@ -1552,8 +1552,8 @@ func TestPrepareReRendersUntilProcessed(t *testing.T) {
 	if strings.Contains(got, m.ID) {
 		t.Fatalf("processed message still rendered:\n%s", got)
 	}
-	if strings.Contains(got, "# Messages") {
-		t.Fatalf("# Messages section should be gone with no pending messages:\n%s", got)
+	if !strings.Contains(got, "## Messages\n\nNo incoming messages for this iteration.") {
+		t.Fatalf("Messages section should report the empty batch:\n%s", got)
 	}
 }
 
