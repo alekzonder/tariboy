@@ -249,8 +249,11 @@ actually ships. `cfg.libOverrides` declares the fork.
 
 Two things to know about the fork:
 
-- It needs `.design-sync/node_modules` (the `ln -sfn ../.ds-sync/node_modules`
-  symlink) on a fresh clone, because it imports from `../../.ds-sync/lib/`.
+- It needs **no** `.design-sync/node_modules` symlink. The skill's fork docs call
+  for one, but that is only for a fork with a BARE dependency import (`esbuild`);
+  this fork imports `node:fs`/`node:path` plus two relative paths
+  (`../../.ds-sync/lib/common.mjs`, `../annotate-tokens.mjs`), all of which
+  resolve on their own. Verified by importing the fork with the symlink removed.
 - **Introducing or editing it re-opens verification for every component.**
   `configSlicesFor` in `lib/sync-hashes.mjs` hashes the *bytes* of every
   `.design-sync/overrides/*.mjs` into the global slice of each component's
@@ -322,9 +325,9 @@ frame, so use it whenever a page card needs judging.
   one `annotateFile()` call at the top of `writeStylesCss`). Editing it clears
   every grade (see the token-classification section); leaving it alone does
   not.
-- The fork imports from `../../.ds-sync/lib/`, so a fresh clone needs
-  `ln -sfn ../.ds-sync/node_modules .design-sync/node_modules` before the
-  converter runs.
+- The fork's relative import of `../../.ds-sync/lib/common.mjs` means a fresh
+  clone must have the staged scripts in place (`.ds-sync/`) before the converter
+  runs — which the re-sync steps already do. No symlink is required.
 - `annotate-tokens.mjs`'s theme-scope list (`:root`, `:root,:host`, `.dark`,
   `html`, `:host`) is what separates tokens from noise. If the app ever moves
   its tokens to another scope (a `[data-theme]` attribute, a `@layer theme`
