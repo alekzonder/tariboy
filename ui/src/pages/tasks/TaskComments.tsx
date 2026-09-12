@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react"
+import { Copy } from "lucide-react"
+import { toast } from "sonner"
 import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/tasks"
 import { MarkdownEditor, MarkdownContent } from "./TaskMarkdown"
 import { Button } from "@/components/ui/button"
@@ -71,11 +73,26 @@ export default function TaskComments({
     await send(askText(body.trim()), true)
   }
 
+  const copyComment = async (body: string) => {
+    try {
+      await navigator.clipboard.writeText(body)
+      toast.success("Comment Markdown copied")
+    } catch (error) {
+      toast.error(`Could not copy comment: ${String(error)}`)
+    }
+  }
+
   const commentList = (
     <div key="list" className="task-comment-list">
       {comments.map((comment) => (
         <article key={comment.id}>
-          <header><strong>{comment.author}</strong><time>{new Date(comment.created_at).toLocaleString()}</time></header>
+          <header>
+            <strong>{comment.author}</strong>
+            <span className="task-comment-actions">
+              <time>{new Date(comment.created_at).toLocaleString()}</time>
+              <Button type="button" size="icon-xs" variant="ghost" className="task-comment-copy" aria-label="Copy comment Markdown" title="Copy comment Markdown" onClick={() => void copyComment(comment.body)}><Copy /></Button>
+            </span>
+          </header>
           <MarkdownContent>{comment.body}</MarkdownContent>
         </article>
       ))}

@@ -454,6 +454,23 @@ describe("TasksWorkspace", () => {
     expect(commentList.compareDocumentPosition(commentForm)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
+  it("copies the original comment Markdown", async () => {
+    const markdown = "# Status\n\n- **ready**\n- `tested`"
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
+    api.getTask.mockResolvedValue({
+      ...detail,
+      comments: [{ ...detail.comments[0], body: markdown }],
+    })
+
+    render(<TasksWorkspace />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    await userEvent.click(screen.getByRole("button", { name: "Copy comment Markdown" }))
+
+    expect(writeText).toHaveBeenCalledWith(markdown)
+    expect(toast.success).toHaveBeenCalledWith("Comment Markdown copied")
+  })
+
   it("keeps the latest task selected during a real-time refresh", async () => {
     const first = deferred<TaskDetail>()
     const second = deferred<TaskDetail>()
