@@ -1,0 +1,252 @@
+{
+  "projectId": "adbfdd8c-fff7-471b-985e-ba8dc89a4c93",
+  "shape": "package",
+  "pkg": "tariboy-ui",
+  "globalName": "TariboyUI",
+  "srcDir": "src",
+  "tsconfig": "tsconfig.app.json",
+  "buildCmd": "bash .design-sync/prepare-css.sh && node .design-sync/make-entry.mjs",
+  "cssEntry": ".design-sync/.cache/css/styles.css",
+  "componentSrcMap": {
+    "AgentColorSwatch": "src/components/AgentColorSwatch.tsx",
+    "AgentControls": "src/components/AgentControls.tsx",
+    "AgentLayout": "src/components/AgentLayout.tsx",
+    "AgentSubscriptions": "src/components/AgentSubscriptions.tsx",
+    "AgentWorkspace": "src/pages/agents/AgentWorkspace.tsx",
+    "AlertDialog": "src/components/ui/alert-dialog.tsx",
+    "AliasEditor": "src/components/AliasEditor.tsx",
+    "AppSettings": "src/components/DesktopUpdates.tsx",
+    "AttachButton": "src/components/AttachButton.tsx",
+    "AuditExportActions": "src/components/AuditExportActions.tsx",
+    "AuditRow": "src/components/AuditRow.tsx",
+    "Badge": "src/components/ui/badge.tsx",
+    "Button": "src/components/ui/button.tsx",
+    "Card": "src/components/ui/card.tsx",
+    "Collapsible": "src/components/ui/collapsible.tsx",
+    "ComboField": "src/components/ComboField.tsx",
+    "Command": "src/components/ui/command.tsx",
+    "ConfirmButton": "src/components/LoopControls.tsx",
+    "ContextMenu": "src/components/ui/context-menu.tsx",
+    "CustomerQuestionNotifications": "src/components/CustomerQuestionNotifications.tsx",
+    "DaemonBanner": "src/components/DaemonBanner.tsx",
+    "Dialog": "src/components/ui/dialog.tsx",
+    "DropdownMenu": "src/components/ui/dropdown-menu.tsx",
+    "EditablePresetCombobox": "src/components/EditablePresetCombobox.tsx",
+    "FileBrowser": "src/components/FileBrowser.tsx",
+    "FullAuditLog": "src/components/FullAuditLog.tsx",
+    "GoalHelp": "src/components/GoalHelp.tsx",
+    "GroupWizard": "src/components/GroupWizard.tsx",
+    "HostStatus": "src/components/HostStatus.tsx",
+    "HostSwitcher": "src/components/HostSwitcher.tsx",
+    "ImageCombobox": "src/components/AgentFormFields.tsx",
+    "ImageLayout": "src/components/ImageLayout.tsx",
+    "ImagesPage": "src/pages/ImagesPage.tsx",
+    "InboxComposer": "src/components/InboxComposer.tsx",
+    "Input": "src/components/ui/input.tsx",
+    "IterationAuditLog": "src/components/IterationAuditLog.tsx",
+    "IterationJudgePanel": "src/components/IterationJudgePanel.tsx",
+    "IterationTimeoutControl": "src/components/IterationTimeoutControl.tsx",
+    "Label": "src/components/ui/label.tsx",
+    "LoopToggle": "src/components/LoopControls.tsx",
+    "MemoryRouter": null,
+    "NotesEditor": "src/components/NotesEditor.tsx",
+    "PathAutocomplete": "src/components/PathAutocomplete.tsx",
+    "ProxyCallRow": "src/components/ProxyCallRow.tsx",
+    "RetentionPanel": "src/components/RetentionPanel.tsx",
+    "RunStateActions": "src/components/AgentControls.tsx",
+    "ScrollArea": "src/components/ui/scroll-area.tsx",
+    "SecretsPanel": "src/components/SecretsPanel.tsx",
+    "Select": "src/components/ui/select.tsx",
+    "SendFilesButton": "src/components/SendFilesButton.tsx",
+    "Separator": "src/components/ui/separator.tsx",
+    "SettingsPage": "src/pages/settings/SettingsPage.tsx",
+    "Sheet": "src/components/ui/sheet.tsx",
+    "ShellScriptEditor": "src/components/ShellScriptEditor.tsx",
+    "StatusChatHistory": "src/components/StatusChatHistory.tsx",
+    "StoresPage": "src/pages/StoresPage.tsx",
+    "SupportBundle": "src/components/SupportBundle.tsx",
+    "Switch": "src/components/ui/switch.tsx",
+    "Tabs": "src/components/ui/tabs.tsx",
+    "TaskDetail": "src/pages/tasks/TaskDetail.tsx",
+    "TasksWorkspace": "src/pages/tasks/TasksWorkspace.tsx",
+    "TerminalsPage": "src/pages/terminals/TerminalsPage.tsx",
+    "Textarea": "src/components/ui/textarea.tsx",
+    "ThemeToggle": "src/components/ThemeToggle.tsx",
+    "Toaster": "src/components/ui/sonner.tsx",
+    "Tooltip": "src/components/ui/tooltip.tsx",
+    "TuiScreen": "src/components/TuiScreen.tsx",
+    "UpdateBanner": "src/components/DesktopUpdates.tsx"
+  },
+  "overrides": {
+    "AgentColorSwatch": {
+      "cardMode": "column"
+    },
+    "AgentControls": {
+      "cardMode": "column"
+    },
+    "AgentLayout": {
+      "cardMode": "column"
+    },
+    "AgentSubscriptions": {
+      "cardMode": "column"
+    },
+    "AgentWorkspace": {
+      "cardMode": "single",
+      "primaryStory": "Console"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "primaryStory": "DeleteAgent"
+    },
+    "AliasEditor": {
+      "cardMode": "column"
+    },
+    "AppSettings": {
+      "cardMode": "column"
+    },
+    "AttachButton": {
+      "cardMode": "column"
+    },
+    "AuditExportActions": {
+      "cardMode": "column"
+    },
+    "AuditRow": {
+      "cardMode": "column"
+    },
+    "Collapsible": {
+      "cardMode": "column"
+    },
+    "ComboField": {
+      "cardMode": "column"
+    },
+    "Command": {
+      "cardMode": "column"
+    },
+    "ConfirmButton": {
+      "cardMode": "single",
+      "primaryStory": "ConfirmOpen"
+    },
+    "ContextMenu": {
+      "cardMode": "single",
+      "primaryStory": "AgentRow"
+    },
+    "DaemonBanner": {
+      "cardMode": "column"
+    },
+    "Dialog": {
+      "cardMode": "single",
+      "primaryStory": "NewAgent"
+    },
+    "DropdownMenu": {
+      "cardMode": "single",
+      "primaryStory": "HostActions"
+    },
+    "EditablePresetCombobox": {
+      "cardMode": "column"
+    },
+    "FullAuditLog": {
+      "cardMode": "column"
+    },
+    "GroupWizard": {
+      "cardMode": "column"
+    },
+    "HostSwitcher": {
+      "cardMode": "single",
+      "primaryStory": "HostListOpen"
+    },
+    "ImageCombobox": {
+      "cardMode": "column"
+    },
+    "ImageLayout": {
+      "cardMode": "column"
+    },
+    "ImagesPage": {
+      "cardMode": "column"
+    },
+    "InboxComposer": {
+      "cardMode": "column"
+    },
+    "Input": {
+      "cardMode": "column"
+    },
+    "IterationTimeoutControl": {
+      "cardMode": "column"
+    },
+    "Label": {
+      "cardMode": "column"
+    },
+    "LoopToggle": {
+      "cardMode": "single",
+      "primaryStory": "Running"
+    },
+    "PathAutocomplete": {
+      "cardMode": "column"
+    },
+    "RetentionPanel": {
+      "cardMode": "single",
+      "primaryStory": "Policy"
+    },
+    "RunStateActions": {
+      "cardMode": "column"
+    },
+    "ScrollArea": {
+      "cardMode": "column"
+    },
+    "Select": {
+      "cardMode": "single",
+      "primaryStory": "Open"
+    },
+    "SendFilesButton": {
+      "cardMode": "column"
+    },
+    "Separator": {
+      "cardMode": "column"
+    },
+    "SettingsPage": {
+      "cardMode": "column"
+    },
+    "Sheet": {
+      "cardMode": "single",
+      "primaryStory": "StatusHistory"
+    },
+    "StatusChatHistory": {
+      "cardMode": "single",
+      "primaryStory": "HistoryOpen"
+    },
+    "StoresPage": {
+      "cardMode": "column"
+    },
+    "Switch": {
+      "cardMode": "column"
+    },
+    "Tabs": {
+      "cardMode": "column"
+    },
+    "TaskDetail": {
+      "cardMode": "single",
+      "primaryStory": "OpenTask"
+    },
+    "TasksWorkspace": {
+      "cardMode": "column"
+    },
+    "TerminalsPage": {
+      "cardMode": "single",
+      "primaryStory": "Workspace"
+    },
+    "Textarea": {
+      "cardMode": "column"
+    },
+    "Toaster": {
+      "cardMode": "single",
+      "primaryStory": "Statuses"
+    },
+    "Tooltip": {
+      "cardMode": "single",
+      "primaryStory": "GoalHelp"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md",
+  "libOverrides": {
+    "css.mjs": "annotate non-token custom properties (--tw-*, flexlayout, --splitter-*) with /* @kind other */ before styleSha"
+  }
+}
