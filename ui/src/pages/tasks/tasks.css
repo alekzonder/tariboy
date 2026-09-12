@@ -157,6 +157,9 @@
 .task-comment-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 14px 0; }
 .task-comment-list article { border-left: 2px solid var(--border); padding-left: 10px; }
 .task-comment-list header { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--muted-foreground); }
+.task-comment-actions { display: flex; align-items: center; gap: 4px; }
+.task-comment-copy { opacity: 0; transition: opacity 120ms ease; }
+.task-comment-list article:hover .task-comment-copy, .task-comment-list article:focus-within .task-comment-copy { opacity: 1; }
 .task-comment-list p { margin-top: 4px; }
 .task-comments form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .task-comments textarea { min-height: 72px; resize: vertical; }

@@ -280,7 +280,9 @@ after Enter adds a new item; they do not add an extra visible paragraph.
 The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
-editor documents are not stored. Long text and links wrap within the task
+editor documents are not stored. Each saved comment exposes a copy action on
+hover or keyboard focus that writes its original Markdown string to the
+clipboard. Long text and links wrap within the task
 panel, while wide tables and code blocks scroll inside their own Markdown
 block. In Desktop, absolute `http://` and `https://` links in descriptions and
 comments open through the native system-browser command instead of navigating
