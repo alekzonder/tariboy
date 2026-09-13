@@ -3,6 +3,14 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+/* Tailwind v4 auto-detects its content sources, which sweeps in the design-sync
+   prose. A class name merely NAMED in NOTES.md or conventions.md compiles into
+   the shipped bundle — the design-system header once listed three utilities as
+   absent and thereby created all three. The authored previews next to those two
+   files are real markup and stay in the scan. */
+@source not "../.design-sync/NOTES.md";
+@source not "../.design-sync/conventions.md";
+
 @custom-variant dark (&:is(.dark *));
 
 /* identifiers line up: task keys, durations, digests, timestamps. Declared as

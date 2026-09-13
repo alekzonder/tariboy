@@ -197,6 +197,13 @@ Documented limits, not defects — they ship importable with types and docs:
   plausible compositions rather than lifted usage.
 
 ## Known render warns (triaged — not new findings)
+
+- `[RENDER] agents/AgentWorkspace: root empty` on a FULL render check, with
+  `pngBytes` ~36 KB and no `firstErr`. This is the documented first-card false
+  negative (see "Page-level surfaces" below), re-confirmed on the console-slice
+  sync by opening `_screenshots/agents__AgentWorkspace.png`: the card renders the
+  whole agent header, tabs and console. 66 of 67 cards pass. The final validate
+  runs `--no-render-check` for this reason.
 - Focus rings appear in overlay captures because Dialog/AlertDialog/Sheet autofocus
   their Cancel or close button. Genuine component behaviour, not a defect.
 - `Badge` `ghost` and `link` variants are text-only at rest; that is correct, not
@@ -430,6 +437,79 @@ page surfaces from `make-entry.mjs` and the check goes clean again at ~3.5 MB.
 `.design-sync/.cache/shot.mjs <html> <out.png> <w> <h>` screenshots one card at
 full width — the review sheets crop at ~900px, which is narrower than a page
 frame, so use it whenever a page card needs judging.
+
+## Tailwind scans `conventions.md` — never name a class as absent there
+
+The header used to say "exotic or rarely-used utilities (e.g. `text-4xl`,
+`animate-pulse`, `tracking-tight`) are not present". By the next build they WERE
+present: `.design-sync/conventions.md` is an ordinary source file as far as
+Tailwind v4's content scan is concerned, so every class name written in its prose
+gets compiled into `_ds_bundle.css`. The sentence conjured the three utilities it
+named, and `grep -rl text-4xl` found exactly one file in the repo — the header
+itself.
+
+It only surfaced now because a header is authored at the END of a sync, after
+that sync's final build: this was the first build whose CSS scan saw the file.
+
+Removing the sentence was not enough: these very notes then named the same three
+classes and kept them alive. The fix is a scan boundary, in `src/index.css`:
+
+    @source not "../.design-sync/NOTES.md";
+    @source not "../.design-sync/conventions.md";
+
+Verified after adding it - the three stop compiling, while `leading-tight` (the
+sidebar footer really uses it) and the utilities the authored previews use
+(`border-b`, `py-2`, `gap-3`) all survive.
+
+Rules that follow:
+
+- The two prose files are out of the scan; write class names in them freely.
+- `.design-sync/previews/*.tsx` stay IN the scan on purpose - they are real
+  markup and their classes must compile. Any new prose file under
+  `.design-sync/` needs its own `@source not` line.
+- Never state in `conventions.md` that a particular class is absent: with the
+  boundary in place the claim is merely unverifiable, without it the claim
+  falsifies itself.
+
+## Token tripwire moved deliberately: 83 → 99
+
+The console-slice redesign added 14 theme tokens on purpose: `--status-running`,
+`--status-queued`, `--status-done`, `--status-failed`, `--status-stopped`,
+`--lift`, `--raise`, `--panel-radius`, and six `--workspace-*` (the thematic half
+of what `terminalWorkspace.css` used to declare on `.flexlayout__layout`).
+
+The clean build reads `99 distinct`: the 14 above, plus `--leading-tight` (real -
+the sidebar footer uses it) and `--color-background`, both engine defaults
+Tailwind emits once the app uses them. A mid-flight build read `103` because the
+header prose was still conjuring four more; the scan boundary removed them.
+
+So the tripwire number to watch from here is the one the next clean build prints,
+not 83. Check the delta against deliberate token changes before accepting it.
+
+## The driver does NOT run `cfg.buildCmd` — run it yourself first
+
+`resync.mjs` chains build -> diff -> validate -> capture, where "build" is
+`package-build.mjs`, NOT `cfg.buildCmd`. For this repo those are different
+things: `buildCmd` (`prepare-css.sh` + `make-entry.mjs`) is what produces the
+compiled stylesheet and stages the Geist `.woff2` files into
+`.design-sync/.cache/css/`. Skip it and the converter happily consumes whatever
+is in that cache directory.
+
+What that looked like when it happened (console-slice sync): the cache held a
+hand-copied `styles.css` and no fonts, so
+
+- `fonts/` shipped `fonts.css` alone. Its five `url(./geist-*.woff2)` pointed at
+  files that were not there, the build logged
+  `0 url(s) rewritten to fonts/, 5 dead @font-face block(s) dropped`, and every
+  design would have silently fallen back to a system font. **Validate does not
+  catch this** - `fonts.css` is valid CSS; only `ls ds-bundle/fonts/` shows it.
+- The stylesheet was one build stale, so a source fix made minutes earlier
+  (`@source not`) was absent from the shipped CSS while the local app build had
+  it. The tripwire number is what exposed it: it refused to move.
+
+So the re-sync order is: `bash .design-sync/prepare-css.sh && node
+.design-sync/make-entry.mjs`, confirm the log says `staged ... + 5 fonts`, THEN
+the driver. After any build, `ls ds-bundle/fonts/` must show six files.
 
 ## Re-sync risks
 
