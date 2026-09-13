@@ -7,6 +7,7 @@
   "tsconfig": "tsconfig.app.json",
   "buildCmd": "bash .design-sync/prepare-css.sh && node .design-sync/make-entry.mjs",
   "cssEntry": ".design-sync/.cache/css/styles.css",
+  "tokensPkg": "tariboy-ui",
   "componentSrcMap": {
     "AgentColorSwatch": "src/components/AgentColorSwatch.tsx",
     "AgentControls": "src/components/AgentControls.tsx",

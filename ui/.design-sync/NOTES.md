@@ -214,7 +214,8 @@ Documented limits, not defects — they ship importable with types and docs:
 The design-system token scan reads every custom property reachable from
 `styles.css`. Tariboy ships no static stylesheet, so `_ds_bundle.css` is the
 only place its CSS lives, and the scan saw ~325 declarations that are not
-design tokens sitting next to the 87 real ones:
+design tokens sitting next to the 87 real ones (83 after the four
+Tailwind engine defaults below were demoted by name):
 
 - **73 `--tw-*`** Tailwind v4 internals - on `*,:before,:after,::backdrop`, on
   utility classes, and as 73 `@property` rules.
@@ -229,7 +230,7 @@ design tokens sitting next to the 87 real ones:
 `.design-sync/annotate-tokens.mjs` marks them with `/* @kind other */`. The
 rule is **scope-based, not a name allowlist**: a custom property whose
 innermost selector is not a theme scope (`:root`, `:root,:host`, `.dark`,
-`html`, `:host`) is not a design token. The 87 tokens under `:root`/`.dark`
+`html`, `:host`) is not a design token. The tokens under `:root`/`.dark`
 (`--background`, `--primary`, `--sidebar*`, `--chart-1…5`, …) are untouched
 and still classify normally.
 
@@ -268,6 +269,119 @@ If the check still reports unclassified tokens after this, the remaining names
 will be real `:root`/`.dark` tokens whose *values* it cannot bucket (easings,
 durations, font weights, `calc()` line-heights) - a different problem from the
 scope pollution this pass fixes, and one to solve by value, not by scope.
+
+### DEMOTE_NAMES - the four that scope cannot reach
+
+That prediction came true for exactly four names, and they are now demoted by
+name in `annotate-tokens.mjs`:
+
+    --ease-in-out  --animate-spin
+    --default-transition-duration  --default-transition-timing-function
+
+Tailwind v4 writes its own engine defaults into the very same `:root,:host`
+block as the app's tokens, so no scope rule can separate them - only the name
+can. They back the `transition-*` and `animate-spin` utilities and carry no
+design decision. The marker lands *inside* the declaration, right after its
+`;`, exactly like every scope-demoted one:
+
+    --ease-in-out:cubic-bezier(.4, 0, .2, 1);/* @kind other */
+
+Keep the list minimal. A real token whose value merely looks unbucketable (a
+`calc()` line-height, a font weight) belongs in the token list, not here. The
+build-log tripwire moved with this change: the line now reads **83 distinct**
+theme tokens (114 declarations), not 87. Same rule as before - if that number
+moves without a deliberate token change, stop.
+
+### Markers are audited, not assumed
+
+`annotate-tokens.mjs` now ends with an `audit()` pass over its own output, and
+**throws** (failing the converter run) unless every single `/* @kind other */`
+sits in one of exactly two places:
+
+    --x:1px;/* @kind other */         immediately after a declaration's `;`
+    @property --x{/* @kind other */   immediately after an @property `{`
+
+It also fails if a non-token declaration was left unmarked. Two things worth
+knowing before chasing a report of loose markers in `_ds_bundle.css`:
+
+- A stray marker in the *input* cannot survive. The pass opens by stripping
+  every marker it has ever written (`css.split(MARKER).join('')`) and then
+  re-derives them, so litter from any source is removed, not re-attached.
+- `flushDecl` always emits its own `;` before the marker, so a block's last
+  declaration (`.ring-primary{--tw-ring-color:var(--primary)}`) is closed
+  first. This is why the audit can only fire on a walker regression - which
+  is exactly what it is there to catch.
+
+Current build: 402 markers, all attached, verified by that pass. If a detached
+marker is ever reported again, get the byte offset - it is not coming from
+this script.
+
+## The token list the design agent reads (`cfg.tokensPkg`)
+
+The `@kind other` annotation is a hint for the app-side check. It is **not**
+read by the converter: `grep -r '@kind' .ds-sync/` finds nothing. So it did
+nothing for the one token surface that reaches the design agent directly - the
+README's `## Tokens` section, which is inlined into that agent's system prompt.
+
+`emitReadme` (`lib/emit.mjs`) scans `tokens/*.css` for that section and only
+falls back to a flat regex over the whole of `_ds_bundle.css` when no token
+file shipped. Tariboy shipped none, so it hit the fallback, and the fallback
+has no notion of scope. The README therefore advertised **220 "tokens"**, led
+by:
+
+    - **color** (88): `--color-text`, `--color-background`, `--color-base`, …
+    - **typography** (14): `--font-size`, `--font-family`, `--font-weight`, …
+    - **spacing** (5): `--tw-space-y-reverse`, `--tw-inset-shadow`, …
+
+Every one of those is flexlayout-react's `light.css` theme or a Tailwind
+internal, and **none of them resolve outside the subtree that declares them**:
+an agent writing `background: var(--color-background)` gets nothing at all. The
+DS's real tokens were not even in the examples.
+
+Fix: `.design-sync/make-tokens.mjs` hoists the real theme tokens - exactly what
+`annotate-tokens.mjs` classifies as tokens, from `:root` / `:root,:host` /
+`.dark`, minus `DEMOTE_NAMES` - into one stylesheet, staged as a minimal
+package at `node_modules/tariboy-ui/dist/css/theme.css`, and `cfg.tokensPkg`
+points at it. `prepare-css.sh` runs it, so `cfg.buildCmd` still covers
+everything. The README now lists **83 tokens** and says "See `tokens/` for the
+full list."
+
+Things to know:
+
+- **Rendering is unaffected.** `writeStylesCss` imports `tokens/theme.css`
+  *before* `_ds_bundle.css`, which redeclares every one of those names with the
+  same value, so the cascade is identical. The file is documentation that
+  happens to be valid CSS.
+- **The package name must stay `tariboy-ui`.** The README prints
+  `cfg.tokensPkg ?? cfg.pkg`, so using the real package name keeps that
+  sentence truthful and identical to what it printed before. A made-up name
+  (`tariboy-ui-theme`) would tell the agent to look for a package that does not
+  exist.
+- **`node_modules/tariboy-ui/` is a build artifact**, like the staged CSS:
+  gitignored, rewritten by every `prepare-css.sh`, and pruned by `npm ci`.
+  That is one more reason a fresh clone must run `buildCmd` before the
+  converter. Nothing imports it as JavaScript - `story-imports.mjs` intercepts
+  the `tariboy-ui` specifier by name in `onResolve`, before esbuild consults
+  `node_modules` at all (checked: the preview builds are unaffected).
+- **This is config, not a fork** - `cfg.tokensPkg` and a script outside
+  `overrides/`. `configSlicesFor` keys only `overrides/*.mjs` bytes, so no
+  grade cleared and no component was re-verified. Keep it that way: solving
+  this by forking `lib/emit.mjs` instead would have re-opened all 67.
+
+### What this does NOT fix, and why
+
+The ~325 non-token custom properties still ship inside `_ds_bundle.css`, and
+the app-side scan still sees them, because rendered designs receive **only**
+the `styles.css` `@import` closure. Taking flexlayout/xterm/hljs CSS out of
+that closure is the only way to hide them from the scan, and it would strip
+those styles from every design the agent ever builds (TerminalsPage,
+AgentWorkspace, TuiScreen, rendered markdown). Upstream states the trade-off
+outright in `lib/css.mjs`'s `writeStylesCss` comment: the app's scope filter is
+permissive on purpose, component vars do enter the token list, and that is
+"tolerable … and the price of designs actually receiving component CSS".
+
+So the split is: the annotation marks them, the README no longer lists them,
+and they keep rendering. Do not "fix" the remainder by dropping vendor CSS.
 
 ## Page-level surfaces, and why the render check is skipped
 
@@ -331,10 +445,12 @@ frame, so use it whenever a page card needs judging.
 - `annotate-tokens.mjs`'s theme-scope list (`:root`, `:root,:host`, `.dark`,
   `html`, `:host`) is what separates tokens from noise. If the app ever moves
   its tokens to another scope (a `[data-theme]` attribute, a `@layer theme`
-  block, a media-query dark mode), that scope must be added or all 87 real
-  tokens get demoted to `@kind other` in one silent step. The build log line
-  is the tripwire: it prints how many were kept as tokens - if that number
-  falls off 87 without a deliberate token change, stop.
+  block, a media-query dark mode), that scope must be added or all 83 real
+  tokens get demoted to `@kind other` in one silent step - and
+  `make-tokens.mjs`, which reads the same rule, would empty the shipped
+  `tokens/theme.css` alongside it (it throws rather than write an empty one).
+  The build log line is the tripwire: it prints how many were kept as tokens -
+  if that number falls off 83 without a deliberate token change, stop.
 
 - The final validate runs with `--no-render-check` (see above). If the bundle
   ever shrinks back under roughly 4 MB, drop the flag and confirm a clean run.
@@ -371,4 +487,8 @@ frame, so use it whenever a page card needs judging.
   `desktop/dist/assets/` holding exactly one `.css`. A build change breaks CSS
   silently (validate would report `[CSS_PLACEHOLDER]` or missing tokens).
 - The staged CSS is gitignored (`.design-sync/.cache/`), so a fresh clone must run
-  `buildCmd` before the converter.
+  `buildCmd` before the converter. Same for the staged token package at
+  `node_modules/tariboy-ui/` (written by `make-tokens.mjs`, which
+  `prepare-css.sh` calls last): without it `copyTokens` throws on the missing
+  `package.json` rather than falling back, so `cfg.tokensPkg` and `buildCmd`
+  travel together.

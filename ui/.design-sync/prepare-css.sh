@@ -15,3 +15,7 @@ cp "$(ls ../desktop/dist/assets/*.css | head -1)" "$out/styles.css"
 # the converter appends CSS that never passes through this file - see the fork's
 # header comment.
 echo "staged $out/styles.css ($(wc -c < "$out/styles.css") bytes) + $(ls "$out"/*.woff2 | wc -l) fonts"
+# Hoist the theme tokens into a staged token package for cfg.tokensPkg, so the
+# README's token list is the theme rather than a flat scan of the whole
+# compiled bundle. Must run after styles.css is staged - it reads it.
+node .design-sync/make-tokens.mjs

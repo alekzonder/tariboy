@@ -22,6 +22,14 @@
 // token. Only declarations whose innermost scope is a theme scope (:root,
 // :host, html, .dark, or a comma list of those) stay unannotated.
 //
+// One narrow exception rides on top of that rule: DEMOTE_NAMES, the handful of
+// Tailwind engine defaults Tailwind writes into the app's own `:root,:host`
+// block. Scope cannot separate those from real tokens, so they are named.
+//
+// Every marker is then audited: it must sit immediately after a declaration's
+// `;` or an `@property` rule's `{`. A marker attached to nothing is a build
+// failure, not a cosmetic flaw.
+//
 // Nothing is deleted - every declaration still ships and still renders;
 // `--tw-*` in particular is load-bearing for the compiled utilities. CSS
 // comments are inert, so this is a pure metadata pass.
@@ -33,15 +41,37 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const MARKER = '/* @kind other */';
 const THEME_PART = /^(:root|:host|html|\.dark)$/;
 
+// Custom properties that ARE declared in a theme scope but are not design
+// tokens. Tailwind v4 writes its own engine defaults into the very same
+// `:root,:host` block as the app's tokens, so *scope* cannot separate these
+// from `--background` and friends - only the name can. All four carry no
+// design decision a design agent would reach for (they back the `transition-*`
+// and `animate-spin` utilities), and their values are exactly the kinds the
+// token scan cannot bucket: an easing curve, a keyframes shorthand, a bare
+// duration.
+//
+// Keep this list minimal and name every entry deliberately. A real token whose
+// value merely looks unbucketable (a `calc()` line-height, a font weight)
+// belongs in the token list, not here.
+export const DEMOTE_NAMES = new Set([
+  '--ease-in-out',
+  '--animate-spin',
+  '--default-transition-duration',
+  '--default-transition-timing-function',
+]);
+
 // A scope is a theme scope only if EVERY comma-separated part is one.
 // `:root,:host` qualifies; `.dark\:scale-0:is(.dark *)` does not.
-const isThemeScope = (sel) => {
+export const isThemeScope = (sel) => {
   const s = sel.replace(/\/\*[\s\S]*?\*\//g, '').trim();
   if (!s || s.startsWith('@')) return false;
   return s.split(',').every((p) => THEME_PART.test(p.trim()));
 };
 
-const isCustomProp = (decl) => /^\s*--[\w-]+\s*:/.test(decl.replace(/\/\*[\s\S]*?\*\//g, ''));
+// The declared name, or null when the text is not a custom-property
+// declaration. Comments are stripped first so an already-annotated
+// declaration still reports its name.
+export const declName = (decl) => decl.replace(/\/\*[\s\S]*?\*\//g, '').match(/^\s*(--[\w-]+)\s*:/)?.[1] ?? null;
 
 function annotate(css) {
   // Idempotence by reconstruction: drop every marker this script has ever
@@ -53,22 +83,25 @@ function annotate(css) {
   let cur = ''; // text since the last {, } or ; at paren depth 0
   const stack = []; // innermost-last selector preludes
   let paren = 0;
-  let counts = { decls: 0, atProperty: 0, skipped: 0 };
+  let counts = { decls: 0, atProperty: 0, skipped: 0, demoted: 0 };
 
   const scope = () => (stack.length ? stack[stack.length - 1] : '');
 
   // Flush a declaration, appending the marker when it is a custom property
-  // in a non-theme scope and isn't already annotated.
+  // that is either outside every theme scope or named in DEMOTE_NAMES.
   const flushDecl = (terminator) => {
     let text = cur;
     cur = '';
-    if (!isCustomProp(text)) return (out += text + terminator);
-    if (isThemeScope(scope())) {
+    const name = declName(text);
+    if (!name) return (out += text + terminator);
+    const demoted = DEMOTE_NAMES.has(name);
+    if (isThemeScope(scope()) && !demoted) {
       counts.skipped++;
       return (out += text + terminator);
     }
     if (text.includes('@kind')) return (out += text + terminator);
     counts.decls++;
+    if (demoted) counts.demoted++;
     // Always terminate with `;` so the marker never fuses with the value -
     // a block's last declaration may arrive with `}` as its terminator.
     out += `${text};${MARKER}${terminator === ';' ? '' : terminator}`;
@@ -147,7 +180,8 @@ function annotate(css) {
 }
 
 // Pass 1: collect the names declared in theme scopes, so an `@property` rule
-// backing a real token is never demoted.
+// backing a real token is never demoted. DEMOTE_NAMES are held out here, so an
+// `@property` rule backing one of them is marked like any other non-token.
 const THEME_NAMES = new Set();
 function collectThemeNames(css) {
   const re = /([^{}]*)\{([^{}]*)\}/g;
@@ -155,8 +189,165 @@ function collectThemeNames(css) {
   while ((m = re.exec(css))) {
     const sel = m[1].split(/[{}]/).pop();
     if (!isThemeScope(sel)) continue;
-    for (const d of m[2].matchAll(/(--[\w-]+)\s*:/g)) THEME_NAMES.add(d[1]);
+    for (const d of m[2].matchAll(/(--[\w-]+)\s*:/g)) {
+      if (!DEMOTE_NAMES.has(d[1])) THEME_NAMES.add(d[1]);
+    }
   }
+}
+
+// Pass 3: audit the annotated CSS. Every marker must sit *in* something - a
+// marker that ends up floating between rules annotates nothing, and reads as
+// litter in the shipped stylesheet. Two legal positions, and no third:
+//
+//   `--x:1px;/* @kind other */`        immediately after a declaration's `;`
+//   `@property --x{/* @kind other */`  immediately after an @property `{`
+//
+// The walker below cannot currently produce anything else (flushDecl always
+// emits its own `;` first), so this is a standing guarantee rather than a
+// repair: it is what keeps a later edit to the walker from silently shipping
+// detached markers. Violations throw, which fails the converter run.
+export function audit(css) {
+  const attached = [];
+  const cps = []; // every custom-property declaration: { name, scope, marked }
+  let cur = '';
+  const stack = [];
+  let paren = 0;
+  const scope = () => (stack.length ? stack[stack.length - 1] : '');
+  const marked = (i) => css.startsWith(MARKER, i);
+
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (c === '\\' && i + 1 < css.length) { cur += css.slice(i, i + 2); i++; continue; }
+    if (c === '/' && css[i + 1] === '*') {
+      const end = css.indexOf('*/', i + 2);
+      const stop = end === -1 ? css.length : end + 2;
+      cur += css.slice(i, stop);
+      i = stop - 1;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < css.length && css[j] !== c) j += css[j] === '\\' ? 2 : 1;
+      cur += css.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (c === '(') paren++;
+    else if (c === ')') paren = Math.max(0, paren - 1);
+    if (paren > 0) { cur += c; continue; }
+
+    if (c === '{') {
+      const prelude = cur.trim();
+      cur = '';
+      stack.push(prelude);
+      if (marked(i + 1)) {
+        if (!/^@property\s+--[\w-]+/.test(prelude)) {
+          throw new Error(`annotate-tokens: marker opens a non-@property block: ${prelude.slice(-90)} {`);
+        }
+        attached.push(i + 1);
+      }
+      continue;
+    }
+    if (c === '}' || c === ';') {
+      const name = declName(cur);
+      if (name) cps.push({ name, scope: scope(), marked: c === ';' && marked(i + 1) });
+      if (c === ';' && marked(i + 1)) {
+        if (!name) throw new Error(`annotate-tokens: marker follows a non-custom-property declaration: ${cur.trim().slice(-90)};`);
+        attached.push(i + 1);
+      }
+      cur = '';
+      if (c === '}') stack.pop();
+      continue;
+    }
+    cur += c;
+  }
+
+  // Every marker in the file must be one of the attached ones.
+  const total = css.split(MARKER).length - 1;
+  if (total !== attached.length) {
+    const seen = new Set(attached);
+    const loose = [];
+    for (let p = css.indexOf(MARKER); p !== -1; p = css.indexOf(MARKER, p + 1)) {
+      if (!seen.has(p)) loose.push(`line ${css.slice(0, p).split('\n').length}: …${css.slice(Math.max(0, p - 60), p + MARKER.length)}`);
+    }
+    throw new Error(
+      `annotate-tokens: ${total - attached.length} marker(s) attached to nothing:\n  ${loose.slice(0, 8).join('\n  ')}`,
+    );
+  }
+
+  // And every non-token declaration must carry one.
+  const missed = cps.filter((d) => d.marked === false && (DEMOTE_NAMES.has(d.name) || !isThemeScope(d.scope)));
+  if (missed.length) {
+    throw new Error(
+      `annotate-tokens: ${missed.length} non-token declaration(s) left unmarked: ` +
+        missed.slice(0, 8).map((d) => `${d.name} in ${d.scope.slice(-50) || '<top level>'}`).join(', '),
+    );
+  }
+  return { markers: total, customProps: cps.length };
+}
+
+// Every theme-scope block, as { scope, decls: [text, …] }, carrying only the
+// declarations this file classifies as design tokens - the same rule the
+// annotation pass applies, read the other way round. `make-tokens.mjs` writes
+// these out as the DS's token stylesheet so the converter's README scan has a
+// real `tokens/` file to read instead of falling back to the whole compiled
+// bundle (where flexlayout's `--color-text` outranks the app's own tokens).
+export function themeTokenBlocks(css) {
+  const blocks = [];
+  let cur = '';
+  const stack = [];
+  let paren = 0;
+  let open = null; // block currently collecting, or null
+  const flush = () => {
+    if (!open) return;
+    const name = declName(cur);
+    if (name && !DEMOTE_NAMES.has(name)) open.decls.push(cur.replace(/\/\*[\s\S]*?\*\//g, '').trim());
+  };
+
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (c === '\\' && i + 1 < css.length) { cur += css.slice(i, i + 2); i++; continue; }
+    if (c === '/' && css[i + 1] === '*') {
+      const end = css.indexOf('*/', i + 2);
+      const stop = end === -1 ? css.length : end + 2;
+      cur += css.slice(i, stop);
+      i = stop - 1;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < css.length && css[j] !== c) j += css[j] === '\\' ? 2 : 1;
+      cur += css.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (c === '(') paren++;
+    else if (c === ')') paren = Math.max(0, paren - 1);
+    if (paren > 0) { cur += c; continue; }
+
+    if (c === '{') {
+      const prelude = cur.trim();
+      stack.push(prelude);
+      cur = '';
+      // Only the outermost theme block collects: a nested block inside one
+      // (there are none today) would carry its own conditions.
+      if (!open && isThemeScope(prelude)) open = { scope: prelude, decls: [], depth: stack.length };
+      continue;
+    }
+    if (c === '}') {
+      flush();
+      cur = '';
+      if (open && open.depth === stack.length) {
+        if (open.decls.length) blocks.push({ scope: open.scope, decls: open.decls });
+        open = null;
+      }
+      stack.pop();
+      continue;
+    }
+    if (c === ';') { flush(); cur = ''; continue; }
+    cur += c;
+  }
+  return blocks;
 }
 
 // Annotate a stylesheet in place. Safe to call on a file that has already
@@ -167,10 +358,13 @@ export function annotateFile(file) {
   THEME_NAMES.clear();
   collectThemeNames(src);
   const { css, counts } = annotate(src);
+  const audited = audit(css); // throws rather than write a stylesheet with loose markers
   writeFileSync(file, css);
   console.error(
-    `  @kind other: ${counts.decls} declaration(s) + ${counts.atProperty} @property rule(s) marked; ` +
-      `${counts.skipped} theme-scope token(s) left as tokens (${THEME_NAMES.size} distinct)`,
+    `  @kind other: ${counts.decls} declaration(s) (${counts.demoted} demoted by name from a theme scope) + ` +
+      `${counts.atProperty} @property rule(s) marked; ` +
+      `${counts.skipped} theme-scope token(s) left as tokens (${THEME_NAMES.size} distinct); ` +
+      `${audited.markers} markers, all attached`,
   );
   return counts;
 }
