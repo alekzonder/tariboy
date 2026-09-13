@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Tariboy Console" description="Operator console in the Tariboy style layer: warm chrome, borderless sidebar, floating content island, quiet status." -->
+<helmet><script src="./ds-base.js"></script><style>*{box-sizing:border-box}body{margin:0;--background:oklch(96.4% .005 255);--muted:oklch(94.4% .007 255);--accent:oklch(93.4% .009 255);--sidebar-accent:oklch(94% .007 255);--border:oklch(90.4% .009 255);--secondary:oklch(94.4% .007 255);--popover:oklch(99% .002 255)}button:not([class]),input:not([class]){font:inherit;color:inherit}a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}</style></helmet>
+<div style="height:100vh;display:flex;flex-direction:column;background:var(--background);color:var(--foreground);font-family:'Geist Variable',ui-sans-serif,system-ui,sans-serif;font-size:13px;overflow:hidden">
+<div style="height:42px;flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:0 12px">
+<button style="display:flex;align-items:center;gap:6px;height:26px;padding:0 8px;border:0;border-radius:7px;background:transparent;cursor:pointer" style-hover="background:var(--accent)"><span style="font-weight:500">Default</span><svg width="10" height="10" viewBox="0 0 10 10" style="opacity:.45"><polyline points="2,4 5,7 8,4" fill="none" stroke="currentColor" stroke-width="1.3"></polyline></svg></button>
+<div style="display:flex;gap:2px;padding:2px;background:var(--muted);border-radius:9px">
+<sc-if value="{{ isAgents }}" hint-placeholder-val="{{ true }}"><button onClick="{{ showAgents }}" style="height:24px;padding:0 10px;border:0;border-radius:7px;background:var(--card);box-shadow:0 1px 2px oklch(24% .03 75/.10);font-family:inherit;font-size:12px;font-weight:500;color:var(--foreground);cursor:pointer">Agents</button></sc-if>
+<sc-if value="{{ isAllTasks }}" hint-placeholder-val="{{ false }}"><button onClick="{{ showAgents }}" style="height:24px;padding:0 10px;border:0;border-radius:7px;background:transparent;font-family:inherit;font-size:12px;color:var(--muted-foreground);cursor:pointer">Agents</button></sc-if>
+<sc-if value="{{ isAllTasks }}" hint-placeholder-val="{{ false }}"><button onClick="{{ showAllTasks }}" style="height:24px;padding:0 10px;border:0;border-radius:7px;background:var(--card);box-shadow:0 1px 2px oklch(24% .03 75/.10);font-family:inherit;font-size:12px;font-weight:500;color:var(--foreground);cursor:pointer">All tasks</button></sc-if>
+<sc-if value="{{ isAgents }}" hint-placeholder-val="{{ true }}"><button onClick="{{ showAllTasks }}" style="height:24px;padding:0 10px;border:0;border-radius:7px;background:transparent;font-family:inherit;font-size:12px;color:var(--muted-foreground);cursor:pointer">All tasks</button></sc-if>
+</div>
+<div style="margin-left:auto;display:flex;gap:2px">
+<button aria-label="Settings" style="width:26px;height:26px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:var(--muted-foreground);cursor:pointer" style-hover="background:var(--accent);color:var(--foreground)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+</div>
+</div>
+<div style="flex:1 1 auto;display:flex;min-height:0;padding:0 8px 8px;gap:8px">
+<div style="width:268px;flex:0 0 auto;display:flex;flex-direction:column;min-height:0;padding:0 2px">
+<div style="flex:0 0 auto;padding:2px 6px 8px"><div style="display:flex;align-items:center;gap:7px;height:30px;padding:0 9px;border-radius:8px;background:var(--muted);color:var(--muted-foreground)"><svg width="13" height="13" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="5" r="3.4"></circle><line x1="7.6" y1="7.6" x2="10.5" y2="10.5"></line></svg><span style="font-size:12.5px">Search agents</span><span style="margin-left:auto;font-size:11px;opacity:.6">⌘K</span></div></div>
+<div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 8px 8px">
+<sc-if value="{{ leftAgentsOn }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickAgentsTab }}" style="height:24px;padding:0 9px;border:0;border-radius:7px;background:var(--accent);font-family:inherit;font-size:12px;font-weight:500;color:var(--foreground);cursor:pointer">Agents</button></sc-if>
+<sc-if value="{{ leftAgentsOff }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickAgentsTab }}" style="height:24px;padding:0 9px;border:0;border-radius:7px;background:transparent;font-family:inherit;font-size:12px;color:var(--muted-foreground);cursor:pointer">Agents</button></sc-if>
+<sc-if value="{{ leftGroupsOn }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickGroupsTab }}" style="height:24px;padding:0 9px;border:0;border-radius:7px;background:var(--accent);font-family:inherit;font-size:12px;font-weight:500;color:var(--foreground);cursor:pointer">Groups</button></sc-if>
+<sc-if value="{{ leftGroupsOff }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickGroupsTab }}" style="height:24px;padding:0 9px;border:0;border-radius:7px;background:transparent;font-family:inherit;font-size:12px;color:var(--muted-foreground);cursor:pointer">Groups</button></sc-if>
+<sc-if value="{{ leftServersOn }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickServersTab }}" style="height:24px;padding:0 9px;border:0;border-radius:7px;background:var(--accent);font-family:inherit;font-size:12px;font-weight:500;color:var(--foreground);cursor:pointer">Servers</button></sc-if>
+<sc-if value="{{ leftServersOff }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickServersTab }}" style="height:24px;padding:0 9px;border:0;border-radius:7px;background:transparent;font-family:inherit;font-size:12px;color:var(--muted-foreground);cursor:pointer">Servers</button></sc-if>
+<button aria-label="New agent" style="margin-left:auto;width:24px;height:24px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:var(--muted-foreground);cursor:pointer" style-hover="background:var(--accent);color:var(--foreground)"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5"><line x1="6" y1="2" x2="6" y2="10"></line><line x1="2" y1="6" x2="10" y2="6"></line></svg></button>
+</div>
+<div style="flex:1 1 auto;overflow:auto;min-height:0;padding:0 6px">
+<div style="padding:6px 8px 4px;font-size:11px;font-weight:500;letter-spacing:.02em;color:var(--muted-foreground)">Pinned</div>
+<sc-for list="{{ pinned }}" as="a" hint-placeholder-count="1">
+<dc-import name="AgentRow" label="{{ a.name }}" status="{{ a.status }}" selected="{{ a.selected }}" no-budget="{{ a.noBudget }}" unread="{{ a.unread }}" update="{{ a.update }}" image="{{ a.image }}" onSelect="{{ a.select }}" hint-size="100%,32px"></dc-import>
+</sc-for>
+<div style="padding:12px 8px 4px;font-size:11px;font-weight:500;letter-spacing:.02em;color:var(--muted-foreground)">All agents</div>
+<sc-for list="{{ rest }}" as="a" hint-placeholder-count="3">
+<dc-import name="AgentRow" label="{{ a.name }}" status="{{ a.status }}" selected="{{ a.selected }}" no-budget="{{ a.noBudget }}" unread="{{ a.unread }}" update="{{ a.update }}" image="{{ a.image }}" onSelect="{{ a.select }}" hint-size="100%,32px"></dc-import>
+</sc-for>
+</div>
+<div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;height:44px;padding:0 12px">
+<span style="width:22px;height:22px;border-radius:999px;background:var(--accent);display:grid;place-items:center;color:var(--muted-foreground)"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2.5" width="10" height="4" rx="1.2"></rect><rect x="2" y="7.5" width="10" height="4" rx="1.2"></rect></svg></span>
+<span style="flex:1 1 auto;min-width:0;font-size:12px"><span style="display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">All servers</span><span style="display:block;font-size:11px;color:var(--muted-foreground)">{{ serverCount }} connected · {{ agentCount }} agents</span></span>
+<span style="width:6px;height:6px;border-radius:999px;background:var(--status-running)"></span>
+</div>
+</div>
+<div style="flex:1 1 auto;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--card);border-radius:var(--panel-radius);box-shadow:var(--lift);overflow:hidden">
+<sc-if value="{{ isAgents }}" hint-placeholder-val="{{ true }}">
+<div style="flex:0 0 auto;display:flex;align-items:flex-start;gap:10px;padding:14px 16px 11px">
+<div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:9px;min-width:0">
+<sc-if value="{{ selLive }}" hint-placeholder-val="{{ true }}"><span style="flex:0 0 auto;width:8px;height:8px;border-radius:999px;background:var(--status-running);box-shadow:0 0 0 3px color-mix(in oklab,var(--status-running) 18%,transparent)"></span></sc-if>
+<sc-if value="{{ selFailed }}" hint-placeholder-val="{{ false }}"><span style="flex:0 0 auto;width:8px;height:8px;border-radius:999px;background:var(--status-failed)"></span></sc-if>
+<sc-if value="{{ selQuiet }}" hint-placeholder-val="{{ false }}"><span style="flex:0 0 auto;width:8px;height:8px;border-radius:999px;background:var(--status-stopped)"></span></sc-if>
+<span style="font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap">{{ selName }}</span>
+<sc-if value="{{ selLive }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px 0 7px;border-radius:6px;background:color-mix(in oklab,var(--status-running) 13%,transparent);color:var(--status-running);font-size:11.5px;font-weight:500;white-space:nowrap">running</span></sc-if>
+<sc-if value="{{ selFailed }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;height:20px;color:var(--status-failed);font-size:11.5px;font-weight:500;white-space:nowrap">failed</span></sc-if>
+<sc-if value="{{ selQuiet }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;height:20px;color:var(--muted-foreground);font-size:11.5px;white-space:nowrap">{{ selStatus }}</span></sc-if>
+<span style="flex:0 0 auto;font-size:12.5px;color:var(--muted-foreground);white-space:nowrap">{{ selServer }}</span>
+<span style="display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:6px;background:var(--muted);font-family:var(--font-mono);font-size:11.5px;color:var(--muted-foreground);white-space:nowrap"><svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="3.5" width="9" height="6" rx="1.5"></rect><line x1="4" y1="1.5" x2="4" y2="3.5"></line><line x1="8" y1="1.5" x2="8" y2="3.5"></line></svg>{{ selImage }}</span>
+<span style="flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden"><span style="flex:0 0 auto">Goal:</span><a href="#" title="{{ selGoalHint }}" style="flex:0 0 auto;font-family:var(--font-mono);font-size:11.5px;font-weight:500;color:var(--foreground);text-decoration:none;border-bottom:1px dotted var(--border)" style-hover="border-bottom-color:var(--foreground)">{{ selGoalKey }}</a><span title="The agent works toward this goal between tasks" style="flex:0 0 auto;display:inline-flex;color:var(--muted-foreground);cursor:help"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="7" cy="7" r="5.4"></circle><path d="M5.6 5.4a1.5 1.5 0 1 1 1.9 1.7v1"></path><circle cx="7" cy="10" r=".6" fill="currentColor" stroke="none"></circle></svg></span></span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;min-width:0;font-size:12px">
+<span style="min-width:0;display:inline-flex;align-items:center;gap:6px;overflow:hidden"><span style="flex:0 0 auto;color:var(--muted-foreground)">cwd:</span><span style="min-width:0;font-family:var(--font-mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ selCwd }}</span></span>
+<a href="#" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-weight:500;color:var(--foreground);text-decoration:none" style-hover="text-decoration:underline"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7 1.5h3.5V5"></path><path d="M10.5 1.5 5.5 6.5"></path><path d="M9 7.5v2.5a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5V3.5A.5.5 0 0 1 2 3h2.5"></path></svg>Open in VS Code</a>
+</div>
+</div>
+<div style="flex:0 0 auto;display:flex;align-items:center;gap:6px">
+<x-import component-from-global-scope="TariboyUI.Button" size="sm" hint-size="60px,28px">Start</x-import>
+<x-import component-from-global-scope="TariboyUI.Button" size="sm" variant="secondary" hint-size="52px,28px">Exec</x-import>
+<x-import component-from-global-scope="TariboyUI.Button" size="sm" variant="secondary" hint-size="46px,28px"><span style="color:var(--destructive)">Kill</span></x-import>
+<span style="position:relative;display:inline-flex"><button onClick="{{ toggleMenu }}" aria-label="Agent settings" style="width:28px;height:28px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--muted-foreground);cursor:pointer" style-hover="background:var(--accent);color:var(--foreground)"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.4"></circle><circle cx="8" cy="8" r="1.4"></circle><circle cx="8" cy="13" r="1.4"></circle></svg></button>
+<sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;top:32px;right:0;min-width:164px;padding:5px;display:grid;gap:1px;background:var(--popover);border-radius:12px;box-shadow:var(--lift);z-index:30">
+<button onClick="{{ closeMenu }}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;height:28px;padding:0 9px;border:0;border-radius:7px;background:transparent;cursor:pointer;font-family:inherit;font-size:13px;color:var(--foreground)" style-hover="background:var(--accent)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</button>
+<div style="height:1px;margin:4px 3px;background:var(--border)"></div>
+<button onClick="{{ closeMenu }}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;height:28px;padding:0 9px;border:0;border-radius:7px;background:transparent;cursor:pointer;font-family:inherit;font-size:13px;color:var(--destructive)" style-hover="background:color-mix(in oklab, var(--destructive) 10%, transparent)"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.6 3.8h8.8M5.4 3.8V2.6h3.2v1.2M3.6 3.8l.5 7.1a.7.7 0 0 0 .7.7h4.4a.7.7 0 0 0 .7-.7l.5-7.1"></path></svg>Delete agent</button>
+</div></sc-if></span>
+</div>
+</div>
+<div style="flex:0 0 auto;display:flex;align-items:center;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);position:relative">
+<sc-if value="{{ onTasks }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickTasks }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid var(--primary);background:transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--foreground);cursor:pointer">Tasks<sc-if value="{{ tasksQ }}" hint-placeholder-val="{{ true }}"><span title="Open question from an agent" style="margin-left:6px;display:inline-block;vertical-align:middle;width:5px;height:5px;border-radius:999px;background:var(--primary)"></span></sc-if></button></sc-if>
+<sc-if value="{{ offTasks }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickTasks }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;font-family:inherit;font-size:13px;color:var(--muted-foreground);cursor:pointer">Tasks<sc-if value="{{ tasksQ }}" hint-placeholder-val="{{ true }}"><span title="Open question from an agent" style="margin-left:6px;display:inline-block;vertical-align:middle;width:5px;height:5px;border-radius:999px;background:var(--primary)"></span></sc-if></button></sc-if>
+<sc-if value="{{ onChats }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickChats }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid var(--primary);background:transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--foreground);cursor:pointer">Chats<sc-if value="{{ chatsQ }}" hint-placeholder-val="{{ true }}"><span title="Unread message" style="margin-left:6px;display:inline-block;vertical-align:middle;width:5px;height:5px;border-radius:999px;background:var(--primary)"></span></sc-if></button></sc-if>
+<sc-if value="{{ offChats }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickChats }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;font-family:inherit;font-size:13px;color:var(--muted-foreground);cursor:pointer">Chats<sc-if value="{{ chatsQ }}" hint-placeholder-val="{{ true }}"><span title="Unread message" style="margin-left:6px;display:inline-block;vertical-align:middle;width:5px;height:5px;border-radius:999px;background:var(--primary)"></span></sc-if></button></sc-if>
+<sc-if value="{{ onSession }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickSession }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid var(--primary);background:transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--foreground);cursor:pointer">Session</button></sc-if>
+<sc-if value="{{ offSession }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickSession }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;font-family:inherit;font-size:13px;color:var(--muted-foreground);cursor:pointer">Session</button></sc-if>
+<sc-if value="{{ onPrompt }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickPrompt }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid var(--primary);background:transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--foreground);cursor:pointer">Prompt</button></sc-if>
+<sc-if value="{{ offPrompt }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickPrompt }}" style="height:34px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;font-family:inherit;font-size:13px;color:var(--muted-foreground);cursor:pointer">Prompt</button></sc-if>
+<span style="display:inline-flex;align-items:center">
+<sc-if value="{{ onCtx }}" hint-placeholder-val="{{ false }}"><button onClick="{{ pickCtxTab }}" style="height:34px;padding:0 4px 0 10px;border:0;border-bottom:2px solid var(--primary);background:transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--foreground);cursor:pointer">{{ ctxLabel }}</button><button onClick="{{ toggleCtx }}" aria-label="More tabs" style="height:34px;padding:0 8px 0 2px;border:0;border-bottom:2px solid var(--primary);background:transparent;color:var(--muted-foreground);cursor:pointer"><svg width="10" height="10" viewBox="0 0 10 10"><polyline points="2,4 5,7 8,4" fill="none" stroke="currentColor" stroke-width="1.3"></polyline></svg></button></sc-if>
+<sc-if value="{{ offCtx }}" hint-placeholder-val="{{ true }}"><button onClick="{{ pickCtxTab }}" style="height:34px;padding:0 4px 0 10px;border:0;border-bottom:2px solid transparent;background:transparent;font-family:inherit;font-size:13px;color:var(--muted-foreground);cursor:pointer">{{ ctxLabel }}</button><button onClick="{{ toggleCtx }}" aria-label="More tabs" style="height:34px;padding:0 8px 0 2px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted-foreground);cursor:pointer"><svg width="10" height="10" viewBox="0 0 10 10"><polyline points="2,4 5,7 8,4" fill="none" stroke="currentColor" stroke-width="1.3"></polyline></svg></button></sc-if>
+</span>
+<sc-if value="{{ ctxOpen }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;top:38px;left:236px;min-width:168px;padding:5px;display:grid;gap:1px;background:var(--popover);border-radius:12px;box-shadow:var(--lift);z-index:20">
+<sc-for list="{{ ctxItems }}" as="c" hint-placeholder-count="4">
+<sc-if value="{{ c.on }}" hint-placeholder-val="{{ false }}"><button onClick="{{ c.pick }}" style="display:block;width:100%;text-align:left;height:28px;padding:0 9px;border:0;border-radius:7px;background:var(--accent);font-family:inherit;font-size:13px;color:var(--foreground);cursor:pointer">{{ c.label }}</button></sc-if>
+<sc-if value="{{ c.off }}" hint-placeholder-val="{{ true }}"><button onClick="{{ c.pick }}" style="display:block;width:100%;text-align:left;height:28px;padding:0 9px;border:0;border-radius:7px;background:transparent;font-family:inherit;font-size:13px;color:var(--foreground);cursor:pointer" style-hover="background:var(--accent)">{{ c.label }}</button></sc-if>
+</sc-for>
+</div></sc-if>
+</div>
+<div style="flex:0 0 auto"><dc-import name="TaskFilterBar" scope="agent" q="{{ q }}" filter="{{ taskFilter }}" onQuery="{{ setQ }}" onFilter="{{ setFilter }}" onAdd="{{ addTask }}" hint-size="100%,48px"></dc-import></div>
+<div style="flex:1 1 auto;overflow:auto;min-height:0">
+<div style="display:flex;align-items:center;gap:10px;height:30px;padding:0 16px;font-size:11.5px;color:var(--muted-foreground)"><span style="width:62px;flex:0 0 auto">Key</span><span style="flex:1 1 auto">Task</span><span style="width:30px;flex:0 0 auto">Pri</span><span style="width:110px">Status</span><span style="width:74px;text-align:right">Duration</span><span style="width:76px;text-align:right">Updated</span></div>
+<sc-for list="{{ taskRows }}" as="t" hint-placeholder-count="6">
+<dc-import name="TaskRow" variant="agent" task-key="{{ t.key }}" task-title="{{ t.title }}" status="{{ t.status }}" priority="{{ t.priority }}" duration="{{ t.duration }}" updated="{{ t.updated }}" depth="{{ t.depth }}" has-kids="{{ t.hasKids }}" open="{{ t.open }}" question="{{ t.question }}" onToggle="{{ t.toggle }}" hint-size="100%,30px"></dc-import>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ isAllTasks }}" hint-placeholder-val="{{ false }}">
+<div style="flex:0 0 auto"><dc-import name="TaskFilterBar" scope="all" q="{{ q }}" filter="{{ taskFilter }}" server="all" agentName="{{ allAgentName }}" selCount="{{ selCount }}" onQuery="{{ setQ }}" onFilter="{{ setFilter }}" onClearAgent="{{ clearAgentFilter }}" onAdd="{{ addTask }}" hint-size="100%,48px"></dc-import></div>
+<div style="flex:1 1 auto;overflow:auto;min-height:0">
+<div style="display:flex;align-items:center;gap:10px;height:30px;padding:0 16px;font-size:11.5px;color:var(--muted-foreground);position:sticky;top:0;background:var(--card);z-index:2"><span style="width:20px;flex:0 0 auto"></span><span style="width:62px;flex:0 0 auto">Key</span><span style="flex:1 1 auto">Task</span><span style="width:104px">Agent</span><span style="width:96px">Server</span><span style="width:110px">Status</span><span style="width:76px;text-align:right">Updated</span></div>
+<sc-for list="{{ allRows }}" as="t" hint-placeholder-count="10">
+<dc-import name="TaskRow" variant="all" task-key="{{ t.key }}" task-title="{{ t.title }}" status="{{ t.status }}" priority="{{ t.priority }}" duration="{{ t.duration }}" updated="{{ t.updated }}" depth="{{ t.depth }}" has-kids="{{ t.hasKids }}" open="{{ t.open }}" question="{{ t.question }}" checked="{{ t.checked }}" agent="{{ t.agent }}" server="{{ t.server }}" onToggle="{{ t.toggle }}" hint-size="100%,30px"></dc-import>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:800}}">
+const CLOSED = { done: true, cancelled: true };
+const AGENTS = [
+  { id: 'builder', name: 'builder', image: 'worker:v2', status: 'running', goal: 'Migrate the store schema and keep CI green', unread: true, update: true, pinned: true, server: 'hetzner-01' },
+  { id: 'reviewer', name: 'reviewer', image: 'worker:v2', status: 'running', goal: 'Review open diffs before release', unread: false, update: false, pinned: false, server: 'hetzner-01', noBudget: true },
+  { id: 'packager', name: 'packager', image: 'bare:latest', status: 'failed', goal: 'Ship nightly bundles', unread: true, update: true, pinned: false, server: 'fly-eu' },
+  { id: 'docs-bot', name: 'docs-bot', image: 'bare:latest', status: 'stopped', goal: 'Keep docs in sync with the API', unread: false, update: false, pinned: false, server: 'fly-eu' }
+];
+const TASKS = {
+  builder: [{ key: 'TB-142', title: 'Migrate store schema', status: 'in_progress', priority: 'P1', duration: '18m', updated: '14:02', children: [
+    { key: 'TB-143', title: 'Dump current schema', status: 'done', priority: 'P2', duration: '40s', updated: '13:44' },
+    { key: 'TB-144', title: 'Write migration', status: 'wait_customer', priority: 'P1', question: true, duration: '9m', updated: '14:02', children: [
+      { key: 'TB-146', title: 'Generate SQL', status: 'done', priority: 'P2', duration: '1m', updated: '13:58' },
+      { key: 'TB-147', title: 'Verify rollback', status: 'open', priority: 'P2', duration: '—', updated: '—' }
+    ] },
+    { key: 'TB-145', title: 'Update docs', status: 'open', priority: 'P3', duration: '—', updated: '—' }
+  ] }],
+  reviewer: [{ key: 'TB-151', title: 'Review release diffs', status: 'wait_customer', priority: 'P2', question: true, duration: '—', updated: '13:47' }],
+  packager: [{ key: 'TB-133', title: 'Nightly bundle', status: 'in_progress', priority: 'P1', duration: '2m', updated: '12:10', children: [{ key: 'TB-134', title: 'Sign artifacts', status: 'cancelled', priority: 'P1', duration: '3s', updated: '12:10' }] }],
+  'docs-bot': [{ key: 'TB-120', title: 'Sync API reference', status: 'done', priority: 'P3', duration: '5m', updated: 'Fri' }]
+};
+const CTX = ['Scripts', 'Iterations', 'Audit', 'Secrets', 'Files'];
+class Component extends DCLogic {
+  state = { mode: 'agents', leftTab: 'Agents', tab: 'Tasks', ctx: 'Scripts', ctxOpen: false, sel: 'builder', agentFilter: true, q: '', taskFilter: 'active', added: [], nextKey: 152, open: { 'TB-142': true, 'TB-144': true, 'TB-133': true } };
+  matches(t) {
+    const q = this.state.q.trim().toLowerCase();
+    const f = this.state.taskFilter;
+    const closed = !!CLOSED[t.status];
+    const okF = f === 'all' || (f === 'closed' ? closed : !closed);
+    const okQ = !q || (t.title + ' ' + t.key).toLowerCase().indexOf(q) >= 0;
+    return okF && okQ;
+  }
+  sift(list) {
+    const out = [];
+    list.forEach((t) => {
+      const kids = this.sift(t.children || []);
+      if (this.matches(t) || kids.length) out.push(kids.length ? Object.assign({}, t, { children: kids }) : Object.assign({}, t, { children: t.children || [] }));
+    });
+    return out;
+  }
+  addTask() {
+    this.setState((s) => ({
+      added: [{ key: 'TB-' + s.nextKey, title: 'New task', status: 'open', priority: 'P2', duration: '—', updated: 'now' }].concat(s.added),
+      nextKey: s.nextKey + 1, taskFilter: s.taskFilter === 'closed' ? 'active' : s.taskFilter, q: ''
+    }));
+  }
+  toggle(key) { this.setState((s) => ({ open: Object.assign({}, s.open, { [key]: !s.open[key] }) })); }
+  flatten(list, depth, agent, server, out) {
+    list.forEach((t) => {
+      const kids = t.children || [];
+      const open = !!this.state.open[t.key];
+      out.push({ t, depth, agent, server, kids: kids.length, open });
+      if (kids.length && open) this.flatten(kids, depth + 1, agent, server, out);
+    });
+    return out;
+  }
+  row(r, i, withBox) {
+    return {
+      key: r.t.key, title: r.t.title, status: r.t.status || 'open', duration: r.t.duration, updated: r.t.updated,
+      priority: r.t.priority || 'P3',
+      question: !!r.t.question,
+      agent: r.agent, server: r.server, depth: r.depth,
+      hasKids: !!r.kids, open: r.open,
+      toggle: () => r.kids && this.toggle(r.t.key),
+      checked: withBox && i < 2
+    };
+  }
+  agent(a) {
+    return {
+      name: a.name, status: a.status, unread: a.unread, update: a.update, image: a.image,
+      noBudget: !!a.noBudget, selected: a.id === this.state.sel,
+      select: () => this.setState({ sel: a.id, agentFilter: true })
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const sel = AGENTS.find((a) => a.id === s.sel) || AGENTS[0];
+    const base = (s.sel === 'builder' ? s.added : []).concat(TASKS[sel.id] || []);
+    const taskRows = this.flatten(this.sift(base), 0, sel.name, sel.server, []).map((r, i) => this.row(r, i, false));
+    const all = [];
+    const scope = s.agentFilter ? AGENTS.filter((a) => a.id === sel.id) : AGENTS;
+    scope.forEach((a) => this.flatten(this.sift((a.id === 'builder' ? s.added : []).concat(TASKS[a.id] || [])), 0, a.name, a.server, all));
+    const allRows = all.map((r, i) => this.row(r, i, true));
+    const onCtx = CTX.indexOf(s.tab) >= 0;
+    return {
+      isAgents: s.mode === 'agents', isAllTasks: s.mode === 'all',
+      showAgents: () => this.setState({ mode: 'agents' }), showAllTasks: () => this.setState({ mode: 'all' }),
+      leftAgentsOn: s.leftTab === 'Agents', leftAgentsOff: s.leftTab !== 'Agents',
+      leftGroupsOn: s.leftTab === 'Groups', leftGroupsOff: s.leftTab !== 'Groups',
+      leftServersOn: s.leftTab === 'Servers', leftServersOff: s.leftTab !== 'Servers',
+      pickAgentsTab: () => this.setState({ leftTab: 'Agents' }), pickGroupsTab: () => this.setState({ leftTab: 'Groups' }), pickServersTab: () => this.setState({ leftTab: 'Servers' }),
+      tasksQ: (TASKS[sel.id] || []).some(function q(t) { return t.question || (t.children || []).some(q); }),
+      chatsQ: !!sel.unread,
+      serverCount: new Set(AGENTS.map((a) => a.server)).size,
+      agentCount: AGENTS.length,
+      pinned: AGENTS.filter((a) => a.pinned).map((a) => this.agent(a)),
+      rest: AGENTS.filter((a) => !a.pinned).map((a) => this.agent(a)),
+      selName: sel.name, selImage: sel.image + ':' + (sel.version || '0.1.0'), selStatus: sel.status,
+      selLive: sel.status === 'running', selFailed: sel.status === 'failed', selQuiet: sel.status !== 'running' && sel.status !== 'failed',
+      selGoalKey: ((TASKS[sel.id] || [])[0] || {}).key || 'No current goal',
+      selGoalHint: ((TASKS[sel.id] || [])[0] || {}).title || 'No current goal',
+      selServer: sel.server, selCwd: sel.cwd || '/home/agent/github/tariboy',
+      onTasks: s.tab === 'Tasks', offTasks: s.tab !== 'Tasks',
+      onChats: s.tab === 'Chats', offChats: s.tab !== 'Chats',
+      onSession: s.tab === 'Session', offSession: s.tab !== 'Session',
+      onPrompt: s.tab === 'Prompt', offPrompt: s.tab !== 'Prompt',
+      onCtx, offCtx: !onCtx,
+      ctxLabel: s.ctx,
+      pickTasks: () => this.setState({ tab: 'Tasks', ctxOpen: false }), pickChats: () => this.setState({ tab: 'Chats', ctxOpen: false }), pickSession: () => this.setState({ tab: 'Session', ctxOpen: false }), pickPrompt: () => this.setState({ tab: 'Prompt', ctxOpen: false }),
+      pickCtxTab: () => this.setState({ tab: s.ctx, ctxOpen: false }),
+      toggleCtx: () => this.setState({ ctxOpen: !s.ctxOpen, menuOpen: false }),
+      menuOpen: !!s.menuOpen,
+      toggleMenu: () => this.setState({ menuOpen: !s.menuOpen, ctxOpen: false }),
+      closeMenu: () => this.setState({ menuOpen: false }),
+      ctxOpen: s.ctxOpen,
+      ctxItems: CTX.map((c) => ({ label: c, on: s.tab === c, off: s.tab !== c, pick: () => this.setState({ ctx: c, tab: c, ctxOpen: false }) })),
+      taskRows, allRows,
+      q: s.q, setQ: (e) => this.setState({ q: e.target.value }),
+      taskFilter: s.taskFilter, setFilter: (v) => this.setState({ taskFilter: v }),
+      addTask: () => this.addTask(),
+      allAgentName: s.agentFilter ? sel.name : '',
+      clearAgentFilter: () => this.setState({ agentFilter: false }),
+      selCount: 2
+    };
+  }
+}
+</script>
+</body>
+</html>

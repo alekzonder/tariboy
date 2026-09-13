@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><style>*{box-sizing:border-box}body{margin:0}button:not([class]){font:inherit;color:inherit}a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}</style></helmet>
+<div style="display:flex;align-items:center;gap:10px;min-height:30px;padding:0 16px;font-family:'Geist Variable',ui-sans-serif,system-ui,sans-serif;font-size:13px;color:var(--foreground)" style-hover="background:var(--muted)">
+<sc-if value="{{ withBox }}" hint-placeholder-val="{{ false }}"><span style="width:20px;flex:0 0 auto;display:grid;place-items:center">
+<sc-if value="{{ checked }}" hint-placeholder-val="{{ false }}"><span style="width:13px;height:13px;border-radius:4px;background:var(--primary)"></span></sc-if>
+<sc-if value="{{ unchecked }}" hint-placeholder-val="{{ true }}"><span style="width:13px;height:13px;border-radius:4px;border:1px solid var(--input)"></span></sc-if>
+</span></sc-if>
+<sc-for list="{{ indents }}" as="i" hint-placeholder-count="0"><span style="flex:0 0 auto;width:14px"></span></sc-for>
+<button onClick="{{ toggle }}" style="width:16px;height:16px;flex:0 0 auto;display:grid;place-items:center;border:0;background:transparent;cursor:pointer;color:var(--muted-foreground);opacity:.65">
+<sc-if value="{{ chevOpen }}" hint-placeholder-val="{{ false }}"><svg width="10" height="10" viewBox="0 0 10 10" style="transform:rotate(90deg);transition:transform .12s"><polyline points="3.5,2 6.5,5 3.5,8" fill="none" stroke="currentColor" stroke-width="1.4"></polyline></svg></sc-if>
+<sc-if value="{{ chevClosed }}" hint-placeholder-val="{{ true }}"><svg width="10" height="10" viewBox="0 0 10 10" style="transition:transform .12s"><polyline points="3.5,2 6.5,5 3.5,8" fill="none" stroke="currentColor" stroke-width="1.4"></polyline></svg></sc-if>
+</button>
+<span style="font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--muted-foreground);width:62px;flex:0 0 auto">{{ taskKey }}</span>
+<span style="flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:7px;overflow:hidden"><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ title }}</span><sc-if value="{{ question }}" hint-placeholder-val="{{ false }}"><span title="The agent is waiting on an answer from the customer" style="flex:0 0 auto;width:5px;height:5px;border-radius:999px;background:var(--primary)"></span></sc-if></span>
+<sc-if value="{{ withBox }}" hint-placeholder-val="{{ false }}"><span style="width:104px;flex:0 0 auto"><span style="display:inline-flex;align-items:center;gap:5px;height:19px;padding:0 7px;border-radius:6px;background:var(--muted);font-size:11.5px">{{ agent }}</span></span><span style="width:96px;flex:0 0 auto;font-family:var(--font-mono);font-size:11.5px;color:var(--muted-foreground)">{{ server }}</span></sc-if>
+<sc-if value="{{ withPriority }}" hint-placeholder-val="{{ true }}"><span style="width:30px;flex:0 0 auto">
+<sc-if value="{{ p1 }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:17px;padding:0 5px;border-radius:5px;font-family:var(--font-mono);font-size:10.5px;font-weight:500;background:color-mix(in oklab,var(--status-failed) 12%,transparent);color:var(--status-failed)">{{ priority }}</span></sc-if>
+<sc-if value="{{ pRest }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:17px;padding:0 5px;border-radius:5px;font-family:var(--font-mono);font-size:10.5px;font-weight:500;background:var(--muted);color:var(--muted-foreground)">{{ priority }}</span></sc-if>
+</span></sc-if>
+<span style="width:110px;flex:0 0 auto"><dc-import name="StatusPill" status="{{ status }}" hint-size="110px,20px"></dc-import></span>
+<sc-if value="{{ withDuration }}" hint-placeholder-val="{{ true }}"><span style="width:74px;flex:0 0 auto;text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--muted-foreground)">{{ duration }}</span></sc-if>
+<span style="width:76px;flex:0 0 auto;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted-foreground)">{{ updated }}</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:760,&quot;height&quot;:36},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;agent&quot;,&quot;all&quot;],&quot;default&quot;:&quot;agent&quot;,&quot;tsType&quot;:&quot;'agent' | 'all'&quot;},&quot;taskKey&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;TB-142&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Migrate store schema&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;open&quot;,&quot;in_progress&quot;,&quot;wait_customer&quot;,&quot;done&quot;,&quot;cancelled&quot;],&quot;default&quot;:&quot;in_progress&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;priority&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;P1&quot;,&quot;P2&quot;,&quot;P3&quot;],&quot;default&quot;:&quot;P1&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;duration&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;18m&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;updated&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;14:02&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;depth&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:6,&quot;tsType&quot;:&quot;number&quot;},&quot;hasKids&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;open&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;question&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;checked&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;All-tasks&quot;},&quot;agent&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;builder&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;All-tasks&quot;},&quot;server&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;hetzner-01&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;All-tasks&quot;},&quot;onToggle&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const all = (p.variant || 'agent') === 'all';
+    const depth = Math.max(0, Math.min(6, p.depth || 0));
+    const pr = p.priority || 'P3';
+    return {
+      taskKey: p.taskKey, title: p.taskTitle || p.title, status: p.status || 'open', duration: p.duration || '—', updated: p.updated || '—',
+      priority: pr, p1: pr === 'P1', pRest: pr !== 'P1',
+      question: !!p.question,
+      agent: p.agent, server: p.server,
+      indents: Array.from({ length: depth }, (_, i) => i),
+      chevOpen: !!p.hasKids && !!p.open,
+      chevClosed: !!p.hasKids && !p.open,
+      toggle: p.onToggle || (() => {}),
+      withBox: all, withPriority: !all, withDuration: !all,
+      checked: all && !!p.checked, unchecked: all && !p.checked
+    };
+  }
+}
+</script>
+</body>
+</html>

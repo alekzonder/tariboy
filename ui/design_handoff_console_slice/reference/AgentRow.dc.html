@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><script src="./ds-base.js"></script><style>*{box-sizing:border-box}body{margin:0}button:not([class]){font:inherit;color:inherit}a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}</style></helmet>
+<div onClick="{{ select }}" style="position:relative;display:flex;align-items:center;gap:9px;height:30px;padding:0 10px;margin:1px 0;border-radius:8px;cursor:pointer;font-family:'Geist Variable',ui-sans-serif,system-ui,sans-serif;font-size:13px;color:var(--foreground)" style-hover="background:var(--sidebar-accent)">
+<sc-if value="{{ selected }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;inset:0;border-radius:8px;background:var(--card);box-shadow:0 1px 2px oklch(24% .03 75/.10)"></span></sc-if>
+<sc-if value="{{ dotLive }}" hint-placeholder-val="{{ true }}"><span style="position:relative;flex:0 0 auto;width:7px;height:7px;border-radius:999px;background:var(--status-running);box-shadow:0 0 0 3px color-mix(in oklab,var(--status-running) 18%,transparent)"></span></sc-if>
+<sc-if value="{{ dotFailed }}" hint-placeholder-val="{{ false }}"><span style="position:relative;flex:0 0 auto;width:7px;height:7px;border-radius:999px;background:var(--status-failed)"></span></sc-if>
+<sc-if value="{{ dotQuiet }}" hint-placeholder-val="{{ false }}"><span style="position:relative;flex:0 0 auto;width:7px;height:7px;border-radius:999px;background:var(--status-stopped)"></span></sc-if>
+<span style="position:relative;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500">{{ name }}</span>
+<sc-if value="{{ update }}" hint-placeholder-val="{{ true }}"><span title="{{ updateHint }}" style="position:relative;display:inline-flex;color:var(--muted-foreground);opacity:.8"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="6" y1="10" x2="6" y2="2.5"></line><polyline points="3,5.5 6,2.5 9,5.5"></polyline></svg></span></sc-if>
+<sc-if value="{{ unread }}" hint-placeholder-val="{{ true }}"><span style="position:relative;flex:0 0 auto;width:5px;height:5px;border-radius:999px;background:var(--primary)"></span></sc-if>
+<sc-if value="{{ pillBudget }}" hint-placeholder-val="{{ false }}"><span title="{{ pillHint }}" style="position:relative;display:inline-flex;align-items:center;flex:0 0 auto;height:17px;padding:0 6px;border-radius:5px;background:color-mix(in oklab,var(--status-failed) 12%,transparent);color:var(--status-failed);font-size:10.5px;font-weight:500;letter-spacing:.01em;white-space:nowrap">no budget</span></sc-if>
+<sc-if value="{{ pillLive }}" hint-placeholder-val="{{ true }}"><span title="{{ pillHint }}" style="position:relative;display:inline-flex;align-items:center;flex:0 0 auto;height:17px;padding:0 6px;border-radius:5px;background:color-mix(in oklab,var(--status-running) 13%,transparent);color:var(--status-running);font-size:10.5px;font-weight:500;letter-spacing:.01em;white-space:nowrap">running</span></sc-if>
+<sc-if value="{{ pillFailed }}" hint-placeholder-val="{{ false }}"><span title="{{ pillHint }}" style="position:relative;display:inline-flex;align-items:center;flex:0 0 auto;height:17px;padding:0 6px;border-radius:5px;background:color-mix(in oklab,var(--status-failed) 12%,transparent);color:var(--status-failed);font-size:10.5px;font-weight:500;letter-spacing:.01em;white-space:nowrap">failed</span></sc-if>
+<sc-if value="{{ pillQuiet }}" hint-placeholder-val="{{ false }}"><span title="{{ pillHint }}" style="position:relative;display:inline-flex;align-items:center;flex:0 0 auto;height:17px;padding:0 6px;border-radius:5px;background:var(--muted);color:var(--muted-foreground);font-size:10.5px;letter-spacing:.01em;white-space:nowrap">{{ status }}</span></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:268,&quot;height&quot;:44},&quot;name&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;builder&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;status&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;running&quot;,&quot;queued&quot;,&quot;done&quot;,&quot;failed&quot;,&quot;stopped&quot;],&quot;default&quot;:&quot;running&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;selected&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;noBudget&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;unread&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;update&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;image&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;worker:v2&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Config&quot;},&quot;onSelect&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const s = p.status || 'queued';
+    const nb = !!p.noBudget;
+    return {
+      name: p.label || p.name, status: s, selected: !!p.selected,
+      update: !!p.update, unread: !!p.unread,
+      updateHint: (p.image || 'image') + ' → new digest available, applied on next start',
+      dotLive: s === 'running', dotFailed: s === 'failed', dotQuiet: s !== 'running' && s !== 'failed',
+      pillBudget: nb,
+      pillLive: !nb && s === 'running',
+      pillFailed: !nb && s === 'failed',
+      pillQuiet: !nb && s !== 'running' && s !== 'failed',
+      pillHint: nb ? 'Budget exhausted — agent paused until the cap is raised' : 'Status: ' + s,
+      select: p.onSelect || (() => {})
+    };
+  }
+}
+</script>
+</body>
+</html>
