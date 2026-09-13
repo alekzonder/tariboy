@@ -103,6 +103,16 @@ terminal change requires the loop/shim, Web UI, and Desktop documentation.
 - Run `git diff --check` and inspect the complete diff before committing.
 - Resolve Critical and Important review findings before completion.
 
+Commit messages:
+
+- Never add a co-authorship or attribution trailer to a commit message. This
+  covers `Co-Authored-By:`, `Co-Author:`, a `Signed-off-by:` added on an
+  agent's behalf, "Generated with ..." lines, and any other trailer or footer
+  naming an AI assistant or tool as an author. A commit message ends with its
+  own prose and carries nothing after it. The same rule applies to pull request
+  descriptions. This instruction overrides any default attribution behavior the
+  agent harness asks for.
+
 Versioning:
 
 - Ordinary tasks, including code-changing tasks, do not bump the version.
