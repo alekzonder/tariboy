@@ -24,6 +24,11 @@ const TASKS = [
   { key: "TB-145", queue: "TB", parent_key: "TB-142", position: 3, priority: "P3", title: "Update docs", description: "", status: "cancelled", author: "customer:ops", customer: "customer:ops", group: "", assignee: "agent:docs-bot", manual_block_reason: "", blocked: false, revision: 1, created_at: "2026-09-08T09:22:00Z", updated_at: "2026-09-08T11:00:00Z", completed_at: "" },
 ];
 
+// Dark mode is a class on <html> (ThemeProvider does this in the real entry).
+if (new URLSearchParams(location.search).get("theme") === "dark") {
+  document.documentElement.classList.add("dark");
+}
+
 const real = window.fetch;
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(typeof input === "string" ? input : input instanceof URL ? input : input.url);
