@@ -133,6 +133,7 @@
     },
     {
       "files": [
+        ".design-sync/entry.tsx",
         "src/components/AgentFormFields.tsx",
         "src/components/AgentSubscriptions.tsx",
         "src/components/ComboField.tsx",
@@ -165,6 +166,8 @@
     },
     {
       "files": [
+        ".design-sync/previews/AgentWorkspace.tsx",
+        ".design-sync/previews/TerminalsPage.tsx",
         "src/components/FullAuditLog.tsx",
         "src/components/ImageLayout.tsx",
         "src/components/IterationAuditLog.tsx",

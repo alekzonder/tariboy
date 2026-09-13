@@ -106,7 +106,7 @@ function MainApp() {
             size="icon-sm"
             className="size-[26px] rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            <Link to="/app-settings" aria-label="Настройки приложения" title="Настройки приложения">
+            <Link to="/app-settings" aria-label="Application settings" title="Application settings">
               <Settings className="size-[15px]" />
             </Link>
           </Button>

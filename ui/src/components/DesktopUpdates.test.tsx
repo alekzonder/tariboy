@@ -82,7 +82,7 @@ describe("Desktop updates", () => {
     renderUpdates();
 
     const button = await screen.findByRole("button", {
-      name: "Проверить и скачать обновление",
+      name: "Check for and download update",
     });
     fireEvent.click(button);
     fireEvent.click(button);
@@ -90,7 +90,7 @@ describe("Desktop updates", () => {
     expect(bridge.download).toHaveBeenCalledTimes(1);
     expect(button).toBeDisabled();
     await act(async () => finish(update({ revision: 1, phase: "up-to-date" })));
-    expect(await screen.findByText("Установлена актуальная версия")).toBeInTheDocument();
+    expect(await screen.findByText("You have the latest version")).toBeInTheDocument();
   });
 
   it("checks on startup when automatic downloads use their default", async () => {
@@ -128,7 +128,7 @@ describe("Desktop updates", () => {
     expect(bridge.download).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("switch", {
-      name: "Скачивать обновления автоматически",
+      name: "Download updates automatically",
     }));
     expect(localStorage.getItem(AUTO_DOWNLOAD_KEY)).toBe("false");
     await act(async () => {
@@ -143,7 +143,7 @@ describe("Desktop updates", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(bridge.state).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("switch", {
-      name: "Скачивать обновления автоматически",
+      name: "Download updates automatically",
     })).not.toBeChecked();
     expect(bridge.download).not.toHaveBeenCalled();
   });
@@ -162,13 +162,13 @@ describe("Desktop updates", () => {
     renderUpdates();
 
     const toggle = await screen.findByRole("switch", {
-      name: "Скачивать обновления автоматически",
+      name: "Download updates automatically",
     });
     fireEvent.click(toggle);
 
     expect(toggle).toBeChecked();
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Не удалось сохранить настройку автоматической загрузки",
+      "Could not save the automatic download setting",
     );
   });
 
@@ -187,7 +187,7 @@ describe("Desktop updates", () => {
     })));
     await act(async () => finishState(update({ revision: 0 })));
 
-    expect(screen.getByText("Загружено 2048 байт")).toBeInTheDocument();
+    expect(screen.getByText("Downloaded 2048 bytes")).toBeInTheDocument();
   });
 
   it("renders accessible indeterminate progress when the total is unknown", async () => {
@@ -201,10 +201,10 @@ describe("Desktop updates", () => {
     }));
     renderUpdates();
 
-    const progress = await screen.findByRole("progressbar", { name: "Загрузка обновления" });
+    const progress = await screen.findByRole("progressbar", { name: "Downloading update" });
     expect(progress).not.toHaveAttribute("max");
     expect(progress).not.toHaveAttribute("value");
-    expect(screen.getByText("Загружено 512 байт")).toBeInTheDocument();
+    expect(screen.getByText("Downloaded 512 bytes")).toBeInTheDocument();
   });
 
   it("reports signature failure without claiming an update is ready", async () => {
@@ -213,12 +213,12 @@ describe("Desktop updates", () => {
       revision: 3,
       phase: "error",
       version: "2.0.0",
-      error: "Проверка подписи обновления завершилась ошибкой.",
+      error: "Update signature verification failed.",
     }));
     renderUpdates();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Проверка подписи");
-    expect(screen.queryByText("Версия 2.0.0 загружена")).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent("signature verification");
+    expect(screen.queryByText("Version 2.0.0 downloaded")).toBeNull();
   });
 
   it("offers installation only for a ready verified package", async () => {
@@ -227,11 +227,11 @@ describe("Desktop updates", () => {
     bridge.install.mockReturnValue(new Promise(() => {}));
     renderUpdates();
 
-    expect(await screen.findByText("Версия 2.0.0 загружена")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Обновить" }));
+    expect(await screen.findByText("Version 2.0.0 downloaded")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     expect(bridge.install).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("status")).toHaveTextContent("Установка обновления");
+    expect(screen.getByRole("status")).toHaveTextContent("Installing update");
   });
 
   it("shows an install failure and allows retry with the retained package", async () => {
@@ -240,15 +240,15 @@ describe("Desktop updates", () => {
       revision: 5,
       phase: "ready",
       version: "2.0.0",
-      error: "Не удалось установить обновление. Повторите попытку.",
+      error: "Could not install the update. Try again.",
     });
     bridge.state.mockResolvedValue(update({ revision: 4, phase: "ready", version: "2.0.0" }));
     bridge.install.mockResolvedValue(failed);
     renderUpdates();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Обновить" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось установить");
-    fireEvent.click(screen.getByRole("button", { name: "Обновить" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Update" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not install");
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(bridge.install).toHaveBeenCalledTimes(2));
   });
@@ -258,7 +258,7 @@ describe("Desktop updates", () => {
     bridge.state.mockResolvedValue(update({ revision: 4, phase: "ready", version: "2.0.0" }));
     renderUpdates(
       <>
-        <nav><Link to="/">Рабочая область</Link><Link to="/app-settings">Настройки</Link></nav>
+        <nav><Link to="/">Workspace</Link><Link to="/app-settings">Settings</Link></nav>
         <Routes>
           <Route path="/" element={<UpdateBanner />} />
           <Route path="/app-settings" element={<AppSettings />} />
@@ -266,10 +266,10 @@ describe("Desktop updates", () => {
       </>,
     );
 
-    expect(await screen.findByText("Версия 2.0.0 загружена")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("link", { name: "Настройки" }));
+    expect(await screen.findByText("Version 2.0.0 downloaded")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
 
-    expect(await screen.findByRole("heading", { name: "Настройки приложения" }))
+    expect(await screen.findByRole("heading", { name: "Application settings" }))
       .toBeInTheDocument();
     expect(screen.getByText("1.2.3")).toBeInTheDocument();
     expect(bridge.subscribe).toHaveBeenCalledTimes(1);
@@ -280,7 +280,7 @@ describe("Desktop updates", () => {
     bridge.desktop = false;
     renderUpdates();
 
-    expect(screen.getByText("Обновления доступны только в приложении Desktop."))
+    expect(screen.getByText("Updates are only available in the Desktop app."))
       .toBeInTheDocument();
     expect(bridge.subscribe).not.toHaveBeenCalled();
     expect(bridge.state).not.toHaveBeenCalled();
