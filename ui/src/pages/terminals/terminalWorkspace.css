@@ -1,10 +1,15 @@
 @import "flexlayout-react/style/light.css";
 
+/* flexlayout-react names its theme generically (--color-text, --font-family,
+   --splitter-size) and declares it on .flexlayout__layout, so those names can
+   only be remapped here, in the component scope — they lose to light.css when
+   merely inherited. Every value below is a token reference: the thematic
+   decisions themselves live in :root/.dark as --workspace-*. */
 .terminal-workspace .flexlayout__layout {
   --color-text: var(--foreground);
   --color-background: var(--background);
   --color-base: var(--background);
-  --color-1: color-mix(in oklab, var(--muted) 72%, var(--background));
+  --color-1: var(--workspace-tabset);
   --color-2: var(--muted);
   --color-3: var(--accent);
   --color-4: var(--border);
@@ -12,13 +17,13 @@
   --color-6: var(--muted-foreground);
   --color-drag1: var(--primary);
   --color-drag2: var(--primary);
-  --color-drag1-background: color-mix(in oklab, var(--primary) 16%, transparent);
-  --color-drag2-background: color-mix(in oklab, var(--primary) 12%, transparent);
+  --color-drag1-background: var(--workspace-drag-primary);
+  --color-drag2-background: var(--workspace-drag-secondary);
   --color-focus: var(--ring);
   --font-family: var(--font-sans);
-  --font-size: 12px;
-  --splitter-size: 6px;
-  --splitter-active-size: 10px;
+  --font-size: var(--workspace-font-size);
+  --splitter-size: var(--workspace-splitter);
+  --splitter-active-size: var(--workspace-splitter-active);
 }
 
 .terminal-workspace .flexlayout__tabset {
