@@ -23,7 +23,7 @@ import { Switch } from "@/components/ui/switch";
 
 const AUTO_DOWNLOAD_KEY = "desktop:updates:auto-download:v1";
 const SIX_HOURS = 6 * 60 * 60 * 1000;
-const STORAGE_ERROR = "Не удалось сохранить настройку автоматической загрузки.";
+const STORAGE_ERROR = "Could not save the automatic download setting.";
 
 type Pending = "download" | "install" | null;
 
@@ -72,7 +72,7 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
     let active = true;
     const failed = () => {
       if (!active) return;
-      setRequestError("Не удалось подключиться к службе обновлений Desktop.");
+      setRequestError("Could not connect to the Desktop update service.");
       setBridgeReady(true);
     };
     const unsubscribe = onDesktopUpdateState(
@@ -103,8 +103,8 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
       accept(await (kind === "download" ? desktopUpdateDownload() : desktopUpdateInstall()));
     } catch {
       setRequestError(kind === "download"
-        ? "Не удалось проверить обновления. Повторите попытку."
-        : "Не удалось установить обновление. Повторите попытку.");
+        ? "Could not check for updates. Try again."
+        : "Could not install the update. Try again.");
     } finally {
       inFlight.current = false;
       setPending(null);
@@ -159,9 +159,9 @@ function useDesktopUpdates() {
 }
 
 function DownloadStatus({ snapshot }: { snapshot: DesktopUpdateSnapshot }) {
-  if (snapshot.phase === "checking") return <p role="status">Проверка обновлений…</p>;
-  if (snapshot.phase === "installing") return <p role="status">Установка обновления…</p>;
-  if (snapshot.phase === "up-to-date") return <p role="status">Установлена актуальная версия</p>;
+  if (snapshot.phase === "checking") return <p role="status">Checking for updates…</p>;
+  if (snapshot.phase === "installing") return <p role="status">Installing update…</p>;
+  if (snapshot.phase === "up-to-date") return <p role="status">You have the latest version</p>;
   if (snapshot.phase !== "downloading") return null;
   const knownTotal = snapshot.total_bytes !== null && snapshot.total_bytes > 0;
   const percent = knownTotal
@@ -170,13 +170,13 @@ function DownloadStatus({ snapshot }: { snapshot: DesktopUpdateSnapshot }) {
   return (
     <div className="space-y-2" role="status">
       <progress
-        aria-label="Загрузка обновления"
+        aria-label="Downloading update"
         className="w-full"
         {...(knownTotal ? { max: snapshot.total_bytes!, value: snapshot.downloaded_bytes } : {})}
       />
       <p>{percent === null
-        ? `Загружено ${snapshot.downloaded_bytes} байт`
-        : `Загружено ${percent}%`}</p>
+        ? `Downloaded ${snapshot.downloaded_bytes} bytes`
+        : `Downloaded ${percent}%`}</p>
     </div>
   );
 }
@@ -191,14 +191,14 @@ export function AppSettings() {
   return (
     <section className="h-full overflow-auto p-6">
       <div className="mx-auto max-w-2xl space-y-6">
-        <Button asChild variant="ghost"><Link to="/">Вернуться к рабочей области</Link></Button>
-        <h1 className="text-2xl font-semibold">Настройки приложения</h1>
+        <Button asChild variant="ghost"><Link to="/">Back to workspace</Link></Button>
+        <h1 className="text-2xl font-semibold">Application settings</h1>
         <Card>
-          <CardHeader><CardTitle>Обновления Desktop</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Desktop updates</CardTitle></CardHeader>
           <CardContent className="space-y-5">
-            <p>Текущая версия Desktop: <strong>{updates.snapshot?.current_version || "—"}</strong></p>
+            <p>Current Desktop version: <strong>{updates.snapshot?.current_version || "—"}</strong></p>
             <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="desktop-auto-updates">Скачивать обновления автоматически</Label>
+              <Label htmlFor="desktop-auto-updates">Download updates automatically</Label>
               <Switch
                 id="desktop-auto-updates"
                 checked={updates.automatic}
@@ -209,7 +209,7 @@ export function AppSettings() {
             {updates.storageError && <p role="alert" className="text-destructive">{updates.storageError}</p>}
             {!updates.desktop ? (
               <p role="status" className="text-muted-foreground">
-                Обновления доступны только в приложении Desktop.
+                Updates are only available in the Desktop app.
               </p>
             ) : (
               <>
@@ -218,7 +218,7 @@ export function AppSettings() {
                   disabled={updates.pending !== null || !canCheck}
                   onClick={() => void updates.request("download")}
                 >
-                  Проверить и скачать обновление
+                  Check for and download update
                 </Button>
                 {updates.snapshot && <DownloadStatus snapshot={updates.snapshot} />}
                 {error && <p role="alert" className="text-destructive">{error}</p>}
@@ -235,20 +235,20 @@ export function UpdateBanner() {
   const updates = useDesktopUpdates();
   if (!updates.desktop) return null;
   if (updates.snapshot?.phase === "installing" || updates.pending === "install") {
-    return <div role="status" className="border-b bg-muted px-4 py-2">Установка обновления…</div>;
+    return <div role="status" className="border-b bg-muted px-4 py-2">Installing update…</div>;
   }
   if (updates.snapshot?.phase !== "ready") return null;
   const error = updates.requestError || updates.snapshot.error;
   return (
     <div role="status" className="flex flex-wrap items-center justify-center gap-3 border-b bg-muted px-4 py-2">
-      <span>Версия {updates.snapshot.version} загружена</span>
+      <span>Version {updates.snapshot.version} downloaded</span>
       <Button
         type="button"
         size="sm"
         disabled={updates.pending !== null}
         onClick={() => void updates.request("install")}
       >
-        Обновить
+        Update
       </Button>
       {error && <span role="alert" className="text-destructive">{error}</span>}
     </div>

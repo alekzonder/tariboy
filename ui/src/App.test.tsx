@@ -88,13 +88,13 @@ describe("product routing", () => {
     renderAt("/");
 
     const titlebar = screen.getByTestId("app-titlebar");
-    const settings = within(titlebar).getByRole("link", { name: "Настройки приложения" });
+    const settings = within(titlebar).getByRole("link", { name: "Application settings" });
     expect(settings).toHaveAttribute("href", "/app-settings");
     fireEvent.click(settings);
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app-settings"));
-    expect(screen.getByRole("heading", { name: "Настройки приложения" })).toBeInTheDocument();
-    expect(screen.getByText("Обновления доступны только в приложении Desktop."))
+    expect(screen.getByRole("heading", { name: "Application settings" })).toBeInTheDocument();
+    expect(screen.getByText("Updates are only available in the Desktop app."))
       .toBeInTheDocument();
   });
 
