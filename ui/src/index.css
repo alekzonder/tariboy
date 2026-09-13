@@ -59,7 +59,9 @@
     --color-card-foreground: var(--card-foreground);
     --color-card: var(--card);
     --color-foreground: var(--foreground);
-    --color-background: var(--background);
+    /* --background is a gradient, and background-color drops a gradient value.
+       Every utility built on this name therefore takes the flat base tone. */
+    --color-background: var(--background-base);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -70,58 +72,66 @@
 }
 
 :root {
-    /* warm sand neutrals — chroma ~0.006-0.016 at hue 85 */
-    --background: oklch(96.3% .016 88);
-    --foreground: oklch(24% .012 75);
-    --card: oklch(100% .002 85);
-    --card-foreground: oklch(24% .012 75);
-    --popover: oklch(100% .002 85);
-    --popover-foreground: oklch(24% .012 75);
-    --primary: oklch(52% .085 248);
-    --primary-foreground: oklch(99% .003 248);
-    --secondary: oklch(94.6% .016 88);
-    --secondary-foreground: oklch(30% .012 78);
-    --muted: oklch(95.2% .014 88);
-    --muted-foreground: oklch(55% .014 80);
-    --accent: oklch(93% .020 88);
-    --accent-foreground: oklch(26% .012 78);
+    /* metal neutrals — achromatic chrome at hue 250, chroma <= .008. The window
+       carries one near-invisible gradient (delta ~3% lightness); it reads as
+       brushed metal, not as decoration. */
+    --background: linear-gradient(175deg, oklch(94.8% .004 250) 0%, oklch(93.4% .005 250) 55%, oklch(91.8% .006 250) 100%);
+    /* The flat tone the gradient settles on. Anything that needs a colour rather
+       than an image — background-color, color-mix(), the bg-background utility —
+       uses this name; only the window itself paints --background. */
+    --background-base: oklch(93.4% .005 250);
+    --foreground: oklch(20% .006 250);
+    /* Content islands are plain white on the metal, separated by --lift. */
+    --card: oklch(100% 0 0);
+    --card-foreground: var(--foreground);
+    --popover: oklch(100% 0 0);
+    --popover-foreground: var(--foreground);
+    /* teal is the single accent */
+    --primary: oklch(58% .14 188);
+    --primary-foreground: oklch(99% 0 0);
+    --secondary: oklch(96.4% .003 250);
+    --secondary-foreground: var(--foreground);
+    --muted: oklch(97% .003 250);
+    --muted-foreground: oklch(48% .008 250);
+    --accent: oklch(95% .004 250);
+    --accent-foreground: var(--foreground);
     --destructive: oklch(55% .155 27);
-    --border: oklch(90.5% .010 85);
-    --input: oklch(92% .010 85);
-    --ring: oklch(62% .090 248);
+    --border: oklch(88.5% .005 250);
+    --input: oklch(88.5% .005 250);
+    --ring: oklch(64% .13 188);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: .625rem; /* @kind radius */
-    --sidebar: oklch(96.3% .016 88);
-    --sidebar-foreground: oklch(24% .012 75);
-    --sidebar-primary: oklch(52% .085 248);
-    --sidebar-primary-foreground: oklch(99% .003 248);
-    --sidebar-accent: oklch(93% .020 88);
-    --sidebar-accent-foreground: oklch(26% .012 78);
-    --sidebar-border: oklch(90.5% .010 85);
-    --sidebar-ring: oklch(62% .090 248);
+    --sidebar: var(--background-base);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: oklch(95% .004 250);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
 
     /* status — one lightness, one chroma band, hue does the work */
-    --status-running: oklch(56% .115 152);
-    --status-queued: oklch(58% .014 82);
-    --status-done: oklch(52% .014 82);
-    --status-failed: oklch(55% .155 27);
-    --status-stopped: oklch(64% .012 82);
+    --status-running: oklch(62% .15 168);
+    --status-queued: oklch(62% .1 300);
+    --status-done: oklch(58% .13 188);
+    --status-failed: oklch(58% .19 18);
+    --status-stopped: oklch(64% .012 250);
 
     /* elevation: the island, not a box-shadow zoo */
-    --lift: 0 1px 2px oklch(24% .03 75/.05), 0 10px 28px -14px oklch(24% .03 75/.22); /* @kind shadow */
+    --lift: 0 1px 2px oklch(24% .03 255/.05), 0 10px 28px -14px oklch(24% .03 255/.22); /* @kind shadow */
     /* The second and last level of elevation: the selected sidebar row and the
        active segment of a segmented control. The handoff writes it inline; it
        is a token here so no markup has to spell out a color. */
-    --raise: 0 1px 2px oklch(24% .03 75/.10); /* @kind shadow */
+    --raise: 0 1px 2px oklch(24% .03 255/.10); /* @kind shadow */
     --panel-radius: 14px; /* @kind radius */
 
     /* terminal workspace (flexlayout) — the thematic half of what
        terminalWorkspace.css used to declare on .flexlayout__layout */
-    --workspace-tabset: color-mix(in oklab, var(--muted) 72%, var(--background));
+    --workspace-tabset: color-mix(in oklab, var(--muted) 72%, var(--background-base));
     --workspace-drag-primary: color-mix(in oklab, var(--primary) 16%, transparent);
     --workspace-drag-secondary: color-mix(in oklab, var(--primary) 12%, transparent);
     --workspace-font-size: 12px; /* @kind font */
@@ -130,42 +140,47 @@
 }
 
 .dark {
-    --background: oklch(19.5% .008 80);
-    --foreground: oklch(95% .004 85);
-    --card: oklch(23.2% .008 80);
-    --card-foreground: oklch(95% .004 85);
-    --popover: oklch(24.5% .008 80);
-    --popover-foreground: oklch(95% .004 85);
-    --primary: oklch(68% .105 248);
-    --primary-foreground: oklch(19% .012 248);
-    --secondary: oklch(27.5% .009 80);
-    --secondary-foreground: oklch(95% .004 85);
-    --muted: oklch(27.5% .009 80);
-    --muted-foreground: oklch(69% .012 82);
-    --accent: oklch(29% .011 80);
-    --accent-foreground: oklch(95% .004 85);
+    /* The same metal, turned down. --background carries no gradient here: on a
+       dark ground the sheen reads as banding rather than as metal. */
+    --background: oklch(19.5% .005 250);
+    --background-base: oklch(19.5% .005 250);
+    --foreground: oklch(95% .003 250);
+    --card: oklch(23.2% .006 250);
+    --card-foreground: var(--foreground);
+    --popover: oklch(24.5% .006 250);
+    --popover-foreground: var(--foreground);
+    --primary: oklch(66% .13 188);
+    --primary-foreground: oklch(17% .01 188);
+    --secondary: oklch(26% .006 250);
+    --secondary-foreground: var(--foreground);
+    --muted: oklch(26% .006 250);
+    --muted-foreground: oklch(70% .008 250);
+    --accent: oklch(28% .007 250);
+    --accent-foreground: var(--foreground);
     --destructive: oklch(66% .150 27);
-    --border: oklch(100% 0 0/.08);
-    --input: oklch(100% 0 0/.12);
-    --ring: oklch(60% .090 248);
+    --border: oklch(31% .007 250);
+    --input: oklch(31% .007 250);
+    --ring: oklch(66% .13 188);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(17.5% .008 80);
-    --sidebar-foreground: oklch(95% .004 85);
-    --sidebar-primary: oklch(68% .105 248);
-    --sidebar-primary-foreground: oklch(19% .012 248);
-    --sidebar-accent: oklch(26% .011 80);
-    --sidebar-accent-foreground: oklch(95% .004 85);
-    --sidebar-border: oklch(100% 0 0/.08);
-    --sidebar-ring: oklch(60% .090 248);
-    --status-running: oklch(70% .125 152);
-    --status-queued: oklch(66% .012 82);
-    --status-done: oklch(60% .012 82);
-    --status-failed: oklch(66% .150 27);
-    --status-stopped: oklch(56% .010 82);
+    --sidebar: oklch(17.5% .005 250);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: oklch(28% .007 250);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+    /* The light row's hue and chroma at the dark theme's lightness, so one
+       status reads as the same colour in both themes. */
+    --status-running: oklch(70% .15 168);
+    --status-queued: oklch(66% .1 300);
+    --status-done: oklch(60% .13 188);
+    --status-failed: oklch(66% .19 18);
+    --status-stopped: oklch(56% .010 250);
     --lift: 0 1px 2px oklch(0 0 0/.3), 0 12px 30px -14px oklch(0 0 0/.55); /* @kind shadow */
     --raise: 0 1px 2px oklch(0 0 0/.3); /* @kind shadow */
 }
@@ -175,7 +190,8 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background: var(--background);
     }
   html {
     @apply font-sans;

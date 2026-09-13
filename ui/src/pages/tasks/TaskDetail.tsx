@@ -173,6 +173,9 @@ export default function TaskDetail({
   return (
     <Dialog open onOpenChange={(open) => { if (!open) close() }}>
     <DialogContent className="task-detail-dialog" showCloseButton={false} aria-describedby={undefined}
+      /* The sheet dims the whole window — topbar and sidebar included — with the
+         theme's own foreground, so both read as one tone behind it. */
+      overlayClassName="bg-[color-mix(in_oklab,var(--foreground)_5%,transparent)]"
       style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
       onOpenAutoFocus={(event) => { event.preventDefault(); initialFocusRef.current?.focus() }}
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus() }}>
