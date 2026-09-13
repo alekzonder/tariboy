@@ -1,4 +1,5 @@
-import { useRef, type ButtonHTMLAttributes } from "react";
+import { useRef, useState, type ButtonHTMLAttributes } from "react";
+import { Plus, Search, Server } from "lucide-react";
 import {
   DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable,
   useSensor, useSensors, type DragEndEvent,
@@ -83,6 +84,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
   onResize: (px: number) => void;
 }) {
   const asideRef = useRef<HTMLElement | null>(null);
+  const [query, setQuery] = useState("");
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor),
@@ -141,6 +143,19 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
     onReorder("agents", source[1], move(current, source[2], target[2]));
   };
 
+  // The reference opens a Command palette from this box; this app has no
+  // palette yet, and a dead control is worse than a live one — so it filters
+  // the list the sidebar already has, by agent name or server label.
+  const q = query.trim().toLowerCase();
+  const filtering = q.length > 0;
+  const visibleHosts = filtering
+    ? hosts
+      .map((h) => ({ ...h, agents: h.agents.filter((a) => a.name.toLowerCase().includes(q)) }))
+      .filter((h) => h.agents.length > 0 || h.host.label.toLowerCase().includes(q))
+    : hosts;
+  const connectedCount = hosts.filter((h) => !h.error).length;
+  const agentCount = hosts.reduce((total, h) => total + h.agents.length, 0);
+
   return (
     <DndContext
       sensors={sensors}
@@ -148,10 +163,32 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
       accessibility={{ announcements: sidebarAnnouncements }}
       onDragEnd={finishReorder}
     >
-    <aside ref={asideRef} style={{ width }} className="flex shrink-0 flex-col overflow-y-auto border-r">
-      <div className="p-2 text-sm font-semibold">Agents</div>
-      {hosts.map((h) => (
-        <section key={h.host.id || "__local__"} className="px-2 pb-2">
+    {/* The sidebar is chrome, not a panel: it sits straight on --background
+        with no border and no surface of its own — the content island is the
+        only raised thing on the screen. */}
+    <aside
+      ref={asideRef}
+      aria-label="Agents"
+      data-testid="agents-sidebar"
+      style={{ width }}
+      className="flex min-h-0 shrink-0 flex-col px-0.5"
+    >
+      <div className="shrink-0 px-1.5 pt-0.5 pb-2">
+        <label className="flex h-[30px] items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
+          <Search className="size-[13px] shrink-0" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search agents"
+            placeholder="Search agents"
+            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      {visibleHosts.map((h) => (
+        <section key={h.host.id || "__local__"} className="px-1.5 pb-2">
           <div className="flex items-center justify-between">
             <SortableButton
               dragKey={dragId("servers", "", h.host.id, undefined, h.host.label)}
@@ -160,8 +197,8 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
               aria-current={selectedHostId === h.host.id ? "page" : undefined}
               onClick={() => onSelectHost(h.host.id)}
               className={cn(
-                "min-w-0 truncate rounded px-2 py-1 text-left text-xs font-semibold uppercase text-muted-foreground hover:bg-accent hover:text-foreground",
-                selectedHostId === h.host.id && "bg-accent text-foreground",
+                "min-w-0 truncate rounded-[7px] px-2 py-1 text-left text-[11px] font-medium tracking-[.02em] uppercase text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+                selectedHostId === h.host.id && "bg-sidebar-accent text-foreground",
               )}
               title={h.host.label}
             >
@@ -265,8 +302,10 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
               <>
                 {teams.size > 0 && (
                   <div className="mt-1">
-                    <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Teams</div>
-                    {[...teams.entries()].map(([name, agents]) => (
+                    <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">Teams</div>
+                    {[...teams.entries()]
+                      .filter(([, agents]) => !filtering || agents.length > 0)
+                      .map(([name, agents]) => (
                       <details key={name} open>
                         <summary className="cursor-pointer px-2 py-1 text-sm font-medium">
                           <SortableButton
@@ -284,7 +323,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
                   </div>
                 )}
                 <div className="mt-1">
-                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Individual agents</div>
+                  <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">Individual agents</div>
                   {individuals.map(renderAgent)}
                 </div>
               </>
@@ -295,8 +334,36 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
           )}
         </section>
       ))}
-      <div className="mt-auto p-2">
-        <Button variant="outline" size="sm" className="w-full" onClick={onAddServer}>Add host</Button>
+      </div>
+      <div className="flex h-11 shrink-0 items-center gap-2 px-3">
+        <span aria-hidden="true" className="grid size-[22px] shrink-0 place-items-center rounded-full bg-accent text-muted-foreground">
+          <Server className="size-3" />
+        </span>
+        <span className="min-w-0 flex-1 text-[12px] leading-tight">
+          <span className="block truncate font-medium">All servers</span>
+          <span className="block text-[11px] text-muted-foreground">
+            {connectedCount} connected · {agentCount} agents
+          </span>
+        </span>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="size-6 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          aria-label="Add host"
+          title="Add host"
+          onClick={onAddServer}
+        >
+          <Plus className="size-3" />
+        </Button>
+        <span
+          role="img"
+          aria-label={`${connectedCount} of ${hosts.length} servers connected`}
+          title={`${connectedCount} of ${hosts.length} servers connected`}
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            connectedCount === hosts.length ? "bg-status-running" : "bg-status-failed",
+          )}
+        />
       </div>
     </aside>
     <div
@@ -310,7 +377,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
       onPointerDown={startDrag}
       onKeyDown={onKeyDown}
       onDoubleClick={() => onResize(DEFAULT_SIDEBAR_WIDTH)}
-      className="w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary focus-visible:bg-primary focus-visible:outline-none"
+      className="w-2 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-primary/30 focus-visible:bg-primary/30 focus-visible:outline-none"
     />
     </DndContext>
   );

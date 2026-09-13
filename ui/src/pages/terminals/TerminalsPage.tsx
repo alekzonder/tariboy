@@ -255,7 +255,9 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   };
 
   return (
-    <div className="flex h-full">
+    // Console body: the chrome shows through as an 8px gutter around the
+    // content island, so neither the sidebar nor the island needs a border.
+    <div className="flex h-full px-2 pb-2">
       {!sidebar.hidden && <TerminalsSidebar
         hosts={orderedSidebarHosts}
         selectedHostId={hostId}
@@ -287,7 +289,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         width={sidebar.width}
         onResize={sidebar.setWidth}
       />}
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* The content island: --card on the --background chrome, one radius and
+          one of the two allowed shadows. Everything the operator works with
+          lives inside it. */}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--panel-radius)] bg-card shadow-[var(--lift)]">
         {!workspaceMode && hostId !== undefined && (
           <ServerContextBar hostId={hostId} label={selectedHostLabel ?? "Unknown server"} />
         )}

@@ -159,7 +159,7 @@ describe("product routing", () => {
   it("uses Agents as the default route", () => {
     renderAt("/");
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
-    expect(screen.getAllByText("Agents").length).toBeGreaterThan(0);
+    expect(screen.getByRole("complementary", { name: "Agents" })).toBeInTheDocument();
   });
 
   it("redirects a legacy terminal route to the Console tab", async () => {

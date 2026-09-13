@@ -524,7 +524,7 @@ describe("TerminalWorkspace", () => {
         },
       },
       activeTerminal: null,
-      sidebar: { width: 256, hidden: false },
+      sidebar: { width: 268, hidden: false },
     }));
     const { refresh } = renderWorkspace();
 
@@ -589,7 +589,7 @@ describe("TerminalWorkspace", () => {
         },
       },
       activeTerminal: null,
-      sidebar: { width: 256, hidden: false },
+      sidebar: { width: 268, hidden: false },
     }));
     const { onOpenConfiguration } = renderWorkspace();
 

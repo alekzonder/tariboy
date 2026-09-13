@@ -529,7 +529,7 @@ describe("TerminalsPage", () => {
         layout: { type: "row", weight: 100, children: [] },
       },
       activeTerminal: null,
-      sidebar: { width: 256, hidden: true },
+      sidebar: { width: 268, hidden: true },
     }));
     renderAt("/workspace");
 
@@ -869,7 +869,7 @@ describe("sidebar width", () => {
     localStorage.setItem("terminals:sidebarWidth", "380");
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
-    expect(screen.getByText("Agents").parentElement).toHaveStyle({ width: "380px" });
+    expect(screen.getByTestId("agents-sidebar")).toHaveStyle({ width: "380px" });
   });
 
   it("drags to a new width and persists it", async () => {
@@ -882,7 +882,7 @@ describe("sidebar width", () => {
     fireEvent.pointerMove(window, { clientX: 400 });
     fireEvent.pointerUp(window);
 
-    expect(screen.getByText("Agents").parentElement).toHaveStyle({ width: "400px" });
+    expect(screen.getByTestId("agents-sidebar")).toHaveStyle({ width: "400px" });
     expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
       .toMatchObject({ schemaVersion: 1, sidebar: { width: 400, hidden: false } });
 
@@ -908,7 +908,7 @@ describe("sidebar width", () => {
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     fireEvent.doubleClick(screen.getByRole("separator", { name: "resize sidebar" }));
     expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 256, hidden: false } });
+      .toMatchObject({ sidebar: { width: 268, hidden: false } });
   });
 
   it("resizes with arrow keys", async () => {

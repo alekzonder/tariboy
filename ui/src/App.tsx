@@ -67,22 +67,24 @@ function MainApp() {
     || location.pathname.startsWith("/servers/");
   return (
     <>
+      {/* Topbar: 42px, no bottom border — the separation between chrome and the
+          content island is made by the background, not by a line. */}
       <header
-        className="flex h-12 shrink-0 items-center border-b pr-4"
+        className="flex h-[42px] shrink-0 items-center gap-2.5 px-3"
         data-tauri-drag-region="deep"
         data-testid="app-titlebar"
       >
         <div className="flex min-w-0 items-center">
           <div
             aria-hidden="true"
-            className="h-12 w-[72px] shrink-0"
+            className="h-full w-[72px] shrink-0"
           />
           {sidebarRoute && (
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="mr-1 shrink-0"
+              className="size-[26px] shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
               aria-label={sidebar.hidden ? "Show agents" : "Hide agents"}
               title={sidebar.hidden ? "Show agents" : "Hide agents"}
               onClick={() => sidebar.setHidden(!sidebar.hidden)}
@@ -97,14 +99,21 @@ function MainApp() {
           aria-hidden="true"
           className="h-full min-w-4 flex-1"
         />
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/app-settings" aria-label="Настройки приложения">
-              <Settings className="size-4" />
-              Настройки
+        <div className="flex items-center gap-0.5">
+          <Button
+            asChild
+            variant="ghost"
+            size="icon-sm"
+            className="size-[26px] rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Link to="/app-settings" aria-label="Настройки приложения" title="Настройки приложения">
+              <Settings className="size-[15px]" />
             </Link>
           </Button>
-          <ThemeToggle />
+          <ThemeToggle
+            variant="ghost"
+            className="size-[26px] rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          />
         </div>
       </header>
       <UpdateBanner />

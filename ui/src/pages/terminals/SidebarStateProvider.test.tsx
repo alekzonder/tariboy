@@ -28,11 +28,11 @@ describe("SidebarStateProvider", () => {
       </SidebarStateProvider>,
     );
 
-    expect(screen.getByText("256:false")).toBeInTheDocument();
+    expect(screen.getByText("268:false")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "hide" }));
 
-    expect(screen.getByText("256:true")).toBeInTheDocument();
+    expect(screen.getByText("268:true")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 256, hidden: true } });
+      .toMatchObject({ sidebar: { width: 268, hidden: true } });
   });
 });

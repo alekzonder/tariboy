@@ -3,7 +3,7 @@ export const WORKSPACE_SCHEMA_VERSION = 1 as const;
 export const MAX_WORKSPACE_STATE_BYTES = 256 * 1024;
 export const LEGACY_SIDEBAR_WIDTH_KEY = "terminals:sidebarWidth";
 
-export const DEFAULT_SIDEBAR_WIDTH = 256;
+export const DEFAULT_SIDEBAR_WIDTH = 268;
 export const MIN_SIDEBAR_WIDTH = 160;
 export const MAX_SIDEBAR_WIDTH = 640;
 
