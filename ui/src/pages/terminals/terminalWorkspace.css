@@ -7,8 +7,8 @@
    decisions themselves live in :root/.dark as --workspace-*. */
 .terminal-workspace .flexlayout__layout {
   --color-text: var(--foreground);
-  --color-background: var(--background);
-  --color-base: var(--background);
+  --color-background: var(--background-base);
+  --color-base: var(--background-base);
   --color-1: var(--workspace-tabset);
   --color-2: var(--muted);
   --color-3: var(--accent);
@@ -49,7 +49,7 @@
 .terminal-workspace .flexlayout__tab {
   padding: 0;
   overflow: hidden;
-  background: var(--background);
+  background: var(--background-base);
 }
 
 .terminal-workspace .flexlayout__splitter {
