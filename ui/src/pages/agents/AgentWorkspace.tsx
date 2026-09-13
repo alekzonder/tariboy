@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, NavLink, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Container } from "lucide-react";
 import { toast } from "sonner";
 import { useDaemons } from "@/components/DaemonProvider";
 import { Button } from "@/components/ui/button";
+import { StatusDot, StatusPill } from "@/components/ui/status";
+import { AgentControls } from "@/components/AgentControls";
+import { agentTone } from "@/lib/statusTone";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { agentGetOn } from "@/lib/api";
 import { openHostPathInVSCode } from "@/lib/desktop";
@@ -16,6 +20,7 @@ import AgentConfigurationTab from "./AgentConfigurationTab";
 import AgentAdvancedTab from "./AgentAdvancedTab";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
+import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
 import { GoalHelp } from "@/components/GoalHelp";
 
@@ -36,6 +41,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   unavailable?: boolean;
 }) {
   const { tab = "console" } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { activeId, daemons, select } = useDaemons();
   const [connection, setConnection] = useState<"selecting" | "ready" | "unavailable">("selecting");
@@ -44,7 +50,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   const cwdKey = `${hostId}\0${agent.name}\0${agent.cwd ?? ""}`;
   const effectiveCwd = agent.cwd || (resolvedCwd.key === cwdKey ? resolvedCwd.cwd : "");
   const target = targetFor(hostId);
-  const { refreshHost } = useCustomerQuestionNotifications();
+  const { attention, refreshHost } = useCustomerQuestionNotifications();
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +116,11 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   }
 
   const base = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}`;
-  const exhaustedPeriods = status?.budget?.exhausted ?? [];
+  const exhaustedPeriods = status?.budget?.exhausted ?? agent.budget?.exhausted ?? [];
+  const outOfBudget = exhaustedPeriods.length > 0;
+  const tone = agentTone(agent.state, outOfBudget);
+  const alive = agent.enabled ?? agent.state !== "stopped";
+  const hasOpenQuestion = attention.has(customerQuestionAttentionKey(hostId, agent.name));
   const content =
     tab === "console" ? <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} />
     : tab === "autopilot" ? <AgentAutopilotTab />
@@ -128,65 +138,105 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     <AgentNameContext.Provider value={agent.name}>
       <AgentStatusContext.Provider value={{ status, refresh: refreshStatus }}>
         <div className="flex h-full min-h-0 flex-col">
-          <header className="mb-3 shrink-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-semibold">{agent.name}</h1>
-              <span className="text-sm text-muted-foreground">{agent.state}</span>
-              <span className="text-sm text-muted-foreground">{hostLabel || (hostId ? hostId : "Local")}</span>
-              <span className="min-w-0 truncate text-sm text-muted-foreground">{agent.image}</span>
-              <span className="flex items-center gap-0.5 text-sm">
-                <span className="text-muted-foreground">Goal:</span>
-                {agent.current_goal_task_key ? (
-                  <Link
-                    className="font-mono text-primary underline-offset-4 hover:underline"
-                    to={`${base}/tasks?task=${encodeURIComponent(agent.current_goal_task_key)}`}
+          {/* Agent header: one line of identity (who, how it is doing, where it
+              runs, what it is working toward), one line of location, and the
+              lifecycle cluster — visible on every tab. */}
+          <header className="shrink-0">
+            <div className="flex items-start gap-2.5 px-4 pt-3.5 pb-[11px]">
+              <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
+                <div className="flex min-w-0 items-center gap-[9px]">
+                  <StatusDot tone={tone} size={8} />
+                  <h1 className="shrink-0 text-[15px] font-semibold tracking-[-.01em] whitespace-nowrap">
+                    {agent.name}
+                  </h1>
+                  <StatusPill tone={tone}>{outOfBudget ? "no budget" : agent.state}</StatusPill>
+                  <span className="shrink-0 text-[12.5px] whitespace-nowrap text-muted-foreground">
+                    {hostLabel || (hostId ? hostId : "Local")}
+                  </span>
+                  <span
+                    title={agent.image}
+                    className="inline-flex h-5 shrink-0 items-center gap-[5px] rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground"
                   >
-                    {agent.current_goal_task_key}
-                  </Link>
-                ) : <span className="text-muted-foreground">No current goal</span>}
-                <GoalHelp />
-              </span>
+                    <Container className="size-2.5" aria-hidden="true" />
+                    {agent.image}
+                  </span>
+                  <span className="flex min-w-0 flex-1 items-center gap-[5px] overflow-hidden text-[12.5px] whitespace-nowrap text-muted-foreground">
+                    <span className="shrink-0">Goal:</span>
+                    {agent.current_goal_task_key ? (
+                      <Link
+                        className="shrink-0 border-b border-dotted border-border font-mono text-[11.5px] font-medium text-foreground tabular-nums hover:border-foreground"
+                        to={`${base}/tasks?task=${encodeURIComponent(agent.current_goal_task_key)}`}
+                      >
+                        {agent.current_goal_task_key}
+                      </Link>
+                    ) : <span className="shrink-0">No current goal</span>}
+                    <GoalHelp />
+                  </span>
+                </div>
+                {/* The reference ellipsises the path to hold the header to one
+                    line; this app shows it whole on purpose (a wrapped cwd is
+                    better than a path the operator cannot read), so it wraps. */}
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1 text-[12px]">
+                  <span className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="shrink-0 text-muted-foreground">cwd:</span>
+                    <span data-testid="agent-cwd" className="min-w-0 break-all font-mono text-[11.5px]">
+                      {effectiveCwd || "…"}
+                    </span>
+                  </span>
+                  {effectiveCwd && canOpenAgentCwdInVSCode(hostId, daemons) && (
+                    <Button
+                      type="button"
+                      data-testid="open-agent-cwd-vscode"
+                      variant="link"
+                      size="xs"
+                      className="h-auto shrink-0 px-0 py-0 text-[12px] font-medium text-foreground"
+                      disabled={unavailable}
+                      onClick={() => void openHostPathInVSCode(hostId, effectiveCwd)
+                        .catch((error) => toast.error(String(error)))}
+                    >
+                      Open in VS Code
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <AgentControls
+                target={target}
+                name={agent.name}
+                alive={alive}
+                disabled={unavailable}
+                configurationPath={`${base}/configuration`}
+                refresh={refresh}
+                onDeleted={() => navigate("/")}
+              />
             </div>
-            <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
-              <span className="font-mono text-muted-foreground">cwd:</span>
-              <span data-testid="agent-cwd" className="min-w-0 break-all font-mono">
-                {effectiveCwd || "…"}
-              </span>
-              {effectiveCwd && canOpenAgentCwdInVSCode(hostId, daemons) && (
-                <Button
-                  type="button"
-                  data-testid="open-agent-cwd-vscode"
-                  variant="link"
-                  size="xs"
-                  className="h-auto px-0 py-0 text-xs"
-                  disabled={unavailable}
-				  onClick={() => void openHostPathInVSCode(hostId, effectiveCwd)
-                    .catch((error) => toast.error(String(error)))}
-                >
-                  Open in VS Code
-                </Button>
-              )}
-			</div>
-			{status?.messages_queue_full && (
-				<p className="mt-2 text-xs font-semibold text-destructive">
-					Message queue full: {status.messages_pending} / {status.messages_max_queue}
-				</p>
-			)}
-			{status?.budget && (status.budget.hour_usd > 0 || status.budget.day_usd > 0 || status.budget.week_usd > 0 || status.budget.month_usd > 0) && <div className="mt-2 text-xs" data-testid="agent-budget-header">
-				{exhaustedPeriods.length > 0 && <p className="font-semibold text-destructive">Out of budget: {exhaustedPeriods.join(", ")}</p>}
-				<p>Hour {status.budget.hour_spent_usd.toFixed(2)} / {status.budget.hour_usd || "Unlimited"} · Day {status.budget.day_spent_usd.toFixed(2)} / {status.budget.day_usd || "Unlimited"} · Week {status.budget.week_spent_usd.toFixed(2)} / {status.budget.week_usd || "Unlimited"} · Month {status.budget.month_spent_usd.toFixed(2)} / {status.budget.month_usd || "Unlimited"}</p>
-			</div>}
-            <nav aria-label="Agent workspace" className="mt-2 flex gap-1 border-b">
+            {status?.messages_queue_full && (
+              <p className="px-4 pb-2 text-[11px] font-medium text-destructive">
+                Message queue full: {status.messages_pending} / {status.messages_max_queue}
+              </p>
+            )}
+            {status?.budget && (status.budget.hour_usd > 0 || status.budget.day_usd > 0 || status.budget.week_usd > 0 || status.budget.month_usd > 0) && <div className="px-4 pb-2 text-[11px]" data-testid="agent-budget-header">
+              {exhaustedPeriods.length > 0 && <p className="font-medium text-destructive">Out of budget: {exhaustedPeriods.join(", ")}</p>}
+              <p className="text-muted-foreground tabular-nums">Hour {status.budget.hour_spent_usd.toFixed(2)} / {status.budget.hour_usd || "Unlimited"} · Day {status.budget.day_spent_usd.toFixed(2)} / {status.budget.day_usd || "Unlimited"} · Week {status.budget.week_spent_usd.toFixed(2)} / {status.budget.week_usd || "Unlimited"} · Month {status.budget.month_spent_usd.toFixed(2)} / {status.budget.month_usd || "Unlimited"}</p>
+            </div>}
+            <nav aria-label="Agent workspace" className="flex items-center gap-0.5 border-b px-3">
               {TABS.map(([key, label]) => (
                 <NavLink
                   key={key}
                   to={`${base}/${key}`}
                   className={({ isActive }) =>
-                    cn("border-b-2 border-transparent px-3 py-2 text-sm hover:text-foreground",
-                      isActive && "border-primary font-medium")
+                    cn("flex h-[34px] items-center border-b-2 border-transparent px-2.5 text-[13px] text-muted-foreground hover:text-foreground",
+                      isActive && "border-primary font-medium text-foreground")
                   }
                 >
                   {label}
+                  {key === "tasks" && hasOpenQuestion && (
+                    <span
+                      role="img"
+                      aria-label="Open question from an agent"
+                      title="Open question from an agent"
+                      className="ml-1.5 size-[5px] rounded-full bg-primary"
+                    />
+                  )}
                 </NavLink>
               ))}
             </nav>

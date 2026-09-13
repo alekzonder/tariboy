@@ -1,17 +1,6 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SendFilesButton } from "@/components/SendFilesButton";
@@ -19,7 +8,7 @@ import { TuiScreen } from "@/components/TuiScreen";
 import { useFileDropTarget } from "@/hooks/useFileDropTarget";
 import { useSendFiles } from "@/hooks/useSendFiles";
 import { useTerminalSocket } from "@/hooks/useTerminalSocket";
-import { agentDeleteOn, agentPostOn, ApiError } from "@/lib/api";
+import { agentPostOn, ApiError } from "@/lib/api";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
 import type { AgentSummary } from "@/lib/types";
 
@@ -28,15 +17,12 @@ export default function AgentConsoleTab({ hostId, agent, refresh }: {
   agent: AgentSummary;
   refresh: () => void;
 }) {
-  const navigate = useNavigate();
   const target = targetFor(hostId);
   const interactive = agent.interactive !== false;
   const alive = agent.enabled ?? agent.state !== "stopped";
   const controller = useTerminalSocket(agent.name, interactive && alive, target);
   const [prompt, setPrompt] = useState("");
   const [execPending, setExecPending] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deletePending, setDeletePending] = useState(false);
   const absentUpload = useSendFiles({
     daemon: target,
     onUploaded: (paths) => toast.success(`uploaded: ${paths.join(", ")}`),
@@ -56,8 +42,6 @@ export default function AgentConsoleTab({ hostId, agent, refresh }: {
     await agentPostOn(target, agent.name, "start");
     controller.reconnect();
   });
-  const stop = () => act(() => agentPostOn(target, agent.name, "stop"));
-  const kill = () => act(() => agentPostOn(target, agent.name, "kill"));
   const exec = async () => {
     if (execPending) return;
     setExecPending(true);
@@ -73,76 +57,25 @@ export default function AgentConsoleTab({ hostId, agent, refresh }: {
       setExecPending(false);
     }
   };
-  const remove = async () => {
-    if (deletePending) return;
-    setDeletePending(true);
-    try {
-      await agentDeleteOn(target, agent.name, { force: true, purge: true });
-      refresh();
-      navigate("/");
-    } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : String(error));
-    } finally {
-      setDeletePending(false);
-    }
-  };
   const configuration = `/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/configuration`;
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {alive ? (
-          <Button size="sm" variant="secondary" onClick={() => void stop()}>Stop</Button>
-        ) : (
-          <Button size="sm" onClick={() => void start()}>Start</Button>
-        )}
-        <Button size="sm" variant="outline" onClick={() => {
-          if (window.confirm(`Kill the session for ${agent.name}?`)) void kill();
-        }}>Kill session</Button>
-        <AlertDialog
-          open={deleteOpen}
-          onOpenChange={(open) => {
-            if (!deletePending) setDeleteOpen(open);
-          }}
-        >
-          <AlertDialogTrigger asChild>
-            <Button size="sm" variant="destructive">Delete</Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete agent {agent.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This permanently deletes the agent and all of its durable data. This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deletePending}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                disabled={deletePending}
-                onClick={(event) => {
-                  event.preventDefault();
-                  void remove();
-                }}
-              >
-                {deletePending ? "Deleting…" : "Delete agent"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-        {agent.image !== "bare:latest" && (
-          <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
-            <Input
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="one-shot exec prompt (optional)"
-              className="h-8 min-w-48 max-w-xl flex-1"
-              disabled={execPending}
-            />
-            <Button size="sm" disabled={execPending} onClick={() => void exec()}>Exec</Button>
-          </div>
-        )}
-      </div>
+      {/* Start/Stop, Kill and Delete live in the agent header now — they are
+          lifecycle, not console, and the header is on every tab. What stays
+          here is the one-shot exec prompt, which is console work. */}
+      {agent.image !== "bare:latest" && (
+        <div className="flex shrink-0 items-center justify-end gap-2">
+          <Input
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder="one-shot exec prompt (optional)"
+            className="h-8 min-w-48 max-w-xl flex-1"
+            disabled={execPending}
+          />
+          <Button size="sm" disabled={execPending} onClick={() => void exec()}>Exec</Button>
+        </div>
+      )}
       {!interactive ? (
         <div
           data-testid="agent-console-absent-drop-target"

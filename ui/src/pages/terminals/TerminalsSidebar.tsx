@@ -1,10 +1,9 @@
-import { useRef, useState, type ButtonHTMLAttributes } from "react";
+import { useRef, useState, type ButtonHTMLAttributes, type ComponentProps } from "react";
 import { Plus, Search, Server } from "lucide-react";
 import {
   DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable,
   useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -16,6 +15,8 @@ import { cn } from "@/lib/utils";
 import type { HostAgents } from "@/lib/aggregate";
 import type { DaemonMeta } from "@/lib/daemons";
 import { HostStatus } from "@/components/HostStatus";
+import { AgentRow } from "@/components/AgentRow";
+import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import {
   DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH,
 } from "./useSidebarWidth";
@@ -62,6 +63,23 @@ function SortableButton({ dragKey, disabled, style, className, ...props }: Butto
     {...drag.listeners}
   />;
 }
+
+function SortableAgentRow({ dragKey, disabled, ...props }: ComponentProps<typeof AgentRow> & {
+  dragKey: string;
+}) {
+  const drag = useDraggable({ id: dragKey, disabled });
+  const drop = useDroppable({ id: dragKey, disabled });
+  return <AgentRow
+    ref={(node) => { drag.setNodeRef(node); drop.setNodeRef(node); }}
+    disabled={disabled}
+    style={{ opacity: drag.isDragging ? 0.45 : undefined }}
+    className={cn("cursor-grab active:cursor-grabbing", drop.isOver && "ring-1 ring-primary")}
+    {...props}
+    {...drag.attributes}
+    {...drag.listeners}
+  />;
+}
+/* eslint-enable react-hooks/refs */
 
 export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
   hosts: HostAgents[];
@@ -237,45 +255,22 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
           {h.error && <div className="text-xs text-destructive">{h.error}</div>}
           {(() => {
             const agentsInOrder = ordered(h.agents, h.sidebarOrder?.agents ?? [], (agent) => agent.name);
-            const renderAgent = (a: (typeof h.agents)[number]) => {
-            const interactive = a.interactive !== false;
-            return (
+            const renderAgent = (a: (typeof h.agents)[number]) => (
               <ContextMenu key={a.name}>
                 <ContextMenuTrigger asChild>
-                  <div
-                    className={cn(
-                      "flex w-full items-center rounded text-sm hover:bg-accent",
-                      selected && selected.hostId === h.host.id && selected.agent === a.name && "bg-accent",
-                    )}
-                  >
-                    <SortableButton
-                      dragKey={dragId("agents", h.host.id, a.name, a.group?.trim() ?? "")}
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center justify-between px-2 py-1 text-left"
-                      aria-label={`Open ${a.name}`}
-                      aria-current={selected?.hostId === h.host.id && selected.agent === a.name ? "page" : undefined}
-                      disabled={Boolean(h.error)}
-                      onClick={() => { if (!h.error) onSelect(h.host.id, a.name); }}
-                    >
-                      <span className="flex min-w-0 items-center gap-1">
-                        <span className="truncate">{a.name}</span>
-                        {attention.has(JSON.stringify([h.host.id, a.name])) && (
-                          <span
-                            role="img"
-                            aria-label={`Unread customer question for ${a.name} on ${h.host.label}`}
-                            title={`Unread customer question for ${a.name} on ${h.host.label}`}
-                            className="h-2 w-2 shrink-0 rounded-full bg-red-500"
-                          />
-                        )}
-                        {!interactive && (
-                          <span className="shrink-0 text-xs text-muted-foreground" title="not interactive (no tty)">
-                            non-tty
-                          </span>
-                        )}
-                      </span>
-						{a.budget?.exhausted?.length ? <Badge variant="destructive" title={`Out of budget: ${a.budget.exhausted.join(", ")}`}>out of budget</Badge> : <Badge variant={a.state === "running" ? "default" : "secondary"}>{a.state}</Badge>}
-                    </SortableButton>
-                  </div>
+                  <div className="w-full"><SortableAgentRow
+                    dragKey={dragId("agents", h.host.id, a.name, a.group?.trim() ?? "")}
+                    name={a.name}
+                    state={a.state}
+                    outOfBudget={Boolean(a.budget?.exhausted?.length)}
+                    selected={selected?.hostId === h.host.id && selected.agent === a.name}
+                    unread={attention.has(customerQuestionAttentionKey(h.host.id, a.name))}
+                    unreadLabel={`Unread customer question for ${a.name} on ${h.host.label}`}
+                    interactive={a.interactive !== false}
+                    aria-label={`Open ${a.name}`}
+                    disabled={Boolean(h.error)}
+                    onClick={() => { if (!h.error) onSelect(h.host.id, a.name); }}
+                  /></div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
                   <ContextMenuItem disabled={Boolean(h.error)} onSelect={() => onClone(h.host.id, a.name)}>
@@ -284,7 +279,6 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
                 </ContextMenuContent>
               </ContextMenu>
             );
-            };
             const groupNames = [...new Set([
               ...(h.groups ?? []).map((group) => group.name),
               ...agentsInOrder.map((agent) => agent.group?.trim()).filter((name): name is string => Boolean(name)),

@@ -60,13 +60,9 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("TerminalPane compatibility wrapper", () => {
-  it("stops the master switch without navigating away", async () => {
-    vi.mocked(agentPostOn).mockResolvedValue({});
-    renderPane();
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
-    await waitFor(() => expect(agentPostOn).toHaveBeenCalledWith(remoteTarget, "a1", "stop"));
-    expect(screen.queryByText("Agents list")).toBeNull();
-  });
+  // Stop / Kill / Delete are asserted in AgentControls.test.tsx: they moved out
+  // of the console pane and into the agent header, so they are reachable from
+  // every tab rather than only this one.
 
   it("starts a stopped interactive agent with start, not restart", async () => {
     vi.mocked(agentPostOn).mockResolvedValue({});
@@ -74,23 +70,6 @@ describe("TerminalPane compatibility wrapper", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Start" })[0]);
     await waitFor(() => expect(agentPostOn).toHaveBeenCalledWith(remoteTarget, "a1", "start"));
     expect(agentPostOn).not.toHaveBeenCalledWith(remoteTarget, "a1", "restart");
-  });
-
-  it("offers an explicit kill-session action", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(agentPostOn).mockResolvedValue({});
-    renderPane();
-    fireEvent.click(screen.getByRole("button", { name: "Kill session" }));
-    await waitFor(() => expect(agentPostOn).toHaveBeenCalledWith(remoteTarget, "a1", "kill"));
-  });
-
-  it("deletes durable data and returns to the Agents list", async () => {
-    vi.mocked(agentDeleteOn).mockResolvedValue({});
-    renderPane();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete agent" }));
-    await waitFor(() => expect(screen.getByText("Agents list")).toBeInTheDocument());
-    expect(agentDeleteOn).toHaveBeenCalledWith(remoteTarget, "a1", { force: true, purge: true });
   });
 
   it("keeps a live terminal attached for an idle interactive agent", () => {

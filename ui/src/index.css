@@ -105,6 +105,10 @@
 
     /* elevation: the island, not a box-shadow zoo */
     --lift: 0 1px 2px oklch(24% .03 75/.05), 0 10px 28px -14px oklch(24% .03 75/.22); /* @kind shadow */
+    /* The second and last level of elevation: the selected sidebar row and the
+       active segment of a segmented control. The handoff writes it inline; it
+       is a token here so no markup has to spell out a color. */
+    --raise: 0 1px 2px oklch(24% .03 75/.10); /* @kind shadow */
     --panel-radius: 14px; /* @kind radius */
 
     /* terminal workspace (flexlayout) — the thematic half of what
@@ -155,6 +159,7 @@
     --status-failed: oklch(66% .150 27);
     --status-stopped: oklch(56% .010 82);
     --lift: 0 1px 2px oklch(0 0 0/.3), 0 12px 30px -14px oklch(0 0 0/.55); /* @kind shadow */
+    --raise: 0 1px 2px oklch(0 0 0/.3); /* @kind shadow */
 }
 
 @layer base {
