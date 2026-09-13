@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/core"
 import { buildTaskForest, canDropTaskInside, canReorderTaskBeside, flattenVisible } from "@/lib/taskTree"
 import type { Task } from "@/lib/tasks"
-import TaskRow from "./TaskRow"
+import TaskRow, { TaskTableHeader, type TaskRowMode } from "./TaskRow"
 
 function preferSpecificDropTarget(args: Parameters<typeof pointerWithin>[0]) {
   const collisions = pointerWithin(args)
@@ -36,6 +36,7 @@ function RootDrop({ children }: { children: React.ReactNode }) {
 
 export default function TaskTree({
   tasks,
+  mode,
   activeQuestionTaskKeys,
   expanded,
   selectedKey,
@@ -45,6 +46,7 @@ export default function TaskTree({
   onMove,
 }: {
   tasks: Task[]
+  mode: TaskRowMode
   activeQuestionTaskKeys: ReadonlySet<string>
   expanded: ReadonlySet<string>
   selectedKey: string
@@ -95,11 +97,13 @@ export default function TaskTree({
 
   return (
     <DndContext sensors={sensors} collisionDetection={preferSpecificDropTarget} onDragEnd={finish}>
+      <TaskTableHeader mode={mode} sticky={mode === "all"} />
       <RootDrop>
         {visible.map((row) => (
           <TaskRow
             key={row.task.key}
             row={row}
+            mode={mode}
             hasActiveQuestion={activeQuestionTaskKeys.has(row.task.key)}
             expanded={expanded.has(row.task.key)}
             selected={selectedKey === row.task.key}

@@ -702,8 +702,11 @@ describe("TasksWorkspace", () => {
     const parentRow = await screen.findByTestId("task-row-TEST-1")
     await userEvent.click(within(parentRow).getByRole("button", { name: "Expand TEST-1" }))
     const childRow = await screen.findByTestId("task-row-TEST-2")
-    expect(within(childRow).getByText("In progress")).toBeVisible()
-    expect(within(childRow).getByRole("button", { name: /In progress/ })).toBeVisible()
+    // The status is its own column now, not a badge inside the row's button:
+    // visible text, and the tone that carries the meaning.
+    const badge = within(childRow).getByText("In progress")
+    expect(badge).toBeVisible()
+    expect(badge).toHaveAttribute("data-tone", "live")
     expect(within(parentRow).queryByText("In progress")).toBeNull()
   })
 
@@ -723,12 +726,12 @@ describe("TasksWorkspace", () => {
       undefined,
     )
 
-    await userEvent.selectOptions(screen.getByLabelText("Task status"), "closed")
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", { name: "Closed" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ status_view: "closed" }),
       undefined,
     ))
-    await userEvent.selectOptions(screen.getByLabelText("Task status"), "all")
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Task status" })).getByRole("radio", { name: "All" }))
     await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
       expect.objectContaining({ status_view: "all" }),
       undefined,

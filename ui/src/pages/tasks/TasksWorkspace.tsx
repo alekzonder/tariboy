@@ -1,8 +1,6 @@
-import { Plus, RefreshCw, Search } from "lucide-react"
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useOptionalDaemons } from "@/components/DaemonProvider"
-import { Input } from "@/components/ui/input"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import { ApiError, type ApiTarget } from "@/lib/api"
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree"
@@ -42,6 +40,7 @@ import {
   type WorkflowQuestion,
 } from "@/lib/tasks"
 import QueueSettings from "./QueueSettings"
+import { TaskFilterBar } from "./TaskFilterBar"
 import TaskDetail from "./TaskDetail"
 import TaskForm from "./TaskForm"
 import TaskNotifications from "./TaskNotifications"
@@ -582,6 +581,18 @@ function TasksWorkspaceContent({
     }
   }
 
+  // Which shape the table takes: one agent's tasks, or a whole server's.
+  const mode = scopeAgent ? "agent" : "all"
+
+  // "+ New task" from the handoff: the new row must be visible the moment it
+  // lands, so the search that would hide it is cleared and a Closed-only view
+  // switches back to Active. The expansion state is deliberately untouched.
+  const startCreate = () => {
+    setQuery("")
+    setStatusView((current) => (current === "closed" ? "active" : current))
+    setCreatingParent("")
+  }
+
   const unread = useMemo(
     () => notifications.filter((notification) => !notification.read_at && !notification.dismissed_at).length,
     [notifications],
@@ -621,38 +632,25 @@ function TasksWorkspaceContent({
       <main className="tasks-center">
         {(view === "all" || view === "mine" || view === "waiting") && (
           <>
-            <header className="tasks-toolbar">
-              <div>
-                <h2>{view === "all" ? "All tasks" : view === "mine" ? "My tasks" : "Waiting for me"}</h2>
-                {scopeAgent && <span>Scoped to {scopeAgent}</span>}
-              </div>
-              <label className="tasks-search">
-                <Search aria-hidden="true" />
-                <Input aria-label="Search tasks" placeholder="Filter tasks" value={query} onChange={(event) => setQuery(event.target.value)} />
-              </label>
-              <label>
-                Task status
-                <select value={statusView} onChange={(event) => setStatusView(event.target.value as TaskStatusView)}>
-                  <option value="active">Active</option>
-                  <option value="closed">Closed</option>
-                  <option value="all">All</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                aria-label="Refresh tasks"
-                aria-busy={refreshing}
-                onClick={() => {
-                  if (!scopeAgent && (view === "mine" || view === "waiting") && !principalFilter) void loadMetadata()
-                  else void loadTree()
-                }}
-              >
-                <RefreshCw className={refreshing ? "is-refreshing" : undefined} />
-              </button>
-              <button type="button" className="task-primary-action" onClick={() => setCreatingParent("")}>
-                <Plus /> New task
-              </button>
+            <header className="flex items-center gap-2.5 px-4 pt-3.5 text-[13px]">
+              <h2 className="font-medium">
+                {view === "all" ? "All tasks" : view === "mine" ? "My tasks" : "Waiting for me"}
+              </h2>
             </header>
+            <TaskFilterBar
+              mode={mode}
+              query={query}
+              onQuery={setQuery}
+              statusView={statusView}
+              onStatusView={setStatusView}
+              scopeAgent={scopeAgent}
+              refreshing={refreshing}
+              onRefresh={() => {
+                if (!scopeAgent && (view === "mine" || view === "waiting") && !principalFilter) void loadMetadata()
+                else void loadTree()
+              }}
+              onCreate={startCreate}
+            />
             {creatingParent === "" && (
               <TaskForm queues={queues} initialQueue={queue} onCreate={create} onCancel={() => setCreatingParent(null)} />
             )}
@@ -661,6 +659,7 @@ function TasksWorkspaceContent({
               : loading ? <div className="tasks-empty">Loading tasks…</div> : (
               <TaskTree
                 tasks={tasks}
+                mode={mode}
                 activeQuestionTaskKeys={activeQuestionTaskKeys}
                 expanded={expanded}
                 selectedKey={selectedKey}
