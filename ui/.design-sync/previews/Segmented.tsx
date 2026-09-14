@@ -11,15 +11,21 @@ const STATUS_OPTIONS = [
 
 type StatusView = (typeof STATUS_OPTIONS)[number]["value"];
 
+// Segmented is a flex container, so a block parent stretches its --muted
+// trough to the full width. Every real call site sits in a flex row (where
+// its own shrink-0 keeps it at content width), so the previews mirror that —
+// otherwise the card teaches a full-width bar this component never renders.
 export const TaskStatus = () => {
   const [view, setView] = useState<StatusView>("active");
   return (
-    <Segmented
-      label="Task status"
-      options={STATUS_OPTIONS}
-      value={view}
-      onChange={setView}
-    />
+    <div style={{ display: "flex" }}>
+      <Segmented
+        label="Task status"
+        options={STATUS_OPTIONS}
+        value={view}
+        onChange={setView}
+      />
+    </div>
   );
 };
 
@@ -53,15 +59,17 @@ export const Selection = () => (
 export const TwoOptions = () => {
   const [scope, setScope] = useState<"mine" | "all">("mine");
   return (
-    <Segmented
-      label="Task scope"
-      options={[
-        { value: "mine", label: "Mine" },
-        { value: "all", label: "Everyone" },
-      ]}
-      value={scope}
-      onChange={setScope}
-    />
+    <div style={{ display: "flex" }}>
+      <Segmented
+        label="Task scope"
+        options={[
+          { value: "mine", label: "Mine" },
+          { value: "all", label: "Everyone" },
+        ]}
+        value={scope}
+        onChange={setScope}
+      />
+    </div>
   );
 };
 

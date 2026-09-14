@@ -188,6 +188,9 @@
     "PathAutocomplete": {
       "cardMode": "column"
     },
+    "PriorityTag": {
+      "cardMode": "column"
+    },
     "RetentionPanel": {
       "cardMode": "single",
       "primaryStory": "Policy"
@@ -196,6 +199,9 @@
       "cardMode": "column"
     },
     "ScrollArea": {
+      "cardMode": "column"
+    },
+    "Segmented": {
       "cardMode": "column"
     },
     "Select": {
@@ -218,6 +224,9 @@
     "StatusChatHistory": {
       "cardMode": "single",
       "primaryStory": "HistoryOpen"
+    },
+    "StatusPill": {
+      "cardMode": "column"
     },
     "StoresPage": {
       "cardMode": "column"
