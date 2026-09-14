@@ -302,3 +302,34 @@ func TestDeleteRelationAppendsEventForBothEndpoints(t *testing.T) {
 		}
 	}
 }
+
+func TestRelationCarriesEndpointTitleAndStatus(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	customer := CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, customer, CreateQueueInput{Prefix: "REL", Name: "Rel"})
+	blocker, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "REL", Title: "Ship worker:v2"})
+	blocked, _ := svc.CreateTask(ctx, customer, CreateTaskInput{Queue: "REL", Title: "Packager drops skills"})
+	if _, err := svc.AddRelation(ctx, customer, blocked.Key, RelationInput{
+		TargetKey: blocker.Key, Type: "blocks", Revision: blocked.Revision,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	detail, err := svc.GetTask(ctx, customer, blocked.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Relations) != 1 {
+		t.Fatalf("relations = %#v; want one", detail.Relations)
+	}
+	relation := detail.Relations[0]
+	if relation.SourceTitle != blocked.Title || relation.TargetTitle != blocker.Title {
+		t.Fatalf("relation titles = %q -> %q; want %q -> %q",
+			relation.SourceTitle, relation.TargetTitle, blocked.Title, blocker.Title)
+	}
+	if relation.SourceStatus != string(blocked.Status) || relation.TargetStatus != string(blocker.Status) {
+		t.Fatalf("relation statuses = %q -> %q; want %q -> %q",
+			relation.SourceStatus, relation.TargetStatus, blocked.Status, blocker.Status)
+	}
+}

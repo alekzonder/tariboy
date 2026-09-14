@@ -88,29 +88,3 @@ const TASK_STATUS_LABELS: Record<string, string> = {
 export function taskStatusLabel(status: string): string {
   return TASK_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
 }
-
-/**
- * A managed-workflow row (assignment, hold, artifact, question, observation)
- * carries a 6px dot rather than a filled row: the section is already a nested
- * block, and a second fill inside it would outrank the task's own status. The
- * rule is the same one the rest of the app uses — alive is green, needing a
- * person is red or accent — so every one of the five lists reads it from here
- * instead of deciding per list.
- */
-export function workflowRowTone(state: string): StatusTone {
-  const value = state.trim().toLowerCase();
-  if (["running", "in_progress", "active", "claimed", "started", "leased"].includes(value)) return "live";
-  if (["failed", "error", "frozen", "escalated", "timed_out", "expired"].includes(value)) return "danger";
-  if (["open", "waiting", "wait_customer", "asked", "blocked", "held", "pending"].includes(value)) return "attention";
-  return "quiet";
-}
-
-/** The dot itself: flat, no halo, and a quiet row shows the border tone so it
- *  holds the column without reading as a status. */
-export const WORKFLOW_DOT: Record<StatusTone, string> = {
-  live: "bg-status-running",
-  attention: "bg-primary",
-  danger: "bg-status-failed",
-  quiet: "bg-border",
-  faint: "bg-border",
-};

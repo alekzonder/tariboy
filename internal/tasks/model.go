@@ -179,12 +179,16 @@ type WaitingFor struct {
 }
 
 type Relation struct {
-	ID        int64  `json:"id"`
-	SourceKey string `json:"source_key"`
-	TargetKey string `json:"target_key"`
-	Type      string `json:"type"`
-	CreatedBy string `json:"created_by"`
-	CreatedAt string `json:"created_at"`
+	ID           int64  `json:"id"`
+	SourceKey    string `json:"source_key"`
+	SourceTitle  string `json:"source_title"`
+	SourceStatus string `json:"source_status"`
+	TargetKey    string `json:"target_key"`
+	TargetTitle  string `json:"target_title"`
+	TargetStatus string `json:"target_status"`
+	Type         string `json:"type"`
+	CreatedBy    string `json:"created_by"`
+	CreatedAt    string `json:"created_at"`
 }
 
 type Event struct {

@@ -387,10 +387,13 @@ token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 
 Queue settings expose the active immutable workflow version and explicit pool
-membership. Managed task detail renders workflow status, requirements,
-assignments, outcomes, holds, artifacts, questions, and observations from typed
-HTTP projections; the UI does not infer phases from title prefixes or assignee.
-Operator history remains available after completion. See
+membership. Task detail does not render the workflow execution lists
+(assignments, holds, artifacts, questions, observations); a managed task is
+distinguished there by its lifecycle fields being read-only, and by the freeze
+banner the execution projection still drives. The projections remain available
+over typed HTTP for the operator surfaces that read them, and the UI does not
+infer phases from title prefixes or assignee. Operator history remains
+available after completion. See
 [Configurable task workflows](/docs/task-workflows).
 
 The navigation hierarchy is **Server → Agent**. The existing Workspace canvas

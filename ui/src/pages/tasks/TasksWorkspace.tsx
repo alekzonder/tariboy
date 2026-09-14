@@ -17,8 +17,6 @@ import {
   listTaskEvents,
   listTaskPrincipals,
   listTaskQueues,
-  listWorkflowArtifacts,
-  listWorkflowQuestions,
   listTasks,
   markTaskNotificationRead,
   moveTask,
@@ -35,9 +33,7 @@ import {
   type TaskRelationType,
   type TaskStatus,
   type TaskStatusView,
-  type WorkflowArtifact,
   type WorkflowExecutionView,
-  type WorkflowQuestion,
 } from "@/lib/tasks"
 import QueueSettings from "./QueueSettings"
 import { TaskFilterBar } from "./TaskFilterBar"
@@ -240,14 +236,6 @@ function TasksWorkspaceContent({
   const [detail, setDetail] = useState<Detail | null>(null)
   const [events, setEvents] = useState<TaskEvent[]>([])
   const [workflow, setWorkflow] = useState<WorkflowExecutionView | null>(null)
-  const [workflowArtifacts, setWorkflowArtifacts] = useState<WorkflowArtifact[]>([])
-  const [workflowQuestions, setWorkflowQuestions] = useState<WorkflowQuestion[]>([])
-  const [executionLoading, setExecutionLoading] = useState(false)
-  const [executionError, setExecutionError] = useState("")
-  const [artifactsLoading, setArtifactsLoading] = useState(false)
-  const [artifactsError, setArtifactsError] = useState("")
-  const [questionsLoading, setQuestionsLoading] = useState(false)
-  const [questionsError, setQuestionsError] = useState("")
   const [creatingParent, setCreatingParent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -363,34 +351,16 @@ function TasksWorkspaceContent({
       setDetail(next)
       setEvents(history)
       setWorkflow(null)
-      setWorkflowArtifacts([])
-      setWorkflowQuestions([])
-      setExecutionError("")
-      setArtifactsError("")
-      setQuestionsError("")
       setSelectedKey(key)
+      // The execution projection is read for one thing the panel still shows:
+      // whether the workflow is frozen. A failure leaves that banner off
+      // rather than speaking for itself.
       if (next.task.workflow_version_id) {
-        setExecutionLoading(true)
-        setArtifactsLoading(true)
-        setQuestionsLoading(true)
         const current = () => mountedRef.current && request === detailRequestRef.current
-        await Promise.all([
-          getTaskWorkflow(key, target).then((value) => { if (current()) setWorkflow(value) })
-            .catch((error) => { if (current()) setExecutionError(errorMessage(error)) })
-            .finally(() => { if (current()) setExecutionLoading(false) }),
-          listWorkflowArtifacts(key, target).then((page) => { if (current()) setWorkflowArtifacts(page.items ?? []) })
-            .catch((error) => { if (current()) setArtifactsError(errorMessage(error)) })
-            .finally(() => { if (current()) setArtifactsLoading(false) }),
-          listWorkflowQuestions(key, target).then((page) => { if (current()) setWorkflowQuestions(page.items ?? []) })
-            .catch((error) => { if (current()) setQuestionsError(errorMessage(error)) })
-            .finally(() => { if (current()) setQuestionsLoading(false) }),
-        ])
+        await getTaskWorkflow(key, target)
+          .then((value) => { if (current()) setWorkflow(value) })
+          .catch(() => {})
         if (!current()) return
-      }
-      if (!next.task.workflow_version_id) {
-        setExecutionLoading(false)
-        setArtifactsLoading(false)
-        setQuestionsLoading(false)
       }
     } catch (error) {
       if (!mountedRef.current || request !== detailRequestRef.current) return
@@ -403,14 +373,6 @@ function TasksWorkspaceContent({
       setDetail(null)
       setEvents([])
       setWorkflow(null)
-      setWorkflowArtifacts([])
-      setWorkflowQuestions([])
-      setExecutionLoading(false)
-      setExecutionError("")
-      setArtifactsLoading(false)
-      setArtifactsError("")
-      setQuestionsLoading(false)
-      setQuestionsError("")
       toast.error(error instanceof Error ? error.message : String(error))
     }
   }, [target])
@@ -740,25 +702,9 @@ function TasksWorkspaceContent({
             setDetail(null)
             setEvents([])
             setWorkflow(null)
-            setWorkflowArtifacts([])
-            setWorkflowQuestions([])
-            setExecutionLoading(false)
-            setExecutionError("")
-            setArtifactsLoading(false)
-            setArtifactsError("")
-            setQuestionsLoading(false)
-            setQuestionsError("")
           }}
           events={events}
           workflow={workflow}
-          workflowArtifacts={workflowArtifacts}
-          workflowQuestions={workflowQuestions}
-          executionLoading={executionLoading}
-          executionError={executionError}
-          artifactsLoading={artifactsLoading}
-          artifactsError={artifactsError}
-          questionsLoading={questionsLoading}
-          questionsError={questionsError}
           onSave={saveDetail}
           onComment={comment}
           onAddRelation={async (targetKey: string, type: TaskRelationType) => {
