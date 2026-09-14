@@ -137,7 +137,7 @@ func (s *Store) Current(agent string, now time.Time) (tasks.Task, bool, error) {
 }
 
 // GoalDeliveryAllowed suppresses another goal wake until the previous one is
-// processed and the agent's configured cooldown has elapsed.
+// processed or dead-lettered and the agent's configured cooldown has elapsed.
 func (s *Store) GoalDeliveryAllowed(agent string, now time.Time) (bool, error) {
 	var cooldown int
 	var last string
@@ -148,7 +148,7 @@ func (s *Store) GoalDeliveryAllowed(agent string, now time.Time) (bool, error) {
 	), ''),
 		EXISTS(SELECT 1 FROM deliveries d JOIN subscriptions s ON s.id=d.subscription_id
 		JOIN messages m ON m.id=d.message_id WHERE s.agent=? AND m.type='task.goal'
-		AND d.processed_at IS NULL) FROM agents WHERE name=?`, agent, agent, agent).Scan(&cooldown, &last, &pending)
+		AND d.processed_at IS NULL AND d.dlq=0) FROM agents WHERE name=?`, agent, agent, agent).Scan(&cooldown, &last, &pending)
 	if err != nil || pending {
 		return false, err
 	}

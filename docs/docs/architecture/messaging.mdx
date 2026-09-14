@@ -79,9 +79,10 @@ The per-agent Goal reconciler publishes `task.goal` to
 `agent:<name>:inbox` with the selected task key and `selected` or
 `iteration_completed` reason. Its idempotency key includes the agent, task key,
 task revision, and terminal iteration identity, so recovery and repeated scans
-do not duplicate a generation. An unprocessed Goal delivery suppresses another
-publication; a positive per-agent cooldown then suppresses rapid repeats (60
-seconds by default). Delivery remains strictly
+do not duplicate a generation. An unprocessed Goal delivery outside the DLQ
+suppresses another publication. Dead-lettered deliveries are retained but do
+not block a new Goal generation; a positive per-agent cooldown still suppresses
+rapid repeats (60 seconds by default). Delivery remains strictly
 `Publish -> delivery -> WakeMessage`; the reconciler never starts an iteration
 directly. Disabled agents or disabled loops receive no new goal wake.
 
