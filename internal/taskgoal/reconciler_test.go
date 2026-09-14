@@ -187,7 +187,7 @@ func TestReconcilerSuppressesUnprocessedGoalDelivery(t *testing.T) {
 	onlyGoalMessage(t, messageBus, "worker")
 }
 
-func TestReconcilerSuppressesDeadLetteredGoalDelivery(t *testing.T) {
+func TestReconcilerDeliversNewGoalAfterDeadLetteredCooldown(t *testing.T) {
 	now := goalNow
 	_, messageBus, base := seededGoalReconciler(t)
 	r := NewReconciler(ReconcilerConfig{Store: base, Bus: messageBus, Clock: func() time.Time { return now }})
@@ -199,11 +199,32 @@ func TestReconcilerSuppressesDeadLetteredGoalDelivery(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	s := NewStore(base)
+	updateTask(t, s, "T-1", "status", "done")
+	seedTask(t, s, "T-2", "agent:worker", "P0", "open", "2026-09-02T00:00:00Z")
+	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
+		t.Fatal(err)
+	}
+	onlyGoalMessage(t, messageBus, "worker") // DLQ does not bypass cooldown.
 	now = now.Add(time.Minute)
 	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
 		t.Fatal(err)
 	}
-	onlyGoalMessage(t, messageBus, "worker")
+	messages, err := messageBus.Pending("worker", 10)
+	if err != nil || len(messages) != 1 || messages[0].Data["task_key"] != "T-2" {
+		t.Fatalf("pending after cooldown = %#v, %v; want new goal T-2", messages, err)
+	}
+	var retained int
+	if err := base.DB.QueryRow(`SELECT COUNT(*) FROM deliveries WHERE dlq=1 AND processed_at IS NULL`).Scan(&retained); err != nil || retained != 1 {
+		t.Fatalf("retained unprocessed DLQ deliveries = %d, %v; want 1", retained, err)
+	}
+	now = now.Add(time.Minute)
+	if err := r.Reconcile(context.Background(), "worker", "later"); err != nil {
+		t.Fatal(err)
+	}
+	if messages, err := messageBus.MessagesSince(bus.InboxChannel("worker"), "", 10); err != nil || len(messages) != 2 {
+		t.Fatalf("messages with pending new goal = %#v, %v; want 2", messages, err)
+	}
 }
 
 func TestReconcilerDeliversAgainAfterProcessedCooldown(t *testing.T) {
