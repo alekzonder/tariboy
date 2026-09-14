@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link, NavLink, Outlet, useNavigate, useOutletContext, useParams,
 } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  ApiError, imageManifestGet, imageProvenanceGet, listImages, removeImage,
-  type ImageManifest, type ImageProvenance, type ImageRow,
+  ApiError, imageManifestGet, imageProvenanceGet, removeImage,
+  type ImageManifest, type ImageProvenance,
 } from "@/lib/api";
+import { resolveDaemon, type Daemon } from "@/lib/daemons";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { canOpenAgentCwdInVSCode } from "@/pages/agents/agentCwdVSCode";
 import { useOptionalDaemons } from "@/components/DaemonProvider";
@@ -24,6 +25,8 @@ export interface ImageOutletContext {
   manifest: ImageManifest | null;
   hostKey: string;
   provenance: ImageProvenance | null;
+  target: Daemon | null;
+  onReadError: (error: unknown) => void;
 }
 
 export function useImageContext() {
@@ -46,40 +49,53 @@ export function ImageLayout({ hostId, basePath = "/images" }: {
   basePath?: string;
 }) {
   const { name = "", tag = "" } = useParams();
+  const hostKey = hostId ?? "";
+  return <ImageDetail key={`${hostKey}:${name}:${tag}`} hostKey={hostKey} name={name} tag={tag} basePath={basePath} />;
+}
+
+function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: string; tag: string; basePath: string }) {
   const ref = `${name}:${tag}`;
   const navigate = useNavigate();
-  const daemonContext=useOptionalDaemons();
-  const hostKey = hostId ?? daemonContext?.activeId ?? "";
-  const [manifest, setManifest] = useState<ImageManifest | null>(null);
-  const [row, setRow] = useState<ImageRow | null>(null);
-  const [provenance,setProvenance]=useState<ImageProvenance|null>(null);
+  const daemonContext = useOptionalDaemons();
+  const [detail, setDetail] = useState<{ manifest: ImageManifest; provenance: ImageProvenance; target: Daemon | null } | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [revision, setRevision] = useState(0);
+  const refreshes = useRef(0);
+  const onReadError = useCallback((cause: unknown) => {
+    setDetail(null);
+    if (cause instanceof ApiError && cause.code === "image_changed") {
+      setNotice("Image changed; refreshing the displayed build.");
+      if (refreshes.current++ === 0) {
+        setRevision((value) => value + 1);
+        return;
+      }
+    }
+    setError(message(cause));
+  }, []);
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([imageManifestGet(ref), listImages(),imageProvenanceGet(ref)])
-      .then(([nextManifest, listing,nextProvenance]) => {
-        if (!alive) return;
-        setManifest(nextManifest);
-        setRow(
-          (listing.images ?? []).find((image) => `${image.name}:${image.tag}` === ref) ?? null,
-        );
-        setProvenance(nextProvenance);
-        setError("");
-      })
-      .catch((err) => {
-        if (alive) setError(message(err));
-      });
+    void (async () => {
+      const target = await resolveDaemon(hostKey);
+      if (hostKey && !target) throw new Error(`host ${hostKey} is not available`);
+      const manifest = await imageManifestGet(ref, target);
+      const provenance = await imageProvenanceGet(ref, target, manifest.digest);
+      if (provenance.digest && provenance.digest !== manifest.digest) throw new ApiError(409, "image_changed", "Image changed; refresh to inspect the new build");
+      if (alive) { setDetail({ manifest, provenance, target }); setError(""); }
+    })().catch((cause) => { if (alive) onReadError(cause); });
     return () => { alive = false; };
-  }, [hostKey, ref]);
+  }, [hostKey, ref, revision, onReadError]);
 
-  const bare = row?.bare ?? manifest?.bare ?? false;
-
+  const manifest = detail?.manifest;
+  const provenance = detail?.provenance;
+  const bare = manifest?.bare ?? false;
   const remove = async () => {
     try {
-      await removeImage(ref);
+      if (!detail) return;
+      await removeImage(ref, detail.target);
       toast.success(`image ${ref} removed`);
-      navigate(`${basePath}?tab=built`);
+      navigate(`${basePath}/${encodeURIComponent(name)}`);
     } catch (err) {
       toast.error(`remove failed: ${message(err)}`);
     }
@@ -87,8 +103,14 @@ export function ImageLayout({ hostId, basePath = "/images" }: {
 
   return (
     <div className="flex h-full flex-col">
+      <nav aria-label="Image breadcrumbs" className="flex gap-2 border-b px-4 py-2 text-sm">
+        <Link className="text-primary hover:underline" to={basePath}>Images</Link><span>/</span>
+        <Link className="text-primary hover:underline" to={`${basePath}/${encodeURIComponent(name)}`}>{name}</Link><span>/</span><span>{tag}</span>
+      </nav>
+      {notice && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">{notice}</p>}
       <header className="flex flex-wrap items-center gap-3 border-b px-4 py-2">
         <span className="font-mono text-sm font-medium">{ref}</span>
+        {manifest && <span className="text-sm">{manifest.image_version || "Version not specified"}</span>}
         {bare && <Badge variant="secondary">Terminal-only</Badge>}
         {manifest?.digest && (
           <span className="font-mono text-xs text-muted-foreground">{manifest.digest.slice(0, 16)}</span>
@@ -158,9 +180,10 @@ export function ImageLayout({ hostId, basePath = "/images" }: {
       </nav>
       <div className="flex-1 overflow-auto p-4">
         {error ? (
-          <p className="text-sm text-destructive">{error}</p>
+          <div className="space-y-2"><p role="alert" className="text-sm text-destructive">{error}</p>
+            <Button variant="outline" onClick={() => { refreshes.current = 0; setError(""); setRevision((value) => value + 1); }}>Refresh image</Button></div>
         ) : (
-          <Outlet context={{ ref, manifest, hostKey,provenance } satisfies ImageOutletContext} />
+          detail ? <Outlet key={detail.manifest.digest} context={{ ref, manifest: detail.manifest, hostKey, provenance: detail.provenance, target: detail.target, onReadError } satisfies ImageOutletContext} /> : <p className="text-sm text-muted-foreground">Loading…</p>
         )}
       </div>
     </div>

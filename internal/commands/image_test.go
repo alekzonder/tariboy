@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1156,5 +1157,76 @@ func TestImageRemoveRejectsActiveAndPendingRefsAndClearsProvenance(t *testing.T)
 	}
 	if _, ok, err := provenance.Get("unused:latest"); err != nil || ok {
 		t.Fatalf("provenance survived removal: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestImageListManifestVersion(t *testing.T) {
+	c := localCtx(t)
+	for _, tc := range []struct{ name, version string }{{"versioned", "1.2.3"}, {"legacy", ""}} {
+		src := writeExample(t)
+		if tc.version != "" {
+			if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nimage_version: "+tc.version+"\nprompts:\n  - file: ./task.md\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": tc.name, "tag": "arbitrary", "path": src}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := cmdHandler(t, "image.ls")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range result.(map[string]any)["images"].([]map[string]any) {
+		if row["name"] == "versioned" && row["image_version"] != "1.2.3" {
+			t.Errorf("versioned row = %v, want manifest version 1.2.3", row)
+		}
+		if row["name"] == "legacy" && row["image_version"] != nil && row["image_version"] != "" {
+			t.Errorf("legacy row invented version: %v", row)
+		}
+	}
+}
+
+func TestImageDetailRejectsChangedDigest(t *testing.T) {
+	c := localCtx(t)
+	src := writeExample(t)
+	build := func() string {
+		result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": src})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.(map[string]any)["digest"].(string)
+	}
+	old := build()
+	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("NEW GENERATION"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	current := build()
+	server := api.NewServer(BuildRegistry(), c).Handler()
+	for _, command := range []string{"image.inspect", "image.template", "image.prompt", "image.files", "image.file", "image.provenance"} {
+		t.Run(command, func(t *testing.T) {
+			params := registry.Params{"ref": "reviewer:latest", "path": "manifest.json", "expected_digest": old}
+			_, err := cmdHandler(t, command)(c, params)
+			var userErr api.UserError
+			if !errors.As(err, &userErr) || userErr.Code != "image_changed" || userErr.Status != 409 {
+				t.Errorf("stale read error = %v, want image_changed 409", err)
+			}
+			registered, _ := BuildRegistry().Get(command)
+			route := strings.ReplaceAll(registered.HTTP.Path, "{ref}", "reviewer%3Alatest")
+			route = strings.ReplaceAll(route, "{path...}", "manifest.json")
+			response := httptest.NewRecorder()
+			server.ServeHTTP(response, httptest.NewRequest("GET", route+"?expected_digest="+old, nil))
+			if response.Code != 409 || !strings.Contains(response.Body.String(), "image_changed") {
+				t.Errorf("stale HTTP read: %d %s", response.Code, response.Body.String())
+			}
+			params["expected_digest"] = current
+			if _, err := cmdHandler(t, command)(c, params); err != nil {
+				t.Errorf("current read: %v", err)
+			}
+			delete(params, "expected_digest")
+			if _, err := cmdHandler(t, command)(c, params); err != nil {
+				t.Errorf("legacy read: %v", err)
+			}
+		})
 	}
 }

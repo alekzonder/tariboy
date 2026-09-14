@@ -43,7 +43,7 @@ it("starts transfer from the route source instead of the active daemon", async (
     return Promise.reject(new Error(`unexpected request ${String(input)}`));
   }));
 
-  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>);
 
   await screen.findByRole("button", { name: "Upload to servers built:v1" });
   expect(screen.queryByRole("button", { name: /Upload to servers basic:latest/ })).toBeNull();
@@ -83,7 +83,7 @@ it("exports from the route host instead of the active daemon", async () => {
   let downloaded = "";
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
 
-  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>);
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
   await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));
@@ -143,7 +143,7 @@ it("removes from the route host instead of the active daemon", async () => {
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId={source.id} /></MemoryRouter>);
 
   fireEvent.click(await screen.findByRole("button", { name: "Remove reviewer:v3" }));
   fireEvent.click(screen.getByRole("button", { name: "Remove image" }));
@@ -168,7 +168,7 @@ it("waits for the current destination generation before opening a transfer", asy
     { name: "built", tag: "v1", bare: false, exportable: true },
   ] } }), { status: 200 })));
 
-  render(<MemoryRouter><BuiltImages hostId={source.id} /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="built" hostId={source.id} /></MemoryRouter>);
 
   const action = await screen.findByRole("button", { name: "Upload to servers built:v1" });
   expect(action).toBeDisabled();
@@ -206,7 +206,7 @@ it("does not invoke an upload action bound to the previous route host", async ()
     }, [hostId]);
     return <>
       <button onClick={() => setHostId(sourceB.id)}>Switch route</button>
-      <BuiltImages hostId={hostId} />
+      <BuiltImages imageName="built" hostId={hostId} />
     </>;
   };
 
@@ -231,6 +231,7 @@ it("exports runnable images and distinguishes original builds from imports", asy
   render(
     <MemoryRouter>
       <BuiltImages hostId="" basePath="/servers/local/images" />
+      {["built", "imported", "missing", "bare"].map((name) => <BuiltImages key={name} imageName={name} hostId="" basePath="/servers/local/images" />)}
     </MemoryRouter>,
   );
 
@@ -243,7 +244,7 @@ it("exports runnable images and distinguishes original builds from imports", asy
   expect(screen.getByText("Pending: worker")).toBeInTheDocument();
   expect(screen.getAllByTitle(/original sources are not included/i)).toHaveLength(3);
   expect(screen.getByLabelText("Import image archive")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "built:v1" }))
+  expect(screen.getByTestId("built-image-built:v1").querySelector("a"))
     .toHaveAttribute("href", "/servers/local/images/built/v1");
   expect(screen.queryByRole("button", { name: "Upload to servers bare:latest" })).toBeNull();
 });
@@ -267,7 +268,7 @@ it("downloads the runnable bundle and confirms the saved portable filename", asy
   const success = vi.spyOn(toast, "success");
   let downloaded = "";
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
-  render(<MemoryRouter><BuiltImages hostId="" /></MemoryRouter>);
+  render(<MemoryRouter><BuiltImages imageName="reviewer" hostId="" /></MemoryRouter>);
 
   fireEvent.click(await screen.findByRole("button", { name: "Export reviewer:v3" }));
   await waitFor(() => expect(downloaded).toBe("reviewer-v3.tariboy-image.tar.gz"));

@@ -138,8 +138,15 @@ artifact. The workspace owns vertical scrolling within the height-constrained
 server shell, so validation output and built images remain reachable at small
 window heights. **Close** dismisses the in-memory validation preview, warnings,
 and diagnostics without changing build inputs or any built artifact. The
-built-image list identifies agents using each ref now and agents
-with that ref pending. Agent **Configuration** only selects an already built
+built-image root groups by image name and distinguishes the version and build
+date inside `latest` from the newest tag by parsed build date. A name opens its
+tag table with versions, digests, build dates, Latest/Newest badges, current and
+pending agent usage, and existing tag actions. Import remains at the root.
+Breadcrumbs preserve the explicit host and existing direct tag routes.
+Manifest, provenance, template, and file reads carry the same expected digest;
+a changed mutable ref clears the old view and reloads once, then offers manual
+refresh if it changes again. Directory builds and all detail requests capture
+the explicit route target. Agent **Configuration** only selects an already built
 image, shows current and pending refs, and links back to image detail.
 Selection does not mutate runtime form state and becomes active at the next
 iteration boundary.

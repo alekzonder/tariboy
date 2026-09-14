@@ -375,6 +375,7 @@ export const startAgent = (name: string, target?: ApiTarget) =>
 
 // One image as listed by GET /api/images (the create form's image combobox).
 export interface ImageRow {
+  image_version?: string;
   schema_version?: number;
   name: string;
   tag: string;
@@ -742,6 +743,7 @@ export interface ImageManifestEval {
   prompt: string;
 }
 export interface ImageManifest {
+  image_version?: string;
   schema_version: number;
   name: string;
   tag: string;
@@ -820,17 +822,19 @@ export const buildImageDirectory = (
     "/api/images/build",
     input,
   );
-export const imageTemplateGet = (ref: string, target?: ApiTarget) =>
+const imageDigestQuery = (digest?: string) => digest ? `?expected_digest=${encodeURIComponent(digest)}` : "";
+
+export const imageTemplateGet = (ref: string, target?: ApiTarget, expectedDigest?: string) =>
   apiOn<ImagePromptTemplate>(
     resolveTarget(target),
     "GET",
-    `/api/images/${encodeURIComponent(ref)}/template`,
+    `/api/images/${encodeURIComponent(ref)}/template${imageDigestQuery(expectedDigest)}`,
   );
-export const imageProvenanceGet = (ref: string, target?: ApiTarget) =>
+export const imageProvenanceGet = (ref: string, target?: ApiTarget, expectedDigest?: string) =>
   apiOn<ImageProvenance>(
     resolveTarget(target),
     "GET",
-    `/api/images/${encodeURIComponent(ref)}/provenance`,
+    `/api/images/${encodeURIComponent(ref)}/provenance${imageDigestQuery(expectedDigest)}`,
   );
 export interface AgentImageStatus {
   name: string;
@@ -865,41 +869,41 @@ export interface ImageFileEntry {
 const encImagePath = (p: string) =>
   p.split("/").map(encodeURIComponent).join("/");
 
-export const imageManifestGetOn = (target: ApiTarget, ref: string) =>
+export const imageManifestGetOn = (target: ApiTarget, ref: string, expectedDigest?: string) =>
   apiOn<ImageManifest>(
     resolveTarget(target),
     "GET",
-    `/api/images/${encodeURIComponent(ref)}`,
+    `/api/images/${encodeURIComponent(ref)}${imageDigestQuery(expectedDigest)}`,
   );
-export const imageManifestGet = (ref: string, target?: ApiTarget) =>
-  imageManifestGetOn(target, ref);
+export const imageManifestGet = (ref: string, target?: ApiTarget, expectedDigest?: string) =>
+  imageManifestGetOn(target, ref, expectedDigest);
 
-export const imagePromptGetOn = (target: ApiTarget, ref: string) =>
+export const imagePromptGetOn = (target: ApiTarget, ref: string, expectedDigest?: string) =>
   apiOn<{ prompt: string }>(
     resolveTarget(target),
     "GET",
-    `/api/images/${encodeURIComponent(ref)}/prompt`,
+    `/api/images/${encodeURIComponent(ref)}/prompt${imageDigestQuery(expectedDigest)}`,
   );
-export const imagePromptGet = (ref: string, target?: ApiTarget) =>
-  imagePromptGetOn(target, ref);
+export const imagePromptGet = (ref: string, target?: ApiTarget, expectedDigest?: string) =>
+  imagePromptGetOn(target, ref, expectedDigest);
 
-export const imageFilesListOn = (target: ApiTarget, ref: string) =>
+export const imageFilesListOn = (target: ApiTarget, ref: string, expectedDigest?: string) =>
   apiOn<{ files: ImageFileEntry[] | null; count: number }>(
     resolveTarget(target),
     "GET",
-    `/api/images/${encodeURIComponent(ref)}/files`,
+    `/api/images/${encodeURIComponent(ref)}/files${imageDigestQuery(expectedDigest)}`,
   );
-export const imageFilesList = (ref: string, target?: ApiTarget) =>
-  imageFilesListOn(target, ref);
+export const imageFilesList = (ref: string, target?: ApiTarget, expectedDigest?: string) =>
+  imageFilesListOn(target, ref, expectedDigest);
 
-export const imageFileReadOn = (target: ApiTarget, ref: string, path: string) =>
+export const imageFileReadOn = (target: ApiTarget, ref: string, path: string, expectedDigest?: string) =>
   apiOn<{ path: string; content: string }>(
     resolveTarget(target),
     "GET",
-    `/api/images/${encodeURIComponent(ref)}/files/${encImagePath(path)}`,
+    `/api/images/${encodeURIComponent(ref)}/files/${encImagePath(path)}${imageDigestQuery(expectedDigest)}`,
   );
-export const imageFileRead = (ref: string, path: string, target?: ApiTarget) =>
-  imageFileReadOn(target, ref, path);
+export const imageFileRead = (ref: string, path: string, target?: ApiTarget, expectedDigest?: string) =>
+  imageFileReadOn(target, ref, path, expectedDigest);
 export const removeImage = (ref: string, target?: ApiTarget) =>
   apiOn<{ removed: string }>(
     resolveTarget(target),

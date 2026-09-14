@@ -445,7 +445,7 @@ func v2ValidationWarnings(source *imagefile.V2, validated image.ValidationV2, pl
 }
 
 func imageTemplate() registry.Command {
-	return registry.Command{
+	return imageReadCommand(registry.Command{
 		Path: "image.template", Summary: "Show an image prompt template",
 		Args: []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/images/{ref}/template"},
@@ -460,11 +460,11 @@ func imageTemplate() registry.Command {
 			}
 			return template, nil
 		},
-	}
+	})
 }
 
 func imageProvenance() registry.Command {
-	return registry.Command{
+	return imageReadCommand(registry.Command{
 		Path: "image.provenance", Summary: "Show local image source provenance",
 		Args: []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/images/{ref}/provenance"},
@@ -495,7 +495,7 @@ func imageProvenance() registry.Command {
 			}
 			return result, nil
 		},
-	}
+	})
 }
 
 func imageLs() registry.Command {
@@ -560,6 +560,9 @@ func imageLs() registry.Command {
 					"current_agents": currentAgents[ref],
 					"pending_agents": pendingAgents[ref],
 				}
+				if m.ImageVersion != "" {
+					item["image_version"] = m.ImageVersion
+				}
 				if source := sourceByDigest[m.Digest]; source != "" {
 					item["source"] = source
 				}
@@ -586,7 +589,7 @@ func imageLs() registry.Command {
 }
 
 func imageInspect() registry.Command {
-	return registry.Command{
+	return imageReadCommand(registry.Command{
 		Path:    "image.inspect",
 		Summary: "Show an image manifest",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
@@ -602,11 +605,11 @@ func imageInspect() registry.Command {
 			}
 			return man, nil
 		},
-	}
+	})
 }
 
 func imagePrompt() registry.Command {
-	return registry.Command{
+	return imageReadCommand(registry.Command{
 		Path:    "image.prompt",
 		Summary: "Print an image's assembled prompt",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
@@ -622,11 +625,11 @@ func imagePrompt() registry.Command {
 			}
 			return map[string]any{"prompt": s}, nil
 		},
-	}
+	})
 }
 
 func imageFiles() registry.Command {
-	return registry.Command{
+	return imageReadCommand(registry.Command{
 		Path:    "image.files",
 		Summary: "List the files packed into an image",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
@@ -642,11 +645,11 @@ func imageFiles() registry.Command {
 			}
 			return map[string]any{"files": entries, "count": len(entries)}, nil
 		},
-	}
+	})
 }
 
 func imageFileRead() registry.Command {
-	return registry.Command{
+	return imageReadCommand(registry.Command{
 		Path:    "image.file",
 		Summary: "Read a single file packed into an image",
 		Args: []registry.Arg{
@@ -666,7 +669,7 @@ func imageFileRead() registry.Command {
 			}
 			return map[string]any{"path": name, "content": string(data)}, nil
 		},
-	}
+	})
 }
 
 func imageRm() registry.Command {
@@ -717,4 +720,34 @@ func parseImageRef(p registry.Params) (image.Ref, error) {
 		return image.Ref{}, api.UserError{Code: "bad_ref", Msg: err.Error()}
 	}
 	return ref, nil
+}
+
+// imageReadCommand keeps each detail read in one published generation. Clients
+// pass the displayed manifest digest to reject a ref rebuilt between requests.
+func imageReadCommand(command registry.Command) registry.Command {
+	command.Args = append(command.Args, registry.Arg{Name: "expected_digest", Flag: "expected-digest", Type: registry.String, Help: "reject a changed image digest"})
+	handler := command.Handler
+	command.Handler = func(c *registry.Ctx, p registry.Params) (any, error) {
+		var result any
+		err := image.WithPublicationGate(func() error {
+			if expected := str(p, "expected_digest"); expected != "" {
+				ref, err := parseImageRef(p)
+				if err != nil {
+					return err
+				}
+				manifest, err := imageStore(c).Inspect(ref)
+				if err != nil {
+					return api.UserError{Code: "not_found", Msg: err.Error()}
+				}
+				if manifest.Digest != expected {
+					return api.UserError{Code: "image_changed", Msg: "Image changed; refresh to inspect the new build", Status: http.StatusConflict}
+				}
+			}
+			var err error
+			result, err = handler(c, p)
+			return err
+		})
+		return result, err
+	}
+	return command
 }

@@ -129,6 +129,7 @@ function MainApp() {
           <Route path="/servers/:hostId/tasks" element={<TerminalsPage serverView="tasks" />} />
 
           <Route path="/servers/:hostId/images" element={<TerminalsPage serverView="images" />} />
+          <Route path="/servers/:hostId/images/:name" element={<TerminalsPage serverView="image-tags" />} />
           <Route path="/servers/:hostId/images/:name/:tag" element={<TerminalsPage serverView="image-detail" />}>
             <Route index element={<ImageOverview />} />
             <Route path="template" element={<ImageTemplate />} />

@@ -11,6 +11,34 @@ Skills, and the exact prompt template rendered for each iteration. Harness,
 model, effort, interactive mode, environment, policy, secrets, and evals are
 runtime or compose configuration. They are not schema-v2 image fields.
 
+## Browse built images
+
+The **Images** list has one row per image name on the selected server. **Latest
+image_version** and **Latest built at** describe exactly `name:latest`;
+**Newest built tag** and **Tag built at** describe the most recently built tag,
+which may be different. Missing latest shows **No latest**, and an unversioned
+manifest shows **Version not specified**. Newest is selected by parsed
+`built_at`, not SemVer. Tied dates prefer the matching version tag, then stable
+tag-name order; missing or invalid dates sort last. Imported archives retain
+their original build time, rather than showing the import time.
+
+Select an image name to see its tags, manifest versions, build dates, full
+digests, and separate **Latest** and **Newest** badges. Current and pending agent
+usage and Run Agent, Export, Upload to servers, and Remove remain per-tag
+actions. Import stays on the Images root. Select a tag for its existing
+Overview, Template, Skills, and Files tabs; breadcrumbs return to its name or
+the root, and existing direct tag URLs keep working.
+
+Detail reads carry the displayed manifest digest. If a mutable ref changes
+between reads, the UI reports the update, discards the old content, and reloads
+once. A further change offers **Refresh image**, so repeated rebuilds cannot
+cause an endless refresh loop. The read API accepts optional
+`expected_digest` on manifest, template, prompt, provenance, file-list, and
+file-content requests; a mismatched published digest returns HTTP 409
+`image_changed`. CLI equivalents accept `--expected-digest`. Requests without
+that value retain their existing behavior. Every detail read is serialized
+with publication, so its digest check and content read describe one generation.
+
 ## Build from an original directory
 
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
@@ -312,7 +340,7 @@ subscriptions. A validation or staging failure leaves the current image active
 and exposes a retryable pending error. The pending selection can be replaced or
 cancelled before activation.
 
-The built-image list shows agent names separately under **Current** and
+The image tag list shows agent names separately under **Current** and
 **Pending**, so an operator can see both active use and assignments waiting for
 their next launch gate. An image in either list cannot be removed.
 
