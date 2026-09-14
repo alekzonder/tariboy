@@ -54,13 +54,11 @@
 - [scripts](https://alekzonder.github.io/tariboy/plugins/built-in/scripts): Run asynchronous one-shot or fixed-interval local commands with durable per-run logs.
 - [image-creator](https://alekzonder.github.io/tariboy/plugins/built-in/image-creator): Build a runnable Tariboy image from source confined to the authenticated agent's working directory.
 - [goal](https://alekzonder.github.io/tariboy/plugins/built-in/goal): Receive or set the selected Native Task and AI usage attribution.
-- [llm-as-judge](https://alekzonder.github.io/tariboy/plugins/built-in/llm-as-judge): Run capability-gated, evidence-scoped worker and lead actions for durable historical iteration reviews.
 - [tasks](https://alekzonder.github.io/tariboy/plugins/built-in/tasks): Use Native Tasks and leased workflow assignments through the globally installed ttasks client.
 
 ## Images & groups
 
 - [Images & groups](https://alekzonder.github.io/tariboy/images-and-groups): Reproducible agent images, custom groups, and portable team transfers.
-- [LLM-as-Judge](https://alekzonder.github.io/tariboy/images-and-groups/llm-judge): An operator-visible investigation of completed historical iterations, distinct from image-declared evals.
 
 ## Reference
 

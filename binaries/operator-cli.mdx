@@ -18,8 +18,6 @@ when the daemon is down.
 | `version` | print the canonical Tariboy version locally, without a daemon |
 | `daemon` | `start` / `stop` / `restart` / `status` / `logs`, `config get`/`set`, `reindex` |
 | `image` | `build`, `ls`, `inspect`, `prompt`, `rm` |
-| `improvement` | `ls`, `inspect`, `plan approve` / `reject` |
-| `image-release` | `inspect`, `rollout approve` / `reject` / `stage`, `rollback` |
 | `agent` | `run`, `ps`, `inspect`, `start`, `stop`, `restart`, `kill`, `rm`, `exec`, `screen`, `send-keys`, `status show`/`history`, `pull` |
 | `cp` | Upload `LOCAL_FILE` to the shared server directory, or download `AGENT:SRC LOCAL_DST` |
 | `files` | `upload` base64 content to the shared server directory |
@@ -51,10 +49,6 @@ contributions from the selected running daemon; core help remains usable when
 that daemon is unavailable, while contributed commands require it. Secret
 arguments are accepted only through an owner-only file or stdin, never as a
 token value in argv. See the [Telegram setup workflow](/docs/plugins#bundled-telegram-plugin).
-
-Improvement and image-release decisions require the exact revision or release
-hash shown by `inspect`; an approval for older content cannot authorize changed
-content. See the [controlled improvement workflow](/docs/images-and-groups/llm-judge#controlled-improvement-workflow).
 
 Workflow definition, queue binding, pool, trigger, and execution inspection are
 operator REST routes rather than hand-written CLI verbs. Compose is the normal

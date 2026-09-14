@@ -91,25 +91,6 @@ that host before freezing sources. Register and build sources you trust to
 install their declared skills. Store source contents remain outside the
 support-bundle allowlist.
 
-Controlled production publication is stricter than an ordinary operator build.
-Its external source uses only vendored `./` prompt and skill inputs, provides
-`tariboy.lock.yaml`, and matches every declared SHA-256. Upstream entries must
-match upstream bytes; forks require upstream and local hashes. Validation rejects
-traversal, duplicate paths, symlinks, non-regular or oversized files, and Git
-changes outside the approved allowlist.
-
-Judge evidence cannot authorize mutation. Plan and rollout approvals are
-operator-only, append-only rows bound to canonical proposal or release hashes;
-agent-supplied actor fields are ignored. Production and rollback refs are
-immutable, and `latest` is rejected.
-
-Automatic Judge configuration is parsed, semantically validated, revisioned,
-and applied only by `tariboyd`. Agent and image names come from that document;
-the customer principal comes from the daemon's `USER`. Scheduled actions remain
-bound to authenticated agent sockets and active iterations. A Judge proposal
-still cannot mutate a repository: only explicit plan approval creates an
-`IMPROVE` task.
-
 ## Pricing catalog boundary
 
 The daemon downloads model prices only from LiteLLM's fixed production HTTPS
@@ -146,7 +127,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.60.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.61.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

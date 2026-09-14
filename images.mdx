@@ -79,8 +79,7 @@ tariboy image ls
 
 Provide `--repository-id` and `--git-commit` together when the source is an
 exact Git revision. Tariboy records those explicit values in the immutable
-source snapshot used by Judge; it never infers a commit from the current
-working directory.
+source snapshot; it never infers a commit from the current working directory.
 
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
@@ -98,8 +97,8 @@ single-result output reports the versioned ref. Older files without a version
 publish only `latest`. Explicit tags, including `--tag latest`, take priority
 and do not add another ref.
 
-Imports and retagged runnable artifacts, registry artifacts, the reserved
-`bare` ref, and controlled-improvement releases remain immutable.
+Imports and retagged runnable artifacts, registry artifacts, and the reserved
+`bare` ref remain immutable.
 An ordinary build never converts an existing immutable ref. Daemons created
 before mutable markers existed migrate a legacy ordinary-build ref only when
 its authoritative source snapshot and provenance both match the current
@@ -158,6 +157,14 @@ publishes both `<image_name>:<image_version>` and `<image_name>:latest`, while a
 source without a version publishes only `latest`. Use `--name` to avoid a name
 collision between Stores, and `--tag` to publish only an explicit tag. Do not
 combine a Store selector with `--path`.
+
+An immutable version tag can conflict even when the table says **Latest not
+built**: the table compares only `latest`. Build checks the requested refs
+before restoring skills or packaging sources, and checks again at publication
+to protect against concurrent changes. A conflict leaves existing images
+untouched. The Store's **Target image name** and **Target image tag** fields
+are optional: leave them blank for the defaults, or choose an alternative and
+retry. An explicit tag publishes only that ref; other refs remain unchanged.
 
 Before freezing sources, the daemon runs `npx skills experimental_install` in
 the Store root when `skills-lock.json` exists there, then in the image directory

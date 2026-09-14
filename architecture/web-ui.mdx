@@ -185,9 +185,15 @@ errors; it highlights only known version mismatches and never reports an
 unknown comparison as up to date. Source errors disable Build, while missing or
 damaged latest and equal versions retain the manual Build action. A successful
 default versioned build reports publication of both the version tag and
-`latest`, then reloads the detail so its comparison reflects the daemon
-immediately. Version comparison does not detect changed bytes when the source
-keeps the same `image_version`.
+`latest`, then reloads the detail to update its comparison. Build controls
+become available when the build request finishes; a slow
+follow-up inventory read does not keep the image labelled as building. An older
+follow-up read cannot replace a newer build's result. Version comparison does
+not detect changed bytes when the source keeps the same `image_version`.
+Store build controls also accept a target name and optional explicit tag,
+allowing a safe retry after an immutable-ref conflict. An explicit tag publishes
+only that tag; a missing `latest` does not imply that the source version tag is
+available for replacement.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -209,31 +215,6 @@ error after rejection, and keep drafts only in React memory. Save and Discard
 remain unavailable until loading succeeds and while a save is pending, so saves
 cannot overlap. Edits made during a save remain an unsaved draft.
 
-A completed Judge run lists its evidence-linked improvement proposals. Opening
-one shows the repository and base commit, approved file scope, acceptance
-criteria, evidence citations, rollback image, and exact revision hash. Operators
-can approve or reject that plan; if an immutable release has been recorded, the
-same view shows its provenance and exact release hash and can approve, reject,
-or stage it for one agent's next iteration. The view does not run Git changes or
-build a release, and it does not provide atomic team rollout.
-
-The Judge runs table shows local start date/time (`created_at`), the full run ID
-linked to its details, then count, coverage, verdict, model, cost, and creator.
-Runs are sorted newest first; missing or invalid dates appear last as `—`.
-The full criteria remain on the detail page rather than expanding table rows.
-
-Agent Activity projects Judge state onto each iteration. A terminal iteration
-can queue a manual review with one Judge by default; operators can request two
-independent analyses through the CLI when that extra cost is warranted. Until
-the daemon creates its target the Activity action is only
-**Queued**, and after target creation pending work is still waiting for a
-configured worker, not proof that a harness is running. The latest completed
-score remains visible while a newer review is pending, including a numeric zero.
-History links open the run at that exact target. The target view contains only
-that iteration's consensus, analyses, and immutable evidence, with breadcrumbs
-back to both the explicit-host Judge list and the originating Activity entry.
-Every poll, action, citation, and link stays pinned to the host in the route.
-
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -245,23 +226,6 @@ plain WebView download cannot attach the bearer token required by a remote
 daemon. The client therefore still needs memory proportional to the archive;
 streaming directly to a file requires a separate authenticated Desktop/Rust
 download API.
-
-Judge workers run in manual mode when Autopilot is disabled. Activity reports
-that configured state as the reason pending work is waiting; an unavailable
-status is reported as unknown rather than treated as disabled. Operators start
-or enable workers separately—the review action does not claim that it did so.
-
-The Judge page also exposes the selected daemon's automation document as a raw
-JSON textarea. Validate, Apply, and Run once send unchanged text or the existing
-one-shot request to `tariboyd`; JSON
-Pointer diagnostics and canonical applied JSON come back from the daemon.
-Unsaved text stays only in component state, and Reset restores the last applied
-revision. When that selected daemon has no complete `judges` group, the page
-offers to create or repair it from the applied document's Judge lead, two
-workers, and image. Missing agents are created first; the page then reapplies
-the saved automation document so the daemon restores its image and loop settings
-before group membership is reconciled. Every request uses that same explicit
-daemon target.
 
 Tasks uses one reusable workspace at `/servers/:hostId/tasks` and inside each
 Agent tab. The server route shows every task visible on that host;
@@ -381,10 +345,13 @@ token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 
 Queue settings expose the active immutable workflow version and explicit pool
-membership. Managed task detail renders workflow status, requirements,
-assignments, outcomes, holds, artifacts, questions, and observations from typed
-HTTP projections; the UI does not infer phases from title prefixes or assignee.
-Operator history remains available after completion. See
+membership. Task detail does not render the workflow execution lists
+(assignments, holds, artifacts, questions, observations); a managed task is
+distinguished there by its lifecycle fields being read-only, and by the freeze
+banner the execution projection still drives. The projections remain available
+over typed HTTP for the operator surfaces that read them, and the UI does not
+infer phases from title prefixes or assignee. Operator history remains
+available after completion. See
 [Configurable task workflows](/docs/task-workflows).
 
 The navigation hierarchy is **Server → Agent**. The existing Workspace canvas

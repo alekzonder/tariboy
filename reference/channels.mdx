@@ -12,11 +12,6 @@ This document describes the v2 channel bus: how messages move through channels,
 how agents receive them, how deliveries are acknowledged, and which agent
 settings affect message handling.
 
-Judge automation uses ordinary inbox deliveries. `judge.review.requested` goes
-to the configured lead from a cron or one-shot schedule,
-`judge.work.available` wakes configured workers, and `judge.summary.ready`
-wakes the lead. The delivery ID is the automatic cycle's idempotency key.
-
 ## Mental model
 
 The bus is a store-backed fan-out system with four core tables:
@@ -172,9 +167,10 @@ Native Task assignment and mention notifications use this same path; they do
 not call a Tasks-specific runner or poller. A disabled loop keeps the delivery
 pending until it is enabled or started manually. The per-agent Goal reconciler
 uses it too: it publishes `task.goal` only while the agent and Autopilot are
-enabled. An unprocessed Goal delivery suppresses another publication; a
-positive per-agent cooldown then suppresses rapid repeats (60 seconds by
-default). That message is a durable wake hint, not a task mutation or a direct
+enabled. An unprocessed Goal delivery outside the DLQ suppresses another
+publication. Dead-lettered deliveries are retained but do not block a new Goal
+generation; a positive per-agent cooldown still suppresses rapid repeats (60
+seconds by default). That message is a durable wake hint, not a task mutation or a direct
 iteration start.
 
 ### Workflow-owned channel use

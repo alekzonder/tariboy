@@ -50,9 +50,10 @@ URL does not affect Goal selection or release.
 At startup, relevant task or agent changes, terminal iteration completion, and
 the bounded one-minute recovery cadence, the reconciler publishes one durable
 `task.goal` inbox message. It follows `Publish -> delivery -> WakeMessage` and
-never starts an iteration directly. An unprocessed Goal delivery blocks another
-publication; after it is processed, the positive per-agent delivery cooldown
-(60 seconds by default) also blocks rapid repeats. A wait within its grace
+never starts an iteration directly. An unprocessed Goal delivery outside the DLQ
+blocks another publication. Dead-lettered deliveries are retained but do not
+block a new Goal generation; the positive per-agent delivery cooldown
+(60 seconds by default) still blocks rapid repeats. A wait within its grace
 period remains the goal but sends no continuation wake. Disabled agents or
 disabled Autopilot loops neither select nor receive a goal wake, but preserve a
 valid sticky key; only disabling Goal clears it.
@@ -186,7 +187,7 @@ On top of the core, an image opts into **optional capabilities**:
 - `context` — durable working memory,
 - `status` — a one-line "what I'm doing",
 - `schedule`, `scripts`, `tasks`,
-- `image-creator`, `llm-as-judge`, and any validated, explicitly
+- `image-creator` and any validated, explicitly
   installed external plugin capability.
 
 The built-in `workdir` plugin is instruction-only. The `goal` capability adds

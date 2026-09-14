@@ -401,7 +401,7 @@ procedures as Agent Skills. Their prompt layers retain rules that must apply
 before skill selection, such as closing every delivered message and respecting
 a managed task packet's least-privilege boundary.
 
-Images using `llm-as-judge`, `image-creator`, or `schedule` should package the
+Images using `image-creator` or `schedule` should package the
 same-named image skill explicitly. Declaring a plugin never injects its skill or
 legacy prompt in schema v2. Role responsibilities belong in the image's own
 ordered prompt layer; task identity and input remain runtime layers.
