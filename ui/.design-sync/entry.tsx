@@ -51,7 +51,6 @@ export * from "@/components/HostSwitcher";
 export * from "@/components/ImageLayout";
 export * from "@/components/InboxComposer";
 export * from "@/components/IterationAuditLog";
-export * from "@/components/IterationJudgePanel";
 export * from "@/components/IterationTimeoutControl";
 export * from "@/components/LoopControls";
 export * from "@/components/NotesEditor";

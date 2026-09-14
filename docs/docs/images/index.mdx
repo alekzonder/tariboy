@@ -79,8 +79,7 @@ tariboy image ls
 
 Provide `--repository-id` and `--git-commit` together when the source is an
 exact Git revision. Tariboy records those explicit values in the immutable
-source snapshot used by Judge; it never infers a commit from the current
-working directory.
+source snapshot; it never infers a commit from the current working directory.
 
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
@@ -98,8 +97,8 @@ single-result output reports the versioned ref. Older files without a version
 publish only `latest`. Explicit tags, including `--tag latest`, take priority
 and do not add another ref.
 
-Imports and retagged runnable artifacts, registry artifacts, the reserved
-`bare` ref, and controlled-improvement releases remain immutable.
+Imports and retagged runnable artifacts, registry artifacts, and the reserved
+`bare` ref remain immutable.
 An ordinary build never converts an existing immutable ref. Daemons created
 before mutable markers existed migrate a legacy ordinary-build ref only when
 its authoritative source snapshot and provenance both match the current

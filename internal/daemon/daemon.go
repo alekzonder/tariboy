@@ -29,8 +29,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
-	"github.com/alekzonder/tariboy/internal/improvement"
-	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -318,69 +316,6 @@ func Run(ctx context.Context, o Options) error {
 		time.Now,
 	)
 
-	// LLM-as-Judge survives daemon restarts: the runner recovers durable runs on
-	// startup and is drained before SQLite closes during shutdown.
-	judgeStore := judge.NewStore(st, time.Now)
-	improvementStore := improvement.NewStore(st, time.Now)
-	improvementService := improvement.NewService(improvementStore, channelBus)
-	judgeRunner := judge.NewRunner(judge.RunnerConfig{
-		Store:       judgeStore,
-		Snapshotter: judge.NewSnapshotter(judge.SnapshotConfig{Store: judgeStore, BaseDir: p.Base, AgentsDir: p.AgentsDir()}),
-		Bus:         channelBus,
-	})
-	judgeAutomation := judge.NewAutomationService(judgeStore, schedStore, judge.AutomationValidator{
-		Customer: daemonCustomerLogin(),
-		AgentExists: func(_ context.Context, name string) bool {
-			_, err := as.Get(name)
-			return err == nil
-		},
-		ImagePlugins: func(refText string) ([]string, error) {
-			ref, err := image.ParseRef(refText)
-			if err != nil {
-				return nil, err
-			}
-			manifest, err := imgStore.Inspect(ref)
-			plugins := make([]string, len(manifest.Plugins))
-			for i, plugin := range manifest.Plugins {
-				plugins[i] = plugin.Name
-			}
-			return plugins, err
-		},
-		ImageDigest: func(refText string) (string, error) {
-			ref, err := image.ParseRef(refText)
-			if err != nil {
-				return "", err
-			}
-			manifest, err := imgStore.Inspect(ref)
-			return manifest.Digest, err
-		},
-		TargetImageUsed: func(ctx context.Context, names []string, ref string) bool {
-			if len(names) == 0 {
-				return false
-			}
-			args := make([]any, 0, len(names)+1)
-			args = append(args, ref)
-			marks := make([]string, len(names))
-			for i, name := range names {
-				marks[i], args = "?", append(args, name)
-			}
-			var count int
-			err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM iterations WHERE image_ref=? AND agent IN (`+strings.Join(marks, ",")+`)`, args...).Scan(&count)
-			return err == nil && count > 0
-		},
-	}, time.Now)
-	judgeAutomation.ConfigureExecution(taskService, judgeRunner.Enqueue, imgStore)
-	judgeRunner.SetFailureCallback(func(ctx context.Context, runID string, err error) {
-		_ = judgeAutomation.Fail(ctx, runID, err)
-	})
-	judgeService := judge.NewService(judge.ServiceConfig{
-		Store: judgeStore, Images: imgStore, Agents: as, Groups: groups.NewStore(st, time.Now), Bus: channelBus,
-		Evidence: judge.NewEvidenceReader(p.Base), Enqueue: judgeRunner.Enqueue, Improvements: improvementStore, Automation: judgeAutomation,
-		Audit: func(agent, kind, iteration string, data map[string]any) {
-			auditReg.For(agent).Record(kind, "system", iteration, data)
-		},
-	})
-
 	// AI proxy (spec §9): load pricing/router, build the token
 	// registry, ingester and budget cache, then the proxy itself.
 	//
@@ -644,9 +579,6 @@ func Run(ctx context.Context, o Options) error {
 			}
 			return out, nil
 		},
-		JudgeAction: func(agent, iteration, action string, body map[string]any) (map[string]any, error) {
-			return judgeService.AgentAction(context.Background(), agent, iteration, action, body)
-		},
 		AuditFor: func(a string) loop.Recorder { return auditReg.For(a) },
 		Metrics:  metrics,
 		// UsageLookup adapts aiStore.IterationUsage (which returns an error) into
@@ -657,15 +589,6 @@ func Run(ctx context.Context, o Options) error {
 			return in, out, cost
 		},
 	})
-	judgeAutomation.SetActivator(func(names []string) error {
-		for _, name := range names {
-			if err := manager.Start(name); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
 	// Register the observable gauges exactly once (spec §14): bus queue depth,
 	// healthy plugins, active agent loops. No-op instruments when OTel is off.
 	_ = metrics.RegisterGauges(telemetry.GaugeSource{
@@ -706,14 +629,11 @@ func Run(ctx context.Context, o Options) error {
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
 		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: channelBus, Plugins: pluginHost,
-		Groups:          groupProv,
-		Judges:          judgeService,
-		JudgeAutomation: judgeAutomation,
-		Improvements:    improvementService,
-		Operator:        taskService.CustomerLogin(),
-		Retention:       &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
-		Policy:          policyCache,
-		Tasks:           taskService,
+		Groups:    groupProv,
+		Operator:  taskService.CustomerLogin(),
+		Retention: &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
+		Policy:    policyCache,
+		Tasks:     taskService,
 	}
 	srv := api.NewServer(commands.BuildRegistry(), cctx)
 	srv.SetEventSource(hub)
@@ -777,7 +697,7 @@ func Run(ctx context.Context, o Options) error {
 	// their final flush/refresh before the store closes.
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(12)
+	wg.Add(11)
 	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
 	go func() {
 		defer wg.Done()
@@ -802,10 +722,6 @@ func Run(ctx context.Context, o Options) error {
 	go func() {
 		defer wg.Done()
 		evalRunner.Run(gctx)
-	}()
-	go func() {
-		defer wg.Done()
-		judgeRunner.Run(gctx)
 	}()
 	go func() {
 		defer wg.Done()

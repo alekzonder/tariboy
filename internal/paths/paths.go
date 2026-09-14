@@ -100,12 +100,6 @@ func (p Paths) ImageSourcesDir() string {
 }
 func (p Paths) PluginsDir() string { return filepath.Join(p.Base, "plugins") }
 
-// JudgeRunsDir contains the logical manifests for LLM-as-Judge runs.
-func (p Paths) JudgeRunsDir() string { return filepath.Join(p.Base, "judge-runs") }
-
-// JudgeObjectsDir is the content-addressed immutable evidence store.
-func (p Paths) JudgeObjectsDir() string { return filepath.Join(p.JudgeRunsDir(), "objects") }
-
 // RuntimeDir returns the socket directory, falling back to Base for a
 // zero-value Paths that was constructed without a runtime dir.
 func (p Paths) RuntimeDir() string {

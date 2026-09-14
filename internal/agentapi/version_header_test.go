@@ -26,7 +26,7 @@ func TestAgentAPIStampsVersionHeader(t *testing.T) {
 		status int
 	}{
 		{"ok", httptest.NewRequest("GET", "/tools/whoami", nil), http.StatusOK},
-		{"plugin disabled", httptest.NewRequest("POST", "/tools/judge/action/work.claim", bytes.NewBufferString(`{}`)), http.StatusNotFound},
+		{"plugin disabled", httptest.NewRequest("POST", "/tools/status/set", bytes.NewBufferString(`{}`)), http.StatusNotFound},
 		{"unknown route", httptest.NewRequest("GET", "/tools/nope", nil), http.StatusNotFound},
 	}
 	for _, tc := range cases {

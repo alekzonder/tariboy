@@ -139,35 +139,6 @@ Adoption removes the carried lease after the shim produces a terminal result.
 The handoff file is runtime-sensitive state: it is not part of SQLite, audit
 logs, transcripts, or support bundles.
 
-## Judge evidence and controlled improvements
-
-Judge snapshots copy the already-redacted prompt, audit, proxy transcript, and
-usage evidence into content-addressed bundles. Evidence Bundle v2 also records
-the attributed task subject and immutable runtime/source provenance; the proxy
-remains the transcript authority and grants no repository or rollout permission.
-
-Transcript evidence is exposed as bounded, readable request records with stable
-locators; legacy bundles remain readable without changing their hashes. Secrets
-are redacted from the readable representation, and usage is reported separately
-per target iteration. A task subject snapshot captures its identifier, type,
-external ID, status, group, participants, and artifact names; task description
-or instruction content is available only when it was recorded in the immutable
-prompt or transcript. Current task context, when shown, is explicitly an
-observation at review time rather than execution-time evidence.
-
-Manual operator review is a normal bounded Judge run over explicit terminal
-iteration IDs. It reuses the configured workers and lead plus the same frozen
-rubric as automation, but does not run automatic target filters, create a task
-workflow, enable agents or loops, or ask a lead model to select targets. Judge
-scores and confidence are evidence assessments rather than calibrated
-probabilities. Missing evidence produces `uncertain`; unanimous `uncertain`
-reviews remain `uncertain` instead of becoming disagreement.
-
-An improvement citation contains only a bundle hash plus stable artifact and
-locator. Task text, model output, transcripts, messages, and repository content
-remain untrusted evidence and cannot act as approval. Plan and rollout decisions
-are append-only operator records bound to canonical object hashes.
-
 The pricing catalog cache has a different purpose and lifecycle from this
 handoff file. It contains external model-price data, not active tokens, but is
 also owner-only and excluded from support bundles. See [Security and

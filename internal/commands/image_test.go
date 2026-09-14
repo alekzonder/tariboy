@@ -641,25 +641,6 @@ func TestImageBuildRejectsDuplicateAndReservedTagsBeforePublishing(t *testing.T)
 	}
 }
 
-func TestImageBuildRejectsReleaseRef(t *testing.T) {
-	c := localCtx(t)
-	if _, err := c.Store.DB.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _, _ = c.Store.DB.Exec(`PRAGMA foreign_keys = ON`) })
-	if _, err := c.Store.DB.Exec(`INSERT INTO image_releases(id,proposal_id,repository_id,git_commit,source_name,source_digest,lock_digest,prompt_template_digest,image_ref,image_digest,builder_version,release_hash,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, "release", "proposal", "repo", "abc1234", "reviewer", "source", "lock", "prompt", "reviewer:latest", "sha256:release", "test", "sha256:hash", "image_built", "2026-09-01T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
-	_, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": writeExample(t)})
-	var userErr api.UserError
-	if !errors.As(err, &userErr) || userErr.Code != "immutable_release" {
-		t.Fatalf("error = %#v, want immutable_release", err)
-	}
-	if imageStore(c).Exists(image.Ref{Name: "reviewer", Tag: "latest"}) {
-		t.Fatal("release ref was published")
-	}
-}
-
 func TestImageBuildWaitsForPublicationGate(t *testing.T) {
 	c := localCtx(t)
 	entered := make(chan struct{})

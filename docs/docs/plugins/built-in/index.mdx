@@ -25,7 +25,6 @@ runtime prompt entries explicitly. Neither kind starts a supervised subprocess.
 | [`schedule`](/docs/plugins/built-in/schedule) | Optional | No | `scripts/schedule.sh …` | Schedules and resulting bus messages |
 | [`scripts`](/docs/plugins/built-in/scripts) | Optional | Yes | `scripts/scripts.sh …` | Script records and logs |
 | [`image-creator`](/docs/plugins/built-in/image-creator) | Optional | No | `scripts/image_creator.sh build` | Built image in the host image store |
-| [`llm-as-judge`](/docs/plugins/built-in/llm-as-judge) | Optional | No | `scripts/judge.sh …` | Judge runs, evidence, analyses, summaries |
 | [`tasks`](/docs/plugins/built-in/tasks) | Optional | Yes | Bare `tasks` command | Native Tasks and workflow state in SQLite |
 
 “Historical core” describes schema-v1 resolution, where `whoami`, `loop`, and
@@ -78,8 +77,8 @@ The official Store's `basic` source declares nine built-ins:
 whoami, loop, messages, context, status, workdir, scripts, goal, tasks
 ```
 
-It deliberately excludes `schedule`, `image-creator`, and
-`llm-as-judge`. Register and refresh the Store, then build it. Existing agents
+It deliberately excludes `schedule` and `image-creator`. Register and refresh
+the Store, then build it. Existing agents
 remain pinned to their assigned image digest until an image change is activated
 for a future iteration.
 
@@ -102,7 +101,7 @@ Canonical skills and the mandatory finish prompt live in the image source. A
 schema-v2 image packages each enabled skill and chooses the
 exact position of runtime values and mandatory prompt layers. Changing an image does not
 delete daemon-owned agent data such as context, audit, messages, schedules,
-scripts, Tasks, or judge artifacts.
+scripts, or Tasks.
 
 For the image schema and runtime marker list, see [Images](/docs/images). For
 external process plugins, see [Plugins](/docs/plugins#external-plugins).

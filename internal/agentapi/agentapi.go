@@ -18,7 +18,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/version"
@@ -86,10 +85,6 @@ type Deps struct {
 	// Tariboyfile at the given path; the daemon confines the path to the
 	// agent workdir and calls image.Build (M15).
 	BuildImage func(name, tag, path string) (map[string]any, error)
-
-	// JudgeAction executes an llm-as-judge action for the authenticated caller.
-	// The daemon supplies agent and iteration identity; action bodies never do.
-	JudgeAction func(action string, body map[string]any) (map[string]any, error)
 
 	// Group coordination surface. These callbacks are daemon-wired so an agent
 	// can coordinate only within its own group through the per-agent tools socket.
@@ -217,8 +212,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /tools/image/build", s.gated("image-creator", s.imageBuild))
 	mux.HandleFunc("POST /tools/goal/set", s.gated("goal", s.goalSet))
 	mux.HandleFunc("POST /tools/tasks/{action}", s.gated("tasks", s.nativeTaskAction))
-	mux.HandleFunc("POST /tools/judge/action/{action...}", s.gated("llm-as-judge", s.judgeAction))
-
 	mux.HandleFunc("GET /tools/group/info", s.groupInfo)
 	mux.HandleFunc("GET /tools/group/status", s.groupStatus)
 	mux.HandleFunc("GET /tools/group/status/{member}", s.groupStatus)
@@ -290,49 +283,6 @@ func (s *Server) nativeTaskAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	api.WriteOK(w, result)
-}
-
-func (s *Server) judgeAction(w http.ResponseWriter, r *http.Request) {
-	if s.d.JudgeAction == nil {
-		api.WriteErr(w, http.StatusServiceUnavailable, "unavailable", "judge capability is not available")
-		return
-	}
-	if s.d.CurrentIteration() == "" {
-		api.WriteErr(w, http.StatusConflict, "no_iteration", "no iteration is currently running")
-		return
-	}
-	action := r.PathValue("action")
-	if action == "" {
-		api.WriteErr(w, http.StatusBadRequest, "bad_action", "judge action is required")
-		return
-	}
-	body := map[string]any{}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
-		return
-	}
-	res, err := s.d.JudgeAction(action, body)
-	if err != nil {
-		status, code := judgeError(err)
-		api.WriteErr(w, status, code, err.Error())
-		return
-	}
-	api.WriteOK(w, res)
-}
-
-func judgeError(err error) (int, string) {
-	switch {
-	case errors.Is(err, judge.ErrUnauthorized), errors.Is(err, judge.ErrCapabilityDisabled), errors.Is(err, judge.ErrLeaseNotOwned):
-		return http.StatusForbidden, "forbidden"
-	case errors.Is(err, judge.ErrNotFound), errors.Is(err, judge.ErrNoAssignment):
-		return http.StatusNotFound, "not_found"
-	case errors.Is(err, judge.ErrStaleIteration):
-		return http.StatusConflict, "stale_iteration"
-	case errors.Is(err, judge.ErrEmptySelection), errors.Is(err, judge.ErrNonTerminalIteration), errors.Is(err, judge.ErrInsufficientJudges), errors.Is(err, judge.ErrInvalidSubmission), errors.Is(err, judge.ErrInvalidAnalysis), errors.Is(err, judge.ErrInvalidSummary), errors.Is(err, judge.ErrInvalidAction):
-		return http.StatusBadRequest, "invalid_judge_request"
-	default:
-		return http.StatusInternalServerError, "internal"
-	}
 }
 
 func (s *Server) loopControl(w http.ResponseWriter, r *http.Request) {

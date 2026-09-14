@@ -18,7 +18,6 @@ const ADVANCED = [
   ["budgets", "Budgets"],
   ["rules", "Rules"],
   ["evals", "Evals"],
-  ["judges", "Judges"],
   ["plugins", "Plugins"],
   ["ops", "Ops"],
   ["daemons", "Daemons"],

@@ -38,7 +38,6 @@ var builtins = map[string]Capability{
 	"scripts":       {Plugin: "scripts", Skill: "scripts"},
 	"goal":          {Plugin: "goal", Skill: "goal"},
 	"image-creator": {Plugin: "image-creator", Skill: "image-creator"},
-	"llm-as-judge":  {Plugin: "llm-as-judge", Skill: "llm-as-judge"},
 	"tasks":         {Plugin: "tasks", Skill: "tasks", Launcher: "scripts/tasks.sh"},
 	"workdir":       {Plugin: "workdir", Skill: "workdir"},
 }

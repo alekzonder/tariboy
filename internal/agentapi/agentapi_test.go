@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/judge"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
@@ -34,43 +33,6 @@ func decode(t *testing.T, body []byte) (bool, map[string]any) {
 		return false, env.Error
 	}
 	return true, env.Result
-}
-
-func TestJudgeActionRouteGatingAndErrors(t *testing.T) {
-	disabled := NewServer(Deps{Plugins: []string{"whoami", "loop", "messages"}})
-	rr := httptest.NewRecorder()
-	disabled.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/judge/action/work.claim", bytes.NewBufferString(`{}`)))
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("disabled status=%d, want 404", rr.Code)
-	}
-
-	var gotAction string
-	var gotBody map[string]any
-	enabled := NewServer(Deps{
-		Plugins: []string{"llm-as-judge"}, CurrentIteration: func() string { return "iter-1" },
-		JudgeAction: func(action string, body map[string]any) (map[string]any, error) {
-			gotAction, gotBody = action, body
-			return nil, judge.ErrStaleIteration
-		},
-	})
-	rr = httptest.NewRecorder()
-	enabled.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/judge/action/work.claim", bytes.NewBufferString(`{"run_id":"r1","agent":"forged"}`)))
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("stale status=%d, want 409; body=%s", rr.Code, rr.Body.String())
-	}
-	if gotAction != "work.claim" || gotBody["run_id"] != "r1" || gotBody["agent"] != "forged" {
-		t.Fatalf("judge hook got action=%q body=%v", gotAction, gotBody)
-	}
-
-	noIteration := NewServer(Deps{Plugins: []string{"llm-as-judge"}, CurrentIteration: func() string { return "" }, JudgeAction: func(string, map[string]any) (map[string]any, error) {
-		t.Fatal("must not call without iteration")
-		return nil, nil
-	}})
-	rr = httptest.NewRecorder()
-	noIteration.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/tools/judge/action/work.claim", bytes.NewBufferString(`{}`)))
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("no iteration status=%d, want 409", rr.Code)
-	}
 }
 
 func TestPluginGatingReadsCurrentImageCapabilities(t *testing.T) {

@@ -117,10 +117,7 @@ type ManagerConfig struct {
 	// daemon (loop must not import plugins directly); nil yields no annotations.
 	ProvidedChannels func() ([]agentapi.ProvidedChannel, error)
 	ExternalPlugins  plugincaps.ExternalResolver
-	// JudgeAction forwards an llm-as-judge action after binding the caller's
-	// agent and current iteration from manager state.
-	JudgeAction func(agent, iteration, action string, body map[string]any) (map[string]any, error)
-	Tasks       registry.TaskControl
+	Tasks            registry.TaskControl
 	// iterationStore overrides Store for terminal-status finalization only
 	// (finalizeIteration). Unexported on purpose: it is a test seam for
 	// injecting an UpdateIteration failure, not daemon configuration. Unset
@@ -1007,16 +1004,6 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 			return m.cfg.Bus.Channels()
 		},
 		ProvidedChannels: m.cfg.ProvidedChannels,
-		JudgeAction: func(action string, body map[string]any) (map[string]any, error) {
-			iteration := m.currentIterationID(agName)
-			if iteration == "" {
-				return nil, fmt.Errorf("no iteration is currently running")
-			}
-			if m.cfg.JudgeAction == nil {
-				return nil, fmt.Errorf("judge capability is not available")
-			}
-			return m.cfg.JudgeAction(agName, iteration, action, body)
-		},
 		TaskAction: func(action string, body map[string]any) (any, error) {
 			if m.cfg.Tasks == nil {
 				return nil, fmt.Errorf("native Tasks service is unavailable")

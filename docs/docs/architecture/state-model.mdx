@@ -169,45 +169,6 @@ activation, provisioning, reprovisioning, import, and removal, so none can
 persist an uncommitted generation. Compose publishes through the daemon rather
 than writing its image store from the client process.
 
-Controlled improvement adds durable task-level Judge subjects, structured
-proposals, append-only approvals, immutable image releases, and rollout rows.
-A proposal revision hash covers its citations, repository/base commit, file
-allowlist, acceptance criteria, risk, and rollback image. A release hash covers
-merged source and lock provenance plus prompt and image digests. Approvals for
-other hashes do not unlock either transition.
-
-Judge automation adds immutable JSON revisions, one active revision pointer,
-one owned schedule ID, and cycles keyed by schedule delivery ID. A cycle links
-its Native Task and Judge run. Proposal revision hashes link approved plans to
-idempotent `IMPROVE` tasks.
-
-Every Judge run also snapshots the active image ref, digest, and prompt-template
-hash for each eligible worker while the image publication gate is held. The
-image-packaged rubric is read from that pinned digest, never from the mutable
-tag's later generation. Claim and submission compare the worker iteration's
-execution snapshot with the run snapshot; a mismatch is denied and recorded as
-an actionable run diagnostic without turning it into a target finding or
-invalidating compatible workers. Legacy runs keep an empty snapshot and clients
-must present their provenance as unavailable rather than derive it from current
-agent state. The number of snapshotted eligible workers is independent of the
-required analyses per target, which remains one by default.
-
-Iteration reads expose a derived Judge projection rather than another source of
-truth. `latest_completed` is the newest review whose required assignments have
-finished, while `active` is the newest in-flight target review; both may exist at
-once, so starting new work does not erase an older score (including `0`). The
-per-iteration history endpoint returns those durable review rows newest first.
-Clients use the projection directly and do not infer completion by summing
-history counters, because the required assignment count remains Judge-owned.
-`pending` means assignments have not yet completed or failed; it does not
-assert that a worker harness is running.
-
-Staging an approved single-agent release records the prior ref/digest and writes
-the candidate only to the existing pending fields. The launch gate remains the
-sole promotion path, so a running iteration is not interrupted. Successful
-promotion completes the linked rollout; failure leaves the old active image.
-Rollback stages the recorded prior immutable assignment through the same gate.
-
 ## Restart handoff
 
 A running iteration is owned by `tariboy-shim`, not by the lifetime of the

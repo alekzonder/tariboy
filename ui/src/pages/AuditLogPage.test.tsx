@@ -21,8 +21,8 @@ const OLD_ID = "dev-worker-20200102030400-1";
 // SetIterationDone; failure states leave productive at its DEFAULT 1). OLD_ID is
 // thus a done+idle iteration; TODAY_ID a done+productive one.
 const ITERS = [
-  { id: OLD_ID, trigger: "manual", status: "done", started_at: OLD_ISO, done: true, productive: false, judge: { latest_completed: null, active: null } },
-  { id: TODAY_ID, trigger: "manual", status: "done", started_at: TODAY_ISO, done: true, productive: true, judge: { latest_completed: { run_id: "run", target_id: "target", created_at: TODAY_ISO, state: "done", verdict: "pass", score: 0, completed: 1, failed: 0, pending: 0 }, active: null } },
+  { id: OLD_ID, trigger: "manual", status: "done", started_at: OLD_ISO, done: true, productive: false },
+  { id: TODAY_ID, trigger: "manual", status: "done", started_at: TODAY_ISO, done: true, productive: true },
 ];
 const mkEvent = (trigger: string, iter: string) => [
   { seq: 1, kind: "iteration_started", source: "system", at: "t1", data: JSON.stringify({ trigger }), iteration_id: iter },
@@ -134,13 +134,6 @@ describe("AuditLogPage (merged iterations + audit log)", () => {
     await waitFor(() => expect(screen.getByText("Iteration does-not-exist was not found.")).toBeInTheDocument());
     const full = screen.getByText("Full log").closest("button")!;
     expect(full.className).not.toMatch(/(^|\s)bg-accent($|\s)/);
-  });
-
-  it("renders zero score and verdict in the iteration row", async () => {
-    renderPage();
-    const row = (await screen.findByText("09:05")).closest("button")!;
-    expect(row).toHaveTextContent("0");
-    expect(row).toHaveTextContent("pass");
   });
 
   it("keeps selection in the URL, preserves other params, and follows external and back navigation", async () => {

@@ -15,7 +15,6 @@ export default defineMeta({
     "scripts",
     "image-creator",
     "goal",
-    "llm-as-judge",
     "tasks",
   ],
 });

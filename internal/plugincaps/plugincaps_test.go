@@ -93,16 +93,6 @@ func TestIsOptional(t *testing.T) {
 	}
 }
 
-func TestLLMAsJudgeCapability(t *testing.T) {
-	resolved, err := Resolve([]string{"llm-as-judge"})
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if !IsOptional("llm-as-judge") || !reflect.DeepEqual(resolved[len(resolved)-1:], []string{"llm-as-judge"}) {
-		t.Fatalf("judge capability not resolved: %v", resolved)
-	}
-}
-
 func TestImageCreatorCapability(t *testing.T) {
 	if !IsOptional("image-creator") {
 		t.Fatal("image-creator must be an OPTIONAL capability")

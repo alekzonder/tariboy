@@ -25,7 +25,6 @@ func TestMain(m *testing.M) {
 		"skills/schedule/SKILL.md":      "# Schedule\nscripts/schedule.sh\n",
 		"skills/scripts/SKILL.md":       "# Scripts\nscripts/scripts.sh\n",
 		"skills/goal/SKILL.md":          "# Goal\nscripts/goal.sh\n",
-		"skills/llm-as-judge/SKILL.md":  "# LLM as judge\nscripts/judge.sh\n",
 		"skills/image-creator/SKILL.md": "# Image creator\nscripts/image_creator.sh\n",
 		"skills/tasks/SKILL.md":         "# Tasks\nscripts/tasks.sh\n",
 		"prompts/iteration-finish.md":   "Run i-am-done.\n",
