@@ -281,7 +281,9 @@ func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in R
 		eventPayload, now); err != nil {
 		return Relation{}, err
 	}
-	relation := Relation{ID: id, SourceKey: source.Key, TargetKey: target.Key,
+	relation := Relation{ID: id,
+		SourceKey: source.Key, SourceTitle: source.Title, SourceStatus: string(source.Status),
+		TargetKey: target.Key, TargetTitle: target.Title, TargetStatus: string(target.Status),
 		Type: in.Type, CreatedBy: actor.Principal, CreatedAt: now}
 	if err := writeTaskIdempotency(
 		ctx, tx, actor.Principal, "add_relation", in.IdempotencyKey, relation, now,
@@ -420,7 +422,8 @@ func listRelations(ctx context.Context, q queryer, actor Actor, task Task) ([]Re
 		return nil, err
 	}
 	rows, err := q.QueryContext(ctx, `
-		SELECT r.id, r.source_id, source.task_key, r.target_id, target.task_key,
+		SELECT r.id, r.source_id, source.task_key, source.title, source.status,
+		       r.target_id, target.task_key, target.title, target.status,
 		       r.type, r.created_by, r.created_at
 		FROM task_relations r
 		JOIN tasks source ON source.id = r.source_id
@@ -435,7 +438,9 @@ func listRelations(ctx context.Context, q queryer, actor Actor, task Task) ([]Re
 	for rows.Next() {
 		var relation Relation
 		var sourceID, targetID int64
-		if err := rows.Scan(&relation.ID, &sourceID, &relation.SourceKey, &targetID, &relation.TargetKey,
+		if err := rows.Scan(&relation.ID,
+			&sourceID, &relation.SourceKey, &relation.SourceTitle, &relation.SourceStatus,
+			&targetID, &relation.TargetKey, &relation.TargetTitle, &relation.TargetStatus,
 			&relation.Type, &relation.CreatedBy, &relation.CreatedAt); err != nil {
 			return nil, err
 		}

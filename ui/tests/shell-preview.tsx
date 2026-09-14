@@ -36,8 +36,8 @@ const WAITS = [
   { id: 1, task_key: DETAIL_KEY, expected_principal: "customer:ops", requesting_principal: "agent:builder", requesting_comment_id: 1, requested_at: "2026-09-13T13:20:00Z" },
 ];
 const RELATIONS = [
-  { id: 1, source_key: DETAIL_KEY, target_key: "TB-142", type: "blocks", created_by: "agent:builder", created_at: "2026-09-13T09:30:00Z" },
-  { id: 2, source_key: DETAIL_KEY, target_key: "TB-133", type: "related", created_by: "agent:builder", created_at: "2026-09-13T09:31:00Z" },
+  { id: 1, source_key: DETAIL_KEY, source_title: "Write migration for the skills column", source_status: "wait_customer", target_key: "TB-142", target_title: "Packager drops skills when the template declares no plugins", target_status: "in_progress", type: "blocks", created_by: "agent:builder", created_at: "2026-09-13T09:30:00Z" },
+  { id: 2, source_key: DETAIL_KEY, source_title: "Write migration for the skills column", source_status: "wait_customer", target_key: "TB-133", target_title: "Nightly bundle fails to sign artifacts", target_status: "open", type: "related", created_by: "agent:builder", created_at: "2026-09-13T09:31:00Z" },
 ];
 const EVENTS = [
   { sequence: 4, event_id: "e4", task_key: DETAIL_KEY, queue: "TB", kind: "task.comment.added", actor: "customer:ops", task_revision: 4, payload: { comment_id: 2 }, created_at: "2026-09-13T13:52:00Z" },

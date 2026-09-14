@@ -227,7 +227,11 @@ export type TaskRelationType = "blocks" | "related"
 export interface TaskRelation {
   id: number
   source_key: string
+  source_title: string
+  source_status: TaskStatus
   target_key: string
+  target_title: string
+  target_status: TaskStatus
   type: TaskRelationType
   created_by: string
   created_at: string

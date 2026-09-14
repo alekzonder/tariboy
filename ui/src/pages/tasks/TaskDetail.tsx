@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, HelpCircle, X } from "lucide-react"
+import { AlertCircle, HelpCircle, X } from "lucide-react"
 import { type ComponentProps, type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
 import type {
   TaskDetail as Detail,
@@ -8,9 +8,7 @@ import type {
   TaskPriority,
   TaskRelationType,
   TaskStatus,
-  WorkflowArtifact,
   WorkflowExecutionView,
-  WorkflowQuestion,
 } from "@/lib/tasks"
 import TaskComments from "./TaskComments"
 import { Input } from "@/components/ui/input"
@@ -19,11 +17,10 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { MarkdownEditor, MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
 import { SendFilesButton } from "@/components/SendFilesButton"
 import { StatusPill } from "@/components/ui/status"
-import { WORKFLOW_DOT, taskStatusLabel, taskTone, workflowRowTone } from "@/lib/statusTone"
+import { taskStatusLabel, taskTone } from "@/lib/statusTone"
 import { formatTaskTime } from "./taskTime"
 import { cn } from "@/lib/utils"
 import { COUNT, DANGER_FILL, EMPTY, FIELD, FIELD_MONO, LABEL, MONO, PRIMARY_FILL, QUIET_ACTION, ROW, SelectShell } from "./panelStyles"
-import type { StatusTone } from "@/lib/statusTone"
 import type { ApiTarget } from "@/lib/api"
 
 /**
@@ -40,14 +37,6 @@ export default function TaskDetail({
   target,
   events,
   workflow,
-  workflowArtifacts,
-  workflowQuestions,
-  executionLoading,
-  executionError,
-  artifactsLoading,
-  artifactsError,
-  questionsLoading,
-  questionsError,
   principals,
   width,
   resizeHandle,
@@ -61,14 +50,6 @@ export default function TaskDetail({
   target?: ApiTarget
   events: TaskEvent[]
   workflow: WorkflowExecutionView | null
-  workflowArtifacts: WorkflowArtifact[]
-  workflowQuestions: WorkflowQuestion[]
-  executionLoading: boolean
-  executionError: string
-  artifactsLoading: boolean
-  artifactsError: string
-  questionsLoading: boolean
-  questionsError: string
   principals: TaskPrincipals | null
   width: number
   resizeHandle: ReactNode
@@ -206,10 +187,6 @@ export default function TaskDetail({
           status stay in view. The one shadow here is the same rule the selected
           row and the active segment carry. */}
       <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
-        <Button ref={initialFocusRef} variant="ghost" size="sm" disabled={pending} onClick={close}
-          className="h-[26px] shrink-0 gap-1.5 rounded-[7px] pr-2 pl-1.5 text-[12.5px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground">
-          <ArrowLeft className="size-[13px] [stroke-width:1.4]" /> Back
-        </Button>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex min-w-0 items-center gap-[9px]">
             <DialogTitle asChild>
@@ -220,24 +197,20 @@ export default function TaskDetail({
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px]">
             <StatusPill tone={taskTone(task.status)}>{taskStatusLabel(task.status)}</StatusPill>
-            {managed
-              ? <span title="Managed workflow version · revision"
-                  className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] tabular-nums">
-                  {task.workflow_version || (workflow ? `${workflow.workflow.name}@${workflow.workflow.version}` : `#${task.workflow_version_id}`)}
-                  <span className="opacity-60">rev {task.workflow_revision ?? 0}</span>
-                </span>
-              : <span className="text-[11.5px] text-muted-foreground">unmanaged · status set by hand</span>}
+            {/* A managed task says so by omission — it simply carries no note.
+                Which version and revision its execution runs on belongs to the
+                workflow, not to this header, and the parent is stated once, in
+                the overview grid below. */}
+            {!managed && <span className="text-[11.5px] text-muted-foreground">unmanaged · status set by hand</span>}
             <MetaInline label="agent" value={task.assignee || "unassigned"} />
-            {task.parent_key && <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              parent
-              <span className="border-b border-dotted border-border font-mono text-[11.5px] font-medium text-foreground tabular-nums">{task.parent_key}</span>
-            </span>}
             <MetaInline label="updated" value={formatTaskTime(task.updated_at)} />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {editable && <Button size="sm" className="h-7" disabled={pending || !title.trim()} onClick={() => void save()}>Save task</Button>}
-          <Button variant="ghost" size="icon" aria-label="Close task detail" disabled={pending} onClick={close}
+          {/* The close button is the panel entry point now that Back is gone,
+              so it takes the focus Back used to hold. */}
+          <Button ref={initialFocusRef} variant="ghost" size="icon" aria-label="Close task detail" disabled={pending} onClick={close}
             className="size-7 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"><X className="size-3.5" /></Button>
         </div>
       </header>
@@ -340,68 +313,26 @@ export default function TaskDetail({
               </label>}
             </div>
           </fieldset>
-          {managed && (
-            /* A nested level reads as a quieter fill, never as a box. */
-            <section className="task-workflow flex min-w-0 flex-col gap-2.5 rounded-[8px] bg-[color-mix(in_oklab,var(--muted)_55%,transparent)] p-3" aria-label="Workflow execution">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[12.5px] font-medium">Managed workflow</span>
-                <span className="inline-flex h-[19px] items-center rounded-[6px] bg-card px-[7px] font-mono text-[11px] tabular-nums">
-                  {task.workflow_version || (workflow ? `${workflow.workflow.name}@${workflow.workflow.version}` : `#${task.workflow_version_id}`)}
-                </span>
-                {task.workflow_status && <StatusPill tone={workflowRowTone(task.workflow_status)} size="sm">{task.workflow_status}</StatusPill>}
-                <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">rev {task.workflow_revision ?? 0}</span>
-              </div>
-              {/* Assignments, holds and observations all come from the one
-                  execution projection, so its loading and failure speak once
-                  for the three rather than repeating the same line. */}
-              {executionLoading && <span className={EMPTY}>Loading execution…</span>}
-              {executionError && <span role="alert" className="text-[12px] text-status-failed">Execution unavailable: {executionError}</span>}
-              <div className="grid min-w-0 grid-cols-2 gap-x-5 gap-y-3">
-                {!executionLoading && !executionError && <WorkflowList title="Assignments" empty="No assignments"
-                  items={(workflow?.assignments ?? []).map((assignment) => ({
-                    key: String(assignment.id),
-                    primary: assignment.agent || "Unclaimed",
-                    mono: Boolean(assignment.agent),
-                    tone: workflowRowTone(assignment.state),
-                    secondary: `${assignment.state} · attempt ${assignment.attempt}${assignment.outcome ? ` · ${assignment.outcome}` : ""}`,
-                  }))} />}
-                {!executionLoading && !executionError && <WorkflowList title="Holds" empty="No active holds"
-                  items={(workflow?.holds ?? []).filter((hold) => !hold.released_at).map((hold) => ({
-                    key: String(hold.id), primary: hold.reason || hold.scope, secondary: hold.scope, tone: "attention" as StatusTone,
-                  }))} />}
-                <WorkflowList title="Artifacts" empty="No artifacts" loading={artifactsLoading}
-                  error={artifactsError ? `Artifacts unavailable: ${artifactsError}` : ""}
-                  items={workflowArtifacts.map((artifact) => ({
-                    key: String(artifact.id), primary: artifact.name, mono: true, secondary: artifact.content || artifact.type,
-                  }))} />
-                <WorkflowList title="Questions" empty="No questions" loading={questionsLoading}
-                  error={questionsError ? `Questions unavailable: ${questionsError}` : ""}
-                  items={workflowQuestions.map((question) => ({
-                    key: String(question.id), primary: question.question, tone: workflowRowTone(question.state),
-                    secondary: `${question.state} · ${question.blocking_scope}`,
-                  }))} />
-                {!executionLoading && !executionError && <WorkflowList title="Observations" empty="No observations"
-                  items={(workflow?.observations ?? []).map((observation) => ({
-                    key: String(observation.id), primary: observation.kind, mono: true, secondary: summarizePayload(observation.payload),
-                  }))} />}
-              </div>
-            </section>
-          )}
           <section className="flex min-w-0 flex-col gap-1.5">
             <SectionHeading label="Dependencies" count={detail.relations.length} />
             {detail.relations.length === 0 && <span className={EMPTY}>Nothing blocks this task.</span>}
             {detail.relations.map((relation) => {
-              const other = relation.source_key === task.key ? relation.target_key : relation.source_key
+              const source = relation.source_key === task.key
+              const other = source ? relation.target_key : relation.source_key
+              const otherTitle = source ? relation.target_title : relation.source_title
+              const otherStatus = source ? relation.target_status : relation.source_status
               return (
                 <div key={relation.id} className={ROW}>
                   <span className={cn("inline-flex h-[19px] shrink-0 items-center rounded-[6px] px-[7px] text-[11px]",
                     relation.type === "blocks"
                       ? cn(DANGER_FILL, "font-medium")
                       : "bg-muted text-muted-foreground")}>{relation.type}</span>
-                  {/* The key is underlined only as far as it reads; the rest of
-                      the row is the space the reference gives a title. */}
+                  {/* The key is underlined only as far as it reads; the title
+                      takes the rest of the row and the pill closes it, so a
+                      dependency says what it is without being opened. */}
                   <span className="shrink-0 border-b border-dotted border-border font-mono text-[11.5px] font-medium tabular-nums">{other}</span>
-                  <span className="min-w-0 flex-1" />
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">{otherTitle}</span>
+                  {otherStatus && <StatusPill tone={taskTone(otherStatus)}>{taskStatusLabel(otherStatus)}</StatusPill>}
                   <Button type="button" variant="ghost" size="icon-xs" aria-label={`Remove relation to ${other}`}
                     className="size-6 shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-destructive"
                     onClick={() => {
@@ -530,35 +461,6 @@ function SelectField({ label, value, onChange, mono = false, children }: {
       {children}
     </SelectShell>
   </label>
-}
-
-type WorkflowItem = { key: string; primary: string; secondary: string; tone?: StatusTone; mono?: boolean }
-
-/** One of the five managed-workflow lists. Loading and failure speak in the
- *  list's own place rather than replacing the section. */
-function WorkflowList({ title, empty, items, loading = false, error = "" }: {
-  title: string
-  empty: string
-  items: WorkflowItem[]
-  loading?: boolean
-  error?: string
-}) {
-  return <div className="flex min-w-0 flex-col">
-    <div className="flex h-6 items-center gap-1.5 px-0.5">
-      <span className={LABEL}>{title}</span>
-      <span className={COUNT}>{items.length}</span>
-    </div>
-    {loading ? <span className={EMPTY}>Loading {title.toLowerCase()}…</span>
-      : error ? <span role="alert" className="text-[12px] text-status-failed">{error}</span>
-      : items.length === 0 ? <span className={EMPTY}>{empty}</span>
-      : items.map((item) => (
-        <div key={item.key} className={ROW}>
-          <span className={cn("size-1.5 shrink-0 rounded-full", WORKFLOW_DOT[item.tone ?? "quiet"])} />
-          <span className={cn("min-w-0 flex-1 truncate", item.mono ? "font-mono text-[11.5px]" : "text-[12.5px]")}>{item.primary}</span>
-          <span className="max-w-[46%] shrink-0 truncate font-mono text-[11px] tabular-nums text-muted-foreground">{item.secondary}</span>
-        </div>
-      ))}
-  </div>
 }
 
 /** Event payloads read as `key value · key value`; a JSON dump is a log, not a

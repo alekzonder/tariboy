@@ -118,7 +118,11 @@ const detail: TaskDetail = {
   relations: [{
     id: 9,
     source_key: "TEST-1",
+    source_title: root.title,
+    source_status: "open",
     target_key: "TEST-2",
+    target_title: "Child task",
+    target_status: "in_progress",
     type: "blocks",
     created_by: "user:owner",
     created_at: root.created_at,
@@ -223,7 +227,7 @@ describe("TasksWorkspace", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     await userEvent.click(row)
     expect(await screen.findByRole("dialog")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /Back/ })).toHaveFocus()
+    expect(screen.getByRole("button", { name: "Close task detail" })).toHaveFocus()
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Unsaved title" } })
     await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]') as HTMLElement)
     expect(screen.getByDisplayValue("Unsaved title")).toBeInTheDocument()
@@ -491,7 +495,7 @@ describe("TasksWorkspace", () => {
     expect(await screen.findByRole("heading", { name: "TEST-2" })).toBeInTheDocument()
   })
 
-  it("renders managed execution state read-only and hides lifecycle controls", async () => {
+  it("keeps the frozen banner and hides lifecycle controls on a managed task", async () => {
     const managed = {
       ...root,
       workflow_version_id: 7,
@@ -513,20 +517,16 @@ describe("TasksWorkspace", () => {
       holds: [{ id: 2, task_key: root.key, assignment_id: 11, scope: "assignment", reason: "Need decision", created_at: root.created_at }],
       observations: [{ id: 3, task_key: root.key, assignment_id: 11, kind: "logs", payload: { service: "api" }, observed_at: root.created_at }],
     })
-    api.listWorkflowArtifacts.mockResolvedValue({ items: [{ id: 5, task_key: root.key, assignment_id: 11, name: "review", type: "markdown", content: "Looks good", revision: 1, created_by: "agent:review-a", created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
-    api.listWorkflowQuestions.mockResolvedValue({ items: [{ id: 6, task_key: root.key, assignment_id: 11, question: "Which rollout?", context: "Two safe options", blocking_scope: "assignment", state: "open", created_at: root.created_at }], count: 1 })
     api.listTaskEvents.mockResolvedValue({ events: [{ sequence: 9, event_id: "workflow-error", task_key: root.key, queue: "TEST", kind: "workflow.escalated", actor: "system", task_revision: 2, payload: { error_code: "no_matching_transition", message: "No transition matched" }, created_at: root.updated_at }], count: 1 })
 
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
 
-    expect(await screen.findAllByText("development@2")).toHaveLength(2)
-    expect(screen.getByText("review-a")).toBeInTheDocument()
-    expect(screen.getByText("qa-a")).toBeInTheDocument()
-    expect(screen.getByText("Need decision")).toBeInTheDocument()
-    expect(screen.getByText("Which rollout?")).toBeInTheDocument()
-    expect(screen.getByText("Looks good")).toBeInTheDocument()
-    expect(screen.getByText("No transition matched")).toBeInTheDocument()
+    expect(await screen.findByText("No transition matched")).toBeInTheDocument()
+    // The execution lists left with the workflow section; the freeze it
+    // reports still reaches the panel through the banner.
+    expect(screen.queryByText("review-a")).not.toBeInTheDocument()
+    expect(screen.queryByText("Need decision")).not.toBeInTheDocument()
     expect(screen.getAllByText("no_matching_transition").length).toBeGreaterThan(0)
     expect(screen.getByText(/error_code no_matching_transition/)).toBeInTheDocument()
     expect(screen.queryByLabelText("Status")).not.toBeInTheDocument()
@@ -588,49 +588,32 @@ describe("TasksWorkspace", () => {
     expect(api.rebindAgentPool).toHaveBeenLastCalledWith("TEST", "developers", ["dev-a", "dev-b"], 6, expect.any(String), undefined)
   })
 
-  it("keeps core task detail when managed auxiliary projections fail", async () => {
+  it("shows a managed task without the workflow section and without its auxiliary projections", async () => {
     const managed = { ...root, workflow_version_id: 7, workflow_version: "development@2", workflow_status: "review", workflow_revision: 5 }
     api.listTasks.mockResolvedValue({ tasks: [managed], sequence: 10 })
     api.getTask.mockResolvedValue({ ...detail, task: managed })
     api.getTaskWorkflow.mockResolvedValue({ task: managed, workflow: { id: 7, name: "development", version: 2, state: "published", definition: { name: "development", version: 2, initial_status: "implement", statuses: [] }, created_at: root.created_at, updated_at: root.updated_at }, status_executions: [], requirement_executions: [], assignments: [], holds: [], observations: [] })
-    api.listWorkflowArtifacts.mockRejectedValue(new Error("artifact projection unavailable"))
 
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     expect(await screen.findByRole("heading", { name: "TEST-1" })).toBeInTheDocument()
     expect(screen.getByText("Starting now")).toBeInTheDocument()
-    expect(screen.getByText("Artifacts unavailable: artifact projection unavailable")).toBeInTheDocument()
-    expect(screen.queryByText("No artifacts")).not.toBeInTheDocument()
+    expect(screen.queryByText("Managed workflow")).not.toBeInTheDocument()
+    expect(screen.queryByText("Assignments")).not.toBeInTheDocument()
+    expect(screen.queryByText("development@2")).not.toBeInTheDocument()
+    expect(screen.queryByText(/unmanaged/)).not.toBeInTheDocument()
+    expect(api.listWorkflowArtifacts).not.toHaveBeenCalled()
+    expect(api.listWorkflowQuestions).not.toHaveBeenCalled()
   })
 
-  it("renders artifact and question projections when execution projection fails", async () => {
-    const managed = { ...root, workflow_version_id: 7, workflow_version: "development@2", workflow_status: "review", workflow_revision: 5 }
-    api.listTasks.mockResolvedValue({ tasks: [managed], sequence: 10 })
-    api.getTask.mockResolvedValue({ ...detail, task: managed })
-    api.getTaskWorkflow.mockRejectedValue(new Error("execution projection unavailable"))
-    api.listWorkflowArtifacts.mockResolvedValue({ items: [{ id: 5, task_key: root.key, assignment_id: 11, name: "report", type: "markdown", content: "Independent artifact", revision: 1, created_by: "agent:review-a", created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
-    api.listWorkflowQuestions.mockResolvedValue({ items: [{ id: 6, task_key: root.key, assignment_id: 11, question: "Independent question", context: "context", blocking_scope: "none", state: "open", created_at: root.created_at }], count: 1 })
-
+  it("names a dependency by its title and status, and the parent only once", async () => {
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    expect(await screen.findByText("Independent artifact")).toBeInTheDocument()
-    expect(screen.getByText("Independent question")).toBeInTheDocument()
-    expect(screen.getByText("Execution unavailable: execution projection unavailable")).toBeInTheDocument()
-    expect(screen.queryByText("No assignments")).not.toBeInTheDocument()
+    const row = (await screen.findByText("Child task")).closest("div")!
+    expect(within(row).getByText("TEST-2")).toBeInTheDocument()
+    expect(within(row).getByText("In progress")).toBeInTheDocument()
   })
 
-  it("does not describe failed question data as empty", async () => {
-    const managed = { ...root, workflow_version_id: 7, workflow_version: "development@2", workflow_status: "review", workflow_revision: 5 }
-    api.listTasks.mockResolvedValue({ tasks: [managed], sequence: 10 })
-    api.getTask.mockResolvedValue({ ...detail, task: managed })
-    api.getTaskWorkflow.mockResolvedValue({ task: managed, workflow: { id: 7, name: "development", version: 2, state: "published", definition: { name: "development", version: 2, initial_status: "implement", statuses: [] }, created_at: root.created_at, updated_at: root.updated_at }, status_executions: [], requirement_executions: [], assignments: [], holds: [], observations: [] })
-    api.listWorkflowQuestions.mockRejectedValue(new Error("question projection unavailable"))
-
-    render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
-    expect(await screen.findByText("Questions unavailable: question projection unavailable")).toBeInTheDocument()
-    expect(screen.queryByText("No questions")).not.toBeInTheDocument()
-  })
   it("shows one accessible question indicator only for task rows with active question notifications", async () => {
     api.listTaskNotifications.mockResolvedValue({
       notifications: [
