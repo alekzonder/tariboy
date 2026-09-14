@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, ChevronDown, HelpCircle, X } from "lucide-react"
+import { AlertCircle, ArrowLeft, HelpCircle, X } from "lucide-react"
 import { type ComponentProps, type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
 import type {
   TaskDetail as Detail,
@@ -22,6 +22,7 @@ import { StatusPill } from "@/components/ui/status"
 import { WORKFLOW_DOT, taskStatusLabel, taskTone, workflowRowTone } from "@/lib/statusTone"
 import { formatTaskTime } from "./taskTime"
 import { cn } from "@/lib/utils"
+import { COUNT, DANGER_FILL, EMPTY, FIELD, FIELD_MONO, LABEL, MONO, PRIMARY_FILL, QUIET_ACTION, ROW, SelectShell } from "./panelStyles"
 import type { StatusTone } from "@/lib/statusTone"
 import type { ApiTarget } from "@/lib/api"
 
@@ -33,21 +34,6 @@ import type { ApiTarget } from "@/lib/api"
  * carries exactly two shadows (the header rule and the island) and exactly one
  * `600` weight (the task title).
  */
-
-/** Every section label and field label reads the same. */
-const LABEL = "text-[11.5px] font-medium tracking-[.02em] text-muted-foreground"
-/** A field is a fill, not a box: 30px of `--muted` at radius 8, no border. */
-const FIELD = "h-[30px] w-full min-w-0 rounded-[8px] border-0 bg-muted px-2.5 text-[12.5px] md:text-[12.5px] text-foreground shadow-none outline-none focus-visible:ring-2 focus-visible:ring-ring"
-/** Keys, times, durations and digests line up in one column. */
-const MONO = "font-mono text-[11.5px] tabular-nums"
-/** The list row shared by workflow items, dependencies and history. */
-const ROW = "-mx-1.5 flex min-h-[30px] items-center gap-2.5 rounded-[8px] px-2 hover:bg-muted"
-/** The counter that follows a section label. */
-const COUNT = "font-mono text-[11px] tabular-nums text-muted-foreground opacity-75"
-/** A quiet 24px action sitting on the right of a section header. */
-const QUIET_ACTION = "h-6 rounded-[7px] px-2.5 text-[12px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
-/** The one empty-state voice: a single quiet line where the list would be. */
-const EMPTY = "text-[12px] text-muted-foreground opacity-80"
 
 export default function TaskDetail({
   detail,
@@ -219,7 +205,7 @@ export default function TaskDetail({
       {/* Sticky: whatever the panel is scrolled to, the key, the title and the
           status stay in view. The one shadow here is the same rule the selected
           row and the active segment carry. */}
-      <header className="task-detail-header sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
+      <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
         <Button ref={initialFocusRef} variant="ghost" size="sm" disabled={pending} onClick={close}
           className="h-[26px] shrink-0 gap-1.5 rounded-[7px] pr-2 pl-1.5 text-[12.5px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground">
           <ArrowLeft className="size-[13px] [stroke-width:1.4]" /> Back
@@ -236,7 +222,7 @@ export default function TaskDetail({
             <StatusPill tone={taskTone(task.status)}>{taskStatusLabel(task.status)}</StatusPill>
             {managed
               ? <span title="Managed workflow version · revision"
-                  className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px]">
+                  className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] tabular-nums">
                   {task.workflow_version || (workflow ? `${workflow.workflow.name}@${workflow.workflow.version}` : `#${task.workflow_version_id}`)}
                   <span className="opacity-60">rev {task.workflow_revision ?? 0}</span>
                 </span>
@@ -244,7 +230,7 @@ export default function TaskDetail({
             <MetaInline label="agent" value={task.assignee || "unassigned"} />
             {task.parent_key && <span className="inline-flex items-center gap-1.5 text-muted-foreground">
               parent
-              <span className="border-b border-dotted border-border font-mono text-[11.5px] font-medium text-foreground tabular-nums hover:border-foreground">{task.parent_key}</span>
+              <span className="border-b border-dotted border-border font-mono text-[11.5px] font-medium text-foreground tabular-nums">{task.parent_key}</span>
             </span>}
             <MetaInline label="updated" value={formatTaskTime(task.updated_at)} />
           </div>
@@ -259,11 +245,13 @@ export default function TaskDetail({
       {confirmClose && <Banner tone="danger" role="alert" icon={<AlertCircle className="size-3.5 [stroke-width:1.4]" />}
         text="Are you sure you want to close this task? Unsaved changes will be discarded."
         actions={<>
-          <BannerButton tone="danger" onClick={() => setConfirmClose(false)}>Keep editing</BannerButton>
+          {/* Keeping the draft is the safe default, so it stays quiet; only the
+              action that throws work away carries the solid fill. */}
+          <BannerButton tone="quiet" onClick={() => setConfirmClose(false)}>Keep editing</BannerButton>
           <BannerButton tone="danger" onClick={onClose}>Discard changes</BannerButton>
         </>} />}
       {dirty && baseline.revision !== task.revision && <div role="alert"
-        className="flex flex-col gap-2 rounded-[8px] bg-[color-mix(in_oklab,var(--status-failed)_12%,transparent)] px-2.5 py-2 text-status-failed">
+        className={cn("flex flex-col gap-2 rounded-[8px] px-2.5 py-2", DANGER_FILL)}>
         <div className="flex items-start gap-[9px]">
           <AlertCircle className="mt-px size-3.5 shrink-0 [stroke-width:1.4]" />
           <p className="min-w-0 flex-1 text-[12.5px] leading-[1.45] font-medium text-pretty">This task changed while you were editing. Keep your edited fields over the latest values, or reload to discard your edits.</p>
@@ -281,7 +269,7 @@ export default function TaskDetail({
         </details>
         <div className="flex gap-1.5">
           <BannerButton tone="danger" disabled={saving} onClick={keepEdits}>Keep my edits</BannerButton>
-          <BannerButton tone="danger" disabled={saving} onClick={() => adopt(task)}>Reload task</BannerButton>
+          <BannerButton tone="quiet" disabled={saving} onClick={() => adopt(task)}>Reload task</BannerButton>
         </div>
       </div>}
       {task.access === "context" ? (
@@ -294,7 +282,7 @@ export default function TaskDetail({
             ? <WorkflowFreezeBanner events={events} />
             : openWaits.length > 0 && <Banner tone="primary" icon={<HelpCircle className="mt-0.5 size-3.5 [stroke-width:1.4]" />}
                 text={`Waiting for an answer from ${openWaits.map((wait) => wait.expected_principal).join(", ")} — reply in the comments below.`} />}
-          <dl className="task-metadata grid grid-cols-2 gap-x-6 gap-y-[9px]">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-[9px]">
             <Meta label="Author" value={task.author} />
             <Meta label="Customer" value={task.customer} />
             <Meta label="Queue" value={task.queue} />
@@ -336,7 +324,7 @@ export default function TaskDetail({
               </SelectField>
               {!managed && <label className="flex min-w-0 flex-col gap-[5px]">
                 <span className={LABEL}>Assignee</span>
-                <Input aria-label="Assignee" list="task-assignees" className={cn(FIELD, "font-mono text-[11.5px] md:text-[11.5px]")}
+                <Input aria-label="Assignee" list="task-assignees" className={cn(FIELD, FIELD_MONO)}
                   value={assignee} onChange={(event) => setAssignee(event.target.value)} />
                 <datalist id="task-assignees">
                   {principals?.agents.map((agent) => <option key={agent} value={agent} />)}
@@ -344,7 +332,7 @@ export default function TaskDetail({
               </label>}
               <label className="flex min-w-0 flex-col gap-[5px]">
                 <span className={LABEL}>Pull request</span>
-                <Input className={cn(FIELD, "font-mono text-[11.5px] md:text-[11.5px]")} value={pullRequest} onChange={(event) => setPullRequest(event.target.value)} />
+                <Input className={cn(FIELD, FIELD_MONO)} value={pullRequest} onChange={(event) => setPullRequest(event.target.value)} />
               </label>
               {!managed && <label className="flex min-w-0 flex-col gap-[5px]">
                 <span className={LABEL}>Manual block reason</span>
@@ -357,7 +345,7 @@ export default function TaskDetail({
             <section className="task-workflow flex min-w-0 flex-col gap-2.5 rounded-[8px] bg-[color-mix(in_oklab,var(--muted)_55%,transparent)] p-3" aria-label="Workflow execution">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[12.5px] font-medium">Managed workflow</span>
-                <span className="inline-flex h-[19px] items-center rounded-[6px] bg-card px-[7px] font-mono text-[11px]">
+                <span className="inline-flex h-[19px] items-center rounded-[6px] bg-card px-[7px] font-mono text-[11px] tabular-nums">
                   {task.workflow_version || (workflow ? `${workflow.workflow.name}@${workflow.workflow.version}` : `#${task.workflow_version_id}`)}
                 </span>
                 {task.workflow_status && <StatusPill tone={workflowRowTone(task.workflow_status)} size="sm">{task.workflow_status}</StatusPill>}
@@ -399,7 +387,7 @@ export default function TaskDetail({
               </div>
             </section>
           )}
-          <section className="task-relations flex min-w-0 flex-col gap-1.5">
+          <section className="flex min-w-0 flex-col gap-1.5">
             <SectionHeading label="Dependencies" count={detail.relations.length} />
             {detail.relations.length === 0 && <span className={EMPTY}>Nothing blocks this task.</span>}
             {detail.relations.map((relation) => {
@@ -408,11 +396,11 @@ export default function TaskDetail({
                 <div key={relation.id} className={ROW}>
                   <span className={cn("inline-flex h-[19px] shrink-0 items-center rounded-[6px] px-[7px] text-[11px]",
                     relation.type === "blocks"
-                      ? "bg-[color-mix(in_oklab,var(--status-failed)_12%,transparent)] font-medium text-status-failed"
+                      ? cn(DANGER_FILL, "font-medium")
                       : "bg-muted text-muted-foreground")}>{relation.type}</span>
                   {/* The key is underlined only as far as it reads; the rest of
                       the row is the space the reference gives a title. */}
-                  <span className="shrink-0 border-b border-dotted border-border font-mono text-[11.5px] font-medium tabular-nums hover:border-foreground">{other}</span>
+                  <span className="shrink-0 border-b border-dotted border-border font-mono text-[11.5px] font-medium tabular-nums">{other}</span>
                   <span className="min-w-0 flex-1" />
                   <Button type="button" variant="ghost" size="icon-xs" aria-label={`Remove relation to ${other}`}
                     className="size-6 shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-destructive"
@@ -425,39 +413,40 @@ export default function TaskDetail({
               )
             })}
             <form className="flex items-center gap-1.5 pt-0.5" onSubmit={(event) => { event.preventDefault(); submitRelation() }}>
-              <span className="relative inline-flex">
-                <select aria-label="Relation type" value={relationType} disabled={saving}
-                  className={cn(FIELD, "h-[26px] w-auto appearance-none pr-7 text-[12px] md:text-[12px]")}
-                  onChange={(event) => setRelationType(event.target.value as TaskRelationType)}>
-                  <option value="blocks">Blocks</option>
-                  <option value="related">Related</option>
-                </select>
-                <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 size-2.5 -translate-y-1/2 opacity-45" />
-              </span>
+              <SelectShell aria-label="Relation type" value={relationType}
+                className="h-[26px] w-auto text-[12px] md:text-[12px]"
+                onChange={(event) => setRelationType(event.target.value as TaskRelationType)}>
+                <option value="blocks">Blocks</option>
+                <option value="related">Related</option>
+              </SelectShell>
               <Input name="target_key" aria-label="Related task key" placeholder="TEST-2" value={relationTarget}
-                className={cn(FIELD, "h-[26px] w-[118px] font-mono text-[11.5px] md:text-[11.5px]")}
+                className={cn(FIELD, FIELD_MONO, "h-[26px] w-[118px]")}
                 onChange={(event) => setRelationTarget(event.target.value)} />
               <Button type="button" variant="ghost" onClick={submitRelation} disabled={relationBusy || !relationTarget.trim()}
                 className="h-[26px] rounded-[7px] bg-accent px-2.5 text-[12px] hover:bg-secondary">Add relation</Button>
             </form>
             {relationError && <p role="alert" className="text-[12px] text-status-failed">{relationError}</p>}
           </section>
-          </> : <div className="task-response-description flex min-w-0 flex-col gap-2">
-            <h3 className="text-[15px] font-semibold tracking-[-.01em]">{task.title}</h3>
+          </> : <div className="flex min-w-0 flex-col gap-2">
+            {/* No second title here: the sticky header already carries it, and
+                it is the panel's only 600. */}
+            <span className={LABEL}>Description</span>
             <div className="rounded-[8px] bg-muted px-3 py-[11px]"><MarkdownContent>{task.description}</MarkdownContent></div>
             <p className={EMPTY}>Response access — comments only.</p>
           </div>}
           <TaskComments comments={comments} waits={detail.waiting_for} principals={principals} assignee={task.assignee}
             formFirst={commentOrder === "newest"} order={commentOrder} onOrderChange={setCommentOrder}
             onComment={onComment} onDirtyChange={setCommentDirty} target={target} onUploadingChange={setUploadingComment} />
-          <section className="task-history flex min-w-0 flex-col gap-1">
+          <section className="flex min-w-0 flex-col gap-1">
             <SectionHeading label="History" count={events.length} action={
-              <Button type="button" variant="ghost" className={QUIET_ACTION} onClick={() => setHistoryOpen(!historyOpen)}>
+              <Button type="button" variant="ghost" className={QUIET_ACTION} aria-expanded={historyOpen}
+                onClick={() => setHistoryOpen(!historyOpen)}>
                 {historyOpen ? "Collapse" : "Expand"}
               </Button>} />
             {historyOpen && events.map((event) => (
               <div key={event.event_id} className={ROW}>
-                <span className="w-[52px] shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">{formatTaskTime(event.created_at)}</span>
+                <time dateTime={event.created_at} title={new Date(event.created_at).toLocaleString()}
+                  className="w-[52px] shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">{formatTaskTime(event.created_at)}</time>
                 <span className="shrink-0 font-mono text-[11.5px] font-medium">{event.kind}</span>
                 <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{summarizePayload(event.payload)}</span>
                 <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{event.actor}</span>
@@ -506,22 +495,23 @@ function Banner({ tone, icon, text, actions, role }: {
   role?: string
 }) {
   return <div role={role}
-    className={cn("flex items-start gap-[9px] rounded-[8px] px-2.5 py-2",
-      tone === "danger"
-        ? "bg-[color-mix(in_oklab,var(--status-failed)_12%,transparent)] text-status-failed"
-        : "bg-[color-mix(in_oklab,var(--primary)_12%,transparent)] text-primary")}>
+    className={cn("flex items-start gap-[9px] rounded-[8px] px-2.5 py-2", tone === "danger" ? DANGER_FILL : PRIMARY_FILL)}>
     <span className="shrink-0">{icon}</span>
     <span className="min-w-0 flex-1 self-center text-[12.5px] leading-[1.45] font-medium text-pretty">{text}</span>
     {actions}
   </div>
 }
 
-function BannerButton({ tone, children, ...props }: { tone: "danger" | "primary" } & ComponentProps<typeof Button>) {
+/** The action a banner carries. `quiet` is the one that changes nothing. */
+function BannerButton({ tone, children, className, ...props }: {
+  tone: "danger" | "quiet"
+} & ComponentProps<typeof Button>) {
   return <Button type="button" variant="ghost" {...props}
     className={cn("h-6 shrink-0 rounded-[7px] px-2.5 text-[12px]",
       tone === "danger"
         ? "bg-[color-mix(in_oklab,var(--status-failed)_14%,transparent)] text-status-failed hover:bg-[color-mix(in_oklab,var(--status-failed)_20%,transparent)] hover:text-status-failed"
-        : "bg-primary text-primary-foreground hover:bg-primary/80 hover:text-primary-foreground")}>
+        : "text-status-failed hover:bg-[color-mix(in_oklab,var(--status-failed)_10%,transparent)] hover:text-status-failed",
+      className)}>
     {children}
   </Button>
 }
@@ -536,13 +526,9 @@ function SelectField({ label, value, onChange, mono = false, children }: {
 }) {
   return <label className="flex min-w-0 flex-col gap-[5px]">
     <span className={LABEL}>{label}</span>
-    <span className="relative flex min-w-0">
-      <select value={value} onChange={(event) => onChange(event.target.value)}
-        className={cn(FIELD, "appearance-none pr-7", mono && "font-mono text-[11.5px] md:text-[11.5px]")}>
-        {children}
-      </select>
-      <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 size-2.5 -translate-y-1/2 opacity-45" />
-    </span>
+    <SelectShell className={cn("flex", mono && FIELD_MONO)} value={value} onChange={(event) => onChange(event.target.value)}>
+      {children}
+    </SelectShell>
   </label>
 }
 
@@ -589,9 +575,6 @@ function WorkflowFreezeBanner({ events }: { events: TaskEvent[] }) {
   const escalation = [...events].reverse().find((event) => event.kind === "workflow.escalated")
   const code = typeof escalation?.payload.error_code === "string" ? escalation.payload.error_code : "unknown_error"
   const message = typeof escalation?.payload.message === "string" ? escalation.payload.message : "Workflow execution is frozen"
-  return <div role="alert" className="task-workflow-error flex items-center gap-[9px] rounded-[8px] bg-[color-mix(in_oklab,var(--status-failed)_12%,transparent)] px-2.5 py-[7px] text-status-failed">
-    <AlertCircle className="size-3.5 shrink-0 [stroke-width:1.4]" />
-    <span className="min-w-0 flex-1 text-[12.5px] font-medium">{message}</span>
-    <span className="shrink-0 font-mono text-[11px] opacity-80">{code}</span>
-  </div>
+  return <Banner tone="danger" role="alert" icon={<AlertCircle className="size-3.5 [stroke-width:1.4]" />} text={message}
+    actions={<span className="shrink-0 self-center font-mono text-[11px] opacity-80">{code}</span>} />
 }

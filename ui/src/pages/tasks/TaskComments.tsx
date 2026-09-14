@@ -1,18 +1,14 @@
 import { useEffect, useState } from "react"
-import { ChevronDown, Copy } from "lucide-react"
+import { Copy } from "lucide-react"
 import { toast } from "sonner"
 import type { TaskComment, TaskPrincipals, TaskWait } from "@/lib/tasks"
 import { MarkdownEditor, MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
 import { Button } from "@/components/ui/button"
 import { SendFilesButton } from "@/components/SendFilesButton"
 import { cn } from "@/lib/utils"
+import { COUNT, LABEL, PRIMARY_FILL, QUIET_ACTION, SelectShell } from "./panelStyles"
 import { formatTaskTime } from "./taskTime"
 import type { ApiTarget } from "@/lib/api"
-
-/** Shared with the panel: the label, the field fill and the quiet action. */
-const LABEL = "text-[11.5px] font-medium tracking-[.02em] text-muted-foreground"
-const COUNT = "font-mono text-[11px] tabular-nums text-muted-foreground opacity-75"
-const QUIET_ACTION = "h-6 rounded-[7px] px-2.5 text-[12px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
 
 function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `comment-${Date.now()}-${Math.random()}`
@@ -115,7 +111,7 @@ export default function TaskComments({
           <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
             <header className="flex min-w-0 items-center gap-2">
               <strong className="shrink-0 font-mono text-[11.5px] font-medium">{comment.author}</strong>
-              {asking.has(comment.id) && <span className="inline-flex h-[17px] shrink-0 items-center rounded-[5px] bg-[color-mix(in_oklab,var(--primary)_12%,transparent)] px-1.5 text-[10.5px] font-medium text-primary">waiting for answer</span>}
+              {asking.has(comment.id) && <span className={cn("inline-flex h-[17px] shrink-0 items-center rounded-[5px] px-1.5 text-[10.5px] font-medium", PRIMARY_FILL)}>waiting for answer</span>}
               <span className="task-comment-actions ml-auto flex shrink-0 items-center gap-1">
                 <time className="font-mono text-[11px] tabular-nums text-muted-foreground" dateTime={comment.created_at}
                   title={new Date(comment.created_at).toLocaleString()}>{formatTaskTime(comment.created_at)}</time>
@@ -133,14 +129,11 @@ export default function TaskComments({
     <form key="form" className="rounded-[8px] bg-muted p-3" onSubmit={(event) => void submit(event)}>
       <label className="flex min-w-0 items-center gap-2">
         <span className={LABEL}>Ask</span>
-        <span className="relative inline-flex min-w-0">
-          <select aria-label="Ask" value={ask.principal} onChange={(event) => setAsk({ assignee, principal: event.target.value })}
-            className="h-6 w-full min-w-0 appearance-none rounded-[8px] border-0 bg-card pr-7 pl-2.5 text-[11.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <option value="">No explicit answer needed</option>
-            {choices.map((principal) => <option key={principal} value={principal}>{principal}</option>)}
-          </select>
-          <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 size-2.5 -translate-y-1/2 opacity-45" />
-        </span>
+        <SelectShell aria-label="Ask" className="h-6 bg-card pl-2.5 text-[11.5px] md:text-[11.5px]"
+          value={ask.principal} onChange={(event) => setAsk({ assignee, principal: event.target.value })}>
+          <option value="">No explicit answer needed</option>
+          {choices.map((principal) => <option key={principal} value={principal}>{principal}</option>)}
+        </SelectShell>
       </label>
       <div>
         <div className="flex items-center gap-2 pb-[7px]">
@@ -165,14 +158,13 @@ export default function TaskComments({
       <div className="flex items-center gap-1.5">
         <span className={LABEL}>Comments</span>
         <span className={COUNT}>{comments.length}</span>
-        <label className="relative ml-auto inline-flex items-center">
+        <label className="ml-auto inline-flex items-center">
           <span className="sr-only">Comment order</span>
-          <select aria-label="Comment order" value={order} onChange={(event) => onOrderChange(event.target.value as "newest" | "oldest")}
-            className="h-6 appearance-none rounded-[8px] border-0 bg-muted pr-7 pl-2.5 text-[11.5px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <SelectShell aria-label="Comment order" className="h-6 pl-2.5 text-[11.5px] md:text-[11.5px] text-muted-foreground"
+            value={order} onChange={(event) => onOrderChange(event.target.value as "newest" | "oldest")}>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
-          </select>
-          <ChevronDown aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 size-2.5 -translate-y-1/2 opacity-45" />
+          </SelectShell>
         </label>
       </div>
       {formFirst ? [commentForm, commentList] : [commentList, commentForm]}
