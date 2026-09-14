@@ -42,6 +42,7 @@ describe("SettingsPage", () => {
       .toHaveAttribute("href", "/servers/remote-1/settings/advanced");
     expect(screen.getByRole("link", { name: "Usage" }))
       .toHaveAttribute("href", "/servers/remote-1/settings/advanced/usage");
+    expect(screen.queryByRole("link", { name: "Evals" })).not.toBeInTheDocument();
   });
 
   it("adds settings contributions under the selected server", async () => {

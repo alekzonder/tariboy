@@ -400,7 +400,7 @@ func (h *Host) Start(rec Record) error {
 	//
 	// SECURITY: the inherited daemon env is scrubbed of the real upstream provider
 	// keys (scrubProviderKeys) BEFORE the plugin's own vars are appended, so an
-	// eval/llm-judge plugin can only ever reach an LLM through the scoped proxy
+	// plugins can only ever reach an LLM through the scoped proxy
 	// token — the real key never reaches the plugin process. This isolation is
 	// structural (the key is absent from the child env), not merely by convention.
 	spec := SpawnSpec{

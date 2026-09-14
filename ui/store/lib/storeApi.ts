@@ -102,11 +102,6 @@ export interface ManifestHarness {
   effort?: string;
   interactive: boolean;
 }
-export interface ManifestEval {
-  name: string;
-  type: string;
-  prompt: string;
-}
 export interface StoreManifest {
   schema_version: number;
   name: string;
@@ -119,7 +114,6 @@ export interface StoreManifest {
   harness: ManifestHarness;
   env: Record<string, string>;
   policy: { tools_allow?: string[]; tools_deny?: string[] };
-  evals: ManifestEval[];
   layers: { name: string; sha256: string }[];
 }
 

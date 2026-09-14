@@ -77,7 +77,6 @@ const manifest = (overrides: Partial<ImageManifest> = {}): ImageManifest => ({
   },
   env: null,
   policy: {},
-  evals: null,
   layers: null,
   ...overrides,
   skills: overrides.skills ?? null,

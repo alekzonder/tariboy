@@ -3,7 +3,7 @@ import { useImageContext } from "@/components/ImageLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Read-only presentation of an image manifest. Every section renders only when
-// it has content, so a lean image (no plugins/evals/env) stays uncluttered.
+// it has content, so a lean image (no plugins/env) stays uncluttered.
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -39,7 +39,7 @@ export default function ImageOverview() {
   const { manifest } = useImageContext();
   if (!manifest) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
-  const { harness, policy, plugins, env, evals, parents, requires_secrets, layers } = manifest;
+  const { harness, policy, plugins, env, parents, requires_secrets, layers } = manifest;
   const envKeys = env ? Object.keys(env) : [];
 
   return (
@@ -92,18 +92,6 @@ export default function ImageOverview() {
         </Section>
       ) : null}
 
-      {evals?.length ? (
-        <Section title="Evals">
-          {evals.map((e) => (
-            <div key={e.name} className="space-y-0.5">
-              <div className="font-mono text-xs">
-                {e.name} <span className="text-muted-foreground">({e.type})</span>
-              </div>
-              <div className="whitespace-pre-wrap text-xs text-muted-foreground">{e.prompt}</div>
-            </div>
-          ))}
-        </Section>
-      ) : null}
 
       {parents?.length ? (
         <Section title="Parents">

@@ -63,7 +63,6 @@ Types are defined in `internal/plugins`:
   `POST /api/plugin/publish`.
 - **`channel-sink`** receives subscribed bus messages at `POST /deliver`, with
   durable redelivery and a dead-letter queue.
-- **`eval`** receives iteration checks at `POST /evaluate`.
 - **`tool`** advertises an agent-facing capability out of band.
 - **`harness`** is recognized, but its runtime wiring is deferred.
 

@@ -17,7 +17,6 @@ const ADVANCED = [
   ["usage", "Usage"],
   ["budgets", "Budgets"],
   ["rules", "Rules"],
-  ["evals", "Evals"],
   ["plugins", "Plugins"],
   ["ops", "Ops"],
   ["daemons", "Daemons"],
@@ -140,7 +139,7 @@ export function AppearanceSettings() {
 export function AdvancedSettingsIndex() {
   return (
     <Copy title="Advanced">
-      Inspect organization-wide usage, budgets, policy, evaluations, plugins, groups, and raw event channels.
+      Inspect organization-wide usage, budgets, policy, plugins, groups, and raw event channels.
       These tools are intentionally separated from the everyday agent workflow.
     </Copy>
   );

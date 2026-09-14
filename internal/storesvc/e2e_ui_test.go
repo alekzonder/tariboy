@@ -65,7 +65,7 @@ func TestStoreUIE2EOverTLS(t *testing.T) {
 		SchemaVersion: 1, Name: "demo", Tag: "latest", BuiltAt: "2026-07-06T00:00:00Z",
 		Parents: []string{}, Plugins: []image.ManifestPlugin{{Name: "status"}},
 		RequiresSecrets: []string{}, Harness: image.ManifestHarness{Type: "claude"},
-		Env: map[string]string{}, Evals: []image.ManifestEval{}, Layers: []image.Layer{},
+		Env: map[string]string{}, Layers: []image.Layer{},
 	}
 	blob, digest := buildArchive(t, m)
 	put, _ := http.NewRequest(http.MethodPut, ts.URL+"/v1/images/demo/latest", bytes.NewReader(blob))

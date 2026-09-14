@@ -6,7 +6,7 @@ sidebar:
   icon: activity
 ---
 
-Every LLM call an agent (or an `llm-judge` eval, or any plugin) makes is routed
+Every LLM call an agent or plugin makes is routed
 through the daemon's **in-process AI proxy** (`internal/aiproxy`). The proxy:
 
 - **routes** to the configured provider and model;

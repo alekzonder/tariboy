@@ -143,10 +143,6 @@ export default function RepoDetail() {
               <span className="text-muted-foreground">requires_secrets: </span>
               {manifest.requires_secrets.length === 0 ? "none" : manifest.requires_secrets.join(", ")}
             </div>
-            <div>
-              <span className="text-muted-foreground">evals: </span>
-              {manifest.evals.length === 0 ? "none" : manifest.evals.map((e) => e.name).join(", ")}
-            </div>
           </CardContent>
         </Card>
       )}

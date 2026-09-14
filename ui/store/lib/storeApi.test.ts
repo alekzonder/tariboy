@@ -88,7 +88,7 @@ describe("storeApi envelope + bearer", () => {
       "fetch",
       mockFetch(200, {
         ok: true,
-        result: { schema_version: 1, name: "x", tag: "latest", built_at: "t", parents: [], plugins: [], requires_secrets: [], harness: { type: "cli", interactive: false }, env: {}, policy: {}, evals: [], layers: [] },
+        result: { schema_version: 1, name: "x", tag: "latest", built_at: "t", parents: [], plugins: [], requires_secrets: [], harness: { type: "cli", interactive: false }, env: {}, policy: {}, layers: [] },
       }),
     );
     const m = await getManifest("x", "latest");

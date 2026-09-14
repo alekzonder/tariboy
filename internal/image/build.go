@@ -292,21 +292,6 @@ func Build(imgFile *imagefile.Imagefile, ref Ref, store *Store, clock func() tim
 		}
 		manPlugins = append(manPlugins, mp)
 	}
-	evals := make([]ManifestEval, 0, len(imgFile.Evals))
-	for _, e := range imgFile.Evals {
-		prompt := e.Prompt
-		if prompt != "" {
-			// imagefile.validate resolved Prompt to an existing absolute path; inline
-			// its CONTENT so the criteria/script survives to runtime (the image never
-			// packs the file, and the build-host path is meaningless on another host).
-			b, err := os.ReadFile(prompt)
-			if err != nil {
-				return Manifest{}, fmt.Errorf("read eval %q prompt %q: %w", e.Name, e.Prompt, err)
-			}
-			prompt = string(b)
-		}
-		evals = append(evals, ManifestEval{Name: e.Name, Type: e.Type, Prompt: prompt})
-	}
 	if parents == nil {
 		parents = []string{}
 	}
@@ -321,7 +306,6 @@ func Build(imgFile *imagefile.Imagefile, ref Ref, store *Store, clock func() tim
 		Harness:         harness,
 		Env:             env,
 		Policy:          policy,
-		Evals:           evals,
 		Layers:          layers,
 	}
 	digest, err := store.writeArchive(ref, man, prompt, tail, body, imgFile.Skills, opts.mutableRef, opts.archiveOut)

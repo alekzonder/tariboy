@@ -47,13 +47,6 @@ type GroupProvisioner interface {
 	Inspect(name string) (map[string]any, error)
 }
 
-// EvalRunner runs an image's declared evals after an iteration completes (spec
-// §7.3/§8). RunEvals must be non-blocking. nil disables eval execution. The
-// interface lives here so loop does not import evals (mirrors GroupProvisioner).
-type EvalRunner interface {
-	RunEvals(ag agent.Agent, iterationID, status string)
-}
-
 type ScriptResultNotifier interface {
 	Wake()
 }
@@ -81,7 +74,6 @@ type ManagerConfig struct {
 	Emit                func(events.Event)
 	Proxy               ProxyBinder
 	Groups              GroupProvisioner
-	Evals               EvalRunner
 	// AuditFor returns the shared per-agent audit recorder. Wired by the daemon to
 	// its audit.Registry so recordEvent, the engine lifecycle sink, and the
 	// runner's log tailer all share one *audit.Log per agent. Nil disables audit.
@@ -1170,7 +1162,6 @@ func (m *Manager) start(ag agent.Agent) error {
 	}
 	engine.metrics = m.cfg.Metrics
 	engine.usageLookup = m.cfg.UsageLookup
-	engine.evals = m.cfg.Evals
 	if m.cfg.Bus != nil {
 		engine.SetMessagePeek(func() (bool, error) { return m.cfg.Bus.HasPending(agName) })
 	}
@@ -2684,7 +2675,7 @@ func confineToWorkdir(workdir, path string) (string, error) {
 }
 
 // confineReferencedPath rejects a path referenced INSIDE an agent-authored
-// Tariboyfile (a skill dir, prompt filepath, or eval prompt) if it escapes
+// Tariboyfile (a skill dir or prompt filepath) if it escapes
 // the agent workdir. imagefile.Parse already resolved p to an absolute path
 // (mirroring resolveExisting); here we clean it, follow symlinks, and require it
 // to lie within realWork — closing absolute-outside, ".." traversal, and

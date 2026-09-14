@@ -23,7 +23,6 @@ func TestManifestRoundTrip(t *testing.T) {
 		Harness:         ManifestHarness{Type: "claude", Model: "sonnet", Effort: "medium", Interactive: true},
 		Env:             map[string]string{"APP_ENV": "prod"},
 		Policy:          ManifestPolicy{ToolsAllow: []string{"context.*"}, ToolsDeny: []string{"scripts.*"}},
-		Evals:           []ManifestEval{{Name: "t", Type: "llm-judge", Prompt: "/abs/eval.md"}},
 		Layers:          []Layer{{Name: "system", SHA256: "aa"}, {Name: "task.md", SHA256: "bb"}, {Name: "tail", SHA256: "cc"}},
 	}
 	b, err := json.Marshal(m)

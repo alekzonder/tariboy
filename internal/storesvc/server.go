@@ -289,7 +289,7 @@ func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleManifest returns the parsed image manifest for a repo:tag (plugins,
-// harness, requires_secrets, evals, parents, digest). Repo.Inspect reads
+// harness, requires_secrets, parents, digest). Repo.Inspect reads
 // manifest.json from the archive and re-checks schema_version; it is the read
 // model the store UI needs (the catalog only carries {name,tags}).
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {

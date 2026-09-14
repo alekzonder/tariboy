@@ -64,7 +64,7 @@ Clone loads the source inspect projection from that agent's explicit host,
 leaves the unique name blank, and prefills every persisted agent-row
 configuration field, including raw configured CWD and message limits. It does
 not copy secrets, history, runtime evidence, messages, subscriptions, scripts,
-workdir contents, retention/evals, budgets, or proxy policy. The target host
+workdir contents, retention, budgets, or proxy policy. The target host
 and image remain editable, and every follow-up request stays pinned to that
 explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request

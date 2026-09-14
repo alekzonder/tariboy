@@ -27,10 +27,6 @@ type fakeRunner struct {
 	seen     []string // iteration ids
 }
 
-type countingEvalRunner struct{ calls atomic.Int32 }
-
-func (r *countingEvalRunner) RunEvals(agent.Agent, string, string) { r.calls.Add(1) }
-
 func (f *fakeRunner) Run(_ context.Context, _ agent.Agent, _, id, _ string) (Outcome, error) {
 	o := f.outcomes[min(f.calls, len(f.outcomes)-1)]
 	f.seen = append(f.seen, id)
@@ -445,8 +441,6 @@ func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
 	clk := func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
 	ag.OnError = "stop"
 	e := NewEngine(ag, as, r, slog.New(slog.NewTextHandler(io.Discard, nil)), clk)
-	evals := &countingEvalRunner{}
-	e.evals = evals
 	var phases, audits []string
 	e.SetEmit(func(event events.Event) { phases = append(phases, event.Data["phase"].(string)) })
 	e.SetAudit(func(typ, _, _ string, _ map[string]any) { audits = append(audits, typ) })
@@ -457,8 +451,8 @@ func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
 	if got := e.runOnce(context.Background(), "manual", ""); got != TickSkipped {
 		t.Fatalf("runOnce = %q, want skipped", got)
 	}
-	if evals.calls.Load() != 0 || len(phases) != 1 || phases[0] != "start" || len(audits) != 1 || audits[0] != "iteration_started" || closes != 1 || completions != 0 {
-		t.Fatalf("evals/phases/audits/closes/completions = %d/%v/%v/%d/%d", evals.calls.Load(), phases, audits, closes, completions)
+	if len(phases) != 1 || phases[0] != "start" || len(audits) != 1 || audits[0] != "iteration_started" || closes != 1 || completions != 0 {
+		t.Fatalf("phases/audits/closes/completions = %v/%v/%d/%d", phases, audits, closes, completions)
 	}
 	it, err := as.GetIteration(ag.Name, r.seen[0])
 	if err != nil {

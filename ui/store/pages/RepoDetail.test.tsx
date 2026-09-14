@@ -30,7 +30,7 @@ describe("RepoDetail", () => {
       schema_version: 1, name: "demo", tag: "latest", digest: "deadbeef", built_at: "2026-07-06T00:00:00Z",
       parents: [], plugins: [{ name: "status", version: ">=1.0" }], requires_secrets: ["OPENAI_API_KEY"],
       harness: { type: "claude", model: "opus", interactive: false }, env: {}, policy: {},
-      evals: [{ name: "smoke", type: "prompt", prompt: "hi" }], layers: [],
+      layers: [],
     });
     renderAt("/repo/demo");
     await waitFor(() => expect(screen.getByText("deadbeef")).toBeInTheDocument());
@@ -52,7 +52,7 @@ describe("RepoDetail", () => {
       schema_version: 1, name: "demo", tag: t, digest: `dig-${t}`, built_at: "t",
       parents: [], plugins: [], requires_secrets: [],
       harness: { type: "claude", model: `model-${t}`, interactive: false }, env: {}, policy: {},
-      evals: [], layers: [],
+      layers: [],
     });
 
     (getTags as ReturnType<typeof vi.fn>).mockResolvedValue({

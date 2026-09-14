@@ -31,12 +31,6 @@ type Policy struct {
 	ToolsDeny  []string `yaml:"tools_deny"`
 }
 
-type Eval struct {
-	Name   string `yaml:"name"`
-	Type   string `yaml:"type"`
-	Prompt string `yaml:"prompt"`
-}
-
 // Prompt is either a plain body-prompt filepath (Name == "") or a
 // {name, filepath} entry. A Name of "system:<plugin>" overrides that
 // plugin's SYSTEM fragment.
@@ -85,7 +79,6 @@ type Imagefile struct {
 	Policy          Policy
 	Prompts         []Prompt
 	Skills          []string
-	Evals           []Eval
 	Dir             string // directory holding the Tariboyfile
 }
 
@@ -100,7 +93,6 @@ type rawImagefile struct {
 	Policy          Policy            `yaml:"policy"`
 	Prompts         []Prompt          `yaml:"prompts"`
 	Skills          []string          `yaml:"skills"`
-	Evals           []Eval            `yaml:"evals"`
 }
 
 type rawHarness struct {
@@ -141,7 +133,6 @@ func Parse(path string) (*Imagefile, error) {
 		Policy:          raw.Policy,
 		Prompts:         raw.Prompts,
 		Skills:          raw.Skills,
-		Evals:           raw.Evals,
 		Dir:             filepath.Dir(path),
 	}
 	if raw.Harness != nil {
@@ -189,16 +180,6 @@ func (im *Imagefile) validate() error {
 			return fmt.Errorf("skill %q: %w", im.Skills[i], err)
 		}
 		im.Skills[i] = abs
-	}
-	for i := range im.Evals {
-		if im.Evals[i].Prompt == "" {
-			continue
-		}
-		abs, err := im.resolveExisting(im.Evals[i].Prompt, false)
-		if err != nil {
-			return fmt.Errorf("eval %q prompt %q: %w", im.Evals[i].Name, im.Evals[i].Prompt, err)
-		}
-		im.Evals[i].Prompt = abs
 	}
 	return nil
 }
