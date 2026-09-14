@@ -1,3 +1,25 @@
+## [0.61.0] - 2026-09-14
+
+### Added
+
+- Retry Store image builds after immutable-tag conflicts with an alternative target image name or tag.
+- Show dependency titles and statuses in task details.
+
+### Changed
+
+- Simplify the task detail panel around the compact operator template.
+
+### Removed
+
+- Remove Judge reviews, automation, controlled improvements, and their CLI, API, UI, documentation, and persisted state.
+
+### Fixed
+
+- Reject immutable Store image targets before restoring skill locks, release build controls promptly, and prevent stale inventory reads from replacing newer build results.
+- Allow Goal wake delivery to recover after an earlier delivery reaches the dead-letter queue.
+
+[0.61.0]: https://github.com/alekzonder/tariboy/compare/v0.60.0...v0.61.0
+
 ## [0.60.0] - 2026-09-14
 
 ### Added
