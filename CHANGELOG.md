@@ -1,3 +1,27 @@
+## [0.60.0] - 2026-09-14
+
+### Added
+
+- Copy the original Markdown from task comments.
+- Browse image registry names and tags with coherent details for the selected image version.
+- Show each agent’s active image version and the next available image version.
+- Filter console agents by agent name or server label.
+
+### Changed
+
+- Redesign the console shell, task table, task detail panel, and application theme around the denser metal-and-blue operator interface.
+- Publish documentation automatically after a successful Desktop release.
+
+### Fixed
+
+- Preserve unsupported Markdown content when editing task text in the rich editor.
+- Accept `argument-hint` in Agent Skill frontmatter.
+- Report latest-image inspection errors and retain existing agent image status when inventory refresh fails.
+- Use English labels in application settings.
+- Keep task detail controls usable at narrow widths and preserve Queue settings labels.
+
+[0.60.0]: https://github.com/alekzonder/tariboy/compare/v0.59.0...v0.60.0
+
 ## [0.59.0] - 2026-09-11
 
 ### Added
