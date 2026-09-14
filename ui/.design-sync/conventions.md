@@ -1,10 +1,10 @@
 ## How to build with Tariboy UI
 
-Tariboy UI is the component library of the Tariboy desktop app (Tauri shell, web
-UI). It is **shadcn/ui on Tailwind v4**, warm sand neutrals with a single steel
-accent, Geist Variable, built for dense operator tooling: agent consoles, task
-trees, image and host tables. Designs should read as a control surface, not a
-marketing page.
+Tariboy UI is the component library of the Tariboy desktop app (Tauri shell,
+web UI). It is **shadcn/ui on Tailwind v4**, achromatic metal neutrals (hue 250,
+chroma <= .008) with a single blue accent, Geist Variable, built for dense
+operator tooling: agent consoles, task trees, image and host tables. Designs
+should read as a control surface, not a marketing page.
 
 ### Setup
 
@@ -41,7 +41,13 @@ The same names exist as CSS custom properties for inline styles and for anything
 the utilities don't cover: `--background --foreground --card --popover --primary
 --secondary --muted --accent --destructive --border --input --ring --radius`,
 each with a `-foreground` partner where it carries text, plus `--sidebar*` and
-`--chart-1…5`. 49 in `:root`, 38 redefined under `.dark`.
+`--chart-1…5`. 47 in `:root`, 39 redefined under `.dark`.
+
+`--background` is a window-wide **gradient**, and `background-color` and
+`color-mix()` both drop a gradient value. `--background-base` carries the flat
+tone for them, and `bg-background` resolves to it — only the window itself
+paints `--background`. Reach for `--background-base` in any inline
+`background-color` or `color-mix(…, var(--background-base))`.
 
 **Status is a system, not a color choice.** A fill is only for what is alive and
 what needs a person; everything else is quiet text: `--status-running` (in

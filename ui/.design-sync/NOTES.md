@@ -196,6 +196,28 @@ Documented limits, not defects — they ship importable with types and docs:
   `AttachButton`, and `AlertDialogContent size="sm"`. Their previews are
   plausible compositions rather than lifted usage.
 
+## Theme reconcile (metal neutrals + blue accent)
+
+The DS export and the app's theme diverged once and were reconciled once; the
+shape of that divergence is worth knowing because it can recur.
+
+- `ui/src/index.css` (`:root` / `.dark`) is the **only** source of theme tokens.
+  `d0c3b27` moved the neutrals off warm sand (hue 85-88) onto achromatic metal
+  (hue 250, chroma <= .008) and made the content islands pure white;
+  `f3cb765` then moved the accent from teal `oklch(58% .14 188)` to blue
+  `oklch(54% .125 252)`. The export's last sync before both was `41e4cd4`, so
+  the uploaded `tokens/theme.css` advertised sand for two commits.
+- Nothing in the app overrides the theme at runtime. If a future screenshot and
+  the export disagree on colour, the answer is almost always "the export is
+  stale" - re-sync before looking for a second style layer.
+- `--background` is a gradient now. `--background-base` is the flat companion
+  that `background-color` and `color-mix()` need, and Tailwind's
+  `--color-background` resolves to it. `conventions.md` states this; keep it
+  stated, because a design agent reaching for `var(--background)` in a
+  `background-color` gets nothing.
+- Any handoff document claiming a **teal** accent predates `f3cb765` and is
+  stale. The accent is blue by decision, not by drift.
+
 ## Known render warns (triaged — not new findings)
 
 - `[RENDER] agents/AgentWorkspace: root empty` on a FULL render check, with
@@ -525,12 +547,13 @@ the driver. After any build, `ls ds-bundle/fonts/` must show six files.
 - `annotate-tokens.mjs`'s theme-scope list (`:root`, `:root,:host`, `.dark`,
   `html`, `:host`) is what separates tokens from noise. If the app ever moves
   its tokens to another scope (a `[data-theme]` attribute, a `@layer theme`
-  block, a media-query dark mode), that scope must be added or all 83 real
-  tokens get demoted to `@kind other` in one silent step - and
+  block, a media-query dark mode), that scope must be added or every real
+  token gets demoted to `@kind other` in one silent step - and
   `make-tokens.mjs`, which reads the same rule, would empty the shipped
   `tokens/theme.css` alongside it (it throws rather than write an empty one).
   The build log line is the tripwire: it prints how many were kept as tokens -
-  if that number falls off 83 without a deliberate token change, stop.
+  **93 declarations / 51 distinct names** at the metal/blue theme (was 83 at the
+  sand theme). If that number drops without a deliberate token change, stop.
 
 - The final validate runs with `--no-render-check` (see above). If the bundle
   ever shrinks back under roughly 4 MB, drop the flag and confirm a clean run.
@@ -559,6 +582,17 @@ the driver. After any build, `ls ds-bundle/fonts/` must show six files.
   `MemoryRouter`/`Routes`/`Route`.
 - Four components are knowingly below a rich preview (see the section above).
   Re-check them if the app ever exposes the seams named there.
+- Three of the five style-layer primitives added in `7afb5d6` - `PriorityTag`,
+  `Segmented`, `StatusPill` - flagged `[GRID_OVERFLOW]` on their first validate,
+  because their in-context stories (`InTaskTable`, `InFilterBar`, `InTaskRow`)
+  are full rows and the grid cell crops them. Fixed the way the validator names:
+  `cfg.overrides.<Name>.cardMode = "column"`. `AgentRow` and `StatusDot` were
+  already narrow enough. A new in-context story on a small primitive will very
+  likely need the same override.
+- `Segmented` is a flex container, so a **block** parent stretches its `--muted`
+  trough to the full card width - a shape no call site renders. Its previews
+  wrap each instance in `display:flex`, mirroring the real filter row. Any new
+  Segmented story needs that wrapper or the card teaches the wrong thing.
 
 - `componentSrcMap` is a hand-maintained enumeration — it silently goes stale when
   components are added or renamed in the repo. Diff it against
