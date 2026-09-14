@@ -107,11 +107,15 @@ longer installs a separate built-in Store tree.
 Only the registration's name and source are persisted in the daemon database.
 Viewing a Store reads the current disk inventory and `image_version` values;
 there is no saved image list to become stale. For each valid source, the detail
-also shows the newest built version with the same default image name and marks
-the source when that newest version is absent or differs from its declared
-version. A successful **Build** reloads that inventory. A missing `images/`
-directory shows an empty list. An invalid image reports its own error while
-valid sibling images remain visible.
+inspects `<image_name>:latest` directly and shows that manifest's
+`image_version`. It marks an update only when the source and latest both declare
+versions and those values differ. Missing latest, an unversioned source or
+latest, and a damaged latest artifact remain distinct states. A damaged latest
+does not hide healthy siblings or fall back to another tag. A successful
+**Build** reloads the inventory and reports both the version tag and `latest`
+when the source is versioned. A missing `images/` directory shows an empty
+list. An invalid source reports its own error and disables its Build action
+while valid sibling images remain available.
 
 **Refresh** runs `git pull --ff-only` for both managed clones and local Git
 checkout roots, including Git worktrees. A local directory without its own
@@ -135,9 +139,12 @@ requires Node.js/npm and access to the skill sources. Private repositories use
 the server account's configured SSH or Git credential helpers. Configure access
 on that server before adding the Store; do not put credentials in its URL.
 
-The Store detail shows **Images**, their source and built versions, update
-highlighting, and **Build** actions. Built artifacts appear in the existing
-**Images** workspace. Stores do not yet expose standalone skills or plugins.
+The Store detail labels **Source image_version** and **Latest image_version**
+explicitly, highlights version mismatches, and keeps manual **Build** available
+when the versions match. This comparison cannot detect changed source bytes
+when `image_version` stays the same; use manual Build after such a change.
+Built artifacts appear in the existing **Images** workspace. Stores do not yet
+expose standalone skills or plugins.
 
 ## Image versions
 

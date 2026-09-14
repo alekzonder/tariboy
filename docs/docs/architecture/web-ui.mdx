@@ -164,9 +164,16 @@ unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
 on the route-selected daemon. Its detail shows the current disk-backed image
-inventory, source and newest built versions, update highlighting, and
-diagnostics, with Refresh, Remove and Build actions. A successful build reloads
-the detail so its version and update state reflect the daemon immediately.
+inventory, each source `image_version`, and the `image_version` read directly
+from that image's `latest` manifest. It distinguishes missing latest,
+unversioned source or latest, source validation errors, and latest inspection
+errors; it highlights only known version mismatches and never reports an
+unknown comparison as up to date. Source errors disable Build, while missing or
+damaged latest and equal versions retain the manual Build action. A successful
+default versioned build reports publication of both the version tag and
+`latest`, then reloads the detail so its comparison reflects the daemon
+immediately. Version comparison does not detect changed bytes when the source
+keeps the same `image_version`.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources

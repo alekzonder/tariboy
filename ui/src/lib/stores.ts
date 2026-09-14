@@ -13,6 +13,8 @@ export interface StoreImage {
   built_version: string;
   update_needed: boolean;
   error?: string;
+  latest_status: "built" | "missing" | "unversioned" | "error";
+  latest_error?: string;
 }
 
 export interface StoreDetail extends Store {
