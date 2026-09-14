@@ -39,7 +39,7 @@ function stubFetch() {
           digest: bare ? "sha256:bare" : "sha256:deadbeefcafef00d",
           built_at: "2026-07-12T00:00:00Z", parents: [], plugins: [], requires_secrets: [],
           harness: { type: "claude", interactive: false }, env: {},
-          policy: {}, evals: [], layers: [], bare,
+          policy: {}, layers: [], bare,
         };
       } else if (path.endsWith("/provenance")) {
         result = path.includes("bare%3Alatest")

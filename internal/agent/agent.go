@@ -587,17 +587,13 @@ func (s *Store) Delete(name string) error {
 // PurgeAgentData deletes every agent-keyed row Delete leaves behind, so a real
 // (purge) remove leaves nothing orphaned. Delete only clears iterations/secrets/
 // agents; these side-tables key by the agent name (subscriptions/schedules/
-// scripts/script_result_outbox/ai_requests/retention_policies/eval_results,
+// scripts/script_result_outbox/ai_requests/retention_policies,
 // plus subscription deliveries) or by the scope "agent:<name>"
 // (budgets/proxy_rules). All live in
 // the one SQLite DB. The deletes share one transaction so script completion
 // cannot enqueue a result between clearing scripts and clearing their outbox,
 // and any statement failure rolls the entire purge back. It is a no-op-safe
 // superset: rows that never existed simply match nothing.
-//
-// eval_results carries a direct agent column (populated at both runner insert
-// sites), so it is keyed on agent here rather than via an iteration subquery —
-// which sidesteps any ordering dependency on Delete's DELETE FROM iterations.
 func (s *Store) PurgeAgentData(name string) error {
 	scope := "agent:" + name
 	tx, err := s.db.Begin()
@@ -617,7 +613,6 @@ func (s *Store) PurgeAgentData(name string) error {
 		{`DELETE FROM script_result_outbox WHERE agent=?`, []any{name}},
 		{`DELETE FROM ai_requests WHERE agent=?`, []any{name}},
 		{`DELETE FROM retention_policies WHERE agent=?`, []any{name}},
-		{`DELETE FROM eval_results WHERE agent=?`, []any{name}},
 		{`DELETE FROM budgets WHERE scope=?`, []any{scope}},
 		{`DELETE FROM proxy_rules WHERE scope=?`, []any{scope}},
 	}

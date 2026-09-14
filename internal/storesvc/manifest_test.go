@@ -59,7 +59,6 @@ func TestManifestEndpoint(t *testing.T) {
 		RequiresSecrets: []string{"OPENAI_API_KEY"},
 		Harness:         image.ManifestHarness{Type: "claude", Model: "opus", Interactive: false},
 		Env:             map[string]string{},
-		Evals:           []image.ManifestEval{{Name: "smoke", Type: "prompt", Prompt: "hi"}},
 		Layers:          []image.Layer{},
 	}
 	blob, digest := buildArchive(t, m)

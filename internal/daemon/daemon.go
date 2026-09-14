@@ -24,7 +24,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/commands"
-	"github.com/alekzonder/tariboy/internal/evals"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -527,29 +526,11 @@ func Run(ctx context.Context, o Options) error {
 	retPruner := retention.NewPruner(st, as, retPolicies, p.AgentsDir(), time.Now, log)
 	retRunner := retention.NewRunner(retPruner, time.Hour, time.After, log)
 
-	// Eval runner (spec §7.3/§8): an ingester-style worker that, after each
-	// iteration, dispatches the image's declared evals to the eval plugin and
-	// persists a verdict keyed by iteration+image_digest+eval_name. For llm-judge
-	// it mints a per-eval proxy token (via proxy) so the AI call is accounted and
-	// the real key stays server-side. RunEvals is non-blocking; Run drains the
-	// queue on cancel (drained before st.Close via the wg block below).
-	evalRunner := evals.NewRunner(evals.RunnerConfig{
-		Store:     evals.NewStore(st, time.Now),
-		ImgStore:  imgStore,
-		Plugins:   pluginHost,
-		Minter:    proxy,
-		AgentsDir: p.AgentsDir(),
-		Clock:     time.Now,
-		Log:       log,
-	})
-	var _ loop.EvalRunner = evalRunner
-
 	manager := loop.NewManager(loop.ManagerConfig{
 		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), ShimBin: shimBin,
 		ImgStore: imgStore, Store: as, Log: log, Clock: time.Now, Bus: channelBus,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: hub.Emit, Proxy: proxy,
 		Groups:             groupProv,
-		Evals:              evalRunner,
 		Tasks:              taskService,
 		ExternalPlugins:    plugins.ResolveEnabledInstalledMetadata(p.PluginsDir(), pluginStore),
 		Spawner:            o.Spawner,
@@ -697,7 +678,7 @@ func Run(ctx context.Context, o Options) error {
 	// their final flush/refresh before the store closes.
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(11)
+	wg.Add(10)
 	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
 	go func() {
 		defer wg.Done()
@@ -714,14 +695,6 @@ func Run(ctx context.Context, o Options) error {
 	go func() {
 		defer wg.Done()
 		ingester.Run(gctx)
-	}()
-	// Eval worker: drains queued post-iteration evals. cancel()+wg.Wait() (below,
-	// LIFO before pluginHost.StopAll and st.Close) lets it best-effort drain its
-	// queue while the plugin host and store are still live; an llm-judge queued at
-	// the instant of shutdown records an "error" verdict if the proxy is gone.
-	go func() {
-		defer wg.Done()
-		evalRunner.Run(gctx)
 	}()
 	go func() {
 		defer wg.Done()

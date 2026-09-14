@@ -737,11 +737,6 @@ export interface ImageManifestPolicy {
   tools_allow?: string[];
   tools_deny?: string[];
 }
-export interface ImageManifestEval {
-  name: string;
-  type: string;
-  prompt: string;
-}
 export interface ImageManifest {
   image_version?: string;
   schema_version: number;
@@ -756,7 +751,6 @@ export interface ImageManifest {
   harness?: ImageManifestHarness;
   env: Record<string, string> | null;
   policy?: ImageManifestPolicy;
-  evals: ImageManifestEval[] | null;
   layers: PromptLayer[] | null;
   bare?: boolean;
   prompt_template_sha256?: string;

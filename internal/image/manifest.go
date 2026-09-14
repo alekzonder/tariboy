@@ -31,12 +31,6 @@ type ManifestPolicy struct {
 	ToolsDeny  []string `json:"tools_deny,omitempty"`
 }
 
-type ManifestEval struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Prompt string `json:"prompt"`
-}
-
 // Layer records one content-addressed piece of the prompt (system, each body
 // prompt file, tail).
 type Layer struct {
@@ -60,7 +54,6 @@ type Manifest struct {
 	Harness              ManifestHarness   `json:"harness"`
 	Env                  map[string]string `json:"env"`
 	Policy               ManifestPolicy    `json:"policy"`
-	Evals                []ManifestEval    `json:"evals"`
 	Layers               []Layer           `json:"layers"`
 	PromptTemplateSHA256 string            `json:"prompt_template_sha256,omitempty"`
 	// Bare marks an instructions-free image: the runner launches the harness

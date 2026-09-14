@@ -113,7 +113,6 @@ beforeEach(() => {
     harness: { type: "codex", interactive: false },
     env: null,
     policy: {},
-    evals: null,
     layers: null,
   });
   vi.mocked(startAgent).mockResolvedValue({ name: "new-agent", action: "start" });

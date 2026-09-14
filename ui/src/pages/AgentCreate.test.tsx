@@ -25,7 +25,7 @@ function mockApi(posts: unknown[], createSucceeds = true, deferOtherManifest = f
         schema_version: 1, name: "img", tag: "1", built_at: "2026-08-11T00:00:00Z",
         parents: null, plugins: null, requires_secrets: null,
         harness: { type: "codex", model: "gpt-5", effort: "high", interactive: false },
-        env: null, policy: {}, evals: null, layers: null,
+        env: null, policy: {}, layers: null,
       } });
     }
     if (path === "/api/images/other%3A1" && deferOtherManifest) {
@@ -35,7 +35,7 @@ function mockApi(posts: unknown[], createSucceeds = true, deferOtherManifest = f
       return resp({ ok: true, result: {
         schema_version: 2, name: "v2", tag: "latest", built_at: "2026-08-17T00:00:00Z",
         parents: null, plugins: [{ name: "context" }], requires_secrets: null,
-        env: null, evals: null, layers: null,
+        env: null, layers: null,
       } });
     }
     if (path.startsWith("/api/images"))

@@ -28,7 +28,6 @@ var knownTypes = map[string]bool{
 	"channel-sink":   true,
 	"harness":        true, // recognised; deep wiring deferred to Phase 2
 	"tool":           true, // recognised; deep wiring deferred to Phase 2
-	"eval":           true, // recognised; deep wiring deferred to Phase 2
 }
 
 // Provided is one channel a plugin fulfils for parameterized (query-like)

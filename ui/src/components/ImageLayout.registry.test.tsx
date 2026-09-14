@@ -11,7 +11,7 @@ vi.mock("@/components/DaemonProvider", () => ({ useOptionalDaemons: () => null }
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); setActiveDaemon(null); });
 const result = (value: unknown) => new Response(JSON.stringify({ ok: true, result: value }));
 const changed = () => new Response(JSON.stringify({ ok: false, error: { code: "image_changed", message: "Image changed" } }), { status: 409 });
-const manifest = (digest: string) => ({ schema_version: 2, name: "reviewer", tag: "latest", digest, image_version: digest === "old" ? "1.0.0" : "2.0.0", built_at: "", parents: [], plugins: [], skills: [], requires_secrets: [], env: null, evals: [], layers: [] });
+const manifest = (digest: string) => ({ schema_version: 2, name: "reviewer", tag: "latest", digest, image_version: digest === "old" ? "1.0.0" : "2.0.0", built_at: "", parents: [], plugins: [], skills: [], requires_secrets: [], env: null, layers: [] });
 
 it("reloads a changed template once with the new manifest and explicit route target", async () => {
  const host = await addDaemon({ label: "Route", baseURL: "https://route", token: "token" });

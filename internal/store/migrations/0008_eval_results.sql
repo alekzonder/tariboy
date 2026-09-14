@@ -1,4 +1,4 @@
--- Eval results (spec §7.3/§8): one verdict per (iteration, image version, eval).
+-- Legacy Evals data retained for safe upgrades after the Evals subsystem removal.
 -- Keyed by image_digest so results are attributed to the exact image version
 -- the iteration ran; the unique index backs the Insert upsert.
 CREATE TABLE eval_results (

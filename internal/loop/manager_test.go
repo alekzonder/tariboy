@@ -1299,8 +1299,6 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 	var releaseOnce sync.Once
 	releaseRunner := func() { releaseOnce.Do(func() { close(r.release) }) }
 	m, as, agentsDir, _ := newManager(t, r)
-	evals := &countingEvalRunner{}
-	m.cfg.Evals = evals
 	var finishEvents, closes atomic.Int32
 	m.cfg.Emit = func(event events.Event) {
 		if event.Type == "iteration" && event.Data["phase"] == "finish" {
@@ -1422,9 +1420,9 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 		}
 	}
 	stored, err := as.Get("smoke")
-	if err != nil || evals.calls.Load() != 0 || finishEvents.Load() != 0 || finishedAudits != 0 || closes.Load() != 1 || !stored.LoopEnabled || stored.ErrorReason != "" {
-		t.Fatalf("losing engine side effects: evals=%d finish_events=%d finish_audits=%d closes=%d agent=%#v err=%v",
-			evals.calls.Load(), finishEvents.Load(), finishedAudits, closes.Load(), stored, err)
+	if err != nil || finishEvents.Load() != 0 || finishedAudits != 0 || closes.Load() != 1 || !stored.LoopEnabled || stored.ErrorReason != "" {
+		t.Fatalf("losing engine side effects: finish_events=%d finish_audits=%d closes=%d agent=%#v err=%v",
+			finishEvents.Load(), finishedAudits, closes.Load(), stored, err)
 	}
 	if err := m.Stop("smoke"); err != nil {
 		t.Fatal(err)
@@ -2787,7 +2785,7 @@ func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
 
 // TestBuildImageForAgentConfinesReferencedPaths locks in the M15 Critical fix:
 // confineToWorkdir clamps only the Tariboyfile's OWN dir, but the file paths
-// REFERENCED inside it (skills:/prompts:/evals:) must also be confined to the
+// REFERENCED inside it (skills:/prompts:) must also be confined to the
 // agent workdir. Otherwise a semi-trusted image-creator authors a Tariboyfile
 // pointing skills: at an absolute host dir (/etc) or a relative-escape
 // (../../outside), and the daemon packs those host files' CONTENTS into a
@@ -3105,9 +3103,6 @@ func seedLeakedRows(t *testing.T, s *store.Store, name string) {
 	exec(`INSERT INTO ai_requests(id, ts, agent) VALUES(?,?,?)`, "air-1", "2026-07-13T00:00:00Z", name)
 	exec(`INSERT INTO budgets(scope) VALUES(?)`, "agent:"+name)
 	exec(`INSERT INTO retention_policies(agent) VALUES(?)`, name)
-	// eval_results carries a direct agent column, so purge keys on agent (not on
-	// the iteration subquery) and this row survives regardless of delete order.
-	exec(`INSERT INTO eval_results(id, iteration, agent) VALUES(?,?,?)`, "evr-1", "iter-1", name)
 	exec(`INSERT INTO proxy_rules(id, scope) VALUES(?,?)`, "pr-1", "agent:"+name)
 }
 
@@ -3130,7 +3125,6 @@ func leakedRowCount(t *testing.T, s *store.Store, name string) int {
 	count(`SELECT COUNT(*) FROM ai_requests WHERE agent=?`, name)
 	count(`SELECT COUNT(*) FROM budgets WHERE scope=?`, "agent:"+name)
 	count(`SELECT COUNT(*) FROM retention_policies WHERE agent=?`, name)
-	count(`SELECT COUNT(*) FROM eval_results WHERE agent=?`, name)
 	count(`SELECT COUNT(*) FROM proxy_rules WHERE scope=?`, "agent:"+name)
 	return total
 }

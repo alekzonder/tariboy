@@ -127,7 +127,6 @@ type Engine struct {
 	audit               func(typ, source, iterationID string, data map[string]any)
 	onClose             func(agent, iterationID string)
 	iterationCompleted  func(agent, iterationID string)
-	evals               EvalRunner
 	beforeLaunch        func(*agent.Agent) (activatedImage, error)
 
 	mu            sync.Mutex
@@ -697,12 +696,6 @@ func (e *Engine) runOnceGuarded(
 		if err := e.store.SetIterationDone(id, outcome.Productive); err != nil {
 			e.log.Error("set iteration done", "agent", e.ag.Name, "id", id, "err", err)
 		}
-	}
-	// Post-iteration evals (spec §7.3/§8): fire-and-forget onto the eval runner's
-	// queue AFTER the iteration row is final. Non-blocking, so the loop is never
-	// blocked; a missing eval plugin yields an "error" verdict, not a crash.
-	if e.evals != nil {
-		e.evals.RunEvals(e.ag, id, outcome.Status)
 	}
 	e.log.Info("iteration finished", "agent", e.ag.Name, "id", id, "status", outcome.Status)
 	e.emitIteration(id, trigger, outcome.Status, "finish")
