@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
-import { HostSwitcher } from "@/components/HostSwitcher";
 import { addDaemon } from "@/lib/daemons";
 import ImagesPage from "./ImagesPage";
 
@@ -43,12 +42,11 @@ function stubApi(calls: Call[]) {
   }));
 }
 
-function renderPage(withSwitcher = false) {
+function renderPage(hostId = "") {
   return render(
     <MemoryRouter>
       <DaemonProvider>
-        {withSwitcher && <HostSwitcher />}
-        <ImagesPage />
+        <ImagesPage hostId={hostId} />
       </DaemonProvider>
     </MemoryRouter>,
   );
@@ -84,37 +82,22 @@ describe("Images workspace", () => {
     }));
   });
 
-  it("marks bare terminal-only and exposes runnable artifact actions", async () => {
+  it("lists image names with import at the root and tag actions behind the name", async () => {
     const calls: Call[] = [];
     stubApi(calls);
     renderPage();
-
-    const bare = await screen.findByTestId("built-image-bare:latest");
-    expect(within(bare).getByText("Terminal-only")).toBeInTheDocument();
-    expect(within(bare).queryByRole("button", { name: /Remove/i })).not.toBeInTheDocument();
-    expect(within(bare).queryByRole("button", { name: /Export/i })).not.toBeInTheDocument();
-
-    const imported = screen.getByTestId("built-image-imported:v1");
-    expect(within(imported).getByText("Source CWD unavailable — imported artifact")).toBeInTheDocument();
-    expect(within(imported).getByRole("button", { name: "Export imported:v1" })).toBeEnabled();
-
-    const built = screen.getByTestId("built-image-reviewer:latest");
-    expect(within(built).getByText("/srv/images/reviewer")).toBeInTheDocument();
-    expect(within(built).getByRole("link", { name: "Run Agent" })).toHaveAttribute(
-      "href",
-      "/?new=1&host=&image=reviewer%3Alatest",
-    );
+    expect(await screen.findByRole("link", { name: "reviewer" })).toHaveAttribute("href", "/images/reviewer");
+    expect(screen.getByRole("link", { name: "bare" })).toHaveAttribute("href", "/images/bare");
+    expect(screen.getByLabelText("Import image archive")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export/ })).toBeNull();
   });
 
-  it("reloads built images through the host selected by HostSwitcher", async () => {
-    await addDaemon({ label: "prod", baseURL: "https://prod:8765", token: "tp" });
+  it("loads built images from the explicit host", async () => {
+    const host = await addDaemon({ label: "prod", baseURL: "https://prod:8765", token: "tp" });
     const calls: Call[] = [];
     stubApi(calls);
-    renderPage(true);
-
-    await screen.findByTestId("built-image-reviewer:latest");
-    fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(await screen.findByRole("option", { name: "prod" }));
+    renderPage(host.id);
+    await screen.findByRole("link", { name: "reviewer" });
 
     await waitFor(() => {
       expect(calls).toContainEqual(expect.objectContaining({

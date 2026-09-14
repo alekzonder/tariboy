@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { setActiveDaemon } from "@/lib/api";
 import ImageBuildFromDirectory from "./ImageBuildFromDirectory";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); setActiveDaemon(null); });
 
 it("sends an explicit name and non-default tag while leaving sources in place", async () => {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -112,4 +113,22 @@ it("dismisses validation diagnostics and the resolved template", async () => {
   expect(screen.queryByText(/duplicate skill name/)).not.toBeInTheDocument();
   expect(screen.queryByText(/identity placeholder is omitted/)).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Validated image template")).not.toBeInTheDocument();
+});
+
+it("keeps validation and build on the explicit target when the active host differs", async () => {
+  const target = { id: "route", label: "Route", baseURL: "https://route", token: "" };
+  setActiveDaemon({ id: "other", label: "Other", baseURL: "https://other", token: "" });
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return new Response(JSON.stringify({ ok: true, result: { valid: true, schema_version: 2, name: "reviewer", tag: "latest" } }));
+  }));
+  render(<ImageBuildFromDirectory target={target} />);
+  fireEvent.change(screen.getByLabelText("Image source directory"), { target: { value: "/srv/image" } });
+  fireEvent.change(screen.getByLabelText("Image name"), { target: { value: "reviewer" } });
+  fireEvent.click(screen.getByRole("button", { name: "Validate" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Build" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Build" }));
+  await waitFor(() => expect(calls).toEqual(["https://route/api/images/validate", "https://route/api/images/build"]));
+  setActiveDaemon(null);
 });

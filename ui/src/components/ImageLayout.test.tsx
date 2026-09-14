@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import * as daemons from "@/lib/daemons";
 import { ImageLayout } from "./ImageLayout";
 
 const { openHostPathInVSCode } = vi.hoisted(() => ({
@@ -15,7 +16,7 @@ function stubFetch() {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
-      const path = String(url);
+      const path = String(url).split("?")[0];
       let result: unknown = {};
       if (path.endsWith("/api/images")) {
         result = {
@@ -31,7 +32,7 @@ function stubFetch() {
           ],
           count: 2,
         };
-      } else if (/\/api\/images\/[^/]+$/.test(path)) {
+      } else if (!path.endsWith("/provenance") && /\/api\/images\/[^/]+$/.test(path)) {
         const bare = path.includes("bare%3Alatest");
         result = {
           schema_version: 1, name: bare ? "bare" : "foo", tag: bare ? "latest" : "v1",
@@ -52,7 +53,10 @@ function stubFetch() {
   );
 }
 
-beforeEach(() => stubFetch());
+beforeEach(() => {
+  stubFetch();
+  vi.spyOn(daemons, "resolveDaemon").mockImplementation(async (id) => id ? { id, label: id, baseURL: "https://route", token: "" } : null);
+});
 afterEach(() => vi.restoreAllMocks());
 
 function renderAt(path: string) {
@@ -96,7 +100,7 @@ function renderServerAt(path: string) {
 describe("ImageLayout", () => {
   it("renders the ref header and tab strip, routing to the index (Overview) tab", async () => {
     renderAt("/images/foo/v1");
-    expect(screen.getByText("overview body")).toBeInTheDocument();
+    expect(await screen.findByText("overview body")).toBeInTheDocument();
     expect(screen.getByText("foo:v1")).toBeInTheDocument();
     // All three tabs are present.
     expect(screen.getByText("Overview")).toBeInTheDocument();
@@ -107,21 +111,21 @@ describe("ImageLayout", () => {
     await waitFor(() => expect(screen.getByText("sha256:deadbeefc")).toBeInTheDocument());
   });
 
-  it("routes to the Template tab", () => {
+  it("routes to the Template tab", async () => {
     renderAt("/images/foo/v1/template");
-    expect(screen.getByText("template body")).toBeInTheDocument();
+    expect(await screen.findByText("template body")).toBeInTheDocument();
     expect(screen.queryByText("overview body")).not.toBeInTheDocument();
   });
 
-  it("routes to the Files tab", () => {
+  it("routes to the Files tab", async () => {
     renderAt("/images/foo/v1/files");
-    expect(screen.getByText("files body")).toBeInTheDocument();
+    expect(await screen.findByText("files body")).toBeInTheDocument();
     expect(screen.queryByText("overview body")).not.toBeInTheDocument();
   });
 
-  it("routes to the Skills tab", () => {
+  it("routes to the Skills tab", async () => {
 	renderAt("/images/foo/v1/skills");
-	expect(screen.getByText("skills body")).toBeInTheDocument();
+	expect(await screen.findByText("skills body")).toBeInTheDocument();
 	expect(screen.getByRole("link", { name: "Skills" })).toHaveAttribute("href", "/images/foo/v1/skills");
   });
 

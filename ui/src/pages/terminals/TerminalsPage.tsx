@@ -22,6 +22,7 @@ import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 import ImagesPage from "@/pages/ImagesPage";
+import ImageTags from "@/pages/images/ImageTags";
 import StoresPage from "@/pages/StoresPage";
 import { ImageLayout } from "@/components/ImageLayout";
 import SettingsPage from "@/pages/settings/SettingsPage";
@@ -33,7 +34,7 @@ type CreateDialogState = {
   imageRef?: string;
   cloneSource?: CloneAgentSource;
 };
-export type ServerView = "tasks" | "images" | "image-detail" | "stores" | "store-detail" | "settings";
+export type ServerView = "tasks" | "images" | "image-tags" | "image-detail" | "stores" | "store-detail" | "settings";
 
 export default function TerminalsPage({ serverView }: { serverView?: ServerView }) {
   const { hostId: hostParam, agent: agentName, team: teamName, name: storeName } = useParams();
@@ -319,6 +320,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         ) : serverView === "images" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
             <ImagesPage hostId={hostId} basePath={`${serverBasePath}/images`} />
+          </RouteHostBoundary>
+        ) : serverView === "image-tags" && hostId !== undefined ? (
+          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+            <ImageTags hostId={hostId} basePath={`${serverBasePath}/images`} />
           </RouteHostBoundary>
         ) : serverView === "image-detail" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>

@@ -17,13 +17,30 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ImageTransferDialog } from "./ImageTransferDialog";
 
+function buildTime(image: ImageRow): number {
+  const value = Date.parse(image.built_at ?? "");
+  return Number.isFinite(value) ? value : -Infinity;
+}
+
+function compareTags(a: ImageRow, b: ImageRow): number {
+  const time = buildTime(b) - buildTime(a);
+  if (time && !Number.isNaN(time)) return time;
+  const rank = (image: ImageRow) => image.image_version && image.tag === image.image_version ? 0 : 1;
+  return rank(a) - rank(b) || (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0);
+}
+
+function builtDate(image?: ImageRow): string {
+  return image && Number.isFinite(buildTime(image)) ? image.built_at! : "—";
+}
+
 function message(error: unknown): string {
   return error instanceof ApiError ? error.message : String(error);
 }
 
-export default function BuiltImages({ hostId, basePath = "/images" }: {
+export default function BuiltImages({ hostId, basePath = "/images", imageName }: {
   hostId: string;
   basePath?: string;
+  imageName?: string;
 }) {
   const daemonContext = useOptionalDaemons();
   const [images, setImages] = useState<ImageRow[]>([]);
@@ -103,6 +120,18 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
     return () => { alive = false; };
   }, [hostId, revision, source]);
 
+  const groups = useMemo(() => {
+    const byName = new Map<string, ImageRow[]>();
+    for (const image of images) {
+      const tags = byName.get(image.name) ?? [];
+      tags.push(image);
+      byName.set(image.name, tags);
+    }
+    return [...byName].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([name, tags]) => ({ name, tags: tags.sort(compareTags), latest: tags.find((tag) => tag.tag === "latest") }));
+  }, [images]);
+  const tags = groups.find((group) => group.name === imageName)?.tags ?? [];
+
   const sourceReady = source?.hostId === hostId;
   const transferDaemonsReady = resolvedTransferDaemons.generation === registryGeneration;
 
@@ -136,7 +165,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   return (
     <div className="space-y-3">
-      <div className="rounded border p-3">
+      {imageName === undefined && <div className="rounded border p-3">
         <label htmlFor="image-archive" className="text-sm font-medium">Import runnable image</label>
         <Input id="image-archive" aria-label="Import image archive" type="file" accept=".gz,.tgz,application/gzip" className="mt-1"
           disabled={!sourceReady}
@@ -150,12 +179,29 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
           </label>
           <Button size="sm" disabled={!imageImport.name.trim() || !imageImport.tag.trim()} onClick={() => void applyImageArchiveOn(imageImport.target, imageImport.id, `${imageImport.name.trim()}:${imageImport.tag.trim()}`).then(() => { toast.success("image imported"); setImageImport(null); setRevision((value) => value + 1); }).catch((error) => toast.error(`import failed: ${message(error)}`))}>Import image</Button>
         </div>}
-      </div>
-      <div className="overflow-x-auto rounded border">
+      </div>}
+      {imageName === undefined ? <div className="overflow-x-auto rounded border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-left text-xs text-muted-foreground"><tr>
+            {["Image", "Latest image_version", "Latest built at", "Newest built tag", "Tag built at"].map((label) => <th key={label} className="px-3 py-2">{label}</th>)}
+          </tr></thead>
+          <tbody>
+            {groups.map(({ name, tags, latest }) => <tr key={name} className="border-t">
+              <td className="px-3 py-2"><Link className="font-mono text-primary hover:underline" to={`${basePath}/${encodeURIComponent(name)}`}>{name}</Link></td>
+              <td className="px-3 py-2">{latest ? latest.image_version || "Version not specified" : "No latest"}</td>
+              <td className="px-3 py-2 text-xs">{builtDate(latest)}</td>
+              <td className="px-3 py-2"><Link className="font-mono text-primary hover:underline" to={`${basePath}/${encodeURIComponent(name)}/${encodeURIComponent(tags[0].tag)}`}>{tags[0].tag}</Link></td>
+              <td className="px-3 py-2 text-xs">{builtDate(tags[0])}</td>
+            </tr>)}
+            {groups.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No built images on this host.</td></tr>}
+          </tbody>
+        </table>
+      </div> : <div className="overflow-x-auto rounded border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
-            <th className="px-3 py-2">Image</th>
+            <th className="px-3 py-2">Tag</th>
+            <th className="px-3 py-2">image_version</th>
             <th className="px-3 py-2">Digest</th>
             <th className="px-3 py-2">Built</th>
             <th className="px-3 py-2">Source</th>
@@ -163,7 +209,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
           </tr>
         </thead>
         <tbody>
-          {images.map((image) => {
+          {tags.map((image) => {
             const ref = `${image.name}:${image.tag}`;
             return (
               <tr key={ref} data-testid={`built-image-${ref}`} className="border-t">
@@ -173,8 +219,10 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                       className="font-mono text-primary hover:underline"
                       to={`${basePath}/${encodeURIComponent(image.name)}/${encodeURIComponent(image.tag)}`}
                     >
-                      {ref}
+                      {image.tag}
                     </Link>
+                    {image.tag === "latest" && <Badge variant="secondary">Latest</Badge>}
+                    {image === tags[0] && <Badge variant="secondary">Newest</Badge>}
                     {image.bare && <Badge variant="secondary">Terminal-only</Badge>}
                   </div>
                   {(image.current_agents?.length ?? 0) > 0 && (
@@ -188,10 +236,11 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                     </div>
                   )}
                 </td>
+                <td className="px-3 py-2">{image.image_version || "Version not specified"}</td>
                 <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                  {image.digest?.slice(0, 18) ?? "—"}
+                  {image.digest ?? "—"}
                 </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{image.built_at ?? "—"}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{builtDate(image)}</td>
                 <td className="px-3 py-2 font-mono text-xs break-all">
                   {!image.source_cwd
                     ? "Source CWD unavailable — imported artifact"
@@ -229,7 +278,7 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
                             size="sm"
                             variant="destructive"
                             aria-label={`Remove ${ref}`}
-                            disabled={!sourceReady}
+                            disabled={!sourceReady || !!image.current_agents?.length || !!image.pending_agents?.length}
                           >
                             Remove
                           </Button>
@@ -258,16 +307,16 @@ export default function BuiltImages({ hostId, basePath = "/images" }: {
               </tr>
             );
           })}
-          {images.length === 0 && (
+          {tags.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                No built images on this host.
+              <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                No tags for this image on this host.
               </td>
             </tr>
           )}
         </tbody>
       </table>
-      </div>
+      </div>}
       {transfer && transfer.hostId === hostId && (
         <ImageTransferDialog
           open
