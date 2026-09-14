@@ -192,8 +192,9 @@ func (c *Catalog) Remove(ctx context.Context, name string) error {
 }
 
 // PrepareBuild holds the catalog lock until release is called. Keeping it
-// through image source freezing prevents Refresh from changing the selected tree.
-func (c *Catalog) PrepareBuild(ctx context.Context, selector string) (prepared PreparedBuild, release func(), err error) {
+// through lock restoration and image source freezing prevents Refresh from
+// changing the selected tree.
+func (c *Catalog) PrepareBuild(selector string) (prepared PreparedBuild, release func(), err error) {
 	catalogMu.Lock()
 	release = catalogMu.Unlock
 	fail := func(cause error) (PreparedBuild, func(), error) {
@@ -223,21 +224,25 @@ func (c *Catalog) PrepareBuild(ctx context.Context, selector string) (prepared P
 	if err := regularFile(imagefilePath); err != nil {
 		return fail(err)
 	}
-	for _, dir := range []string{store.Path, imageDir} {
+	return PreparedBuild{Name: parts[1], Path: imageDir}, release, nil
+}
+
+func (c *Catalog) RestoreBuildLocks(ctx context.Context, prepared PreparedBuild) error {
+	for _, dir := range []string{filepath.Dir(filepath.Dir(prepared.Path)), prepared.Path} {
 		lock := filepath.Join(dir, "skills-lock.json")
 		if _, err := os.Lstat(lock); errors.Is(err, os.ErrNotExist) {
 			continue
 		} else if err != nil {
-			return fail(err)
+			return err
 		}
 		if err := regularFile(lock); err != nil {
-			return fail(err)
+			return err
 		}
 		if err := run(ctx, dir, "npx", "skills", "experimental_install"); err != nil {
-			return fail(fmt.Errorf("install Store skills lock: %w", err))
+			return fmt.Errorf("install Store skills lock: %w", err)
 		}
 	}
-	return PreparedBuild{Name: parts[1], Path: imageDir}, release, nil
+	return nil
 }
 
 func (c *Catalog) detail(ctx context.Context, name string) (Detail, error) {
