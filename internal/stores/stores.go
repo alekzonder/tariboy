@@ -252,14 +252,18 @@ func (c *Catalog) detail(ctx context.Context, name string) (Detail, error) {
 	built := &image.Store{Dir: filepath.Join(c.BaseDir, "images")}
 	for i := range images {
 		ref := image.Ref{Name: images[i].Name, Tag: "latest"}
-		if !built.Exists(ref) {
-			images[i].LatestStatus = "missing"
-			continue
-		}
 		manifest, err := built.Inspect(ref)
 		if err != nil {
-			images[i].LatestStatus = "error"
-			images[i].LatestError = err.Error()
+			_, statErr := os.Stat(filepath.Join(built.Dir, images[i].Name, "latest.tar.gz"))
+			if errors.Is(statErr, os.ErrNotExist) {
+				images[i].LatestStatus = "missing"
+			} else {
+				images[i].LatestStatus = "error"
+				images[i].LatestError = err.Error()
+				if statErr != nil {
+					images[i].LatestError = statErr.Error()
+				}
+			}
 			continue
 		}
 		images[i].BuiltVersion = manifest.ImageVersion
