@@ -49,8 +49,7 @@
   font-variant-numeric: tabular-nums;
 }
 .tasks-queue-picker { display: grid; gap: 5px; margin-top: auto; padding: 12px 7px 0; font-size: 11px; color: var(--muted-foreground); }
-.tasks-queue-picker select, .task-fields select, .task-fields input, .task-fields textarea,
-.task-comments select, .task-comments textarea, .task-inline-form input, .task-inline-form select,
+.tasks-queue-picker select, .task-inline-form input, .task-inline-form select,
 .task-queues input {
   min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--background-base);
   padding: 7px 9px; color: var(--foreground); font-size: 13px;
@@ -89,60 +88,43 @@
 .task-inline-form input { flex: 1; }
 .tasks-empty { padding: 40px 20px; text-align: center; font-size: 13px; color: var(--muted-foreground); }
 
+/* The detail panel is the same island as the console content: a --card sheet
+   inset from the window edges, on --panel-radius under --lift, with its own
+   scroll. The topbar is 42px, so 50px leaves the island's 8px gutter above it. */
 .task-detail-dialog[data-slot="dialog-content"] {
-  top: 0; bottom: 0; inset-inline-start: auto; inset-inline-end: 0;
-  width: var(--tasks-detail-width, 50vw); height: 100dvh;
-  max-width: calc(100vw - 80px); grid-template-columns: 4px minmax(0, 1fr);
-  translate: none; padding: 0; border-radius: 0; gap: 0;
+  top: 50px; bottom: 8px; inset-inline-start: auto; inset-inline-end: 8px;
+  width: var(--tasks-detail-width, 50vw); height: auto;
+  max-width: calc(100vw - 80px); grid-template-columns: 9px minmax(0, 1fr);
+  translate: none; padding: 0; border-radius: var(--panel-radius); gap: 0;
+  overflow: hidden; box-shadow: var(--lift);
 }
-.task-detail-panel { min-width: 0; min-height: 0; overflow: auto; background: var(--background-base); }
+/* The seam is a grip, not a line: a 9px column with a 3px bar in it, so the
+   resize target stays comfortable without drawing a border into the island. */
+.task-detail-dialog .task-panel-resize-handle {
+  display: grid; place-items: center; min-width: 9px;
+}
+.task-detail-dialog .task-panel-resize-handle::before {
+  content: ""; width: 3px; height: 26px; border-radius: 999px; background: var(--border);
+}
+.task-detail-dialog .task-panel-resize-handle:hover,
+.task-detail-dialog .task-panel-resize-handle:focus-visible { background: transparent; }
+.task-detail-dialog .task-panel-resize-handle:hover::before,
+.task-detail-dialog .task-panel-resize-handle:focus-visible::before { background: var(--muted-foreground); }
+
+/* The scroll lives in the panel, not on the page, so the header can stick. */
+.task-detail-panel { min-width: 0; min-height: 0; overflow: auto; background: var(--card); }
 .task-detail-body { min-width: 0; }
-.task-discard { display: flex; align-items: center; gap: 12px; padding: 12px 32px; background: var(--muted); }
-.task-description { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+
+/* Containment, not decoration: the single minmax column is what keeps a long
+   URL, a wide table or a code block inside the panel instead of widening it.
+   Everything else about these sections is Tailwind on the element. */
+.task-description { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; }
+.task-comment-list, .task-comments form { display: grid; grid-template-columns: minmax(0, 1fr); }
+.task-comments form { gap: 8px; }
 .task-markdown { min-width: 0; overflow-wrap: anywhere; }
-.task-comment-order { padding: 16px 20px 0; font-size: 12px; }
-.task-detail-header { position: sticky; top: 0; z-index: 5; background: var(--background-base); display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); padding: 18px 20px; }
-.task-detail-header > div { flex: 1; }
-.task-detail-header h2 { font-family: ui-monospace, monospace; font-size: 16px; font-weight: 650; }
-.task-detail-header span { font-size: 10px; color: var(--muted-foreground); }
-.task-detail-header button svg { width: 16px; }
-.task-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; border-bottom: 1px solid var(--border); padding: 13px 20px; }
-.task-metadata div { min-width: 0; }
-.task-metadata dt { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); }
-.task-metadata dd { overflow: hidden; text-overflow: ellipsis; font-size: 11px; white-space: nowrap; }
-.task-fields { display: contents; }
-.task-main-fields, .task-properties { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 12px; padding: 18px 20px; }
-.task-fields label, .task-comments label, .task-queues label { display: grid; gap: 5px; font-size: 11px; color: var(--muted-foreground); }
-.task-fields textarea { min-height: 100px; resize: vertical; }
-.task-field-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
-.task-fields .task-primary-action { justify-self: start; }
-.task-section-title { display: flex; justify-content: space-between; font-size: 12px; font-weight: 650; }
-.task-section-title span { color: var(--muted-foreground); }
-.task-comments { padding: 18px 20px 40px; }
-.task-waits { margin: 10px 0; border-radius: 7px; background: color-mix(in oklch, var(--chart-1) 40%, transparent); padding: 8px; font-size: 11px; }
-.task-comment-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 14px 0; }
-.task-comment-list article { border-left: 2px solid var(--border); padding-left: 10px; }
-.task-comment-list header { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--muted-foreground); }
-.task-comment-actions { display: flex; align-items: center; gap: 4px; }
+/* The copy action is revealed by the comment it belongs to. */
 .task-comment-copy { opacity: 0; transition: opacity 120ms ease; }
 .task-comment-list article:hover .task-comment-copy, .task-comment-list article:focus-within .task-comment-copy { opacity: 1; }
-.task-comment-list p { margin-top: 4px; }
-.task-comments form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.task-comments textarea { min-height: 72px; resize: vertical; }
-.task-comments form > button { justify-self: end; }
-.task-relations, .task-history { border-bottom: 1px solid var(--border); padding: 16px 20px; }
-.task-relations ul, .task-history ol { display: grid; gap: 6px; margin: 10px 0; }
-.task-relations li { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-radius: 6px; background: var(--muted); padding: 6px 8px; font-size: 11px; }
-.task-relations li button { color: var(--muted-foreground); }
-.task-relations form { display: grid; grid-template-columns: 92px 1fr auto; gap: 6px; }
-.task-relations form select, .task-relations form input { min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--background-base); padding: 6px 8px; font-size: 11px; }
-.task-relations form button { border-radius: 7px; background: var(--primary); padding: 6px 8px; color: var(--primary-foreground); font-size: 11px; }
-.task-history { border-bottom: 0; padding-bottom: 40px; }
-.task-history li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 10px; }
-.task-history li strong { font-size: 11px; }
-.task-history li span, .task-history li time { color: var(--muted-foreground); }
-.task-history li time { grid-column: 1 / -1; }
-.task-history li code { grid-column: 1 / -1; overflow-wrap: anywhere; color: var(--muted-foreground); }
 
 .task-inbox, .task-queues { padding: 20px; }
 .task-inbox > header, .task-queues > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -168,10 +150,6 @@
 .task-queue-workflow fieldset { display: grid; gap: 9px; min-width: 0; border: 0; padding: 0; }
 .task-queue-workflow textarea { min-height: 120px; font-family: ui-monospace, monospace; font-size: 10px; }
 .task-queue-workflow details { font-size: 11px; color: var(--muted-foreground); }
-.task-workflow { display: grid; gap: 12px; border-bottom: 1px solid var(--border); padding: 16px 20px; }
-.task-workflow .task-metadata { border: 0; padding: 0; }
-.task-workflow-error { border-radius: 6px; background: color-mix(in oklch, var(--destructive) 12%, transparent); padding: 8px; color: var(--destructive); font-size: 11px; }
-.task-workflow-notice { border-bottom: 1px solid var(--border); padding: 12px 20px; color: var(--muted-foreground); font-size: 11px; }
 .task-workflow-list h3 { display: flex; justify-content: space-between; font-size: 11px; font-weight: 650; }
 .task-workflow-list h3 span { color: var(--muted-foreground); }
 .task-workflow-list ul { display: grid; gap: 5px; margin-top: 5px; }
@@ -182,14 +160,15 @@
 @media (max-width: 1000px) {
   .tasks-workspace { grid-template-columns: 180px 1fr; }
   .task-panel-resize-handle { display: none; }
-  .task-detail-dialog[data-slot="dialog-content"] { width: 100vw; max-width: none; }
+  /* Too narrow for an island: the panel takes the window and drops the inset,
+     the radius and the grip column with it. */
+  .task-detail-dialog[data-slot="dialog-content"] {
+    top: 0; bottom: 0; inset-inline-end: 0; width: 100vw; max-width: none;
+    grid-template-columns: minmax(0, 1fr); border-radius: 0;
+  }
 }
 
 @media (max-width: 700px) {
   .tasks-workspace { grid-template-columns: 1fr; }
   .tasks-navigation { display: none; }
 }
-
-.task-conflict { margin: 16px 32px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
-.task-conflict details { margin: 8px 0; }
-.task-conflict button { margin-right: 8px; }

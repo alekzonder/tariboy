@@ -85,7 +85,7 @@ describe("task Markdown", () => {
     }
     render(<Draft />)
     expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "true")
-    fireEvent.click(screen.getByRole("button", { name: "Source Markdown" }))
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }))
     expect(screen.getByRole("textbox")).toHaveValue("Hello")
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "World" } })
     fireEvent.click(screen.getByRole("button", { name: "Rich text" }))
@@ -111,7 +111,7 @@ describe("task Markdown", () => {
     expect(screen.getByRole("button", { name: "Rich text" })).toHaveAttribute("aria-pressed", "true")
     act(() => { editor.commands.insertContent("Second") })
     expect(textbox.querySelectorAll("li")[1]).toHaveTextContent("Second")
-    fireEvent.click(screen.getByRole("button", { name: "Source Markdown" }))
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }))
     expect(screen.getByRole("textbox")).toHaveValue(initial + "\n" + (initial.startsWith("1.") ? "2. Second" : initial.replace("First", "Second")))
   })
 
@@ -127,7 +127,7 @@ describe("task Markdown", () => {
     const onChange = vi.fn()
     render(<MarkdownEditor value={value} onChange={onChange} />)
     expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "true")
-    fireEvent.click(screen.getByRole("button", { name: "Source Markdown" }))
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }))
     expect(screen.getByRole("textbox")).toHaveValue(value)
     expect(onChange).not.toHaveBeenCalled()
   })
