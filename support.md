@@ -15,7 +15,7 @@ sidebar:
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.55.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.60.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -30,6 +30,24 @@ At `0.14.1` and newer, an adopted interactive session remains attachable and
 controllable throughout that handoff. A persistent `4404` for an agent that
 still reports `running` is not an expected restart state; export a support
 bundle rather than restarting the agent or killing its surviving tmux session.
+
+## Desktop updates
+
+The first updater-enabled version must be installed from its verified DMG.
+Later higher stable versions can be checked, downloaded, signature-verified,
+and installed from **App settings**. Downloading never installs automatically.
+Only a package verified against the public key pinned in the app becomes ready;
+the package stays in memory until it is installed or the app fully exits.
+
+Installation needs a writable installed application location. It cannot update
+an app running from the read-only mounted DMG and may ask for system
+authorization. A download or verification failure can be retried from the
+start. An installation failure keeps the verified package ready for another
+install attempt and never restarts the app.
+
+If installation or the following launch fails, quit Tariboy and reinstall the
+previously verified DMG. The updater does not promise transactional rollback or
+recovery when the new application cannot start.
 
 If an interactive harness exits, its tmux PTY reaches EOF and Desktop changes
 the terminal to **Session not running or not interactive** without repeatedly
@@ -137,8 +155,9 @@ separately.
 - Apple Silicon macOS desktop only.
 - Automatic SSH installation supports Linux x86_64 only.
 - Ad-hoc signing requires a one-app Gatekeeper confirmation.
-- No auto-updater, Developer ID signing, or notarization.
+- Desktop updates require a writable installed app; Developer ID signing and
+  notarization are not yet available.
 - No built-in product analytics; optional OTLP is off by default and requires
   explicit operator configuration.
-- Publication is manual and allowed only after artifact checks and two-person
-  review.
+- Exact `vX.Y.Z` tags publish checked artifacts to GitHub Releases; the tag is
+  created only after the release checks and two-person review.

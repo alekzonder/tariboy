@@ -10,9 +10,10 @@ An **agent** is a configured, named instance of an image with its own working
 directory and its own loop. It does not run continuously — it runs a series of
 **iterations**. On each iteration the daemon:
 
-1. prepares a prompt — schema v2 renders static image layers and current runtime
-   placeholders in their declared order; a self-contained legacy schema-v1
-   artifact keeps its historical assembly behavior;
+1. prepares a prompt — a platform-owned **Task Processing Order** block groups
+   one-shot instructions, messages (including awaiting replies), and Goal in
+   that order. Schema v2 preserves the declared order of the remaining image
+   layers; self-contained legacy schema-v1 artifacts use the same work block;
 2. launches the harness (e.g. Claude) under the [shim](/docs/architecture/shim)
    for exactly one pass;
 3. records the outcome, iteration logs, AI usage, and audit timeline.
@@ -56,14 +57,28 @@ period remains the goal but sends no continuation wake. Disabled agents or
 disabled Autopilot loops neither select nor receive a goal wake, but preserve a
 valid sticky key; only disabling Goal clears it.
 
-Images with the `goal` capability always render daemon-owned Goal guidance, even without a
-`runtime: goal` template entry. The block tells the agent to work through the
+Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing
+Order**, regardless of image plugins or runtime entries. The block tells the agent to work through the
 Native Task workflow, wait for a recorded customer answer while in
 `wait_customer`, and set `wait_customer` after recording a PR while monitoring
 it rather than merging. When selected, it also contains the task key, title,
 priority, status, and description. The inbox message is only a durable wake
 hint. Task title and description are untrusted task input, not daemon
 instructions or lifecycle authority.
+
+The block starts with `# Task Processing Order` and a fixed instruction to
+process one-shot, then messages, then Goal. Its `## One-shot`, `## Messages`,
+and `## Goal` subsections always appear. Missing inputs explicitly say that
+there is no one-shot instruction, no incoming messages, or no selected Goal
+for this iteration; the agent is told to continue without running commands
+merely to search for absent input. Outstanding requests remain nested under
+Messages even when no incoming messages exist. Message IDs, threading fields,
+subject/data, and the explicit `message processed` instruction are retained.
+Bare sessions still receive no prompt.
+
+The operator prompt preview uses the same grouping and Goal selection. It
+keeps placeholders for messages and the one-shot supplied at execution time;
+viewing the preview does not drain messages or increment delivery attempts.
 
 ## Harness environment and preflight
 
@@ -203,3 +218,12 @@ Recovery compares the pinned digest, not only the ref. For daemon-managed and
 ordinary mutable-build refs, both inspection and staging resolve the exact
 retained digest recorded on the agent, including assignments that were pending
 when the daemon was upgraded or the ordinary ref was rebuilt.
+
+The agent image read API projects the same selection order under the image
+publication gate: explicit pending digest, ordinary mutable active ref, then
+current pinned image. Current version metadata always comes from pinned
+inspection. This read does not stage or promote an assignment; next is a
+preview at read time and can change before the launch gate runs. A changed
+digest triggers activation even if the source version stays the same. A failed
+inspection is returned explicitly, and the separate pending error preserves
+activation failures even without a pending ref.

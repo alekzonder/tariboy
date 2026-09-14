@@ -34,11 +34,14 @@ and npm dependencies.
 Install only the toolchains needed for the area you are changing:
 
 - **Go control plane:** Go 1.26, Make, a C toolchain where required by the host.
+- **Fast checks:** ripgrep (`rg`) for the packaging secret-scan contract in
+  `make backend-check` and `make check`. Install with `apt-get install ripgrep`
+  on Ubuntu or `brew install ripgrep` on macOS; the PR workflow installs it.
 - **React UI:** Node.js and npm.
 - **Desktop native host:** Rust (minimum package version 1.77), Cargo, the Tauri
   prerequisites, and platform build tools.
 - **macOS packaging:** Apple Silicon macOS 12+, Xcode command-line tools,
-  `codesign`, `hdiutil`, and the other checks reported by `make desktop-alpha`.
+  `codesign`, `hdiutil`, and the other checks reported by `make desktop-mac`.
 - **Agent smoke suites:** `tmux` is checked by both `make smoke` and
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
@@ -158,11 +161,13 @@ Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
 Go unit tests and smoke contracts. The frontend target runs UI
-typecheck, lint, unit tests, branding, and the documentation checks. All three
-are read-only: they never install dependencies, write into `bin/`, or dirty
-`git status`. Each step reports its result and duration as it finishes.
-Successful command output is suppressed; failed steps print their command and
-complete diagnostics, and every run ends with a compact summary.
+typecheck, lint, unit tests, branding, and the documentation checks. Before
+checking, `backend-check` runs `go mod download`, and `frontend-check` runs
+locked `npm ci` installs under both `ui/` and `docs/`. They do not write into
+`bin/` or dirty `git status`. Each step reports its result and duration as it
+finishes.
+Successful check-step output is suppressed; failed steps print their command
+and complete diagnostics, and every run ends with a compact summary.
 
 `make full-check` is the full set of checks that run unattended on a developer
 machine, not every check in the repository. It runs `check`, then `build`, the
@@ -170,14 +175,13 @@ four core E2E scripts, `full-smoke`, the two Playwright browser suites, and one
 desktop step for the host: `desktop-e2e` on Linux x86_64, `desktop` plus
 `desktop-smoke` on macOS arm64, and the version and lock gates alone elsewhere.
 
-The check targets do not stop at the first failure. Each step is timed and
-recorded, and the run ends with a summary table naming every step that failed,
-so one aggregate pass surfaces gofmt drift and a UI type error together.
+After dependency preparation succeeds, the check steps do not stop at the
+first failure. Each step is timed and recorded, and the run ends with a summary
+table naming every step that failed, so one aggregate pass surfaces gofmt drift
+and a UI type error together.
 
-`frontend-check`, `check`, and `full-check` require `ui/node_modules` and
-`docs/node_modules` to exist; run `npm ci` in those directories once, as
-described below. These targets do not install them, because installing would
-rewrite a shared working tree.
+`frontend-check`, `check`, and `full-check` refresh `ui/node_modules` and
+`docs/node_modules` from the committed lockfiles before running checks.
 
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
@@ -300,8 +304,8 @@ dedicated config.
 
 ### React UI
 
-Install the dependencies once; neither entry point does it for you, and both
-fail with an explicit `cd ui && npm ci` hint when `ui/node_modules` is missing:
+`frontend-check` and its aggregate entry points install the locked dependencies
+before checking. To install them directly while iterating:
 
 ```bash
 cd ui
@@ -433,15 +437,15 @@ binary payloads, and native packages for the selected platform. `PLATFORM`
 defaults to the supported native host and accepts `darwin` or `linux`; it does
 not enable cross-compilation. A standalone invocation runs `npm ci` when
 `ui/node_modules` is absent, using the committed lockfile before it builds the
-SPA. Verification entry points keep their prepared-dependency contract and do
-not install Node packages.
+SPA. Verification entry points already install Node packages, so their Desktop
+step skips that duplicate work.
 
 On Darwin arm64:
 
 ```bash
 make desktop PLATFORM=darwin  # .app and .dmg
 make desktop-smoke
-make desktop-alpha
+make desktop-mac
 ```
 
 The Darwin recipe sets `CI=true` only for `cargo tauri build`. This
@@ -458,8 +462,30 @@ make desktop PLATFORM=linux  # .deb and .AppImage
 The preflight rejects unknown platform values, unsupported host architectures,
 and a platform that does not match the current host before compiling payloads.
 
-`make desktop-alpha` packages and verifies the alpha; publication is a
-separate manual action.
+Ordinary `make desktop` packages keep Tauri updater artifacts disabled, so local
+macOS and Linux builds do not need the release owner's private key. The macOS
+path still creates the ad-hoc-signed app and DMG.
+
+`make desktop-mac` is the signed release path. It requires
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, enables the
+Tauri updater archive and signature explicitly, and fails before packaging when
+either variable is missing. The release owner permanently owns and backs up that
+private key; its matching public key is pinned in the Desktop bundle. Never print
+or commit the signing Secrets. Key rotation requires a separately planned
+release because installed applications trust the embedded public key.
+
+Pushing an exact `vX.Y.Z` tag whose version matches both canonical declarations
+runs the same target on GitHub's `macos-15` runner. The workflow requires both
+signing Secrets, finds the single generated `.app.tar.gz` and `.sig` pair, and
+stages them with the checked DMG, `SHA256SUMS`, `release.json`, and `latest.json`.
+Before staging, the manifest gate rejects malformed packets or a signature key
+identifier that differs from the public key in `tauri.conf.json`. This identifies
+an accidental wrong signing Secret; cryptographic archive verification remains
+the installed updater's responsibility. The workflow creates a draft GitHub
+Release, uploads the complete set, and only then makes the release public, so the
+latest catalog cannot reference missing assets. The first updater-enabled version
+must still be installed from the DMG; only later, higher signed versions can be
+installed by the updater.
 
 The tray action **Install/Update CLI** owns the local five-file payload and
 six-command-path install. It preflights and atomically switches `tariboyd`,
@@ -480,7 +506,8 @@ Other documentation pages keep the standard sidebar layout. Use site-root paths
 such as `/quickstart` in Markdown and Card links; Blume adds the deployment
 base to produce `/tariboy/quickstart`. Raw HTML anchors are not rewritten.
 
-Install the dependencies once, as for the UI:
+`frontend-check` and its aggregate entry points install the locked dependencies
+before checking. To install them directly while iterating:
 
 ```bash
 cd docs
@@ -512,6 +539,11 @@ working tree stay selected and untouched. On the first publication, configure
 the repository under **Settings → Pages** to use **Deploy from a branch**, then
 select the `docs` branch and `/ (root)` folder. GitHub Pages serves this project
 site at `https://alekzonder.github.io/tariboy/`.
+
+After a successful Desktop release, a separate workflow job runs `make docs`
+from the tagged commit and pushes the `docs` branch. Site deployment follows
+separately. If documentation publication fails, rerun the failed docs job; the
+already-published release remains intact.
 
 ### End-to-end suites
 

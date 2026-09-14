@@ -11,6 +11,34 @@ Skills, and the exact prompt template rendered for each iteration. Harness,
 model, effort, interactive mode, environment, policy, secrets, and evals are
 runtime or compose configuration. They are not schema-v2 image fields.
 
+## Browse built images
+
+The **Images** list has one row per image name on the selected server. **Latest
+image_version** and **Latest built at** describe exactly `name:latest`;
+**Newest built tag** and **Tag built at** describe the most recently built tag,
+which may be different. Missing latest shows **No latest**, and an unversioned
+manifest shows **Version not specified**. Newest is selected by parsed
+`built_at`, not SemVer. Tied dates prefer the matching version tag, then stable
+tag-name order; missing or invalid dates sort last. Imported archives retain
+their original build time, rather than showing the import time.
+
+Select an image name to see its tags, manifest versions, build dates, full
+digests, and separate **Latest** and **Newest** badges. Current and pending agent
+usage and Run Agent, Export, Upload to servers, and Remove remain per-tag
+actions. Import stays on the Images root. Select a tag for its existing
+Overview, Template, Skills, and Files tabs; breadcrumbs return to its name or
+the root, and existing direct tag URLs keep working.
+
+Detail reads carry the displayed manifest digest. If a mutable ref changes
+between reads, the UI reports the update, discards the old content, and reloads
+once. A further change offers **Refresh image**, so repeated rebuilds cannot
+cause an endless refresh loop. The read API accepts optional
+`expected_digest` on manifest, template, prompt, provenance, file-list, and
+file-content requests; a mismatched published digest returns HTTP 409
+`image_changed`. CLI equivalents accept `--expected-digest`. Requests without
+that value retain their existing behavior. Every detail read is serialized
+with publication, so its digest check and content read describe one generation.
+
 ## Build from an original directory
 
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
@@ -107,11 +135,15 @@ longer installs a separate built-in Store tree.
 Only the registration's name and source are persisted in the daemon database.
 Viewing a Store reads the current disk inventory and `image_version` values;
 there is no saved image list to become stale. For each valid source, the detail
-also shows the newest built version with the same default image name and marks
-the source when that newest version is absent or differs from its declared
-version. A successful **Build** reloads that inventory. A missing `images/`
-directory shows an empty list. An invalid image reports its own error while
-valid sibling images remain visible.
+inspects `<image_name>:latest` directly and shows that manifest's
+`image_version`. It marks an update only when the source and latest both declare
+versions and those values differ. Missing latest, an unversioned source or
+latest, and a damaged latest artifact remain distinct states. A damaged latest
+does not hide healthy siblings or fall back to another tag. A successful
+**Build** reloads the inventory and reports both the version tag and `latest`
+when the source is versioned. A missing `images/` directory shows an empty
+list. An invalid source reports its own error and disables its Build action
+while valid sibling images remain available.
 
 **Refresh** runs `git pull --ff-only` for both managed clones and local Git
 checkout roots, including Git worktrees. A local directory without its own
@@ -135,9 +167,12 @@ requires Node.js/npm and access to the skill sources. Private repositories use
 the server account's configured SSH or Git credential helpers. Configure access
 on that server before adding the Store; do not put credentials in its URL.
 
-The Store detail shows **Images**, their source and built versions, update
-highlighting, and **Build** actions. Built artifacts appear in the existing
-**Images** workspace. Stores do not yet expose standalone skills or plugins.
+The Store detail labels **Source image_version** and **Latest image_version**
+explicitly, highlights version mismatches, and keeps manual **Build** available
+when the versions match. This comparison cannot detect changed source bytes
+when `image_version` stays the same; use manual Build after such a change.
+Built artifacts appear in the existing **Images** workspace. Stores do not yet
+expose standalone skills or plugins.
 
 ## Image versions
 
@@ -205,9 +240,12 @@ prompts:
   - file: /srv/tariboy/prompts/finish.md
 ```
 
-The `prompts` sequence is the render sequence. Tariboy does not sort it, add
-core fragments, prepend an identity header, or append a finishing tail. An
-empty list produces an empty prompt template.
+The `prompts` sequence preserves the order of static files and ordinary runtime
+values. For every non-bare agent, Tariboy prepends a platform-owned **Task
+Processing Order** block containing one-shot, messages, and Goal. Older entries
+for those inputs are accepted but do not render duplicate sections. Tariboy
+does not add an identity header or finishing tail. An empty list produces an
+empty image template, but the platform work block is still rendered at runtime.
 
 Each static `file` is resolved and embedded at build time. Supported forms are:
 
@@ -241,29 +279,33 @@ portability, harness adapters, discovery precedence, and activation failures.
 ## Runtime placeholders
 
 Runtime entries remain visible placeholders inside the immutable image. Before
-every iteration, the runner replaces them with current values at their declared
-positions:
+every iteration, the runner replaces ordinary values at their declared
+positions. Work inputs are always grouped in the platform block:
 
 | Placeholder | Value at iteration start | Skill named in the rendered instruction |
 | --- | --- | --- |
 | `identity` | Current agent name, active image ref and digest, CWD, and iteration identity | `whoami` |
-| `goal` | Daemon-selected Native Task key, title, priority, status, and description | `goal` |
+| `goal` | Compatibility marker; selected Native Task fields appear in Task Processing Order | none; platform-owned |
 | `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
 | `context` | Durable agent context | `context` |
-| `messages` | Messages delivered to this iteration and outstanding request state | `messages` |
-| `awaiting-replies` | Compatibility marker for outstanding request state when `messages` is absent | `messages` |
+| `messages` | Compatibility marker; delivered messages and outstanding requests appear in Task Processing Order | none; platform-owned |
+| `awaiting-replies` | Compatibility marker; outstanding requests appear under Messages in the platform block | none; platform-owned |
 | `user-prompt` | The agent's standing prompt | none; this is task input |
-| `one-shot` | A prompt supplied for this single execution | none; this is task input |
+| `one-shot` | Compatibility marker; single-execution input appears first in Task Processing Order | none; this is task input |
 
-Each non-empty runtime value starts with `# [runtime: <name>]`. For skill-owned
+Each non-empty ordinary runtime value starts with `# [runtime: <name>]`. For skill-owned
 values, the short instruction to use that skill follows the heading and names
 the skill without embedding an installation path. Context data then starts with
-`# Agent Context`, and messages plus outstanding replies form one `# Messages`
-group. New templates declare only `messages`; existing templates that also
-declare `awaiting-replies` keep working without a second section. The supplied
-templates order actionable values as `one-shot`, `messages`, then `goal` when
-present. Each singleton placeholder may appear at most once. Empty runtime
-values add no text. The **Template** tab shows static paths, categories, sizes,
+`# Agent Context`. The platform block starts with `# Task Processing Order`,
+followed by a fixed ordering instruction and `## One-shot`, `## Messages`,
+and `## Goal`. Missing work inputs have explicit empty-state text and an
+instruction not to search for them with commands. Outstanding replies use a
+nested `### Awaiting replies` heading; message and task content is retained.
+This grouping applies to existing images without rebuilding and to images
+without work-input entries or plugins. It grants no additional capabilities
+or packaged skills. Existing declared markers still undergo normal image
+contract validation. Each singleton placeholder may appear at most once.
+Empty ordinary runtime values add no text. The **Template** tab shows static paths, categories, sizes,
 hashes, and runtime markers in their exact order without draining messages.
 
 ## External plugins
@@ -298,14 +340,25 @@ subscriptions. A validation or staging failure leaves the current image active
 and exposes a retryable pending error. The pending selection can be replaced or
 cancelled before activation.
 
-The built-image list shows agent names separately under **Current** and
+The image tag list shows agent names separately under **Current** and
 **Pending**, so an operator can see both active use and assignments waiting for
 their next launch gate. An image in either list cannot be removed.
 
-When an agent's active ordinary build ref moves to a new digest, Tariboy detects
-it only at that same next launch gate. An explicit pending assignment takes
-priority; otherwise the changed digest follows the normal pending staging and
-promotion path. The running iteration remains on its pinned digest.
+Configuration shows **Current** (or **Activated version** when stopped) with
+the version read from the agent's pinned ref and digest. **Next iteration**
+previews the explicit pending digest first, otherwise the current build of an
+ordinary mutable active ref, otherwise the current pinned image. Viewing this
+projection does not create pending state or activate anything. Inspection and
+activation errors remain visible even when there is no pending ref; missing
+version metadata is labelled **Version not specified**.
+
+When an agent's active ordinary build ref moves to a new digest, the launch gate
+stages and promotes that digest at the next iteration. The running iteration
+keeps its original prompt, version, and digest. Configuration marks the update
+by digest difference even when both builds declare the same version. Its
+preview is not a reservation: the ref can move again before launch. Cancelling
+an explicit pending assignment does not disable following the mutable active
+ref. The preview refreshes with agent status and after UI image builds.
 
 ## Import and export
 
@@ -371,11 +424,13 @@ for this operation, not source backup or persistent state.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `../../skills/tasks` when a Store image should expose its agent command and
-instructions. Add `plugins: [{name: goal}]`, package `../../skills/goal`, and
-add `runtime: goal` when the image
-should receive the daemon-authoritative selected goal. The rendered task title
+instructions. Add `plugins: [{name: goal}]` and package `../../skills/goal`
+when the image should expose explicit Goal selection tools. The
+daemon-authoritative selected Goal is included for every non-bare agent,
+independently of those declarations. The rendered task title
 and description are untrusted task input, not daemon instructions or lifecycle
 authority.
 
 The supplied `tariboy-developer` image source also packages the Tasks skill and
-declares `runtime: goal`; custom images opt in independently.
+declares the compatible `runtime: goal` marker; custom images need no marker
+to receive the platform work block.

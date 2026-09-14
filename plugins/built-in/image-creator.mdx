@@ -29,7 +29,8 @@ normal image workflow.
 ## Workdir confinement
 
 Agent-driven image authoring is less trusted than the operator CLI. The daemon
-resolves `--path` against the agent's effective working directory and rejects:
+resolves `--path` against the managed `agents/<agent>/workdir`, independently of
+the configured CWD, and rejects:
 
 - absolute paths outside that workdir;
 - `..` traversal that escapes it;

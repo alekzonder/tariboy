@@ -35,7 +35,7 @@ Inspect and control definitions and runs separately:
 scripts/scripts.sh ls
 scripts/scripts.sh runs scr-agent-...
 scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...        # completed one-shot definitions only
+scripts/scripts.sh rerun scr-agent-...        # completed one-shot or idle recurring definitions
 scripts/scripts.sh cancel scr-agent-...       # stop a definition and its active run
 scripts/scripts.sh cancel srun-agent-...      # stop only this run
 scripts/scripts.sh rm scr-agent-...           # inactive definitions only
@@ -64,10 +64,12 @@ scripts.
    inspect its status, exit code, timestamps, duration, log path, and inline
    log. Use **Copy path** to copy the log's absolute path or **Download log**
    to save the complete log.
-4. Use **Cancel** on an active definition to stop future runs and request
+4. Use **Exec** to queue an immediate attempt for a completed one-shot or an
+   active recurring definition with no pending or running attempt. A recurring
+   definition starts its next fixed delay when that manual run finishes. Use
+   **Cancel** on an active definition to stop future runs and request
    cancellation of its active run. Use **Cancel run** on an active run when
-   only that attempt should stop. After a one-shot definition is completed,
-   **Rerun** queues another attempt.
+   only that attempt should stop.
 5. Remove only an inactive definition. Desktop asks for confirmation because
    removal permanently deletes the definition and all of its run history.
 

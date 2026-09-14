@@ -29,6 +29,16 @@ adoption/start and saved-host reconnect continue independently in the
 background, so their existing status banners may be visible during startup.
 Dock reopen and the menu-bar Open action raise the same main window.
 
+Application settings live at `/app-settings` and remain available without a
+daemon connection. Desktop update checks use the native application host and
+never target the selected local or remote daemon. The settings screen, its
+titlebar action, update status, and ready banner use English labels. Automatic
+download is enabled by default, persists in WebView localStorage, runs on
+startup and then every six hours while enabled, and never installs automatically. A verified package stays
+only in Rust process memory, so quitting Desktop discards it. When one is ready,
+the route-independent banner below the titlebar requires an explicit install
+action and reports installation failures for retry.
+
 The primary agent dialog has **Target**, **Identity**, **Runtime**,
 **Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
 documented defaults and submits one complete create request; the daemon writes
@@ -128,11 +138,25 @@ artifact. The workspace owns vertical scrolling within the height-constrained
 server shell, so validation output and built images remain reachable at small
 window heights. **Close** dismisses the in-memory validation preview, warnings,
 and diagnostics without changing build inputs or any built artifact. The
-built-image list identifies agents using each ref now and agents
-with that ref pending. Agent **Configuration** only selects an already built
-image, shows current and pending refs, and links back to image detail.
-Selection does not mutate runtime form state and becomes active at the next
-iteration boundary.
+built-image root groups by image name and distinguishes the version and build
+date inside `latest` from the newest tag by parsed build date. A name opens its
+tag table with versions, digests, build dates, Latest/Newest badges, current and
+pending agent usage, and existing tag actions. Import remains at the root.
+Breadcrumbs preserve the explicit host and existing direct tag routes.
+Manifest, provenance, template, and file reads carry the same expected digest;
+a changed mutable ref clears the old view and reloads once, then offers manual
+refresh if it changes again. Directory builds and all detail requests capture
+the explicit route target. Agent **Configuration** only selects an already built
+image and links back to image detail. It shows the pinned **Current** (or
+**Activated version** when stopped) and the daemon's **Next iteration** preview,
+each with ref, manifest version, and digest. The next selection explains its
+pending, mutable-ref, or current-pinned origin; a digest difference signals an
+update even at equal versions. Inspection and activation failures remain visible
+without a pending ref. The preview is explicitly not a reservation. Ordinary
+agent status refreshes and image-build events reload it without overwriting
+runtime drafts, and responses from an older host, agent, or refresh are ignored.
+Selection becomes active at the next iteration boundary; cancelling pending
+keeps automatic mutable-ref following enabled.
 Runnable import previews expose the target name and tag. Operators can keep the
 artifact ref for an idempotent import or choose a different target when that ref
 already contains another digest; the source archive remains runnable-only.
@@ -154,9 +178,16 @@ unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
 on the route-selected daemon. Its detail shows the current disk-backed image
-inventory, source and newest built versions, update highlighting, and
-diagnostics, with Refresh, Remove and Build actions. A successful build reloads
-the detail so its version and update state reflect the daemon immediately.
+inventory, each source `image_version`, and the `image_version` read directly
+from that image's `latest` manifest. It distinguishes missing latest,
+unversioned source or latest, source validation errors, and latest inspection
+errors; it highlights only known version mismatches and never reports an
+unknown comparison as up to date. Source errors disable Build, while missing or
+damaged latest and equal versions retain the manual Build action. A successful
+default versioned build reports publication of both the version tag and
+`latest`, then reloads the detail so its comparison reflects the daemon
+immediately. Version comparison does not detect changed bytes when the source
+keeps the same `image_version`.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -249,8 +280,15 @@ pointer-accessible left separator resizes it, and the pixel width persists in
 sheet while preserving the tree's expansion and scroll position. Dismissal
 protects unsaved task, comment, and relation drafts with the confirmation
 “Are you sure you want to close this task? Unsaved changes will be discarded.”
-Task Detail also offers `Wait customer` status and an editable Pull request URL;
-both use the existing optimistic revision and explicit-host request path.
+Task Detail also offers `Wait customer` status and an editable `Pull request`
+field; both use the existing optimistic revision and explicit-host request path.
+The sheet is one `--card` island with its own scroll and a sticky identity
+header carrying the task key, title, status, workflow version and assignee. A
+single banner under that header reports what needs a person — a frozen workflow
+with its error code, or an unanswered customer question — and other statuses
+speak through the status pill alone. History rows read as time, kind, a
+one-line `key value · key value` payload summary and actor; the panel never
+prints a raw JSON payload.
 On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
 the left task navigation. Arrow keys move the separator, Shift increases the
 step, Home and double-click restore its default,
@@ -263,14 +301,19 @@ separator is hidden without discarding the stored desktop navigation width.
 
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
-links, lists, checklists, code, and tables are supported. Unsupported syntax
-keeps the editor in source mode rather than being silently converted or lost.
+links, lists, checklists, code, and tables are supported. Unsupported blocks
+remain visible and editable as literal code blocks in rich mode; the
+Markdown source stays available as an explicit manual mode. A `Rich text |
+Markdown` segment selects the mode, and in Task Detail it sits on the section's
+own label row beside `Send files` rather than inside the editor.
 Empty numbered-list items remain editable in rich text, including immediately
 after Enter adds a new item; they do not add an extra visible paragraph.
 The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
-editor documents are not stored. Long text and links wrap within the task
+editor documents are not stored. Each saved comment exposes a copy action on
+hover or keyboard focus that writes its original Markdown string to the
+clipboard. Long text and links wrap within the task
 panel, while wide tables and code blocks scroll inside their own Markdown
 block. In Desktop, absolute `http://` and `https://` links in descriptions and
 comments open through the native system-browser command instead of navigating
@@ -293,8 +336,15 @@ remain. The dialog cannot be dismissed or submitted twice while the one bulk
 request is running. Success reports the server's delivery/message counters and
 reloads Queue; failure keeps the authoritative rows visible for retry.
 
+An agent's **Scripts** view exposes **Exec** for a completed one-shot or an
+active recurring definition with no pending or running attempt. Exec queues the
+stored command through the ordinary script worker; recurring definitions resume
+their fixed post-completion delay after that manual run.
+
 Notifications and customer-only queue administration live in the same
-workspace. A small red indicator on a task row identifies an unread,
+workspace. **Mark as Read All** marks every currently unread notification read
+through the existing per-notification action and refreshes shared attention once.
+A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task; it updates from the
 same notification state used by the inbox. A route-independent coordinator
 also watches every configured host and projects agent-authored questions into
@@ -431,7 +481,8 @@ extra is rendered at all — no empty element and no placeholder.
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
 main Tauri window retains native traffic lights under an overlay titlebar, and
 the sidebar icon is immediately after their reserved area in the global
-toolbar. The only other titlebar control is the theme icon. Empty toolbar space is draggable, while daemon status banners remain
+toolbar. The application-settings action and theme icon are the other titlebar
+controls. Empty toolbar space is draggable, while daemon status banners remain
 below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Workspace
 xterm content is square and flush inside the single FlexLayout pane border; the

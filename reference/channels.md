@@ -216,13 +216,20 @@ The max attempts constant is currently `5`.
 The messages are written into the prompt under:
 
 ```text
-# Messages
+# Task Processing Order
+...
+## Messages
 Incoming messages for this iteration (newest last):
 ...
 ```
 
 Despite the section text saying "newest last", the practical result is
 chronological order: older messages appear first, newer messages later.
+This platform-owned block puts one-shot instructions before Messages and Goal
+after it, independently of the image template. With no incoming messages it
+says so explicitly; outstanding requests, if any, remain nested under
+`### Awaiting replies`. Preview keeps execution-time message placeholders and
+does not increment delivery attempts.
 
 ## Ack and redelivery
 
@@ -288,7 +295,9 @@ runs immediately and then after a fixed post-completion delay. Non-quiet runs
 publish `script.result` to the owner's inbox. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
 The log starts with the resolved execution CWD; combined stdout and stderr
-follow in that file and are not copied into the message.
+follow in that file and are not copied into the message. An idle recurring
+definition can also be run immediately; its next fixed delay starts when that
+manual run finishes, and the active-run constraint still prevents overlap.
 
 ## Operator visibility
 

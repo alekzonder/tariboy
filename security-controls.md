@@ -146,7 +146,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.55.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.60.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -154,8 +154,33 @@ Security → Open Anyway** for that exact app. This is a temporary scoped
 exception for named alpha partners.
 
 Do not disable Gatekeeper globally, change system-wide `spctl` policy, or remove
-quarantine recursively from Applications. Developer ID signing, notarization,
-and signed updater artifacts are later release work.
+quarantine recursively from Applications. Developer ID signing and notarization
+remain later release work.
+
+Desktop accepts an update only when the official Tauri updater verifies the
+download against the permanent public key pinned in the installed application.
+The release owner's matching private key stays in GitHub Actions Secrets and
+must be securely owned and backed up before an updater-enabled release. The
+fixed catalog may select only a higher stable version for the supported Apple
+Silicon macOS target. The WebView cannot provide a URL, signature, path, or
+archive bytes.
+
+The verified archive remains in Rust process memory and is never sent through
+IPC, written to Web Storage, or added to support bundles. Closing the window to
+the tray retains it; quitting the application discards it. A failed install
+retains the verified archive for retry, while an interrupted download starts
+again from zero. Archive memory use is proportional to the update size.
+
+An exact `vX.Y.Z` tag triggers the repository's GitHub Actions workflow on a
+macOS runner. The workflow rejects a tag that differs from either canonical
+version declaration, builds and verifies the release through `make
+desktop-mac`, and publishes the DMG, signed updater archive and catalog,
+`SHA256SUMS`, and `release.json` with the job-scoped `contents: write`
+permission. Before staging, the workflow rejects malformed signing packets or a
+signature key identifier that differs from the pinned updater public key. This
+catches an accidental wrong signing Secret; cryptographic archive verification
+remains the official updater's responsibility. GitHub publication does not change
+the ad-hoc-signing or Gatekeeper constraints above.
 
 The alpha deliberately enables Tauri WebView developer tools in its
 release build for local diagnosis. DevTools exposes the current WebView state

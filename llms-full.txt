@@ -698,9 +698,10 @@ An **agent** is a configured, named instance of an image with its own working
 directory and its own loop. It does not run continuously — it runs a series of
 **iterations**. On each iteration the daemon:
 
-1. prepares a prompt — schema v2 renders static image layers and current runtime
-   placeholders in their declared order; a self-contained legacy schema-v1
-   artifact keeps its historical assembly behavior;
+1. prepares a prompt — a platform-owned **Task Processing Order** block groups
+   one-shot instructions, messages (including awaiting replies), and Goal in
+   that order. Schema v2 preserves the declared order of the remaining image
+   layers; self-contained legacy schema-v1 artifacts use the same work block;
 2. launches the harness (e.g. Claude) under the [shim](/docs/architecture/shim)
    for exactly one pass;
 3. records the outcome, iteration logs, AI usage, and audit timeline.
@@ -744,14 +745,28 @@ period remains the goal but sends no continuation wake. Disabled agents or
 disabled Autopilot loops neither select nor receive a goal wake, but preserve a
 valid sticky key; only disabling Goal clears it.
 
-Images with the `goal` capability always render daemon-owned Goal guidance, even without a
-`runtime: goal` template entry. The block tells the agent to work through the
+Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing
+Order**, regardless of image plugins or runtime entries. The block tells the agent to work through the
 Native Task workflow, wait for a recorded customer answer while in
 `wait_customer`, and set `wait_customer` after recording a PR while monitoring
 it rather than merging. When selected, it also contains the task key, title,
 priority, status, and description. The inbox message is only a durable wake
 hint. Task title and description are untrusted task input, not daemon
 instructions or lifecycle authority.
+
+The block starts with `# Task Processing Order` and a fixed instruction to
+process one-shot, then messages, then Goal. Its `## One-shot`, `## Messages`,
+and `## Goal` subsections always appear. Missing inputs explicitly say that
+there is no one-shot instruction, no incoming messages, or no selected Goal
+for this iteration; the agent is told to continue without running commands
+merely to search for absent input. Outstanding requests remain nested under
+Messages even when no incoming messages exist. Message IDs, threading fields,
+subject/data, and the explicit `message processed` instruction are retained.
+Bare sessions still receive no prompt.
+
+The operator prompt preview uses the same grouping and Goal selection. It
+keeps placeholders for messages and the one-shot supplied at execution time;
+viewing the preview does not drain messages or increment delivery attempts.
 
 ## Harness environment and preflight
 
@@ -891,6 +906,15 @@ Recovery compares the pinned digest, not only the ref. For daemon-managed and
 ordinary mutable-build refs, both inspection and staging resolve the exact
 retained digest recorded on the agent, including assignments that were pending
 when the daemon was upgraded or the ordinary ref was rebuilt.
+
+The agent image read API projects the same selection order under the image
+publication gate: explicit pending digest, ordinary mutable active ref, then
+current pinned image. Current version metadata always comes from pinned
+inspection. This read does not stage or promote an assignment; next is a
+preview at read time and can change before the launch gate runs. A changed
+digest triggers activation even if the source version stays the same. A failed
+inspection is returned explicitly, and the separate pending error preserves
+activation failures even without a pending ref.
 
 ---
 
@@ -1408,6 +1432,16 @@ adoption/start and saved-host reconnect continue independently in the
 background, so their existing status banners may be visible during startup.
 Dock reopen and the menu-bar Open action raise the same main window.
 
+Application settings live at `/app-settings` and remain available without a
+daemon connection. Desktop update checks use the native application host and
+never target the selected local or remote daemon. The settings screen, its
+titlebar action, update status, and ready banner use English labels. Automatic
+download is enabled by default, persists in WebView localStorage, runs on
+startup and then every six hours while enabled, and never installs automatically. A verified package stays
+only in Rust process memory, so quitting Desktop discards it. When one is ready,
+the route-independent banner below the titlebar requires an explicit install
+action and reports installation failures for retry.
+
 The primary agent dialog has **Target**, **Identity**, **Runtime**,
 **Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
 documented defaults and submits one complete create request; the daemon writes
@@ -1507,11 +1541,25 @@ artifact. The workspace owns vertical scrolling within the height-constrained
 server shell, so validation output and built images remain reachable at small
 window heights. **Close** dismisses the in-memory validation preview, warnings,
 and diagnostics without changing build inputs or any built artifact. The
-built-image list identifies agents using each ref now and agents
-with that ref pending. Agent **Configuration** only selects an already built
-image, shows current and pending refs, and links back to image detail.
-Selection does not mutate runtime form state and becomes active at the next
-iteration boundary.
+built-image root groups by image name and distinguishes the version and build
+date inside `latest` from the newest tag by parsed build date. A name opens its
+tag table with versions, digests, build dates, Latest/Newest badges, current and
+pending agent usage, and existing tag actions. Import remains at the root.
+Breadcrumbs preserve the explicit host and existing direct tag routes.
+Manifest, provenance, template, and file reads carry the same expected digest;
+a changed mutable ref clears the old view and reloads once, then offers manual
+refresh if it changes again. Directory builds and all detail requests capture
+the explicit route target. Agent **Configuration** only selects an already built
+image and links back to image detail. It shows the pinned **Current** (or
+**Activated version** when stopped) and the daemon's **Next iteration** preview,
+each with ref, manifest version, and digest. The next selection explains its
+pending, mutable-ref, or current-pinned origin; a digest difference signals an
+update even at equal versions. Inspection and activation failures remain visible
+without a pending ref. The preview is explicitly not a reservation. Ordinary
+agent status refreshes and image-build events reload it without overwriting
+runtime drafts, and responses from an older host, agent, or refresh are ignored.
+Selection becomes active at the next iteration boundary; cancelling pending
+keeps automatic mutable-ref following enabled.
 Runnable import previews expose the target name and tag. Operators can keep the
 artifact ref for an idempotent import or choose a different target when that ref
 already contains another digest; the source archive remains runnable-only.
@@ -1533,9 +1581,16 @@ unstarted destinations.
 
 The **Stores** workspace registers Git URLs or local absolute source directories
 on the route-selected daemon. Its detail shows the current disk-backed image
-inventory, source and newest built versions, update highlighting, and
-diagnostics, with Refresh, Remove and Build actions. A successful build reloads
-the detail so its version and update state reflect the daemon immediately.
+inventory, each source `image_version`, and the `image_version` read directly
+from that image's `latest` manifest. It distinguishes missing latest,
+unversioned source or latest, source validation errors, and latest inspection
+errors; it highlights only known version mismatches and never reports an
+unknown comparison as up to date. Source errors disable Build, while missing or
+damaged latest and equal versions retain the manual Build action. A successful
+default versioned build reports publication of both the version tag and
+`latest`, then reloads the detail so its comparison reflects the daemon
+immediately. Version comparison does not detect changed bytes when the source
+keeps the same `image_version`.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -1628,8 +1683,15 @@ pointer-accessible left separator resizes it, and the pixel width persists in
 sheet while preserving the tree's expansion and scroll position. Dismissal
 protects unsaved task, comment, and relation drafts with the confirmation
 “Are you sure you want to close this task? Unsaved changes will be discarded.”
-Task Detail also offers `Wait customer` status and an editable Pull request URL;
-both use the existing optimistic revision and explicit-host request path.
+Task Detail also offers `Wait customer` status and an editable `Pull request`
+field; both use the existing optimistic revision and explicit-host request path.
+The sheet is one `--card` island with its own scroll and a sticky identity
+header carrying the task key, title, status, workflow version and assignee. A
+single banner under that header reports what needs a person — a frozen workflow
+with its error code, or an unanswered customer question — and other statuses
+speak through the status pill alone. History rows read as time, kind, a
+one-line `key value · key value` payload summary and actor; the panel never
+prints a raw JSON payload.
 On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
 the left task navigation. Arrow keys move the separator, Shift increases the
 step, Home and double-click restore its default,
@@ -1642,14 +1704,19 @@ separator is hidden without discarding the stored desktop navigation width.
 
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
-links, lists, checklists, code, and tables are supported. Unsupported syntax
-keeps the editor in source mode rather than being silently converted or lost.
+links, lists, checklists, code, and tables are supported. Unsupported blocks
+remain visible and editable as literal code blocks in rich mode; the
+Markdown source stays available as an explicit manual mode. A `Rich text |
+Markdown` segment selects the mode, and in Task Detail it sits on the section's
+own label row beside `Send files` rather than inside the editor.
 Empty numbered-list items remain editable in rich text, including immediately
 after Enter adds a new item; they do not add an extra visible paragraph.
 The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
-editor documents are not stored. Long text and links wrap within the task
+editor documents are not stored. Each saved comment exposes a copy action on
+hover or keyboard focus that writes its original Markdown string to the
+clipboard. Long text and links wrap within the task
 panel, while wide tables and code blocks scroll inside their own Markdown
 block. In Desktop, absolute `http://` and `https://` links in descriptions and
 comments open through the native system-browser command instead of navigating
@@ -1672,8 +1739,15 @@ remain. The dialog cannot be dismissed or submitted twice while the one bulk
 request is running. Success reports the server's delivery/message counters and
 reloads Queue; failure keeps the authoritative rows visible for retry.
 
+An agent's **Scripts** view exposes **Exec** for a completed one-shot or an
+active recurring definition with no pending or running attempt. Exec queues the
+stored command through the ordinary script worker; recurring definitions resume
+their fixed post-completion delay after that manual run.
+
 Notifications and customer-only queue administration live in the same
-workspace. A small red indicator on a task row identifies an unread,
+workspace. **Mark as Read All** marks every currently unread notification read
+through the existing per-notification action and refreshes shared attention once.
+A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task; it updates from the
 same notification state used by the inbox. A route-independent coordinator
 also watches every configured host and projects agent-authored questions into
@@ -1810,7 +1884,8 @@ extra is rendered at all — no empty element and no placeholder.
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
 main Tauri window retains native traffic lights under an overlay titlebar, and
 the sidebar icon is immediately after their reserved area in the global
-toolbar. The only other titlebar control is the theme icon. Empty toolbar space is draggable, while daemon status banners remain
+toolbar. The application-settings action and theme icon are the other titlebar
+controls. Empty toolbar space is draggable, while daemon status banners remain
 below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Workspace
 xterm content is square and flush inside the single FlexLayout pane border; the
@@ -2434,11 +2509,14 @@ and npm dependencies.
 Install only the toolchains needed for the area you are changing:
 
 - **Go control plane:** Go 1.26, Make, a C toolchain where required by the host.
+- **Fast checks:** ripgrep (`rg`) for the packaging secret-scan contract in
+  `make backend-check` and `make check`. Install with `apt-get install ripgrep`
+  on Ubuntu or `brew install ripgrep` on macOS; the PR workflow installs it.
 - **React UI:** Node.js and npm.
 - **Desktop native host:** Rust (minimum package version 1.77), Cargo, the Tauri
   prerequisites, and platform build tools.
 - **macOS packaging:** Apple Silicon macOS 12+, Xcode command-line tools,
-  `codesign`, `hdiutil`, and the other checks reported by `make desktop-alpha`.
+  `codesign`, `hdiutil`, and the other checks reported by `make desktop-mac`.
 - **Agent smoke suites:** `tmux` is checked by both `make smoke` and
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
@@ -2558,11 +2636,13 @@ Run `make backend-check` for backend-only changes and `make frontend-check` for
 frontend- or documentation-only changes. Run `make check` for mixed changes or
 when ownership is unclear. The backend target runs `fmt-check`, `vet`, `test`,
 Go unit tests and smoke contracts. The frontend target runs UI
-typecheck, lint, unit tests, branding, and the documentation checks. All three
-are read-only: they never install dependencies, write into `bin/`, or dirty
-`git status`. Each step reports its result and duration as it finishes.
-Successful command output is suppressed; failed steps print their command and
-complete diagnostics, and every run ends with a compact summary.
+typecheck, lint, unit tests, branding, and the documentation checks. Before
+checking, `backend-check` runs `go mod download`, and `frontend-check` runs
+locked `npm ci` installs under both `ui/` and `docs/`. They do not write into
+`bin/` or dirty `git status`. Each step reports its result and duration as it
+finishes.
+Successful check-step output is suppressed; failed steps print their command
+and complete diagnostics, and every run ends with a compact summary.
 
 `make full-check` is the full set of checks that run unattended on a developer
 machine, not every check in the repository. It runs `check`, then `build`, the
@@ -2570,14 +2650,13 @@ four core E2E scripts, `full-smoke`, the two Playwright browser suites, and one
 desktop step for the host: `desktop-e2e` on Linux x86_64, `desktop` plus
 `desktop-smoke` on macOS arm64, and the version and lock gates alone elsewhere.
 
-The check targets do not stop at the first failure. Each step is timed and
-recorded, and the run ends with a summary table naming every step that failed,
-so one aggregate pass surfaces gofmt drift and a UI type error together.
+After dependency preparation succeeds, the check steps do not stop at the
+first failure. Each step is timed and recorded, and the run ends with a summary
+table naming every step that failed, so one aggregate pass surfaces gofmt drift
+and a UI type error together.
 
-`frontend-check`, `check`, and `full-check` require `ui/node_modules` and
-`docs/node_modules` to exist; run `npm ci` in those directories once, as
-described below. These targets do not install them, because installing would
-rewrite a shared working tree.
+`frontend-check`, `check`, and `full-check` refresh `ui/node_modules` and
+`docs/node_modules` from the committed lockfiles before running checks.
 
 Three scripts stay outside `full-check` deliberately and are run by hand:
 `scripts/product-alpha-e2e.sh` and `scripts/remote-provision-smoke.sh` require a
@@ -2700,8 +2779,8 @@ dedicated config.
 
 ### React UI
 
-Install the dependencies once; neither entry point does it for you, and both
-fail with an explicit `cd ui && npm ci` hint when `ui/node_modules` is missing:
+`frontend-check` and its aggregate entry points install the locked dependencies
+before checking. To install them directly while iterating:
 
 ```bash
 cd ui
@@ -2833,15 +2912,15 @@ binary payloads, and native packages for the selected platform. `PLATFORM`
 defaults to the supported native host and accepts `darwin` or `linux`; it does
 not enable cross-compilation. A standalone invocation runs `npm ci` when
 `ui/node_modules` is absent, using the committed lockfile before it builds the
-SPA. Verification entry points keep their prepared-dependency contract and do
-not install Node packages.
+SPA. Verification entry points already install Node packages, so their Desktop
+step skips that duplicate work.
 
 On Darwin arm64:
 
 ```bash
 make desktop PLATFORM=darwin  # .app and .dmg
 make desktop-smoke
-make desktop-alpha
+make desktop-mac
 ```
 
 The Darwin recipe sets `CI=true` only for `cargo tauri build`. This
@@ -2858,8 +2937,30 @@ make desktop PLATFORM=linux  # .deb and .AppImage
 The preflight rejects unknown platform values, unsupported host architectures,
 and a platform that does not match the current host before compiling payloads.
 
-`make desktop-alpha` packages and verifies the alpha; publication is a
-separate manual action.
+Ordinary `make desktop` packages keep Tauri updater artifacts disabled, so local
+macOS and Linux builds do not need the release owner's private key. The macOS
+path still creates the ad-hoc-signed app and DMG.
+
+`make desktop-mac` is the signed release path. It requires
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, enables the
+Tauri updater archive and signature explicitly, and fails before packaging when
+either variable is missing. The release owner permanently owns and backs up that
+private key; its matching public key is pinned in the Desktop bundle. Never print
+or commit the signing Secrets. Key rotation requires a separately planned
+release because installed applications trust the embedded public key.
+
+Pushing an exact `vX.Y.Z` tag whose version matches both canonical declarations
+runs the same target on GitHub's `macos-15` runner. The workflow requires both
+signing Secrets, finds the single generated `.app.tar.gz` and `.sig` pair, and
+stages them with the checked DMG, `SHA256SUMS`, `release.json`, and `latest.json`.
+Before staging, the manifest gate rejects malformed packets or a signature key
+identifier that differs from the public key in `tauri.conf.json`. This identifies
+an accidental wrong signing Secret; cryptographic archive verification remains
+the installed updater's responsibility. The workflow creates a draft GitHub
+Release, uploads the complete set, and only then makes the release public, so the
+latest catalog cannot reference missing assets. The first updater-enabled version
+must still be installed from the DMG; only later, higher signed versions can be
+installed by the updater.
 
 The tray action **Install/Update CLI** owns the local five-file payload and
 six-command-path install. It preflights and atomically switches `tariboyd`,
@@ -2880,7 +2981,8 @@ Other documentation pages keep the standard sidebar layout. Use site-root paths
 such as `/quickstart` in Markdown and Card links; Blume adds the deployment
 base to produce `/tariboy/quickstart`. Raw HTML anchors are not rewritten.
 
-Install the dependencies once, as for the UI:
+`frontend-check` and its aggregate entry points install the locked dependencies
+before checking. To install them directly while iterating:
 
 ```bash
 cd docs
@@ -2912,6 +3014,11 @@ working tree stay selected and untouched. On the first publication, configure
 the repository under **Settings → Pages** to use **Deploy from a branch**, then
 select the `docs` branch and `/ (root)` folder. GitHub Pages serves this project
 site at `https://alekzonder.github.io/tariboy/`.
+
+After a successful Desktop release, a separate workflow job runs `make docs`
+from the tagged commit and pushes the `docs` branch. Site deployment follows
+separately. If documentation publication fails, rerun the failed docs job; the
+already-published release remains intact.
 
 ### End-to-end suites
 
@@ -3062,6 +3169,34 @@ Skills, and the exact prompt template rendered for each iteration. Harness,
 model, effort, interactive mode, environment, policy, secrets, and evals are
 runtime or compose configuration. They are not schema-v2 image fields.
 
+## Browse built images
+
+The **Images** list has one row per image name on the selected server. **Latest
+image_version** and **Latest built at** describe exactly `name:latest`;
+**Newest built tag** and **Tag built at** describe the most recently built tag,
+which may be different. Missing latest shows **No latest**, and an unversioned
+manifest shows **Version not specified**. Newest is selected by parsed
+`built_at`, not SemVer. Tied dates prefer the matching version tag, then stable
+tag-name order; missing or invalid dates sort last. Imported archives retain
+their original build time, rather than showing the import time.
+
+Select an image name to see its tags, manifest versions, build dates, full
+digests, and separate **Latest** and **Newest** badges. Current and pending agent
+usage and Run Agent, Export, Upload to servers, and Remove remain per-tag
+actions. Import stays on the Images root. Select a tag for its existing
+Overview, Template, Skills, and Files tabs; breadcrumbs return to its name or
+the root, and existing direct tag URLs keep working.
+
+Detail reads carry the displayed manifest digest. If a mutable ref changes
+between reads, the UI reports the update, discards the old content, and reloads
+once. A further change offers **Refresh image**, so repeated rebuilds cannot
+cause an endless refresh loop. The read API accepts optional
+`expected_digest` on manifest, template, prompt, provenance, file-list, and
+file-content requests; a mismatched published digest returns HTTP 409
+`image_changed`. CLI equivalents accept `--expected-digest`. Requests without
+that value retain their existing behavior. Every detail read is serialized
+with publication, so its digest check and content read describe one generation.
+
 ## Build from an original directory
 
 Open **Images**, enter the directory containing `Tariboyfile.yaml`, choose a
@@ -3158,11 +3293,15 @@ longer installs a separate built-in Store tree.
 Only the registration's name and source are persisted in the daemon database.
 Viewing a Store reads the current disk inventory and `image_version` values;
 there is no saved image list to become stale. For each valid source, the detail
-also shows the newest built version with the same default image name and marks
-the source when that newest version is absent or differs from its declared
-version. A successful **Build** reloads that inventory. A missing `images/`
-directory shows an empty list. An invalid image reports its own error while
-valid sibling images remain visible.
+inspects `<image_name>:latest` directly and shows that manifest's
+`image_version`. It marks an update only when the source and latest both declare
+versions and those values differ. Missing latest, an unversioned source or
+latest, and a damaged latest artifact remain distinct states. A damaged latest
+does not hide healthy siblings or fall back to another tag. A successful
+**Build** reloads the inventory and reports both the version tag and `latest`
+when the source is versioned. A missing `images/` directory shows an empty
+list. An invalid source reports its own error and disables its Build action
+while valid sibling images remain available.
 
 **Refresh** runs `git pull --ff-only` for both managed clones and local Git
 checkout roots, including Git worktrees. A local directory without its own
@@ -3186,9 +3325,12 @@ requires Node.js/npm and access to the skill sources. Private repositories use
 the server account's configured SSH or Git credential helpers. Configure access
 on that server before adding the Store; do not put credentials in its URL.
 
-The Store detail shows **Images**, their source and built versions, update
-highlighting, and **Build** actions. Built artifacts appear in the existing
-**Images** workspace. Stores do not yet expose standalone skills or plugins.
+The Store detail labels **Source image_version** and **Latest image_version**
+explicitly, highlights version mismatches, and keeps manual **Build** available
+when the versions match. This comparison cannot detect changed source bytes
+when `image_version` stays the same; use manual Build after such a change.
+Built artifacts appear in the existing **Images** workspace. Stores do not yet
+expose standalone skills or plugins.
 
 ## Image versions
 
@@ -3256,9 +3398,12 @@ prompts:
   - file: /srv/tariboy/prompts/finish.md
 ```
 
-The `prompts` sequence is the render sequence. Tariboy does not sort it, add
-core fragments, prepend an identity header, or append a finishing tail. An
-empty list produces an empty prompt template.
+The `prompts` sequence preserves the order of static files and ordinary runtime
+values. For every non-bare agent, Tariboy prepends a platform-owned **Task
+Processing Order** block containing one-shot, messages, and Goal. Older entries
+for those inputs are accepted but do not render duplicate sections. Tariboy
+does not add an identity header or finishing tail. An empty list produces an
+empty image template, but the platform work block is still rendered at runtime.
 
 Each static `file` is resolved and embedded at build time. Supported forms are:
 
@@ -3292,29 +3437,33 @@ portability, harness adapters, discovery precedence, and activation failures.
 ## Runtime placeholders
 
 Runtime entries remain visible placeholders inside the immutable image. Before
-every iteration, the runner replaces them with current values at their declared
-positions:
+every iteration, the runner replaces ordinary values at their declared
+positions. Work inputs are always grouped in the platform block:
 
 | Placeholder | Value at iteration start | Skill named in the rendered instruction |
 | --- | --- | --- |
 | `identity` | Current agent name, active image ref and digest, CWD, and iteration identity | `whoami` |
-| `goal` | Daemon-selected Native Task key, title, priority, status, and description | `goal` |
+| `goal` | Compatibility marker; selected Native Task fields appear in Task Processing Order | none; platform-owned |
 | `workdir` | Absolute managed `agents/<agent>/workdir`, independent of the effective CWD | `workdir` |
 | `context` | Durable agent context | `context` |
-| `messages` | Messages delivered to this iteration and outstanding request state | `messages` |
-| `awaiting-replies` | Compatibility marker for outstanding request state when `messages` is absent | `messages` |
+| `messages` | Compatibility marker; delivered messages and outstanding requests appear in Task Processing Order | none; platform-owned |
+| `awaiting-replies` | Compatibility marker; outstanding requests appear under Messages in the platform block | none; platform-owned |
 | `user-prompt` | The agent's standing prompt | none; this is task input |
-| `one-shot` | A prompt supplied for this single execution | none; this is task input |
+| `one-shot` | Compatibility marker; single-execution input appears first in Task Processing Order | none; this is task input |
 
-Each non-empty runtime value starts with `# [runtime: <name>]`. For skill-owned
+Each non-empty ordinary runtime value starts with `# [runtime: <name>]`. For skill-owned
 values, the short instruction to use that skill follows the heading and names
 the skill without embedding an installation path. Context data then starts with
-`# Agent Context`, and messages plus outstanding replies form one `# Messages`
-group. New templates declare only `messages`; existing templates that also
-declare `awaiting-replies` keep working without a second section. The supplied
-templates order actionable values as `one-shot`, `messages`, then `goal` when
-present. Each singleton placeholder may appear at most once. Empty runtime
-values add no text. The **Template** tab shows static paths, categories, sizes,
+`# Agent Context`. The platform block starts with `# Task Processing Order`,
+followed by a fixed ordering instruction and `## One-shot`, `## Messages`,
+and `## Goal`. Missing work inputs have explicit empty-state text and an
+instruction not to search for them with commands. Outstanding replies use a
+nested `### Awaiting replies` heading; message and task content is retained.
+This grouping applies to existing images without rebuilding and to images
+without work-input entries or plugins. It grants no additional capabilities
+or packaged skills. Existing declared markers still undergo normal image
+contract validation. Each singleton placeholder may appear at most once.
+Empty ordinary runtime values add no text. The **Template** tab shows static paths, categories, sizes,
 hashes, and runtime markers in their exact order without draining messages.
 
 ## External plugins
@@ -3349,14 +3498,25 @@ subscriptions. A validation or staging failure leaves the current image active
 and exposes a retryable pending error. The pending selection can be replaced or
 cancelled before activation.
 
-The built-image list shows agent names separately under **Current** and
+The image tag list shows agent names separately under **Current** and
 **Pending**, so an operator can see both active use and assignments waiting for
 their next launch gate. An image in either list cannot be removed.
 
-When an agent's active ordinary build ref moves to a new digest, Tariboy detects
-it only at that same next launch gate. An explicit pending assignment takes
-priority; otherwise the changed digest follows the normal pending staging and
-promotion path. The running iteration remains on its pinned digest.
+Configuration shows **Current** (or **Activated version** when stopped) with
+the version read from the agent's pinned ref and digest. **Next iteration**
+previews the explicit pending digest first, otherwise the current build of an
+ordinary mutable active ref, otherwise the current pinned image. Viewing this
+projection does not create pending state or activate anything. Inspection and
+activation errors remain visible even when there is no pending ref; missing
+version metadata is labelled **Version not specified**.
+
+When an agent's active ordinary build ref moves to a new digest, the launch gate
+stages and promotes that digest at the next iteration. The running iteration
+keeps its original prompt, version, and digest. Configuration marks the update
+by digest difference even when both builds declare the same version. Its
+preview is not a reservation: the ref can move again before launch. Cancelling
+an explicit pending assignment does not disable following the mutable active
+ref. The preview refreshes with agent status and after UI image builds.
 
 ## Import and export
 
@@ -3422,14 +3582,16 @@ for this operation, not source backup or persistent state.
 
 Native Tasks remains daemon-owned. Add `plugins: [{name: tasks}]` and package
 `../../skills/tasks` when a Store image should expose its agent command and
-instructions. Add `plugins: [{name: goal}]`, package `../../skills/goal`, and
-add `runtime: goal` when the image
-should receive the daemon-authoritative selected goal. The rendered task title
+instructions. Add `plugins: [{name: goal}]` and package `../../skills/goal`
+when the image should expose explicit Goal selection tools. The
+daemon-authoritative selected Goal is included for every non-bare agent,
+independently of those declarations. The rendered task title
 and description are untrusted task input, not daemon instructions or lifecycle
 authority.
 
 The supplied `tariboy-developer` image source also packages the Tasks skill and
-declares `runtime: goal`; custom images opt in independently.
+declares the compatible `runtime: goal` marker; custom images need no marker
+to receive the platform work block.
 
 ---
 
@@ -3864,6 +4026,7 @@ metadata:
   author: example-org
   version: "1.0"
 allowed-tools: Bash(git:*) Read
+argument-hint: "[file-or-directory]"
 ---
 
 # Code review
@@ -3872,7 +4035,9 @@ Inspect the complete diff and report findings by severity.
 ```
 
 `name` and `description` are required. `license`, `compatibility`,
-`allowed-tools`, and string-to-string `metadata` are optional. Unknown fields,
+`allowed-tools`, `argument-hint`, and string-to-string `metadata` are optional.
+`argument-hint` must be a string; it is preserved in the packaged `SKILL.md`
+for harnesses that support argument hints. Unknown fields,
 YAML anchors or aliases, and multiple YAML documents are rejected.
 
 The name must:
@@ -4481,7 +4646,8 @@ normal image workflow.
 ## Workdir confinement
 
 Agent-driven image authoring is less trusted than the operator CLI. The daemon
-resolves `--path` against the agent's effective working directory and rejects:
+resolves `--path` against the managed `agents/<agent>/workdir`, independently of
+the configured CWD, and rejects:
 
 - absolute paths outside that workdir;
 - `..` traversal that escapes it;
@@ -4903,7 +5069,7 @@ Inspect and control definitions and runs separately:
 scripts/scripts.sh ls
 scripts/scripts.sh runs scr-agent-...
 scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...        # completed one-shot definitions only
+scripts/scripts.sh rerun scr-agent-...        # completed one-shot or idle recurring definitions
 scripts/scripts.sh cancel scr-agent-...       # stop a definition and its active run
 scripts/scripts.sh cancel srun-agent-...      # stop only this run
 scripts/scripts.sh rm scr-agent-...           # inactive definitions only
@@ -4932,10 +5098,12 @@ scripts.
    inspect its status, exit code, timestamps, duration, log path, and inline
    log. Use **Copy path** to copy the log's absolute path or **Download log**
    to save the complete log.
-4. Use **Cancel** on an active definition to stop future runs and request
+4. Use **Exec** to queue an immediate attempt for a completed one-shot or an
+   active recurring definition with no pending or running attempt. A recurring
+   definition starts its next fixed delay when that manual run finishes. Use
+   **Cancel** on an active definition to stop future runs and request
    cancellation of its active run. Use **Cancel run** on an active run when
-   only that attempt should stop. After a one-shot definition is completed,
-   **Rerun** queues another attempt.
+   only that attempt should stop.
 5. Remove only an inactive definition. Desktop asks for confirmation because
    removal permanently deletes the definition and all of its run history.
 
@@ -5331,13 +5499,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.55.0` alpha on an Apple Silicon Mac.
+This path is for the `0.60.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.55.0_aarch64.dmg`;
+- a verified `Tariboy_0.60.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -5686,13 +5854,20 @@ The max attempts constant is currently `5`.
 The messages are written into the prompt under:
 
 ```text
-# Messages
+# Task Processing Order
+...
+## Messages
 Incoming messages for this iteration (newest last):
 ...
 ```
 
 Despite the section text saying "newest last", the practical result is
 chronological order: older messages appear first, newer messages later.
+This platform-owned block puts one-shot instructions before Messages and Goal
+after it, independently of the image template. With no incoming messages it
+says so explicitly; outstanding requests, if any, remain nested under
+`### Awaiting replies`. Preview keeps execution-time message placeholders and
+does not increment delivery attempts.
 
 ## Ack and redelivery
 
@@ -5758,7 +5933,9 @@ runs immediately and then after a fixed post-completion delay. Non-quiet runs
 publish `script.result` to the owner's inbox. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
 The log starts with the resolved execution CWD; combined stdout and stderr
-follow in that file and are not copied into the message.
+follow in that file and are not copied into the message. An idle recurring
+definition can also be run immediately; its next fixed delay starts when that
+manual run finishes, and the active-run constraint still prevents overlap.
 
 ## Operator visibility
 
@@ -6061,7 +6238,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh run NAME [--description TEXT] -- COMMAND` | Queue exactly one local run |
 | `scripts/scripts.sh schedule NAME --every SECONDS [--quiet-exit CODE] -- COMMAND` | Run now and repeat after each completion |
 | `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
-| `scripts/scripts.sh rerun SCRIPT_ID` | Rerun a completed one-shot definition |
+| `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
 | `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from an agent-confined source directory (`image-creator` only) |
 
@@ -6181,13 +6358,28 @@ agent's explicit `PATH` overrides the daemon baseline and therefore must retain
 both prerequisites; non-bare images then prepend their agent bin directory,
 while bare images do not.
 
-## Add and provision
+## Add a host
 
 1. Confirm the alias works in Terminal: `ssh build-box`.
 2. Add the same alias under **Settings → Hosts**.
-3. Run preflight and review its output.
-4. Answer first-seen host-key or 2FA prompts in the desktop when requested.
-5. Install the matching version and wait for tunnel health to become Ready.
+3. Choose one of the two setup modes:
+   - **Install Tariboy** (default) runs preflight, uploads and installs the
+     matching release, starts the daemon, and connects the tunnel.
+   - **Connect to existing Tariboy** saves the host and connects without
+     uploading, installing, activating, starting, or restarting anything.
+
+Both modes use system OpenSSH and its existing host-key, ssh-agent, ProxyJump,
+and authentication rules. **Connect to existing Tariboy** creates an
+independent dynamic local forward from `127.0.0.1` to the remote daemon at
+`127.0.0.1:9990`, then checks daemon health through that tunnel. A successful
+probe marks the host Ready, and the ordinary saved-host reconnect restores the
+tunnel after Desktop restarts.
+
+If no daemon answers at the remote loopback port, Desktop keeps the saved host
+and does not install or start anything automatically. The dialog offers to
+retry the connection or run **Install Tariboy** explicitly. A daemon version
+different from Desktop is allowed to connect; the existing **Update** indicator
+reports the mismatch without triggering an update.
 
 System OpenSSH honors `~/.ssh/config`, ProxyJump, ssh-agent, hardware-backed
 keys, `known_hosts`, and organization authentication. Tariboy never adds
@@ -6452,7 +6644,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.55.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.60.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6460,8 +6652,33 @@ Security → Open Anyway** for that exact app. This is a temporary scoped
 exception for named alpha partners.
 
 Do not disable Gatekeeper globally, change system-wide `spctl` policy, or remove
-quarantine recursively from Applications. Developer ID signing, notarization,
-and signed updater artifacts are later release work.
+quarantine recursively from Applications. Developer ID signing and notarization
+remain later release work.
+
+Desktop accepts an update only when the official Tauri updater verifies the
+download against the permanent public key pinned in the installed application.
+The release owner's matching private key stays in GitHub Actions Secrets and
+must be securely owned and backed up before an updater-enabled release. The
+fixed catalog may select only a higher stable version for the supported Apple
+Silicon macOS target. The WebView cannot provide a URL, signature, path, or
+archive bytes.
+
+The verified archive remains in Rust process memory and is never sent through
+IPC, written to Web Storage, or added to support bundles. Closing the window to
+the tray retains it; quitting the application discards it. A failed install
+retains the verified archive for retry, while an interrupted download starts
+again from zero. Archive memory use is proportional to the update size.
+
+An exact `vX.Y.Z` tag triggers the repository's GitHub Actions workflow on a
+macOS runner. The workflow rejects a tag that differs from either canonical
+version declaration, builds and verifies the release through `make
+desktop-mac`, and publishes the DMG, signed updater archive and catalog,
+`SHA256SUMS`, and `release.json` with the job-scoped `contents: write`
+permission. Before staging, the workflow rejects malformed signing packets or a
+signature key identifier that differs from the pinned updater public key. This
+catches an accidental wrong signing Secret; cryptographic archive verification
+remains the official updater's responsibility. GitHub publication does not change
+the ad-hoc-signing or Gatekeeper constraints above.
 
 The alpha deliberately enables Tauri WebView developer tools in its
 release build for local diagnosis. DevTools exposes the current WebView state
@@ -6524,7 +6741,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.55.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.60.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -6539,6 +6756,24 @@ At `0.14.1` and newer, an adopted interactive session remains attachable and
 controllable throughout that handoff. A persistent `4404` for an agent that
 still reports `running` is not an expected restart state; export a support
 bundle rather than restarting the agent or killing its surviving tmux session.
+
+## Desktop updates
+
+The first updater-enabled version must be installed from its verified DMG.
+Later higher stable versions can be checked, downloaded, signature-verified,
+and installed from **App settings**. Downloading never installs automatically.
+Only a package verified against the public key pinned in the app becomes ready;
+the package stays in memory until it is installed or the app fully exits.
+
+Installation needs a writable installed application location. It cannot update
+an app running from the read-only mounted DMG and may ask for system
+authorization. A download or verification failure can be retried from the
+start. An installation failure keeps the verified package ready for another
+install attempt and never restarts the app.
+
+If installation or the following launch fails, quit Tariboy and reinstall the
+previously verified DMG. The updater does not promise transactional rollback or
+recovery when the new application cannot start.
 
 If an interactive harness exits, its tmux PTY reaches EOF and Desktop changes
 the terminal to **Session not running or not interactive** without repeatedly
@@ -6646,11 +6881,12 @@ separately.
 - Apple Silicon macOS desktop only.
 - Automatic SSH installation supports Linux x86_64 only.
 - Ad-hoc signing requires a one-app Gatekeeper confirmation.
-- No auto-updater, Developer ID signing, or notarization.
+- Desktop updates require a writable installed app; Developer ID signing and
+  notarization are not yet available.
 - No built-in product analytics; optional OTLP is off by default and requires
   explicit operator configuration.
-- Publication is manual and allowed only after artifact checks and two-person
-  review.
+- Exact `vX.Y.Z` tags publish checked artifacts to GitHub Releases; the tag is
+  created only after the release checks and two-person review.
 
 ---
 
