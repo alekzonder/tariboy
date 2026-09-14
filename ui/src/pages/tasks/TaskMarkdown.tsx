@@ -44,7 +44,7 @@ const extensions = [
 ]
 const markdownParser = unified().use(remarkParse).use(remarkGfm)
 const markdownStyles = [
-  "task-markdown max-w-none text-sm leading-relaxed [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+  "task-markdown max-w-none text-[12.5px] leading-[1.55] text-pretty [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
   "[&_:is(h1,h2,h3,h4,h5,h6)]:mt-4 [&_:is(h1,h2,h3,h4,h5,h6)]:mb-2 [&_:is(h1,h2,h3,h4,h5,h6)]:font-semibold [&_h1]:text-2xl [&_h2]:text-xl [&_h3]:text-lg",
   "[&_strong]:font-bold [&_em]:italic [&_del]:line-through [&_s]:line-through [&_a]:text-primary [&_a]:underline",
   "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1",
@@ -98,12 +98,46 @@ export function MarkdownContent({ children }: { children: string }) {
   }}>{children}</ReactMarkdown></div>
 }
 
-export function MarkdownEditor({ value, onChange, id, placeholder, disabled = false }: {
+/** Rich text or the Markdown source behind it. */
+export type MarkdownMode = "rich" | "source"
+
+/**
+ * The mode switch as the style layer draws it: a segmented control on the
+ * section's label row rather than a toolbar strip inside the editor box. It is
+ * exported separately so the owner of the label row renders it there; an editor
+ * given no explicit mode still shows its own switch and keeps its own state.
+ */
+export function MarkdownModeSegment({ label, mode, onModeChange, disabled = false }: {
+  label: string
+  mode: MarkdownMode
+  onModeChange: (mode: MarkdownMode) => void
+  disabled?: boolean
+}) {
+  return <div role="group" aria-label={label} className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
+    {([["rich", "Rich text"], ["source", "Markdown"]] as const).map(([value, text]) => (
+      <button key={value} type="button" aria-pressed={mode === value} disabled={disabled}
+        onClick={() => onModeChange(value)}
+        className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] disabled:opacity-50 ${mode === value
+          ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+          : "text-muted-foreground hover:text-foreground"}`}>
+        {text}
+      </button>
+    ))}
+  </div>
+}
+
+export function MarkdownEditor({ value, onChange, id, placeholder, disabled = false, mode, surface = "muted" }: {
   value: string
   onChange: (value: string) => void
   id?: string
   placeholder?: string
   disabled?: boolean
+  /** Lift the mode out of the editor: when set, the caller owns the switch
+   *  and renders MarkdownModeSegment on the section's label row. */
+  mode?: MarkdownMode
+  /** Which fill the editor sits on. `card` is for an editor nested inside a
+   *  `--muted` block, where the same tone twice would read as one surface. */
+  surface?: "muted" | "card"
 }) {
   const [source, setSource] = useState(false)
   const [showLink, setShowLink] = useState(false)
@@ -120,12 +154,12 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
         role: "textbox",
         "aria-multiline": "true",
         ...(placeholder ? { "aria-label": placeholder, "data-placeholder": placeholder } : {}),
-        class: `${markdownStyles} min-h-32 p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring`,
+        class: `${markdownStyles} min-h-32 px-3 py-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring`,
       },
     },
     onUpdate: ({ editor: current }) => onChange(current.getMarkdown()),
   })
-  const showSource = source
+  const showSource = mode ? mode === "source" : source
 
   useEffect(() => {
     if (!editor) return
@@ -169,15 +203,18 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
     setLinkError("")
   }
 
-  return <div className="min-w-0 rounded-lg border border-input bg-background">
-    <div className="flex flex-wrap items-center gap-1 border-b p-1" aria-label="Markdown editing mode">
-      <Button type="button" size="xs" variant={!showSource ? "secondary" : "ghost"} aria-pressed={!showSource} disabled={disabled} onClick={() => setSource(false)}>Rich text</Button>
-      <Button type="button" size="xs" variant={showSource ? "secondary" : "ghost"} aria-pressed={showSource} disabled={disabled} onClick={() => { setSource(true); setShowLink(false) }}>Source Markdown</Button>
-    </div>
+  /* A field in this style layer is a fill, not a box: the editor is one
+     `--muted` block at radius 8, and its chrome rows are separated by
+     padding rather than by rules. */
+  return <div className={`min-w-0 rounded-[8px] ${surface === "card" ? "bg-card" : "bg-muted"}`}>
+    {!mode && <div className="flex flex-wrap items-center gap-1 p-1.5 pb-0" aria-label="Markdown editing mode">
+      <MarkdownModeSegment label="Markdown editing mode" disabled={disabled} mode={showSource ? "source" : "rich"}
+        onModeChange={(next) => { setSource(next === "source"); if (next === "source") setShowLink(false) }} />
+    </div>}
     {showSource ? <>
-      <Textarea id={id} aria-label={placeholder} placeholder={placeholder} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="min-h-32 rounded-none border-0 font-mono" />
+      <Textarea id={id} aria-label={placeholder} placeholder={placeholder} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="min-h-32 rounded-none border-0 bg-transparent font-mono text-[12.5px] shadow-none focus-visible:ring-0" />
     </> : <>
-      <div className="flex flex-wrap items-center gap-0.5 border-b p-1" role="group" aria-label="Markdown formatting">
+      <div className="flex flex-wrap items-center gap-0.5 p-1.5 pb-0" role="group" aria-label="Markdown formatting">
         {([1, 2, 3] as const).map((level) => <Button key={level} type="button" size="icon-xs" variant={editor?.isActive("heading", { level }) ? "secondary" : "ghost"} title={`Heading ${level}`} aria-label={`Heading ${level}`} aria-pressed={editor?.isActive("heading", { level })} disabled={disabled} onClick={() => editor?.chain().focus().toggleHeading({ level }).run()}>H{level}</Button>)}
         {actions.map(({ label, icon: Icon, active, run }) => <Button key={label} type="button" size="icon-xs" variant={active ? "secondary" : "ghost"} title={label} aria-label={label} aria-pressed={active} disabled={disabled} onClick={run}><Icon /></Button>)}
         <Button type="button" size="icon-xs" variant={editor?.isActive("link") ? "secondary" : "ghost"} title="Link" aria-label="Link" aria-pressed={editor?.isActive("link")} disabled={disabled} onClick={() => { setLinkURL(String(editor?.getAttributes("link").href ?? "")); setLinkError(""); setShowLink(!showLink) }}><Link /></Button>
@@ -189,7 +226,7 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
           <Button type="button" size="xs" variant="ghost" disabled={disabled} onClick={() => editor.chain().focus().deleteTable().run()}>Delete table</Button>
         </>}
       </div>
-      {showLink && <div className="space-y-1 border-b p-2">
+      {showLink && <div className="space-y-1 px-1.5 pt-1.5">
         <div className="flex flex-wrap gap-1">
           <Input aria-label="Link URL" value={linkURL} disabled={disabled} onChange={(event) => setLinkURL(event.target.value)} placeholder="https://example.com" className="min-w-40 flex-1" />
           <Button type="button" size="sm" disabled={disabled} onClick={applyLink}>Apply link</Button>
@@ -200,7 +237,7 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
       </div>}
       <div className="relative">
         <EditorContent editor={editor} onClick={(event) => openMarkdownLink(event, (event.target as Element).closest("a")?.getAttribute("href") ?? undefined)} />
-        {editor?.isEmpty && placeholder && <p aria-hidden="true" className="pointer-events-none absolute top-3 left-3 text-sm text-muted-foreground">{placeholder}</p>}
+        {editor?.isEmpty && placeholder && <p aria-hidden="true" className="pointer-events-none absolute top-[11px] left-3 text-[12.5px] text-muted-foreground">{placeholder}</p>}
       </div>
     </>}
   </div>

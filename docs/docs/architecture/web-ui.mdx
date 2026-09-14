@@ -280,8 +280,15 @@ pointer-accessible left separator resizes it, and the pixel width persists in
 sheet while preserving the tree's expansion and scroll position. Dismissal
 protects unsaved task, comment, and relation drafts with the confirmation
 “Are you sure you want to close this task? Unsaved changes will be discarded.”
-Task Detail also offers `Wait customer` status and an editable Pull request URL;
-both use the existing optimistic revision and explicit-host request path.
+Task Detail also offers `Wait customer` status and an editable Pull request
+URL; both use the existing optimistic revision and explicit-host request path.
+The sheet is one `--card` island with its own scroll and a sticky identity
+header carrying the task key, title, status, workflow version and assignee. A
+single banner under that header reports what needs a person — a frozen workflow
+with its error code, or an unanswered customer question — and other statuses
+speak through the status pill alone. History rows read as time, kind, a
+one-line `key value · key value` payload summary and actor; the panel never
+prints a raw JSON payload.
 On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
 the left task navigation. Arrow keys move the separator, Shift increases the
 step, Home and double-click restore its default,
@@ -295,8 +302,10 @@ separator is hidden without discarding the stored desktop navigation width.
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
 links, lists, checklists, code, and tables are supported. Unsupported blocks
-remain visible and editable as literal code blocks in rich mode; Source
-Markdown stays available as an explicit manual mode.
+remain visible and editable as literal code blocks in rich mode; the
+Markdown source stays available as an explicit manual mode. A `Rich text |
+Markdown` segment selects the mode, and in Task Detail it sits on the section's
+own label row beside `Send files` rather than inside the editor.
 Empty numbered-list items remain editable in rich text, including immediately
 after Enter adds a new item; they do not add an extra visible paragraph.
 The comment form appears before newest-first comments and after oldest-first comments.

@@ -196,8 +196,8 @@ describe("TasksWorkspace", () => {
     const comments = screen.getByText("Comments").closest("section")!
     expect(within(description as HTMLElement).getByRole("button", { name: "Send files" })).toBeEnabled()
     expect(within(comments).getByRole("button", { name: "Send files" })).toBeEnabled()
-    await userEvent.click(within(description as HTMLElement).getByRole("button", { name: "Source Markdown" }))
-    await userEvent.click(within(comments).getByRole("button", { name: "Source Markdown" }))
+    await userEvent.click(within(description as HTMLElement).getByRole("button", { name: "Markdown" }))
+    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Comment draft" } })
     const file = new File(["hello"], "notes.txt")
     await userEvent.upload(description.querySelector('input[type="file"]') as HTMLInputElement, file)
@@ -520,14 +520,15 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
 
-    expect(await screen.findByText("development@2")).toBeInTheDocument()
+    expect(await screen.findAllByText("development@2")).toHaveLength(2)
     expect(screen.getByText("review-a")).toBeInTheDocument()
     expect(screen.getByText("qa-a")).toBeInTheDocument()
     expect(screen.getByText("Need decision")).toBeInTheDocument()
     expect(screen.getByText("Which rollout?")).toBeInTheDocument()
     expect(screen.getByText("Looks good")).toBeInTheDocument()
-    expect(screen.getByText(/No transition matched · no_matching_transition/)).toBeInTheDocument()
-    expect(screen.getByText(/"error_code":"no_matching_transition"/)).toBeInTheDocument()
+    expect(screen.getByText("No transition matched")).toBeInTheDocument()
+    expect(screen.getAllByText("no_matching_transition").length).toBeGreaterThan(0)
+    expect(screen.getByText(/error_code no_matching_transition/)).toBeInTheDocument()
     expect(screen.queryByLabelText("Status")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Assignee")).not.toBeInTheDocument()
     expect(screen.queryByLabelText("Manual block reason")).not.toBeInTheDocument()
@@ -837,7 +838,7 @@ describe("TasksWorkspace", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     await userEvent.selectOptions(await screen.findByLabelText("Status"), "wait_customer")
-    await userEvent.type(screen.getByLabelText("Pull request URL"), "https://example.test/pull/7")
+    await userEvent.type(screen.getByLabelText("Pull request"), "https://example.test/pull/7")
     await userEvent.click(screen.getByRole("button", { name: "Save task" }))
 
     expect(api.updateTask).toHaveBeenNthCalledWith(1, "TEST-1", expect.objectContaining({
@@ -845,7 +846,7 @@ describe("TasksWorkspace", () => {
       pull_request: "https://example.test/pull/7",
       revision: 2,
     }), target)
-    const pullRequest = await screen.findByLabelText("Pull request URL")
+    const pullRequest = await screen.findByLabelText("Pull request")
     expect(pullRequest).toHaveValue("https://example.test/pull/7")
     await userEvent.clear(pullRequest)
     await userEvent.click(screen.getByRole("button", { name: "Save task" }))
@@ -1181,7 +1182,7 @@ describe("TasksWorkspace", () => {
     )
 
     await userEvent.selectOptions(screen.getByLabelText("Ask"), "user:owner")
-    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Source Markdown" }))
+    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Which release?" } })
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
     expect(api.addTaskComment).toHaveBeenCalledWith(
@@ -1197,7 +1198,7 @@ describe("TasksWorkspace", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
     await screen.findByRole("heading", { name: "TEST-1" })
 
-    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Source Markdown" }))
+    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
     await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
 
@@ -1238,7 +1239,7 @@ describe("TasksWorkspace", () => {
     await screen.findByRole("heading", { name: "TEST-1" })
 
     const comments = screen.getByText("Comments").closest("section")!
-    await userEvent.click(within(comments).getByRole("button", { name: "Source Markdown" }))
+    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Keep this draft" } })
 
     expect(within(comments).queryByRole("button", { name: "Send Ok" })).not.toBeInTheDocument()
@@ -1252,7 +1253,7 @@ describe("TasksWorkspace", () => {
     const ask = screen.getByLabelText("Ask")
     expect(ask).toHaveValue("worker")
     await userEvent.selectOptions(ask, "")
-    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Source Markdown" }))
+    await userEvent.click(within(screen.getByText("Comments").closest("section")!).getByRole("button", { name: "Markdown" }))
     fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Can you verify?" } })
     expect(ask).toHaveValue("")
 
@@ -1281,7 +1282,9 @@ describe("TasksWorkspace", () => {
 
     expect(screen.getAllByText("user:owner", { selector: "dd" })).toHaveLength(2)
     expect(screen.getByText("TEST", { selector: "dd" })).toBeInTheDocument()
-    expect(screen.getByText("blocks TEST-2")).toBeInTheDocument()
+    const dependencies = screen.getByText("Dependencies").closest("section")!
+    expect(within(dependencies).getByText("blocks")).toBeInTheDocument()
+    expect(within(dependencies).getByText("TEST-2")).toBeInTheDocument()
     expect(screen.getByText("task.updated")).toBeInTheDocument()
 
     await userEvent.selectOptions(screen.getByLabelText("Relation type"), "related")
