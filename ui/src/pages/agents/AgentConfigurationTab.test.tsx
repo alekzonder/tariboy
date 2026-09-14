@@ -88,6 +88,62 @@ it("reports an unavailable image endpoint", async () => {
   expect(screen.queryByRole("group", { name: "Next iteration" })).not.toBeInTheDocument();
 });
 
+it.each(["failed", "loading"])("keeps image diagnostics and cancellation usable when inventory is %s", async (inventory) => {
+  let state: AgentImageStatus = {
+    ...projection,
+    pending: { ref: "explicit:v2", digest: "explicit-digest", error: "bridge preparation failed" },
+    next: { ref: "explicit:v2", digest: "explicit-digest", reason: "pending", error: "pending archive is unreadable" },
+  };
+  let finish!: (value: Response) => void;
+  const listing = new Promise<Response>((resolve) => { finish = resolve; });
+  const fallback = imageFetch(() => state);
+  vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+    if (url.endsWith("/api/images")) return inventory === "loading" ? listing
+      : response({ code: "internal", message: "unrelated archive is corrupt" }, false, 500);
+    if (url.endsWith("/image") && init?.method === "DELETE") state = projection;
+    return fallback(url);
+  }));
+  render(configurationTree());
+  expect(await screen.findByRole("group", { name: "Activated version" })).toHaveTextContent("old-digest");
+  expect(screen.getByRole("group", { name: "Next iteration" })).toHaveTextContent("pending archive is unreadable");
+  expect(screen.getByText("bridge preparation failed")).toBeInTheDocument();
+  if (inventory === "failed") expect(screen.getByText(/Image inventory unavailable:/)).toHaveTextContent("unrelated archive is corrupt");
+  expect(screen.getByRole("combobox", { name: "Agent image" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeDisabled();
+  const cancel = screen.getByRole("button", { name: "Cancel pending" });
+  expect(cancel).toBeEnabled();
+  fireEvent.click(cancel);
+  expect(await screen.findByText("1.1.0")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Cancel pending" })).not.toBeInTheDocument();
+  expect(screen.queryByText("bridge preparation failed")).not.toBeInTheDocument();
+  await act(async () => finish(await response({ images: [] })));
+});
+
+it("preserves the selected image draft on refresh and disables assignment after inventory failure", async () => {
+  let inventoryFailed = false;
+  let state = projection;
+  const fallback = imageFetch(() => state);
+  vi.stubGlobal("fetch", vi.fn((url: string) => url.endsWith("/api/images")
+    ? inventoryFailed ? response({ code: "internal", message: "archive is corrupt" }, false, 500)
+      : response({ images: [{ name: "worker", tag: "latest", bare: false }, { name: "reviewer", tag: "v2", bare: false }] })
+    : fallback(url)));
+  render(configurationTree());
+  fireEvent.click(await screen.findByRole("combobox", { name: "Agent image" }));
+  fireEvent.click(await screen.findByRole("option", { name: "reviewer:v2" }));
+  state = { ...projection, next: { ...projection.next, image_version: "1.2.0" } };
+  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+  await screen.findByText("1.2.0");
+  expect(screen.getByRole("combobox", { name: "Agent image" })).toHaveTextContent("reviewer:v2");
+  expect(screen.getByRole("button", { name: "Use next iteration" })).toBeEnabled();
+  inventoryFailed = true;
+  state = { ...projection, next: { ...projection.next, image_version: "1.3.0" } };
+  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+  expect(await screen.findByText(/Image inventory unavailable:/)).toHaveTextContent("archive is corrupt");
+  expect(screen.getByRole("group", { name: "Next iteration" })).toHaveTextContent("1.3.0");
+  expect(screen.getByRole("combobox", { name: "Agent image" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Use next iteration" })).toBeDisabled();
+});
+
 it("cancels explicit pending and previews the mutable ref again", async () => {
   let state: AgentImageStatus = {
     ...projection,
