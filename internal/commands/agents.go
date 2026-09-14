@@ -90,6 +90,13 @@ func agentImageSet() registry.Command {
 	}}
 }
 
+type agentImageProjection struct {
+	agent.ImageAssignment
+	ImageVersion string `json:"image_version,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+}
+
+// The caller holds the publication gate, including when set returns its preview.
 func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error) {
 	a, err := getAgent(c, name)
 	if err != nil {
@@ -99,20 +106,62 @@ func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"name": name, "current": agent.ImageAssignment{Ref: a.ImageRef, Digest: a.ImageDigest}, "pending": pending}, nil
+	images := imageStore(c)
+	inspect := func(refText, digest, reason string) agentImageProjection {
+		projection := agentImageProjection{ImageAssignment: agent.ImageAssignment{Ref: refText, Digest: digest}, Reason: reason}
+		ref, err := image.ParseRef(refText)
+		var manifest image.Manifest
+		if err == nil {
+			if reason == "mutable_ref" {
+				manifest, err = images.Inspect(ref)
+			} else {
+				manifest, err = images.InspectPinned(ref, digest)
+			}
+		}
+		if err != nil {
+			projection.Error = err.Error()
+		} else {
+			projection.Digest = manifest.Digest
+			projection.ImageVersion = manifest.ImageVersion
+		}
+		return projection
+	}
+	current := inspect(a.ImageRef, a.ImageDigest, "")
+	next := current
+	next.Reason = "current"
+	if pending.Ref != "" {
+		next = inspect(pending.Ref, pending.Digest, "pending")
+	} else if ref, err := image.ParseRef(a.ImageRef); err == nil && images.IsMutable(ref) {
+		next = inspect(a.ImageRef, "", "mutable_ref")
+	}
+	return map[string]any{"name": name, "current": current, "pending": pending, "next": next}, nil
 }
 
 func agentImageStatus() registry.Command {
-	return registry.Command{Path: "agent.image.status", Summary: "Show current and pending agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return agentImageStatusValue(c, str(p, "name")) }}
+	return registry.Command{Path: "agent.image.status", Summary: "Show current, pending, and next agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		var result any
+		err := image.WithPublicationGate(func() error {
+			var err error
+			result, err = agentImageStatusValue(c, str(p, "name"))
+			return err
+		})
+		return result, err
+	}}
 }
 
 func agentImageCancel() registry.Command {
 	return registry.Command{Path: "agent.image.cancel", Summary: "Cancel a pending agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		name := str(p, "name")
-		if err := agentStore(c).ClearPendingImage(name); err != nil {
-			return nil, err
-		}
-		return agentImageStatusValue(c, name)
+		var result any
+		err := image.WithPublicationGate(func() error {
+			name := str(p, "name")
+			if err := agentStore(c).ClearPendingImage(name); err != nil {
+				return err
+			}
+			var err error
+			result, err = agentImageStatusValue(c, name)
+			return err
+		})
+		return result, err
 	}}
 }
 

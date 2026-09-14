@@ -218,3 +218,12 @@ Recovery compares the pinned digest, not only the ref. For daemon-managed and
 ordinary mutable-build refs, both inspection and staging resolve the exact
 retained digest recorded on the agent, including assignments that were pending
 when the daemon was upgraded or the ordinary ref was rebuilt.
+
+The agent image read API projects the same selection order under the image
+publication gate: explicit pending digest, ordinary mutable active ref, then
+current pinned image. Current version metadata always comes from pinned
+inspection. This read does not stage or promote an assignment; next is a
+preview at read time and can change before the launch gate runs. A changed
+digest triggers activation even if the source version stays the same. A failed
+inspection is returned explicitly, and the separate pending error preserves
+activation failures even without a pending ref.

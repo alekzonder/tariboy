@@ -147,9 +147,16 @@ Manifest, provenance, template, and file reads carry the same expected digest;
 a changed mutable ref clears the old view and reloads once, then offers manual
 refresh if it changes again. Directory builds and all detail requests capture
 the explicit route target. Agent **Configuration** only selects an already built
-image, shows current and pending refs, and links back to image detail.
-Selection does not mutate runtime form state and becomes active at the next
-iteration boundary.
+image and links back to image detail. It shows the pinned **Current** (or
+**Activated version** when stopped) and the daemon's **Next iteration** preview,
+each with ref, manifest version, and digest. The next selection explains its
+pending, mutable-ref, or current-pinned origin; a digest difference signals an
+update even at equal versions. Inspection and activation failures remain visible
+without a pending ref. The preview is explicitly not a reservation. Ordinary
+agent status refreshes and image-build events reload it without overwriting
+runtime drafts, and responses from an older host, agent, or refresh are ignored.
+Selection becomes active at the next iteration boundary; cancelling pending
+keeps automatic mutable-ref following enabled.
 Runnable import previews expose the target name and tag. Operators can keep the
 artifact ref for an idempotent import or choose a different target when that ref
 already contains another digest; the source archive remains runnable-only.

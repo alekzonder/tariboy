@@ -344,10 +344,21 @@ The image tag list shows agent names separately under **Current** and
 **Pending**, so an operator can see both active use and assignments waiting for
 their next launch gate. An image in either list cannot be removed.
 
-When an agent's active ordinary build ref moves to a new digest, Tariboy detects
-it only at that same next launch gate. An explicit pending assignment takes
-priority; otherwise the changed digest follows the normal pending staging and
-promotion path. The running iteration remains on its pinned digest.
+Configuration shows **Current** (or **Activated version** when stopped) with
+the version read from the agent's pinned ref and digest. **Next iteration**
+previews the explicit pending digest first, otherwise the current build of an
+ordinary mutable active ref, otherwise the current pinned image. Viewing this
+projection does not create pending state or activate anything. Inspection and
+activation errors remain visible even when there is no pending ref; missing
+version metadata is labelled **Version not specified**.
+
+When an agent's active ordinary build ref moves to a new digest, the launch gate
+stages and promotes that digest at the next iteration. The running iteration
+keeps its original prompt, version, and digest. Configuration marks the update
+by digest difference even when both builds declare the same version. Its
+preview is not a reservation: the ref can move again before launch. Cancelling
+an explicit pending assignment does not disable following the mutable active
+ref. The preview refreshes with agent status and after UI image builds.
 
 ## Import and export
 

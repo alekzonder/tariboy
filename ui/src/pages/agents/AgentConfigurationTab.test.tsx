@@ -5,11 +5,13 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { MemoryRouter } from "react-router-dom";
 import type { Daemon } from "@/lib/daemons";
 import type { AgentStatus, AgentView } from "@/lib/types";
+import type { AgentImageStatus } from "@/lib/api";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 
 vi.mock("@/pages/AgentSettings", () => ({
@@ -24,6 +26,120 @@ vi.mock("@/pages/AgentSettings", () => ({
 }));
 
 afterEach(() => vi.restoreAllMocks());
+
+const projection = {
+  name: "worker",
+  current: { ref: "worker:latest", digest: "old-digest", image_version: "1.0.0" },
+  pending: { ref: "", digest: "", error: "" },
+  next: { ref: "worker:latest", digest: "new-digest", image_version: "1.1.0", reason: "mutable_ref" },
+} satisfies AgentImageStatus;
+
+function configurationTree(target = remote, name = "worker", status: AgentStatus | null = null) {
+  return <MemoryRouter><AgentNameContext.Provider value={name}>
+    <AgentStatusContext.Provider value={{ status, refresh: async () => {} }}>
+      <AgentConfigurationTab target={target} refresh={vi.fn()} />
+    </AgentStatusContext.Provider>
+  </AgentNameContext.Provider></MemoryRouter>;
+}
+
+function imageFetch(state: () => unknown = () => projection) {
+  return vi.fn((url: string) => {
+    if (url.endsWith("/image")) return response(state());
+    if (url.endsWith("/api/images")) return response({ images: [] });
+    if (url.includes("/api/fs/list")) return response({ path: "/srv", parent: "/", entries: [] });
+    return response(stopped);
+  });
+}
+
+it("shows pinned Activated version and next digest even when source versions match", async () => {
+  vi.stubGlobal("fetch", imageFetch(() => ({ ...projection, next: { ...projection.next, image_version: "1.0.0" } })));
+  render(configurationTree());
+  const current = await screen.findByRole("group", { name: "Activated version" });
+  const next = screen.getByRole("group", { name: "Next iteration" });
+  expect(current).toHaveTextContent("1.0.0");
+  expect(current).toHaveTextContent("old-digest");
+  expect(next).toHaveTextContent("1.0.0");
+  expect(next).toHaveTextContent("new-digest");
+  expect(within(next).getByRole("link", { name: "worker:latest" })).toHaveAttribute("href", "/servers/remote-1/images/worker/latest");
+  expect(screen.getByText("Update on next iteration")).toBeInTheDocument();
+  expect(screen.getByText(/preview.*not a reservation/i)).toBeInTheDocument();
+});
+
+it("shows inspection and activation failures without a pending ref", async () => {
+  vi.stubGlobal("fetch", imageFetch(() => ({
+    ...projection,
+    current: { ...projection.current, image_version: undefined },
+    next: { ref: "worker:latest", digest: "", reason: "mutable_ref", error: "latest is unreadable" },
+    pending: { ref: "", digest: "", error: "bridge preparation failed" },
+  })));
+  render(configurationTree());
+  expect(await screen.findByText("latest is unreadable")).toBeInTheDocument();
+  expect(screen.getByText("bridge preparation failed")).toBeInTheDocument();
+  expect(within(screen.getByRole("group", { name: "Activated version" })).getByText("Version not specified")).toBeInTheDocument();
+  expect(screen.queryByText("Update on next iteration")).not.toBeInTheDocument();
+});
+
+it("reports an unavailable image endpoint", async () => {
+  const fallback = imageFetch();
+  vi.stubGlobal("fetch", vi.fn((url: string) => url.endsWith("/image")
+    ? Promise.reject(new Error("image request failed")) : fallback(url)));
+  render(configurationTree());
+  expect(await screen.findByRole("alert")).toHaveTextContent(/Image status unavailable:.*image request failed/);
+  expect(screen.queryByRole("group", { name: "Next iteration" })).not.toBeInTheDocument();
+});
+
+it("cancels explicit pending and previews the mutable ref again", async () => {
+  let state: AgentImageStatus = {
+    ...projection,
+    pending: { ref: "explicit:v2", digest: "explicit-digest", error: "" },
+    next: { ref: "explicit:v2", digest: "explicit-digest", image_version: "2.0.0", reason: "pending" },
+  };
+  const fallback = imageFetch(() => state);
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    if (url.endsWith("/image") && init?.method === "DELETE") state = projection;
+    return fallback(url);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(configurationTree());
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel pending" }));
+  expect(await screen.findByText("1.1.0")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Cancel pending" })).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith("https://remote.example/api/agents/worker/image", expect.objectContaining({ method: "DELETE" }));
+});
+
+it("refreshes image projection on agent status and build events without replacing CWD drafts", async () => {
+  let state = projection;
+  vi.stubGlobal("fetch", imageFetch(() => state));
+  const { rerender } = render(configurationTree());
+  await screen.findByRole("group", { name: "Next iteration" });
+  fireEvent.change(await screen.findByLabelText("Working directory"), { target: { value: "/srv/draft" } });
+  state = { ...projection, next: { ...projection.next, image_version: "1.2.0" } };
+  rerender(configurationTree(remote, "worker", { name: "worker", state: "stopped" } as AgentStatus));
+  expect(await screen.findByText("1.2.0")).toBeInTheDocument();
+  state = { ...projection, next: { ...projection.next, image_version: "1.3.0" } };
+  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+  expect(await screen.findByText("1.3.0")).toBeInTheDocument();
+  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
+});
+
+it.each(["host", "agent", "refresh"])("ignores delayed image responses after a %s change", async (change) => {
+  let finish!: (value: Response) => void;
+  let count = 0;
+  const fresh = { ...projection, next: { ...projection.next, image_version: "2.0.0" } };
+  const fallback = imageFetch(() => fresh);
+  vi.stubGlobal("fetch", vi.fn((url: string) => {
+    if (url.endsWith("/image") && count++ === 0) return new Promise<Response>((resolve) => { finish = resolve; });
+    return fallback(url);
+  }));
+  const { rerender } = render(configurationTree());
+  await waitFor(() => expect(finish).toBeDefined());
+  if (change === "refresh") act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+  else rerender(configurationTree(change === "host" ? { ...remote, id: "remote-2", baseURL: "https://other.example" } : remote, change === "agent" ? "other" : "worker"));
+  expect(await screen.findByText("2.0.0")).toBeInTheDocument();
+  await act(async () => finish(await response(projection)));
+  expect(screen.getByText("2.0.0")).toBeInTheDocument();
+  expect(screen.queryByText("1.1.0")).not.toBeInTheDocument();
+});
 
 const remote = {
   id: "remote-1",
@@ -463,12 +579,10 @@ it("shows a save error without discarding the entered CWD", async () => {
 
   // The section copy leads, but the server's reason is still shown verbatim —
   // the operator needs to know WHICH path was rejected and why.
-  expect(await screen.findByRole("alert")).toHaveTextContent(
+  expect(await screen.findByText(/Working directory was not saved/)).toHaveTextContent(
     "Working directory was not saved. Fix the path and try again.",
   );
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "directory does not exist",
-  );
+  expect(screen.getByText(/Working directory was not saved/)).toHaveTextContent("directory does not exist");
   expect(input).toHaveValue("/srv/missing");
 });
 
@@ -509,10 +623,7 @@ it("shows a budget save error without discarding the entered limit", async () =>
   fireEvent.change(input, { target: { value: "2" } });
   fireEvent.click(screen.getByRole("button", { name: "Save agent budgets" }));
 
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Agent budgets were not saved.",
-  );
-  expect(screen.getByRole("alert")).toHaveTextContent("budget update rejected");
+  expect(await screen.findByText(/Agent budgets were not saved/)).toHaveTextContent("budget update rejected");
   expect(input).toHaveValue(2);
 });
 
