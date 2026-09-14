@@ -16,11 +16,14 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/api"
+	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imageportable"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
+	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	storedb "github.com/alekzonder/tariboy/internal/store"
@@ -1177,13 +1180,176 @@ func TestImageListManifestVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, row := range result.(map[string]any)["images"].([]map[string]any) {
+	rows := result.(map[string]any)["images"].([]map[string]any)
+	seen := make(map[string]bool)
+	for _, row := range rows {
+		seen[row["name"].(string)] = true
 		if row["name"] == "versioned" && row["image_version"] != "1.2.3" {
 			t.Errorf("versioned row = %v, want manifest version 1.2.3", row)
 		}
 		if row["name"] == "legacy" && row["image_version"] != nil && row["image_version"] != "" {
 			t.Errorf("legacy row invented version: %v", row)
 		}
+	}
+	if !seen["versioned"] || !seen["legacy"] {
+		t.Fatalf("missing versioned or legacy image: %v", rows)
+	}
+}
+
+// The production runner prepares PROMPT.md; only process creation is replaced.
+// With no result file, the iteration stays running until the test releases it.
+type heldImageSpawner struct{ started chan string }
+
+func (s heldImageSpawner) Start(argv, _ []string, _ string) error {
+	for i, arg := range argv {
+		if arg == "--iteration-dir" && i+1 < len(argv) {
+			s.started <- argv[i+1]
+			return nil
+		}
+	}
+	return errors.New("missing iteration directory")
+}
+
+func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
+	for _, nextVersion := range []string{"1.1.0", "1.0.0"} {
+		t.Run(nextVersion, func(t *testing.T) {
+			c := localCtx(t)
+			runtime := t.TempDir()
+			t.Setenv("TARIBOY_BASE_DIR", c.BaseDir)
+			t.Setenv("TARIBOY_RUNTIME_DIR", runtime)
+			t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+			as := agentStore(c)
+			src := t.TempDir()
+			skillDir := filepath.Join(src, "whoami")
+			if err := os.MkdirAll(skillDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: whoami\ndescription: Test identity.\n---\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			ref := image.Ref{Name: "reviewer", Tag: "latest"}
+			build := func(version, prompt string) image.Manifest {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nimage_version: "+version+"\nplugins:\n  - name: whoami\nskills:\n  - dir: ./whoami\nprompts:\n  - runtime: identity\n  - file: ./prompt.md\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(src, "prompt.md"), []byte(prompt), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "path": src}); err != nil {
+					t.Fatal(err)
+				}
+				latest, err := imageStore(c).Inspect(ref)
+				if err != nil {
+					t.Fatal(err)
+				}
+				versionTag, err := imageStore(c).Inspect(image.Ref{Name: ref.Name, Tag: version})
+				if err != nil || latest.ImageVersion != version || versionTag.ImageVersion != version || latest.BuiltAt != versionTag.BuiltAt || latest.PromptTemplateSHA256 != versionTag.PromptTemplateSHA256 {
+					t.Fatalf("default publication mismatch: latest=%+v version=%+v err=%v", latest, versionTag, err)
+				}
+				return latest
+			}
+			first := build("1.0.0", "OLD INSTRUCTIONS")
+			spawner := heldImageSpawner{started: make(chan string, 2)}
+			m := loop.NewManager(loop.ManagerConfig{
+				AgentsDir: filepath.Join(c.BaseDir, "agents"), RuntimeDir: runtime,
+				Store: as, ImgStore: imageStore(c), Log: c.Log, Clock: time.Now, Bus: bus.New(c.Store, time.Now),
+				Spawner: spawner, ShimBin: "/unused/fake-shim",
+			})
+			t.Cleanup(m.Shutdown)
+			if _, err := m.Run(registry.RunSpec{Name: "worker", ImageRef: ref.String(), Harness: "stub"}); err != nil {
+				t.Fatal(err)
+			}
+			start := func() string {
+				t.Helper()
+				if _, err := m.Exec("worker", ""); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case dir := <-spawner.started:
+					return dir
+				case <-time.After(3 * time.Second):
+					iterations, _ := as.ListIterations("worker")
+					t.Fatalf("iteration did not reach prepared launch: %+v", iterations)
+					return ""
+				}
+			}
+			finish := func(dir string) {
+				t.Helper()
+				id := filepath.Base(dir)
+				if err := as.SetIterationDone(id, true); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "result.json"), []byte(`{"exit_code":0}`), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				deadline := time.Now().Add(3 * time.Second)
+				for {
+					it, err := as.GetIteration("worker", id)
+					if err == nil && it.Status == "done" {
+						return
+					}
+					if time.Now().After(deadline) {
+						t.Fatalf("iteration did not finish: %+v err=%v", it, err)
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+			read := func(path string) []byte {
+				t.Helper()
+				body, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return body
+			}
+			aDir := start()
+			aPrompt := read(filepath.Join(aDir, "PROMPT.md"))
+			layout := agentdir.New(filepath.Join(c.BaseDir, "agents"), "worker")
+			aTemplate := read(filepath.Join(layout.ImageDir(), "prompt", "template.json"))
+			second := build(nextVersion, "NEW INSTRUCTIONS")
+			if first.Digest == second.Digest {
+				t.Fatal("changed bytes did not change digest")
+			}
+			if !bytes.Equal(aPrompt, read(filepath.Join(aDir, "PROMPT.md"))) || !bytes.Equal(aTemplate, read(filepath.Join(layout.ImageDir(), "prompt", "template.json"))) {
+				t.Fatal("running iteration bytes changed during build")
+			}
+			if !bytes.Contains(aPrompt, []byte("OLD INSTRUCTIONS")) || !bytes.Contains(aPrompt, []byte("1.0.0")) || bytes.Contains(aPrompt, []byte("NEW INSTRUCTIONS")) {
+				t.Fatalf("first prompt: %s", aPrompt)
+			}
+			active, err := as.GetIteration("worker", filepath.Base(aDir))
+			if err != nil || active.Status != "running" || active.ImageDigest != first.Digest || active.ImageVersion != "1.0.0" || active.PromptTemplateSHA256 != first.PromptTemplateSHA256 {
+				t.Fatalf("active snapshot changed: %+v err=%v", active, err)
+			}
+			preview := readAgentImageStatus(t, c)
+			if preview.Current.ImageVersion != "1.0.0" || preview.Current.Digest != first.Digest || preview.Next.ImageVersion != nextVersion || preview.Next.Digest != second.Digest || preview.Pending.Ref != "" {
+				t.Fatalf("preview during A: %+v", preview)
+			}
+			finish(aDir)
+			bDir := start()
+			bPrompt := read(filepath.Join(bDir, "PROMPT.md"))
+			if !bytes.Contains(bPrompt, []byte("NEW INSTRUCTIONS")) || !bytes.Contains(bPrompt, []byte(nextVersion)) || bytes.Contains(bPrompt, []byte("OLD INSTRUCTIONS")) {
+				t.Fatalf("second prompt: %s", bPrompt)
+			}
+			if bytes.Equal(aTemplate, read(filepath.Join(layout.ImageDir(), "prompt", "template.json"))) {
+				t.Fatal("next iteration kept old template")
+			}
+			finish(bDir)
+			secondIteration, err := as.GetIteration("worker", filepath.Base(bDir))
+			if err != nil || secondIteration.ImageVersion != nextVersion || secondIteration.ImageDigest != second.Digest || secondIteration.PromptTemplateSHA256 != second.PromptTemplateSHA256 {
+				t.Fatalf("second snapshot: %+v err=%v", secondIteration, err)
+			}
+			if !bytes.Equal(aPrompt, read(filepath.Join(aDir, "PROMPT.md"))) {
+				t.Fatal("historical prompt overwritten")
+			}
+			// An unchanged latest keeps the same execution identity on another launch.
+			cDir := start()
+			finish(cDir)
+			unchanged, err := as.GetIteration("worker", filepath.Base(cDir))
+			if err != nil || unchanged.ImageDigest != second.Digest || unchanged.ImageVersion != nextVersion || unchanged.PromptTemplateSHA256 != second.PromptTemplateSHA256 {
+				t.Fatalf("unchanged latest changed execution identity: %+v err=%v", unchanged, err)
+			}
+		})
 	}
 }
 

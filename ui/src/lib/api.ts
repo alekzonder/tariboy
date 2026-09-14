@@ -838,8 +838,9 @@ export const imageProvenanceGet = (ref: string, target?: ApiTarget, expectedDige
   );
 export interface AgentImageStatus {
   name: string;
-  current: { ref: string; digest: string; error?: string };
+  current: { ref: string; digest: string; image_version?: string; error?: string };
   pending: { ref: string; digest: string; error: string };
+  next?: { ref: string; digest: string; image_version?: string; reason: "pending" | "mutable_ref" | "current"; error?: string };
 }
 export const agentImageStatusGetOn = (target: ApiTarget, name: string) =>
   agentGetOn<AgentImageStatus>(target, name, "image");

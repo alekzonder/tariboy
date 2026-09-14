@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/ui/select";
@@ -37,6 +37,7 @@ export default function AgentConfigurationTab({
 	const [budgetSaving, setBudgetSaving] = useState(false);
 	const [budgetError, setBudgetError] = useState("");
   const [images,setImages]=useState<ImageRow[]>([]);const [imageStatus,setImageStatus]=useState<AgentImageStatus|null>(null);const [selectedImage,setSelectedImage]=useState("");const [imageSaving,setImageSaving]=useState(false);
+  const [imageError, setImageError] = useState("");
   const targetId = target?.id;
   const targetLabel = target?.label;
   const targetBaseURL = target?.baseURL;
@@ -53,15 +54,32 @@ export default function AgentConfigurationTab({
     },
     [targetBaseURL, targetId, targetLabel, targetToken],
   );
+  const requests = useRef({ name, target: requestTarget, active: false, agent: 0, image: 0 });
+  useEffect(() => {
+    const scope = { name, target: requestTarget, active: true, agent: 0, image: 0 };
+    requests.current = scope;
+    void Promise.resolve().then(() => {
+      if (!scope.active) return;
+      setAgent(null);
+      setImageStatus(null);
+      setSelectedImage("");
+      setImageError("");
+    });
+    return () => { scope.active = false; };
+  }, [name, requestTarget]);
 
   const load = useCallback(async () => {
+    const scope = requests.current;
+    if (!scope.active || scope.name !== name || scope.target !== requestTarget) return;
+    const request = ++scope.agent;
     try {
       const next = await agentGetOn<AgentView>(requestTarget, name, "");
+      if (!scope.active || request !== scope.agent) return;
       setAgent(next);
 		setBudget(next.budget ?? null);
       setCwd(next.cwd);
     } catch {
-      setAgent(null);
+      if (scope.active && request === scope.agent) setAgent(null);
     }
   }, [name, requestTarget]);
 
@@ -70,18 +88,35 @@ export default function AgentConfigurationTab({
   }, [load]);
 
   const loadImages = useCallback(async () => {
+    const scope = requests.current;
+    if (!scope.active || scope.name !== name || scope.target !== requestTarget) return;
+    const request = ++scope.image;
     try {
       const [listing, state] = await Promise.all([
         listImagesOn(requestTarget), agentImageStatusGetOn(requestTarget, name),
       ]);
+      if (!scope.active || request !== scope.image) return;
+      const selectedRef = state.pending.ref || state.current.ref;
       setImages(listing.images ?? []);
       setImageStatus(state);
-      setSelectedImage(state.pending.ref || state.current.ref);
-    } catch {
+      setImageError("");
+      setSelectedImage((selected) => selected || selectedRef);
+    } catch (cause) {
+      if (!scope.active || request !== scope.image) return;
       setImageStatus(null);
+      setImageError(cause instanceof Error ? cause.message : String(cause));
     }
   }, [name, requestTarget]);
-  useEffect(() => { void Promise.resolve().then(loadImages); }, [loadImages]);
+  useEffect(() => {
+    const scope = requests.current;
+    void Promise.resolve().then(loadImages);
+    return () => { scope.image++; };
+  }, [loadImages, status]);
+  useEffect(() => {
+    const reload = () => { void loadImages(); };
+    window.addEventListener("tariboy:image-built", reload);
+    return () => window.removeEventListener("tariboy:image-built", reload);
+  }, [loadImages]);
   const imageHref = (ref: string) => {
     const split = ref.lastIndexOf(":");
     const base = serverPath(targetId ?? "", "images");
@@ -306,9 +341,22 @@ export default function AgentConfigurationTab({
       <section className="rounded-lg border p-4">
         <h3 className="text-base font-semibold">Agent image</h3>
         <p className="mt-1 text-sm text-muted-foreground">Select an already-built image. It becomes active before the next iteration and does not change runtime settings.</p>
+        {imageError && <p role="alert" className="mt-3 text-sm text-destructive">Image status unavailable: {imageError}</p>}
         {imageStatus&&<div className="mt-4 space-y-3 text-sm">
-          <div>Current: <Link className="font-mono text-primary hover:underline" to={imageHref(imageStatus.current.ref)}>{imageStatus.current.ref}</Link></div>
-          {imageStatus.pending.ref&&<div>Pending: <Link className="font-mono text-primary hover:underline" to={imageHref(imageStatus.pending.ref)}>{imageStatus.pending.ref}</Link>{imageStatus.pending.error&&<p role="alert" className="mt-1 text-destructive">{imageStatus.pending.error}</p>}</div>}
+          {([{ label: stopped ? "Activated version" : "Current", value: imageStatus.current }, { label: "Next iteration", value: imageStatus.next }] as const).map(({ label, value }) => value && <div key={label} role="group" aria-label={label}>
+            <div className="font-medium">{label}</div>
+            <Link className="font-mono text-primary hover:underline" to={imageHref(value.ref)}>{value.ref}</Link>
+            <div>{value.error ? "Version unavailable" : value.image_version || "Version not specified"}</div>
+            <div className="break-all font-mono text-xs">{value.digest || "Digest unavailable"}</div>
+            {value.error && <p role="alert" className="mt-1 text-destructive">{value.error}</p>}
+          </div>)}
+          {imageStatus.next && <>
+            <p className="text-xs text-muted-foreground">{imageStatus.next.reason === "pending" ? "Explicit pending assignment" : imageStatus.next.reason === "mutable_ref" ? "Latest build of the active mutable ref" : "Current pinned image"}</p>
+            {!imageStatus.next.error && imageStatus.next.digest && imageStatus.next.digest !== imageStatus.current.digest && <p role="status">Update on next iteration</p>}
+            <p className="text-xs text-muted-foreground">This preview is not a reservation; the image may change before launch.</p>
+          </>}
+          {imageStatus.pending.ref&&<div>Pending: <Link className="font-mono text-primary hover:underline" to={imageHref(imageStatus.pending.ref)}>{imageStatus.pending.ref}</Link></div>}
+          {imageStatus.pending.error&&<p role="alert" className="mt-1 text-destructive">{imageStatus.pending.error}</p>}
           <div className="flex flex-wrap gap-2"><Select value={selectedImage} onValueChange={setSelectedImage}><SelectTrigger aria-label="Agent image" className="w-72"><SelectValue placeholder="Select image"/></SelectTrigger><SelectContent>{images.map(item=>{const ref=`${item.name}:${item.tag}`;return <SelectItem key={ref} value={ref}>{ref}</SelectItem>})}</SelectContent></Select><Button disabled={imageSaving||!selectedImage} onClick={()=>void scheduleImage()}>{imageStatus.pending.error?"Retry":"Use next iteration"}</Button>{imageStatus.pending.ref&&<Button variant="outline" disabled={imageSaving} onClick={()=>void cancelImage()}>Cancel pending</Button>}</div>
         </div>}
       </section>
