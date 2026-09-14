@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -41,6 +40,8 @@ type StoreImage struct {
 	BuiltVersion string `json:"built_version"`
 	UpdateNeeded bool   `json:"update_needed"`
 	Error        string `json:"error,omitempty"`
+	LatestStatus string `json:"latest_status"`
+	LatestError  string `json:"latest_error,omitempty"`
 }
 
 type Detail struct {
@@ -248,73 +249,28 @@ func (c *Catalog) detail(ctx context.Context, name string) (Detail, error) {
 	if err != nil {
 		return Detail{}, err
 	}
-	manifests, err := builtManifests(&image.Store{Dir: filepath.Join(c.BaseDir, "images")}, images)
-	if err != nil {
-		return Detail{}, err
-	}
-	built := builtVersions(manifests)
+	built := &image.Store{Dir: filepath.Join(c.BaseDir, "images")}
 	for i := range images {
-		if images[i].Error == "" {
-			images[i].BuiltVersion = built[images[i].Name]
-			images[i].UpdateNeeded = images[i].BuiltVersion != images[i].Version
+		ref := image.Ref{Name: images[i].Name, Tag: "latest"}
+		if !built.Exists(ref) {
+			images[i].LatestStatus = "missing"
+			continue
 		}
+		manifest, err := built.Inspect(ref)
+		if err != nil {
+			images[i].LatestStatus = "error"
+			images[i].LatestError = err.Error()
+			continue
+		}
+		images[i].BuiltVersion = manifest.ImageVersion
+		if manifest.ImageVersion == "" {
+			images[i].LatestStatus = "unversioned"
+		} else {
+			images[i].LatestStatus = "built"
+		}
+		images[i].UpdateNeeded = images[i].Error == "" && images[i].Version != "" && images[i].BuiltVersion != "" && images[i].Version != images[i].BuiltVersion
 	}
 	return Detail{Name: store.Name, Source: store.Source, Path: store.Path, Images: images}, nil
-}
-
-func builtManifests(store *image.Store, sources []StoreImage) ([]image.Manifest, error) {
-	var manifests []image.Manifest
-	for _, source := range sources {
-		if source.Error != "" {
-			continue
-		}
-		entries, err := os.ReadDir(filepath.Join(store.Dir, source.Name))
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		for _, entry := range entries {
-			if !strings.HasSuffix(entry.Name(), ".tar.gz") {
-				continue
-			}
-			manifest, err := store.Inspect(image.Ref{Name: source.Name, Tag: strings.TrimSuffix(entry.Name(), ".tar.gz")})
-			if err != nil {
-				return nil, err
-			}
-			manifests = append(manifests, manifest)
-		}
-	}
-	return manifests, nil
-}
-
-func builtVersions(manifests []image.Manifest) map[string]string {
-	newest := make(map[string]image.Manifest)
-	for _, candidate := range manifests {
-		current, exists := newest[candidate.Name]
-		candidateTime, candidateErr := time.Parse(time.RFC3339, candidate.BuiltAt)
-		currentTime, currentErr := time.Parse(time.RFC3339, current.BuiltAt)
-		replace := !exists
-		if exists && candidateErr == nil {
-			replace = currentErr != nil || candidateTime.After(currentTime) ||
-				(candidateTime.Equal(currentTime) && sameBuiltPayload(candidate, current) && current.Tag == "latest" && candidate.Tag != "latest")
-		}
-		if replace {
-			newest[candidate.Name] = candidate
-		}
-	}
-	versions := make(map[string]string, len(newest))
-	for name, manifest := range newest {
-		versions[name] = manifest.Tag
-	}
-	return versions
-}
-
-func sameBuiltPayload(a, b image.Manifest) bool {
-	a.Name, a.Tag, a.Digest = "", "", ""
-	b.Name, b.Tag, b.Digest = "", "", ""
-	return reflect.DeepEqual(a, b)
 }
 
 func (c *Catalog) get(name string) (Store, error) {
@@ -442,9 +398,6 @@ func inventory(root string) ([]StoreImage, error) {
 			item.Version = parsed.V2.ImageVersion
 		} else {
 			item.Version = parsed.V1.ImageVersion
-		}
-		if item.Version == "" && item.Error == "" {
-			item.Version = "latest"
 		}
 		result = append(result, item)
 	}

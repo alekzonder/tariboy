@@ -105,8 +105,13 @@ describe("Stores workspace", () => {
           source: "git@example.com:design.git",
           path: "/stores/design",
           images: [
-            { name: "reviewer", version: "1.2.3", built_version: detailReads === 1 ? "1.0.0" : "1.2.3", update_needed: detailReads === 1 },
-            { name: "broken", version: "latest", error: "invalid Tariboyfile" },
+            { name: "reviewer", version: "1.2.3", built_version: detailReads === 1 ? "1.0.0" : "1.2.3", update_needed: detailReads === 1, latest_status: "built" },
+            { name: "equal", version: "1.0.0", built_version: "1.0.0", update_needed: false, latest_status: "built" },
+            { name: "missing-latest", version: "2.0.0", built_version: "", update_needed: false, latest_status: "missing" },
+            { name: "source-unversioned", version: "", built_version: "1.0.0", update_needed: false, latest_status: "built" },
+            { name: "latest-unversioned", version: "1.0.0", built_version: "", update_needed: false, latest_status: "unversioned" },
+            { name: "latest-broken", version: "1.0.0", built_version: "", update_needed: false, latest_status: "error", latest_error: "invalid latest manifest" },
+            { name: "broken", version: "", built_version: "", update_needed: false, error: "invalid Tariboyfile", latest_status: "missing" },
           ],
         }));
       }
@@ -139,12 +144,32 @@ describe("Stores workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add store" }));
 
     expect(await screen.findByRole("heading", { name: "design" })).toBeInTheDocument();
-    expect(await screen.findByText("1.2.3")).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "Source image_version" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Latest image_version" })).toBeInTheDocument();
     const reviewerRow = screen.getByText("reviewer").closest("tr");
     expect(reviewerRow).toHaveTextContent("1.0.0");
+    expect(reviewerRow).toHaveTextContent("Update needed");
     expect(reviewerRow).toHaveClass("bg-amber-50");
-    expect(screen.getByText("invalid Tariboyfile")).toBeInTheDocument();
-    expect(screen.getByText("broken").closest("tr")).toHaveTextContent("—");
+    const equalRow = screen.getByText("equal").closest("tr")!;
+    expect(equalRow).toHaveTextContent("Up to date");
+    expect(within(equalRow).getByRole("button", { name: "Build equal" })).toBeEnabled();
+    const missingLatestRow = screen.getByText("missing-latest").closest("tr")!;
+    expect(missingLatestRow).toHaveTextContent("Not built");
+    expect(missingLatestRow).toHaveTextContent("Latest not built");
+    expect(within(missingLatestRow).getByRole("button", { name: "Build missing-latest" })).toBeEnabled();
+    const sourceUnversionedRow = screen.getByText("source-unversioned").closest("tr")!;
+    expect(sourceUnversionedRow).toHaveTextContent("Source image_version missing; comparison unavailable");
+    expect(sourceUnversionedRow).not.toHaveTextContent("Up to date");
+    const latestUnversionedRow = screen.getByText("latest-unversioned").closest("tr")!;
+    expect(latestUnversionedRow).toHaveTextContent("Latest image_version missing; comparison unavailable");
+    expect(latestUnversionedRow).not.toHaveTextContent("Up to date");
+    const latestBrokenRow = screen.getByText("latest-broken").closest("tr")!;
+    expect(latestBrokenRow).toHaveTextContent("Latest error: invalid latest manifest");
+    expect(within(latestBrokenRow).getByRole("button", { name: "Build latest-broken" })).toBeEnabled();
+    const brokenRow = screen.getByText("broken").closest("tr")!;
+    expect(brokenRow).toHaveTextContent("Source error: invalid Tariboyfile");
+    expect(brokenRow).toHaveTextContent("Latest not built");
+    expect(within(brokenRow).getByRole("button", { name: "Build broken" })).toBeDisabled();
     expect(calls).toContainEqual({
       url: "https://store.example/api/stores",
       method: "POST",
@@ -174,15 +199,17 @@ describe("Stores workspace", () => {
     expect(screen.getByRole("button", { name: "Remove store" })).toBeDisabled();
 
     finishBuild(envelope({ name: "reviewer", tag: "1.2.3", digest: "sha256:new", layers: 2 }));
-    expect(await screen.findByText("Built reviewer:1.2.3.")).toBeInTheDocument();
+    expect(await screen.findByText("Built reviewer:1.2.3 and reviewer:latest.")).toBeInTheDocument();
     await waitFor(() => expect(detailReads).toBe(2));
     expect(screen.getByText("reviewer").closest("tr")).not.toHaveClass("bg-amber-50");
+    expect(screen.getByText("reviewer").closest("tr")).toHaveTextContent("Up to date");
+    expect(within(screen.getByText("reviewer").closest("tr")!).getByRole("button", { name: "Build reviewer" })).toBeEnabled();
     expect(imageBuilt).toHaveBeenCalledOnce();
 
     detailReloadFails = true;
     fireEvent.click(screen.getByRole("button", { name: "Build reviewer" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("reload failed");
-    expect(screen.getByText("Built reviewer:1.2.3.")).toBeInTheDocument();
+    expect(screen.getByText("Built reviewer:1.2.3 and reviewer:latest.")).toBeInTheDocument();
     expect(imageBuilt).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove store" }));

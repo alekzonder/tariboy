@@ -11,6 +11,7 @@ import {
   removeStore,
   type Store,
   type StoreDetail,
+  type StoreImage,
 } from "@/lib/stores";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,21 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const message = (error: unknown) => error instanceof ApiError ? error.message : String(error);
+
+const imageStatuses = (image: StoreImage) => {
+  const statuses: string[] = [];
+  if (image.error) statuses.push(`Source error: ${image.error}`);
+  if (image.latest_status === "error") statuses.push(`Latest error: ${image.latest_error || "inspection failed"}`);
+  if (image.latest_status === "missing") statuses.push("Latest not built");
+  if (image.latest_status === "unversioned" || (image.latest_status === "built" && !image.built_version)) {
+    statuses.push("Latest image_version missing; comparison unavailable");
+  } else if (image.latest_status === "built" && !image.error) {
+    statuses.push(!image.version ? "Source image_version missing; comparison unavailable" : image.update_needed ? "Update needed" : "Up to date");
+  } else if (!image.latest_status && !image.error) {
+    statuses.push("Comparison unavailable");
+  }
+  return statuses;
+};
 
 export default function StoresPage({ target, name, basePath }: {
   target: Daemon | null;
@@ -108,7 +124,9 @@ export default function StoresPage({ target, name, basePath }: {
     try {
       const built = await buildStoreImage(target, `${name}/${imageName}`);
       if (mounted.current) {
-        setStatus(`Built ${built.name}:${built.tag}.`);
+        setStatus(built.tag === "latest"
+          ? `Built ${built.name}:latest.`
+          : `Built ${built.name}:${built.tag} and ${built.name}:latest.`);
         window.dispatchEvent(new Event("tariboy:image-built"));
       }
       try {
@@ -197,24 +215,24 @@ export default function StoresPage({ target, name, basePath }: {
         <div className="overflow-x-auto rounded border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr><th className="px-3 py-2">Image</th><th className="px-3 py-2">Version</th><th className="px-3 py-2">Built version</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr>
+              <tr><th className="px-3 py-2">Image</th><th className="px-3 py-2">Source image_version</th><th className="px-3 py-2">Latest image_version</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr>
             </thead>
             <tbody>
               {detail.images.map((image) => <tr key={image.name} className={`border-t ${image.update_needed ? "bg-amber-50 dark:bg-amber-950/30" : ""}`}>
                 <td className="px-3 py-2 font-mono">{image.name}</td>
-                <td className="px-3 py-2 font-mono text-xs">{image.version}</td>
-                <td className="px-3 py-2 font-mono text-xs">{image.built_version || "—"}</td>
-                <td className={`px-3 py-2 text-xs ${image.error ? "text-destructive" : "text-muted-foreground"}`}>
-                  {image.error ?? (image.update_needed ? "Update needed" : "Ready")}
+                <td className="px-3 py-2 font-mono text-xs">{image.version || "Not specified"}</td>
+                <td className="px-3 py-2 font-mono text-xs">{image.latest_status === "missing" ? "Not built" : image.latest_status === "error" ? "Inspection failed" : image.built_version || "Not specified"}</td>
+                <td className={`px-3 py-2 text-xs ${image.error || image.latest_status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                  {imageStatuses(image).map((status) => <div key={status}>{status}</div>)}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {!image.error && <Button
+                  <Button
                     size="sm"
-                    disabled={Boolean(busy)}
+                    disabled={Boolean(busy) || Boolean(image.error)}
                     onClick={() => void build(image.name)}
                   >
                     {busy === `build:${image.name}` ? `Building ${image.name}…` : `Build ${image.name}`}
-                  </Button>}
+                  </Button>
                 </td>
               </tr>)}
               {detail.images.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No images in this Store.</td></tr>}
