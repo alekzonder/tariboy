@@ -75,7 +75,7 @@ func validateFrontmatterNode(doc *yaml.Node) error {
 			return errors.New("SKILL.md frontmatter keys must be strings")
 		}
 		switch key.Value {
-		case "name", "description", "license", "compatibility", "allowed-tools":
+		case "name", "description", "license", "compatibility", "allowed-tools", "argument-hint":
 			if value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
 				return fmt.Errorf("frontmatter field %q must be a string", key.Value)
 			}

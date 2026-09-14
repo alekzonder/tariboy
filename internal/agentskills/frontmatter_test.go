@@ -15,6 +15,7 @@ metadata:
   author: example-org
   version: "1.0"
 allowed-tools: Bash(git:*) Read
+argument-hint: "[lite|full|ultra]"
 ---
 # Instructions
 `)
@@ -42,6 +43,9 @@ func TestParseFrontmatterRejectsInvalidDocuments(t *testing.T) {
 		"uppercase name":            "---\nname: Code-review\ndescription: review\n---\n",
 		"empty description":         "---\nname: code-review\ndescription: ''\n---\n",
 		"non-string metadata":       "---\nname: code-review\ndescription: review\nmetadata: {version: 1}\n---\n",
+		"numeric argument hint":     "---\nname: code-review\ndescription: review\nargument-hint: 1\n---\n",
+		"list argument hint":        "---\nname: code-review\ndescription: review\nargument-hint: [lite, full]\n---\n",
+		"null argument hint":        "---\nname: code-review\ndescription: review\nargument-hint: null\n---\n",
 		"long compatibility":        "---\nname: code-review\ndescription: review\ncompatibility: " + strings.Repeat("x", 501) + "\n---\n",
 	}
 	for name, body := range tests {

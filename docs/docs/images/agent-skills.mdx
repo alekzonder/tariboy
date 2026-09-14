@@ -231,6 +231,7 @@ metadata:
   author: example-org
   version: "1.0"
 allowed-tools: Bash(git:*) Read
+argument-hint: "[file-or-directory]"
 ---
 
 # Code review
@@ -239,7 +240,9 @@ Inspect the complete diff and report findings by severity.
 ```
 
 `name` and `description` are required. `license`, `compatibility`,
-`allowed-tools`, and string-to-string `metadata` are optional. Unknown fields,
+`allowed-tools`, `argument-hint`, and string-to-string `metadata` are optional.
+`argument-hint` must be a string; it is preserved in the packaged `SKILL.md`
+for harnesses that support argument hints. Unknown fields,
 YAML anchors or aliases, and multiple YAML documents are rejected.
 
 The name must:
