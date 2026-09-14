@@ -173,6 +173,30 @@ func TestCatalogDetailReportsLatestImageVersionAndComparisonStatus(t *testing.T)
 	}
 }
 
+func TestCatalogDetailReportsLatestPathInspectionError(t *testing.T) {
+	base, source := t.TempDir(), t.TempDir()
+	writeImage(t, source, "alpha", "1.0.0")
+	if err := os.MkdirAll(filepath.Join(base, "images"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "images", "alpha"), []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	catalog, db := openCatalog(t, base)
+	defer db.Close()
+	if _, err := catalog.Add(context.Background(), "team", source); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := catalog.Detail(context.Background(), "team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Images) != 1 || detail.Images[0].LatestStatus != "error" || detail.Images[0].LatestError == "" {
+		t.Fatalf("images = %#v, want latest inspection error", detail.Images)
+	}
+}
+
 func TestCatalogDetailIgnoresCorruptBuiltArtifactForAnotherImage(t *testing.T) {
 	base, source := t.TempDir(), t.TempDir()
 	writeImage(t, source, "alpha", "1.0.0")
