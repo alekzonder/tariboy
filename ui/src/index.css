@@ -86,9 +86,9 @@
     --card-foreground: var(--foreground);
     --popover: oklch(100% 0 0);
     --popover-foreground: var(--foreground);
-    /* teal is the single accent */
-    --primary: oklch(58% .14 188);
-    --primary-foreground: oklch(99% 0 0);
+    /* blue is the single accent */
+    --primary: oklch(54% .125 252);
+    --primary-foreground: oklch(99% .003 252);
     --secondary: oklch(96.4% .003 250);
     --secondary-foreground: var(--foreground);
     --muted: oklch(97% .003 250);
@@ -98,7 +98,7 @@
     --destructive: oklch(55% .155 27);
     --border: oklch(88.5% .005 250);
     --input: oklch(88.5% .005 250);
-    --ring: oklch(64% .13 188);
+    --ring: oklch(64% .12 252);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -117,7 +117,7 @@
     /* status — one lightness, one chroma band, hue does the work */
     --status-running: oklch(62% .15 168);
     --status-queued: oklch(62% .1 300);
-    --status-done: oklch(58% .13 188);
+    --status-done: oklch(54% .125 252);
     --status-failed: oklch(58% .19 18);
     --status-stopped: oklch(64% .012 250);
 
@@ -149,8 +149,8 @@
     --card-foreground: var(--foreground);
     --popover: oklch(24.5% .006 250);
     --popover-foreground: var(--foreground);
-    --primary: oklch(66% .13 188);
-    --primary-foreground: oklch(17% .01 188);
+    --primary: oklch(74% .13 252);
+    --primary-foreground: oklch(19% .012 252);
     --secondary: oklch(26% .006 250);
     --secondary-foreground: var(--foreground);
     --muted: oklch(26% .006 250);
@@ -160,7 +160,7 @@
     --destructive: oklch(66% .150 27);
     --border: oklch(31% .007 250);
     --input: oklch(31% .007 250);
-    --ring: oklch(66% .13 188);
+    --ring: oklch(64% .12 252);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -178,7 +178,7 @@
        status reads as the same colour in both themes. */
     --status-running: oklch(70% .15 168);
     --status-queued: oklch(66% .1 300);
-    --status-done: oklch(60% .13 188);
+    --status-done: oklch(62% .11 252);
     --status-failed: oklch(66% .19 18);
     --status-stopped: oklch(56% .010 250);
     --lift: 0 1px 2px oklch(0 0 0/.3), 0 12px 30px -14px oklch(0 0 0/.55); /* @kind shadow */
