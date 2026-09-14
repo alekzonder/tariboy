@@ -26,21 +26,22 @@ const envelope = (result: unknown, ok = true): Response => ({
     : { ok: false, error: { code: "store_failed", message: String(result) } }),
 }) as Response;
 
-function RouteButtons({ hostParam }: { hostParam: string }) {
+function RouteButtons({ hostParam, otherHostParam }: { hostParam: string; otherHostParam?: string }) {
   const navigate = useNavigate();
   return <>
     <button onClick={() => navigate(`/servers/${hostParam}/stores/old`)}>Open old</button>
-    <button onClick={() => navigate(`/servers/${hostParam}/stores/new`)}>Open new</button>
+    <button onClick={() => navigate(`/servers/${otherHostParam ?? hostParam}/stores/new`)}>Open new</button>
+    {otherHostParam && <button onClick={() => navigate(`/servers/${otherHostParam}/stores/old`)}>Switch host</button>}
   </>;
 }
 
-function renderPage(path: string, hostParam: string) {
+function renderPage(path: string, hostParam: string, otherHostParam?: string) {
   return render(
     <DaemonProvider>
       <CustomerQuestionNotificationsContext.Provider value={{ attention: new Set(), refreshHost: async () => {} }}>
         <SidebarStateProvider>
           <MemoryRouter initialEntries={[path]}>
-            <RouteButtons hostParam={hostParam} />
+            <RouteButtons hostParam={hostParam} otherHostParam={otherHostParam} />
             <Routes>
               <Route path="/servers/:hostId/stores" element={<TerminalsPage serverView="stores" />} />
               <Route path="/servers/:hostId/stores/:name" element={<TerminalsPage serverView="store-detail" />} />
@@ -263,5 +264,157 @@ describe("Stores workspace", () => {
 
     await waitFor(() => expect(screen.queryByRole("heading", { name: "old" })).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "new" })).toBeInTheDocument();
+  });
+
+  it("isolates late builds by host and supports an explicit target ref", async () => {
+    const host = await addDaemon({
+      label: "Old Store host",
+      baseURL: "https://old-build.example",
+      token: "old-build-token",
+    });
+    const newHost = await addDaemon({
+      label: "New Store host",
+      baseURL: "https://new-build.example",
+      token: "new-build-token",
+    });
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "This daemon (local)" }, agents: [] },
+      { host: { id: host.id, label: host.label }, agents: [] },
+      { host: { id: newHost.id, label: newHost.label }, agents: [] },
+    ]);
+    let finishOld!: (response: Response) => void;
+    let finishNewFailure!: (response: Response) => void;
+    let finishNewSuccess!: (response: Response) => void;
+    let finishThirdFailure!: (response: Response) => void;
+    let finishNewReload!: (response: Response) => void;
+    const oldBuild = new Promise<Response>((resolve) => { finishOld = resolve; });
+    const newFailure = new Promise<Response>((resolve) => { finishNewFailure = resolve; });
+    const newSuccess = new Promise<Response>((resolve) => { finishNewSuccess = resolve; });
+    const thirdFailure = new Promise<Response>((resolve) => { finishThirdFailure = resolve; });
+    const newReload = new Promise<Response>((resolve) => { finishNewReload = resolve; });
+    let newAttempts = 0;
+    let newReads = 0;
+    const calls: Call[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      const body = typeof init.body === "string" ? init.body : undefined;
+      calls.push({ url, method, body });
+      if (url.startsWith("https://old-build.example") && url.endsWith("/api/stores/old")) return Promise.resolve(envelope({
+      name: "old", source: "/srv/old", path: "/srv/old",
+      images: [{ name: "old-image", version: "1.0.0", built_version: "", update_needed: false, latest_status: "missing" }],
+      }));
+      if (url.startsWith("https://new-build.example") && url.endsWith("/api/stores/old")) {
+      newReads++;
+      if (newReads > 1) return newReload;
+      return Promise.resolve(envelope({
+        name: "old", source: "/srv/new", path: "/srv/new",
+        images: [{ name: "new-image", version: "2.0.0", built_version: "", update_needed: false, latest_status: "missing" }],
+      }));
+      }
+      if (url.endsWith("/api/images/build")) {
+      const source = JSON.parse(body ?? "{}").source;
+      if (source === "old/old-image") return oldBuild;
+      newAttempts++;
+      return newAttempts === 1 ? newFailure : newAttempts === 2 ? newSuccess : thirdFailure;
+      }
+      return Promise.resolve(envelope({ agents: [], groups: [], count: 0 }));
+    }));
+    const hostParam = encodeURIComponent(host.id);
+    const newHostParam = encodeURIComponent(newHost.id);
+    renderPage(`/servers/${hostParam}/stores/old`, hostParam, newHostParam);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Build old-image" }));
+    expect(screen.getByRole("button", { name: "Building old-image…" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Switch host" }));
+    expect(await screen.findByRole("button", { name: "Build new-image" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Open server New Store host" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("button", { name: "Build new-image" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Target image name"), { target: { value: "alternate" } });
+    fireEvent.change(screen.getByLabelText("Target image tag"), { target: { value: "candidate" } });
+    fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
+    expect(screen.getByRole("button", { name: "Building new-image…" })).toBeDisabled();
+    expect(calls).toContainEqual(expect.objectContaining({
+      url: "https://new-build.example/api/images/build",
+      method: "POST",
+      body: JSON.stringify({ source: "old/new-image", name: "alternate", tag: "candidate" }),
+    }));
+
+    finishOld(envelope({ name: "old-image", tag: "1.0.0", digest: "sha256:old", layers: 1 }));
+    await waitFor(() => expect(screen.queryByText(/Built old-image/)).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "old" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Building new-image…" })).toBeDisabled();
+
+    finishNewFailure(envelope("immutable target", false));
+    expect(await screen.findByRole("alert")).toHaveTextContent("immutable target");
+    expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
+    finishNewSuccess(envelope({ name: "alternate", tag: "candidate", digest: "sha256:new", layers: 1 }));
+    expect(await screen.findByText("Built alternate:candidate.")).toBeInTheDocument();
+    expect(screen.queryByText(/alternate:latest/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
+    finishNewReload(envelope({ name: "old", source: "/srv/new", path: "/srv/new", images: [] }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Building new-image…" })).toBeDisabled());
+    expect(screen.getByText("new-image")).toBeInTheDocument();
+    finishThirdFailure(envelope("third build failed", false));
+    expect(await screen.findByRole("alert")).toHaveTextContent("third build failed");
+    expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
+  });
+
+  it("keeps Refresh ownership when build inventory finishes late", async () => {
+    const host = await addDaemon({
+      label: "Store host",
+      baseURL: "https://refresh-build.example",
+      token: "refresh-build-token",
+    });
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "This daemon (local)" }, agents: [] },
+      { host: { id: host.id, label: host.label }, agents: [] },
+    ]);
+    let finishStaleRead!: (response: Response) => void;
+    let finishRefresh!: (response: Response) => void;
+    const staleRead = new Promise<Response>((resolve) => { finishStaleRead = resolve; });
+    const refreshResponse = new Promise<Response>((resolve) => { finishRefresh = resolve; });
+    let detailReads = 0;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      if (url.endsWith("/api/stores/team") && method === "GET") {
+        detailReads++;
+        if (detailReads > 1) return staleRead;
+        return Promise.resolve(envelope({
+          name: "team", source: "/srv/team", path: "/srv/team",
+          images: [{ name: "reviewer", version: "1.0.0", built_version: "", update_needed: false, latest_status: "missing" }],
+        }));
+      }
+      if (url.endsWith("/api/images/build")) {
+        return Promise.resolve(envelope({ name: "reviewer", tag: "1.0.0", digest: "sha256:built", layers: 1 }));
+      }
+      if (url.endsWith("/api/stores/team/refresh")) return refreshResponse;
+      return Promise.resolve(envelope({ agents: [], groups: [], count: 0 }));
+    }));
+    const hostParam = encodeURIComponent(host.id);
+    renderPage(`/servers/${hostParam}/stores/team`, hostParam);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Build reviewer" }));
+    expect(await screen.findByText("Built reviewer:1.0.0 and reviewer:latest.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Build reviewer" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+
+    finishStaleRead(envelope("stale inventory failed", false));
+    await waitFor(() => expect(screen.queryByText("stale inventory failed")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
+
+    finishRefresh(envelope({
+      name: "team", source: "/srv/team", path: "/srv/team",
+      images: [{ name: "fresh", version: "2.0.0", built_version: "2.0.0", update_needed: false, latest_status: "built" }],
+    }));
+    expect(await screen.findByText("Refreshed team.")).toBeInTheDocument();
+    expect(screen.getByText("fresh")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
   });
 });

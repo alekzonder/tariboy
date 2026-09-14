@@ -159,6 +159,14 @@ source without a version publishes only `latest`. Use `--name` to avoid a name
 collision between Stores, and `--tag` to publish only an explicit tag. Do not
 combine a Store selector with `--path`.
 
+An immutable version tag can conflict even when the table says **Latest not
+built**: the table compares only `latest`. Build checks the requested refs
+before restoring skills or packaging sources, and checks again at publication
+to protect against concurrent changes. A conflict leaves existing images
+untouched. The Store's **Target image name** and **Target image tag** fields
+are optional: leave them blank for the defaults, or choose an alternative and
+retry. An explicit tag publishes only that ref; other refs remain unchanged.
+
 Before freezing sources, the daemon runs `npx skills experimental_install` in
 the Store root when `skills-lock.json` exists there, then in the image directory
 when it has a separate lock. An installation failure stops the build before

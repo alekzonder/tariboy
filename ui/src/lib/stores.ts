@@ -33,5 +33,5 @@ export const refreshStore = (target: Target, name: string) =>
   apiOn<StoreDetail>(target, "POST", `${storePath(name)}/refresh`);
 export const removeStore = (target: Target, name: string) =>
   apiOn<{ removed: boolean }>(target, "DELETE", storePath(name));
-export const buildStoreImage = (target: Target, source: string) =>
-  apiOn<ImageBuildResult>(target, "POST", "/api/images/build", { source });
+export const buildStoreImage = (target: Target, input: { source: string; name?: string; tag?: string }) =>
+  apiOn<ImageBuildResult>(target, "POST", "/api/images/build", input);

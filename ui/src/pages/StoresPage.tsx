@@ -59,8 +59,11 @@ export default function StoresPage({ target, name, basePath }: {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [targetName, setTargetName] = useState("");
+  const [targetTag, setTargetTag] = useState("");
   const [removeOpen, setRemoveOpen] = useState(false);
   const [removeError, setRemoveError] = useState("");
+  const buildGeneration = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -100,6 +103,7 @@ export default function StoresPage({ target, name, basePath }: {
 
   const refresh = async () => {
     if (!name) return;
+    buildGeneration.current++;
     setBusy("refresh");
     setError("");
     setStatus("");
@@ -118,32 +122,45 @@ export default function StoresPage({ target, name, basePath }: {
 
   const build = async (imageName: string) => {
     if (!name) return;
+    const requestedBuild = ++buildGeneration.current;
+    const requestedName = targetName.trim();
+    const requestedTag = targetTag.trim();
+    const isCurrent = () => mounted.current && buildGeneration.current === requestedBuild;
     setBusy(`build:${imageName}`);
     setError("");
     setStatus("");
     try {
-      const built = await buildStoreImage(target, `${name}/${imageName}`);
-      if (mounted.current) {
-        setStatus(built.tag === "latest"
-          ? `Built ${built.name}:latest.`
-          : `Built ${built.name}:${built.tag} and ${built.name}:latest.`);
+      const built = await buildStoreImage(target, {
+        source: `${name}/${imageName}`,
+        ...(requestedName ? { name: requestedName } : {}),
+        ...(requestedTag ? { tag: requestedTag } : {}),
+      });
+      if (isCurrent()) {
+        setStatus(requestedTag
+          ? `Built ${built.name}:${built.tag}.`
+          : built.tag === "latest"
+            ? `Built ${built.name}:latest.`
+            : `Built ${built.name}:${built.tag} and ${built.name}:latest.`);
+        setBusy("");
         window.dispatchEvent(new Event("tariboy:image-built"));
       }
+      if (!isCurrent()) return;
       try {
         const refreshed = await getStore(target, name);
-        if (mounted.current) setDetail(refreshed);
+        if (isCurrent()) setDetail(refreshed);
       } catch (cause) {
-        if (mounted.current) setError(message(cause));
+        if (isCurrent()) setError(message(cause));
       }
     } catch (cause) {
-      if (mounted.current) setError(message(cause));
+      if (isCurrent()) setError(message(cause));
     } finally {
-      if (mounted.current) setBusy("");
+      if (isCurrent()) setBusy("");
     }
   };
 
   const remove = async () => {
     if (!name) return;
+    buildGeneration.current++;
     setBusy("remove");
     setError("");
     setRemoveError("");
@@ -212,6 +229,11 @@ export default function StoresPage({ target, name, basePath }: {
       {loading && <p role="status" className="text-sm text-muted-foreground">Loading Store…</p>}
       {detail && <section className="space-y-2">
         <h2 className="font-medium">Images</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Input aria-label="Target image name" placeholder="Source image name" value={targetName} disabled={Boolean(busy)} onChange={(event) => setTargetName(event.target.value)} />
+          <Input aria-label="Target image tag" placeholder="image_version + latest" value={targetTag} disabled={Boolean(busy)} onChange={(event) => setTargetTag(event.target.value)} />
+        </div>
+        <p className="text-xs text-muted-foreground">Leave both blank to publish the source name with image_version and latest. If a target is immutable, choose another name or tag.</p>
         <div className="overflow-x-auto rounded border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">

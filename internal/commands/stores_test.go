@@ -2,14 +2,18 @@ package commands
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -124,19 +128,20 @@ func TestImageBuildStoreSelectorInstallsLocksAndDefaultsIdentity(t *testing.T) {
 
 	tools := t.TempDir()
 	logPath := filepath.Join(t.TempDir(), "npx.log")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$PWD\" >>\"$NPX_LOG\"\nif test \"$PWD\" = \"${NPX_FAIL_DIR-}\"; then exit 7; fi\n"
+	script := "#!/bin/sh\nprintf '%s\\n' \"$PWD\" >>\"$NPX_LOG\"\nif test \"$PWD\" = \"${NPX_UPDATE_DIR-}\"; then printf '%s\\n' 'schema_version: 2' 'image_version: 1.2.4' 'plugins: []' 'prompts: []' >Tariboyfile.yaml; fi\nif test \"$PWD\" = \"${NPX_FAIL_DIR-}\"; then exit 7; fi\n"
 	if err := os.WriteFile(filepath.Join(tools, "npx"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("NPX_LOG", logPath)
+	t.Setenv("NPX_UPDATE_DIR", imageDir)
 
 	result, err := cmdHandler(t, "image.build")(c, registry.Params{"source": "team/reviewer"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := result.(map[string]any)
-	if got["name"] != "reviewer" || got["tag"] != "1.2.3" {
+	if got["name"] != "reviewer" || got["tag"] != "1.2.4" {
 		t.Fatalf("build result = %#v", got)
 	}
 	raw, err := os.ReadFile(logPath)
@@ -158,6 +163,52 @@ func TestImageBuildStoreSelectorInstallsLocksAndDefaultsIdentity(t *testing.T) {
 	}
 	if imageStore(c).Exists(image.Ref{Name: "failed", Tag: "2.0.0"}) {
 		t.Fatal("failed lock installation published an image")
+	}
+}
+
+func TestImageBuildStoreSelectorRejectsImmutableVersionBeforeInstallingLocks(t *testing.T) {
+	c := localCtx(t)
+	source := t.TempDir()
+	imageDir := filepath.Join(source, "images", "reviewer")
+	writeImageV2(t, imageDir, "1.2.3")
+	for _, dir := range []string{source, imageDir} {
+		if err := os.WriteFile(filepath.Join(dir, "skills-lock.json"), []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := cmdHandler(t, "store.add")(c, registry.Params{"name": "team", "source": source}); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := imagefile.ParseV2(imageDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := image.Ref{Name: "reviewer", Tag: "1.2.3"}
+	if _, err := image.BuildV2(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	tools := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "npx.log")
+	if err := os.WriteFile(filepath.Join(tools, "npx"), []byte("#!/bin/sh\nprintf 'called\\n' >>\"$NPX_LOG\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("NPX_LOG", logPath)
+
+	_, err = cmdHandler(t, "image.build")(c, registry.Params{"source": "team/reviewer"})
+	var userErr api.UserError
+	if !errors.As(err, &userErr) || userErr.Code != "immutable_ref" {
+		t.Fatalf("error = %#v, want immutable_ref", err)
+	}
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("npx ran before immutable target rejection: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(c.BaseDir, "image-source-snapshots")); !os.IsNotExist(err) {
+		t.Fatalf("source was frozen before immutable target rejection: %v", err)
+	}
+	if imageStore(c).Exists(image.Ref{Name: "reviewer", Tag: "latest"}) {
+		t.Fatal("default latest ref was published")
 	}
 }
 
