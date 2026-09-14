@@ -330,13 +330,6 @@ func validateImageBuildTargets(c *registry.Ctx, store *image.Store, snapshotStor
 	legacy := make(map[string]bool, len(refs))
 	provenanceStore := imageprovenance.Store{DB: c.Store.DB}
 	for _, ref := range refs {
-		var releases int
-		if err := c.Store.DB.QueryRow(`SELECT COUNT(*) FROM image_releases WHERE image_ref=?`, ref.String()).Scan(&releases); err != nil {
-			return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-		}
-		if releases != 0 {
-			return nil, api.UserError{Code: "immutable_release", Msg: "image " + ref.String() + " is a controlled release", Status: http.StatusConflict}
-		}
 		if store.Exists(ref) && !store.IsMutable(ref) {
 			current, err := store.Inspect(ref)
 			if err != nil {

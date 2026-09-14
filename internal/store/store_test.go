@@ -31,6 +31,29 @@ func TestOpenMigrates(t *testing.T) {
 	}
 }
 
+func TestOpenRemovesJudgeTables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "remove-judge.db")
+	db := createDatabaseBeforeMigration(t, path, "0043_remove_judge.sql")
+	requireTable(t, db, "judge_runs")
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, name := range []string{"judge_runs", "judge_automation_revisions", "improvement_proposals", "image_releases"} {
+		var count int
+		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, name).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Errorf("removed table %q still exists", name)
+		}
+	}
+}
+
 func TestAgentGoalsMigrationPreservesTasksAndAddsReleaseFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent-goals-upgrade.db")
 	db := createDatabaseBeforeMigration(t, path, "0037_agent_goals.sql")

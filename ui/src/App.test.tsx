@@ -37,17 +37,7 @@ beforeEach(() => {
     "fetch",
     vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
-      const result =
-        url.includes("/api/judges/run-1") ? {
-          run: {
-            id: "run-1", status: "completed", original_request: "test",
-            targets_ready: 0, targets_total: 0, assignments_completed: 0,
-            assignments_total: 0, current_summary_version: 0,
-          },
-          targets: [], analyses: [], summaries: [], usage: [],
-        }
-        :
-        url.includes("/api/usage") ? {
+      const result = url.includes("/api/usage") ? {
           total_requests: 0, total_cost_usd: 0, total_input_tokens: 0,
           total_output_tokens: 0, total_cache_write_tokens: 0, total_cache_read_tokens: 0,
           rows: [], series: [], requests: [],
@@ -185,15 +175,6 @@ describe("product routing", () => {
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent(
         "/?image=worker%3Av1&host=remote-1&new=1",
-      ),
-    );
-  });
-
-  it("preserves a legacy judge run id under Settings", async () => {
-    renderAt("/judges/run-1");
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/settings/advanced/judges/run-1",
       ),
     );
   });

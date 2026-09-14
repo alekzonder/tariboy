@@ -160,7 +160,7 @@ logged for its agent without preventing unrelated agents from starting.
 In steady state it runs the schedule publisher, task-workflow outbox publisher,
 the per-agent goal reconciler, workflow question and observation reconcilers, AI ingestion, the daily pricing
 catalog worker, policy/budget cache refresh, post-iteration evaluations,
-LLM-as-judge runner, retention pruner, loop engines, and plugin supervisors.
+retention pruner, loop engines, and plugin supervisors.
 Shutdown stops the proxy first, then cancels and awaits the pricing worker and
 the other workers before loops/plugins and SQLite stop. That ordering prevents
 a catalog publication, final outbox, or usage write from racing a closed

@@ -118,8 +118,8 @@ usage — re-ground them if real usage lands later.
   the props type before assuming a component cannot be previewed:
   `ShellScriptEditor` takes `load`/`save`, `FileBrowser` takes a whole
   `FileBrowserApi`, `TuiScreen` takes the `controller` (the websocket lives
-  outside it, so a captured session renders a real xterm), `IterationJudgePanel`
-  renders from a `judge` projection, `PathAutocomplete` is fully controlled.
+  outside it, so a captured session renders a real xterm), and
+  `PathAutocomplete` is fully controlled.
 - **The failure shell is a legitimate preview.** The capture server 404s every
   `/api/...` read, so fetch-coupled components land in their genuine empty/error
   states. That is honest content, not a placeholder — grade it on the rubric.

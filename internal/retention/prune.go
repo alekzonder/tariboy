@@ -127,17 +127,6 @@ func (p *Pruner) selectVictims(name string, its []agent.Iteration, pol Policy) [
 		nf[len(its)-1-i] = it
 	}
 	protected := map[string]bool{nf[0].ID: true}
-	// A snapshot pins an iteration only while it is being copied into immutable
-	// judge evidence.  Do not race that copy with retention.
-	if rows, err := p.db.Query(`SELECT DISTINCT iteration_id FROM judge_retention_pins`); err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if rows.Scan(&id) == nil {
-				protected[id] = true
-			}
-		}
-	}
 	for _, it := range nf {
 		if it.Status == "running" || !safeID(it.ID) {
 			protected[it.ID] = true

@@ -153,41 +153,6 @@ type UsageRow struct {
 	CostUSD          float64
 }
 
-// IterationUsageRow aggregates exactly one historical iteration. It is kept
-// separate from UsageFilter because operator judge views must not accidentally
-// include the judge agents' own requests.
-type IterationUsageRow struct {
-	Iteration                                                              string
-	Requests, InputTokens, OutputTokens, CacheWriteTokens, CacheReadTokens int
-	CostUSD                                                                float64
-}
-
-func (s *Store) AggregateIterations(ids []string) ([]IterationUsageRow, error) {
-	if len(ids) == 0 {
-		return []IterationUsageRow{}, nil
-	}
-	q := `SELECT iteration,COUNT(*),COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0),COALESCE(SUM(cache_write_tokens),0),COALESCE(SUM(cache_read_tokens),0),COALESCE(SUM(cost_usd),0) FROM ai_requests WHERE iteration IN (` + strings.TrimRight(strings.Repeat("?,", len(ids)), ",") + `) GROUP BY iteration ORDER BY iteration`
-	args := make([]any, len(ids))
-	for i := range ids {
-		args[i] = ids[i]
-	}
-	rows, err := s.db.Query(q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []IterationUsageRow{}
-	for rows.Next() {
-		var x IterationUsageRow
-		if err := rows.Scan(&x.Iteration, &x.Requests, &x.InputTokens, &x.OutputTokens, &x.CacheWriteTokens, &x.CacheReadTokens, &x.CostUSD); err != nil {
-			return nil, err
-		}
-		x.CostUSD = roundCost(x.CostUSD)
-		out = append(out, x)
-	}
-	return out, rows.Err()
-}
-
 func (f UsageFilter) where() (string, []any) {
 	var conds []string
 	var args []any

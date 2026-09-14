@@ -73,25 +73,6 @@ tariboy has three command surfaces:
 | `tariboy image provenance REF` | Show local source and immutable snapshot Git provenance |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
-| `tariboy image-release inspect` | Show immutable image release provenance |
-| `tariboy image-release rollback` | Stage the prior immutable image from a completed rollout |
-| `tariboy image-release rollout approve` | Approve an exact image release rollout |
-| `tariboy image-release rollout reject` | Reject an exact image release rollout |
-| `tariboy image-release rollout stage` | Stage an approved release for one agent |
-| `tariboy improvement inspect` | Show an agent improvement proposal |
-| `tariboy improvement ls` | List agent improvement proposals |
-| `tariboy improvement plan approve` | Approve an exact improvement plan revision |
-| `tariboy improvement plan reject` | Reject an exact improvement plan revision |
-| `tariboy judge cancel` | Cancel an LLM-as-Judge run while preserving immutable artifacts |
-| `tariboy judge evidence` | Read immutable judge evidence by stable locator |
-| `tariboy judge inspect` | Show an LLM-as-Judge run, targets, analyses, summaries and target usage |
-| `tariboy judge ls` | List LLM-as-Judge runs |
-| `tariboy judge review --iteration ID [--iteration ID] [--judges-per-iteration N]` | Review explicit terminal iterations with the configured Judge team |
-| `tariboy judge retry` | Retry failed assignments in an LLM-as-Judge run |
-| `tariboy judge automation get` | Read the active Judge automation revision |
-| `tariboy judge automation validate --json JSON` | Validate raw JSON in `tariboyd` without applying it |
-| `tariboy judge automation apply --json JSON` | Apply JSON, create `JUDGE`/`IMPROVE`, and reconcile the recurring schedule without starting a review |
-| `tariboy judge automation run-once --limit N` | Queue one immediate cycle through the existing scheduler |
 | `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, and prompt-template hash |
 | `tariboy iteration logs` | Print an iteration's harness logs |
 | `tariboy iteration ls` | List an agent's iterations |
@@ -132,20 +113,6 @@ tariboy has three command surfaces:
 | `tariboy version` | Print the Tariboy version locally without a daemon |
 
 > Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
-
-`judge review` creates one bounded run for only the listed terminal iteration
-IDs. It uses the lead and workers from the active Judge configuration even when
-its cron schedule is disabled; it does not enable agents or loops. One worker
-reviews each iteration by default. `--judges-per-iteration` must be between one
-and the number of configured workers. Unknown, nonterminal, or empty selections
-and invalid configured roles are rejected without creating a run.
-
-The command pins each eligible worker's image ref, resolved digest, and
-prompt-template hash with the run. Results are
-evidence-backed assessments, not calibrated probabilities: confidence values
-express the judge's support from the available evidence and must not be read as
-measured error rates. When every independent review is `uncertain`, consensus
-remains `uncertain`; missing evidence is not a disagreement or a failure.
 
 ## Agent capability scripts
 

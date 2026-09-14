@@ -1,0 +1,17 @@
+DROP TABLE IF EXISTS improvement_tasks;
+DROP TABLE IF EXISTS image_rollouts;
+DROP TABLE IF EXISTS image_releases;
+DROP TABLE IF EXISTS improvement_approvals;
+DROP TABLE IF EXISTS improvement_proposals;
+DROP TABLE IF EXISTS judge_subject_targets;
+DROP TABLE IF EXISTS judge_subjects;
+DROP TABLE IF EXISTS judge_submission_attempts;
+DROP TABLE IF EXISTS judge_analyses;
+DROP TABLE IF EXISTS judge_summaries;
+DROP TABLE IF EXISTS judge_retention_pins;
+DROP TABLE IF EXISTS judge_assignments;
+DROP TABLE IF EXISTS judge_targets;
+DROP TABLE IF EXISTS judge_runs;
+DROP TABLE IF EXISTS judge_automation_cycles;
+DROP TABLE IF EXISTS judge_automation_state;
+DROP TABLE IF EXISTS judge_automation_revisions;

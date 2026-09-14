@@ -8,10 +8,7 @@ import { IterationAuditLog } from "@/components/IterationAuditLog";
 import { Badge } from "@/components/ui/badge";
 import { fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
-import { IterationJudgePanel } from "@/components/IterationJudgePanel";
 import { paramToHost, targetFor } from "@/lib/terminalsHost";
-
-const terminalStatuses = new Set(["done", "no_i_am_done", "harness_error", "timeout", "killed"]);
 
 // Map a backend iteration status to a badge variant. Backend Status is one of
 // running|done|no_i_am_done|harness_error|timeout|killed (internal/agent/
@@ -108,7 +105,6 @@ export default function AuditLogPage() {
                   idle
                 </Badge>
               )}
-              {it.judge?.latest_completed && <Badge variant="outline">{it.judge.latest_completed.score ?? "—"} {it.judge.latest_completed.verdict || "—"}</Badge>}
               <Badge variant={statusVariant(it.status)}>{it.status}</Badge>
             </span>
           </button>
@@ -118,21 +114,13 @@ export default function AuditLogPage() {
         {selected === null ? (
           <FullAuditLog name={name} />
         ) : selectedItem ? (
-          <div className="flex h-full flex-col gap-3">
-            <IterationJudgePanel
-              agentName={name}
-              iterationId={selected}
-              terminal={terminalStatuses.has(selectedItem.status)}
-              judge={selectedItem.judge ?? { latest_completed: null, active: null }}
-            />
-            <div className="min-h-0 flex-1">
-              <IterationAuditLog
+          <div className="h-full">
+            <IterationAuditLog
                 name={name}
                 iterationId={selected}
                 iterationStatus={selectedItem.status}
                 iterationProductive={selectedItem.productive}
               />
-            </div>
           </div>
         ) : loaded ? (
           <p role="status" className="text-sm text-muted-foreground">Iteration {selected} was not found.</p>

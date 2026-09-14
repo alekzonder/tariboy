@@ -244,12 +244,6 @@ func (s *Store) SetPendingImageErrorIf(name, ref, digest, message string) error 
 	if err := affected(res); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE image_rollouts SET status='failed',completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE target_agent=? AND image_ref=? AND image_digest=? AND status='rollout_pending'`, name, ref, digest); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE image_releases SET status='failed' WHERE id IN (SELECT release_id FROM image_rollouts WHERE target_agent=? AND image_ref=? AND image_digest=? AND status='failed')`, name, ref, digest); err != nil {
-		return err
-	}
 	return tx.Commit()
 }
 func (s *Store) ClearPendingImage(name string) error {
@@ -300,15 +294,6 @@ func (s *Store) PromotePendingImageWithPlugins(name, expectedRef, expectedDigest
 		return err
 	}
 	if err := affected(res); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE image_rollouts SET status='rolled_out',completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE target_agent=? AND image_ref=? AND image_digest=? AND status='rollout_pending'`, name, expectedRef, expectedDigest); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE image_releases SET status='rolled_out' WHERE id IN (SELECT release_id FROM image_rollouts WHERE target_agent=? AND image_ref=? AND image_digest=? AND status='rolled_out')`, name, expectedRef, expectedDigest); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`UPDATE improvement_proposals SET status='rolled_out',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id IN (SELECT proposal_id FROM image_releases WHERE id IN (SELECT release_id FROM image_rollouts WHERE target_agent=? AND image_ref=? AND image_digest=? AND status='rolled_out'))`, name, expectedRef, expectedDigest); err != nil {
 		return err
 	}
 	return tx.Commit()

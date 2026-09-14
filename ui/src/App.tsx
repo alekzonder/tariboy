@@ -22,9 +22,6 @@ import GroupsPage from "@/pages/GroupsPage";
 import BudgetsPage from "@/pages/BudgetsPage";
 import RulesPage from "@/pages/RulesPage";
 import EvalsPage from "@/pages/EvalsPage";
-import JudgeRunsPage from "@/pages/JudgeRunsPage";
-import JudgeRunDetailPage from "@/pages/JudgeRunDetailPage";
-import ImprovementDetailPage from "@/pages/ImprovementDetailPage";
 import PluginsPage from "@/pages/PluginsPage";
 import OpsPage from "@/pages/OpsPage";
 import ChannelsPage from "@/pages/ChannelsPage";
@@ -151,9 +148,6 @@ function MainApp() {
             <Route path="advanced/budgets" element={<BudgetsPage />} />
             <Route path="advanced/rules" element={<RulesPage />} />
             <Route path="advanced/evals" element={<EvalsPage />} />
-            <Route path="advanced/judges" element={<JudgeRunsPage />} />
-            <Route path="advanced/judges/:id" element={<JudgeRunDetailPage />} />
-            <Route path="advanced/improvements/:id" element={<ImprovementDetailPage />} />
             <Route path="advanced/plugins" element={<PluginsPage />} />
             <Route path="advanced/ops" element={<OpsPage />} />
             <Route path="advanced/daemons" element={<DaemonsPage />} />
@@ -173,7 +167,6 @@ function MainApp() {
           <Route path="/budgets" element={<Navigate to="/settings/advanced/budgets" replace />} />
           <Route path="/rules" element={<Navigate to="/settings/advanced/rules" replace />} />
           <Route path="/evals" element={<Navigate to="/settings/advanced/evals" replace />} />
-          <Route path="/judges/*" element={<LegacyJudgeRedirect />} />
           <Route path="/plugins" element={<Navigate to="/settings/advanced/plugins" replace />} />
           <Route path="/ops" element={<Navigate to="/settings/advanced/ops" replace />} />
           <Route path="/daemons" element={<Navigate to="/settings/advanced/daemons" replace />} />
@@ -207,16 +200,6 @@ function CanonicalCreateRedirect() {
 function CanonicalTerminalsRedirect() {
   const location = useLocation();
   return <Navigate to={`/${location.search}`} replace />;
-}
-
-function LegacyJudgeRedirect() {
-  const { "*": id = "" } = useParams();
-  return (
-    <Navigate
-      to={id ? `/settings/advanced/judges/${encodeURIComponent(id)}` : "/settings/advanced/judges"}
-      replace
-    />
-  );
 }
 
 function LegacyAgentRedirect() {
