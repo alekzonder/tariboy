@@ -36,7 +36,9 @@
 //
 // Idempotent: re-running over annotated CSS is a no-op.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MARKER = '/* @kind other */';
 const THEME_PART = /^(:root|:host|html|\.dark)$/;
@@ -59,6 +61,56 @@ export const DEMOTE_NAMES = new Set([
   '--default-transition-duration',
   '--default-transition-timing-function',
 ]);
+
+// The structural half of the same idea. The list above names four engine
+// defaults explicitly; this derives the rest, because naming them one at a
+// time does not survive ordinary UI work. Tailwind v4 emits a theme default
+// into the app's own `:root,:host` block the first time a utility uses it, so
+// every new `text-2xl` or `max-w-5xl` in a component silently adds a "token".
+// The metal/teal theme pass grew that leak from a handful to 49 of 100 names
+// (`--color-amber-400`, `--container-5xl`, `--text-lg--line-height`, ...) -
+// every one of which the README would have advertised to the design agent as
+// a Tariboy design token.
+//
+// The discriminator is authorship, not spelling: a design token is a custom
+// property this repo's OWN stylesheets declare. Tailwind's defaults are
+// materialized into the compiled bundle and appear in no source file, so
+// scanning src/**/*.css separates them exactly, with no name list to rot. The
+// two names this rule looked likeliest to get wrong were checked by hand and
+// are genuinely authored in src/index.css: `--color-background` (:64) and
+// `--radius-md` (:66, which button.tsx and select.tsx both read).
+//
+// This can only NARROW what the scope rule already admitted, so it cannot
+// promote a non-token.
+const AUTHORED = collectAuthoredNames();
+
+function collectAuthoredNames() {
+  const dir = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
+  const names = new Set();
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.css')) {
+        for (const m of readFileSync(p, 'utf8').matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g)) names.add(m[1]);
+      }
+    }
+  };
+  walk(dir);
+  // Tripwire, in the same spirit as make-tokens.mjs: if the app ever moves its
+  // tokens out of .css files, this scan comes back near-empty and would demote
+  // every real token in one silent step. Fail loudly instead of shipping that.
+  if (names.size < 40) {
+    throw new Error(
+      `annotate-tokens: only ${names.size} custom properties authored under src/**/*.css - ` +
+        'the app appears to have moved its tokens. Fix the scan before trusting the token list.',
+    );
+  }
+  return names;
+}
+
+/** A theme-scope custom property is a design token only if this repo authors it. */
+export const isDemoted = (name) => DEMOTE_NAMES.has(name) || !AUTHORED.has(name);
 
 // A scope is a theme scope only if EVERY comma-separated part is one.
 // `:root,:host` qualifies; `.dark\:scale-0:is(.dark *)` does not.
@@ -94,7 +146,7 @@ function annotate(css) {
     cur = '';
     const name = declName(text);
     if (!name) return (out += text + terminator);
-    const demoted = DEMOTE_NAMES.has(name);
+    const demoted = isDemoted(name);
     if (isThemeScope(scope()) && !demoted) {
       counts.skipped++;
       return (out += text + terminator);
@@ -190,7 +242,7 @@ function collectThemeNames(css) {
     const sel = m[1].split(/[{}]/).pop();
     if (!isThemeScope(sel)) continue;
     for (const d of m[2].matchAll(/(--[\w-]+)\s*:/g)) {
-      if (!DEMOTE_NAMES.has(d[1])) THEME_NAMES.add(d[1]);
+      if (!isDemoted(d[1])) THEME_NAMES.add(d[1]);
     }
   }
 }
@@ -301,7 +353,7 @@ export function themeTokenBlocks(css) {
   const flush = () => {
     if (!open) return;
     const name = declName(cur);
-    if (name && !DEMOTE_NAMES.has(name)) open.decls.push(cur.replace(/\/\*[\s\S]*?\*\//g, '').trim());
+    if (name && !isDemoted(name)) open.decls.push(cur.replace(/\/\*[\s\S]*?\*\//g, '').trim());
   };
 
   for (let i = 0; i < css.length; i++) {
@@ -361,7 +413,7 @@ export function annotateFile(file) {
   const audited = audit(css); // throws rather than write a stylesheet with loose markers
   writeFileSync(file, css);
   console.error(
-    `  @kind other: ${counts.decls} declaration(s) (${counts.demoted} demoted by name from a theme scope) + ` +
+    `  @kind other: ${counts.decls} declaration(s) (${counts.demoted} demoted from a theme scope as non-tokens) + ` +
       `${counts.atProperty} @property rule(s) marked; ` +
       `${counts.skipped} theme-scope token(s) left as tokens (${THEME_NAMES.size} distinct); ` +
       `${audited.markers} markers, all attached`,
