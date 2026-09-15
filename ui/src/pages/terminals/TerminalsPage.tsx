@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import { usePolling } from "@/hooks/usePolling";
 import { fetchAllAgents, type HostAgents } from "@/lib/aggregate";
 import { paramToHost, hostToParam, serverPath, targetFor } from "@/lib/terminalsHost";
-import { TerminalsSidebar } from "./TerminalsSidebar";
+import { AgentSidebar } from "./sidebar/AgentSidebar";
 import { useSharedSidebarState } from "./sidebarStateContext";
 import { CreateAgentDialog, type CloneAgentSource } from "./CreateAgentDialog";
 import { ServerDialog } from "./ServerDialog";
@@ -259,7 +259,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     // Console body: the chrome shows through as an 8px gutter around the
     // content island, so neither the sidebar nor the island needs a border.
     <div className="flex h-full px-2 pb-2">
-      {!sidebar.hidden && <TerminalsSidebar
+      {!sidebar.hidden && <AgentSidebar
         hosts={orderedSidebarHosts}
         selectedHostId={hostId}
         selected={hostId !== undefined && agentName ? { hostId, agent: agentName } : undefined}
