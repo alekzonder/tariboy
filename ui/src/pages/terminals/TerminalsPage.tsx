@@ -27,6 +27,7 @@ import StoresPage from "@/pages/StoresPage";
 import { ImageLayout } from "@/components/ImageLayout";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
+import { MessagesLiveRefresh } from "./MessagesLiveRefresh";
 
 type ServerDialogState = { mode: "add" } | { mode: "edit"; server: DaemonMeta };
 type CreateDialogState = {
@@ -259,6 +260,9 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     // Console body: the chrome shows through as an 8px gutter around the
     // content island, so neither the sidebar nor the island needs a border.
     <div className="flex h-full px-2 pb-2">
+      {/* Chat order is live: a published message refreshes the authoritative
+          snapshot at once rather than waiting for the next poll. */}
+      <MessagesLiveRefresh hostIds={hosts.map((entry) => entry.host.id)} onChange={refresh} />
       {!sidebar.hidden && <AgentSidebar
         hosts={orderedSidebarHosts}
         selectedHostId={hostId}

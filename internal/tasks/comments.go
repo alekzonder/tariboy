@@ -127,7 +127,7 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 		if wait.ExpectedPrincipal == actor.Principal {
 			continue
 		}
-		if err := enqueueNotificationTx(ctx, tx, sequence, wait.ExpectedPrincipal,
+		if err := enqueueNotificationTx(ctx, tx, sequence, wait.ExpectedPrincipal, actor.Principal,
 			"task.question", task, actor.Principal+" asked for an answer on "+task.Key, now); err != nil {
 			return CommentResult{}, err
 		}
@@ -137,7 +137,7 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 		if wait.RequestingPrincipal == actor.Principal || notified[wait.RequestingPrincipal] {
 			continue
 		}
-		if err := enqueueNotificationTx(ctx, tx, sequence, wait.RequestingPrincipal,
+		if err := enqueueNotificationTx(ctx, tx, sequence, wait.RequestingPrincipal, actor.Principal,
 			"task.answered", task, actor.Principal+" answered on "+task.Key, now); err != nil {
 			return CommentResult{}, err
 		}

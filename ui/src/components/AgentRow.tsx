@@ -19,6 +19,7 @@ export function AgentRow({
   selected = false,
   unread = false,
   unreadLabel = "Unread customer question",
+  unreadMessages = 0,
   interactive = true,
   className,
   ...props
@@ -33,6 +34,8 @@ export function AgentRow({
   /** Accessible name of the unread dot — it is the only thing that names which
    *  agent on which host the question belongs to. */
   unreadLabel?: string
+  /** Unread chat messages from this agent. Zero renders nothing at all. */
+  unreadMessages?: number
   /** false → the agent has no tty; shown as a quiet marker after the name. */
   interactive?: boolean
 }) {
@@ -63,6 +66,15 @@ export function AgentRow({
           title={unreadLabel}
           className="size-[5px] shrink-0 rounded-full bg-primary"
         />
+      )}
+      {unreadMessages > 0 && (
+        <span
+          aria-label={`${unreadMessages} unread messages from ${name}`}
+          title={`${unreadMessages} unread messages`}
+          className="shrink-0 rounded-full bg-primary px-1.5 text-[10px] leading-4 font-medium text-primary-foreground"
+        >
+          {unreadMessages > 99 ? "99+" : unreadMessages}
+        </span>
       )}
       {outOfBudget ? (
         <StatusPill tone="danger" size="sm" title="Budget exhausted — agent paused until the cap is raised">

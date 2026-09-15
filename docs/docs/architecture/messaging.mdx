@@ -66,6 +66,43 @@ recipients use `user:<login>`. Mentions and unresolved-answer state remain in
 the task itself; the channel message is the delivery mechanism, not the source
 of truth.
 
+The customer login is a fixed value rather than the account `tariboyd` happens
+to run as, so `user:customer` names the same person on every server. It defaults
+to `customer` and is overridable through the `customer_login` key in
+`daemon_config`. The first start after upgrading adopts the value in one
+transaction, carrying existing tasks, comments, waits, notification state and
+the old `user:<$USER>` channel — messages and subscriptions included — over to
+the new principal instead of orphaning them.
+
+## Chats are a projection, not a fifth table
+
+A chat with one agent is the two inboxes that already exist, merged by time:
+
+- messages in `agent:<a>:inbox` whose sender is the customer;
+- messages in `user:<customer>` whose sender is that agent.
+
+The sender is `data.from` when a producer wrote one, else a principal-shaped
+`source`, else `produced_by_agent`, else `system`. Task notifications carry the
+principal that caused them in `data.from` and keep `source` as `system:tasks`,
+because moving the author into `source` would exclude an agent from a
+notification it addressed to itself. An operator publish is attributed to the
+customer principal, and carries `reply_to: user:<customer>` when it is sent from
+a chat, which is what makes an agent's reply land in the conversation rather
+than back in its own inbox.
+
+`GET /api/chats` ranks every conversation by its last message and counts what
+the customer has not read; `GET /api/chats/{agent}` returns one merged feed;
+`POST /api/chats/{agent}/read` moves that agent's read mark forward. Read marks
+live in one `chat_read_v1` value in `daemon_config`, keyed per agent. Both read
+endpoints take a `types` filter of globs and default to conversation types only,
+so an agent's own `task.goal`, `script.result` and schedule wakes neither appear
+in a chat nor move that agent up the list.
+
+`GET /api/messages/ws` streams one hint per publication for every agent on the
+host. A frame carries `{agent, id, channel, type, from, ts}` and is only a
+refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
+because a client refetches on connect and on every reconnect.
+
 The bundled Telegram process remains outside the daemon. It authorizes and
 maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto `chat:telegram:<agent>`. Agent replies return through the

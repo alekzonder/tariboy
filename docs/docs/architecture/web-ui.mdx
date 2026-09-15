@@ -81,7 +81,13 @@ for the selected host; failed creates do not add values.
 
 The agents sidebar has three tabs. **Agents** lists every host's agents in one
 flat list, ordered the way a chat list is: pinned agents first, then the agents
-with an unread customer question, then the rest in the operator's own order. A
+with an unread customer question, then the rest by their most recent
+conversation, and only then in the operator's own order. The whole sort happens
+in Desktop, across every server, because only Desktop sees all of them; a host
+whose daemon does not project chats simply contributes no conversation dates.
+A row also carries the count of unread messages from that agent, which is a
+separate signal from the question dot: the dot means an unanswered question, the
+badge means unread messages. A
 row's context menu pins and unpins it, and the Desktop WebView remembers the
 pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
 its members gathered across hosts, including a declared group with no members.
@@ -306,6 +312,27 @@ Beside **Send comment**, a secondary **Send Ok** action includes the selected
 Ask mention and posts `Ok` without changing the Ask selection. It is hidden
 as soon as the comment contains text.
 
+The agent **Chat** tab sits directly after **Tasks** and owns both halves of an
+agent's messaging in one section. **Chat** is its default view: the conversation
+with that agent — the customer's messages in its inbox merged with its messages
+in the customer's channel — rendered as sided bubbles, with a composer that
+publishes into the agent's inbox carrying the customer channel as its reply
+target. A message-type filter selects what the conversation shows; it starts
+from the daemon's default conversation types, offers an agent's own wakes
+(`task.goal`, `script.result`, schedule alarms) explicitly, and the chosen set
+persists in the Desktop WebView under `terminals:chat-types:v1`. Opening the
+chat marks it read at the timestamp of the newest message actually shown, never
+at the current time. **Channels** is the same section's second view and keeps
+the existing subscription list, channel tail, and channel send.
+
+Live updates ride one `/api/messages/ws` socket per server. Its frames are
+refetch hints, never authority: a hint reloads the typed HTTP response, and a
+reconnect reloads unconditionally because the socket replays nothing. The
+sidebar mounts one such socket per configured host, so the chat order changes as
+a message lands rather than on the next poll. **Advanced → Messages**
+(Queue/Archive/DLQ) is unchanged: it is the delivery queue, not the
+conversation.
+
 An agent's **Messages → Queue** view can still mark one row processed. Its
 **Clear queue** bulk action instead opens an in-app destructive confirmation:
 pending deliveries for the selected agent are physically deleted and cannot be
@@ -373,7 +400,7 @@ and `/workspace` route remain available for retained layouts and possible
 future use, but the titlebar entry and agent-list add/drag gesture are hidden.
 A selected server owns Tasks, Images, Stores, and Settings, and its
 context row remains visible above the selected agent's Console, Autopilot,
-Activity, Tasks, Configuration, and Advanced tabs. Server-owned routes include
+Activity, Tasks, Chat, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
 When a known explicit server route temporarily loses its tunnel or its

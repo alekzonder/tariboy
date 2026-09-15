@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -259,7 +258,11 @@ func Run(ctx context.Context, o Options) error {
 	if err := reconcileAgentInboxes(as, channelBus); err != nil {
 		return fmt.Errorf("reconcile agent inboxes: %w", err)
 	}
-	taskService := tasks.NewService(st.DB, daemonCustomerLogin(), time.Now)
+	customerLogin, err := resolveCustomerLogin(st)
+	if err != nil {
+		return fmt.Errorf("resolve customer login: %w", err)
+	}
+	taskService := tasks.NewService(st.DB, customerLogin, time.Now)
 	workflowIngress := newWorkflowIngressSignal()
 	taskHub := tasks.NewHub(taskService)
 	taskService.SetHub(taskHub)
@@ -993,25 +996,6 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-func daemonCustomerLogin() string {
-	if current, err := user.Current(); err == nil {
-		if login := strings.TrimSpace(current.Username); login != "" {
-			if i := strings.LastIndexAny(login, `\/`); i >= 0 {
-				login = login[i+1:]
-			}
-			if login != "" {
-				return login
-			}
-		}
-	}
-	for _, key := range []string{"LOGNAME", "USER"} {
-		if login := strings.TrimSpace(os.Getenv(key)); login != "" {
-			return login
-		}
-	}
-	return "customer"
-}
-
 func recordEvent(log *slog.Logger, st *store.Store, reg *audit.Registry, hub *events.Hub, agent, kind, data string) {
 	if agent != "" && reg != nil {
 		// Agent-scoped events go to the durable per-agent audit.jsonl.
@@ -1033,23 +1017,31 @@ func recordEvent(log *slog.Logger, st *store.Store, reg *audit.Registry, hub *ev
 	}
 }
 
-// emitMessageEvent turns a bus publish into per-agent SSE events. An agent's own
+// emitMessageEvent turns a bus publish into per-agent live events. An agent's own
 // stream/inbox channel emits for that agent; other channels emit for each
-// delivered-to agent.
+// delivered-to agent. A message on the customer's own channel has no agent
+// recipient at all, so it is attributed to its sending agent instead — that is
+// the half of a chat the customer receives.
 func emitMessageEvent(hub *events.Hub, msg bus.Message, agents []string) {
 	typ := "message"
 	if strings.HasSuffix(msg.Channel, ":stream") {
 		typ = "stream"
 	}
+	from := bus.MessageFrom(msg)
 	targets := agents
 	// An agent's own inbox/stream always concerns that agent even with no sub.
 	if a, ok := ownerOfChannel(msg.Channel); ok {
 		targets = appendUnique(targets, a)
 	}
+	if strings.HasPrefix(msg.Channel, "user:") {
+		if sender, ok := strings.CutPrefix(from, "agent:"); ok {
+			targets = appendUnique(targets, sender)
+		}
+	}
 	for _, a := range targets {
 		hub.Emit(events.Event{Agent: a, Type: typ, Time: msg.TS,
 			Data: map[string]any{"id": msg.ID, "channel": msg.Channel, "type": msg.Type,
-				"source": msg.Source, "text": msg.Text}})
+				"source": msg.Source, "from": from, "text": msg.Text}})
 	}
 }
 

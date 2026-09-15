@@ -301,7 +301,7 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 		}
 	}
 	if task.Assignee != "" && task.Assignee != actor.Principal {
-		if err := enqueueNotificationTx(ctx, tx, sequence, task.Assignee,
+		if err := enqueueNotificationTx(ctx, tx, sequence, task.Assignee, actor.Principal,
 			"task.assigned", task, "New task assigned: "+task.Key+" "+task.Title, now); err != nil {
 			return Task{}, err
 		}
@@ -320,7 +320,7 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 			triager = customer
 		}
 		if triager != "" {
-			if err := enqueueNotificationTx(ctx, tx, sequence, triager,
+			if err := enqueueNotificationTx(ctx, tx, sequence, triager, actor.Principal,
 				"task.triage", task, "New unassigned task: "+task.Key+" "+task.Title, now); err != nil {
 				return Task{}, err
 			}

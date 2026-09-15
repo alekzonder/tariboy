@@ -982,6 +982,88 @@ export const agentInboxRequeue = (name: string, id: string) =>
     {},
   );
 
+// ---- Chats ----
+// A chat is the two existing inboxes read as one conversation: what the
+// customer sent into the agent's inbox, and what that agent sent into the
+// customer's own channel. The daemon owns the projection; the UI only renders
+// it, sends through the ordinary message endpoint, and marks it read.
+
+export interface ChatSummary {
+  agent: string;
+  last_ts: string;
+  last_from: string;
+  last_type: string;
+  last_text: string;
+  unread: number;
+  read_ts?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  channel: string;
+  ts: string;
+  from: string;
+  source: string;
+  type: string;
+  text: string;
+  subject?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  kind?: string;
+  in_reply_to?: string;
+  reply_to?: string;
+}
+
+export const chatListOn = (target: ApiTarget, types?: string[]) =>
+  apiOn<{ customer: string; chats: ChatSummary[]; count: number }>(
+    resolveTarget(target),
+    "GET",
+    `/api/chats${types?.length ? `?types=${encodeURIComponent(types.join(","))}` : ""}`,
+  );
+
+export const chatMessagesOn = (
+  target: ApiTarget,
+  agent: string,
+  // before is a message timestamp, not an id: the feed merges two channels
+  // whose ids embed their own channel name and therefore do not sort together.
+  opts: { types?: string[]; limit?: number; before?: string } = {},
+) => {
+  const q = new URLSearchParams();
+  if (opts.types?.length) q.set("types", opts.types.join(","));
+  if (opts.limit) q.set("limit", String(opts.limit));
+  if (opts.before) q.set("before", opts.before);
+  const qs = q.toString();
+  return apiOn<{ customer: string; agent: string; messages: ChatMessage[]; count: number }>(
+    resolveTarget(target),
+    "GET",
+    `/api/chats/${encodeURIComponent(agent)}${qs ? `?${qs}` : ""}`,
+  );
+};
+
+// ts is the timestamp of the newest message actually shown, never "now", so a
+// message arriving mid-render cannot be marked read without being seen. The
+// daemon only ever moves the mark forward.
+export const chatReadOn = (target: ApiTarget, agent: string, ts: string) =>
+  apiOn<{ agent: string; read_ts: string }>(
+    resolveTarget(target),
+    "POST",
+    `/api/chats/${encodeURIComponent(agent)}/read`,
+    { ts },
+  );
+
+// Publish as the customer. reply_to names the channel an agent reply must land
+// on, which is what keeps a reply in the chat instead of in the agent's own
+// inbox.
+export const messageSendOn = (
+  target: ApiTarget,
+  message: { channel: string; type?: string; text: string; reply_to?: string },
+) =>
+  apiOn<{ id: string; channel: string; sent: boolean }>(
+    resolveTarget(target),
+    "POST",
+    "/api/messages",
+    message,
+  );
+
 // ---- SSE live events ----
 // Opens an EventSource on <daemon.baseURL>/api/agents/<name>/events. For a
 // cross-origin daemon the bearer rides in the URL as ?token= (EventSource cannot

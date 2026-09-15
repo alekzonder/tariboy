@@ -124,7 +124,7 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 		return Task{}, err
 	}
 	if task.Assignee != "" && task.Assignee != previousAssignee && task.Assignee != actor.Principal {
-		if err := enqueueNotificationTx(ctx, tx, sequence, task.Assignee,
+		if err := enqueueNotificationTx(ctx, tx, sequence, task.Assignee, actor.Principal,
 			"task.assigned", task, "Task assigned: "+task.Key+" "+task.Title, now); err != nil {
 			return Task{}, err
 		}
