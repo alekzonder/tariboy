@@ -56,6 +56,12 @@ type Actor struct {
 	IsCustomer bool
 }
 
+// DefaultCustomerLogin is the customer principal every daemon uses unless an
+// operator overrides it. It is deliberately not derived from $USER: the same
+// customer name on every server keeps tasks, mentions and the customer channel
+// interchangeable across hosts.
+const DefaultCustomerLogin = "customer"
+
 func CustomerActor(login string) Actor {
 	return Actor{Principal: userPrincipal(login), IsCustomer: true}
 }

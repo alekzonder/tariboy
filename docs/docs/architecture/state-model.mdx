@@ -73,6 +73,18 @@ a reason: with none, both keys are omitted entirely rather than emitted empty.
 An agent-authored status line is never reported as a halt reason, since only
 the idle prefix qualifies.
 
+## Customer identity and chat read marks
+
+Two `daemon_config` values carry the customer's side of messaging.
+`customer_login` is the fixed customer login, defaulted to `customer` and
+adopted once — with existing tasks, comments, waits, notification state and the
+old `user:<$USER>` channel carried over in the same transaction — instead of
+following whichever account runs `tariboyd`. `chat_read_v1` is one JSON object
+mapping an agent name to the newest message timestamp the customer has seen in
+that chat; it only ever moves forward. Neither is a new table, and both are UI
+state rather than authority: a lost read mark costs an unread count, not a
+message.
+
 ## Message queue state
 
 Queue saturation is derived rather than persisted. The agent status endpoint

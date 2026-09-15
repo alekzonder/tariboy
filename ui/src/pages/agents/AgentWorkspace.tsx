@@ -18,6 +18,7 @@ import AgentAutopilotTab from "./AgentAutopilotTab";
 import AgentActivityTab from "./AgentActivityTab";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 import AgentAdvancedTab from "./AgentAdvancedTab";
+import AgentChatTab from "./AgentChatTab";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
@@ -29,6 +30,7 @@ const TABS = [
   ["autopilot", "Autopilot"],
   ["activity", "Activity"],
   ["tasks", "Tasks"],
+  ["chat", "Chat"],
   ["configuration", "Configuration"],
   ["advanced", "Advanced"],
 ] as const;
@@ -131,6 +133,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
       initialTaskKey={searchParams.get("task") ?? undefined}
       onNotificationsChanged={() => void refreshHost(hostId)}
     />
+    : tab === "chat" ? <AgentChatTab hostId={hostId} />
     : tab === "configuration" ? <AgentConfigurationTab target={target} refresh={refresh} />
     : <AgentAdvancedTab />;
 

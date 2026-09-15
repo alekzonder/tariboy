@@ -1,4 +1,5 @@
 import type { HostAgents } from "@/lib/aggregate";
+import type { ChatSummary } from "@/lib/api";
 import type { AgentSummary } from "@/lib/types";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 
@@ -16,6 +17,8 @@ export interface SidebarAgent {
   hostError?: string;
   group: string;
   agent: AgentSummary;
+  /** This agent's conversation with the customer, when there is one. */
+  chat?: ChatSummary;
 }
 
 /** Sort `items` by an explicit id order, keeping unlisted items in their
@@ -30,6 +33,7 @@ export function ordered<T>(items: T[], ids: string[], id: (item: T) => string): 
 
 /** Agents of one host in the operator's saved order. */
 export function hostAgents(host: HostAgents): SidebarAgent[] {
+  const chats = new Map((host.chats ?? []).map((chat) => [chat.agent, chat]));
   return ordered(host.agents, host.sidebarOrder?.agents ?? [], (agent) => agent.name)
     .map((agent) => ({
       key: agentKey(host.host.id, agent.name),
@@ -38,6 +42,7 @@ export function hostAgents(host: HostAgents): SidebarAgent[] {
       hostError: host.error,
       group: agent.group?.trim() ?? "",
       agent,
+      chat: chats.get(agent.name),
     }));
 }
 
@@ -49,7 +54,9 @@ export function allAgents(hosts: HostAgents[]): SidebarAgent[] {
 /**
  * The Agents tab order, and the only place that decides it: pinned agents on
  * top, then the ones calling for a person (an unread customer question), then
- * the rest. Within each band the operator's own order is kept.
+ * the rest as a chat list — most recent conversation first, silent agents last
+ * in the operator's own order. The whole sort happens here, across every
+ * server, because only the Desktop sees all of them.
  */
 export function rankAgents(
   agents: SidebarAgent[],
@@ -57,12 +64,16 @@ export function rankAgents(
   attention: ReadonlySet<string>,
 ): { pinned: SidebarAgent[]; rest: SidebarAgent[] } {
   const band = (row: SidebarAgent) => (attention.has(row.key) ? 0 : 1);
+  const spokeAt = (row: SidebarAgent) => row.chat?.last_ts ?? "";
   return {
     pinned: agents.filter((row) => pinned.has(row.key)),
     rest: agents
       .filter((row) => !pinned.has(row.key))
       .map((row, index) => ({ row, index }))
-      .sort((left, right) => band(left.row) - band(right.row) || left.index - right.index)
+      .sort((left, right) =>
+        band(left.row) - band(right.row)
+        || spokeAt(right.row).localeCompare(spokeAt(left.row))
+        || left.index - right.index)
       .map(({ row }) => row),
   };
 }

@@ -32,7 +32,9 @@ type Hub struct {
 func NewHub() *Hub { return &Hub{subs: map[*subscriber]struct{}{}} }
 
 // Subscribe registers a listener for one agent's events, filtered by type (empty
-// = all). The returned cancel closes the channel and unregisters.
+// = all). An empty agent watches every agent, which is what a host-wide socket
+// such as the chat stream needs. The returned cancel closes the channel and
+// unregisters.
 func (h *Hub) Subscribe(agent string, types []string) (<-chan Event, func()) {
 	set := map[string]bool{}
 	for _, t := range types {
@@ -63,7 +65,7 @@ func (h *Hub) Emit(e Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for s := range h.subs {
-		if s.agent != e.Agent {
+		if s.agent != "" && s.agent != e.Agent {
 			continue
 		}
 		if len(s.types) > 0 && !s.types[e.Type] {

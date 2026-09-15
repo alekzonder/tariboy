@@ -71,6 +71,7 @@ func enqueueNotificationTx(
 	tx *sql.Tx,
 	sequence int64,
 	principal string,
+	from string,
 	typ string,
 	task Task,
 	text string,
@@ -86,10 +87,14 @@ func enqueueNotificationTx(
 		"task_key":        task.Key,
 		"event_sequence":  sequence,
 	})
+	// from is the principal that caused the notification. It rides in data
+	// rather than in source, because source stays "system:tasks" so the bus
+	// fan-out keeps excluding an author from its own published message.
 	data, _ := json.Marshal(map[string]any{
 		"task_key":  task.Key,
 		"queue":     task.Queue,
 		"principal": principal,
+		"from":      from,
 	})
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO task_notification_outbox(

@@ -310,6 +310,7 @@ func messageSend() registry.Command {
 			{Name: "subject", Flag: "subject", Type: registry.String, Help: "comma-separated k=v subject"},
 			{Name: "text", Flag: "text", Type: registry.String, Help: "message text"},
 			{Name: "data", Flag: "data", Type: registry.String, Help: "JSON data payload"},
+			{Name: "reply_to", Flag: "reply-to", Type: registry.String, Help: "channel an agent reply should land on"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/messages"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -317,8 +318,11 @@ func messageSend() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			// An operator publish is the customer speaking. Attributing it to the
+			// customer principal — rather than the opaque "operator" — is what
+			// lets the agent's own inbox be read back as one side of a chat.
 			msg := bus.Message{Channel: str(p, "channel"), Type: str(p, "type"), Text: str(p, "text"),
-				Source: "operator"}
+				Source: customerPrincipal(c), ReplyTo: str(p, "reply_to")}
 			if sub := str(p, "subject"); sub != "" {
 				msg.Subject = kvToAny(parseKV(sub))
 			}

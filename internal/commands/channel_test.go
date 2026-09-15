@@ -33,9 +33,9 @@ func TestChannelLsAndMessageSend(t *testing.T) {
 	if res.(map[string]any)["channel"] != "chat:room" {
 		t.Fatalf("send = %v", res)
 	}
-	// the published message carries operator attribution.
+	// the published message speaks as the customer (see chat_test.go).
 	tail, _ := b.Tail("chat:room", 10)
-	if len(tail) != 1 || tail[0].Source != "operator" || tail[0].Text != "hi" {
+	if len(tail) != 1 || tail[0].Source != "user:customer" || tail[0].Text != "hi" {
 		t.Fatalf("tail = %+v", tail)
 	}
 	// channel ls shows it.
