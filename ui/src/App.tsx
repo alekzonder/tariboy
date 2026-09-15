@@ -20,7 +20,6 @@ import PluginSettings from "@/pages/settings/PluginSettings";
 import UsagePage from "@/pages/UsagePage";
 import GroupsPage from "@/pages/GroupsPage";
 import BudgetsPage from "@/pages/BudgetsPage";
-import RulesPage from "@/pages/RulesPage";
 import PluginsPage from "@/pages/PluginsPage";
 import OpsPage from "@/pages/OpsPage";
 import ChannelsPage from "@/pages/ChannelsPage";
@@ -145,7 +144,6 @@ function MainApp() {
             <Route path="advanced" element={<AdvancedSettingsIndex />} />
             <Route path="advanced/usage" element={<UsagePage />} />
             <Route path="advanced/budgets" element={<BudgetsPage />} />
-            <Route path="advanced/rules" element={<RulesPage />} />
             <Route path="advanced/plugins" element={<PluginsPage />} />
             <Route path="advanced/ops" element={<OpsPage />} />
             <Route path="advanced/daemons" element={<DaemonsPage />} />
@@ -163,7 +161,6 @@ function MainApp() {
           <Route path="/hosts" element={<Navigate to="/settings/hosts" replace />} />
           <Route path="/usage" element={<Navigate to="/settings/advanced/usage" replace />} />
           <Route path="/budgets" element={<Navigate to="/settings/advanced/budgets" replace />} />
-          <Route path="/rules" element={<Navigate to="/settings/advanced/rules" replace />} />
           <Route path="/plugins" element={<Navigate to="/settings/advanced/plugins" replace />} />
           <Route path="/ops" element={<Navigate to="/settings/advanced/ops" replace />} />
           <Route path="/daemons" element={<Navigate to="/settings/advanced/daemons" replace />} />

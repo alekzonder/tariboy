@@ -53,8 +53,6 @@ before timeout enforcement starts.
 - **Kill** — immediately stop current iteration or session; use when work is
   unsafe or stuck.
 - **Budget** — reject AI calls once the configured spend limit is reached.
-- **Policy rules** — constrain models and request rates by global, agent, or
-  group scope.
 - **Audit** — inspect each proxied AI request and tool timeline. Copy readable
   Markdown or export a ZIP for the selected iteration or all retained
   iterations. Exports contain sensitive agent data; review the warning before

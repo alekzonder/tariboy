@@ -708,7 +708,7 @@ func TestChatGPTCredentialsRejectedOnNonCodexRoutesBeforeUpstream(t *testing.T) 
 	}
 }
 
-func TestUnsafeRouteRejectedBeforeBudgetPolicyAndRecord(t *testing.T) {
+func TestUnsafeRouteRejectedBeforeBudgetAndRecord(t *testing.T) {
 	tests := []struct {
 		name        string
 		path        string
@@ -731,22 +731,13 @@ func TestUnsafeRouteRejectedBeforeBudgetPolicyAndRecord(t *testing.T) {
 			if err := budget.Refresh(); err != nil {
 				t.Fatal(err)
 			}
-			if err := st.SetRule(PolicyRule{ID: "deny", Scope: "agent:codex", Kind: "model-policy",
-				Deny: []string{"gpt-*"}, Enabled: true}); err != nil {
-				t.Fatal(err)
-			}
-			policy := NewPolicyCache(st, time.Now)
-			if err := policy.Refresh(); err != nil {
-				t.Fatal(err)
-			}
-
 			agentsDir := t.TempDir()
 			iteration := "codex-control-path"
 			mkIter(t, agentsDir, "codex", iteration)
 			var warnings, audits, rows, forwarded atomic.Int32
 			p := New(Config{
 				Tokens: NewTokenRegistry(nil), Pricing: &Pricing{table: DefaultPricing()}, Store: st,
-				Router: NewRouter(), AgentsDir: agentsDir, Budget: budget, Policy: policy,
+				Router: NewRouter(), AgentsDir: agentsDir, Budget: budget,
 				Warn:   func(string, Decision) { warnings.Add(1) },
 				Audit:  func(string, string, string) { audits.Add(1) },
 				Ingest: func(AIRequest) { rows.Add(1) },

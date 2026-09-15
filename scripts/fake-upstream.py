@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Fake Anthropic /v1/messages upstream for the e2e. Echoes the requested model
-# (so model-policy route rewrites are observable) and a fixed usage block. The
+# and a fixed usage block. The
 # response text is read per-request from FAKE_UPSTREAM_TEXTFILE (if set + present)
 # so an llm-judge verdict can be steered mid-run; otherwise "ok". NEVER a real
 # API. Prints its chosen port to stdout.

@@ -135,7 +135,7 @@ not need to read unrelated subsystems.
 | Daemon, API, persistence, lifecycle | [Architecture overview](/docs/architecture) and [State model](/docs/architecture/state-model) |
 | Iteration loop, harness execution, terminal, tmux | [Iteration loop](/docs/architecture/iteration-loop) and [Shim](/docs/architecture/shim) |
 | Channels, messages, delivery, events | [Messaging](/docs/architecture/messaging) and [Channels reference](/docs/reference/channels) |
-| AI proxy, usage, budgets, policy, audit | [AI proxy and audit](/docs/architecture/ai-proxy) and [Security and controls](/docs/security-controls) |
+| AI proxy, usage, budgets, pricing, audit | [AI proxy and audit](/docs/architecture/ai-proxy) and [Security and controls](/docs/security-controls) |
 | React UI and frontend behavior | [Web UI architecture](/docs/architecture/web-ui) |
 | Desktop native host, SSH, Keychain, tunnels, packaging | [Remote hosts](/docs/remote-hosts), [Security and controls](/docs/security-controls), and this guide |
 | Images and groups | [Images](/docs/images) and [Images and groups](/docs/images-and-groups) |

@@ -355,8 +355,6 @@ func Run(ctx context.Context, o Options) error {
 	ingester := aiproxy.NewIngester(aiStore, log)
 	budgetCache := aiproxy.NewBudgetCache(aiStore, time.Now)
 	_ = budgetCache.Refresh()
-	policyCache := aiproxy.NewPolicyCache(aiStore, time.Now)
-	_ = policyCache.Refresh()
 	if o.wireHook != nil {
 		o.wireHook(ingester, aiStore)
 	}
@@ -372,7 +370,6 @@ func Run(ctx context.Context, o Options) error {
 		Activity:      as.RecordAIRequest,
 		GroupSnapshot: aiStore.CurrentGroup,
 		Budget:        budgetCache,
-		Policy:        policyCache,
 		Emit: func(agent string, data map[string]any) {
 			hub.Emit(events.Event{Agent: agent, Type: "proxy",
 				Time: time.Now().UTC().Format(time.RFC3339), Data: data})
@@ -613,7 +610,6 @@ func Run(ctx context.Context, o Options) error {
 		Groups:    groupProv,
 		Operator:  taskService.CustomerLogin(),
 		Retention: &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
-		Policy:    policyCache,
 		Tasks:     taskService,
 	}
 	srv := api.NewServer(commands.BuildRegistry(), cctx)
@@ -728,9 +724,6 @@ func Run(ctx context.Context, o Options) error {
 				if err := budgetCache.Refresh(); err != nil {
 					log.Warn("budget cache refresh", "err", err)
 				}
-				if err := policyCache.Refresh(); err != nil {
-					log.Warn("policy cache refresh", "err", err)
-				}
 			}
 		}
 	}()
@@ -745,8 +738,8 @@ func Run(ctx context.Context, o Options) error {
 	//   st.Close (top of Run) -> manager.Shutdown -> [cancel+wg.Wait] -> proxy.Shutdown
 	// so execution order (bottom-to-top) is:
 	//   proxy.Shutdown -> cancel+wg.Wait -> manager.Shutdown -> st.Close
-	// i.e. the proxy HTTP listener drains first, then the ingester/refresher
-	// goroutines are cancelled and awaited (their final flush/refresh lands),
+	// i.e. the proxy HTTP listener drains first, then the background
+	// goroutines are cancelled and awaited,
 	// then the loop manager, and only then does the store close.
 	defer func() {
 		cancel()

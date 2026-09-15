@@ -16,7 +16,6 @@ const SECTIONS = [
 const ADVANCED = [
   ["usage", "Usage"],
   ["budgets", "Budgets"],
-  ["rules", "Rules"],
   ["plugins", "Plugins"],
   ["ops", "Ops"],
   ["daemons", "Daemons"],
