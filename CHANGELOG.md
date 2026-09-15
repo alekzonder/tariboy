@@ -1,3 +1,27 @@
+## [0.62.0] - 2026-09-15
+
+### Added
+
+- Organize the console sidebar into Agents, Groups, and Servers tabs, with pinned agents, unread-question priority, cross-server group membership, and server update actions.
+- Allow trusted image-creator agents to build images from any source directory readable by the daemon.
+
+### Changed
+
+- Let builds, imports, retags, and registry publication advance any non-reserved image tag while retaining prior archives by digest for pinned assignments.
+- Run the repository checks before packaging a tagged Desktop release.
+
+### Removed
+
+- Remove the Evals subsystem and its image manifest, plugin, CLI, API, UI, and runtime surfaces while retaining legacy persisted data for safe upgrades.
+- Remove AI proxy Rules, including model routing, model allow/deny policy, rate limits, and their CLI, API, UI, and runtime surfaces.
+
+### Fixed
+
+- Flush queued AI usage before terminal iteration span aggregation.
+- Hide stale image provenance and reject stale team snapshots after a tag advances to different image bytes.
+
+[0.62.0]: https://github.com/alekzonder/tariboy/compare/v0.61.0...v0.62.0
+
 ## [0.61.0] - 2026-09-14
 
 ### Added
