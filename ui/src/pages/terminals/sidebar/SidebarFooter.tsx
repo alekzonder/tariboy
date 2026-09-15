@@ -9,6 +9,7 @@ export function SidebarFooter({ servers, connected, agents, onAddServer }: {
   agents: number;
   onAddServer: () => void;
 }) {
+  const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
   const healthy = connected === servers;
   const health = `${connected} of ${servers} servers connected`;
   return (
@@ -17,7 +18,7 @@ export function SidebarFooter({ servers, connected, agents, onAddServer }: {
         <Server className="size-3" />
       </span>
       <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-        {servers} servers · {agents} agents
+        {count(servers, "server")} · {count(agents, "agent")}
       </span>
       <span
         role="img"

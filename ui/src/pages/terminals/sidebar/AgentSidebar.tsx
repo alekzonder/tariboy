@@ -1,37 +1,27 @@
-import { useRef, useState, type ButtonHTMLAttributes, type ComponentProps } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-  DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable,
-  useSensor, useSensors, type DragEndEvent,
+  DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import type { HostAgents } from "@/lib/aggregate";
 import type { DaemonMeta } from "@/lib/daemons";
-import { HostStatus } from "@/components/HostStatus";
-import { SidebarFooter } from "./SidebarFooter";
-import { SidebarSearch } from "./SidebarSearch";
-import { AgentRow } from "@/components/AgentRow";
-import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import {
   DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH,
 } from "../useSidebarWidth";
+import { identityFor, rowCollision, sameScope, sidebarAnnouncements, type ReorderKind } from "./sidebarDnd";
+import { AgentsTab } from "./AgentsTab";
+import { GroupsTab } from "./GroupsTab";
+import { ServersTab } from "./ServersTab";
+import { SidebarFooter } from "./SidebarFooter";
+import { SidebarSearch } from "./SidebarSearch";
+import { SidebarTabs } from "./SidebarTabs";
+import type { AgentRowActions } from "./SidebarAgentRow";
 import {
-  dragId, identityFor, rowCollision, sameScope, sidebarAnnouncements, type ReorderKind,
-} from "./sidebarDnd";
-
-function ordered<T>(items: T[], ids: string[], id: (item: T) => string): T[] {
-  const rank = new Map(ids.map((value, index) => [value, index]));
-  return items
-    .map((item, index) => ({ item, index, rank: rank.get(id(item)) }))
-    .sort((left, right) => (left.rank ?? ids.length + left.index) - (right.rank ?? ids.length + right.index))
-    .map(({ item }) => item);
-}
+  allAgents, filterHosts, groupSections, hostAgents, ordered, rankAgents,
+} from "./sidebarModel";
+import {
+  readPinnedAgents, readSidebarTab, writePinnedAgents, writeSidebarTab, type SidebarTab,
+} from "./sidebarPrefs";
 
 function move(ids: string[], active: string, over: string): string[] {
   const from = ids.indexOf(active);
@@ -42,46 +32,12 @@ function move(ids: string[], active: string, over: string): string[] {
   return next;
 }
 
-/* @dnd-kit exposes callback refs and live attributes from its hooks for
- * render-time spreading. */
-/* eslint-disable react-hooks/refs */
-function SortableButton({ dragKey, disabled, style, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
-  dragKey: string;
-}) {
-  const drag = useDraggable({ id: dragKey, disabled });
-  const drop = useDroppable({ id: dragKey, disabled });
-  return <button
-    ref={(node) => { drag.setNodeRef(node); drop.setNodeRef(node); }}
-    disabled={disabled}
-    style={{ ...style, opacity: drag.isDragging ? 0.45 : undefined }}
-    className={cn(
-      "cursor-grab active:cursor-grabbing",
-      drop.isOver && "ring-1 ring-primary",
-      className,
-    )}
-    {...props}
-    {...drag.attributes}
-    {...drag.listeners}
-  />;
-}
-
-function SortableAgentRow({ dragKey, disabled, ...props }: ComponentProps<typeof AgentRow> & {
-  dragKey: string;
-}) {
-  const drag = useDraggable({ id: dragKey, disabled });
-  const drop = useDroppable({ id: dragKey, disabled });
-  return <AgentRow
-    ref={(node) => { drag.setNodeRef(node); drop.setNodeRef(node); }}
-    disabled={disabled}
-    style={{ opacity: drag.isDragging ? 0.45 : undefined }}
-    className={cn("cursor-grab active:cursor-grabbing", drop.isOver && "ring-1 ring-primary")}
-    {...props}
-    {...drag.attributes}
-    {...drag.listeners}
-  />;
-}
-/* eslint-enable react-hooks/refs */
-
+/**
+ * The left column of the operator console: search, the three tabs, and the
+ * foot. It is chrome, not a panel — it sits straight on `--background` with no
+ * border and no surface of its own, and only the list between the tabs and the
+ * foot scrolls.
+ */
 export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
   hosts: HostAgents[];
   selectedHostId?: string;
@@ -104,10 +60,26 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
 }) {
   const asideRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<SidebarTab>(readSidebarTab);
+  const [pinned, setPinned] = useState<ReadonlySet<string>>(readPinnedAgents);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor),
   );
+
+  const pickTab = (next: string) => {
+    setTab(next as SidebarTab);
+    writeSidebarTab(next as SidebarTab);
+  };
+
+  const togglePin = useCallback((key: string) => {
+    setPinned((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      writePinnedAgents(next);
+      return next;
+    });
+  }, []);
 
   // Drag state lives on window listeners rather than pointer capture: capture
   // is spotty in jsdom, and window listeners keep tracking the drag when the
@@ -151,29 +123,33 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
     if (source[0] === "groups") {
       const names = [...new Set([
         ...(host.groups ?? []).map((group) => group.name),
-        ...host.agents.map((agent) => agent.group?.trim()).filter((name): name is string => Boolean(name)),
+        ...hostAgents(host).map((row) => row.group).filter(Boolean),
       ])];
       const current = ordered(names, host.sidebarOrder?.groups ?? [], (name) => name);
       onReorder("groups", source[1], move(current, source[2], target[2]));
       return;
     }
-    const current = ordered(host.agents, host.sidebarOrder?.agents ?? [], (agent) => agent.name)
-      .map((agent) => agent.name);
+    const current = hostAgents(host).map((row) => row.agent.name);
     onReorder("agents", source[1], move(current, source[2], target[2]));
   };
 
-  // The reference opens a Command palette from this box; this app has no
+  // The reference opens a Command palette from the search box; this app has no
   // palette yet, and a dead control is worse than a live one — so it filters
   // the list the sidebar already has, by agent name or server label.
-  const q = query.trim().toLowerCase();
-  const filtering = q.length > 0;
-  const visibleHosts = filtering
-    ? hosts
-      .map((h) => ({ ...h, agents: h.agents.filter((a) => a.name.toLowerCase().includes(q)) }))
-      .filter((h) => h.agents.length > 0 || h.host.label.toLowerCase().includes(q))
-    : hosts;
-  const connectedCount = hosts.filter((h) => !h.error).length;
-  const agentCount = hosts.reduce((total, h) => total + h.agents.length, 0);
+  const filtering = query.trim().length > 0;
+  const visibleHosts = filterHosts(hosts, query);
+  const agents = allAgents(visibleHosts);
+  const ranked = rankAgents(agents, pinned, attention);
+  const connectedCount = hosts.filter((host) => !host.error).length;
+  const agentCount = hosts.reduce((total, host) => total + host.agents.length, 0);
+  const rowActions: AgentRowActions = {
+    selected,
+    attention,
+    pinned,
+    onSelect,
+    onClone,
+    onTogglePin: togglePin,
+  };
 
   return (
     <DndContext
@@ -195,131 +171,40 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
       <div className="shrink-0 px-1.5 pt-0.5 pb-2">
         <SidebarSearch query={query} onQuery={setQuery} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-      {visibleHosts.map((h) => (
-        <section key={h.host.id || "__local__"} className="px-1.5 pb-2">
-          <div className="flex items-center justify-between">
-            <SortableButton
-              dragKey={dragId("servers", "", h.host.id, undefined, h.host.label)}
-              type="button"
-              aria-label={`Open server ${h.host.label}`}
-              aria-current={selectedHostId === h.host.id ? "page" : undefined}
-              onClick={() => onSelectHost(h.host.id)}
-              className={cn(
-                "min-w-0 truncate rounded-[7px] px-2 py-1 text-left text-[11px] font-medium tracking-[.02em] uppercase text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
-                selectedHostId === h.host.id && "bg-sidebar-accent text-foreground",
-              )}
-              title={h.host.label}
-            >
-              {h.host.label}
-            </SortableButton>
-            <span className="flex shrink-0 items-center">
-              {/* The implicit local host has no registry entry (id ""), so there
-                  is nothing to edit or remove for it. */}
-              {h.host.id !== "" && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" aria-label={`manage ${h.host.label}`}>⋯</Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => onEditServer(h.host.id)}>Edit host</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onRemoveServer(h.host.id)}>Remove host</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <Button variant="ghost" size="sm" aria-label={`new agent on ${h.host.label}`}
-                disabled={Boolean(h.error)}
-                onClick={() => onCreate(h.host.id)}>+</Button>
-            </span>
-          </div>
-          {h.host.id !== "" && (() => {
-            const view = daemonViews.find((candidate) => candidate.id === h.host.id);
-            return view?.kind === "ssh" ? (
-              <HostStatus
-                host={view}
-                appVersion={appVersion}
-                onConnect={() => onConnectHost(view.id)}
-                onUpdate={() => onEditServer(view.id)}
-              />
-            ) : null;
-          })()}
-          {h.error && <div className="text-xs text-destructive">{h.error}</div>}
-          {(() => {
-            const agentsInOrder = ordered(h.agents, h.sidebarOrder?.agents ?? [], (agent) => agent.name);
-            const renderAgent = (a: (typeof h.agents)[number]) => (
-              <ContextMenu key={a.name}>
-                <ContextMenuTrigger asChild>
-                  <div className="w-full"><SortableAgentRow
-                    dragKey={dragId("agents", h.host.id, a.name, a.group?.trim() ?? "")}
-                    name={a.name}
-                    state={a.state}
-                    outOfBudget={Boolean(a.budget?.exhausted?.length)}
-                    selected={selected?.hostId === h.host.id && selected.agent === a.name}
-                    unread={attention.has(customerQuestionAttentionKey(h.host.id, a.name))}
-                    unreadLabel={`Unread customer question for ${a.name} on ${h.host.label}`}
-                    interactive={a.interactive !== false}
-                    aria-label={`Open ${a.name}`}
-                    disabled={Boolean(h.error)}
-                    onClick={() => { if (!h.error) onSelect(h.host.id, a.name); }}
-                  /></div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem disabled={Boolean(h.error)} onSelect={() => onClone(h.host.id, a.name)}>
-                    Clone
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            );
-            const groupNames = [...new Set([
-              ...(h.groups ?? []).map((group) => group.name),
-              ...agentsInOrder.map((agent) => agent.group?.trim()).filter((name): name is string => Boolean(name)),
-            ])];
-            const teams = new Map<string, typeof h.agents>();
-            for (const name of ordered(groupNames, h.sidebarOrder?.groups ?? [], (name) => name)) teams.set(name, []);
-            for (const agent of agentsInOrder) {
-              const group = agent.group?.trim();
-              if (!group) continue;
-              teams.set(group, [...(teams.get(group) ?? []), agent]);
-            }
-            const individuals = agentsInOrder.filter((agent) => !agent.group?.trim());
-
-            return (
-              <>
-                {teams.size > 0 && (
-                  <div className="mt-1">
-                    <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">Teams</div>
-                    {[...teams.entries()]
-                      .filter(([, agents]) => !filtering || agents.length > 0)
-                      .map(([name, agents]) => (
-                      <details key={name} open>
-                        <summary className="cursor-pointer px-2 py-1 text-sm font-medium">
-                          <SortableButton
-                            dragKey={dragId("groups", h.host.id, name)}
-                            type="button"
-                            aria-label={`Open team ${name}`}
-                            className="hover:underline"
-                            disabled={Boolean(h.error)}
-                            onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!h.error) onSelectTeam(h.host.id, name); }}
-                          >{name}</SortableButton>
-                        </summary>
-                        <div className="pl-2">{agents.map(renderAgent)}</div>
-                      </details>
-                    ))}
-                  </div>
-                )}
-                <div className="mt-1">
-                  <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-[.02em] text-muted-foreground">Individual agents</div>
-                  {individuals.map(renderAgent)}
-                </div>
-              </>
-            );
-          })()}
-          {!h.error && h.agents.length === 0 && (
-            <div className="px-2 text-xs text-muted-foreground">No agents.</div>
-          )}
-        </section>
-      ))}
-      </div>
+      <Tabs value={tab} onValueChange={pickTab} className="flex min-h-0 flex-1 flex-col gap-0">
+        <SidebarTabs onCreate={() => onCreate(selectedHostId ?? "")} />
+        <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
+          <TabsContent value="agents">
+            <AgentsTab pinned={ranked.pinned} rest={ranked.rest} actions={rowActions} />
+          </TabsContent>
+          <TabsContent value="groups">
+            <GroupsTab
+              sections={groupSections(visibleHosts, agents)}
+              actions={rowActions}
+              onOpenGroup={onSelectTeam}
+              onCreate={onCreate}
+            />
+          </TabsContent>
+          <TabsContent value="servers">
+            <ServersTab
+              hosts={visibleHosts}
+              filtering={filtering}
+              daemonViews={daemonViews}
+              appVersion={appVersion}
+              actions={rowActions}
+              servers={{
+                selectedHostId,
+                onSelectHost,
+                onSelectTeam,
+                onCreate,
+                onEditServer,
+                onRemoveServer,
+                onConnectHost,
+              }}
+            />
+          </TabsContent>
+        </div>
+      </Tabs>
       <SidebarFooter
         servers={hosts.length}
         connected={connectedCount}

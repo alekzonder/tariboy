@@ -333,3 +333,14 @@ export async function resolveActive(): Promise<Daemon | null> {
 export function cachedDaemon(id: string): Daemon | null {
   return id ? sessionCache.get(id) ?? null : null;
 }
+
+/** A connected SSH host running a daemon older than this app. Both the host
+ *  status block and the sidebar's server header ask this question. */
+export function hostUpdateAvailable(host: DaemonMeta, appVersion: string): boolean {
+  const remoteVersion = host.lastDaemonVersion ?? "";
+  return host.kind === "ssh"
+    && host.state === "ready"
+    && appVersion !== ""
+    && remoteVersion !== ""
+    && remoteVersion !== appVersion;
+}

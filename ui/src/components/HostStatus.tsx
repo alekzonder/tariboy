@@ -1,17 +1,25 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { DaemonMeta } from "@/lib/daemons";
+import { hostUpdateAvailable, type DaemonMeta } from "@/lib/daemons";
 
 export function HostStatus({
   host,
   appVersion,
   onConnect,
   onUpdate,
+  showUpdate = true,
+  showState = true,
 }: {
   host: DaemonMeta;
   appVersion: string;
   onConnect?: () => void;
   onUpdate?: () => void;
+  /** false where the surrounding header already offers the update — the
+   *  sidebar's server row does. Authentication and connection stay here. */
+  showUpdate?: boolean;
+  /** false where the surrounding header already names the state, so it is not
+   *  said twice. */
+  showState?: boolean;
 }) {
   if (host.kind !== "ssh") return null;
   const state = host.state ?? "disconnected";
@@ -23,19 +31,16 @@ export function HostStatus({
     );
   const keyMismatch = host.message?.includes("host_key_mismatch");
   const canConnect = ["disconnected", "degraded", "failed"].includes(state);
-  const remoteVersion = host.lastDaemonVersion ?? "";
-  const updateAvailable =
-    state === "ready"
-    && appVersion !== ""
-    && remoteVersion !== ""
-    && remoteVersion !== appVersion;
+  const updateAvailable = showUpdate && hostUpdateAvailable(host, appVersion);
 
   return (
     <div className="space-y-1 text-xs">
       <div className="flex items-center gap-1">
-        <Badge variant={state === "ready" ? "default" : "secondary"}>
-          {state.replace("_", " ")}
-        </Badge>
+        {showState && (
+          <Badge variant={state === "ready" ? "default" : "secondary"}>
+            {state.replace("_", " ")}
+          </Badge>
+        )}
         {updateAvailable && onUpdate && (
           <Button
             variant="ghost"
