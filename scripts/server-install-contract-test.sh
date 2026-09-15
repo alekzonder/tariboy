@@ -33,6 +33,25 @@ exec /bin/mv "$@"
 SH
 chmod 0755 "$tools/mv"
 
+if ! command -v flock >/dev/null 2>&1; then
+  cat >"$tools/flock" <<'SH'
+#!/bin/sh
+test "${1-}" != -w || shift 2
+exit 0
+SH
+  chmod 0755 "$tools/flock"
+fi
+
+if ! command -v sha256sum >/dev/null 2>&1; then
+  cat >"$tools/sha256sum" <<'SH'
+#!/bin/sh
+exec shasum -a 256 "$@"
+SH
+  chmod 0755 "$tools/sha256sum"
+fi
+
+export PATH="$tools:$PATH"
+
 binaries=(tariboyd tariboy tariboy-shim tariboy-store tariboy-plugin-telegram tariboy-tasks)
 links=(
   tariboyd:tariboyd

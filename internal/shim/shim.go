@@ -682,7 +682,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		// needed before it writes status and exits.
 		cmd.SysProcAttr.Foreground = true
 		cmd.SysProcAttr.Ctty = stdinFD
-	} else if !errors.Is(err, unix.ENOTTY) {
+	} else if !errors.Is(err, unix.ENOTTY) && !errors.Is(err, unix.ENOTSUP) {
 		return fmt.Errorf("inspect harness terminal: %w", err)
 	}
 	if err := cmd.Start(); err != nil {

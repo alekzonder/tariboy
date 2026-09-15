@@ -270,7 +270,7 @@ func TestTmuxShimAttachMissingSessionDoesNotStartAttachClient(t *testing.T) {
 			attachStarted = true
 			return exec.Command("/bin/sh", "-c", "printf 'no sessions\\n'")
 		}
-		return exec.Command("/bin/true")
+		return exec.Command("true")
 	}
 	defer func() { execCommand = old }()
 
@@ -315,7 +315,7 @@ func TestTmuxShimAttachSetsChildTerminalWithoutMutatingParent(t *testing.T) {
 		if isTmuxAttachCommand(args) {
 			return exec.Command("/bin/sh", "-c", `printf %s "$TERM"`)
 		}
-		return exec.Command("/bin/true")
+		return exec.Command("true")
 	}
 	t.Cleanup(func() { execCommand = old })
 
@@ -347,10 +347,10 @@ func TestTmuxShimAttachForcesUTF8Client(t *testing.T) {
 		for _, arg := range args {
 			if arg == "attach-session" {
 				attachArgs = append([]string(nil), args...)
-				return exec.Command("/bin/true")
+				return exec.Command("true")
 			}
 		}
-		return exec.Command("/bin/true")
+		return exec.Command("true")
 	}
 	t.Cleanup(func() { execCommand = old })
 
@@ -384,7 +384,7 @@ func TestTmuxShimAttachFailureLogsSanitizedCategory(t *testing.T) {
 		if len(args) > 0 && args[0] == "has-session" {
 			return exec.Command("/bin/sh", "-c", "printf 'raw-secret-stderr' >&2; exit 1")
 		}
-		return exec.Command("/bin/true")
+		return exec.Command("true")
 	}
 	t.Cleanup(func() { execCommand = old })
 
@@ -416,14 +416,14 @@ func TestTmuxShimAttachRaceDoesNotLeakAttachError(t *testing.T) {
 	execCommand = func(name string, args ...string) *exec.Cmd {
 		switch {
 		case len(args) > 0 && args[0] == "has-session":
-			return exec.Command("/bin/true")
+			return exec.Command("true")
 		case isTmuxAttachCommand(args):
 			// Model the TOCTOU window: preflight saw the session, but it
 			// disappeared before the attach client started. Real tmux writes
 			// "no sessions" to stderr in this case.
 			return exec.Command("/bin/sh", "-c", "printf 'no sessions\\n' >&2; exit 1")
 		default:
-			return exec.Command("/bin/true")
+			return exec.Command("true")
 		}
 	}
 	defer func() { execCommand = old }()
@@ -1294,7 +1294,7 @@ func TestRunTmuxCreatesHarnessWindowAfterSettingSessionHistoryLimit(t *testing.T
 		case "has-session":
 			return exec.Command("/bin/false")
 		default:
-			return exec.Command("/bin/true")
+			return exec.Command("true")
 		}
 	}
 
@@ -1363,7 +1363,7 @@ func TestRunTmuxKeepsBootstrapWindowWhenHarnessWindowCreationFails(t *testing.T)
 		case "new-window":
 			return exec.Command("/bin/false")
 		default:
-			return exec.Command("/bin/true")
+			return exec.Command("true")
 		}
 	}
 
@@ -1400,13 +1400,13 @@ func TestRunTmuxDisablesMouseForEachManagedSession(t *testing.T) {
 			return exec.Command("/bin/sh", "-c", "printf '@42'")
 		case "set-option":
 			if len(args) == 5 && args[3] == "history-limit" {
-				return exec.Command("/bin/true")
+				return exec.Command("true")
 			}
 			return exec.Command("/bin/false")
 		case "has-session":
 			return exec.Command("/bin/false")
 		default:
-			return exec.Command("/bin/true")
+			return exec.Command("true")
 		}
 	}
 
@@ -1509,8 +1509,13 @@ func TestKillTmuxSessionTerminatesAllPanesAndPreservesPrefixedSession(t *testing
 	if err != nil {
 		t.Skip("tmux unavailable")
 	}
+	tmuxTmp, err := os.MkdirTemp("/tmp", "tariboy-tmux-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmuxTmp) })
 	t.Setenv("TMUX", "")
-	t.Setenv("TMUX_TMPDIR", t.TempDir())
+	t.Setenv("TMUX_TMPDIR", tmuxTmp)
 
 	dir := t.TempDir()
 	shimBin := filepath.Join(dir, "tariboy-shim")

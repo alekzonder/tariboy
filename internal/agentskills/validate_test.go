@@ -87,6 +87,37 @@ func TestPrepareRequiresRegularSkillMarkdown(t *testing.T) {
 	}
 }
 
+func TestPrepareAllowsSelectedRootSymlink(t *testing.T) {
+	actual := validSkill(t, filepath.Join(t.TempDir(), "actual"), "code-review")
+	selected := filepath.Join(t.TempDir(), "code-review")
+	if err := os.Symlink(actual, selected); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := Prepare(imagefile.ResolvedDirectory{Path: selected})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := prepared.Metadata.Name, "code-review"; got != want {
+		t.Fatalf("skill name = %q, want %q", got, want)
+	}
+}
+
+func TestPrepareAllowsSelectedRootThroughSymlinkedAncestor(t *testing.T) {
+	actualParent := t.TempDir()
+	validSkill(t, actualParent, "code-review")
+	selectedParent := filepath.Join(t.TempDir(), "selected")
+	if err := os.Symlink(actualParent, selectedParent); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := Prepare(imagefile.ResolvedDirectory{Path: filepath.Join(selectedParent, "code-review")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := prepared.Metadata.Name, "code-review"; got != want {
+		t.Fatalf("skill name = %q, want %q", got, want)
+	}
+}
+
 func TestPrepareRejectsFrontmatterNameDifferentFromBasename(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "directory-name")
 	writeSkillFile(t, dir, "SKILL.md", "---\nname: other-name\ndescription: mismatch\n---\n", 0o600)
@@ -162,14 +193,18 @@ func TestPrepareRejectsAncestorDirectorySwap(t *testing.T) {
 	outside := t.TempDir()
 	validSkill(t, outside, "ancestor-swap-skill")
 
-	resolved := imagefile.ResolvedDirectory{Path: dir}
+	canonical, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved := imagefile.ResolvedDirectory{Path: dir, CanonicalPath: canonical}
 	if err := os.Rename(ancestor, ancestor+"-old"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, ancestor); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Prepare(resolved)
+	_, err = Prepare(resolved)
 	if err == nil {
 		t.Fatal("accepted a skill root reached through a swapped symlink ancestor")
 	}

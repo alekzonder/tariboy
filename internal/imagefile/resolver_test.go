@@ -7,7 +7,10 @@ import (
 )
 
 func TestResolvePromptFileSupportsEveryPathForm(t *testing.T) {
-	base := t.TempDir()
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	source := filepath.Join(base, "source")
 	roots := ResolveRoots{Plugins: filepath.Join(base, "plugins")}
 	paths := map[string]string{
@@ -49,6 +52,29 @@ func TestResolvePromptFileSupportsEveryPathForm(t *testing.T) {
 	}
 }
 
+func TestResolvePromptFileRejectsFrozenSkillMemberSymlink(t *testing.T) {
+	base := t.TempDir()
+	source := filepath.Join(base, "source")
+	skill := filepath.Join(base, "snapshot", "review")
+	if err := os.MkdirAll(skill, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "prompt.md"), []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(skill, "references")); err != nil {
+		t.Fatal(err)
+	}
+	roots := ResolveRoots{SourceSkills: map[string]string{"./skills/review": skill}}
+	if _, err := ResolvePromptFile(source, "./skills/review/references/prompt.md", roots); err == nil {
+		t.Fatal("accepted frozen skill member symlink")
+	}
+}
+
 func TestResolvePromptFileRejectsUnsafeInputs(t *testing.T) {
 	base := t.TempDir()
 	source := filepath.Join(base, "source")
@@ -74,6 +100,47 @@ func TestResolvePromptFileRejectsUnsafeInputs(t *testing.T) {
 	roots.SourceSkills = map[string]string{"../../skills/loop": filepath.Join(base, "skills", "loop")}
 	if _, err := ResolvePromptFile(source, "../../skills/other/secret.md", roots); err == nil {
 		t.Fatal("accepted prompt from an undeclared sibling skill")
+	}
+}
+
+func TestResolveSourceRootSymlink(t *testing.T) {
+	base := t.TempDir()
+	actual := filepath.Join(base, "actual")
+	selected := filepath.Join(base, "selected")
+	if err := os.MkdirAll(filepath.Join(actual, "skills", "local"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(actual, "prompt.md"), []byte("prompt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(actual, "skills", "local", "SKILL.md"), []byte("skill"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(actual, selected); err != nil {
+		t.Fatal(err)
+	}
+
+	prompt, err := ResolvePromptFile(selected, "./prompt.md", ResolveRoots{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPrompt, err := filepath.EvalSymlinks(filepath.Join(actual, "prompt.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := prompt.Path, wantPrompt; got != want {
+		t.Fatalf("prompt path = %q, want %q", got, want)
+	}
+	skill, err := ResolveSkillDirectory(selected, "./skills/local", ResolveRoots{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSkill, err := filepath.EvalSymlinks(filepath.Join(actual, "skills", "local"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := skill.Path, wantSkill; got != want {
+		t.Fatalf("skill path = %q, want %q", got, want)
 	}
 }
 

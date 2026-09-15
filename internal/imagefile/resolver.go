@@ -28,9 +28,10 @@ type ResolvedFile struct {
 }
 
 type ResolvedDirectory struct {
-	Source   string `json:"source"`
-	Path     string `json:"path"`
-	Category string `json:"category"`
+	Source        string `json:"source"`
+	Path          string `json:"path"`
+	Category      string `json:"category"`
+	CanonicalPath string `json:"-"`
 }
 
 func resolveExplicitPath(sourceDir, value string, roots ResolveRoots, kind string) (string, string, error) {
@@ -60,6 +61,10 @@ func resolveExplicitPath(sourceDir, value string, roots ResolveRoots, kind strin
 		rootAbs, err := filepath.Abs(root)
 		if err != nil {
 			return "", "", err
+		}
+		rootAbs, err = filepath.EvalSymlinks(rootAbs)
+		if err != nil {
+			return "", "", fmt.Errorf("resolve %s root: %w", kind, err)
 		}
 		candidate = filepath.Join(rootAbs, filepath.FromSlash(suffix))
 		rel, err := filepath.Rel(rootAbs, candidate)
@@ -163,5 +168,5 @@ func ResolveSkillDirectory(sourceDir, value string, roots ResolveRoots) (Resolve
 	if !info.IsDir() {
 		return ResolvedDirectory{}, fmt.Errorf("skill path %q is not a directory", value)
 	}
-	return ResolvedDirectory{Source: value, Path: abs, Category: category}, nil
+	return ResolvedDirectory{Source: value, Path: abs, Category: category, CanonicalPath: abs}, nil
 }

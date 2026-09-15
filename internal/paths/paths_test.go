@@ -3,6 +3,7 @@ package paths
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -120,6 +121,16 @@ func TestBindableSocketPath(t *testing.T) {
 	long := "/" + string(make([]byte, MaxSockPath)) + ".sock"
 	if err := BindableSocketPath(long); err == nil {
 		t.Fatal("over-limit path accepted")
+	}
+}
+
+func TestBindableSocketPathUsesCrossPlatformLimit(t *testing.T) {
+	max := "/" + strings.Repeat("a", 102)
+	if err := BindableSocketPath(max); err != nil {
+		t.Fatalf("103-byte path rejected: %v", err)
+	}
+	if err := BindableSocketPath(max + "a"); err == nil {
+		t.Fatal("104-byte path accepted")
 	}
 }
 

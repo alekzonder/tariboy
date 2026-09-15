@@ -5,6 +5,7 @@ INSTALLDIR := $(PREFIX)/bin
 BINARIES := tariboyd tariboy tariboy-tasks tariboy-shim tariboy-store tariboy-plugin-telegram
 MANAGED_LINKS := tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-store:tariboy-store tariboy-plugin-telegram:tariboy-plugin-telegram
 SA := $(BINDIR)/tariboy
+LONG_SOCKET_TESTS := TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion|TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary
 # Desktop E2E specs receive separate owner-only state from their fixture, so
 # two WebDriver workers can run safely on a normal development host. Keep this
 # bounded because every worker owns a full WebKit, Tauri, daemon, and Xvfb
@@ -79,9 +80,13 @@ uninstall:
 	done
 
 test:
-	@packages=$$($(GO) list ./...) || exit $$?; \
-	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d'); \
-	$(GO) test $$packages
+	@test_tmp=$$(cd /tmp && pwd -P) || exit $$?; \
+	packages=$$($(GO) list ./...) || exit $$?; \
+	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d; /\/internal\/cli$$/d; /\/internal\/plugins$$/d'); \
+	TMPDIR="$$test_tmp" $(GO) test $$packages && \
+	TMPDIR=/tmp $(GO) test ./internal/cli && \
+	TMPDIR=/tmp $(GO) test ./internal/plugins -skip '^($(LONG_SOCKET_TESTS))$$' && \
+	TMPDIR=. $(GO) test ./internal/plugins -run '^($(LONG_SOCKET_TESTS))$$'
 
 smoke-contract-test:
 	./scripts/tariboy-smoke-contract-test.sh

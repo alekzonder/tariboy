@@ -321,6 +321,18 @@ func prepareWithHook(resolved imagefile.ResolvedDirectory, beforeDescend func(st
 	if err != nil {
 		return Prepared{}, err
 	}
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return Prepared{}, err
+	}
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return Prepared{}, err
+	}
+	if resolved.CanonicalPath != "" && canonicalRoot != resolved.CanonicalPath {
+		return Prepared{}, errors.New("skill source root changed while resolving")
+	}
+	root = canonicalRoot
 	rootFile, err := openPinnedSkillRoot(root)
 	if err != nil {
 		return Prepared{}, err
@@ -330,7 +342,7 @@ func prepareWithHook(resolved imagefile.ResolvedDirectory, beforeDescend func(st
 	if err != nil {
 		return Prepared{}, err
 	}
-	rootInfo, err := os.Lstat(root)
+	rootInfo, err = os.Lstat(root)
 	if err != nil {
 		return Prepared{}, err
 	}

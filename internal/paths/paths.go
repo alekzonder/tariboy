@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 )
 
-// MaxSockPath is the usable length of sockaddr_un.sun_path on Linux: the field
-// is 108 bytes and one is the NUL terminator, so a bindable path is <= 107.
-const MaxSockPath = 107
+// MaxSockPath is the supported cross-platform sockaddr_un.sun_path ceiling:
+// macOS has 104 bytes including the NUL terminator, so paths are <= 103.
+const MaxSockPath = 103
 
 type Paths struct {
 	Base string
