@@ -79,8 +79,21 @@ remembered in the Desktop WebView by harness and offered on later creates.
 These local suggestions are an operator convenience, not a capability check
 for the selected host; failed creates do not add values.
 
-The Agents sidebar partitions each host into expandable **Teams** and
-**Individual agents** without changing agent navigation or membership.
+The agents sidebar has three tabs. **Agents** lists every host's agents in one
+flat list, ordered the way a chat list is: pinned agents first, then the agents
+with an unread customer question, then the rest in the operator's own order. A
+row's context menu pins and unpins it, and the Desktop WebView remembers the
+pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
+its members gathered across hosts, including a declared group with no members.
+**Servers** keeps the per-host list and is the only tab whose rows are drag
+sources, because it is the only one with a persisted order. The selected tab is
+remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
+**Agents**. Each server heading states its own reachability and carries the
+**Update** action for a host running an older daemon, with **Update all (N)**
+above the list when more than one host is behind.
+
+In the Servers tab the sidebar partitions each host into expandable **Teams**
+and **Individual agents** without changing agent navigation or membership.
 Server headings, team headings, and agent rows are themselves
 pointer- and keyboard-accessible drag surfaces; no separate drag handle is
 rendered. A drop reorders only like siblings, so it never changes team
