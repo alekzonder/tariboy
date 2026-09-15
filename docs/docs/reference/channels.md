@@ -37,6 +37,12 @@ Known prefixes:
 - `group`
 - `user`
 - `chat`
+- `plugin`
+- `system`
+
+Provider-declared channels carry their own plugin-owned prefixes (for example
+`issue-provider:query`). They are not covered by the static prefix list; the
+subscribe path accepts them through the provider registry instead.
 
 Built-in helpers define the main system channel shapes:
 
@@ -44,7 +50,7 @@ Built-in helpers define the main system channel shapes:
 - `agent:<agent>:stream`: stream channel for one agent.
 - `group:<group>:broadcast`: fan-out channel for all members of a group.
 - `group:<group>:inbox`: group lead inbox.
-- `group:<group>:direct:<agent>`: direct group lane; currently helper-defined, not the main group workflow.
+- `group:<group>:direct:<agent>`: direct group lane; where a `group request` from a teammate lands.
 - `chat:<name>`: chat/plugin-facing channel.
 - `chat:telegram:<agent>`: the bundled Telegram topic for one agent.
 - `user:<name>`: user-facing channel.
@@ -95,14 +101,20 @@ Agent publish from inside an iteration:
 scripts/messages.sh message send --channel chat:ops --type note --text "hello"
 ```
 
-Group request is a convenience wrapper over normal message publish:
+Group request is the request primitive scoped to a group member:
 
 ```bash
 scripts/messages.sh group request worker --text "What is blocking you?" --deadline 5m
 ```
 
-It publishes to `agent:worker:inbox` with type `group.request` and
-`data.deadline = "5m"` after checking that `worker` is in the caller's group.
+After checking that `worker` is in the caller's group, it publishes a
+`kind=request` message to `group:dev-team:direct:worker` with a fresh
+correlation id and `reply_to` pointing at the caller's inbox. With a deadline it
+also arms a one-shot timeout. The member's reply retires the caller's
+`# Awaiting replies` entry and cancels that timeout.
+
+`scripts/messages.sh group send <member> ...` is the plain publish counterpart:
+it targets the member's `agent:<member>:inbox` with no request bookkeeping.
 
 ## Subscriptions
 
@@ -112,7 +124,9 @@ A subscription belongs to one agent and one channel. It can also include:
 - `type_filter`: list of type globs.
 
 An empty matcher and empty type filter match all messages on the channel.
-Subscriptions are idempotent on `(agent, channel, matcher)`.
+Subscriptions are idempotent on `(agent, channel, matcher, type_filter)`. The
+type filter is part of the key, so two subscribes to the same channel and
+matcher that differ only by their type globs each get their own row.
 
 Agent-side subscription script:
 
@@ -215,9 +229,13 @@ The messages are written into the prompt under:
 # Task Processing Order
 ...
 ## Messages
-Incoming messages for this iteration (newest last):
+Incoming messages for this iteration (newest last). Each is listed with its id:
 ...
 ```
+
+Each entry carries its message id — the handle the agent passes to
+`message processed` — plus its threading fields (`kind`, `in_reply_to`,
+`correlation_id`) when they are set.
 
 Despite the section text saying "newest last", the practical result is
 chronological order: older messages appear first, newer messages later.
@@ -227,21 +245,41 @@ says so explicitly; outstanding requests, if any, remain nested under
 `### Awaiting replies`. Preview keeps execution-time message placeholders and
 does not increment delivery attempts.
 
-## Ack and redelivery
+## Processing and redelivery
 
-The runner remembers the message ids it put in the prompt. After the harness
-finishes, it acknowledges those ids only when:
+Draining a batch into the prompt does **not** acknowledge it. The runner no
+longer acks on iteration success; an agent must explicitly process each message
+by its id, so every rendered batch carries a standing instruction:
 
-- the runner itself did not error;
-- at least one message id was batched;
-- the iteration outcome is `done` or `no_i_am_done`.
+```bash
+scripts/messages.sh message processed <id> "<what you did / result>"
+```
 
-Ack sets `acked_at` on delivery rows for that agent and those message ids.
+Both arguments are mandatory — an empty result is rejected.
 
-Important implication: ack means "the message was included in an iteration that
-finished normally enough", not "the agent semantically handled the message".
-`no_i_am_done` still acks. Harness errors, timeouts, killed iterations, and
-runner errors do not ack, so messages can be redelivered until they hit DLQ.
+`MarkProcessed` sets `processed_at`, `result`, and `acked_at` (explicit
+processing is the only acking path), and clears `dlq` so an archived message
+lands in the `processed` view only. It applies to every one of that agent's
+deliveries of the message and is idempotent: a re-call changes nothing and emits
+no second `message_processed` audit event.
+
+Replying is handling. `scripts/messages.sh message reply` publishes the reply and
+auto-processes the original with result `replied: <reply-id>` in the same
+transaction, so a reply needs no separate `processed` call.
+
+A message that is not processed stays pending and is rendered again in the next
+iteration. Combined with `Pending`'s `attempts++` and the DLQ-after-5 rule, this
+gives re-prompt-until-processed semantics: a harness error, timeout, or killed
+iteration cannot silently acknowledge work, and a message the agent keeps
+ignoring eventually dead-letters instead of looping forever.
+
+`Requeue` returns a message to the pending queue: it clears `dlq`, `attempts`,
+`acked_at`, `processed_at`, and `result` on all of the agent's deliveries.
+Clearing `acked_at` matters — `Pending` drains only rows where it is NULL.
+
+Plugin sinks are the one component that still acks directly: the sink drainer
+acks after the plugin accepts a delivery, acks-and-skips its own inbound echo,
+and leaves a failed delivery unacked for ordinary redelivery and DLQ.
 
 ## Groups
 
@@ -251,11 +289,16 @@ For a group named `dev-team`:
 
 - all members subscribe to `group:dev-team:broadcast`;
 - each member subscribes to its own `agent:<member>:inbox`;
+- each member subscribes to its own `group:dev-team:direct:<member>`;
 - the lead subscribes to `group:dev-team:inbox`;
 - non-lead members are not subscribed to the group inbox.
 
-`scripts/messages.sh group request <member> ...` and `scripts/messages.sh group send <member> ...` publish
-directly to the member's `agent:<member>:inbox`, not to the group broadcast.
+Neither `scripts/messages.sh group request <member> ...` nor
+`scripts/messages.sh group send <member> ...` goes through the group broadcast.
+`group send` publishes to the member's `agent:<member>:inbox`; `group request`
+publishes to `group:dev-team:direct:<member>`. Either way the delivery surfaces
+in that member's prompt, because the inbox view aggregates all of an agent's
+subscriptions.
 
 `group:<group>:inbox` is the external entry point for the lead. Broadcast is the
 lead/member fan-out channel.
@@ -416,8 +459,10 @@ tariboy agent subscriptions worker
   - Check whether previous delivery attempts hit DLQ.
 
 - Message appears repeatedly:
-  - The previous iteration likely did not ack it because the runner errored,
-    timed out, or was killed.
+  - It has not been marked processed. Either the agent never ran
+    `message processed` for that id, or the iteration errored, timed out, or was
+    killed before it could. Re-prompting until processed is the intended
+    behavior; after the attempt limit the delivery dead-letters.
 
 - Group request not received:
   - Confirm both caller and target are in the same group.
