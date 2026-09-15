@@ -92,9 +92,6 @@ tariboy has three command surfaces:
 | `tariboy restore` | Restore an agent from a backup tar.gz (optionally under a new name) |
 | `tariboy retention get` | Show the effective retention policy for an agent (or 'default') |
 | `tariboy retention set` | Set the retention policy for an agent (or 'default') |
-| `tariboy rule ls` | List proxy policy rules (evaluation order) |
-| `tariboy rule rm` | Remove a proxy policy rule by id |
-| `tariboy rule set` | Set a proxy policy rule (kind rate-limit\|model-policy, scope global\|agent:\<n\>\|group:\<g\>) |
 | `tariboy schedule ls` | List an agent's schedules (read-only) |
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |

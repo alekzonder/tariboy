@@ -148,7 +148,7 @@ export const ThinkingRun = () => (
 );
 
 // The left bar is the semantic tone: success on a clean iteration_finished,
-// amber on budget/rate-limit warnings, red on errors.
+// amber on budget warnings, red on errors.
 export const ToneAccents = () => (
   <div style={sheet}>
     <AuditRow row={{ kind: "event", key: 7, event: finished }} open={false} onToggle={noop} />
@@ -157,15 +157,6 @@ export const ToneAccents = () => (
         kind: "event",
         key: 8,
         event: ev(8, "budget_exceeded", { reason: "iteration budget 20 reached for builder" }, "2026-09-11T18:24:10Z"),
-      }}
-      open={false}
-      onToggle={noop}
-    />
-    <AuditRow
-      row={{
-        kind: "event",
-        key: 9,
-        event: ev(9, "rate_limited", { message: "provider rate limit · retrying in 30s" }, "2026-09-11T18:24:20Z"),
       }}
       open={false}
       onToggle={noop}

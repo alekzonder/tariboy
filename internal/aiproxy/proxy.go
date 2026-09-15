@@ -66,7 +66,6 @@ type Config struct {
 	Warn   func(agent string, d Decision)          // Task 8/9
 	Audit  func(agent, kind, dataJSON string)      // Task 9
 	Budget *BudgetCache                            // Task 8
-	Policy *PolicyCache                            // M9: extended proxy rules
 	Client *http.Client                            // Task 6 (nil = default)
 }
 
@@ -106,14 +105,11 @@ func (p *Proxy) rebuild() {
 
 // middlewares returns the ordered chain (outer first). Authentication precedes
 // the route guard so invalid attribution keeps its normal 401;
-// record remains outside budget and policy so their decisions are persisted.
+// record remains outside budget so its decisions are persisted.
 func (p *Proxy) middlewares() []Middleware {
 	mws := []Middleware{p.auth, p.upstreamRouteGuard, p.record}
 	if p.cfg.Budget != nil {
 		mws = append(mws, p.budget)
-	}
-	if p.cfg.Policy != nil {
-		mws = append(mws, p.policy)
 	}
 	return mws
 }
@@ -133,49 +129,6 @@ func (p *Proxy) upstreamRouteGuard(next Handler) Handler {
 		ex.W.WriteHeader(http.StatusBadRequest)
 		ex.W.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"request path is not allowed"}}`))
 		return nil
-	}
-}
-
-// policy applies the general rule engine (spec §9): model-policy deny (403),
-// route rewrite (mutate the request body's model before forward), and rate-limit
-// (429). Thin by construction — all logic is in PolicyCache.Decide. A deny/limit
-// short-circuits with return nil so the outer record middleware still persists.
-//
-// Ordering: policy runs AFTER budget (appended last), so a budget block (429)
-// short-circuits before policy is consulted. Within policy, Deny (403) takes
-// precedence over RateLimited (429): a denied model is rejected regardless of
-// the rate-limit window. The route rewrite is applied between the two so the
-// rewritten model is the one carried into any subsequent forward and usage
-// attribution (usage is parsed from the upstream response, which reflects the
-// rewritten model).
-func (p *Proxy) policy(next Handler) Handler {
-	return func(ex *Exchange) error {
-		model := modelFromBody(ex.ReqBody)
-		d := p.cfg.Policy.Decide(ex.Attr.Agent, model)
-		if d.Deny {
-			ex.Status = "model_denied"
-			if p.cfg.Audit != nil {
-				p.cfg.Audit(ex.Attr.Agent, "model_denied", fmt.Sprintf(`{"reason":%q}`, d.DenyReason))
-			}
-			ex.W.Header().Set("Content-Type", "application/json")
-			ex.W.WriteHeader(http.StatusForbidden)
-			ex.W.Write([]byte(`{"type":"error","error":{"type":"permission_error","message":"model denied by policy"}}`))
-			return nil
-		}
-		if d.RewriteModel != "" && d.RewriteModel != model {
-			ex.ReqBody = rewriteModel(ex.ReqBody, d.RewriteModel)
-		}
-		if d.RateLimited {
-			ex.Status = "rate_limited"
-			if p.cfg.Audit != nil {
-				p.cfg.Audit(ex.Attr.Agent, "rate_limited", fmt.Sprintf(`{"reason":%q}`, d.RateReason))
-			}
-			ex.W.Header().Set("Content-Type", "application/json")
-			ex.W.WriteHeader(http.StatusTooManyRequests)
-			ex.W.Write([]byte(`{"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`))
-			return nil
-		}
-		return next(ex)
 	}
 }
 

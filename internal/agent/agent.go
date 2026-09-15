@@ -589,7 +589,7 @@ func (s *Store) Delete(name string) error {
 // agents; these side-tables key by the agent name (subscriptions/schedules/
 // scripts/script_result_outbox/ai_requests/retention_policies,
 // plus subscription deliveries) or by the scope "agent:<name>"
-// (budgets/proxy_rules). All live in
+// (budgets). All live in
 // the one SQLite DB. The deletes share one transaction so script completion
 // cannot enqueue a result between clearing scripts and clearing their outbox,
 // and any statement failure rolls the entire purge back. It is a no-op-safe
@@ -614,7 +614,6 @@ func (s *Store) PurgeAgentData(name string) error {
 		{`DELETE FROM ai_requests WHERE agent=?`, []any{name}},
 		{`DELETE FROM retention_policies WHERE agent=?`, []any{name}},
 		{`DELETE FROM budgets WHERE scope=?`, []any{scope}},
-		{`DELETE FROM proxy_rules WHERE scope=?`, []any{scope}},
 	}
 	for _, st := range stmts {
 		if _, err := tx.Exec(st.sql, st.args...); err != nil {

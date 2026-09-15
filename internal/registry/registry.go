@@ -83,7 +83,6 @@ type Ctx struct {
 	Groups    GroupControl
 	Operator  string
 	Retention *retention.RetentionAPI
-	Policy    PolicyRefresher
 	Tasks     TaskControl
 }
 
@@ -153,15 +152,6 @@ type ScriptControl interface {
 	OpenScriptLog(agent, runID string) (file io.ReadCloser, filename string, err error)
 	CancelScriptTarget(agent, id string) error
 	RemoveScript(agent, scriptID string) error
-}
-
-// PolicyRefresher is the immediate-refresh seam for the AI-proxy policy engine,
-// implemented by *aiproxy.PolicyCache and consumed by the rule.* command
-// handlers so a rule change takes effect at once (rather than waiting for the
-// daemon's periodic refresh). Declared as a minimal interface so registry does
-// not import aiproxy. Nil when the proxy is not configured.
-type PolicyRefresher interface {
-	Refresh() error
 }
 
 // RunSpec is the create+start request for an agent service.

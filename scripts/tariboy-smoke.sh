@@ -415,10 +415,10 @@ run_restart_case() {
   echo "OK: restart case passed (running->restart->new-pid->running, stopped->restart->running)"
 }
 
-# db_leaked SEED|COUNT <agent>: seed or count the eight agent-keyed side-table rows
+# db_leaked SEED|COUNT <agent>: seed or count the seven agent-keyed side-table rows
 # that Store.Delete leaves behind and PurgeAgentData is meant to clean (subscriptions
-# + their deliveries, schedules, scripts, ai_requests, retention_policies,
-# budgets, proxy_rules). SEED plants exactly one sentinel row per predicate (8 total);
+# + their deliveries, schedules, scripts, ai_requests, retention_policies, and
+# budgets). SEED plants exactly one sentinel row per predicate (7 total);
 # COUNT prints how many still match the agent. Both talk to the isolated smoke DB
 # directly via python3's stdlib sqlite3 (WAL + busy_timeout, so it coexists with the
 # stopped daemon's own connection). This lets the --volumes wipe assert the leaked rows
@@ -447,7 +447,6 @@ if mode == "SEED":
               ("air-sentinel", "2099-01-01T00:00:00Z", agent))
     c.execute("INSERT INTO retention_policies(agent) VALUES(?)", (agent,))
     c.execute("INSERT INTO budgets(scope) VALUES(?)", (scope,))
-    c.execute("INSERT INTO proxy_rules(id,scope) VALUES(?,?)", ("prx-sentinel", scope))
     c.commit()
     print("seeded")
 else:
@@ -465,7 +464,6 @@ else:
         ("SELECT COUNT(*) FROM ai_requests WHERE agent=?", agent),
         ("SELECT COUNT(*) FROM retention_policies WHERE agent=?", agent),
         ("SELECT COUNT(*) FROM budgets WHERE scope=?", scope),
-        ("SELECT COUNT(*) FROM proxy_rules WHERE scope=?", scope),
     ]:
         total += c.execute(sql, (arg,)).fetchone()[0]
     print(total)

@@ -117,8 +117,13 @@ func TestBuildRegistryOmitsRetiredCommandAndRoute(t *testing.T) {
 	if _, ok := reg.Get("bd"); ok {
 		t.Fatal("retired command is still registered")
 	}
+	for _, path := range []string{"rule.set", "rule.ls", "rule.rm"} {
+		if _, ok := reg.Get(path); ok {
+			t.Fatalf("retired command %s is still registered", path)
+		}
+	}
 	for _, command := range reg.Commands() {
-		if command.HTTP != nil && command.HTTP.Path == "/api/customer-attention" {
+		if command.HTTP != nil && (command.HTTP.Path == "/api/customer-attention" || strings.HasPrefix(command.HTTP.Path, "/api/proxy-rules")) {
 			t.Fatalf("retired route is still registered by %s", command.Path)
 		}
 	}

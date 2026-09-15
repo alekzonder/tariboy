@@ -26,7 +26,7 @@ export function tone(kind: string, data: string): Tone {
     const st = parseData(data).status;
     return typeof st === "string" && st.endsWith("_error") ? "error" : "success";
   }
-  if (kind.startsWith("budget_") || kind === "rate_limited" || kind === "model_denied") return "warn";
+  if (kind.startsWith("budget_")) return "warn";
   return "neutral";
 }
 

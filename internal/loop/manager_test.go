@@ -3103,7 +3103,6 @@ func seedLeakedRows(t *testing.T, s *store.Store, name string) {
 	exec(`INSERT INTO ai_requests(id, ts, agent) VALUES(?,?,?)`, "air-1", "2026-07-13T00:00:00Z", name)
 	exec(`INSERT INTO budgets(scope) VALUES(?)`, "agent:"+name)
 	exec(`INSERT INTO retention_policies(agent) VALUES(?)`, name)
-	exec(`INSERT INTO proxy_rules(id, scope) VALUES(?,?)`, "pr-1", "agent:"+name)
 }
 
 // leakedRowCount totals the seeded side-table rows still attributed to the agent.
@@ -3125,7 +3124,6 @@ func leakedRowCount(t *testing.T, s *store.Store, name string) int {
 	count(`SELECT COUNT(*) FROM ai_requests WHERE agent=?`, name)
 	count(`SELECT COUNT(*) FROM budgets WHERE scope=?`, "agent:"+name)
 	count(`SELECT COUNT(*) FROM retention_policies WHERE agent=?`, name)
-	count(`SELECT COUNT(*) FROM proxy_rules WHERE scope=?`, "agent:"+name)
 	return total
 }
 
