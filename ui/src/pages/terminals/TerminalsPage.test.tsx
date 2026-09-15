@@ -188,6 +188,18 @@ async function openManageMenu(): Promise<void> {
   fireEvent.keyDown(await screen.findByRole("button", { name: "manage prod" }), { key: "Enter" });
 }
 
+
+/** Open the Servers tab before mounting — the tab the sidebar remembers is the
+ *  one the server sections, host status and drag-and-drop live in. */
+function serversTab() {
+  localStorage.setItem("terminals:sidebar-tab:v1", "servers");
+}
+
+/** Radix activates a tab on mousedown, which fireEvent.click does not send. */
+function pickSidebarTab(name: string) {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
+}
+
 describe("TerminalsPage", () => {
   it("retains the selected agent shell when its next aggregate refresh is unavailable", async () => {
     vi.useFakeTimers();
@@ -235,6 +247,7 @@ describe("TerminalsPage", () => {
   });
 
   it("opens a server workspace from a selectable server heading", async () => {
+    serversTab();
     renderAt("/");
 
     fireEvent.click(await screen.findByRole("button", {
@@ -251,6 +264,7 @@ describe("TerminalsPage", () => {
   });
 
   it("shows server context above agent context with distinct selected states", async () => {
+    serversTab();
     renderAt("/agents/local/a1/console");
 
     expect(await screen.findByRole("navigation", { name: "Server workspace" }))
@@ -333,6 +347,7 @@ describe("TerminalsPage", () => {
   });
 
   it("restores server, team, and agent order", async () => {
+    serversTab();
     localStorage.setItem("terminals:server-order:v1", JSON.stringify({
       version: 1,
       ids: ["d1", ""],
@@ -366,6 +381,7 @@ describe("TerminalsPage", () => {
   });
 
   it("uses the whole server row as an accessible drag surface", async () => {
+    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       { host: { id: "", label: "local" }, agents: [], groups: [] },
       { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
@@ -378,6 +394,7 @@ describe("TerminalsPage", () => {
   });
 
   it("persists server order after a keyboard drag", async () => {
+    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([
       { host: { id: "", label: "local" }, agents: [], groups: [] },
       { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
@@ -393,6 +410,7 @@ describe("TerminalsPage", () => {
   });
 
   it("persists team order after a keyboard drag", async () => {
+    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "local" },
       agents: [],
@@ -414,6 +432,7 @@ describe("TerminalsPage", () => {
   });
 
   it("rolls back agent order when daemon persistence fails", async () => {
+    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "local" },
       agents: [
@@ -440,6 +459,7 @@ describe("TerminalsPage", () => {
   });
 
   it("serializes daemon order writes so an older request cannot finish last", async () => {
+    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "local" },
       agents: [
@@ -546,6 +566,7 @@ describe("TerminalsPage", () => {
   });
 
   it("groups agents under server sections and shows host errors", async () => {
+    serversTab();
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("This daemon (local)")).toBeInTheDocument());
     expect(screen.getByText("prod")).toBeInTheDocument();
@@ -554,6 +575,7 @@ describe("TerminalsPage", () => {
   });
 
   it("separates team members from individual agents", async () => {
+    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "This daemon (local)" },
       groups: [{ name: "empty-team", lead: "", members: 0 }],
@@ -611,6 +633,7 @@ describe("TerminalsPage", () => {
   });
 
   it("keeps the individual agents subsection visible when a host only has an empty team", async () => {
+    serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "This daemon (local)" },
       groups: [{ name: "empty-team", lead: "", members: 0 }],
@@ -622,6 +645,7 @@ describe("TerminalsPage", () => {
   });
 
   it("shows native SSH connection failures in the terminal workspace", async () => {
+    serversTab();
     vi.stubGlobal("__TAURI_INTERNALS__", {});
     vi.spyOn(desktop, "hostsList").mockResolvedValue([{
       id: "d1",
@@ -652,6 +676,7 @@ describe("TerminalsPage", () => {
   });
 
   it("hides Update in the agent sidebar when the remote version is current", async () => {
+    serversTab();
     vi.stubGlobal("__TAURI_INTERNALS__", {});
     vi.spyOn(desktop, "daemonState").mockResolvedValue({
       state: "ready",
@@ -689,6 +714,7 @@ describe("TerminalsPage", () => {
   });
 
   it("empty state prompts to pick or create an agent when none selected", async () => {
+    serversTab();
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "New agent" })).toBeInTheDocument();
@@ -724,6 +750,7 @@ describe("TerminalsPage", () => {
   });
 
   it("re-polls immediately after creating an agent instead of waiting for the next tick", async () => {
+    serversTab();
     vi.mocked(createAgent).mockResolvedValue({ name: "new-agent", state: "running" });
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
@@ -759,6 +786,7 @@ describe("TerminalsPage", () => {
   });
 
   it("offers a manage menu for remote servers but not for the local daemon", async () => {
+    serversTab();
     await registerProd();
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("prod")).toBeInTheDocument());
@@ -767,6 +795,7 @@ describe("TerminalsPage", () => {
   });
 
   it("edits a server and re-polls immediately with the new values", async () => {
+    serversTab();
     const id = await registerProd();
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("prod")).toBeInTheDocument());
@@ -800,6 +829,7 @@ describe("TerminalsPage", () => {
   });
 
   it("removes a server after confirmation and re-polls", async () => {
+    serversTab();
     const id = await registerProd();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderAt("/terminals");
@@ -821,6 +851,7 @@ describe("TerminalsPage", () => {
   });
 
   it("keeps the server when the confirm is declined", async () => {
+    serversTab();
     const id = await registerProd();
     vi.spyOn(window, "confirm").mockReturnValue(false);
     renderAt("/terminals");
@@ -834,6 +865,7 @@ describe("TerminalsPage", () => {
   });
 
   it("navigates away when the server open in the route is removed", async () => {
+    serversTab();
     const id = (await addDaemon({
       label: "prod", baseURL: "http://127.0.0.1:9992", token: "tok",
     })).id;
@@ -921,5 +953,75 @@ describe("sidebar width", () => {
     fireEvent.keyDown(handle, { key: "ArrowLeft", shiftKey: true });
     expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
       .toMatchObject({ sidebar: { width: 276, hidden: false } });
+  });
+});
+
+describe("sidebar tabs", () => {
+  const twoHosts = [
+    {
+      host: { id: "", label: "This daemon (local)" },
+      groups: [{ name: "release", lead: "alpha", members: 1 }],
+      agents: [
+        { name: "alpha", image: "img", state: "running", harness: "claude", loop_enabled: false, group: "release", interactive: true },
+        { name: "beta", image: "img", state: "stopped", harness: "claude", loop_enabled: false, group: null, interactive: true },
+      ],
+    },
+    {
+      host: { id: "prod", label: "prod" },
+      agents: [
+        { name: "gamma", image: "img", state: "running", harness: "claude", loop_enabled: false, group: "release", interactive: true },
+      ],
+    },
+  ];
+
+  it("opens on Agents and lists every server's agents without server sections", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
+    renderAt("/");
+
+    expect(await screen.findByRole("button", { name: "Open alpha" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open gamma" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull();
+  });
+
+  it("remembers the chosen tab across mounts", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
+    const first = renderAt("/");
+    await screen.findByRole("tab", { name: "Servers" });
+    pickSidebarTab("Servers");
+    expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
+    first.unmount();
+
+    renderAt("/");
+    expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
+  });
+
+  it("puts a called-for agent above the rest, and a pinned one above that", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
+    renderAt("/", new Set([JSON.stringify(["prod", "gamma"])]));
+
+    const names = () => screen.getAllByTestId("sidebar-agent").map((row) => row.textContent);
+    await waitFor(() => expect(names()).toHaveLength(3));
+    expect(names()[0]).toMatch(/gamma/);
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Open beta" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Pin" }));
+    await waitFor(() => expect(names()[0]).toMatch(/beta/));
+    expect(names()[1]).toMatch(/gamma/);
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar-pinned:v1")!))
+      .toEqual({ version: 1, keys: [JSON.stringify(["", "beta"])] });
+  });
+
+  it("groups agents from every server under one group heading", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
+    renderAt("/");
+    await screen.findByRole("tab", { name: "Groups" });
+    pickSidebarTab("Groups");
+
+    const release = await screen.findByRole("button", { name: "Open team release" });
+    expect(release).toBeInTheDocument();
+    const section = release.closest("section")!;
+    expect(section.textContent).toMatch(/alpha/);
+    expect(section.textContent).toMatch(/gamma/);
+    expect(section.textContent).not.toMatch(/beta/);
   });
 });

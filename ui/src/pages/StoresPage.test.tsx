@@ -55,6 +55,8 @@ function renderPage(path: string, hostParam: string, otherHostParam?: string) {
 
 beforeEach(() => {
   localStorage.clear();
+  // The server rows this page asserts on live in the sidebar's Servers tab.
+  localStorage.setItem("terminals:sidebar-tab:v1", "servers");
   sessionStorage.clear();
 });
 
