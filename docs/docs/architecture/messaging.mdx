@@ -30,10 +30,12 @@ immutable message and does not recreate deliveries or fire the publish hook a
 second time. Native Tasks uses this for its transactional notification outbox.
 
 At iteration prepare time the runner drains pending deliveries — oldest first, up
-to `messages_batch` (default 10) — into the prompt. Delivered messages are acked
-only when the iteration finishes normally (`done` / `no_i_am_done`); harness
-errors, timeouts, and kills leave messages for redelivery until they hit the DLQ
-(max 5 attempts).
+to `messages_batch` (default 10) — into the prompt. Draining does not acknowledge
+them: the agent must explicitly mark each message processed by its id, and a
+reply auto-processes the message it answers. Anything left unprocessed stays
+pending and is rendered again next iteration, until it reaches the DLQ (max 5
+attempts). Publishing and processing are distinct durable operations, so a
+harness error, timeout, or kill can never silently acknowledge work.
 
 `messages_max_queue` defaults to 100 for new agents. Reaching it keeps the
 existing overflow behavior: later deliveries for that agent are stored in DLQ
@@ -50,7 +52,9 @@ yet consumed by workflow ingress are retained.
 
 ## Channel names
 
-Channel name prefixes: `agent`, `group`, `user`, `chat`. Well-known shapes:
+Channel name prefixes: `agent`, `group`, `user`, `chat`, `plugin`, `system`.
+Provider-declared channels carry their own plugin-owned prefixes and are
+accepted through the provider registry rather than this list. Well-known shapes:
 
 - `agent:<a>:inbox` — direct inbox for one agent,
 - `agent:<a>:stream` — stream channel for one agent,
