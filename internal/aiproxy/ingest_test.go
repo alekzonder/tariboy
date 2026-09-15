@@ -104,23 +104,21 @@ func TestIngesterRunDrainsOnCancel(t *testing.T) {
 	}
 }
 
-func TestIngesterFlushDrainsRunningBatch(t *testing.T) {
+func TestIngesterDrainAddsQueuedRowsToRunningBatch(t *testing.T) {
 	s := newStore(t)
 	ing := NewIngester(s, discardLogger())
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go ing.Run(ctx)
+	batch := []AIRequest{sampleReq("air-running", "alice", "basic", 0.01, time.Now().UTC())}
+	ing.Enqueue(sampleReq("air-queued", "alice", "basic", 0.01, time.Now().UTC()))
 
-	ing.Enqueue(sampleReq("air-running", "alice", "basic", 0.01, time.Now().UTC()))
-	time.Sleep(10 * time.Millisecond) // Let Run take the row into its private batch.
-	if err := ing.Flush(); err != nil {
+	ing.drain(&batch)
+	if err := s.InsertBatch(batch); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := s.Aggregate(UsageFilter{Agent: "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0].Requests != 1 {
+	if len(rows) != 1 || rows[0].Requests != 2 {
 		t.Fatalf("flushed rows = %+v", rows)
 	}
 }

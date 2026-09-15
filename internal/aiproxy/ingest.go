@@ -53,6 +53,17 @@ func (i *Ingester) Enqueue(r AIRequest) {
 // Dropped returns the total number of rows dropped due to a full buffer.
 func (i *Ingester) Dropped() int64 { return i.dropped.Load() }
 
+func (i *Ingester) drain(batch *[]AIRequest) {
+	for {
+		select {
+		case r := <-i.ch:
+			*batch = append(*batch, r)
+		default:
+			return
+		}
+	}
+}
+
 func (i *Ingester) Run(ctx context.Context) {
 	i.running.Store(true)
 	defer func() {
@@ -77,21 +88,16 @@ func (i *Ingester) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			// Drain what is buffered, then flush and return.
-			for {
-				select {
-				case r := <-i.ch:
-					batch = append(batch, r)
-				default:
-					_ = flush()
-					return
-				}
-			}
+			i.drain(&batch)
+			_ = flush()
+			return
 		case r := <-i.ch:
 			batch = append(batch, r)
 			if len(batch) >= ingestFlushN {
 				_ = flush()
 			}
 		case done := <-i.flush:
+			i.drain(&batch)
 			done <- flush()
 		case <-tk.C:
 			_ = flush()
