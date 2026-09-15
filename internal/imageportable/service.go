@@ -206,41 +206,68 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 	if err != nil {
 		return Result{}, errors.New("image portable: invalid source ref")
 	}
-	if _, err := image.ValidatePortableArchiveContract(body, source, s.ExternalPlugins); err != nil {
+	candidate, err := image.ValidatePortableArchiveContract(body, source, s.ExternalPlugins)
+	if err != nil {
 		return Result{}, fmt.Errorf("image portable: incompatible runnable artifact: %w", err)
 	}
+	candidateArchive := body
+	if target.String() != preview.Ref {
+		staged := &image.Store{Dir: filepath.Join(stage, ".retagged")}
+		candidate, err = staged.RetagMutableArchiveManifest(source, target, body)
+		if err != nil {
+			return Result{}, err
+		}
+		candidateArchive, err = staged.ArchiveBytes(target)
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	store := s.imageStore()
+	committed := func(string, string) (bool, error) { return false, nil }
+	if s.Snapshots != nil && s.Snapshots.DB != nil {
+		committed = (imageprovenance.Store{DB: s.Snapshots.DB}).IsCommitted
+	}
+	if err := store.RecoverMutablePublications(committed); err != nil {
+		return Result{}, err
+	}
 	targetExists := store.Exists(target)
-	if targetExists && target.String() == preview.Ref {
+	previousDigest := ""
+	if targetExists {
 		manifest, err := store.Inspect(target)
 		if err != nil {
 			return Result{}, err
 		}
-		if manifest.Digest != preview.Digest {
-			return Result{}, fmt.Errorf("image portable: ref %s already has a different digest", target.String())
+		previousDigest = manifest.Digest
+		if target.String() == preview.Ref && manifest.Digest == preview.Digest {
+			_ = os.RemoveAll(stage)
+			return Result{Ref: target.String(), Digest: manifest.Digest, Reused: true}, nil
 		}
-		_ = os.RemoveAll(stage)
-		return Result{Ref: target.String(), Digest: manifest.Digest, Reused: true}, nil
 	}
 	if !targetExists && s.Snapshots != nil && s.Snapshots.DB != nil {
 		if err := (imageprovenance.Store{DB: s.Snapshots.DB}).Delete(target.String()); err != nil {
 			return Result{}, err
 		}
 	}
-	if target.String() != preview.Ref {
-		if _, err := store.RetagPortableArchive(source, target, body); err != nil {
-			return Result{}, err
-		}
-	} else if err := store.InstallPortableArchive(target, body); err != nil {
-		return Result{}, err
-	}
-	manifest, err := store.Inspect(target)
+	publication, err := store.BeginMutablePublication([]image.PublicationCandidate{{Ref: target, Digest: candidate.Digest}})
 	if err != nil {
 		return Result{}, err
 	}
-	if target.String() == preview.Ref && manifest.Digest != preview.Digest {
-		return Result{}, errors.New("image portable: installed digest mismatch")
+	rollback := func(cause error) error {
+		if rollbackErr := publication.Rollback(); rollbackErr != nil {
+			return errors.Join(cause, fmt.Errorf("roll back image import: %w", rollbackErr))
+		}
+		return cause
+	}
+	published, err := store.InstallMutableArchive(target, candidateArchive)
+	if err != nil {
+		return Result{}, rollback(err)
+	}
+	if published.Digest != candidate.Digest {
+		return Result{}, rollback(errors.New("image portable: installed digest mismatch"))
+	}
+	if err := publication.Complete(); err != nil {
+		return Result{}, rollback(err)
 	}
 	_ = os.RemoveAll(stage)
-	return Result{Ref: target.String(), Digest: manifest.Digest, Reused: targetExists}, nil
+	return Result{Ref: target.String(), Digest: published.Digest, Reused: targetExists && previousDigest == published.Digest}, nil
 }

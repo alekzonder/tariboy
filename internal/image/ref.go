@@ -11,9 +11,8 @@ import (
 )
 
 var (
-	ErrExists    = errors.New("image ref already exists")
-	ErrImmutable = errors.New("image ref is immutable")
-	ErrReserved  = errors.New("image ref is daemon-managed")
+	ErrExists   = errors.New("image ref already exists")
+	ErrReserved = errors.New("image ref is daemon-managed")
 )
 
 var refPart = regexp.MustCompile(`^[a-z0-9._-]+$`)
@@ -40,7 +39,7 @@ func ParseRef(s string) (Ref, error) {
 func (r Ref) String() string { return r.Name + ":" + r.Tag }
 
 // IsReserved reports refs owned by daemon startup rather than public image
-// authoring. Other tags under the same names remain ordinary immutable refs.
+// authoring. Every other tag is an ordinary mutable reference.
 func IsReserved(r Ref) bool {
 	return r.Tag == "latest" && (r.Name == "bare" || r.Name == "basic")
 }

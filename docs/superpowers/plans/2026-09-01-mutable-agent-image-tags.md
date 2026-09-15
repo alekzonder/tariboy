@@ -1,5 +1,10 @@
 # Mutable Agent Image Tags Implementation Plan
 
+> Superseded lifecycle note (2026-09-15): runnable archives remain immutable by
+> digest, but every non-reserved tag may now move through build, import, retag,
+> or registry publication. Older steps below that keep import or release refs
+> immutable describe the previous implementation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rebuild ordinary image tags safely, publish several tags from one CLI command, and activate changed mutable refs at the next agent iteration boundary.

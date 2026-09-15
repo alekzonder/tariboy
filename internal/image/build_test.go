@@ -340,7 +340,7 @@ func TestBuildMutableArchiveReturnsPublishedBytes(t *testing.T) {
 	}
 }
 
-func TestBuildMutableRejectsUnmarkedExistingRef(t *testing.T) {
+func TestBuildMutableUpdatesUnmarkedExistingRef(t *testing.T) {
 	source := t.TempDir()
 	prompt := promptFile(t, source, "prompt.md", "immutable generation")
 	store := &Store{Dir: t.TempDir()}
@@ -353,14 +353,15 @@ func TestBuildMutableRejectsUnmarkedExistingRef(t *testing.T) {
 	if err := os.WriteFile(prompt, []byte("mutable generation"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := buildLegacy(t, imageSpec, ref, store, fixedClock(), WithMutableRef()); err == nil {
-		t.Fatal("mutable build replaced an unmarked immutable ref")
+	second, err := buildLegacy(t, imageSpec, ref, store, fixedClock(), WithMutableRef())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if current, err := store.Inspect(ref); err != nil || current.Digest != first.Digest {
+	if current, err := store.Inspect(ref); err != nil || current.Digest != second.Digest || current.Digest == first.Digest {
 		t.Fatalf("current generation = %#v, %v", current, err)
 	}
-	if store.IsMutable(ref) {
-		t.Fatal("rejected immutable ref was marked mutable")
+	if !store.IsMutable(ref) {
+		t.Fatal("updated ref was not marked mutable")
 	}
 	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
 		t.Fatalf("pinned immutable generation = %#v, %v", pinned, err)

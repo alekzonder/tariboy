@@ -167,7 +167,7 @@ func TestArtifactExportImportRetainsPackagedSkillsWithoutSources(t *testing.T) {
 	}
 }
 
-func TestArtifactImportIsIdempotentAndConflictsByDigest(t *testing.T) {
+func TestArtifactImportIsIdempotentByDigest(t *testing.T) {
 	base := t.TempDir()
 	source := t.TempDir()
 	_ = os.WriteFile(filepath.Join(source, "p.md"), []byte("x"), 0o600)
@@ -189,6 +189,58 @@ func TestArtifactImportIsIdempotentAndConflictsByDigest(t *testing.T) {
 	result, err := service.Apply(context.Background(), preview.ImportID, "")
 	if err != nil || !result.Reused {
 		t.Fatalf("result=%#v err=%v", result, err)
+	}
+}
+
+func TestArtifactImportUpdatesExistingTags(t *testing.T) {
+	for _, tag := range []string{"1.2.3", "latest"} {
+		t.Run(tag, func(t *testing.T) {
+			ref := image.Ref{Name: "same", Tag: tag}
+			artifact := func(prompt string) []byte {
+				t.Helper()
+				base, source := t.TempDir(), t.TempDir()
+				if err := os.WriteFile(filepath.Join(source, "p.md"), []byte(prompt), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				store := &image.Store{Dir: filepath.Join(base, "images")}
+				if _, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./p.md"}}}, imagefile.ResolveRoots{}, ref, store, time.Now, nil); err != nil {
+					t.Fatal(err)
+				}
+				var archive bytes.Buffer
+				if err := (Service{BaseDir: base, StagingRoot: filepath.Join(base, "imports")}).Export(context.Background(), ref.String(), &archive); err != nil {
+					t.Fatal(err)
+				}
+				return archive.Bytes()
+			}
+
+			target := t.TempDir()
+			importer := Service{BaseDir: target, StagingRoot: filepath.Join(target, "imports")}
+			apply := func(archive []byte) Result {
+				t.Helper()
+				preview, err := importer.Preview(context.Background(), bytes.NewReader(archive), int64(len(archive)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := importer.Apply(context.Background(), preview.ImportID, "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return result
+			}
+
+			first := apply(artifact("old"))
+			second := apply(artifact("new"))
+			store := &image.Store{Dir: filepath.Join(target, "images")}
+			if first.Digest == second.Digest || second.Reused || !store.IsMutable(ref) {
+				t.Fatalf("first=%#v second=%#v mutable=%v", first, second, store.IsMutable(ref))
+			}
+			if prompt, err := store.RenderPrompt(ref); err != nil || prompt != "new" {
+				t.Fatalf("prompt=%q err=%v", prompt, err)
+			}
+			if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
+				t.Fatalf("previous generation=%#v err=%v", pinned, err)
+			}
+		})
 	}
 }
 

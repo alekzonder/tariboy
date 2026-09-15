@@ -320,7 +320,7 @@ func TestImageBuildRebuildsMutableTag(t *testing.T) {
 	}
 }
 
-func TestImageBuildRejectsImportedAndRetaggedRefs(t *testing.T) {
+func TestImageBuildUpdatesImportedAndRetaggedRefs(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		seed func(*testing.T, *image.Store, image.Ref) string
@@ -371,20 +371,24 @@ func TestImageBuildRejectsImportedAndRetaggedRefs(t *testing.T) {
 			c := localCtx(t)
 			ref := image.Ref{Name: test.name + "ed", Tag: "v1"}
 			before := test.seed(t, imageStore(c), ref)
-			_, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": writeExample(t)})
-			var userErr api.UserError
-			if !errors.As(err, &userErr) || userErr.Code != "immutable_ref" {
-				t.Fatalf("build collision error = %#v, want immutable_ref", err)
+			source := writeExample(t)
+			if err := os.WriteFile(filepath.Join(source, "task.md"), []byte("updated image"), 0o600); err != nil {
+				t.Fatal(err)
 			}
+			result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": source})
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest := result.(map[string]any)["digest"].(string)
 			current, inspectErr := imageStore(c).Inspect(ref)
-			if inspectErr != nil || current.Digest != before || imageStore(c).IsMutable(ref) {
-				t.Fatalf("collision changed ref: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
+			if inspectErr != nil || digest == before || current.Digest != digest || !imageStore(c).IsMutable(ref) {
+				t.Fatalf("updated ref: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
 			}
 		})
 	}
 }
 
-func TestImageBuildRejectsImmutableImportAfterMutableRefRemoval(t *testing.T) {
+func TestImageBuildUpdatesImportedRefAfterMutableRefRemoval(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -413,15 +417,66 @@ func TestImageBuildRejectsImmutableImportAfterMutableRefRemoval(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("new ordinary lifecycle"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
-	var userErr api.UserError
-	if !errors.As(err, &userErr) || userErr.Code != "immutable_ref" {
-		t.Fatalf("build collision error = %#v, want immutable_ref", err)
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
+	if err != nil {
+		t.Fatal(err)
 	}
+	digest := result.(map[string]any)["digest"].(string)
 	current, inspectErr := imageStore(c).Inspect(ref)
-	if inspectErr != nil || current.Digest != imported.Digest || imageStore(c).IsMutable(ref) {
-		t.Fatalf("immutable import changed: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
+	if inspectErr != nil || digest == imported.Digest || current.Digest != digest || !imageStore(c).IsMutable(ref) {
+		t.Fatalf("updated import: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
 	}
+}
+
+func TestArtifactImportOverBuildHidesStaleProvenance(t *testing.T) {
+	c := localCtx(t)
+	ref := image.Ref{Name: "reviewer", Tag: "latest"}
+	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": writeExample(t)}); err != nil {
+		t.Fatal(err)
+	}
+
+	origin := t.TempDir()
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte("uploaded"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	originStore := &image.Store{Dir: filepath.Join(origin, "images")}
+	if _, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, ref, originStore, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	var artifact bytes.Buffer
+	if err := (imageportable.Service{BaseDir: origin, StagingRoot: filepath.Join(origin, "imports")}).Export(context.Background(), ref.String(), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	portable := imageportable.Service{Snapshots: imageSnapshotStore(c), BaseDir: c.BaseDir, StagingRoot: filepath.Join(c.BaseDir, "image-imports")}
+	preview, err := portable.Preview(context.Background(), bytes.NewReader(artifact.Bytes()), int64(artifact.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := portable.Apply(context.Background(), preview.ImportID, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := cmdHandler(t, "image.provenance")(c, registry.Params{"ref": ref.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.(map[string]any); got["source_cwd"] != nil || got["source_available"] != false {
+		t.Fatalf("stale provenance exposed: %#v", got)
+	}
+	listed, err := cmdHandler(t, "image.ls")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range listed.(map[string]any)["images"].([]map[string]any) {
+		if item["name"] == ref.Name && item["tag"] == ref.Tag {
+			if _, ok := item["source_cwd"]; ok {
+				t.Fatalf("image list exposed stale provenance: %#v", item)
+			}
+			return
+		}
+	}
+	t.Fatal("updated image missing from list")
 }
 
 func TestImageBuildMigratesUnmarkedOrdinaryRefWithMatchingProvenance(t *testing.T) {
@@ -979,7 +1034,7 @@ func TestImageValidateV2ResolvesPromptFilesWithoutWritingArtifact(t *testing.T) 
 	}
 }
 
-func TestImageValidateChecksTargetRefAndImmutableCollision(t *testing.T) {
+func TestImageValidateChecksTargetRefAndAllowsExistingTag(t *testing.T) {
 	c := localCtx(t)
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts: []\n"), 0o600); err != nil {
@@ -999,8 +1054,8 @@ func TestImageValidateChecksTargetRefAndImmutableCollision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if collision.(map[string]any)["valid"] != false {
-		t.Fatalf("immutable collision accepted: %#v", collision)
+	if collision.(map[string]any)["valid"] != true {
+		t.Fatalf("existing tag rejected: %#v", collision)
 	}
 }
 

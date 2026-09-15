@@ -10,6 +10,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/compose"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/registry"
 	storedb "github.com/alekzonder/tariboy/internal/store"
@@ -109,6 +110,43 @@ func TestYAMLPreviewReportsMissingAgentImageBeforeApply(t *testing.T) {
 	agents := result.(map[string]any)["agents"].([]map[string]any)
 	if len(agents) != 1 || agents[0]["action"] != "blocked" || agents[0]["conflict"] != true {
 		t.Fatalf("agent plans = %#v", agents)
+	}
+}
+
+func TestTeamImportDoesNotReuseSnapshotForChangedImageDigest(t *testing.T) {
+	c, _, _ := ctxWithStore(t)
+	c.BaseDir = t.TempDir()
+	c.Groups = &fakeGroups{}
+	ref := image.Ref{Name: "shared", Tag: "v1"}
+	current, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := imageSnapshotStore(c).Capture(context.Background(), ref.String(), "previous-digest", "shared", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.ImageDigest == current.Digest {
+		t.Fatal("test snapshot unexpectedly matches current image")
+	}
+	preview := teamportable.Preview{
+		ComposeYAML: []byte("version: 1\ngroups:\n  team: {}\n"),
+		Images:      []teamportable.Image{{Ref: ref.String(), SourceName: "shared", SourceDigest: snapshot.SourceDigest}},
+	}
+	result, err := planTeamImport(c, preview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	images := result.(map[string]any)["images"].([]map[string]any)
+	if len(images) != 1 || images[0]["action"] != "retag" || images[0]["conflict"] != true {
+		t.Fatalf("image plans = %#v", images)
+	}
+	if err := applyTeamImage(c, preview, preview.Images[0], false, func() {}); err == nil {
+		t.Fatal("team import reused a snapshot for different image bytes")
 	}
 }
 
