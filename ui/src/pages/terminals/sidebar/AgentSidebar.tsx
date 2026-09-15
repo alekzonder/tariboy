@@ -1,5 +1,4 @@
 import { useRef, useState, type ButtonHTMLAttributes, type ComponentProps } from "react";
-import { Plus, Search, Server } from "lucide-react";
 import {
   DndContext, KeyboardSensor, PointerSensor, useDraggable, useDroppable,
   useSensor, useSensors, type DragEndEvent,
@@ -15,11 +14,13 @@ import { cn } from "@/lib/utils";
 import type { HostAgents } from "@/lib/aggregate";
 import type { DaemonMeta } from "@/lib/daemons";
 import { HostStatus } from "@/components/HostStatus";
+import { SidebarFooter } from "./SidebarFooter";
+import { SidebarSearch } from "./SidebarSearch";
 import { AgentRow } from "@/components/AgentRow";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import {
   DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH,
-} from "./useSidebarWidth";
+} from "../useSidebarWidth";
 import {
   dragId, identityFor, rowCollision, sameScope, sidebarAnnouncements, type ReorderKind,
 } from "./sidebarDnd";
@@ -81,7 +82,7 @@ function SortableAgentRow({ dragKey, disabled, ...props }: ComponentProps<typeof
 }
 /* eslint-enable react-hooks/refs */
 
-export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
+export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
   hosts: HostAgents[];
   selectedHostId?: string;
   selected?: { hostId: string; agent: string };
@@ -192,17 +193,7 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
       className="flex min-h-0 shrink-0 flex-col px-0.5"
     >
       <div className="shrink-0 px-1.5 pt-0.5 pb-2">
-        <label className="flex h-[30px] items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
-          <Search className="size-[13px] shrink-0" aria-hidden="true" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search agents"
-            placeholder="Search agents"
-            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground"
-          />
-        </label>
+        <SidebarSearch query={query} onQuery={setQuery} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
       {visibleHosts.map((h) => (
@@ -329,36 +320,12 @@ export function TerminalsSidebar({ hosts, selectedHostId, selected, onSelectHost
         </section>
       ))}
       </div>
-      <div className="flex h-11 shrink-0 items-center gap-2 px-3">
-        <span aria-hidden="true" className="grid size-[22px] shrink-0 place-items-center rounded-full bg-accent text-muted-foreground">
-          <Server className="size-3" />
-        </span>
-        <span className="min-w-0 flex-1 text-[12px] leading-tight">
-          <span className="block truncate font-medium">All servers</span>
-          <span className="block text-[11px] text-muted-foreground">
-            {connectedCount} connected · {agentCount} agents
-          </span>
-        </span>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          className="size-6 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="Add host"
-          title="Add host"
-          onClick={onAddServer}
-        >
-          <Plus className="size-3" />
-        </Button>
-        <span
-          role="img"
-          aria-label={`${connectedCount} of ${hosts.length} servers connected`}
-          title={`${connectedCount} of ${hosts.length} servers connected`}
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            connectedCount === hosts.length ? "bg-status-running" : "bg-status-failed",
-          )}
-        />
-      </div>
+      <SidebarFooter
+        servers={hosts.length}
+        connected={connectedCount}
+        agents={agentCount}
+        onAddServer={onAddServer}
+      />
     </aside>
     <div
       role="separator"
