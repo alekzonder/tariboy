@@ -56,6 +56,7 @@ export function SidebarAgentRow({ row, actions, dragKey }: {
     selected: actions.selected?.hostId === row.hostId && actions.selected.agent === agent.name,
     unread: actions.attention.has(row.key),
     unreadLabel: `Unread customer question for ${agent.name} on ${row.hostLabel}`,
+    unreadMessages: row.chat?.unread ?? 0,
     interactive: agent.interactive !== false,
     "aria-label": `Open ${agent.name}`,
     "data-testid": "sidebar-agent",

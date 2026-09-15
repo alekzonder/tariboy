@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { HostAgents } from "@/lib/aggregate";
 import type { AgentSummary } from "@/lib/types";
 import { agentKey, allAgents, filterHosts, groupSections, rankAgents } from "./sidebarModel";
+import type { ChatSummary } from "@/lib/api";
+
+const chat = (agent: string, last_ts: string, unread = 0): ChatSummary => ({
+  agent, last_ts, unread, last_from: `agent:${agent}`, last_type: "message", last_text: "...",
+});
 
 const agent = (name: string, group: string | null = null): AgentSummary => ({
   name,
@@ -46,6 +51,29 @@ describe("sidebar agent list", () => {
   it("keeps the saved order inside a band", () => {
     const { rest } = rankAgents(allAgents(hosts), new Set(), new Set());
     expect(rest.map((row) => row.agent.name)).toEqual(["beta", "alpha", "gamma", "delta"]);
+  });
+
+  it("orders the remaining agents like a chat list, newest conversation first", () => {
+    const chatted: HostAgents[] = [
+      { ...hosts[0], chats: [chat("alpha", "2026-09-15T10:00:00Z")] },
+      { ...hosts[1], chats: [chat("gamma", "2026-09-15T12:00:00Z", 2)] },
+    ];
+    const rows = allAgents(chatted);
+    expect(rows.find((row) => row.agent.name === "gamma")?.chat?.unread).toBe(2);
+    const { rest } = rankAgents(rows, new Set(), new Set());
+    // gamma spoke last, alpha before it, and the two silent agents keep the
+    // operator's own order behind them.
+    expect(rest.map((row) => row.agent.name)).toEqual(["gamma", "alpha", "beta", "delta"]);
+  });
+
+  it("keeps an agent calling for a person above a more recent conversation", () => {
+    const chatted: HostAgents[] = [
+      { ...hosts[0], chats: [chat("alpha", "2026-09-15T12:00:00Z")] },
+      hosts[1],
+    ];
+    const { rest } = rankAgents(allAgents(chatted), new Set(), new Set([agentKey("prod", "gamma")]));
+    expect(rest[0].agent.name).toBe("gamma");
+    expect(rest[1].agent.name).toBe("alpha");
   });
 });
 

@@ -83,11 +83,25 @@ A message has:
 - `data`: structured JSON object.
 - `produced_by_agent`, `produced_in_iteration`, `produced_by_plugin`: attribution fields.
 
+`source` names the producer. An operator publish is the customer speaking, so
+it is attributed to `user:<customer>` rather than an opaque `operator`. Task
+notifications keep `source` as `system:tasks` and carry the principal that
+caused them in `data.from`; moving that author into `source` would exclude an
+agent from a notification it addressed to itself. The effective sender of any
+message is therefore `data.from`, else a principal-shaped `source`, else
+`produced_by_agent`, else `system`.
+
 Operator publish:
 
 ```bash
 tariboy message send --channel chat:ops --type note --text "hello"
+tariboy message send --channel agent:worker:inbox --type message \
+  --text "please look at this" --reply-to user:customer
 ```
+
+`--reply-to` sets the channel an agent's reply lands on. Without it a reply to a
+non-agent source returns to the originating channel — the agent's own inbox —
+so a message meant as conversation passes `user:<customer>`.
 
 Agent publish from inside an iteration:
 
@@ -294,6 +308,52 @@ The log starts with the resolved execution CWD; combined stdout and stderr
 follow in that file and are not copied into the message. An idle recurring
 definition can also be run immediately; its next fixed delay starts when that
 manual run finishes, and the active-run constraint still prevents overlap.
+
+## Chats
+
+A chat is not a fifth table. The conversation with one agent is the two existing
+inboxes merged by time: the customer's messages in `agent:<a>:inbox` and that
+agent's messages in `user:<customer>`.
+
+```bash
+tariboy chat ls
+tariboy chat messages worker
+tariboy chat messages worker --types 'message,task.*' --limit 50
+tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
+```
+
+| Route | Returns |
+| --- | --- |
+| `GET /api/chats` | one row per conversation — `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — newest conversation first |
+| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
+| `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
+| `GET /api/messages/ws` | one live hint per publication for every agent on the host |
+
+`types` is a comma-separated list of type globs. The default is
+`task.question`, `task.answered`, `task.assigned`, `task.triage`, `message`,
+`note`, `group.request`, `chat.*` — an explicit list rather than `task.*`, so an
+agent's own `task.goal`, `script.result` and schedule wakes neither appear in
+the conversation nor move that agent up the chat list. Ask for them explicitly
+to read them.
+
+`ts` is the timestamp of a message actually shown, never "now", so a message
+arriving mid-render cannot be marked read without being seen; the daemon only
+ever moves a mark forward, so a late or duplicated request from a second window
+cannot resurrect messages already read. The marks live in one `chat_read_v1`
+value in `daemon_config`, keyed per agent. Only messages an agent sent can be
+unread — the customer's own never count.
+
+The `/api/messages/ws` frame is `{agent, id, channel, type, from, ts}` and is a
+refetch hint, not the message: HTTP stays authoritative. It replays nothing,
+because a client refetches on connect and on every reconnect. A message on the
+customer's channel has no agent recipient, so it is streamed under the agent
+that sent it.
+
+The customer login is fixed rather than derived from `$USER`, so `user:customer`
+is the same person on every server. It defaults to `customer` and is overridable
+through the `customer_login` key in `daemon_config`; the first start after
+upgrading carries existing tasks, comments, waits, notification state and the
+old `user:<$USER>` channel over to it.
 
 ## Operator visibility
 
