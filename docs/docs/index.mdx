@@ -7,8 +7,8 @@ sidebar:
 ---
 
 <section className="hero">
-  <p className="eyebrow">The control plane for autonomous coding agents</p>
-  <h1>From one agent<br /> to a team.</h1>
+  <p className="eyebrow">The control plane for autonomous agents</p>
+  <h1>From an image<br /> to an agent.</h1>
   <p className="hero-description">Define reusable images, work with coding agents directly, and let Autopilot carry the work forward. Bring agents together when the job needs a team.</p>
   <div className="actions">
     <div className="primary-action">
