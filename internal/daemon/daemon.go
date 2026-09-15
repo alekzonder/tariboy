@@ -569,6 +569,11 @@ func Run(ctx context.Context, o Options) error {
 			in, out, cost, _ := aiStore.IterationUsage(iter)
 			return in, out, cost
 		},
+		UsageFlush: func() {
+			if err := ingester.Flush(); err != nil {
+				log.Error("flush terminal iteration usage", "err", err)
+			}
+		},
 	})
 	// Register the observable gauges exactly once (spec §14): bus queue depth,
 	// healthy plugins, active agent loops. No-op instruments when OTel is off.

@@ -103,3 +103,24 @@ func TestIngesterRunDrainsOnCancel(t *testing.T) {
 		t.Fatalf("rows = %+v, want %d requests", rows, perGoroutine*goroutines)
 	}
 }
+
+func TestIngesterFlushDrainsRunningBatch(t *testing.T) {
+	s := newStore(t)
+	ing := NewIngester(s, discardLogger())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go ing.Run(ctx)
+
+	ing.Enqueue(sampleReq("air-running", "alice", "basic", 0.01, time.Now().UTC()))
+	time.Sleep(10 * time.Millisecond) // Let Run take the row into its private batch.
+	if err := ing.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.Aggregate(UsageFilter{Agent: "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Requests != 1 {
+		t.Fatalf("flushed rows = %+v", rows)
+	}
+}

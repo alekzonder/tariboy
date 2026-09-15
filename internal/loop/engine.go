@@ -110,6 +110,7 @@ type Engine struct {
 
 	metrics     *telemetry.Metrics
 	usageLookup func(iteration string) (int, int, float64)
+	usageFlush  func()
 
 	manualCh chan manualReq
 	events   chan WakeKind
@@ -724,6 +725,9 @@ func (e *Engine) finishSpan(span oteltrace.Span, start time.Time, id, outcome st
 		attribute.Int("mem_peak_kb", mem),
 	)
 	if e.usageLookup != nil {
+		if e.usageFlush != nil {
+			e.usageFlush()
+		}
 		in, out, cost := e.usageLookup(id)
 		span.SetAttributes(
 			attribute.Int("tokens_in", in),

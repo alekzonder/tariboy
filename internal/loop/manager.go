@@ -89,6 +89,8 @@ type ManagerConfig struct {
 	// the daemon to aiproxy.Store.IterationUsage) used for OTel span attributes;
 	// nil skips the attributes.
 	UsageLookup func(iteration string) (int, int, float64)
+	// UsageFlush synchronously persists queued proxy usage before terminal span aggregation.
+	UsageFlush func()
 	// PrepareImageBridge is injectable for activation boundary tests. Nil uses
 	// agentdir.PrepareImageBridge.
 	PrepareImageBridge func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error
@@ -1162,6 +1164,7 @@ func (m *Manager) start(ag agent.Agent) error {
 	}
 	engine.metrics = m.cfg.Metrics
 	engine.usageLookup = m.cfg.UsageLookup
+	engine.usageFlush = m.cfg.UsageFlush
 	if m.cfg.Bus != nil {
 		engine.SetMessagePeek(func() (bool, error) { return m.cfg.Bus.HasPending(agName) })
 	}
