@@ -22,6 +22,9 @@ type Ingester struct {
 	store   *Store
 	log     *slog.Logger
 	ch      chan AIRequest
+	flush   chan chan error
+	done    chan struct{}
+	running atomic.Bool
 	dropped atomic.Int64
 }
 
@@ -29,7 +32,7 @@ func NewIngester(s *Store, log *slog.Logger) *Ingester {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Ingester{store: s, log: log, ch: make(chan AIRequest, ingestBuffer)}
+	return &Ingester{store: s, log: log, ch: make(chan AIRequest, ingestBuffer), flush: make(chan chan error), done: make(chan struct{})}
 }
 
 // Enqueue is non-blocking: a full buffer drops the row (recoverable via reindex).
@@ -51,17 +54,24 @@ func (i *Ingester) Enqueue(r AIRequest) {
 func (i *Ingester) Dropped() int64 { return i.dropped.Load() }
 
 func (i *Ingester) Run(ctx context.Context) {
+	i.running.Store(true)
+	defer func() {
+		i.running.Store(false)
+		close(i.done)
+	}()
 	tk := time.NewTicker(ingestPeriod)
 	defer tk.Stop()
 	batch := make([]AIRequest, 0, ingestFlushN)
-	flush := func() {
+	flush := func() error {
 		if len(batch) == 0 {
-			return
+			return nil
 		}
 		if err := i.store.InsertBatch(batch); err != nil {
 			i.log.Error("ai_requests batch insert", "n", len(batch), "err", err)
+			return err
 		}
 		batch = batch[:0]
+		return nil
 	}
 	for {
 		select {
@@ -72,17 +82,19 @@ func (i *Ingester) Run(ctx context.Context) {
 				case r := <-i.ch:
 					batch = append(batch, r)
 				default:
-					flush()
+					_ = flush()
 					return
 				}
 			}
 		case r := <-i.ch:
 			batch = append(batch, r)
 			if len(batch) >= ingestFlushN {
-				flush()
+				_ = flush()
 			}
+		case done := <-i.flush:
+			done <- flush()
 		case <-tk.C:
-			flush()
+			_ = flush()
 		}
 	}
 }
@@ -90,6 +102,18 @@ func (i *Ingester) Run(ctx context.Context) {
 // Flush drains and inserts everything currently buffered (used by tests and the
 // reindex-adjacent paths).
 func (i *Ingester) Flush() error {
+	if i.running.Load() {
+		done := make(chan error, 1)
+		select {
+		case i.flush <- done:
+			select {
+			case err := <-done:
+				return err
+			case <-i.done:
+			}
+		case <-i.done:
+		}
+	}
 	var batch []AIRequest
 	for {
 		select {

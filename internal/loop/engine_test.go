@@ -1112,6 +1112,46 @@ func TestRunOnceEmitsRootSpan(t *testing.T) {
 	}
 }
 
+func TestRunOnceFlushesUsageBeforeTerminalSpanLookup(t *testing.T) {
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() { otel.SetTracerProvider(tracenoop.NewTracerProvider()) })
+
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	e, _ := newEngine(t, baseAgent(), r)
+	flushed := false
+	e.usageFlush = func() { flushed = true }
+	e.usageLookup = func(string) (int, int, float64) {
+		if !flushed {
+			t.Fatal("usage lookup ran before terminal flush")
+		}
+		return 123, 45, 0.67
+	}
+
+	e.runOnce(context.Background(), "manual", "")
+
+	for _, s := range sr.Ended() {
+		if s.Name() != "iteration" {
+			continue
+		}
+		got := map[string]float64{}
+		for _, kv := range s.Attributes() {
+			switch string(kv.Key) {
+			case "tokens_in", "tokens_out":
+				got[string(kv.Key)] = float64(kv.Value.AsInt64())
+			case "cost_usd":
+				got[string(kv.Key)] = kv.Value.AsFloat64()
+			}
+		}
+		if got["tokens_in"] != 123 || got["tokens_out"] != 45 || got["cost_usd"] != 0.67 {
+			t.Fatalf("terminal usage attributes = %v", got)
+		}
+		return
+	}
+	t.Fatal("iteration span not found")
+}
+
 // TestRunOnceNoSpanWhenTelemetryOff verifies iteration behavior is unchanged
 // when telemetry is off (noop tracer): the iteration still completes and is
 // persisted with the correct outcome, and no spans are recorded.
