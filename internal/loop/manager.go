@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -2574,13 +2573,10 @@ func (m *Manager) toolsLoopControl(name, action string) (agent.Agent, error) {
 	return m.cfg.Store.Get(name)
 }
 
-// buildImageForAgent authors + builds a new image from a Tariboyfile the
-// agent wrote in its workdir. The path is resolved against workdir and confined
-// to it (defense in depth: an image-creator authors in its own workdir and must
-// not build from arbitrary host paths — M15 invariant). It then calls
-// image.Build against the daemon's shared image store, exactly as
-// commands/image.go does, so a base `from:` image on this host resolves and the
-// result is runnable via `agent run`.
+// buildImageForAgent authors + builds a new image from a Tariboyfile. Relative
+// paths resolve against the managed workdir; absolute paths are used as given.
+// It calls image.Build against the daemon's shared image store, exactly as
+// commands/image.go does, so the result is runnable via `agent run`.
 func buildImageForAgent(imgStore *image.Store, workdir, name, tag, path string, externalPlugins ...plugincaps.ExternalResolver) (map[string]any, error) {
 	var result map[string]any
 	err := image.WithPublicationGate(func() error {
@@ -2599,7 +2595,11 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	if err != nil {
 		return nil, fmt.Errorf("bad ref: %w", err)
 	}
-	abs, err := confineToWorkdir(workdir, path)
+	abs := path
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(workdir, abs)
+	}
+	abs, err = filepath.EvalSymlinks(filepath.Clean(abs))
 	if err != nil {
 		return nil, err
 	}
@@ -2617,117 +2617,11 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	if len(externalPlugins) > 0 && externalPlugins[0] != nil {
 		resolver = externalPlugins[0]
 	}
-	realWork, err := filepath.EvalSymlinks(workdir)
-	if err != nil {
-		return nil, err
-	}
-	for _, skill := range parsed.V2.Skills {
-		if strings.HasPrefix(skill.Dir, "$PLUGINS/") {
-			continue
-		}
-		path := skill.Dir
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(parsed.V2.Dir, path)
-		}
-		if err := confineReferencedPath(realWork, "skill", path); err != nil {
-			return nil, err
-		}
-	}
-	for _, prompt := range parsed.V2.Prompts {
-		if prompt.File != "" && filepath.IsAbs(prompt.File) {
-			if err := confineReferencedPath(workdir, "prompt", prompt.File); err != nil {
-				return nil, err
-			}
-		}
-	}
 	man, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, imgStore, time.Now, resolver)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)}, nil
-}
-
-// confineToWorkdir resolves an agent-supplied path against workdir and REJECTS
-// anything that escapes it, before any parse or build touches the filesystem.
-// The path comes from a semi-trusted image-creator agent, so three escape
-// vectors are closed: an absolute path outside workdir, ".." traversal, and a
-// symlink under workdir whose real target leaves it (checked with EvalSymlinks
-// on both the resolved target and the workdir root, mirroring the M15
-// ensureConfinedDir pattern). It returns the confined absolute path.
-func confineToWorkdir(workdir, path string) (string, error) {
-	cleanWork := filepath.Clean(workdir)
-	abs := path
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(cleanWork, path)
-	}
-	abs = filepath.Clean(abs)
-	if !withinDir(cleanWork, abs) {
-		return "", fmt.Errorf("path %q escapes the agent workdir", path)
-	}
-	// A symlinked component under workdir must not redirect the build to a real
-	// path outside it. EvalSymlinks needs the target to exist; if it does not,
-	// imagefile.Parse below fails cleanly on os.Stat, so a missing path is fine.
-	realWork := cleanWork
-	if r, err := filepath.EvalSymlinks(cleanWork); err == nil {
-		realWork = r
-	}
-	if realAbs, err := filepath.EvalSymlinks(abs); err == nil && !withinDir(realWork, realAbs) {
-		return "", fmt.Errorf("path %q escapes the agent workdir via symlink", path)
-	}
-	return abs, nil
-}
-
-// confineReferencedPath rejects a path referenced INSIDE an agent-authored
-// Tariboyfile (a skill dir or prompt filepath) if it escapes
-// the agent workdir. imagefile.Parse already resolved p to an absolute path
-// (mirroring resolveExisting); here we clean it, follow symlinks, and require it
-// to lie within realWork — closing absolute-outside, ".." traversal, and
-// symlink-redirect vectors before image.Build reads or packs anything.
-func confineReferencedPath(realWork, kind, p string) error {
-	resolved := filepath.Clean(p)
-	if r, err := filepath.EvalSymlinks(resolved); err == nil {
-		resolved = r
-	}
-	if !withinDir(realWork, resolved) {
-		return fmt.Errorf("%s path %q escapes the agent workdir", kind, p)
-	}
-	return nil
-}
-
-// rejectEscapingInnerSymlinks walks an agent-authored skill dir (already
-// confined to the workdir) and rejects the build if ANY entry under it is a
-// symlink whose real target escapes the workdir. image.Build's writeArchive
-// dereferences symlinks with os.ReadFile, so without this a legitimately
-// placed skill dir containing an inner symlink to /etc/passwd or /root/.ssh
-// would leak that outside file's content into the built image. This runs
-// BEFORE image.Build so no outside byte is ever read or packed.
-func rejectEscapingInnerSymlinks(realWork, skillDir string) error {
-	return filepath.Walk(skillDir, func(path string, info os.FileInfo, werr error) error {
-		if werr != nil {
-			return werr
-		}
-		if info.Mode()&os.ModeSymlink == 0 {
-			return nil
-		}
-		resolved, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			return fmt.Errorf("skill dir symlink %q cannot be resolved: %w", path, err)
-		}
-		if !withinDir(realWork, resolved) {
-			return fmt.Errorf("skill dir symlink %q escapes the agent workdir", path)
-		}
-		return nil
-	})
-}
-
-// withinDir reports whether target is root itself or lies under it, using a
-// lexical relative-path check (root and target must already be cleaned).
-func withinDir(root, target string) bool {
-	rel, err := filepath.Rel(root, target)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func cwdOf(ag agent.Agent, l agentdir.Layout) string {

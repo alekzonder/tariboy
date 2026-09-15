@@ -78,10 +78,11 @@ source repair within the approved task, not a blind overwrite after an error.
 
 Validate/build using the supported command surface available to the agent.
 Operator image validation/build targets a selected daemon; the identity-bound
-build launcher confines sources to the managed workdir. Never bypass that
-boundary with another socket or identity. Record inability to build as a
-limitation and ask through the task. Test daemons and agents use disposable
-base/runtime roots and disabled or isolated listeners; never use live state.
+build launcher accepts any source path readable by the daemon account, with
+relative paths resolved from the managed workdir. Grant that capability only
+to trusted image authors. Record inability to build as a limitation and ask
+through the task. Test daemons and agents use disposable base/runtime roots and
+disabled or isolated listeners; never use live state.
 
 ## Task and integration state machine
 

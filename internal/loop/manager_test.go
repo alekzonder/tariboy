@@ -2577,7 +2577,7 @@ func swapAdoptTiming(poll, probe, timeout time.Duration) func() {
 	return func() { adoptPollInterval, adoptProbeInterval, adoptProbeTimeout = op, opr, ot }
 }
 
-func TestBuildImageForAgentConfinesPath(t *testing.T) {
+func TestBuildImageForAgentResolvesRelativePathFromWorkdir(t *testing.T) {
 	base := t.TempDir()
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	workdir := filepath.Join(base, "workdir")
@@ -2602,39 +2602,13 @@ func TestBuildImageForAgentConfinesPath(t *testing.T) {
 		t.Fatal("authored image not stored")
 	}
 
-	// A path escaping the workdir is rejected BEFORE any parse/build.
-	if _, err := buildImageForAgent(imgStore, workdir, "evil", "latest", "../../etc"); err == nil {
-		t.Fatal("expected an error for a path escaping the workdir, got nil")
-	}
-	if _, err := buildImageForAgent(imgStore, workdir, "evil", "latest", "/etc"); err == nil {
-		t.Fatal("expected an error for an absolute path, got nil")
-	}
-
-	// A symlink INSIDE the workdir whose real target is outside is rejected.
-	outside := filepath.Join(base, "outside")
-	if err := os.MkdirAll(outside, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(outside, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(outside, filepath.Join(workdir, "link")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := buildImageForAgent(imgStore, workdir, "evil", "latest", "link"); err == nil {
-		t.Fatal("expected an error for a symlink escaping the workdir, got nil")
-	}
-	if imgStore.Exists(image.Ref{Name: "evil", Tag: "latest"}) {
-		t.Fatal("evil image must not have been built")
-	}
-
 	// A bad ref is rejected.
 	if _, err := buildImageForAgent(imgStore, workdir, "Bad Ref", "latest", "authored"); err == nil {
 		t.Fatal("expected an error for a bad ref, got nil")
 	}
 }
 
-func TestAgentImageBuildUsesManagedWorkdirWithExternalCWD(t *testing.T) {
+func TestAgentImageBuildSourcePathResolution(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "creator", Harness: "stub"})
 	if err != nil {
@@ -2663,21 +2637,32 @@ func TestAgentImageBuildUsesManagedWorkdirWithExternalCWD(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nskills:\n  - dir: ../../skills/review\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(ag.Cwd, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
+	externalSkill := filepath.Join(ag.Cwd, "review")
+	if err := os.Mkdir(externalSkill, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(externalSkill, "SKILL.md"), []byte("---\nname: review\ndescription: Review changes.\n---\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ag.Cwd, "Tariboyfile.yaml"), []byte("schema_version: 2\nskills:\n  - dir: ./review\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(ag.Cwd, filepath.Join(l.Workdir(), "outside")); err != nil {
 		t.Fatal(err)
 	}
+	parentPath, err := filepath.Rel(l.Workdir(), ag.Cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := m.newToolsAPIServer(ag, l).Handler()
 	for _, tc := range []struct {
 		name, path string
-		allowed    bool
 	}{
-		{"absolute", source, true},
-		{"relative", "images/authored", true},
-		{"external-cwd", ag.Cwd, false},
-		{"symlink", "outside", false},
+		{"absolute", source},
+		{"relative", "images/authored"},
+		{"external-cwd", ag.Cwd},
+		{"parent", parentPath},
+		{"symlink", "outside"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body, err := json.Marshal(map[string]string{"name": tc.name, "path": tc.path})
@@ -2686,15 +2671,11 @@ func TestAgentImageBuildUsesManagedWorkdirWithExternalCWD(t *testing.T) {
 			}
 			recorder := httptest.NewRecorder()
 			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/tools/image/build", bytes.NewReader(body)))
-			if tc.allowed {
-				if recorder.Code != http.StatusOK {
-					t.Fatalf("build status=%d body=%s", recorder.Code, recorder.Body.String())
-				}
-			} else if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "escapes the agent workdir") {
-				t.Fatalf("expected workdir rejection, status=%d body=%s", recorder.Code, recorder.Body.String())
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("build status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
-			if got := m.cfg.ImgStore.Exists(image.Ref{Name: tc.name, Tag: "latest"}); got != tc.allowed {
-				t.Fatalf("image published=%v, want %v", got, tc.allowed)
+			if !m.cfg.ImgStore.Exists(image.Ref{Name: tc.name, Tag: "latest"}) {
+				t.Fatal("image was not published")
 			}
 		})
 	}
@@ -2783,97 +2764,8 @@ func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
 	}
 }
 
-// TestBuildImageForAgentConfinesReferencedPaths locks in the M15 Critical fix:
-// confineToWorkdir clamps only the Tariboyfile's OWN dir, but the file paths
-// REFERENCED inside it (skills:/prompts:) must also be confined to the
-// agent workdir. Otherwise a semi-trusted image-creator authors a Tariboyfile
-// pointing skills: at an absolute host dir (/etc) or a relative-escape
-// (../../outside), and the daemon packs those host files' CONTENTS into a
-// runnable image. This probe mirrors the review's: absolute-outside AND
-// relative-escape references are both REJECTED, no image is built, and no
-// outside content is packed; a legitimate in-workdir skill still builds.
-func TestBuildImageForAgentConfinesReferencedPaths(t *testing.T) {
-	base := t.TempDir()
-	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
-	workdir := filepath.Join(base, "workdir")
-
-	// A skill dir inside the workdir + a secret host dir outside it, holding a
-	// file whose contents an escape would leak into the built image.
-	inSkill := filepath.Join(workdir, "authored", "myskill")
-	if err := os.MkdirAll(inSkill, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(inSkill, "SKILL.md"), []byte("---\nname: myskill\ndescription: Test skill.\n---\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	secret := filepath.Join(base, "secret")
-	if err := os.MkdirAll(secret, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(secret, "id_rsa"), []byte("TOP-SECRET"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	authored := filepath.Join(workdir, "authored")
-
-	writeSF := func(skill string) {
-		sf := "schema_version: 2\nskills:\n  - dir: " + skill + "\n"
-		if err := os.WriteFile(filepath.Join(authored, "Tariboyfile.yaml"), []byte(sf), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// (1a) Absolute-outside skill reference (/etc): rejected, nothing built.
-	writeSF("/etc")
-	if _, err := buildImageForAgent(imgStore, workdir, "leak-etc", "latest", "authored"); err == nil {
-		t.Fatal("expected rejection of an absolute-outside skill reference (/etc), got nil")
-	}
-	if imgStore.Exists(image.Ref{Name: "leak-etc", Tag: "latest"}) {
-		t.Fatal("leak-etc image must NOT have been built from an out-of-workdir skill")
-	}
-
-	// (1b) Absolute-outside skill reference into the readable secret host dir:
-	//      demonstrably packs TOP-SECRET without the fix, so it must be rejected
-	//      and no image built (no outside content packed).
-	writeSF(secret)
-	if _, err := buildImageForAgent(imgStore, workdir, "leak-abs", "latest", "authored"); err == nil {
-		t.Fatal("expected rejection of an absolute-outside skill reference (secret dir), got nil")
-	}
-	if imgStore.Exists(image.Ref{Name: "leak-abs", Tag: "latest"}) {
-		t.Fatal("leak-abs image must NOT have been built from an out-of-workdir skill")
-	}
-
-	// (2) Relative-escape skill reference into the secret host dir: rejected,
-	//     nothing built, no secret content packed.
-	writeSF("../../secret")
-	if _, err := buildImageForAgent(imgStore, workdir, "leak-rel", "latest", "authored"); err == nil {
-		t.Fatal("expected rejection of a relative-escape skill reference, got nil")
-	}
-	if imgStore.Exists(image.Ref{Name: "leak-rel", Tag: "latest"}) {
-		t.Fatal("leak-rel image must NOT have been built from an out-of-workdir skill")
-	}
-
-	// (3) A legitimate in-workdir skill reference still builds.
-	writeSF("./myskill")
-	if _, err := buildImageForAgent(imgStore, workdir, "good", "latest", "authored"); err != nil {
-		t.Fatalf("legitimate in-workdir skill build must succeed: %v", err)
-	}
-	if !imgStore.Exists(image.Ref{Name: "good", Tag: "latest"}) {
-		t.Fatal("good image with in-workdir skill was not stored")
-	}
-}
-
-// TestBuildImageForAgentRejectsEscapingInnerSymlink locks in the M15 Critical
-// RESIDUAL fix. The prior fix confines the skill DIR PATH to the workdir, but
-// image.Build's writeArchive WALKS that dir and os.ReadFile's every entry,
-// which DEREFERENCES symlinks. So a legitimately-in-workdir skill dir that
-// CONTAINS an inner symlink pointing OUTSIDE (e.g.
-// <workdir>/authored/skills/myskill/leak -> <secret>/id_rsa) makes the daemon
-// read that outside file's content and pack it as skills/myskill/leak — the
-// same arbitrary-host-file-read exfiltration, one level deeper. This probe
-// mirrors the re-review's: an in-workdir skill dir + an outside-pointing inner
-// symlink is REJECTED, no image is built/stored, and the outside content is
-// NOT packed; a legitimate skill dir with no escaping symlink still builds.
-func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
+// The ordinary image builder still rejects symlinks inside packaged skills.
+func TestBuildImageForAgentRejectsSkillSymlink(t *testing.T) {
 	base := t.TempDir()
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	workdir := filepath.Join(base, "workdir")
@@ -2888,8 +2780,7 @@ func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A skill dir that IS inside the workdir (passes the per-dir confinement)
-	// but CONTAINS an inner symlink pointing at the outside secret file.
+	// A packaged skill containing a symlink to a file outside its tree.
 	inSkill := filepath.Join(authored, "myskill")
 	if err := os.MkdirAll(inSkill, 0o755); err != nil {
 		t.Fatal(err)
@@ -2908,11 +2799,10 @@ func TestBuildImageForAgentRejectsEscapingInnerSymlink(t *testing.T) {
 		}
 	}
 
-	// The in-workdir skill dir with an outside-pointing inner symlink is
-	// REJECTED before image.Build reads/packs anything.
+	// The ordinary builder rejects symlinks inside packaged skill directories.
 	writeSF("./myskill")
 	if _, err := buildImageForAgent(imgStore, workdir, "leak-inner", "latest", "authored"); err == nil {
-		t.Fatal("expected rejection of an in-workdir skill dir containing an outside-pointing inner symlink, got nil")
+		t.Fatal("expected rejection of a symlink inside a packaged skill, got nil")
 	}
 	if imgStore.Exists(image.Ref{Name: "leak-inner", Tag: "latest"}) {
 		t.Fatal("leak-inner image must NOT have been built from a skill dir with an escaping inner symlink")

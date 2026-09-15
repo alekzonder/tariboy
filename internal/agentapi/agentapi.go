@@ -82,8 +82,7 @@ type Deps struct {
 
 	// Image authoring surface (OPTIONAL image-creator capability: gated). Nil
 	// yields unavailable. BuildImage authors + builds a new image from a
-	// Tariboyfile at the given path; the daemon confines the path to the
-	// agent workdir and calls image.Build (M15).
+	// Tariboyfile at the given path and calls image.Build.
 	BuildImage func(name, tag, path string) (map[string]any, error)
 
 	// Group coordination surface. These callbacks are daemon-wired so an agent
