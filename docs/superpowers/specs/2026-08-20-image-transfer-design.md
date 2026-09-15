@@ -56,10 +56,11 @@ cancellation only stops the next destination.
 
 The destination must use the original source ref on its first apply. The
 daemon's idempotent same-ref/same-digest result is rendered as **Already
-present**, a successful terminal state. A ref conflict is isolated to that
-host: it renders the host-provided message and a per-target **Retag and retry**
-field prefilled with the source ref. Retrying reuses the in-memory blob to make
-a fresh preview and apply for only that target; it does not re-export or repeat
+present**, a successful terminal state. A different digest advances the same
+tag and renders as **Completed**. A destination failure is isolated to that
+host. A retryable conflict exposes a per-target **Retag and retry** field
+prefilled with the source ref. Retrying reuses the in-memory blob to make a
+fresh preview and apply for only that target; it does not re-export or repeat
 successful targets. Other failure types are reported per target and do not
 block queued hosts.
 

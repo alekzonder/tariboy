@@ -193,11 +193,15 @@ func applyTeamImageLocked(c *registry.Ctx, preview teamportable.Preview, planned
 		return api.UserError{Code: "bad_ref", Msg: "invalid image ref " + planned.Ref}
 	}
 	if imageStore(c).Exists(ref) {
+		current, err := imageStore(c).Inspect(ref)
+		if err != nil {
+			return err
+		}
 		snapshot, ok, err := imageSnapshotStore(c).Lookup(context.Background(), ref.String())
 		if err != nil {
 			return err
 		}
-		if !ok || snapshot.SourceDigest != planned.SourceDigest {
+		if !ok || snapshot.ImageDigest != current.Digest || snapshot.SourceDigest != planned.SourceDigest {
 			return api.UserError{Code: "image_conflict", Msg: "image " + ref.String() + " has different source; choose a new tag"}
 		}
 		return nil
@@ -258,8 +262,9 @@ func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (any, error) 
 		if parseErr != nil || image.IsReserved(ref) {
 			action, conflict, message = "invalid", true, "invalid or reserved image ref"
 		} else if imageStore(c).Exists(ref) {
+			current, inspectErr := imageStore(c).Inspect(ref)
 			snapshot, ok, lookupErr := imageSnapshotStore(c).Lookup(context.Background(), ref.String())
-			if lookupErr != nil || !ok || snapshot.SourceDigest != planned.SourceDigest {
+			if inspectErr != nil || lookupErr != nil || !ok || snapshot.ImageDigest != current.Digest || snapshot.SourceDigest != planned.SourceDigest {
 				action, conflict, message = "retag", true, "destination ref has different source"
 			} else {
 				action = "reuse"

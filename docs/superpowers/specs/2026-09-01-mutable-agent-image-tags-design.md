@@ -13,14 +13,11 @@ repeating `--tag`.
 ref is replaced atomically after the complete archive has been validated. The
 previous archive is retained by digest before the ref moves, so running,
 active, and pending assignments remain recoverable. `basic` and `bare` remain
-reserved, and refs recorded as controlled-improvement releases cannot be
-replaced through ordinary authoring.
+reserved when their tag is `latest`.
 
-Runnable import/retag, registry publication, and controlled-improvement
-publication keep their existing immutable behavior. Mutable state is recorded
-beside the ref in the image store; it is not inferred from tag spelling, so a
-production tag and a mutable authoring tag can use the same ref grammar without
-sharing lifecycle semantics.
+Runnable archives remain immutable by digest. Import, retag, registry
+publication, and ordinary builds may move any non-reserved tag to another
+validated digest; prior generations remain available to pinned assignments.
 
 ## Multiple tags
 

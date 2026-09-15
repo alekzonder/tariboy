@@ -272,24 +272,6 @@ func (s *Store) ArchiveBytes(ref Ref) ([]byte, error) {
 	return os.ReadFile(s.tarPath(ref))
 }
 
-// MarkMutable authorizes migration of a legacy ordinary-build ref after its
-// caller has verified authoritative build provenance.
-func (s *Store) MarkMutable(ref Ref) error {
-	if IsReserved(ref) {
-		return fmt.Errorf("%w: %s", ErrReserved, ref.String())
-	}
-	if s.IsMutable(ref) {
-		return nil
-	}
-	if _, err := s.Inspect(ref); err != nil {
-		return err
-	}
-	if err := writeMutableMarker(s.mutablePath(ref)); err != nil {
-		return err
-	}
-	return syncDirectory(s.refDir(ref))
-}
-
 // InstallMutableArchive publishes already-validated authoring bytes.
 func (s *Store) InstallMutableArchive(ref Ref, archive []byte) (Manifest, error) {
 	manifest, err := validatePortableArchive(archive, ref)
@@ -771,9 +753,6 @@ func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool, archiveOut
 	} else {
 		mutablePublishMu.Lock()
 		defer mutablePublishMu.Unlock()
-		if s.Exists(ref) && !s.IsMutable(ref) {
-			return "", fmt.Errorf("%w: %s", ErrImmutable, ref.String())
-		}
 		markerCreated := false
 		if !s.IsMutable(ref) {
 			if err := writeMutableMarker(s.mutablePath(ref)); err != nil {

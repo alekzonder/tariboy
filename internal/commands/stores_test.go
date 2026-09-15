@@ -2,7 +2,6 @@ package commands
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -166,7 +164,7 @@ func TestImageBuildStoreSelectorInstallsLocksAndDefaultsIdentity(t *testing.T) {
 	}
 }
 
-func TestImageBuildStoreSelectorRejectsImmutableVersionBeforeInstallingLocks(t *testing.T) {
+func TestImageBuildStoreSelectorUpdatesExistingVersionTag(t *testing.T) {
 	c := localCtx(t)
 	source := t.TempDir()
 	imageDir := filepath.Join(source, "images", "reviewer")
@@ -179,12 +177,19 @@ func TestImageBuildStoreSelectorRejectsImmutableVersionBeforeInstallingLocks(t *
 	if _, err := cmdHandler(t, "store.add")(c, registry.Params{"name": "team", "source": source}); err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := imagefile.ParseV2(imageDir)
+	oldSource := t.TempDir()
+	if err := os.WriteFile(filepath.Join(oldSource, "prompt.md"), []byte("old image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldSpec := &imagefile.V2{SchemaVersion: 2, ImageVersion: "1.2.3", Dir: oldSource, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}
+	ref := image.Ref{Name: "reviewer", Tag: "1.2.3"}
+	before, err := image.BuildV2(oldSpec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref := image.Ref{Name: "reviewer", Tag: "1.2.3"}
-	if _, err := image.BuildV2(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil); err != nil {
+	latest := image.Ref{Name: "reviewer", Tag: "latest"}
+	beforeLatest, err := image.BuildV2(oldSpec, imagefile.ResolveRoots{}, latest, imageStore(c), time.Now, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,19 +201,24 @@ func TestImageBuildStoreSelectorRejectsImmutableVersionBeforeInstallingLocks(t *
 	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("NPX_LOG", logPath)
 
-	_, err = cmdHandler(t, "image.build")(c, registry.Params{"source": "team/reviewer"})
-	var userErr api.UserError
-	if !errors.As(err, &userErr) || userErr.Code != "immutable_ref" {
-		t.Fatalf("error = %#v, want immutable_ref", err)
+	result, err := cmdHandler(t, "image.build")(c, registry.Params{"source": "team/reviewer"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
-		t.Fatalf("npx ran before immutable target rejection: %v", err)
+	updated := result.(map[string]any)["digest"].(string)
+	if updated == "" {
+		t.Fatalf("build result = %#v", result)
 	}
-	if _, err := os.Stat(filepath.Join(c.BaseDir, "image-source-snapshots")); !os.IsNotExist(err) {
-		t.Fatalf("source was frozen before immutable target rejection: %v", err)
+	current, err := imageStore(c).Inspect(ref)
+	if err != nil || current.Digest == before.Digest || !imageStore(c).IsMutable(ref) {
+		t.Fatalf("version ref = %#v, err %v, mutable %v", current, err, imageStore(c).IsMutable(ref))
 	}
-	if imageStore(c).Exists(image.Ref{Name: "reviewer", Tag: "latest"}) {
-		t.Fatal("default latest ref was published")
+	currentLatest, err := imageStore(c).Inspect(latest)
+	if err != nil || currentLatest.Digest == beforeLatest.Digest || !imageStore(c).IsMutable(latest) {
+		t.Fatalf("latest ref = %#v, err %v, mutable %v", currentLatest, err, imageStore(c).IsMutable(latest))
+	}
+	if raw, err := os.ReadFile(logPath); err != nil || string(raw) != "called\ncalled\n" {
+		t.Fatalf("npx log = %q, err %v", raw, err)
 	}
 }
 

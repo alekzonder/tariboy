@@ -170,17 +170,19 @@ agent status refreshes and image-build events reload it without overwriting
 runtime drafts, and responses from an older host, agent, or refresh are ignored.
 Selection becomes active at the next iteration boundary; cancelling pending
 keeps automatic mutable-ref following enabled.
-Runnable import previews expose the target name and tag. Operators can keep the
-artifact ref for an idempotent import or choose a different target when that ref
-already contains another digest; the source archive remains runnable-only.
+Runnable import previews expose the target name and tag. Keeping the artifact
+ref is idempotent for the same digest and advances that tag for a different
+digest; operators can still choose another target. The source archive remains
+runnable-only.
 For an exportable non-reserved built image, **Upload to servers** captures the
 source target and offers all ready non-source hosts, with individual selection
 or **All servers**. A remote source includes **This daemon (local)** exactly
 once; a local source excludes itself. The UI exports one runnable archive into
 the open dialog's browser memory, then previews and applies it against each
-explicit destination target. It continues after destination failures; same-digest results are
-**Already present**, and a conflicting destination can be retagged and retried
-without another export. Closing the dialog drops the archive and progress. This
+explicit destination target. It continues after destination failures;
+same-digest results are **Already present**, while a different digest advances
+the destination tag. A destination can still be retagged and retried without
+another export. Closing the dialog drops the archive and progress. This
 operation never switches the active host or the selected source route, and the
 archive is neither a source backup nor persisted state.
 Eligible and selected targets are snapshotted for the open transfer, so a
@@ -203,10 +205,9 @@ become available when the build request finishes; a slow
 follow-up inventory read does not keep the image labelled as building. An older
 follow-up read cannot replace a newer build's result. Version comparison does
 not detect changed bytes when the source keeps the same `image_version`.
-Store build controls also accept a target name and optional explicit tag,
-allowing a safe retry after an immutable-ref conflict. An explicit tag publishes
-only that tag; a missing `latest` does not imply that the source version tag is
-available for replacement.
+Store build controls also accept a target name and optional explicit tag. Every
+non-reserved tag can be replaced, including a source version and `latest`. An
+explicit tag publishes only that tag.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources

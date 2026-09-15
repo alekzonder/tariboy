@@ -119,13 +119,9 @@ func imageBuild() registry.Command {
 			if err := image.WithPublicationGate(func() error {
 				store := imageStore(c)
 				provenanceStore := imageprovenance.Store{DB: c.Store.DB}
-				if err := store.RecoverMutablePublications(provenanceStore.IsCommitted); err != nil {
-					return api.UserError{Code: "build_failed", Msg: err.Error()}
-				}
-				_, err := validateImageBuildTargets(c, store, snapshotStore, refs)
-				return err
+				return store.RecoverMutablePublications(provenanceStore.IsCommitted)
 			}); err != nil {
-				return nil, err
+				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
 			}
 			if restoreLocks != nil {
 				if err := restoreLocks(); err != nil {
@@ -155,12 +151,6 @@ func imageBuild() registry.Command {
 			if defaultTags {
 				refs, _, err = imageBuildRefs(name, requestedTags, parsed)
 				if err != nil {
-					return nil, err
-				}
-				if err := image.WithPublicationGate(func() error {
-					_, err := validateImageBuildTargets(c, imageStore(c), snapshotStore, refs)
-					return err
-				}); err != nil {
 					return nil, err
 				}
 			}
@@ -221,10 +211,6 @@ func imageBuild() registry.Command {
 				if err := store.RecoverMutablePublications(provenanceStore.IsCommitted); err != nil {
 					return api.UserError{Code: "build_failed", Msg: err.Error()}
 				}
-				legacy, err := validateImageBuildTargets(c, store, snapshotStore, refs)
-				if err != nil {
-					return err
-				}
 				candidates := make([]image.PublicationCandidate, 0, len(staged))
 				for _, candidate := range staged {
 					candidates = append(candidates, image.PublicationCandidate{Ref: candidate.ref, Digest: candidate.manifest.Digest})
@@ -240,11 +226,6 @@ func imageBuild() registry.Command {
 					return api.UserError{Code: code, Msg: cause.Error()}
 				}
 				for _, candidate := range staged {
-					if legacy[candidate.ref.String()] {
-						if err := store.MarkMutable(candidate.ref); err != nil {
-							return rollback("build_failed", err)
-						}
-					}
 					published, err := store.InstallMutableArchive(candidate.ref, candidate.archive)
 					if err != nil {
 						return rollback("build_failed", err)
@@ -326,32 +307,6 @@ func imageBuildRefs(name string, tags []string, parsed *imagefile.Parsed) ([]ima
 	return refs, defaultTags, nil
 }
 
-func validateImageBuildTargets(c *registry.Ctx, store *image.Store, snapshotStore *imagesnapshot.Store, refs []image.Ref) (map[string]bool, error) {
-	legacy := make(map[string]bool, len(refs))
-	provenanceStore := imageprovenance.Store{DB: c.Store.DB}
-	for _, ref := range refs {
-		if store.Exists(ref) && !store.IsMutable(ref) {
-			current, err := store.Inspect(ref)
-			if err != nil {
-				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-			}
-			record, found, err := provenanceStore.Get(ref.String())
-			if err != nil {
-				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-			}
-			snapshot, snapFound, err := snapshotStore.Lookup(context.Background(), ref.String())
-			if err != nil {
-				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-			}
-			if !found || !snapFound || record.Digest != current.Digest || snapshot.ImageDigest != current.Digest {
-				return nil, api.UserError{Code: "immutable_ref", Msg: "image " + ref.String() + " is immutable", Status: http.StatusConflict}
-			}
-			legacy[ref.String()] = true
-		}
-	}
-	return legacy, nil
-}
-
 func canonicalSourceDir(input string) (string, error) {
 	abs, err := filepath.Abs(input)
 	if err != nil {
@@ -394,8 +349,6 @@ func imageValidate() registry.Command {
 				diagnostic = refErr.Error()
 			case image.IsReserved(ref):
 				diagnostic = "image " + ref.String() + " is managed by tariboyd"
-			case imageStore(c).Exists(ref):
-				diagnostic = "immutable image " + ref.String() + " already exists; choose another tag"
 			}
 			if diagnostic != "" {
 				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "name/tag", "message": diagnostic}}, "warnings": []any{}}, nil
@@ -530,6 +483,13 @@ func imageProvenance() registry.Command {
 			if !ok {
 				return map[string]any{"ref": ref.String(), "source_cwd": nil, "source_available": false}, nil
 			}
+			current, err := imageStore(c).Inspect(ref)
+			if err != nil {
+				return nil, err
+			}
+			if record.Digest != current.Digest {
+				return map[string]any{"ref": ref.String(), "source_cwd": nil, "source_available": false}, nil
+			}
 			result := map[string]any{
 				"ref": record.Ref, "digest": record.Digest, "source_cwd": record.SourceCWD,
 				"built_at": record.BuiltAt, "source_available": record.SourceAvailable,
@@ -614,7 +574,7 @@ func imageLs() registry.Command {
 					item["source"] = source
 				}
 				if c.Store != nil {
-					if provenance, ok, lookupErr := (imageprovenance.Store{DB: c.Store.DB}).Get(ref); lookupErr == nil && ok {
+					if provenance, ok, lookupErr := (imageprovenance.Store{DB: c.Store.DB}).Get(ref); lookupErr == nil && ok && provenance.Digest == m.Digest {
 						item["source_cwd"] = provenance.SourceCWD
 						item["source_available"] = provenance.SourceAvailable
 					}
