@@ -135,12 +135,13 @@ git push origin v0.61.0
 
 `.github/workflows/desktop-release.yml` validates the tag against
 `internal/version/version.go` and `scripts/release-version.txt`, runs `make
-desktop-mac` on `macos-15`, and creates the matching GitHub Release as a draft
-with generated notes. It uploads the versioned DMG, generated updater archive
-and signature, `SHA256SUMS`, `release.json`, and `latest.json` using the
-workflow's job-scoped `contents: write` token, then makes the draft public. A
-failed build, validation, or upload therefore never becomes the latest public
-release. The signing Secrets are available only to the build step.
+check` before `make desktop-mac` on `macos-15`, and creates the matching GitHub
+Release as a draft with generated notes. It uploads the versioned DMG,
+generated updater archive and signature, `SHA256SUMS`, `release.json`, and
+`latest.json` using the workflow's job-scoped `contents: write` token, then
+makes the draft public. A failed check, build, validation, or upload therefore
+never becomes the latest public release. The signing Secrets are available
+only to the build step.
 
 After publication, a reviewer downloads all six files into a new directory,
 verifies `SHA256SUMS`, confirms that `latest.json` names the versioned archive

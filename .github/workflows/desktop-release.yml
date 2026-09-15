@@ -47,6 +47,9 @@ jobs:
       - name: Install release verification tools
         run: brew install tmux ripgrep
 
+      - name: Run repository checks
+        run: make check
+
       - name: Build and verify signed release
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
