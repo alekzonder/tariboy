@@ -30,10 +30,12 @@ immutable message and does not recreate deliveries or fire the publish hook a
 second time. Native Tasks uses this for its transactional notification outbox.
 
 At iteration prepare time the runner drains pending deliveries — oldest first, up
-to `messages_batch` (default 10) — into the prompt. Delivered messages are acked
-only when the iteration finishes normally (`done` / `no_i_am_done`); harness
-errors, timeouts, and kills leave messages for redelivery until they hit the DLQ
-(max 5 attempts).
+to `messages_batch` (default 10) — into the prompt. Draining does not acknowledge
+them: the agent must explicitly mark each message processed by its id, and a
+reply auto-processes the message it answers. Anything left unprocessed stays
+pending and is rendered again next iteration, until it reaches the DLQ (max 5
+attempts). Publishing and processing are distinct durable operations, so a
+harness error, timeout, or kill can never silently acknowledge work.
 
 `messages_max_queue` defaults to 100 for new agents. Reaching it keeps the
 existing overflow behavior: later deliveries for that agent are stored in DLQ
@@ -50,7 +52,9 @@ yet consumed by workflow ingress are retained.
 
 ## Channel names
 
-Channel name prefixes: `agent`, `group`, `user`, `chat`. Well-known shapes:
+Channel name prefixes: `agent`, `group`, `user`, `chat`, `plugin`, `system`.
+Provider-declared channels carry their own plugin-owned prefixes and are
+accepted through the provider registry rather than this list. Well-known shapes:
 
 - `agent:<a>:inbox` — direct inbox for one agent,
 - `agent:<a>:stream` — stream channel for one agent,
@@ -65,6 +69,43 @@ Native Tasks publishes `task.assigned`, `task.question`, `task.answered`,
 recipients use `user:<login>`. Mentions and unresolved-answer state remain in
 the task itself; the channel message is the delivery mechanism, not the source
 of truth.
+
+The customer login is a fixed value rather than the account `tariboyd` happens
+to run as, so `user:customer` names the same person on every server. It defaults
+to `customer` and is overridable through the `customer_login` key in
+`daemon_config`. The first start after upgrading adopts the value in one
+transaction, carrying existing tasks, comments, waits, notification state and
+the old `user:<$USER>` channel — messages and subscriptions included — over to
+the new principal instead of orphaning them.
+
+## Chats are a projection, not a fifth table
+
+A chat with one agent is the two inboxes that already exist, merged by time:
+
+- messages in `agent:<a>:inbox` whose sender is the customer;
+- messages in `user:<customer>` whose sender is that agent.
+
+The sender is `data.from` when a producer wrote one, else a principal-shaped
+`source`, else `produced_by_agent`, else `system`. Task notifications carry the
+principal that caused them in `data.from` and keep `source` as `system:tasks`,
+because moving the author into `source` would exclude an agent from a
+notification it addressed to itself. An operator publish is attributed to the
+customer principal, and carries `reply_to: user:<customer>` when it is sent from
+a chat, which is what makes an agent's reply land in the conversation rather
+than back in its own inbox.
+
+`GET /api/chats` ranks every conversation by its last message and counts what
+the customer has not read; `GET /api/chats/{agent}` returns one merged feed;
+`POST /api/chats/{agent}/read` moves that agent's read mark forward. Read marks
+live in one `chat_read_v1` value in `daemon_config`, keyed per agent. Both read
+endpoints take a `types` filter of globs and default to conversation types only,
+so an agent's own `task.goal`, `script.result` and schedule wakes neither appear
+in a chat nor move that agent up the list.
+
+`GET /api/messages/ws` streams one hint per publication for every agent on the
+host. A frame carries `{agent, id, channel, type, from, ts}` and is only a
+refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
+because a client refetches on connect and on every reconnect.
 
 The bundled Telegram process remains outside the daemon. It authorizes and
 maps forum updates, then publishes ordinary text through the authenticated
