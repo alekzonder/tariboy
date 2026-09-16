@@ -9,6 +9,7 @@ import { targetFor } from "@/lib/terminalsHost";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import TaskDrawer from "@/pages/tasks/TaskDrawer";
 import { fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import {
@@ -17,9 +18,29 @@ import {
 
 const ALL_TYPES = [...DEFAULT_CHAT_TYPES, ...EXTRA_CHAT_TYPES];
 
+/** A task key as the daemon writes it: queue prefix, dash, number. */
+const TASK_KEY = /\b[A-Z][A-Z0-9]*-\d+\b/g;
+
+function stringField(record: Record<string, unknown> | undefined, field: string): string {
+  const value = record?.[field];
+  return typeof value === "string" ? value : "";
+}
+
+/** Every task the message is about: the key the daemon attached to it first,
+ *  then any key written in its text, each listed once. */
+function taskKeysOf(message: ChatMessage): string[] {
+  const attached = stringField(message.data, "task_key") || stringField(message.subject, "task_key");
+  return [...new Set([attached, ...(message.text.match(TASK_KEY) ?? [])].filter(Boolean))];
+}
+
 /** One message, sided by who sent it: the customer on the right, the agent on
  *  the left, the same way a chat reads. */
-function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
+function Bubble({ message, mine, onOpenTask }: {
+  message: ChatMessage;
+  mine: boolean;
+  onOpenTask: (key: string) => void;
+}) {
+  const keys = taskKeysOf(message);
   return (
     <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
       <div className={cn(
@@ -32,6 +53,20 @@ function Bubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
           <Badge variant="secondary">{message.type || "note"}</Badge>
         </div>
         <div className="mt-1 text-sm break-words whitespace-pre-wrap">{message.text}</div>
+        {keys.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {keys.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onOpenTask(key)}
+                className="rounded-full border px-2 py-0.5 font-mono text-xs hover:bg-primary/10"
+              >
+                {key}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -53,6 +88,8 @@ export default function AgentChat({ hostId = "" }: { hostId?: string }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
+  // The task a message points at, opened over the chat rather than on Tasks.
+  const [taskKey, setTaskKey] = useState("");
   const bottom = useRef<HTMLDivElement | null>(null);
   const typesKey = types.join(",");
 
@@ -147,7 +184,12 @@ export default function AgentChat({ hostId = "" }: { hostId?: string }) {
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto rounded-md border p-3">
         {messages.length === 0 && <p className="text-sm text-muted-foreground">No messages in this chat yet.</p>}
         {messages.map((message) => (
-          <Bubble key={message.id} message={message} mine={message.from === customer} />
+          <Bubble
+            key={message.id}
+            message={message}
+            mine={message.from === customer}
+            onOpenTask={setTaskKey}
+          />
         ))}
         <div ref={bottom} />
       </div>
@@ -164,6 +206,14 @@ export default function AgentChat({ hostId = "" }: { hostId?: string }) {
         />
         <Button onClick={() => void send()} disabled={sending || !draft.trim()}>Send</Button>
       </div>
+      {taskKey && (
+        <TaskDrawer
+          key={taskKey}
+          taskKey={taskKey}
+          target={target}
+          onClose={() => setTaskKey("")}
+        />
+      )}
     </div>
   );
 }

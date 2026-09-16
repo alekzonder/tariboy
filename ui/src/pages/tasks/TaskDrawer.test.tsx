@@ -1,0 +1,105 @@
+import { render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { beforeEach, expect, it, vi } from "vitest"
+import { ApiError } from "@/lib/api"
+import type { Task, TaskDetail as Detail } from "@/lib/tasks"
+import TaskDrawer from "./TaskDrawer"
+
+const api = vi.hoisted(() => ({
+  addTaskComment: vi.fn(),
+  getTask: vi.fn(),
+  getTaskWorkflow: vi.fn(),
+  listTaskEvents: vi.fn(),
+  listTaskPrincipals: vi.fn(),
+  updateTask: vi.fn(),
+}))
+const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
+const taskSocket = vi.hoisted(() => ({ options: undefined as { onHint?: (hint: { sequence: number }) => void } | undefined }))
+
+vi.mock("@/lib/tasks", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/tasks")>(),
+  ...api,
+}))
+vi.mock("@/hooks/useTasksSocket", () => ({
+  useTasksSocket: vi.fn((options) => {
+    taskSocket.options = options
+    return "open"
+  }),
+}))
+vi.mock("sonner", () => ({ toast }))
+
+const task: Task = {
+  key: "TEST-1",
+  queue: "TEST",
+  parent_key: "",
+  position: 0,
+  priority: "P1",
+  title: "Ship the drawer",
+  description: "Open a task from chat",
+  status: "open",
+  pull_request: "",
+  author: "user:owner",
+  customer: "user:owner",
+  group: "",
+  assignee: "agent:worker",
+  manual_block_reason: "",
+  blocked: false,
+  revision: 2,
+  created_at: "2026-07-31T10:00:00Z",
+  updated_at: "2026-07-31T10:00:00Z",
+  completed_at: "",
+}
+const detail: Detail = { task, comments: [], waiting_for: [], relations: [] }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  taskSocket.options = undefined
+  api.getTask.mockResolvedValue(detail)
+  api.getTaskWorkflow.mockRejectedValue(new ApiError(404, "workflow_not_found", "workflow not found"))
+  api.listTaskEvents.mockResolvedValue({ events: [], count: 0 })
+  api.listTaskPrincipals.mockResolvedValue({ customer: "user:owner", agents: ["worker"], groups: [] })
+  api.updateTask.mockResolvedValue({ ...task, status: "in_progress", revision: 3 })
+  api.addTaskComment.mockResolvedValue({ comment: null, created_waits: [], resolved_waits: [] })
+})
+
+it("loads the task it was given and closes without touching the tasks list", async () => {
+  const onClose = vi.fn()
+  render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />)
+  expect(await screen.findByText("Ship the drawer")).toBeInTheDocument()
+  expect(api.getTask).toHaveBeenCalledWith("TEST-1", undefined)
+  await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
+  expect(onClose).toHaveBeenCalled()
+})
+
+it("saves task edits from the drawer itself", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  await userEvent.selectOptions(screen.getByLabelText("Status"), "in_progress")
+  await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+  await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith(
+    "TEST-1",
+    expect.objectContaining({ revision: 2, status: "in_progress" }),
+    undefined,
+  ))
+})
+
+it("posts a comment and reloads the task", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  const comments = screen.getByText("Comments").closest("section")!
+  await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
+  await userEvent.type(screen.getByLabelText("Comment"), "on it")
+  await userEvent.click(screen.getByRole("button", { name: "Send comment" }))
+  await waitFor(() => expect(api.addTaskComment).toHaveBeenCalledWith(
+    "TEST-1", expect.stringContaining("on it"), undefined, expect.any(String),
+  ))
+  await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
+})
+
+it("reloads the task when the tasks socket hints a change", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  expect(api.getTask).toHaveBeenCalledTimes(1)
+  taskSocket.options?.onHint?.({ sequence: 7 })
+  await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
+})

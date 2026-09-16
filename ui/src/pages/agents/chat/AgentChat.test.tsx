@@ -21,8 +21,24 @@ const feed = [
   {
     id: "m2", channel: "user:customer", ts: "2026-09-15T10:05:00.000000000Z",
     from: "agent:worker", source: "system:tasks", type: "task.question", text: "which option?",
+    data: { task_key: "TEST-7" }, subject: { task_key: "TEST-7" },
+  },
+  {
+    id: "m3", channel: "user:customer", ts: "2026-09-15T10:06:00.000000000Z",
+    from: "agent:worker", source: "agent:worker", type: "message", text: "done with TEST-8 now",
   },
 ];
+
+const taskDetail = {
+  task: {
+    key: "TEST-7", queue: "TEST", parent_key: "", position: 0, priority: "P1",
+    title: "Answer the question", description: "", status: "open", pull_request: "",
+    author: "user:customer", customer: "user:customer", group: "", assignee: "agent:worker",
+    manual_block_reason: "", blocked: false, revision: 1,
+    created_at: "2026-09-15T10:00:00Z", updated_at: "2026-09-15T10:00:00Z", completed_at: "",
+  },
+  comments: [], waiting_for: [], relations: [],
+};
 
 function stubChat() {
   const calls: Call[] = [];
@@ -34,9 +50,16 @@ function stubChat() {
       path, method: init?.method ?? "GET",
       body: init?.body ? JSON.parse(init.body as string) : undefined,
     });
-    const result = path.startsWith("/api/chats/worker?") || path === "/api/chats/worker"
-      ? { customer: "user:customer", agent: "worker", messages: feed, count: feed.length }
-      : { ok: true };
+    let result: unknown = { ok: true };
+    if (path.startsWith("/api/chats/worker?") || path === "/api/chats/worker") {
+      result = { customer: "user:customer", agent: "worker", messages: feed, count: feed.length };
+    } else if (path.startsWith("/api/tasks/TEST-7/events")) {
+      result = { events: [], count: 0 };
+    } else if (path.startsWith("/api/tasks/TEST-7")) {
+      result = taskDetail;
+    } else if (path === "/api/task-principals") {
+      result = { customer: "user:customer", agents: ["worker"], groups: [] };
+    }
     return Promise.resolve({
       ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result }),
     } as Response);
@@ -62,7 +85,7 @@ it("renders both halves of the conversation and marks it read at the newest show
   expect(feedCall?.path).toContain(encodeURIComponent(DEFAULT_CHAT_TYPES.join(",")));
   await waitFor(() => {
     const read = calls.find((call) => call.path === "/api/chats/worker/read");
-    expect(read?.body).toEqual({ ts: "2026-09-15T10:05:00.000000000Z" });
+    expect(read?.body).toEqual({ ts: "2026-09-15T10:06:00.000000000Z" });
   });
 });
 
@@ -90,4 +113,18 @@ it("keeps a chosen message-type filter and refetches with it", async () => {
     expect(calls.some((call) => call.path.includes(encodeURIComponent("task.goal")))).toBe(true);
   });
   expect(JSON.parse(localStorage.getItem("terminals:chat-types:v1") ?? "[]")).toContain("task.goal");
+});
+
+it("opens a task from its message without leaving the chat", async () => {
+  const calls = stubChat();
+  renderChat();
+  await screen.findByText("which option?");
+  // The key rides in the message data, and a key written in plain text is a link too.
+  expect(screen.getByRole("button", { name: "TEST-8" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "TEST-7" }));
+  expect(await screen.findByText("Answer the question")).toBeInTheDocument();
+  expect(calls.some((call) => call.path.startsWith("/api/tasks/TEST-7"))).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(screen.getByText("which option?")).toBeInTheDocument();
 });
