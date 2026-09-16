@@ -5,9 +5,25 @@ set -eu
 : "${TARIBOY_BASE_DIR:?TARIBOY_BASE_DIR is required}"
 : "${TARIBOY_RUNTIME_DIR:?TARIBOY_RUNTIME_DIR is required}"
 
-canonical_path() {
-  realpath -m -- "$1"
-}
+canonical_path() (
+  path=$1
+  while [ "$path" != / ] && [ "${path%/}" != "$path" ]; do
+    path=${path%/}
+  done
+  if [ -L "$path" ] && [ ! -e "$path" ]; then
+    echo "refusing dangling Tariboy state directory symlink" >&2
+    exit 64
+  fi
+  if [ -d "$path" ]; then
+    CDPATH= cd -P "$path"
+    pwd
+    exit
+  fi
+  directory=$(dirname "$path")
+  name=$(basename "$path")
+  CDPATH= cd -P "$directory"
+  printf '%s/%s\n' "$PWD" "$name"
+)
 
 live_base=$(canonical_path "$HOME/.tariboy")
 live_runtime=$(canonical_path "$HOME/.tariboyd")

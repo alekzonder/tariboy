@@ -403,7 +403,7 @@ func TestAwaitKillsAfterDoneGraceForAllModes(t *testing.T) {
 
 func TestPrepareUsesAgentNameAsTmuxSession(t *testing.T) {
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s, err := store.Open(filepath.Join(base, "x.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -597,7 +597,7 @@ func newRunnerForProxyTest(t *testing.T, binder ProxyBinder) (*ShimRunner, agent
 	base := t.TempDir()
 	// The stub harness only needs a path here; the fake spawner writes result.json
 	// directly, so the script is never executed.
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s, err := store.Open(filepath.Join(base, "x.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -941,7 +941,7 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
 	r, ag, _, as := newRunnerForProxyTest(t, binder)
 	spawner := r.cfg.Spawner.(*fakeProxySpawner)
-	wantHarnessArgv := []string{"/bin/true", filepath.Join(r.cfg.AgentsDir, "alice", "iterations", "alice-1", "PROMPT.md")}
+	wantHarnessArgv := []string{"/usr/bin/true", filepath.Join(r.cfg.AgentsDir, "alice", "iterations", "alice-1", "PROMPT.md")}
 	ag.TimeoutS, ag.HardTimeoutS = 30, 90
 	t0 := time.Date(2026, 7, 14, 10, 0, 0, 0, time.UTC)
 	t1 := t0.Add(7 * time.Second)
@@ -994,7 +994,7 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 // so the harness sees it. Modeled on TestPrepareUsesAgentNameAsTmuxSession.
 func TestRunnerSchemaV1StillMaterializesPackedSkillsUnderCWD(t *testing.T) {
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s, err := store.Open(filepath.Join(base, "x.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -1247,7 +1247,7 @@ func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T)
 	if err := os.WriteFile(filepath.Join(promptDir, "template.json"), templateBody, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	r := NewShimRunner(RunnerConfig{
 		AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim",
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -1313,7 +1313,7 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(promptDir, "template.json"), templateBody, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	r := NewShimRunner(RunnerConfig{
 		AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim", Clock: func() time.Time { return now },
@@ -1445,7 +1445,7 @@ func TestSessionBlockedOnlyInteractive(t *testing.T) {
 func newPromptProbe(t *testing.T) (*ShimRunner, agent.Agent, agentdir.Layout, *bus.Bus, string) {
 	t.Helper()
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s, err := store.Open(filepath.Join(base, "x.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -1858,7 +1858,7 @@ func environmentValue(env []string, key string) string {
 
 func TestPrepareBareImage(t *testing.T) {
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s, err := store.Open(filepath.Join(base, "x.db"))
 	if err != nil {
 		t.Fatal(err)

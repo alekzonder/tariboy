@@ -208,6 +208,10 @@ func (s Store) Freeze(sourceDir string, skills ...imagefile.SkillEntry) (FrozenS
 	if err := os.Rename(stage, target); err != nil && !errors.Is(err, fs.ErrExist) {
 		return FrozenSource{}, err
 	}
+	target, err = filepath.EvalSymlinks(target)
+	if err != nil {
+		return FrozenSource{}, err
+	}
 	for source, rel := range sourceSkills {
 		sourceSkills[source] = filepath.Join(target, rel)
 	}

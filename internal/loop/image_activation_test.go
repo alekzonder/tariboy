@@ -1333,7 +1333,7 @@ func TestImageBridgeRestartReusesPublishedBridge(t *testing.T) {
 }
 
 func TestStubImageSkillsNeedNoBridge(t *testing.T) {
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	called := false
 	m := &Manager{cfg: ManagerConfig{PrepareImageBridge: func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
 		called = true

@@ -660,6 +660,10 @@ func tmuxCommandError(action string, err error, output []byte) error {
 	return fmt.Errorf("tmux %s: %w", action, err)
 }
 
+func isNonTerminalStdinError(err error) bool {
+	return errors.Is(err, unix.ENOTTY) || errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.ENODEV)
+}
+
 // RunTmuxSupervisor owns one harness process until it is reaped. Keeping the
 // process-group leader unreaped makes its group identity stable until this
 // owner either observes normal exit or terminates the group itself.
@@ -682,7 +686,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 		// needed before it writes status and exits.
 		cmd.SysProcAttr.Foreground = true
 		cmd.SysProcAttr.Ctty = stdinFD
-	} else if !errors.Is(err, unix.ENOTTY) && !errors.Is(err, unix.ENOTSUP) {
+	} else if !isNonTerminalStdinError(err) {
 		return fmt.Errorf("inspect harness terminal: %w", err)
 	}
 	if err := cmd.Start(); err != nil {

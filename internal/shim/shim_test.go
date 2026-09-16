@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/harness"
+	"golang.org/x/sys/unix"
 )
 
 const shimTestProxyToken = "sk-tariboy-0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -725,6 +726,15 @@ func TestShellJoinQuotesArgs(t *testing.T) {
 	want := `'claude' '--name' 'a b' 'it'"'"'s ok' ''`
 	if got != want {
 		t.Fatalf("shellJoin = %q, want %q", got, want)
+	}
+}
+
+func TestNonTerminalStdinErrorIncludesDarwinENODEV(t *testing.T) {
+	if !isNonTerminalStdinError(unix.ENODEV) {
+		t.Fatal("Darwin ENODEV was treated as a terminal inspection failure")
+	}
+	if isNonTerminalStdinError(unix.EPERM) {
+		t.Fatal("unexpected terminal inspection error was ignored")
 	}
 }
 

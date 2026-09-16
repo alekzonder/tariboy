@@ -430,14 +430,33 @@ printf 'arg=<%s>\n' "$@"
 	if err := os.WriteFile(fakeDaemon, []byte(fakeSource), 0o700); err != nil {
 		t.Fatalf("write fake daemon: %v", err)
 	}
+	bsdBin := filepath.Join(temp, "bsd-bin")
+	if err := os.Mkdir(bsdBin, 0o700); err != nil {
+		t.Fatalf("create BSD tool shim directory: %v", err)
+	}
+	realpathShim := `#!/bin/sh
+if [ "${1-}" = -m ]; then
+  echo "realpath: illegal option -- m" >&2
+  exit 64
+fi
+test "${1-}" != -- || shift
+CDPATH= cd -P "$1" && pwd
+`
+	if err := os.WriteFile(filepath.Join(bsdBin, "realpath"), []byte(realpathShim), 0o700); err != nil {
+		t.Fatalf("write BSD realpath shim: %v", err)
+	}
 
-	base := filepath.Join(temp, "base")
+	base := filepath.Join(root, ".desktop-e2e-daemon-missing-"+filepath.Base(temp))
+	if _, err := os.Stat(base); !os.IsNotExist(err) {
+		t.Fatalf("test base final component exists or cannot be checked: %v", err)
+	}
 	runtime := filepath.Join(temp, "runtime")
 	cmd := exec.Command(wrapper, "--http-addr", "127.0.0.1:32123", "daemon", "status")
 	cmd.Env = append(os.Environ(),
 		"TARIBOY_REAL_DAEMON_BIN="+fakeDaemon,
 		"TARIBOY_BASE_DIR="+base,
 		"TARIBOY_RUNTIME_DIR="+runtime,
+		"PATH="+bsdBin+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -479,18 +498,58 @@ printf 'arg=<%s>\n' "$@"
 		}
 	}
 
+	existingHome := filepath.Join(temp, "existing-home")
+	existingLiveBase := filepath.Join(existingHome, ".tariboy")
+	if err := os.MkdirAll(existingLiveBase, 0o700); err != nil {
+		t.Fatalf("create isolated existing live state: %v", err)
+	}
 	liveBase := filepath.Join(temp, "live-base")
-	if err := os.Symlink(filepath.Join(os.Getenv("HOME"), ".tariboy"), liveBase); err != nil {
+	if err := os.Symlink(existingLiveBase, liveBase); err != nil {
 		t.Fatalf("create live-state symlink: %v", err)
 	}
 	stateAttempt := exec.Command(wrapper)
 	stateAttempt.Env = append(os.Environ(),
+		"HOME="+existingHome,
 		"TARIBOY_REAL_DAEMON_BIN="+fakeDaemon,
 		"TARIBOY_BASE_DIR="+liveBase+string(os.PathSeparator),
 		"TARIBOY_RUNTIME_DIR="+runtime,
 	)
 	if output, err := stateAttempt.CombinedOutput(); err == nil || !strings.Contains(string(output), "refusing live Tariboy state directory") {
 		t.Fatalf("wrapper accepted symlinked live state (err=%v):\n%s", err, output)
+	}
+
+	absentHome := filepath.Join(temp, "absent-home")
+	if err := os.Mkdir(absentHome, 0o700); err != nil {
+		t.Fatalf("create isolated fake home: %v", err)
+	}
+	danglingLiveBase := filepath.Join(temp, "dangling-live-base")
+	if err := os.Symlink(filepath.Join(absentHome, ".tariboy"), danglingLiveBase); err != nil {
+		t.Fatalf("create dangling live-state symlink: %v", err)
+	}
+	for _, testCase := range []struct {
+		name string
+		base string
+	}{
+		{name: "plain", base: danglingLiveBase},
+		{name: "trailing slash", base: danglingLiveBase + string(os.PathSeparator)},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			danglingAttempt := exec.Command(wrapper)
+			danglingAttempt.Env = append(os.Environ(),
+				"HOME="+absentHome,
+				"TARIBOY_REAL_DAEMON_BIN="+fakeDaemon,
+				"TARIBOY_BASE_DIR="+testCase.base,
+				"TARIBOY_RUNTIME_DIR="+runtime,
+				"PATH="+bsdBin+string(os.PathListSeparator)+os.Getenv("PATH"),
+			)
+			output, err := danglingAttempt.CombinedOutput()
+			exitErr, ok := err.(*exec.ExitError)
+			if !ok || exitErr.ExitCode() != 64 ||
+				!strings.Contains(string(output), "refusing dangling Tariboy state directory symlink") ||
+				strings.Contains(string(output), "base=") {
+				t.Fatalf("wrapper accepted dangling symlink to absent live state (err=%v):\n%s", err, output)
+			}
+		})
 	}
 }
 

@@ -613,7 +613,7 @@ func TestStartFailsLoudlyWhenToolsSocketUnbindable(t *testing.T) {
 
 func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string, *store.Store) {
 	t.Helper()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	base := t.TempDir()
 	s, err := store.Open(filepath.Join(base, "x.db"))
 	if err != nil {

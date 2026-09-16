@@ -310,7 +310,7 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 	}))
 	defer upstream.Close()
 	t.Setenv("TARIBOY_UPSTREAM_ANTHROPIC_BASE_URL", upstream.URL)
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 
 	base := t.TempDir()
 	buildBasicImage(t, filepath.Join(base, "images"))
@@ -477,7 +477,7 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 // the runner produced points at the AI proxy the daemon started — and that the
 // URL in that env is a live proxy (a tokenless request gets a 401 from it).
 func TestProxyWiredIntoIteration(t *testing.T) {
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	base := t.TempDir()
 	buildBasicImage(t, filepath.Join(base, "images"))
 
@@ -880,7 +880,7 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 }
 
 func TestProviderKeysFromAgentEnvAndSecretsReachHarness(t *testing.T) {
-	t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	for _, tc := range []struct {
 		name string
 		body map[string]any

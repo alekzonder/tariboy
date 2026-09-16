@@ -192,6 +192,40 @@ func TestFreezePinsSiblingSkillForBuild(t *testing.T) {
 	}
 }
 
+func TestFreezeCanonicalizesSourceSkillPathsUnderSymlinkedRoot(t *testing.T) {
+	base := t.TempDir()
+	actualRoot := filepath.Join(base, "snapshots")
+	if err := os.Mkdir(actualRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	selectedRoot := filepath.Join(base, "selected-snapshots")
+	if err := os.Symlink(actualRoot, selectedRoot); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(base, "source")
+	skill := filepath.Join(source, "skills", "review")
+	if err := os.MkdirAll(skill, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte("review\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	frozen, err := (Store{Root: selectedRoot}).Freeze(source, imagefile.SkillEntry{Dir: "./skills/review"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := frozen.SourceSkills["./skills/review"]
+	canonicalRoot, err := filepath.EvalSymlinks(actualRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(canonicalRoot, frozen.RelativeDir, "skills", "review")
+	if got != want {
+		t.Fatalf("frozen source skill path = %q, want canonical path %q", got, want)
+	}
+}
+
 func TestFreezePreservesOwnerExecutableMode(t *testing.T) {
 	root := t.TempDir()
 	source := t.TempDir()

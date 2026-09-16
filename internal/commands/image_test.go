@@ -1253,7 +1253,7 @@ func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
 			runtime := t.TempDir()
 			t.Setenv("TARIBOY_BASE_DIR", c.BaseDir)
 			t.Setenv("TARIBOY_RUNTIME_DIR", runtime)
-			t.Setenv("TARIBOY_STUB_HARNESS", "/bin/true")
+			t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 			as := agentStore(c)
 			src := t.TempDir()
 			skillDir := filepath.Join(src, "whoami")
