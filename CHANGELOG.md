@@ -1,3 +1,11 @@
+## [0.62.1] - 2026-09-15
+
+### Fixed
+
+- Make repository and release checks portable to macOS by accepting canonical image source roots through system symlinks, enforcing Darwin Unix-socket limits, handling non-terminal shim probes, and supplying test-only installer command fallbacks without weakening production requirements.
+
+[0.62.1]: https://github.com/alekzonder/tariboy/compare/v0.62.0...v0.62.1
+
 ## [0.62.0] - 2026-09-15
 
 ### Added
