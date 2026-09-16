@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
@@ -215,6 +215,32 @@ describe("AgentWorkspace", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
     expect(screen.getByTestId("agent-cwd")).toHaveTextContent("/managed/worker");
     expect(inspections).toBeGreaterThanOrEqual(2);
+  });
+
+  it("orders the workspace tabs with Chat first and Tasks second", async () => {
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Chat",
+      "Tasks",
+      "Console",
+      "Autopilot",
+      "Activity",
+      "Configuration",
+      "Advanced",
+    ]);
   });
 
   it("keeps host and agent identity in every tab link", async () => {

@@ -26,11 +26,11 @@ import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
 import { GoalHelp } from "@/components/GoalHelp";
 
 const TABS = [
+  ["chat", "Chat"],
+  ["tasks", "Tasks"],
   ["console", "Console"],
   ["autopilot", "Autopilot"],
   ["activity", "Activity"],
-  ["tasks", "Tasks"],
-  ["chat", "Chat"],
   ["configuration", "Configuration"],
   ["advanced", "Advanced"],
 ] as const;
