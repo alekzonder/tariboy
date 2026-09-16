@@ -270,6 +270,13 @@ rejected.
 | One complete skill | 32 MiB |
 | All skills in one image | 128 MiB |
 
+An `evals` directory in the skill root is excluded from the packaged skill.
+Skill evals are authoring evidence, not iteration inputs, so they stay in the
+source and never add bytes, file count, or hash input to the image. The rule
+applies only to that root-level directory: a nested path such as
+`references/evals/` is packaged normally, and a symlink or regular file named
+`evals` in the skill root is still rejected by the member rules above.
+
 Files are archived in deterministic path order under `skills/<name>/...`.
 Non-executable files are normalized to mode `0600`; files whose source owner
 execute bit is set are normalized to `0700`. Directories use `0700`.

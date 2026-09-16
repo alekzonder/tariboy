@@ -209,6 +209,11 @@ func walkSkillDirectory(dir *os.File, root, relDir string, beforeOpen func(strin
 		if name == "." || name == ".." || strings.ContainsRune(name, filepath.Separator) {
 			return fmt.Errorf("invalid skill member name %q", name)
 		}
+		// Skill evals are authoring evidence, never read during an iteration,
+		// so a root-level evals directory stays out of the packaged image.
+		if relDir == "" && name == "evals" && entry.IsDir() {
+			continue
+		}
 		rel := name
 		if relDir != "" {
 			rel = filepath.Join(relDir, name)
