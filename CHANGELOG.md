@@ -1,3 +1,11 @@
+## [0.62.3] - 2026-09-16
+
+### Fixed
+
+- Keep macOS publication focused on version validation, signed packaging, and release assets while completing repository checks before the release tag is pushed.
+
+[0.62.3]: https://github.com/alekzonder/tariboy/compare/v0.62.2...v0.62.3
+
 ## [0.62.2] - 2026-09-16
 
 ### Fixed
