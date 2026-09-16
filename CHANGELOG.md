@@ -1,3 +1,21 @@
+## [0.63.0] - 2026-09-16
+
+### Added
+
+- Read an agent inbox as a chat with the customer: a Chat tab beside Tasks with Chat and Channels views, a sidebar that orders unpinned agents by their most recent conversation and carries per-agent unread counts, and `GET /api/chats`, `GET /api/chats/{agent}`, and `POST /api/chats/{agent}/read` served from the existing messages table.
+- Stream one publication hint per message for every agent on the host over `GET /api/messages/ws`, so Desktop refetches on delivery instead of polling while HTTP stays authoritative.
+
+### Changed
+
+- Fix the customer login at `customer`, overridable through the `customer_login` daemon config key, instead of following the account that runs the daemon. The first start after upgrading carries existing tasks, comments, waits, notification state, and the old `user:<$USER>` channel over to the new principal in one transaction.
+- Attribute task notifications to the causing principal in `data.from` while keeping `source` as `system:tasks`, and attribute an operator publish to the customer principal with `reply_to` support, so an agent reply stays in the conversation instead of in its own inbox.
+
+### Fixed
+
+- Correct the channel bus reference and messaging architecture pages, which still described the removed automatic acknowledgement path, together with the channel prefix list, `group request` semantics, the subscription dedup key, and the repeated-message troubleshooting entry.
+
+[0.63.0]: https://github.com/alekzonder/tariboy/compare/v0.62.3...v0.63.0
+
 ## [0.62.3] - 2026-09-16
 
 ### Fixed
