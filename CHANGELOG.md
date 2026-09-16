@@ -1,3 +1,11 @@
+## [0.62.2] - 2026-09-16
+
+### Fixed
+
+- Complete macOS release-check portability with cross-platform harness fixtures, Darwin non-terminal handling, canonical frozen skill paths, and BSD-compatible Desktop test path resolution while preserving live-state protections.
+
+[0.62.2]: https://github.com/alekzonder/tariboy/compare/v0.62.1...v0.62.2
+
 ## [0.62.1] - 2026-09-15
 
 ### Fixed
