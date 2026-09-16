@@ -64,7 +64,7 @@ Clone loads the source inspect projection from that agent's explicit host,
 leaves the unique name blank, and prefills every persisted agent-row
 configuration field, including raw configured CWD and message limits. It does
 not copy secrets, history, runtime evidence, messages, subscriptions, scripts,
-workdir contents, retention/evals, budgets, or proxy policy. The target host
+workdir contents, retention, or budgets. The target host
 and image remain editable, and every follow-up request stays pinned to that
 explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
@@ -79,8 +79,21 @@ remembered in the Desktop WebView by harness and offered on later creates.
 These local suggestions are an operator convenience, not a capability check
 for the selected host; failed creates do not add values.
 
-The Agents sidebar partitions each host into expandable **Teams** and
-**Individual agents** without changing agent navigation or membership.
+The agents sidebar has three tabs. **Agents** lists every host's agents in one
+flat list, ordered the way a chat list is: pinned agents first, then the agents
+with an unread customer question, then the rest in the operator's own order. A
+row's context menu pins and unpins it, and the Desktop WebView remembers the
+pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
+its members gathered across hosts, including a declared group with no members.
+**Servers** keeps the per-host list and is the only tab whose rows are drag
+sources, because it is the only one with a persisted order. The selected tab is
+remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
+**Agents**. Each server heading states its own reachability and carries the
+**Update** action for a host running an older daemon, with **Update all (N)**
+above the list when more than one host is behind.
+
+In the Servers tab the sidebar partitions each host into expandable **Teams**
+and **Individual agents** without changing agent navigation or membership.
 Server headings, team headings, and agent rows are themselves
 pointer- and keyboard-accessible drag surfaces; no separate drag handle is
 rendered. A drop reorders only like siblings, so it never changes team
@@ -157,17 +170,19 @@ agent status refreshes and image-build events reload it without overwriting
 runtime drafts, and responses from an older host, agent, or refresh are ignored.
 Selection becomes active at the next iteration boundary; cancelling pending
 keeps automatic mutable-ref following enabled.
-Runnable import previews expose the target name and tag. Operators can keep the
-artifact ref for an idempotent import or choose a different target when that ref
-already contains another digest; the source archive remains runnable-only.
+Runnable import previews expose the target name and tag. Keeping the artifact
+ref is idempotent for the same digest and advances that tag for a different
+digest; operators can still choose another target. The source archive remains
+runnable-only.
 For an exportable non-reserved built image, **Upload to servers** captures the
 source target and offers all ready non-source hosts, with individual selection
 or **All servers**. A remote source includes **This daemon (local)** exactly
 once; a local source excludes itself. The UI exports one runnable archive into
 the open dialog's browser memory, then previews and applies it against each
-explicit destination target. It continues after destination failures; same-digest results are
-**Already present**, and a conflicting destination can be retagged and retried
-without another export. Closing the dialog drops the archive and progress. This
+explicit destination target. It continues after destination failures;
+same-digest results are **Already present**, while a different digest advances
+the destination tag. A destination can still be retagged and retried without
+another export. Closing the dialog drops the archive and progress. This
 operation never switches the active host or the selected source route, and the
 archive is neither a source backup nor persisted state.
 Eligible and selected targets are snapshotted for the open transfer, so a
@@ -190,10 +205,9 @@ become available when the build request finishes; a slow
 follow-up inventory read does not keep the image labelled as building. An older
 follow-up read cannot replace a newer build's result. Version comparison does
 not detect changed bytes when the source keeps the same `image_version`.
-Store build controls also accept a target name and optional explicit tag,
-allowing a safe retry after an immutable-ref conflict. An explicit tag publishes
-only that tag; a missing `latest` does not imply that the source version tag is
-available for replacement.
+Store build controls also accept a target name and optional explicit tag. Every
+non-reserved tag can be replaced, including a source version and `latest`. An
+explicit tag publishes only that tag.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources

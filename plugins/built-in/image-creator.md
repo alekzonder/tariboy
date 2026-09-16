@@ -1,6 +1,6 @@
 ---
 title: image-creator
-description: Build a runnable Tariboy image from source confined to the authenticated agent's working directory.
+description: Build a runnable Tariboy image from any source directory readable by the daemon.
 sidebar:
   label: image-creator
   icon: package-plus
@@ -26,22 +26,17 @@ response identifies the name, tag, digest, and layer count. The new immutable
 image is stored on the same host and can be assigned to an agent through the
 normal image workflow.
 
-## Workdir confinement
+## Source paths
 
-Agent-driven image authoring is less trusted than the operator CLI. The daemon
-resolves `--path` against the managed `agents/<agent>/workdir`, independently of
-the configured CWD, and rejects:
+The daemon resolves a relative `--path` against the managed
+`agents/<agent>/workdir`, independently of the configured CWD. An absolute path
+may select any directory readable by the daemon process. A relative path may
+also contain `..` or pass through a symlink to select such a directory.
 
-- absolute paths outside that workdir;
-- `..` traversal that escapes it;
-- a symlinked path whose real target escapes it;
-- skill or prompt paths outside it;
-- inner symlinks in skill directories that resolve outside it;
-- absolute prompt paths outside it.
-
-These checks happen before the builder reads or archives outside content. The
-operator `tariboy image build` remains the trusted path for sources that
-intentionally live elsewhere on the host.
+Skill and prompt paths use the ordinary image builder rules, including explicit
+absolute paths and source-relative declared skills. Grant `image-creator` only
+to agents trusted to read and package image sources available to the daemon
+account.
 
 ## Manifest and plugin validation
 
@@ -62,12 +57,12 @@ skills:
   - dir: ../../skills/image-creator
 ```
 
-The packaged image skill teaches the authoring command. It grants no extra filesystem
-access beyond the capability-gated, workdir-confined API.
+The packaged image skill teaches the authoring command. The capability is the
+authorization to build from directories readable by the daemon account.
 
 ## Failure behavior
 
-Invalid refs, missing manifests, path escapes, unknown plugins, duplicate
+Invalid refs, missing or unreadable manifests, unknown plugins, duplicate
 schema-v2 plugins, unresolved prompt files, and normal image validation errors
 fail the build without publishing the requested ref.
 

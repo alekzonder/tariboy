@@ -26,7 +26,7 @@
 - [The channel bus & messaging](https://alekzonder.github.io/tariboy/architecture/messaging): Messages move over a store-backed fan-out bus — four tables, per-agent delivery queues, and durable ack with redelivery.
 - [The shim](https://alekzonder.github.io/tariboy/architecture/shim): tariboy-shim runs a single harness iteration under a watchdog, so a runaway iteration can be killed without touching the daemon.
 - [State model — the DB is the source of truth](https://alekzonder.github.io/tariboy/architecture/state-model): The SQLite DB is the single source of configuration; live state is computed, not stored, which is why test daemons must be isolated.
-- [The AI proxy & the audit log](https://alekzonder.github.io/tariboy/architecture/ai-proxy): Every LLM call routes through the in-process AI proxy, which enforces policy and budgets and writes a per-iteration audit transcript.
+- [The AI proxy & the audit log](https://alekzonder.github.io/tariboy/architecture/ai-proxy): Every LLM call routes through the in-process AI proxy, which enforces budgets and writes a per-iteration audit transcript.
 - [Desktop web UI](https://alekzonder.github.io/tariboy/architecture/web-ui): React and xterm.js provide the Desktop control surface while host-local daemons remain API and WebSocket services.
 
 ## Binaries & commands
@@ -52,7 +52,7 @@
 - [workdir](https://alekzonder.github.io/tariboy/plugins/built-in/workdir): Expose an agent's absolute managed workdir as an explicit schema-v2 prompt instruction.
 - [schedule](https://alekzonder.github.io/tariboy/plugins/built-in/schedule): Create agent-owned one-shot or cron schedules that wake the agent or publish to a channel.
 - [scripts](https://alekzonder.github.io/tariboy/plugins/built-in/scripts): Run asynchronous one-shot or fixed-interval local commands with durable per-run logs.
-- [image-creator](https://alekzonder.github.io/tariboy/plugins/built-in/image-creator): Build a runnable Tariboy image from source confined to the authenticated agent's working directory.
+- [image-creator](https://alekzonder.github.io/tariboy/plugins/built-in/image-creator): Build a runnable Tariboy image from any source directory readable by the daemon.
 - [goal](https://alekzonder.github.io/tariboy/plugins/built-in/goal): Receive or set the selected Native Task and AI usage attribution.
 - [tasks](https://alekzonder.github.io/tariboy/plugins/built-in/tasks): Use Native Tasks and leased workflow assignments through the globally installed ttasks client.
 

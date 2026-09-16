@@ -1,17 +1,15 @@
 ---
 title: The AI proxy & the audit log
-description: Every LLM call routes through the in-process AI proxy, which enforces policy and budgets and writes a per-iteration audit transcript.
+description: Every LLM call routes through the in-process AI proxy, which enforces budgets and writes a per-iteration audit transcript.
 sidebar:
   label: AI proxy & audit
   icon: activity
 ---
 
-Every LLM call an agent (or an `llm-judge` eval, or any plugin) makes is routed
+Every LLM call an agent or plugin makes is routed
 through the daemon's **in-process AI proxy** (`internal/aiproxy`). The proxy:
 
 - **routes** to the configured provider and model;
-- enforces **policy rules** — rate limits and model policies, scoped
-  `global` / `agent:<n>` / `group:<g>` (`tariboy rule …`);
 - enforces **cost budgets** (`tariboy budget …`) and records usage and cost
   into `ai_requests` (`tariboy usage`);
 - writes a **per-iteration audit transcript** (`proxy-transcript.jsonl`) — the

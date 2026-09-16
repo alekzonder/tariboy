@@ -6,8 +6,8 @@
 Source: https://alekzonder.github.io/tariboy
 
 <section className="hero">
-  <p className="eyebrow">The control plane for autonomous coding agents</p>
-  <h1>From one agent<br /> to a team.</h1>
+  <p className="eyebrow">The control plane for autonomous agents</p>
+  <h1>From an image<br /> to an agent.</h1>
   <p className="hero-description">Define reusable images, work with coding agents directly, and let Autopilot carry the work forward. Bring agents together when the job needs a team.</p>
   <div className="actions">
     <div className="primary-action">
@@ -260,11 +260,11 @@ controls](/docs/security-controls) for the full transport and credential rules.
 | Bus | Channels, subscriptions, deliveries, acknowledgement, and redelivery | Direct process-to-process delivery guarantees |
 | Native Tasks service | Queues, task trees, workflow versions, pools, assignments, artifacts, questions, and observations | Agent authentication |
 | Plugin host | Plugin process lifecycle, plugin tokens, and provider-channel watches | Provider credentials in plugin environments |
-| AI proxy and pricing catalog | Provider routing, scoped tokens, policy, budgets, immutable request costs, daily model-price refresh, usage, and transcripts | Durable provider keys or proxy leases in SQLite |
+| AI proxy and pricing catalog | Provider routing, scoped tokens, budgets, immutable request costs, daily model-price refresh, usage, and transcripts | Durable provider keys or proxy leases in SQLite |
 | API and event hub | Command registry, REST responses, and resumable event hints | State changes outside their owning services |
 
 The daemon creates a shared audit recorder for each agent. Loop lifecycle
-entries, bus actions, policy decisions, and shim log tails therefore describe
+entries, bus actions, proxy decisions, and shim log tails therefore describe
 one coherent agent timeline, while a WebSocket event remains only a replayable
 delivery hint.
 
@@ -343,8 +343,8 @@ logged for its agent without preventing unrelated agents from starting.
 
 In steady state it runs the schedule publisher, task-workflow outbox publisher,
 the per-agent goal reconciler, workflow question and observation reconcilers, AI ingestion, the daily pricing
-catalog worker, policy/budget cache refresh, post-iteration evaluations,
-retention pruner, loop engines, and plugin supervisors.
+catalog worker, budget cache refresh, retention pruner, loop engines,
+and plugin supervisors.
 Shutdown stops the proxy first, then cancels and awaits the pricing worker and
 the other workers before loops/plugins and SQLite stop. That ordering prevents
 a catalog publication, final outbox, or usage write from racing a closed
@@ -432,7 +432,7 @@ flowchart LR
 | Plugin failure | The host health-checks and restarts enabled plugins; provider watches can be pulled again. | Inspect plugin status/logs; never place upstream AI credentials in plugin configuration. |
 | Model-price refresh failure | The proxy keeps the last valid runtime generation, or built-in fallbacks when none has loaded. The next daily check retries. | Inspect `pricing_catalog_error` daemon logs/events; fields are bounded to source, generation time, model count, and a stable error class. |
 | Missed workflow wake or daemon crash | Durable outbox and workflow reconcilers replay pending intent; assignment and lease state remain in SQLite. | Inspect task execution/event history, then let lease expiry or an explicit release drive retry. |
-| Policy or budget denial | Proxy rejects/reports before provider access and records usage/audit evidence. | Inspect usage, budgets, rules, and sensitive per-iteration transcript. |
+| Budget denial | Proxy rejects/reports before provider access and records usage/audit evidence. | Inspect usage, budgets, and the sensitive per-iteration transcript. |
 
 Structured daemon logs, per-agent audit JSONL, iteration results, task/workflow
 events, usage records, and optional OpenTelemetry signals make the system
@@ -510,7 +510,7 @@ than launching the binary directly. See
     questions, and observations.
   </Card>
   <Card title="AI proxy & audit log" href="/docs/architecture/ai-proxy" icon="activity">
-    Routing, policy, budgets, and the per-iteration transcript.
+    Routing, budgets, usage, and the per-iteration transcript.
   </Card>
   <Card title="Desktop web UI" href="/docs/architecture/web-ui" icon="monitor">
     Where the Tauri UI lives and how it talks to host-local daemons.
@@ -522,12 +522,10 @@ than launching the binary directly. See
 # The AI proxy & the audit log
 Source: https://alekzonder.github.io/tariboy/architecture/ai-proxy
 
-Every LLM call an agent (or an `llm-judge` eval, or any plugin) makes is routed
+Every LLM call an agent or plugin makes is routed
 through the daemon's **in-process AI proxy** (`internal/aiproxy`). The proxy:
 
 - **routes** to the configured provider and model;
-- enforces **policy rules** — rate limits and model policies, scoped
-  `global` / `agent:<n>` / `group:<g>` (`tariboy rule …`);
 - enforces **cost budgets** (`tariboy budget …`) and records usage and cost
   into `ai_requests` (`tariboy usage`);
 - writes a **per-iteration audit transcript** (`proxy-transcript.jsonl`) — the
@@ -1401,7 +1399,7 @@ Clone loads the source inspect projection from that agent's explicit host,
 leaves the unique name blank, and prefills every persisted agent-row
 configuration field, including raw configured CWD and message limits. It does
 not copy secrets, history, runtime evidence, messages, subscriptions, scripts,
-workdir contents, retention/evals, budgets, or proxy policy. The target host
+workdir contents, retention, or budgets. The target host
 and image remain editable, and every follow-up request stays pinned to that
 explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
@@ -1416,8 +1414,21 @@ remembered in the Desktop WebView by harness and offered on later creates.
 These local suggestions are an operator convenience, not a capability check
 for the selected host; failed creates do not add values.
 
-The Agents sidebar partitions each host into expandable **Teams** and
-**Individual agents** without changing agent navigation or membership.
+The agents sidebar has three tabs. **Agents** lists every host's agents in one
+flat list, ordered the way a chat list is: pinned agents first, then the agents
+with an unread customer question, then the rest in the operator's own order. A
+row's context menu pins and unpins it, and the Desktop WebView remembers the
+pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
+its members gathered across hosts, including a declared group with no members.
+**Servers** keeps the per-host list and is the only tab whose rows are drag
+sources, because it is the only one with a persisted order. The selected tab is
+remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
+**Agents**. Each server heading states its own reachability and carries the
+**Update** action for a host running an older daemon, with **Update all (N)**
+above the list when more than one host is behind.
+
+In the Servers tab the sidebar partitions each host into expandable **Teams**
+and **Individual agents** without changing agent navigation or membership.
 Server headings, team headings, and agent rows are themselves
 pointer- and keyboard-accessible drag surfaces; no separate drag handle is
 rendered. A drop reorders only like siblings, so it never changes team
@@ -1494,17 +1505,19 @@ agent status refreshes and image-build events reload it without overwriting
 runtime drafts, and responses from an older host, agent, or refresh are ignored.
 Selection becomes active at the next iteration boundary; cancelling pending
 keeps automatic mutable-ref following enabled.
-Runnable import previews expose the target name and tag. Operators can keep the
-artifact ref for an idempotent import or choose a different target when that ref
-already contains another digest; the source archive remains runnable-only.
+Runnable import previews expose the target name and tag. Keeping the artifact
+ref is idempotent for the same digest and advances that tag for a different
+digest; operators can still choose another target. The source archive remains
+runnable-only.
 For an exportable non-reserved built image, **Upload to servers** captures the
 source target and offers all ready non-source hosts, with individual selection
 or **All servers**. A remote source includes **This daemon (local)** exactly
 once; a local source excludes itself. The UI exports one runnable archive into
 the open dialog's browser memory, then previews and applies it against each
-explicit destination target. It continues after destination failures; same-digest results are
-**Already present**, and a conflicting destination can be retagged and retried
-without another export. Closing the dialog drops the archive and progress. This
+explicit destination target. It continues after destination failures;
+same-digest results are **Already present**, while a different digest advances
+the destination tag. A destination can still be retagged and retried without
+another export. Closing the dialog drops the archive and progress. This
 operation never switches the active host or the selected source route, and the
 archive is neither a source backup nor persisted state.
 Eligible and selected targets are snapshotted for the open transfer, so a
@@ -1527,10 +1540,9 @@ become available when the build request finishes; a slow
 follow-up inventory read does not keep the image labelled as building. An older
 follow-up read cannot replace a newer build's result. Version comparison does
 not detect changed bytes when the source keeps the same `image_version`.
-Store build controls also accept a target name and optional explicit tag,
-allowing a safe retry after an immutable-ref conflict. An explicit tag publishes
-only that tag; a missing `latest` does not imply that the source version tag is
-available for replacement.
+Store build controls also accept a target name and optional explicit tag. Every
+non-reserved tag can be replaced, including a source version and `latest`. An
+explicit tag publishes only that tag.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -1970,8 +1982,6 @@ before timeout enforcement starts.
 - **Kill** — immediately stop current iteration or session; use when work is
   unsafe or stuck.
 - **Budget** — reject AI calls once the configured spend limit is reached.
-- **Policy rules** — constrain models and request rates by global, agent, or
-  group scope.
 - **Audit** — inspect each proxied AI request and tool timeline. Copy readable
   Markdown or export a ZIP for the selected iteration or all retained
   iterations. Exports contain sensitive agent data; review the warning before
@@ -2298,9 +2308,7 @@ when the daemon is down.
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |
 | `schedule` | `ls` |
 | `tasks queue create` | Create a native task queue with owners and an optional responsible agent |
-| `eval` | `ls`, `inspect` |
 | `secret` | `set`, `ls`, `rm` |
-| `rule` | `set`, `ls`, `rm` (proxy policy: rate-limit / model-policy) |
 | `budget` | `set`, `ls`, `status` |
 | `usage` / `logs` / `iteration` | AI usage/cost, event stream, iteration inspect/logs/ls |
 | `retention` / `prune` | retention policy, prune old iterations |
@@ -2505,7 +2513,7 @@ not need to read unrelated subsystems.
 | Daemon, API, persistence, lifecycle | [Architecture overview](/docs/architecture) and [State model](/docs/architecture/state-model) |
 | Iteration loop, harness execution, terminal, tmux | [Iteration loop](/docs/architecture/iteration-loop) and [Shim](/docs/architecture/shim) |
 | Channels, messages, delivery, events | [Messaging](/docs/architecture/messaging) and [Channels reference](/docs/reference/channels) |
-| AI proxy, usage, budgets, policy, audit | [AI proxy and audit](/docs/architecture/ai-proxy) and [Security and controls](/docs/security-controls) |
+| AI proxy, usage, budgets, pricing, audit | [AI proxy and audit](/docs/architecture/ai-proxy) and [Security and controls](/docs/security-controls) |
 | React UI and frontend behavior | [Web UI architecture](/docs/architecture/web-ui) |
 | Desktop native host, SSH, Keychain, tunnels, packaging | [Remote hosts](/docs/remote-hosts), [Security and controls](/docs/security-controls), and this guide |
 | Images and groups | [Images](/docs/images) and [Images and groups](/docs/images-and-groups) |
@@ -3061,7 +3069,7 @@ Source: https://alekzonder.github.io/tariboy/images
 
 An image defines the plugins available to an agent, optional packaged Agent
 Skills, and the exact prompt template rendered for each iteration. Harness,
-model, effort, interactive mode, environment, policy, secrets, and evals are
+model, effort, interactive mode, environment, policy, and secrets are
 runtime or compose configuration. They are not schema-v2 image fields.
 
 ## Browse built images
@@ -3150,12 +3158,11 @@ single-result output reports the versioned ref. Older files without a version
 publish only `latest`. Explicit tags, including `--tag latest`, take priority
 and do not add another ref.
 
-Imports and retagged runnable artifacts, registry artifacts, and the reserved
-`bare` ref remain immutable.
-An ordinary build never converts an existing immutable ref. Daemons created
-before mutable markers existed migrate a legacy ordinary-build ref only when
-its authoritative source snapshot and provenance both match the current
-digest; otherwise the operator must choose another tag.
+Runnable archives remain immutable, while their ordinary tags are mutable
+pointers. Build and import can therefore advance any existing non-reserved tag,
+including version tags and `latest`; the prior archive remains addressable by
+digest for pinned assignments. The daemon-managed `bare:latest` and
+`basic:latest` refs remain reserved.
 
 ## Stores on a server
 
@@ -3211,13 +3218,11 @@ source without a version publishes only `latest`. Use `--name` to avoid a name
 collision between Stores, and `--tag` to publish only an explicit tag. Do not
 combine a Store selector with `--path`.
 
-An immutable version tag can conflict even when the table says **Latest not
-built**: the table compares only `latest`. Build checks the requested refs
-before restoring skills or packaging sources, and checks again at publication
-to protect against concurrent changes. A conflict leaves existing images
-untouched. The Store's **Target image name** and **Target image tag** fields
-are optional: leave them blank for the defaults, or choose an alternative and
-retry. An explicit tag publishes only that ref; other refs remain unchanged.
+Store Build advances every requested tag atomically after validation. Existing
+version tags and `latest` do not require a different target name or tag. The
+Store's **Target image name** and **Target image tag** fields remain optional:
+leave them blank for the defaults or use them to publish another ref. An
+explicit tag publishes only that ref; other refs remain unchanged.
 
 Before freezing sources, the daemon runs `npx skills experimental_install` in
 the Store root when `skills-lock.json` exists there, then in the image directory
@@ -3434,8 +3439,9 @@ not rebuild the image. Preview, apply, assignment, and activation also validate
 plugin, runtime, skill, launcher, and harness compatibility against the
 destination daemon before publication. The import preview exposes editable **Import name** and
 **Import tag** fields. The same ref and digest are idempotent; when the ref
-already names different bytes, choose another name or tag. That explicit retag
-receives a newly rewritten manifest and digest.
+already names different bytes, import atomically advances the tag and retains
+the previous archive by digest. An explicit retag receives a newly rewritten
+manifest and digest.
 
 Keep the original directory and paths when future rebuilds are required. An
 exported image is portable for use, not an editable source backup.
@@ -3453,9 +3459,10 @@ Tariboy exports one runnable archive from the captured source and keeps it only
 in the browser memory of the open dialog. It previews and applies that same
 archive separately on each selected destination. A failure on one destination
 does not prevent later destinations from continuing. A same-ref/same-digest
-destination is shown as **Already present**; a ref conflict can be retagged and
-retried for only that destination without exporting again. Closing the dialog
-discards the archive and its transfer progress.
+destination is shown as **Already present**; a different digest advances that
+destination's tag and is shown as completed. A transfer can still be retagged
+and retried for only one destination without exporting again. Closing the
+dialog discards the archive and its transfer progress.
 
 The dialog snapshots the eligible hosts and the chosen destinations when it
 opens and starts the operation, so a later registry refresh cannot hide the
@@ -4055,7 +4062,6 @@ Types are defined in `internal/plugins`:
   `POST /api/plugin/publish`.
 - **`channel-sink`** receives subscribed bus messages at `POST /deliver`, with
   durable redelivery and a dead-letter queue.
-- **`eval`** receives iteration checks at `POST /evaluate`.
 - **`tool`** advertises an agent-facing capability out of band.
 - **`harness`** is recognized, but its runtime wiring is deferred.
 
@@ -4434,22 +4440,17 @@ response identifies the name, tag, digest, and layer count. The new immutable
 image is stored on the same host and can be assigned to an agent through the
 normal image workflow.
 
-## Workdir confinement
+## Source paths
 
-Agent-driven image authoring is less trusted than the operator CLI. The daemon
-resolves `--path` against the managed `agents/<agent>/workdir`, independently of
-the configured CWD, and rejects:
+The daemon resolves a relative `--path` against the managed
+`agents/<agent>/workdir`, independently of the configured CWD. An absolute path
+may select any directory readable by the daemon process. A relative path may
+also contain `..` or pass through a symlink to select such a directory.
 
-- absolute paths outside that workdir;
-- `..` traversal that escapes it;
-- a symlinked path whose real target escapes it;
-- skill or prompt paths outside it;
-- inner symlinks in skill directories that resolve outside it;
-- absolute prompt paths outside it.
-
-These checks happen before the builder reads or archives outside content. The
-operator `tariboy image build` remains the trusted path for sources that
-intentionally live elsewhere on the host.
+Skill and prompt paths use the ordinary image builder rules, including explicit
+absolute paths and source-relative declared skills. Grant `image-creator` only
+to agents trusted to read and package image sources available to the daemon
+account.
 
 ## Manifest and plugin validation
 
@@ -4470,12 +4471,12 @@ skills:
   - dir: ../../skills/image-creator
 ```
 
-The packaged image skill teaches the authoring command. It grants no extra filesystem
-access beyond the capability-gated, workdir-confined API.
+The packaged image skill teaches the authoring command. The capability is the
+authorization to build from directories readable by the daemon account.
 
 ## Failure behavior
 
-Invalid refs, missing manifests, path escapes, unknown plugins, duplicate
+Invalid refs, missing or unreadable manifests, unknown plugins, duplicate
 schema-v2 plugins, unresolved prompt files, and normal image validation errors
 fail the build without publishing the requested ref.
 
@@ -5180,13 +5181,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.61.0` alpha on an Apple Silicon Mac.
+This path is for the `0.62.3` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.61.0_aarch64.dmg`;
+- a verified `Tariboy_0.62.3_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -5800,8 +5801,6 @@ tariboy has three command surfaces:
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
 | `tariboy daemon status` | Show daemon version, uptime and base directory |
-| `tariboy eval inspect` | Show all eval results for an iteration (with the image version) |
-| `tariboy eval ls` | List recent eval results (verdict/score per iteration + image version) |
 | `tariboy group assign` | Assign an agent to a group (empty group leaves) |
 | `tariboy group create` | Create (or update) a group with an optional lead |
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
@@ -5839,9 +5838,6 @@ tariboy has three command surfaces:
 | `tariboy restore` | Restore an agent from a backup tar.gz (optionally under a new name) |
 | `tariboy retention get` | Show the effective retention policy for an agent (or 'default') |
 | `tariboy retention set` | Set the retention policy for an agent (or 'default') |
-| `tariboy rule ls` | List proxy policy rules (evaluation order) |
-| `tariboy rule rm` | Remove a proxy policy rule by id |
-| `tariboy rule set` | Set a proxy policy rule (kind rate-limit\|model-policy, scope global\|agent:\<n\>\|group:\<g\>) |
 | `tariboy schedule ls` | List an agent's schedules (read-only) |
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
@@ -5884,7 +5880,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
 | `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
-| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from an agent-confined source directory (`image-creator` only) |
+| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from a daemon-readable source directory (`image-creator` only); relative paths start at the managed workdir |
 
 ## Native Tasks (`ttasks …`)
 
@@ -6187,7 +6183,6 @@ adoption revokes the remaining lease when its shim finishes.
 - Disabling Autopilot prevents new iterations.
 - Kill terminates current work without stopping unrelated agents.
 - Soft and hard timeouts bound an iteration.
-- Rate/model policy rules constrain calls.
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
@@ -6207,13 +6202,16 @@ Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
 
 Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
-or explicit operator absolute paths. Prompt paths and plugin references reject
-traversal outside their roots.
+or explicit absolute paths. Prompt paths and plugin references reject traversal
+outside their roots.
 Source-relative skill directories may use `../` to reference a sibling tree;
 ordinary builds freeze only those explicitly declared skills alongside the
-source snapshot. Symlinks, missing or non-regular files, and oversized prompt
-files are rejected. Agent-authored builds additionally confine source and all
-relative or absolute skill references to that agent's workdir.
+source snapshot. A source directory may itself be selected through a symlink;
+symlinks inside packaged content, missing or non-regular files, and oversized
+prompt files are rejected. The optional `image-creator` capability can build
+from any source, skill, or prompt path readable by the daemon account; relative
+source paths start at the agent's managed workdir. Grant it only to agents
+trusted with that host-level read and packaging access.
 Native host metadata and exported support archives use owner-only permissions.
 The global `<base-dir>/global-agent-shell.sh` and per-agent
 `<base-dir>/agents/<name>/agent-shell.sh` scripts are owner-only, atomically
@@ -6269,7 +6267,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.61.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.62.3` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6366,7 +6364,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.61.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.62.3`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 

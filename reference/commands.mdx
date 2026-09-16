@@ -55,8 +55,6 @@ tariboy has three command surfaces:
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
 | `tariboy daemon status` | Show daemon version, uptime and base directory |
-| `tariboy eval inspect` | Show all eval results for an iteration (with the image version) |
-| `tariboy eval ls` | List recent eval results (verdict/score per iteration + image version) |
 | `tariboy group assign` | Assign an agent to a group (empty group leaves) |
 | `tariboy group create` | Create (or update) a group with an optional lead |
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
@@ -94,9 +92,6 @@ tariboy has three command surfaces:
 | `tariboy restore` | Restore an agent from a backup tar.gz (optionally under a new name) |
 | `tariboy retention get` | Show the effective retention policy for an agent (or 'default') |
 | `tariboy retention set` | Set the retention policy for an agent (or 'default') |
-| `tariboy rule ls` | List proxy policy rules (evaluation order) |
-| `tariboy rule rm` | Remove a proxy policy rule by id |
-| `tariboy rule set` | Set a proxy policy rule (kind rate-limit\|model-policy, scope global\|agent:\<n\>\|group:\<g\>) |
 | `tariboy schedule ls` | List an agent's schedules (read-only) |
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
@@ -139,7 +134,7 @@ Run inside an agent; the socket comes from `$TARIBOY_TOOLS_SOCKET`.
 | `scripts/scripts.sh runs SCRIPT_ID` / `logs RUN_ID` | Inspect run history and bounded logs |
 | `scripts/scripts.sh rerun SCRIPT_ID` | Run a completed one-shot or idle recurring definition immediately |
 | `scripts/scripts.sh cancel SCRIPT_OR_RUN_ID` / `rm SCRIPT_ID` | Cancel work or remove inactive history |
-| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from an agent-confined source directory (`image-creator` only) |
+| `scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR` | Build a schema-v2 image from a daemon-readable source directory (`image-creator` only); relative paths start at the managed workdir |
 
 ## Native Tasks (`ttasks …`)
 

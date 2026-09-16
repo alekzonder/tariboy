@@ -141,14 +141,6 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <td>Show daemon version, uptime and base directory</td>
 </tr>
 <tr>
-<td><code>tariboy eval inspect</code></td>
-<td>Show all eval results for an iteration (with the image version)</td>
-</tr>
-<tr>
-<td><code>tariboy eval ls</code></td>
-<td>List recent eval results (verdict/score per iteration + image version)</td>
-</tr>
-<tr>
 <td><code>tariboy group assign</code></td>
 <td>Assign an agent to a group (empty group leaves)</td>
 </tr>
@@ -295,18 +287,6 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <tr>
 <td><code>tariboy retention set</code></td>
 <td>Set the retention policy for an agent (or ‘default’)</td>
-</tr>
-<tr>
-<td><code>tariboy rule ls</code></td>
-<td>List proxy policy rules (evaluation order)</td>
-</tr>
-<tr>
-<td><code>tariboy rule rm</code></td>
-<td>Remove a proxy policy rule by id</td>
-</tr>
-<tr>
-<td><code>tariboy rule set</code></td>
-<td>Set a proxy policy rule (kind rate-limit|model-policy, scope global|agent:&lt;n&gt;|group:&lt;g&gt;)</td>
 </tr>
 <tr>
 <td><code>tariboy schedule ls</code></td>
@@ -457,7 +437,7 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>scripts/image_creator.sh build --name NAME [--tag TAG] --path DIR</code></td>
-<td>Build a schema-v2 image from an agent-confined source directory (<code>image-creator</code> only)</td>
+<td>Build a schema-v2 image from a daemon-readable source directory (<code>image-creator</code> only); relative paths start at the managed workdir</td>
 </tr>
 </tbody>
 </table></div>

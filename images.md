@@ -8,7 +8,7 @@ sidebar:
 
 An image defines the plugins available to an agent, optional packaged Agent
 Skills, and the exact prompt template rendered for each iteration. Harness,
-model, effort, interactive mode, environment, policy, secrets, and evals are
+model, effort, interactive mode, environment, policy, and secrets are
 runtime or compose configuration. They are not schema-v2 image fields.
 
 ## Browse built images
@@ -97,12 +97,11 @@ single-result output reports the versioned ref. Older files without a version
 publish only `latest`. Explicit tags, including `--tag latest`, take priority
 and do not add another ref.
 
-Imports and retagged runnable artifacts, registry artifacts, and the reserved
-`bare` ref remain immutable.
-An ordinary build never converts an existing immutable ref. Daemons created
-before mutable markers existed migrate a legacy ordinary-build ref only when
-its authoritative source snapshot and provenance both match the current
-digest; otherwise the operator must choose another tag.
+Runnable archives remain immutable, while their ordinary tags are mutable
+pointers. Build and import can therefore advance any existing non-reserved tag,
+including version tags and `latest`; the prior archive remains addressable by
+digest for pinned assignments. The daemon-managed `bare:latest` and
+`basic:latest` refs remain reserved.
 
 ## Stores on a server
 
@@ -158,13 +157,11 @@ source without a version publishes only `latest`. Use `--name` to avoid a name
 collision between Stores, and `--tag` to publish only an explicit tag. Do not
 combine a Store selector with `--path`.
 
-An immutable version tag can conflict even when the table says **Latest not
-built**: the table compares only `latest`. Build checks the requested refs
-before restoring skills or packaging sources, and checks again at publication
-to protect against concurrent changes. A conflict leaves existing images
-untouched. The Store's **Target image name** and **Target image tag** fields
-are optional: leave them blank for the defaults, or choose an alternative and
-retry. An explicit tag publishes only that ref; other refs remain unchanged.
+Store Build advances every requested tag atomically after validation. Existing
+version tags and `latest` do not require a different target name or tag. The
+Store's **Target image name** and **Target image tag** fields remain optional:
+leave them blank for the defaults or use them to publish another ref. An
+explicit tag publishes only that ref; other refs remain unchanged.
 
 Before freezing sources, the daemon runs `npx skills experimental_install` in
 the Store root when `skills-lock.json` exists there, then in the image directory
@@ -381,8 +378,9 @@ not rebuild the image. Preview, apply, assignment, and activation also validate
 plugin, runtime, skill, launcher, and harness compatibility against the
 destination daemon before publication. The import preview exposes editable **Import name** and
 **Import tag** fields. The same ref and digest are idempotent; when the ref
-already names different bytes, choose another name or tag. That explicit retag
-receives a newly rewritten manifest and digest.
+already names different bytes, import atomically advances the tag and retains
+the previous archive by digest. An explicit retag receives a newly rewritten
+manifest and digest.
 
 Keep the original directory and paths when future rebuilds are required. An
 exported image is portable for use, not an editable source backup.
@@ -400,9 +398,10 @@ Tariboy exports one runnable archive from the captured source and keeps it only
 in the browser memory of the open dialog. It previews and applies that same
 archive separately on each selected destination. A failure on one destination
 does not prevent later destinations from continuing. A same-ref/same-digest
-destination is shown as **Already present**; a ref conflict can be retagged and
-retried for only that destination without exporting again. Closing the dialog
-discards the archive and its transfer progress.
+destination is shown as **Already present**; a different digest advances that
+destination's tag and is shown as completed. A transfer can still be retagged
+and retried for only one destination without exporting again. Closing the
+dialog discards the archive and its transfer progress.
 
 The dialog snapshots the eligible hosts and the chosen destinations when it
 opens and starts the operation, so a later registry refresh cannot hide the

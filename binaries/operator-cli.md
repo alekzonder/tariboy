@@ -28,9 +28,7 @@ when the daemon is down.
 | `telegram` | contributed by the running bundled plugin: `configure`, `chat setup`, `status` |
 | `schedule` | `ls` |
 | `tasks queue create` | Create a native task queue with owners and an optional responsible agent |
-| `eval` | `ls`, `inspect` |
 | `secret` | `set`, `ls`, `rm` |
-| `rule` | `set`, `ls`, `rm` (proxy policy: rate-limit / model-policy) |
 | `budget` | `set`, `ls`, `status` |
 | `usage` / `logs` / `iteration` | AI usage/cost, event stream, iteration inspect/logs/ls |
 | `retention` / `prune` | retention policy, prune old iterations |

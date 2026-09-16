@@ -45,7 +45,6 @@ adoption revokes the remaining lease when its shim finishes.
 - Disabling Autopilot prevents new iterations.
 - Kill terminates current work without stopping unrelated agents.
 - Soft and hard timeouts bound an iteration.
-- Rate/model policy rules constrain calls.
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
@@ -65,13 +64,16 @@ Tariboy app bundle. The bundle has five real payload files; `ttasks` is a
 managed alias whose source is `tariboy-tasks`.
 
 Image builds resolve only the literal `$PLUGINS` root, source-relative paths,
-or explicit operator absolute paths. Prompt paths and plugin references reject
-traversal outside their roots.
+or explicit absolute paths. Prompt paths and plugin references reject traversal
+outside their roots.
 Source-relative skill directories may use `../` to reference a sibling tree;
 ordinary builds freeze only those explicitly declared skills alongside the
-source snapshot. Symlinks, missing or non-regular files, and oversized prompt
-files are rejected. Agent-authored builds additionally confine source and all
-relative or absolute skill references to that agent's workdir.
+source snapshot. A source directory may itself be selected through a symlink;
+symlinks inside packaged content, missing or non-regular files, and oversized
+prompt files are rejected. The optional `image-creator` capability can build
+from any source, skill, or prompt path readable by the daemon account; relative
+source paths start at the agent's managed workdir. Grant it only to agents
+trusted with that host-level read and packaging access.
 Native host metadata and exported support archives use owner-only permissions.
 The global `<base-dir>/global-agent-shell.sh` and per-agent
 `<base-dir>/agents/<name>/agent-shell.sh` scripts are owner-only, atomically
@@ -127,7 +129,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.61.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.62.3` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

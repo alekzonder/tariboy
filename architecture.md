@@ -76,11 +76,11 @@ controls](/docs/security-controls) for the full transport and credential rules.
 | Bus | Channels, subscriptions, deliveries, acknowledgement, and redelivery | Direct process-to-process delivery guarantees |
 | Native Tasks service | Queues, task trees, workflow versions, pools, assignments, artifacts, questions, and observations | Agent authentication |
 | Plugin host | Plugin process lifecycle, plugin tokens, and provider-channel watches | Provider credentials in plugin environments |
-| AI proxy and pricing catalog | Provider routing, scoped tokens, policy, budgets, immutable request costs, daily model-price refresh, usage, and transcripts | Durable provider keys or proxy leases in SQLite |
+| AI proxy and pricing catalog | Provider routing, scoped tokens, budgets, immutable request costs, daily model-price refresh, usage, and transcripts | Durable provider keys or proxy leases in SQLite |
 | API and event hub | Command registry, REST responses, and resumable event hints | State changes outside their owning services |
 
 The daemon creates a shared audit recorder for each agent. Loop lifecycle
-entries, bus actions, policy decisions, and shim log tails therefore describe
+entries, bus actions, proxy decisions, and shim log tails therefore describe
 one coherent agent timeline, while a WebSocket event remains only a replayable
 delivery hint.
 
@@ -159,8 +159,8 @@ logged for its agent without preventing unrelated agents from starting.
 
 In steady state it runs the schedule publisher, task-workflow outbox publisher,
 the per-agent goal reconciler, workflow question and observation reconcilers, AI ingestion, the daily pricing
-catalog worker, policy/budget cache refresh, post-iteration evaluations,
-retention pruner, loop engines, and plugin supervisors.
+catalog worker, budget cache refresh, retention pruner, loop engines,
+and plugin supervisors.
 Shutdown stops the proxy first, then cancels and awaits the pricing worker and
 the other workers before loops/plugins and SQLite stop. That ordering prevents
 a catalog publication, final outbox, or usage write from racing a closed
@@ -248,7 +248,7 @@ flowchart LR
 | Plugin failure | The host health-checks and restarts enabled plugins; provider watches can be pulled again. | Inspect plugin status/logs; never place upstream AI credentials in plugin configuration. |
 | Model-price refresh failure | The proxy keeps the last valid runtime generation, or built-in fallbacks when none has loaded. The next daily check retries. | Inspect `pricing_catalog_error` daemon logs/events; fields are bounded to source, generation time, model count, and a stable error class. |
 | Missed workflow wake or daemon crash | Durable outbox and workflow reconcilers replay pending intent; assignment and lease state remain in SQLite. | Inspect task execution/event history, then let lease expiry or an explicit release drive retry. |
-| Policy or budget denial | Proxy rejects/reports before provider access and records usage/audit evidence. | Inspect usage, budgets, rules, and sensitive per-iteration transcript. |
+| Budget denial | Proxy rejects/reports before provider access and records usage/audit evidence. | Inspect usage, budgets, and the sensitive per-iteration transcript. |
 
 Structured daemon logs, per-agent audit JSONL, iteration results, task/workflow
 events, usage records, and optional OpenTelemetry signals make the system
@@ -326,7 +326,7 @@ than launching the binary directly. See
     questions, and observations.
   </Card>
   <Card title="AI proxy & audit log" href="/docs/architecture/ai-proxy" icon="activity">
-    Routing, policy, budgets, and the per-iteration transcript.
+    Routing, budgets, usage, and the per-iteration transcript.
   </Card>
   <Card title="Desktop web UI" href="/docs/architecture/web-ui" icon="monitor">
     Where the Tauri UI lives and how it talks to host-local daemons.
