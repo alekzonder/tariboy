@@ -403,6 +403,13 @@ context row remains visible above the selected agent's Console, Autopilot,
 Activity, Tasks, Chat, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
+Selecting another agent in the sidebar while an agent workspace is open keeps
+the tab that is currently open and shows the new agent in it, so the same view
+answers the same question about the next agent. An unknown tab still falls back
+to Console, and a selected task in the Tasks query is dropped because it belongs
+to the agent being left. Selecting an agent from anywhere else — Workspace, a
+team, or a freshly created agent — still opens Console.
+
 When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful
 server and agent snapshot in React memory rather than flashing the whole pane
