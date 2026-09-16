@@ -38,7 +38,7 @@ type CreateDialogState = {
 export type ServerView = "tasks" | "images" | "image-tags" | "image-detail" | "stores" | "store-detail" | "settings";
 
 export default function TerminalsPage({ serverView }: { serverView?: ServerView }) {
-  const { hostId: hostParam, agent: agentName, team: teamName, name: storeName } = useParams();
+  const { hostId: hostParam, agent: agentName, tab: agentTab, team: teamName, name: storeName } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -269,7 +269,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         selected={hostId !== undefined && agentName ? { hostId, agent: agentName } : undefined}
         onSelectHost={(id) => navigate(serverPath(id, "tasks"))}
         onSelect={(h, a) => {
-          navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/console`);
+          // Switching agents keeps the tab the operator is reading, so the same
+          // view answers the same question about the next agent. Any query
+          // (a selected task) belongs to the agent being left, so it is dropped.
+          navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/${agentName && agentTab ? agentTab : "console"}`);
         }}
         onSelectTeam={(h, team) => {
           navigate(`/agents/${hostToParam(h)}/teams/${encodeURIComponent(team)}`);

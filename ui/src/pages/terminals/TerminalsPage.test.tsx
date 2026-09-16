@@ -302,6 +302,29 @@ describe("TerminalsPage", () => {
       .toBeInTheDocument();
   });
 
+  it("keeps the current agent tab when switching to another agent", async () => {
+    renderAt("/agents/local/a1/activity");
+    await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location"))
+        .toHaveTextContent("/agents/local/a2/activity"),
+    );
+  });
+
+  it("drops the selected task when switching agents on the Tasks tab", async () => {
+    renderAt("/agents/local/a1/tasks?task=DEV-1");
+    await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("/agents/local/a2/tasks"),
+    );
+  });
+
   it("does not start the Workspace drag gesture from an agent row", async () => {
     renderAt("/workspace");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
