@@ -285,3 +285,26 @@ func TestValidatePreparedRejectsTamperedPortableMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareExcludesRootEvalsDirectory(t *testing.T) {
+	dir := validSkill(t, t.TempDir(), "code-review")
+	writeSkillFile(t, dir, "evals/evals.json", "{}\n", 0o600)
+	writeSkillFile(t, dir, "evals/cases/first.md", "case\n", 0o600)
+	writeSkillFile(t, dir, "references/evals/case.json", "{}\n", 0o600)
+
+	got, err := Prepare(imagefile.ResolvedDirectory{Source: "./skills/code-review", Path: dir, Category: "source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := make([]string, len(got.Files))
+	for i, file := range got.Files {
+		paths[i] = file.RelativePath
+	}
+	want := []string{"SKILL.md", "references/evals/case.json"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("paths = %#v, want %#v", paths, want)
+	}
+	if got.Metadata.FileCount != len(want) {
+		t.Fatalf("file count = %d, want %d", got.Metadata.FileCount, len(want))
+	}
+}
