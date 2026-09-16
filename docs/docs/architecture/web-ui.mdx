@@ -322,8 +322,14 @@ from the daemon's default conversation types, offers an agent's own wakes
 (`task.goal`, `script.result`, schedule alarms) explicitly, and the chosen set
 persists in the Desktop WebView under `terminals:chat-types:v1`. Opening the
 chat marks it read at the timestamp of the newest message actually shown, never
-at the current time. **Channels** is the same section's second view and keeps
-the existing subscription list, channel tail, and channel send.
+at the current time. A message that names a task carries that key as a link
+under its text: the key the daemon attached to the message, and any task key
+written in the message text. Opening one opens the task panel over the chat —
+the same detail panel Tasks shows, with its own load, its own live refresh and
+its own writes, so status, priority, assignee, pull request, description,
+comments and relations are all editable there without leaving Chat. Closing it
+returns to the conversation. **Channels** is the same section's second view and
+keeps the existing subscription list, channel tail, and channel send.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
