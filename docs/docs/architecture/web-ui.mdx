@@ -142,6 +142,11 @@ per-item progress. The target daemon descriptor is captured at upload and
 reused for confirmation, status, and retry even if the global host switcher
 changes.
 
+The Agent workspace header shows the agent's configured runtime as one compact
+`harness · model · effort` chip before **Goal**, omitting the values the
+selected harness does not report. It is read from the agent view alongside the
+header's status poll, so a Configuration change is reflected within one poll.
+
 Every Agent workspace header shows the agent's complete effective working
 directory. A following **Open in VS Code** action opens local paths as local
 folders and SSH-host paths through VS Code Remote SSH in a new editor window.

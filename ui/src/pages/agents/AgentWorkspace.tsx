@@ -48,9 +48,14 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   const { activeId, daemons, select } = useDaemons();
   const [connection, setConnection] = useState<"selecting" | "ready" | "unavailable">("selecting");
   const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [resolvedCwd, setResolvedCwd] = useState({ key: "", cwd: "" });
-  const cwdKey = `${hostId}\0${agent.name}\0${agent.cwd ?? ""}`;
-  const effectiveCwd = agent.cwd || (resolvedCwd.key === cwdKey ? resolvedCwd.cwd : "");
+  const [view, setView] = useState<{ key: string; view: AgentView | null }>({ key: "", view: null });
+  const agentKey = `${hostId}\0${agent.name}`;
+  const currentView = view.key === agentKey ? view.view : null;
+  const effectiveCwd = agent.cwd || currentView?.cwd || "";
+  // Configured runtime, compactly: whatever the harness actually reports.
+  // Codex has no model until one is chosen; only Codex reports an effort.
+  const runtime = [currentView?.harness || agent.harness, currentView?.model, currentView?.effort]
+    .filter(Boolean).join(" · ");
   const target = targetFor(hostId);
   const { attention, refreshHost } = useCustomerQuestionNotifications();
 
@@ -82,15 +87,12 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     } catch {
       setStatus(null);
     }
-    if (!agent.cwd) {
-      try {
-        const view = await agentGetOn<AgentView>(requestTarget, agent.name, "");
-        setResolvedCwd({ key: cwdKey, cwd: view.cwd });
-      } catch {
-        // Preserve the last successful value and retry with the next status poll.
-      }
+    try {
+      setView({ key: agentKey, view: await agentGetOn<AgentView>(requestTarget, agent.name, "") });
+    } catch {
+      // Preserve the last successful value and retry with the next status poll.
     }
-  }, [agent.cwd, agent.name, connection, cwdKey, hostId, unavailable]);
+  }, [agent.name, agentKey, connection, hostId, unavailable]);
 
   useEffect(() => {
     if (connection !== "ready" || unavailable) return;
@@ -163,6 +165,15 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                     <Container className="size-2.5" aria-hidden="true" />
                     {agent.image}
                   </span>
+                  {runtime && (
+                    <span
+                      data-testid="agent-runtime"
+                      title="Harness · model · effort"
+                      className="inline-flex h-5 shrink-0 items-center rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground"
+                    >
+                      {runtime}
+                    </span>
+                  )}
                   <span className="flex min-w-0 flex-1 items-center gap-[5px] overflow-hidden text-[12.5px] whitespace-nowrap text-muted-foreground">
                     <span className="shrink-0">Goal:</span>
                     {agent.current_goal_task_key ? (

@@ -89,6 +89,54 @@ describe("AgentWorkspace", () => {
     expect(screen.getByRole("button", { name: "How Goal is selected" })).toBeInTheDocument();
   });
 
+  it("shows the configured harness, model, and effort before Goal", async () => {
+    vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
+      if (action === "") return { ...agent, harness: "codex", model: "gpt-5-codex", effort: "high" };
+      return {
+        name: "worker", state: "running", loop_enabled: false, iterations: 0,
+        last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+      };
+    });
+
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("agent-runtime")).toHaveTextContent("codex · gpt-5-codex · high"));
+    const runtime = screen.getByTestId("agent-runtime");
+    const goal = screen.getByText("Goal:");
+    expect(runtime.compareDocumentPosition(goal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("omits model and effort the harness does not report", async () => {
+    vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
+      if (action === "") return { ...agent, harness: "opencode", model: "", effort: "" };
+      return {
+        name: "worker", state: "running", loop_enabled: false, iterations: 0,
+        last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+      };
+    });
+
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("agent-runtime")).toHaveTextContent("opencode"));
+    expect(screen.getByTestId("agent-runtime")).not.toHaveTextContent("·");
+  });
+
   it("shows daemon-authoritative message queue saturation", async () => {
     vi.mocked(agentGetOn).mockResolvedValue({
       name: "worker", state: "running", loop_enabled: false, iterations: 0,
