@@ -1,3 +1,21 @@
+## [0.64.0] - 2026-09-17
+
+### Added
+
+- Open a task straight from its chat message: a task key attached to a task notification, or written in the message text, is now a link that opens the full task panel over the conversation, with its own load, tasks-socket refresh, and writes for status, priority, assignee, pull request, description, comments, and relations.
+- Show the configured runtime in the agent header as one compact `harness · model · effort` chip, so the operator no longer has to open Configuration to see it. Values the selected harness does not report are omitted, and the chip disappears when none remain.
+
+### Changed
+
+- Order the agent workspace tabs as Chat, Tasks, Console, Autopilot, Activity, Configuration, Advanced. Tab routes, tab contents, and the default entry tab are unchanged.
+- Keep the open agent tab when switching agents in the sidebar instead of always reopening Console, falling back to Console for Workspace, a team, or a freshly created agent. A selected task is intentionally not carried over.
+
+### Fixed
+
+- Exclude a root-level `evals` directory from a built image when packaging a skill, so authoring evidence no longer adds bytes, file count, and hash input to the immutable image. Nested paths such as `references/evals/` are unaffected.
+
+[0.64.0]: https://github.com/alekzonder/tariboy/compare/v0.63.0...v0.64.0
+
 ## [0.63.0] - 2026-09-16
 
 ### Added
