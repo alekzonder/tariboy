@@ -263,6 +263,12 @@ rejected.</p>
 </tr>
 </tbody>
 </table></div>
+<p>An <code>evals</code> directory in the skill root is excluded from the packaged skill.
+Skill evals are authoring evidence, not iteration inputs, so they stay in the
+source and never add bytes, file count, or hash input to the image. The rule
+applies only to that root-level directory: a nested path such as
+<code>references/evals/</code> is packaged normally, and a symlink or regular file named
+<code>evals</code> in the skill root is still rejected by the member rules above.</p>
 <p>Files are archived in deterministic path order under <code>skills/&lt;name&gt;/...</code>.
 Non-executable files are normalized to mode <code>0600</code>; files whose source owner
 execute bit is set are normalized to <code>0700</code>. Directories use <code>0700</code>.</p>

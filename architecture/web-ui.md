@@ -142,6 +142,11 @@ per-item progress. The target daemon descriptor is captured at upload and
 reused for confirmation, status, and retry even if the global host switcher
 changes.
 
+The Agent workspace header shows the agent's configured runtime as one compact
+`harness · model · effort` chip before **Goal**, omitting the values the
+selected harness does not report. It is read from the agent view alongside the
+header's status poll, so a Configuration change is reflected within one poll.
+
 Every Agent workspace header shows the agent's complete effective working
 directory. A following **Open in VS Code** action opens local paths as local
 folders and SSH-host paths through VS Code Remote SSH in a new editor window.
@@ -312,8 +317,8 @@ Beside **Send comment**, a secondary **Send Ok** action includes the selected
 Ask mention and posts `Ok` without changing the Ask selection. It is hidden
 as soon as the comment contains text.
 
-The agent **Chat** tab sits directly after **Tasks** and owns both halves of an
-agent's messaging in one section. **Chat** is its default view: the conversation
+The agent **Chat** tab is the first tab, directly before **Tasks**, and owns
+both halves of an agent's messaging in one section. **Chat** is its default view: the conversation
 with that agent — the customer's messages in its inbox merged with its messages
 in the customer's channel — rendered as sided bubbles, with a composer that
 publishes into the agent's inbox carrying the customer channel as its reply
@@ -322,8 +327,14 @@ from the daemon's default conversation types, offers an agent's own wakes
 (`task.goal`, `script.result`, schedule alarms) explicitly, and the chosen set
 persists in the Desktop WebView under `terminals:chat-types:v1`. Opening the
 chat marks it read at the timestamp of the newest message actually shown, never
-at the current time. **Channels** is the same section's second view and keeps
-the existing subscription list, channel tail, and channel send.
+at the current time. A message that names a task carries that key as a link
+under its text: the key the daemon attached to the message, and any task key
+written in the message text. Opening one opens the task panel over the chat —
+the same detail panel Tasks shows, with its own load, its own live refresh and
+its own writes, so status, priority, assignee, pull request, description,
+comments and relations are all editable there without leaving Chat. Closing it
+returns to the conversation. **Channels** is the same section's second view and
+keeps the existing subscription list, channel tail, and channel send.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
@@ -399,9 +410,16 @@ The navigation hierarchy is **Server → Agent**. The existing Workspace canvas
 and `/workspace` route remain available for retained layouts and possible
 future use, but the titlebar entry and agent-list add/drag gesture are hidden.
 A selected server owns Tasks, Images, Stores, and Settings, and its
-context row remains visible above the selected agent's Console, Autopilot,
-Activity, Tasks, Chat, Configuration, and Advanced tabs. Server-owned routes include
+context row remains visible above the selected agent's Chat, Tasks, Console,
+Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
+
+Selecting another agent in the sidebar while an agent workspace is open keeps
+the tab that is currently open and shows the new agent in it, so the same view
+answers the same question about the next agent. An unknown tab still falls back
+to Console, and a selected task in the Tasks query is dropped because it belongs
+to the agent being left. Selecting an agent from anywhere else — Workspace, a
+team, or a freshly created agent — still opens Console.
 
 When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful

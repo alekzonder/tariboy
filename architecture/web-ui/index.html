@@ -120,6 +120,10 @@ separate confirmation starts the durable operation and displays persisted
 per-item progress. The target daemon descriptor is captured at upload and
 reused for confirmation, status, and retry even if the global host switcher
 changes.</p>
+<p>The Agent workspace header shows the agent’s configured runtime as one compact
+<code>harness · model · effort</code> chip before <strong>Goal</strong>, omitting the values the
+selected harness does not report. It is read from the agent view alongside the
+header’s status poll, so a Configuration change is reflected within one poll.</p>
 <p>Every Agent workspace header shows the agent’s complete effective working
 directory. A following <strong>Open in VS Code</strong> action opens local paths as local
 folders and SSH-host paths through VS Code Remote SSH in a new editor window.
@@ -280,8 +284,8 @@ mentions, explicit questions, and answer-wait semantics remain daemon-owned.
 Beside <strong>Send comment</strong>, a secondary <strong>Send Ok</strong> action includes the selected
 Ask mention and posts <code>Ok</code> without changing the Ask selection. It is hidden
 as soon as the comment contains text.</p>
-<p>The agent <strong>Chat</strong> tab sits directly after <strong>Tasks</strong> and owns both halves of an
-agent’s messaging in one section. <strong>Chat</strong> is its default view: the conversation
+<p>The agent <strong>Chat</strong> tab is the first tab, directly before <strong>Tasks</strong>, and owns
+both halves of an agent’s messaging in one section. <strong>Chat</strong> is its default view: the conversation
 with that agent — the customer’s messages in its inbox merged with its messages
 in the customer’s channel — rendered as sided bubbles, with a composer that
 publishes into the agent’s inbox carrying the customer channel as its reply
@@ -290,8 +294,14 @@ from the daemon’s default conversation types, offers an agent’s own wakes
 (<code>task.goal</code>, <code>script.result</code>, schedule alarms) explicitly, and the chosen set
 persists in the Desktop WebView under <code>terminals:chat-types:v1</code>. Opening the
 chat marks it read at the timestamp of the newest message actually shown, never
-at the current time. <strong>Channels</strong> is the same section’s second view and keeps
-the existing subscription list, channel tail, and channel send.</p>
+at the current time. A message that names a task carries that key as a link
+under its text: the key the daemon attached to the message, and any task key
+written in the message text. Opening one opens the task panel over the chat —
+the same detail panel Tasks shows, with its own load, its own live refresh and
+its own writes, so status, priority, assignee, pull request, description,
+comments and relations are all editable there without leaving Chat. Closing it
+returns to the conversation. <strong>Channels</strong> is the same section’s second view and
+keeps the existing subscription list, channel tail, and channel send.</p>
 <p>Live updates ride one <code>/api/messages/ws</code> socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
 reconnect reloads unconditionally because the socket replays nothing. The
@@ -358,9 +368,15 @@ available after completion. See
 and <code>/workspace</code> route remain available for retained layouts and possible
 future use, but the titlebar entry and agent-list add/drag gesture are hidden.
 A selected server owns Tasks, Images, Stores, and Settings, and its
-context row remains visible above the selected agent’s Console, Autopilot,
-Activity, Tasks, Chat, Configuration, and Advanced tabs. Server-owned routes include
+context row remains visible above the selected agent’s Chat, Tasks, Console,
+Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.</p>
+<p>Selecting another agent in the sidebar while an agent workspace is open keeps
+the tab that is currently open and shows the new agent in it, so the same view
+answers the same question about the next agent. An unknown tab still falls back
+to Console, and a selected task in the Tasks query is dropped because it belongs
+to the agent being left. Selecting an agent from anywhere else — Workspace, a
+team, or a freshly created agent — still opens Console.</p>
 <p>When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful
 server and agent snapshot in React memory rather than flashing the whole pane
