@@ -88,6 +88,15 @@ fixed installer script to a staging directory. The remote installer:
 - verifies the daemon reports the requested version;
 - rolls back the previous release on activation failure.
 
+The upload runs over `scp` with SSH compression enabled, and its timeout is
+derived from the payload rather than fixed: a floor of two minutes plus one
+second per 128 KiB of bundle, capped at thirty minutes. A release bundle is
+around 100 MB, so a fixed short timeout used to abort the transfer on ordinary
+uplinks, leaving the update reported as `SSH command timed out` at the
+**Upload release** step. The budget now assumes a slow, incompressible worst
+case; a healthy link finishes far sooner and the timeout only bounds a stalled
+transfer.
+
 Reactivating a release that predates `tariboy-tasks` removes both newer Tasks
 links transactionally. Selecting the newer release again restores them; every
 selected release must contain its required payloads before links switch.

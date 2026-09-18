@@ -7,6 +7,28 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+/// Upload budgets. A release bundle is around 100 MB and `scp` gets no second
+/// chance, so the deadline is derived from the payload instead of being fixed:
+/// a fixed two-minute cap aborted ordinary uplinks mid-transfer and surfaced as
+/// a failed "Upload release" step. The floor rate is a deliberately pessimistic
+/// slow-link, worst-case-incompressible assumption; the cap still bounds a
+/// stalled transfer.
+const UPLOAD_MIN_TIMEOUT: Duration = Duration::from_secs(120);
+const UPLOAD_MAX_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const UPLOAD_FLOOR_BYTES_PER_SEC: u64 = 128 * 1024;
+
+/// The time budget for uploading `files`, from their total size on disk.
+/// Unreadable files contribute nothing; the transfer itself reports them.
+fn upload_timeout(files: &[PathBuf]) -> Duration {
+    let bytes = files
+        .iter()
+        .filter_map(|path| std::fs::metadata(path).ok())
+        .map(|meta| meta.len())
+        .sum::<u64>();
+    let transfer = Duration::from_secs(bytes / UPLOAD_FLOOR_BYTES_PER_SEC);
+    (UPLOAD_MIN_TIMEOUT + transfer).min(UPLOAD_MAX_TIMEOUT)
+}
+
 const CREATE_STAGE_SCRIPT: &[u8] = br#"set -eu
 : "${HOME:?HOME is required}"
 staging=${1-}
@@ -217,7 +239,7 @@ fn stage_with(
         remote.upload(
             &files,
             &format!("~/.local/lib/tariboy/{staging}/"),
-            Duration::from_secs(120),
+            upload_timeout(&files),
             sink.clone(),
         )?;
         phase(operation, &sink, "stage_release");
@@ -499,7 +521,7 @@ fn run_with(
         remote.upload(
             &files,
             &format!("~/.local/lib/tariboy/{staging}/"),
-            Duration::from_secs(120),
+            upload_timeout(&files),
             sink.clone(),
         )?;
 
@@ -621,6 +643,7 @@ mod tests {
         wrong_restart_version: Mutex<Option<String>>,
         activation_previous: Mutex<Option<String>>,
         status: Mutex<String>,
+        upload_timeout: Mutex<Option<Duration>>,
     }
 
     impl FakeRemote {
@@ -634,6 +657,13 @@ mod tests {
 
         fn calls(&self) -> Vec<String> {
             self.calls.lock().unwrap().clone()
+        }
+
+        fn upload_timeout(&self) -> Duration {
+            self.upload_timeout
+                .lock()
+                .unwrap()
+                .expect("upload was called")
         }
     }
 
@@ -727,9 +757,10 @@ mod tests {
             &self,
             files: &[PathBuf],
             remote_dir: &str,
-            _timeout: Duration,
+            timeout: Duration,
             _sink: OutputSink,
         ) -> std::result::Result<(), ssh::SshError> {
+            *self.upload_timeout.lock().unwrap() = Some(timeout);
             self.calls.lock().unwrap().push(format!(
                 "upload:{}:{}",
                 files
@@ -770,6 +801,72 @@ mod tests {
         };
         let sink: OutputSink = std::sync::Arc::new(|_| {});
         (dir, bundle, operation, sink)
+    }
+
+    fn grow(bundle: &PlatformBundle, name: &str, bytes: u64) {
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(bundle.file(name))
+            .unwrap();
+        file.set_len(bytes).unwrap();
+    }
+
+    #[test]
+    fn upload_timeout_scales_with_payload_and_stays_bounded() {
+        let small = upload_timeout(&[]);
+        assert_eq!(small, UPLOAD_MIN_TIMEOUT);
+
+        let hundred_megabytes = duration_for_bytes(100 * 1024 * 1024);
+        assert!(
+            hundred_megabytes >= Duration::from_secs(900),
+            "a 100 MiB payload must survive a slow uplink, got {hundred_megabytes:?}"
+        );
+
+        assert_eq!(
+            duration_for_bytes(64 * 1024 * 1024 * 1024),
+            UPLOAD_MAX_TIMEOUT
+        );
+    }
+
+    fn duration_for_bytes(bytes: u64) -> Duration {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("payload");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(bytes).unwrap();
+        upload_timeout(&[path])
+    }
+
+    #[test]
+    fn install_and_update_uploads_budget_time_for_the_whole_bundle() {
+        for large in [false, true] {
+            let (_dir, bundle, operation, sink) = fixture();
+            if large {
+                grow(&bundle, "tariboyd", 200 * 1024 * 1024);
+            }
+            let expected = upload_timeout(&{
+                let mut files = bundle.files_for_upload();
+                files.push(bundle.file("remote-install.sh"));
+                files
+            });
+
+            let install = FakeRemote {
+                status: Mutex::new(r#"{"version":"0.9.0","http_addr":"127.0.0.1:9990"}"#.into()),
+                ..FakeRemote::default()
+            };
+            run_with(&install, &operation, &bundle, 9990, sink.clone()).unwrap();
+            assert_eq!(install.upload_timeout(), expected);
+
+            let update = FakeRemote::default();
+            stage_with(&update, &operation, &bundle, sink).unwrap();
+            assert_eq!(update.upload_timeout(), expected);
+
+            if large {
+                assert!(
+                    expected > Duration::from_secs(1600),
+                    "a 200 MiB bundle must not be cut off at the small-payload floor"
+                );
+            }
+        }
     }
 
     #[test]

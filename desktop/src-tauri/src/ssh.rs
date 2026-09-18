@@ -516,6 +516,9 @@ impl Transport {
             }
         }
         let mut args = vec![
+            // Compression: the release bundle is ~100 MB of Go binaries, which
+            // compress well, and the upload is the slowest step of an update.
+            "-C".to_string(),
             "-o".to_string(),
             format!("ControlPath={}", request.socket.display()),
             "--".to_string(),
@@ -1094,6 +1097,7 @@ mod tests {
         assert_eq!(
             testbin::invocations(&log),
             vec![vec![
+                "-C",
                 "-o",
                 &format!("ControlPath={}", socket.display()),
                 "--",
