@@ -87,6 +87,17 @@ AppleScript layout automation, so release packaging does not require an
 Automation permission grant; the application, `Applications` link, signatures,
 and artifact checks are unchanged.
 
+When bundling fails, the target prints the disk image diagnostics report and
+retries once with `DESKTOP_BUNDLE_VERBOSE=1`, which makes Tauri stream
+`bundle_dmg.sh`'s own output. Read both reports before rerunning the tag
+workflow: a leftover attached image, an exhausted disk, or a stuck
+`diskimages-helper` is a runner fault, while a reproducible `bundle_dmg.sh`
+error is a packaging defect that a rerun will not fix.
+
+```bash
+scripts/desktop-bundle-diagnostics.sh
+```
+
 Run the isolated desktop smoke separately before publishing; it is not part of
 DMG packaging:
 
