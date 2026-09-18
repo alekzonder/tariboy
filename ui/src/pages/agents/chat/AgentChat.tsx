@@ -18,8 +18,10 @@ import {
 
 const ALL_TYPES = [...DEFAULT_CHAT_TYPES, ...EXTRA_CHAT_TYPES];
 
-/** A task key as the daemon writes it: queue prefix, dash, number. */
-const TASK_KEY = /\b[A-Z][A-Z0-9]*-\d+\b/g;
+/** A task key as the daemon writes it: queue prefix, dash, random lowercase
+ *  suffix. The digits-only form is the retired numeric key, which still
+ *  resolves through its alias and still appears in older messages. */
+const TASK_KEY = /\b[A-Z][A-Z0-9]*-(?:[0-9a-z]{4}|\d+)\b/g;
 
 function stringField(record: Record<string, unknown> | undefined, field: string): string {
   const value = record?.[field];

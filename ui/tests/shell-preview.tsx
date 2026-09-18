@@ -59,7 +59,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes("/api/agents")) return json({ agents: AGENTS, count: AGENTS.length });
   if (url.includes("/api/groups")) return json({ groups: [{ name: "core", lead: "builder", members: 2 }], count: 1 });
   if (url.includes("/api/daemon/config")) return json({});
-  if (url.includes("/api/task-queues")) return json({ queues: [{ prefix: "TB", title: "Tariboy", description: "", next_number: 148 }], count: 1 });
+  if (url.includes("/api/task-queues")) return json({ queues: [{ prefix: "TB", title: "Tariboy", description: "" }], count: 1 });
   if (url.includes("/api/task-notifications")) return json({ notifications: [], count: 0 });
   if (url.includes("/api/task-principals")) return json({ customer: "customer:ops", agents: AGENTS.map((agent) => agent.name) });
   if (url.includes(`/api/tasks/${DETAIL_KEY}/artifacts`)) return json({ items: [], count: 0 });

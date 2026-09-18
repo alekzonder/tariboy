@@ -4,6 +4,7 @@ import { useOptionalDaemons } from "@/components/DaemonProvider"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import { ApiError, type ApiTarget } from "@/lib/api"
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree"
+import { resolveDaemon } from "@/lib/daemons"
 import {
   addTaskComment,
   addTaskRelation,
@@ -20,6 +21,7 @@ import {
   listTasks,
   markTaskNotificationRead,
   moveTask,
+  transferTask,
   updateTaskQueue,
   updateTask,
   type CreateQueueInput,
@@ -522,6 +524,18 @@ function TasksWorkspaceContent({
     }
   }
 
+  const transferDetail = async (hostID: string) => {
+    if (!detail) throw new Error("Task is no longer selected")
+    const key = detail.task.key
+    const host = await resolveDaemon(hostID)
+    if (!host) throw new Error("That server is no longer registered")
+    const label = host.label || host.id
+    await transferTask(key, target, host, label, idempotencyKey())
+    toast.success(`${key} moved to ${label}`)
+    await loadTree()
+    await loadDetail(key)
+  }
+
   const createQueue = async (input: CreateQueueInput) => {
     try {
       const created = await createTaskQueue(input, target)
@@ -713,6 +727,7 @@ function TasksWorkspaceContent({
             )
             await loadDetail(detail.task.key)
           }}
+          onTransfer={transferDetail}
           onDeleteRelation={async (relationID: number) => {
             await deleteTaskRelation(
               detail.task.key, relationID, detail.task.revision, target, idempotencyKey(),

@@ -103,6 +103,18 @@ func TaskOperatorCommands() []registry.Command {
 					Revision:          int64Param(p, "revision"),
 				})
 			}),
+		taskRoute("tasks.export", "GET", "/api/tasks/{key}/export", "Export a task tree for transfer to another daemon",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				return control.ExportTask(ctx, actor, stringParam(p, "key"))
+			}),
+		taskRoute("tasks.import", "POST", "/api/tasks/import", "Import a task tree exported from another daemon",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				var bundle tasks.TransferBundle
+				if err := decodeTaskParam(p, "bundle", &bundle); err != nil {
+					return nil, err
+				}
+				return control.ImportTask(ctx, actor, bundle)
+			}),
 		taskRoute("tasks.claim", "POST", "/api/tasks/{key}/claim", "Claim a native task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.ClaimTask(ctx, actor, stringParam(p, "key"), int64Param(p, "revision"))
@@ -396,6 +408,10 @@ func taskHTTPArgs(path string) []registry.Arg {
 			{Name: "priority", Help: "Task priority"},
 			{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"},
 		}
+	case "tasks.import":
+		return []registry.Arg{{Name: "bundle", Type: registry.JSONObject, Required: true,
+			Help:   "Bundle returned by tasks.export on the source daemon",
+			Schema: map[string]any{"type": "object"}}}
 	case "tasks.workflows.create":
 		return []registry.Arg{{Name: "definition", Type: registry.JSONObject, Required: true, Help: "Versioned workflow definition as JSON", Schema: schemaRef("WorkflowDefinition")}}
 	case "tasks.queue.workflow.set":

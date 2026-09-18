@@ -24,7 +24,7 @@ func (s *Service) ListQueues(ctx context.Context, actor Actor) ([]Queue, error) 
 		return nil, err
 	}
 	query := `
-		SELECT prefix, name, description, responsible_agent, next_number,
+		SELECT prefix, name, description, responsible_agent,
 		       revision, created_at, updated_at
 		FROM task_queues`
 	args := []any{}
@@ -46,7 +46,7 @@ func (s *Service) ListQueues(ctx context.Context, actor Actor) ([]Queue, error) 
 	for rows.Next() {
 		var queue Queue
 		if err := rows.Scan(&queue.Prefix, &queue.Name, &queue.Description,
-			&queue.ResponsibleAgent, &queue.NextNumber, &queue.Revision,
+			&queue.ResponsibleAgent, &queue.Revision,
 			&queue.CreatedAt, &queue.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -71,11 +71,11 @@ func (s *Service) GetQueue(ctx context.Context, actor Actor, prefix string) (Que
 	prefix = strings.ToUpper(strings.TrimSpace(prefix))
 	var queue Queue
 	err := s.db.QueryRowContext(ctx, `
-		SELECT prefix, name, description, responsible_agent, next_number,
+		SELECT prefix, name, description, responsible_agent,
 		       revision, created_at, updated_at
 		FROM task_queues WHERE prefix = ?`, prefix).Scan(
 		&queue.Prefix, &queue.Name, &queue.Description, &queue.ResponsibleAgent,
-		&queue.NextNumber, &queue.Revision, &queue.CreatedAt, &queue.UpdatedAt)
+		&queue.Revision, &queue.CreatedAt, &queue.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return Queue{}, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
 	}
@@ -173,11 +173,11 @@ func (s *Service) UpdateQueue(ctx context.Context, actor Actor, prefix string, i
 	if affected != 1 {
 		var fresh Queue
 		if err := tx.QueryRowContext(ctx, `
-			SELECT prefix, name, description, responsible_agent, next_number,
+			SELECT prefix, name, description, responsible_agent,
 			       revision, created_at, updated_at
 			FROM task_queues WHERE prefix = ?`, current.Prefix).Scan(
 			&fresh.Prefix, &fresh.Name, &fresh.Description, &fresh.ResponsibleAgent,
-			&fresh.NextNumber, &fresh.Revision, &fresh.CreatedAt, &fresh.UpdatedAt,
+			&fresh.Revision, &fresh.CreatedAt, &fresh.UpdatedAt,
 		); err != nil {
 			return Queue{}, err
 		}

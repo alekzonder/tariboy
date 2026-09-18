@@ -103,13 +103,13 @@ func TestReconcileAgentKeepsStickyGoalForEqualOrLowerPriority(t *testing.T) {
 
 func TestReconcileAgentSkipsDependencyBlockedCandidate(t *testing.T) {
 	s := goalStore(t, goalNow)
-	seedTask(t, s, "T-BLOCKER", "agent:other", "P0", "in_progress", "2026-09-01T00:00:00Z")
-	seedTask(t, s, "T-BLOCKED", "agent:worker", "P0", "in_progress", "2026-09-01T00:00:00Z")
-	seedTask(t, s, "T-READY", "agent:worker", "P1", "in_progress", "2026-09-02T00:00:00Z")
-	seedBlockingRelation(t, s, "T-BLOCKER", "T-BLOCKED")
+	seedTask(t, s, "T-blocker", "agent:other", "P0", "in_progress", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-blocked", "agent:worker", "P0", "in_progress", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-ready", "agent:worker", "P1", "in_progress", "2026-09-02T00:00:00Z")
+	seedBlockingRelation(t, s, "T-blocker", "T-blocked")
 
 	goal, err := s.ReconcileAgent("worker", goalNow)
-	if err != nil || goal.TaskKey != "T-READY" {
+	if err != nil || goal.TaskKey != "T-ready" {
 		t.Fatalf("goal=%#v err=%v, want unblocked task", goal, err)
 	}
 }
@@ -131,16 +131,16 @@ func TestReconcileAgentReleasesBlockedStickyGoal(t *testing.T) {
 
 func TestReconcileAgentBlockedHigherPriorityDoesNotPreempt(t *testing.T) {
 	s := goalStore(t, goalNow)
-	seedTask(t, s, "T-CURRENT", "agent:worker", "P2", "in_progress", "2026-09-02T00:00:00Z")
-	if goal, err := s.ReconcileAgent("worker", goalNow); err != nil || goal.TaskKey != "T-CURRENT" {
+	seedTask(t, s, "T-current", "agent:worker", "P2", "in_progress", "2026-09-02T00:00:00Z")
+	if goal, err := s.ReconcileAgent("worker", goalNow); err != nil || goal.TaskKey != "T-current" {
 		t.Fatalf("initial goal=%#v err=%v", goal, err)
 	}
 
-	seedTask(t, s, "T-BLOCKER", "agent:other", "P0", "in_progress", "2026-09-01T00:00:00Z")
-	seedTask(t, s, "T-BLOCKED", "agent:worker", "P0", "in_progress", "2026-09-01T00:00:00Z")
-	seedBlockingRelation(t, s, "T-BLOCKER", "T-BLOCKED")
+	seedTask(t, s, "T-blocker", "agent:other", "P0", "in_progress", "2026-09-01T00:00:00Z")
+	seedTask(t, s, "T-blocked", "agent:worker", "P0", "in_progress", "2026-09-01T00:00:00Z")
+	seedBlockingRelation(t, s, "T-blocker", "T-blocked")
 	goal, err := s.ReconcileAgent("worker", goalNow)
-	if err != nil || goal.TaskKey != "T-CURRENT" {
+	if err != nil || goal.TaskKey != "T-current" {
 		t.Fatalf("goal=%#v err=%v, want sticky unblocked task", goal, err)
 	}
 }
@@ -154,26 +154,26 @@ func TestReconcileAgentOrdersCandidates(t *testing.T) {
 		{
 			name: "priority",
 			tasks: []goalTask{
-				{key: "T-P1", priority: "P1", status: "in_progress", createdAt: "2026-09-01T00:00:00Z"},
-				{key: "T-P0", priority: "P0", status: "open", createdAt: "2026-09-02T00:00:00Z"},
+				{key: "T-p1", priority: "P1", status: "in_progress", createdAt: "2026-09-01T00:00:00Z"},
+				{key: "T-p0", priority: "P0", status: "open", createdAt: "2026-09-02T00:00:00Z"},
 			},
-			want: "T-P0",
+			want: "T-p0",
 		},
 		{
 			name: "status",
 			tasks: []goalTask{
-				{key: "T-OPEN", priority: "P1", status: "open", createdAt: "2026-09-01T00:00:00Z"},
-				{key: "T-PROGRESS", priority: "P1", status: "in_progress", createdAt: "2026-09-02T00:00:00Z"},
+				{key: "T-open", priority: "P1", status: "open", createdAt: "2026-09-01T00:00:00Z"},
+				{key: "T-progress", priority: "P1", status: "in_progress", createdAt: "2026-09-02T00:00:00Z"},
 			},
-			want: "T-PROGRESS",
+			want: "T-progress",
 		},
 		{
 			name: "created_at",
 			tasks: []goalTask{
-				{key: "T-NEW", priority: "P1", status: "open", createdAt: "2026-09-02T00:00:00Z"},
-				{key: "T-OLD", priority: "P1", status: "open", createdAt: "2026-09-01T00:00:00Z"},
+				{key: "T-new", priority: "P1", status: "open", createdAt: "2026-09-02T00:00:00Z"},
+				{key: "T-old", priority: "P1", status: "open", createdAt: "2026-09-01T00:00:00Z"},
 			},
-			want: "T-OLD",
+			want: "T-old",
 		},
 		{
 			name: "task_key",

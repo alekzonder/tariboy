@@ -231,9 +231,15 @@ func TestCreateTaskAllocatesPermanentQueueKeyAndInheritsQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if first.Key != "TEST-1" || second.Key != "TEST-2" || child.Key != "TEST-3" {
-		t.Fatalf("keys = %q, %q, %q; want TEST-1, TEST-2, TEST-3",
-			first.Key, second.Key, child.Key)
+	keys := map[string]bool{}
+	for _, key := range []string{first.Key, second.Key, child.Key} {
+		if !randomKeyPattern.MatchString(key) || !strings.HasPrefix(key, "TEST-") {
+			t.Fatalf("key %q is not a TEST random key", key)
+		}
+		if keys[key] {
+			t.Fatalf("duplicate key %q", key)
+		}
+		keys[key] = true
 	}
 	if child.ParentKey != first.Key || child.Queue != "TEST" {
 		t.Fatalf("child parent/queue = %q/%q; want %q/TEST",
@@ -398,18 +404,15 @@ func TestCreateTaskIdempotencyReplaysOriginalWithoutAllocatingAnotherKey(t *test
 	if replayed.Key != first.Key || replayed.Title != first.Title {
 		t.Fatalf("replayed = %#v, first = %#v", replayed, first)
 	}
-	var tasks, events, next int
+	var tasks, events int
 	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix = 'IDEM'`).Scan(&tasks); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_events WHERE kind = 'task.created'`).Scan(&events); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.db.QueryRow(`SELECT next_number FROM task_queues WHERE prefix = 'IDEM'`).Scan(&next); err != nil {
-		t.Fatal(err)
-	}
-	if tasks != 1 || events != 1 || next != 2 {
-		t.Fatalf("tasks/events/next = %d/%d/%d, want 1/1/2", tasks, events, next)
+	if tasks != 1 || events != 1 {
+		t.Fatalf("tasks/events = %d/%d, want 1/1", tasks, events)
 	}
 }
 

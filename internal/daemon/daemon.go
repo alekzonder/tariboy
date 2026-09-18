@@ -262,6 +262,9 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return fmt.Errorf("resolve customer login: %w", err)
 	}
+	if err := tasks.MigrateLegacyKeys(st.DB, time.Now); err != nil {
+		return fmt.Errorf("migrate task keys: %w", err)
+	}
 	taskService := tasks.NewService(st.DB, customerLogin, time.Now)
 	workflowIngress := newWorkflowIngressSignal()
 	taskHub := tasks.NewHub(taskService)

@@ -17,7 +17,20 @@ retain the flexible model described below.
 ## Work model
 
 Every task belongs to a queue and receives an immutable queue key such as
-`TEST-1`. A task records its author, customer, assignee, optional group,
+`TEST-fkt3`: the queue prefix, a dash, and four random characters drawn from
+`23456789abcdefghjkmnpqrstuvwxyz` — the digits and lowercase letters that cannot
+be confused for one another when a key is read aloud or copied by hand. The key
+is random rather than a per-queue counter so that two daemons never mint the
+same key, which is what lets a task keep its key when it
+[moves to another server](#moving-a-task-to-another-server). Keys are matched
+case-insensitively, so `test-FKT3` finds the same task.
+
+Daemons upgraded from a numeric key such as `TEST-12` rewrite every task to a
+random key on first start and keep the old key as a permanent alias, so a key
+already written into an agent context, a branch name, a pull request title or a
+comment keeps resolving to its task.
+
+A task records its author, customer, assignee, optional group,
 status, priority, pull request URL, block reason, parent, ordered siblings,
 comments, dependencies, and principals whose answers are still required. A pull
 request is an optional normalized absolute `http` or `https` URL without
@@ -205,6 +218,40 @@ client renders it as a root-level filtered orphan; the excluded parent is never
 included merely to reconstruct the tree. Switching views always refetches the
 authoritative selected view, and realtime refreshes retain that selection.
 
+## Moving a task to another server
+
+Each host keeps its own tasks, so work that belongs with another host is moved
+rather than copied by hand. In the task panel, the actions menu beside **Save
+task** opens **Move to another server**, which lists the other hosts registered
+in the desktop app.
+
+The desktop app is the only component authenticated against both daemons, so it
+drives the move: it exports the task tree from this daemon, imports it into the
+chosen one, then comments on the task here and sets it to `cancelled`. Nothing
+is deleted — the original task, its history and its events stay on the source
+host — so a failure part-way leaves the task readable on both sides.
+
+What moves: the task, its whole descendant subtree, their comments with the
+original authors and times, and the relations whose two ends are both inside
+that subtree. What does not move: the event log, notifications, reminders,
+relations pointing outside the subtree, and workflow execution state.
+
+The target daemon refuses the import, changing nothing, when:
+
+- it has no queue with the same prefix (`queue_not_found`);
+- a task or a retired key alias already uses one of the keys
+  (`task_key_taken`);
+- its queue runs a [task workflow](/docs/task-workflows)
+  (`transfer_managed_queue`).
+
+A task in a managed queue cannot be exported either
+(`transfer_managed_task`): its assignments, leases and requirement history are
+daemon-local runtime that a transfer would silently drop.
+
+The two endpoints behind the menu are `GET /api/tasks/{key}/export` and
+`POST /api/tasks/import`. Both are customer-authenticated; agents do not
+transfer tasks.
+
 ## Agent capability
 
 Tasks are native daemon functionality, but prompt and command exposure is
@@ -270,19 +317,19 @@ a queue**.
 ```bash
 ttasks mine
 ttasks ready --claim
-ttasks show TEST-12
+ttasks show TEST-fkt3
 ttasks create --queue TEST --title "Investigate failure" --priority P1
-ttasks create --parent TEST-12 --title "Add regression test"
-ttasks assign TEST-12 worker
-ttasks update TEST-12 --priority P0
-ttasks update TEST-12 --pull-request https://example.com/org/repo/pull/42
-ttasks comment TEST-12 "Found the boundary"
-ttasks ask TEST-12 user:login "Which behavior should win?"
-ttasks move TEST-12 --parent TEST-3
-ttasks move TEST-12 --to-root
-ttasks block TEST-12 --by TEST-2
-ttasks relate TEST-12 TEST-9
-ttasks done TEST-12
+ttasks create --parent TEST-fkt3 --title "Add regression test"
+ttasks assign TEST-fkt3 worker
+ttasks update TEST-fkt3 --priority P0
+ttasks update TEST-fkt3 --pull-request https://example.com/org/repo/pull/42
+ttasks comment TEST-fkt3 "Found the boundary"
+ttasks ask TEST-fkt3 user:login "Which behavior should win?"
+ttasks move TEST-fkt3 --parent TEST-9rmq
+ttasks move TEST-fkt3 --to-root
+ttasks block TEST-fkt3 --by TEST-2xwv
+ttasks relate TEST-fkt3 TEST-hb4k
+ttasks done TEST-fkt3
 ```
 
 For workflow-managed work, agents instead use `ttasks work next`, `ttasks work

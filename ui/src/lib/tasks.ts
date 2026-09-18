@@ -11,7 +11,6 @@ export interface TaskQueue {
   description: string
   owners: string[]
   responsible_agent: string
-  next_number: number
   revision: number
   created_at: string
   updated_at: string
@@ -430,6 +429,39 @@ export const completeTask = (
   revision,
   complete_anyway: completeAnyway,
 })
+
+// A transfer bundle travels between daemons unchanged: the source exports it,
+// the target imports it under the same keys. Only the desktop app is
+// authenticated against both hosts, so it drives the two calls.
+export interface TransferBundle {
+  root_key: string
+  queue: string
+  tasks: unknown[]
+  relations: unknown[]
+}
+
+export const exportTask = (key: string, target?: ApiTarget) =>
+  call<TransferBundle>(target, "GET", `/api/tasks/${encodeURIComponent(key)}/export`)
+export const importTask = (bundle: TransferBundle, target?: ApiTarget) =>
+  call<Task>(target, "POST", "/api/tasks/import", { bundle })
+
+// transferTask is the whole move, in the order that keeps a failure
+// inspectable: read the tree on the source, write it on the destination, then
+// close the copy that stays behind. Nothing is deleted, so a failure after the
+// import leaves the task readable on both hosts.
+export async function transferTask(
+  key: string,
+  source: ApiTarget,
+  destination: ApiTarget,
+  destinationLabel: string,
+  idempotencyKey?: string,
+): Promise<void> {
+  const bundle = await exportTask(key, source)
+  await importTask(bundle, destination)
+  await addTaskComment(key, `Moved to ${destinationLabel} as ${key}.`, source, idempotencyKey)
+  const current = await getTask(key, source)
+  await updateTask(key, { status: "cancelled", revision: current.task.revision }, source)
+}
 
 export const listTaskComments = (key: string, target?: ApiTarget) =>
   call<{ comments: TaskComment[]; count: number }>(

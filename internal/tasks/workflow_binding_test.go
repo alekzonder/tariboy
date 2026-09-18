@@ -354,15 +354,15 @@ func TestWorkflowTaskInitializationRollsBackWithTaskCreation(t *testing.T) {
 	if _, err := svc.CreateTask(context.Background(), actor, CreateTaskInput{Queue: "DEV", Title: "rollback"}); err == nil {
 		t.Fatal("managed task creation succeeded despite failed workflow initialization")
 	}
-	var tasks, next int
+	var tasks, aliases int
 	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix = 'DEV'`).Scan(&tasks); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.db.QueryRow(`SELECT next_number FROM task_queues WHERE prefix = 'DEV'`).Scan(&next); err != nil {
+	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_key_aliases`).Scan(&aliases); err != nil {
 		t.Fatal(err)
 	}
-	if tasks != 0 || next != 1 {
-		t.Fatalf("tasks/next after rollback = %d/%d; want 0/1", tasks, next)
+	if tasks != 0 || aliases != 0 {
+		t.Fatalf("tasks/aliases after rollback = %d/%d; want 0/0", tasks, aliases)
 	}
 }
 
