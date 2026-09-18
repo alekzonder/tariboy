@@ -1,3 +1,23 @@
+## [0.65.0] - 2026-09-18
+
+### Added
+
+- Update a remote host from the host itself: `tariboy update [VERSION|latest]` resolves a release, downloads `tariboy_<version>_linux-x86_64.tar.gz` and `SHA256SUMS`, verifies the archive before unpacking it, and runs the release's own `remote-install.sh`, so checksums, locking, atomic activation and rollback stay with the installer. A running daemon is restarted through the managed `tariboyd` link and must report the installed version; a stopped daemon is left stopped. The release now publishes that server archive, and the artifact gate checks its entries, VERSION, internal checksums, installer identity and binary architecture.
+- Tag iterations and search them: `tariboy iteration tag add|rm|set` applies a batch of ids and tags in one transaction, `tariboy iteration ls` gains `--tag`, `--started-after` and `--started-before`, and list and inspect report a sorted tags list. The Activity tab filters by the same criteria, keeps them in the URL, shows each row's tags, and edits the selected iteration's tags. Tags live in their own table and are retired with the iteration, so an iteration row stays immutable evidence of an execution.
+- Move a task tree between servers: a tree can be exported from one daemon and imported into another under the same keys, driven from the desktop task menu, which exports, imports, comments and cancels the copy left behind. The target refuses an import when it has no queue with that prefix, when a key is already in use, or when the queue runs a workflow.
+
+### Changed
+
+- Mint task keys as the queue prefix plus four random characters instead of a per-queue counter, so two daemons no longer mint the same keys and a task keeps its identity across hosts. Existing numeric keys are rewritten on daemon start and recorded as aliases, so a key already written into an agent context, a branch name or a comment keeps resolving, and lookup normalizes casing.
+- Drop the Notifications view from the Tasks workspace. Customer questions stay visible as messages in the agent Chat and as the indicator on the task row, and opening a task marks its unread question notifications read. Agent rows keep only the unread message count, an unanswered question still lifts a row to the top, and a chat draws a New messages line above the first unseen message.
+
+### Fixed
+
+- Render the task panel opened from a chat message, which appeared as an empty sheet and left the Tasks tab unable to load. The dialog drops its resize-grip column when there is no grip, and the panel opens the tasks socket at the host current sequence instead of replaying the whole task event log.
+- Keep trailing blank lines out of the Markdown the rich text editor emits, so pressing Enter twice at the end of a description no longer produces a code block holding `&nbsp;`. The blank lines and the caret stay where the author put them.
+
+[0.65.0]: https://github.com/alekzonder/tariboy/compare/v0.64.0...v0.65.0
+
 ## [0.64.0] - 2026-09-17
 
 ### Added
