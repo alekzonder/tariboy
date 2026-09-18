@@ -26,8 +26,14 @@ scripts/scripts.sh schedule poll --every 60 --description "Poll the queue" -- ./
 ```
 
 Runs of one recurring script never overlap. The fixed delay starts at the
-previous run's actual finish time, and success or failure does not stop the
-schedule.
+previous run's actual finish time.
+
+A recurring script keeps running only while it stays quiet. As soon as a run
+publishes a `script.result` message, the definition stops: its state becomes
+`completed`, no next run is scheduled, and the agent is notified once instead of
+repeatedly. Resume it deliberately with `rerun` after handling that message, or
+keep it silent with `--quiet-exit` (see
+[Results and exit codes](#results-and-exit-codes)).
 
 Inspect and control definitions and runs separately:
 
@@ -35,7 +41,7 @@ Inspect and control definitions and runs separately:
 scripts/scripts.sh ls
 scripts/scripts.sh runs scr-agent-...
 scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...        # completed one-shot or idle recurring definitions
+scripts/scripts.sh rerun scr-agent-...        # run now, or resume a stopped recurring definition
 scripts/scripts.sh cancel scr-agent-...       # stop a definition and its active run
 scripts/scripts.sh cancel srun-agent-...      # stop only this run
 scripts/scripts.sh rm scr-agent-...           # inactive definitions only
@@ -64,12 +70,14 @@ scripts.
    inspect its status, exit code, timestamps, duration, log path, and inline
    log. Use **Copy path** to copy the log's absolute path or **Download log**
    to save the complete log.
-4. Use **Exec** to queue an immediate attempt for a completed one-shot or an
-   active recurring definition with no pending or running attempt. A recurring
-   definition starts its next fixed delay when that manual run finishes. Use
-   **Cancel** on an active definition to stop future runs and request
-   cancellation of its active run. Use **Cancel run** on an active run when
-   only that attempt should stop.
+4. Use **Exec** to queue an immediate attempt for a completed definition,
+   including a recurring one that stopped after publishing its result, or for
+   an active recurring definition with no pending or running attempt. An active
+   recurring definition starts its next fixed delay when that manual run
+   finishes quietly. Use **Cancel** on an active definition to stop future runs
+   and request cancellation of its active run. Use **Cancel run** on an active
+   run when only that attempt should stop; that run still publishes a result,
+   so it stops the definition as well.
 5. Remove only an inactive definition. Desktop asks for confirmation because
    removal permanently deletes the definition and all of its run history.
 
@@ -99,16 +107,19 @@ scripts/scripts.sh schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
 ```
 
 The matching run is still stored with its exit code and log, but creates no
-message and does not wake the agent. `--quiet-exit` is unavailable for
-one-shot runs, and no exit code is quiet by default.
+message, does not wake the agent, and leaves the schedule running. Every other
+outcome publishes a result and therefore stops the definition until it is
+resumed. `--quiet-exit` is unavailable for one-shot runs, and no exit code is
+quiet by default.
 
 ## Restart and lifecycle
 
 Pending runs remain claimable after restart. A run that was already running is
 recorded as `interrupted` and is not blindly repeated, because the command may
 have completed an external side effect before the daemon lost process state.
-A recurring definition schedules its next attempt after recovery; an
-interrupted one-shot becomes completed and can be rerun explicitly.
+Recovery publishes that interrupted result, so a recurring definition stops
+after it exactly as it does after any other published result; an interrupted
+one-shot becomes completed as well. Both are resumed explicitly with `rerun`.
 
 Cancellation is durable and idempotent. A running attempt is shown as
 `cancelling` until its process group actually exits, and it continues to occupy

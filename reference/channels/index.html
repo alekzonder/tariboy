@@ -265,9 +265,12 @@ runs immediately and then after a fixed post-completion delay. Non-quiet runs
 publish <code>script.result</code> to the owner’s inbox. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute <code>log_path</code>.
 The log starts with the resolved execution CWD; combined stdout and stderr
-follow in that file and are not copied into the message. An idle recurring
-definition can also be run immediately; its next fixed delay starts when that
-manual run finishes, and the active-run constraint still prevents overlap.</p>
+follow in that file and are not copied into the message. Publishing that result
+also stops the recurring definition, so one failing command cannot flood the
+inbox; <code>scripts/scripts.sh rerun scr-...</code> resumes it once the agent has handled
+the message. A quiet run publishes nothing and keeps the schedule running. An
+idle recurring definition can also be run immediately; the active-run constraint
+still prevents overlap.</p>
 <h2 id="chats"><a class="blume-heading-anchor" href="#chats">Chats</a></h2>
 <p>A chat is not a fifth table. The conversation with one agent is the two existing
 inboxes merged by time: the customer’s messages in <code>agent:&lt;a&gt;:inbox</code> and that

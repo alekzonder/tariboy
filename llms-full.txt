@@ -1821,10 +1821,11 @@ remain. The dialog cannot be dismissed or submitted twice while the one bulk
 request is running. Success reports the server's delivery/message counters and
 reloads Queue; failure keeps the authoritative rows visible for retry.
 
-An agent's **Scripts** view exposes **Exec** for a completed one-shot or an
+An agent's **Scripts** view exposes **Exec** for any completed definition —
+including a recurring one that stopped after publishing its result — and for an
 active recurring definition with no pending or running attempt. Exec queues the
-stored command through the ordinary script worker; recurring definitions resume
-their fixed post-completion delay after that manual run.
+stored command through the ordinary script worker; a recurring definition
+resumes its fixed post-completion delay from there while its runs stay quiet.
 
 The workspace has no notification inbox: customer-only queue administration is
 the left rail's remaining non-tree view, and the notification state is rendered
@@ -2340,7 +2341,7 @@ scripts/scripts.sh schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
 scripts/scripts.sh ls
 scripts/scripts.sh runs scr-agent-...
 scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...
+scripts/scripts.sh rerun scr-agent-...        # also resumes a stopped schedule
 scripts/scripts.sh cancel scr-agent-...       # definition, including its active run
 scripts/scripts.sh cancel srun-agent-...      # this run only
 scripts/scripts.sh rm scr-agent-...
@@ -4949,8 +4950,14 @@ scripts/scripts.sh schedule poll --every 60 --description "Poll the queue" -- ./
 ```
 
 Runs of one recurring script never overlap. The fixed delay starts at the
-previous run's actual finish time, and success or failure does not stop the
-schedule.
+previous run's actual finish time.
+
+A recurring script keeps running only while it stays quiet. As soon as a run
+publishes a `script.result` message, the definition stops: its state becomes
+`completed`, no next run is scheduled, and the agent is notified once instead of
+repeatedly. Resume it deliberately with `rerun` after handling that message, or
+keep it silent with `--quiet-exit` (see
+[Results and exit codes](#results-and-exit-codes)).
 
 Inspect and control definitions and runs separately:
 
@@ -4958,7 +4965,7 @@ Inspect and control definitions and runs separately:
 scripts/scripts.sh ls
 scripts/scripts.sh runs scr-agent-...
 scripts/scripts.sh logs srun-agent-...
-scripts/scripts.sh rerun scr-agent-...        # completed one-shot or idle recurring definitions
+scripts/scripts.sh rerun scr-agent-...        # run now, or resume a stopped recurring definition
 scripts/scripts.sh cancel scr-agent-...       # stop a definition and its active run
 scripts/scripts.sh cancel srun-agent-...      # stop only this run
 scripts/scripts.sh rm scr-agent-...           # inactive definitions only
@@ -4987,12 +4994,14 @@ scripts.
    inspect its status, exit code, timestamps, duration, log path, and inline
    log. Use **Copy path** to copy the log's absolute path or **Download log**
    to save the complete log.
-4. Use **Exec** to queue an immediate attempt for a completed one-shot or an
-   active recurring definition with no pending or running attempt. A recurring
-   definition starts its next fixed delay when that manual run finishes. Use
-   **Cancel** on an active definition to stop future runs and request
-   cancellation of its active run. Use **Cancel run** on an active run when
-   only that attempt should stop.
+4. Use **Exec** to queue an immediate attempt for a completed definition,
+   including a recurring one that stopped after publishing its result, or for
+   an active recurring definition with no pending or running attempt. An active
+   recurring definition starts its next fixed delay when that manual run
+   finishes quietly. Use **Cancel** on an active definition to stop future runs
+   and request cancellation of its active run. Use **Cancel run** on an active
+   run when only that attempt should stop; that run still publishes a result,
+   so it stops the definition as well.
 5. Remove only an inactive definition. Desktop asks for confirmation because
    removal permanently deletes the definition and all of its run history.
 
@@ -5022,16 +5031,19 @@ scripts/scripts.sh schedule poll --every 60 --quiet-exit 2 -- ./bin/poll-queue
 ```
 
 The matching run is still stored with its exit code and log, but creates no
-message and does not wake the agent. `--quiet-exit` is unavailable for
-one-shot runs, and no exit code is quiet by default.
+message, does not wake the agent, and leaves the schedule running. Every other
+outcome publishes a result and therefore stops the definition until it is
+resumed. `--quiet-exit` is unavailable for one-shot runs, and no exit code is
+quiet by default.
 
 ## Restart and lifecycle
 
 Pending runs remain claimable after restart. A run that was already running is
 recorded as `interrupted` and is not blindly repeated, because the command may
 have completed an external side effect before the daemon lost process state.
-A recurring definition schedules its next attempt after recovery; an
-interrupted one-shot becomes completed and can be rerun explicitly.
+Recovery publishes that interrupted result, so a recurring definition stops
+after it exactly as it does after any other published result; an interrupted
+one-shot becomes completed as well. Both are resumed explicitly with `rerun`.
 
 Cancellation is durable and idempotent. A running attempt is shown as
 `cancelling` until its process group actually exits, and it continues to occupy
@@ -5388,13 +5400,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.66.1` alpha on an Apple Silicon Mac.
+This path is for the `0.66.2` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.66.1_aarch64.dmg`;
+- a verified `Tariboy_0.66.2_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -5875,9 +5887,12 @@ runs immediately and then after a fixed post-completion delay. Non-quiet runs
 publish `script.result` to the owner's inbox. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
 The log starts with the resolved execution CWD; combined stdout and stderr
-follow in that file and are not copied into the message. An idle recurring
-definition can also be run immediately; its next fixed delay starts when that
-manual run finishes, and the active-run constraint still prevents overlap.
+follow in that file and are not copied into the message. Publishing that result
+also stops the recurring definition, so one failing command cannot flood the
+inbox; `scripts/scripts.sh rerun scr-...` resumes it once the agent has handled
+the message. A quiet run publishes nothing and keeps the schedule running. An
+idle recurring definition can also be run immediately; the active-run constraint
+still prevents overlap.
 
 ## Chats
 
@@ -6665,7 +6680,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.66.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.66.2` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6762,7 +6777,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.66.1`. Resolve a local mismatch with
+The app and bundled daemons must report `0.66.2`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 

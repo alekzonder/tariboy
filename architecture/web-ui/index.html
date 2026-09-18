@@ -369,10 +369,11 @@ recovered, while Archive, DLQ, shared messages, and other agents’ deliveries
 remain. The dialog cannot be dismissed or submitted twice while the one bulk
 request is running. Success reports the server’s delivery/message counters and
 reloads Queue; failure keeps the authoritative rows visible for retry.</p>
-<p>An agent’s <strong>Scripts</strong> view exposes <strong>Exec</strong> for a completed one-shot or an
+<p>An agent’s <strong>Scripts</strong> view exposes <strong>Exec</strong> for any completed definition —
+including a recurring one that stopped after publishing its result — and for an
 active recurring definition with no pending or running attempt. Exec queues the
-stored command through the ordinary script worker; recurring definitions resume
-their fixed post-completion delay after that manual run.</p>
+stored command through the ordinary script worker; a recurring definition
+resumes its fixed post-completion delay from there while its runs stay quiet.</p>
 <p>The workspace has no notification inbox: customer-only queue administration is
 the left rail’s remaining non-tree view, and the notification state is rendered
 as one indicator. A small red indicator on a task row identifies an unread,

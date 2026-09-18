@@ -413,10 +413,11 @@ remain. The dialog cannot be dismissed or submitted twice while the one bulk
 request is running. Success reports the server's delivery/message counters and
 reloads Queue; failure keeps the authoritative rows visible for retry.
 
-An agent's **Scripts** view exposes **Exec** for a completed one-shot or an
+An agent's **Scripts** view exposes **Exec** for any completed definition —
+including a recurring one that stopped after publishing its result — and for an
 active recurring definition with no pending or running attempt. Exec queues the
-stored command through the ordinary script worker; recurring definitions resume
-their fixed post-completion delay after that manual run.
+stored command through the ordinary script worker; a recurring definition
+resumes its fixed post-completion delay from there while its runs stay quiet.
 
 The workspace has no notification inbox: customer-only queue administration is
 the left rail's remaining non-tree view, and the notification state is rendered
