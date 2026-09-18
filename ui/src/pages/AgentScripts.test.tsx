@@ -77,6 +77,7 @@ it.each([
   ["a completed one-shot", { ...definition, mode: "once", state: "completed", next_run_at: undefined }, true],
   ["a recurring script with a pending run", { ...definition, latest_run: { ...latestRun, status: "pending" } }, false],
   ["a cancelled recurring script", { ...definition, state: "cancelled", next_run_at: undefined }, false],
+  ["a stopped recurring script", { ...definition, state: "completed", next_run_at: undefined }, true],
 ] as const)("shows Exec eligibility for %s", async (_label, candidate, expected) => {
   const calls: Array<{ path: string; method: string; body?: unknown }> = [];
   stubFetch(calls, [candidate]); renderPage();

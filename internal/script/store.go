@@ -297,9 +297,13 @@ func (s *Store) CompleteRun(agent, runID string, completion Completion) (Run, er
 		}
 		return Run{}, ErrConflict
 	}
+	quiet := definition.QuietExit != nil && completion.ExitCode != nil && *definition.QuietExit == *completion.ExitCode
+	// A recurring script keeps its schedule only while it stays quiet. Any
+	// published result stops it, so the agent is notified once and resumes it
+	// deliberately with Rerun.
 	state := StateCompleted
 	var nextRun any
-	if definition.Mode == ModeEvery && definition.State == StateActive {
+	if definition.Mode == ModeEvery && definition.State == StateActive && quiet {
 		state = StateActive
 		finished, err := time.Parse(time.RFC3339, completion.FinishedAt)
 		if err != nil {
@@ -318,7 +322,6 @@ func (s *Store) CompleteRun(agent, runID string, completion Completion) (Run, er
 	run.ExitCode = completion.ExitCode
 	run.FinishedAt = completion.FinishedAt
 	run.LogPath = completion.LogPath
-	quiet := definition.QuietExit != nil && completion.ExitCode != nil && *definition.QuietExit == *completion.ExitCode
 	if !quiet {
 		payload, err := json.Marshal(ResultPayload{ScriptID: definition.ID, RunID: run.ID, Name: definition.Name, Mode: definition.Mode, Status: run.Status, ExitCode: run.ExitCode, LogPath: run.LogPath})
 		if err != nil {
@@ -364,9 +367,6 @@ func (s *Store) Rerun(agent, scriptID string) (Run, error) {
 		return Run{}, ErrActive
 	}
 	if definition.State == StateCancelled {
-		return Run{}, ErrConflict
-	}
-	if definition.Mode == ModeEvery && definition.State != StateActive {
 		return Run{}, ErrConflict
 	}
 	run, err := s.newPendingRun(tx, definition)
@@ -558,19 +558,11 @@ func (s *Store) CancelRun(agent, runID, at string) error {
 	if n == 0 {
 		return ErrConflict
 	}
-	if definition.State == StateCancelled {
-		// Definition cancellation is durable and prevents future attempts.
-	} else if definition.Mode == ModeEvery && definition.State == StateActive {
-		cancelledAt, err := time.Parse(time.RFC3339, at)
-		if err != nil {
-			return err
-		}
-		next := cancelledAt.Add(time.Duration(definition.IntervalSeconds) * time.Second).UTC().Format(time.RFC3339)
-		if _, err := tx.Exec(`UPDATE scripts SET next_run_at=? WHERE agent=? AND id=? AND state=?`, next, agent, definition.ID, StateActive); err != nil {
-			return err
-		}
-	} else if definition.Mode == ModeOnce {
-		if _, err := tx.Exec(`UPDATE scripts SET state=? WHERE agent=? AND id=?`, StateCompleted, agent, definition.ID); err != nil {
+	// The cancelled run publishes a result, which stops a recurring definition
+	// exactly as a completed run does. A cancelled definition is already
+	// durable and prevents future attempts.
+	if definition.State != StateCancelled {
+		if _, err := tx.Exec(`UPDATE scripts SET state=?,next_run_at=NULL WHERE agent=? AND id=?`, StateCompleted, agent, definition.ID); err != nil {
 			return err
 		}
 	}
@@ -662,15 +654,13 @@ func (s *Store) RecoverRunning() error {
 		if _, err := tx.Exec(`UPDATE script_runs SET status=?,cancel_requested=0,pid=NULL,finished_at=? WHERE id=? AND status=?`, terminal, now, run.ID, RunRunning); err != nil {
 			return err
 		}
+		// Recovery publishes a result for the interrupted attempt, so a
+		// recurring definition stops here too and waits for Rerun.
 		state := StateCompleted
-		var next any
 		if definition.State == StateCancelled {
 			state = StateCancelled
-		} else if definition.Mode == ModeEvery && definition.State == StateActive {
-			state = StateActive
-			next = s.clock().UTC().Add(time.Duration(definition.IntervalSeconds) * time.Second).Format(time.RFC3339)
 		}
-		if _, err := tx.Exec(`UPDATE scripts SET state=?,next_run_at=? WHERE id=?`, state, next, definition.ID); err != nil {
+		if _, err := tx.Exec(`UPDATE scripts SET state=?,next_run_at=NULL WHERE id=?`, state, definition.ID); err != nil {
 			return err
 		}
 		payload, err := json.Marshal(ResultPayload{ScriptID: definition.ID, RunID: run.ID, Name: definition.Name, Mode: definition.Mode, Status: terminal, LogPath: run.LogPath})
