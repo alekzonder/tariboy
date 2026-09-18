@@ -48,10 +48,28 @@ func iterationLs() registry.Command {
 	return registry.Command{
 		Path:    "iteration.ls",
 		Summary: "List an agent's iterations",
-		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
-		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations"},
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "tag", Flag: "tag", Type: registry.String, Help: "keep only iterations carrying any of these tags (comma-separated)"},
+			{Name: "started-after", Flag: "started-after", Type: registry.String, Help: "keep iterations started at or after this RFC3339 time or YYYY-MM-DD day"},
+			{Name: "started-before", Flag: "started-before", Type: registry.String, Help: "keep iterations started at or before this RFC3339 time or YYYY-MM-DD day"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			its, err := agentStore(c).ListIterations(str(p, "name"))
+			store := agentStore(c)
+			its, err := store.FindIterations(str(p, "name"), agent.IterationFilter{
+				Tags:          stringSliceParam(p, "tag"),
+				StartedAfter:  str(p, "started-after"),
+				StartedBefore: str(p, "started-before"),
+			})
+			if err != nil {
+				return nil, iterationTagError(err)
+			}
+			ids := make([]string, 0, len(its))
+			for _, it := range its {
+				ids = append(ids, it.ID)
+			}
+			tags, err := store.IterationTags(ids)
 			if err != nil {
 				return nil, err
 			}
@@ -60,10 +78,54 @@ func iterationLs() registry.Command {
 				rows = append(rows, map[string]any{
 					"id": it.ID, "trigger": it.Trigger, "status": it.Status,
 					"started_at": it.StartedAt, "done": it.DoneFlag,
-					"productive": it.Productive,
+					"productive": it.Productive, "tags": tags[it.ID],
 				})
 			}
 			return map[string]any{"iterations": rows, "count": len(rows)}, nil
+		},
+	}
+}
+
+// iterationTagError maps the tag/filter validation errors onto the HTTP surface.
+func iterationTagError(err error) error {
+	switch {
+	case errors.Is(err, agent.ErrInvalidTag):
+		return api.UserError{Code: "invalid_tag", Msg: err.Error(), Status: http.StatusUnprocessableEntity}
+	case errors.Is(err, agent.ErrInvalidTime):
+		return api.UserError{Code: "invalid_time", Msg: err.Error(), Status: http.StatusUnprocessableEntity}
+	case errors.Is(err, agent.ErrNotFound):
+		return api.UserError{Code: "not_found", Msg: err.Error(), Status: http.StatusNotFound}
+	}
+	return err
+}
+
+// iterationTag builds one of the three tag mutations. They share a route and
+// differ only in op, so a batch of ids and tags travels in one request and one
+// transaction: the whole batch applies or none of it does.
+func iterationTag(op agent.TagOp, summary string) registry.Command {
+	return registry.Command{
+		Path:    "iteration.tag." + map[agent.TagOp]string{agent.TagOpAdd: "add", agent.TagOpRemove: "rm", agent.TagOpSet: "set"}[op],
+		Summary: summary,
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "id", Flag: "id", Type: registry.String, Repeatable: true, Required: true, Help: "iteration id (repeat for a batch)"},
+			{Name: "tag", Flag: "tag", Type: registry.String, Repeatable: true, Help: "tag (repeat for several; empty with set clears every tag)"},
+		},
+		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/iterations/tags/" + string(op)},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			name := str(p, "name")
+			if _, err := getAgent(c, name); err != nil {
+				return nil, err
+			}
+			ids := stringSliceParam(p, "id")
+			if len(ids) == 0 {
+				return nil, api.UserError{Code: "missing_id", Msg: "at least one iteration id is required", Status: http.StatusBadRequest}
+			}
+			tags, err := agentStore(c).MutateIterationTags(name, op, ids, stringSliceParam(p, "tag"))
+			if err != nil {
+				return nil, iterationTagError(err)
+			}
+			return map[string]any{"tags": tags, "count": len(tags)}, nil
 		},
 	}
 }
@@ -82,6 +144,10 @@ func iterationInspect() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "iteration not found"}
 			}
+			tags, err := agentStore(c).IterationTags([]string{it.ID})
+			if err != nil {
+				return nil, err
+			}
 			out := map[string]any{
 				"id": it.ID, "agent": it.Agent, "trigger": it.Trigger, "status": it.Status,
 				"started_at": it.StartedAt, "ended_at": it.EndedAt, "done": it.DoneFlag,
@@ -89,6 +155,7 @@ func iterationInspect() registry.Command {
 				"prompt_path": it.PromptPath,
 				"image_ref":   it.ImageRef, "image_version": it.ImageVersion, "image_digest": it.ImageDigest,
 				"prompt_template_sha256": it.PromptTemplateSHA256,
+				"tags":                   tags[it.ID],
 			}
 			if it.ExitCode != nil {
 				out["exit_code"] = *it.ExitCode

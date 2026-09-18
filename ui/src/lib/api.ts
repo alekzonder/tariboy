@@ -291,6 +291,21 @@ export const agentPostOn = <T>(
 ) => apiOn<T>(resolveTarget(target), "POST", agentApiPath(name, rest), body);
 export const agentGetOn = <T>(target: ApiTarget, name: string, rest: string) =>
   apiOn<T>(resolveTarget(target), "GET", agentApiPath(name, rest));
+// Replace one iteration's whole tag set. The daemon also exposes add/remove and
+// accepts a batch of ids; the UI only ever edits one iteration at a time, and a
+// replace expresses both an added and a removed tag.
+export const setIterationTagsOn = (
+  target: ApiTarget,
+  name: string,
+  iterationId: string,
+  tags: string[],
+) =>
+  agentPostOn<{ tags: Record<string, string[]>; count: number }>(
+    target,
+    name,
+    "iterations/tags/set",
+    { id: [iterationId], tag: tags },
+  );
 export interface AgentShellScript {
   script: string;
 }

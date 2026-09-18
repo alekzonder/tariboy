@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useAgentName } from "@/lib/agent";
-import { agentGetOn, subscribeAgentEventsOn } from "@/lib/api";
+import { agentGetOn, setIterationTagsOn, subscribeAgentEventsOn } from "@/lib/api";
 import type { IterationSummary } from "@/lib/types";
 import { FullAuditLog } from "@/components/FullAuditLog";
 import { IterationAuditLog } from "@/components/IterationAuditLog";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { fmtDateTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { paramToHost, targetFor } from "@/lib/terminalsHost";
@@ -33,7 +34,18 @@ export default function AuditLogPage() {
   const hostId = paramToHost(hostParam);
   const descriptor = targetFor(hostId);
   const [searchParams, setSearchParams] = useSearchParams();
-  const listKey = `${hostId}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}`;
+  // Tag and started-at filters live in the URL beside ?iteration=, so a filtered
+  // view is shareable and survives a reload. They are passed to the daemon,
+  // which owns the matching (any listed tag; inclusive date bounds).
+  const tagFilter = searchParams.get("tag") ?? "";
+  const afterFilter = searchParams.get("started_after") ?? "";
+  const beforeFilter = searchParams.get("started_before") ?? "";
+  const query = new URLSearchParams();
+  if (tagFilter) query.set("tag", tagFilter);
+  if (afterFilter) query.set("started_after", afterFilter);
+  if (beforeFilter) query.set("started_before", beforeFilter);
+  const queryString = query.toString();
+  const listKey = `${hostId}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}\0${queryString}`;
   const [listState, setListState] = useState<{ key: string; items: IterationSummary[] } | null>(null);
   const items = listState?.key === listKey ? listState.items : [];
   const loaded = listState?.key === listKey;
@@ -47,6 +59,14 @@ export default function AuditLogPage() {
     else next.delete("iteration");
     setSearchParams(next);
   };
+  // A filter change replaces the history entry: typing into a filter must not
+  // fill the back stack with one entry per keystroke.
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setSearchParams(next, { replace: true });
+  };
 
   // Load iterations and keep them fresh: a light 5s poll plus the SSE
   // ["iteration"] stream so newly started/finished iterations appear promptly.
@@ -58,7 +78,11 @@ export default function AuditLogPage() {
     const target = targetFor(hostId);
     const load = () => {
       const requestGeneration = ++generation;
-      void agentGetOn<{ iterations: IterationSummary[]; count: number }>(target, name, "iterations")
+      void agentGetOn<{ iterations: IterationSummary[]; count: number }>(
+        target,
+        name,
+        queryString ? `iterations?${queryString}` : "iterations",
+      )
         .then((r) => {
           if (current && requestGeneration === generation) setListState({
             key: listKey,
@@ -73,13 +97,52 @@ export default function AuditLogPage() {
     const t = window.setInterval(load, 5000);
     const off = subscribeAgentEventsOn(target, name, ["iteration"], () => load());
     return () => { current = false; window.clearInterval(t); off(); };
-  }, [hostId, listKey, name]);
+  }, [hostId, listKey, name, queryString]);
 
   const selectedItem = selected ? items.find((it) => it.id === selected) : null;
 
+  // Tag edits replace the whole set of the one selected iteration and patch the
+  // loaded row in place, so the badge list updates before the next poll.
+  const [draftTag, setDraftTag] = useState("");
+  const [tagError, setTagError] = useState("");
+  const saveTags = (id: string, tags: string[]) => {
+    setTagError("");
+    void setIterationTagsOn(targetFor(hostId), name, id, tags)
+      .then((r) => {
+        const applied = r.tags?.[id] ?? tags;
+        setListState((prev) => prev && ({
+          ...prev,
+          items: prev.items.map((it) => (it.id === id ? { ...it, tags: applied } : it)),
+        }));
+      })
+      .catch((e: unknown) => setTagError(e instanceof Error ? e.message : "could not save tags"));
+  };
+
   return (
     <div className="flex h-full gap-4">
-      <div className="w-64 shrink-0 overflow-auto">
+      <div className="flex w-64 shrink-0 flex-col gap-2 overflow-auto">
+        <div className="flex flex-col gap-1">
+          <Input
+            aria-label="Filter by tag"
+            placeholder="tag, or tag,tag"
+            value={tagFilter}
+            onChange={(e) => setFilter("tag", e.target.value)}
+          />
+          <div className="flex gap-1">
+            <Input
+              aria-label="Started after"
+              type="date"
+              value={afterFilter}
+              onChange={(e) => setFilter("started_after", e.target.value)}
+            />
+            <Input
+              aria-label="Started before"
+              type="date"
+              value={beforeFilter}
+              onChange={(e) => setFilter("started_before", e.target.value)}
+            />
+          </div>
+        </div>
         <button
           onClick={() => select(null)}
           className={cn(
@@ -99,7 +162,10 @@ export default function AuditLogPage() {
             )}
           >
             <span className="font-mono text-xs">{fmtDateTime(it.started_at)}</span>
-            <span className="flex items-center gap-1">
+            <span className="flex flex-wrap items-center justify-end gap-1">
+              {(it.tags ?? []).map((tag) => (
+                <Badge key={tag} variant="outline">{tag}</Badge>
+              ))}
               {it.productive === false && (
                 <Badge variant="outline" title="finished with i-am-done --idle (no productive work)">
                   idle
@@ -114,13 +180,46 @@ export default function AuditLogPage() {
         {selected === null ? (
           <FullAuditLog name={name} />
         ) : selectedItem ? (
-          <div className="h-full">
-            <IterationAuditLog
+          <div className="flex h-full flex-col">
+            <div className="mb-2 flex flex-wrap items-center gap-1">
+              {(selectedItem.tags ?? []).map((tag) => (
+                <Badge key={tag} variant="outline" className="gap-1">
+                  {tag}
+                  <button
+                    aria-label={`Remove tag ${tag}`}
+                    onClick={() =>
+                      saveTags(selectedItem.id, (selectedItem.tags ?? []).filter((t) => t !== tag))
+                    }
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
+              <Input
+                aria-label="Add tag"
+                className="h-7 w-32"
+                placeholder="add tag"
+                value={draftTag}
+                onChange={(e) => setDraftTag(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || !draftTag.trim()) return;
+                  saveTags(selectedItem.id, [
+                    ...(selectedItem.tags ?? []).filter((t) => t !== draftTag.trim()),
+                    draftTag.trim(),
+                  ]);
+                  setDraftTag("");
+                }}
+              />
+              {tagError && <span role="alert" className="text-xs text-destructive">{tagError}</span>}
+            </div>
+            <div className="min-h-0 flex-1">
+              <IterationAuditLog
                 name={name}
                 iterationId={selected}
                 iterationStatus={selectedItem.status}
                 iterationProductive={selectedItem.productive}
               />
+            </div>
           </div>
         ) : loaded ? (
           <p role="status" className="text-sm text-muted-foreground">Iteration {selected} was not found.</p>

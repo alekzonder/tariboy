@@ -71,9 +71,12 @@ tariboy has three command surfaces:
 | `tariboy image provenance REF` | Show local source and immutable snapshot Git provenance |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
-| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, and prompt-template hash |
+| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, prompt-template hash, and tags |
 | `tariboy iteration logs` | Print an iteration's harness logs |
-| `tariboy iteration ls` | List an agent's iterations |
+| `tariboy iteration ls` | List an agent's iterations; `--tag`, `--started-after` and `--started-before` narrow the list |
+| `tariboy iteration tag add` | Add tags to one or more iterations |
+| `tariboy iteration tag rm` | Remove tags from one or more iterations |
+| `tariboy iteration tag set` | Replace the tags of one or more iterations |
 | `tariboy logs` | Stream or print an agent's events (-f to follow) |
 | `tariboy loop disable` | Turn the agent loop disable |
 | `tariboy loop enable` | Turn the agent loop enable |
@@ -108,6 +111,35 @@ tariboy has three command surfaces:
 | `tariboy version` | Print the Tariboy version locally without a daemon |
 
 > Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
+
+### Iteration tags
+
+Tags annotate an iteration without changing it: one agent marks the iterations
+of another agent it has already handled. An iteration can carry several tags.
+A tag is at most 64 characters and contains no comma, whitespace, or control
+character.
+
+The three mutations take a batch of iteration ids and a batch of tags, and apply
+in one transaction — the whole batch succeeds or nothing is written. An id that
+belongs to another agent fails the batch with `not_found`.
+
+```bash
+tariboy iteration tag add worker --id worker-20260918T10-1 --id worker-20260918T11-2 --tag processed
+tariboy iteration tag rm worker --id worker-20260918T10-1 --tag processed
+tariboy iteration tag set worker --id worker-20260918T10-1 --tag processed --tag reviewed
+tariboy iteration tag set worker --id worker-20260918T10-1   # no --tag clears every tag
+```
+
+`tariboy iteration ls` searches by tag and by iteration start date. `--tag`
+takes a comma-separated list and matches an iteration carrying **any** of them.
+Both date bounds are inclusive and accept RFC3339 or a bare `YYYY-MM-DD` day:
+
+```bash
+tariboy iteration ls worker --tag processed,reviewed
+tariboy iteration ls worker --started-after 2026-09-01 --started-before 2026-09-18
+```
+
+`iteration ls` rows and `iteration inspect` both report a sorted `tags` list.
 
 ## Agent capability scripts
 

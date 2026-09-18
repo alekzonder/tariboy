@@ -21,8 +21,8 @@ const OLD_ID = "dev-worker-20200102030400-1";
 // SetIterationDone; failure states leave productive at its DEFAULT 1). OLD_ID is
 // thus a done+idle iteration; TODAY_ID a done+productive one.
 const ITERS = [
-  { id: OLD_ID, trigger: "manual", status: "done", started_at: OLD_ISO, done: true, productive: false },
-  { id: TODAY_ID, trigger: "manual", status: "done", started_at: TODAY_ISO, done: true, productive: true },
+  { id: OLD_ID, trigger: "manual", status: "done", started_at: OLD_ISO, done: true, productive: false, tags: [] },
+  { id: TODAY_ID, trigger: "manual", status: "done", started_at: TODAY_ISO, done: true, productive: true, tags: ["processed"] },
 ];
 const mkEvent = (trigger: string, iter: string) => [
   { seq: 1, kind: "iteration_started", source: "system", at: "t1", data: JSON.stringify({ trigger }), iteration_id: iter },
@@ -147,5 +147,49 @@ describe("AuditLogPage (merged iterations + audit log)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "back" }));
     await waitFor(() => expect(screen.getByText(/065606-3 · done/)).toBeInTheDocument());
+  });
+});
+
+describe("AuditLogPage iteration tags", () => {
+  it("renders each iteration's tags as badges", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText("09:05")).toBeInTheDocument());
+    const todayRow = screen.getByText("09:05").closest("button")!;
+    expect(todayRow.textContent).toContain("processed");
+    const oldRow = screen.getByText("2020-01-02 03:04").closest("button")!;
+    expect(oldRow.textContent).not.toContain("processed");
+  });
+
+  it("sends the tag and started-at filters to the iterations request and keeps them in the URL", async () => {
+    renderRoutedPage("/agents/local/dev-worker/activity?keep=yes");
+    await waitFor(() => expect(screen.getByText("09:05")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Filter by tag"), { target: { value: "processed" } });
+    await waitFor(() =>
+      expect(urls.some((u) => u.includes("/iterations?") && u.includes("tag=processed"))).toBe(true),
+    );
+
+    fireEvent.change(screen.getByLabelText("Started after"), { target: { value: "2026-09-01" } });
+    fireEvent.change(screen.getByLabelText("Started before"), { target: { value: "2026-09-30" } });
+    await waitFor(() =>
+      expect(
+        urls.some((u) => u.includes("started_after=2026-09-01") && u.includes("started_before=2026-09-30")),
+      ).toBe(true),
+    );
+    // Filters live in the URL next to the pre-existing params.
+    expect(screen.getByTestId("location")).toHaveTextContent("keep=yes");
+    expect(screen.getByTestId("location")).toHaveTextContent("tag=processed");
+  });
+
+  it("replaces the selected iteration's tags from the tag editor", async () => {
+    renderPage(`/agent/dev-worker/logs?iteration=${TODAY_ID}`);
+    await waitFor(() => expect(screen.getByText(/065606-3 · done/)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Add tag"), { target: { value: "reviewed" } });
+    fireEvent.keyDown(screen.getByLabelText("Add tag"), { key: "Enter" });
+    await waitFor(() => expect(urls.some((u) => u.includes("/iterations/tags/set"))).toBe(true));
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove tag processed" }));
+    await waitFor(() => expect(urls.filter((u) => u.includes("/iterations/tags/set")).length).toBe(2));
   });
 });

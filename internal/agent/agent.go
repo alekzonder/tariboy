@@ -855,24 +855,7 @@ func (s *Store) GetIteration(agentName, id string) (Iteration, error) {
 }
 
 func (s *Store) ListIterations(agentName string) ([]Iteration, error) {
-	rows, err := s.db.Query(`SELECT id, agent, trigger, status, started_at, ended_at,
-		exit_code, done_flag, productive, prompt_path, cpu_ms, mem_peak_kb,
-		timeout_period_s, timeout_deadline, hard_timeout_deadline,
-		timeout_extensions, timeout_triggered_at, image_ref, image_version, image_digest, prompt_template_sha256, last_ai_request_at
-		FROM iterations WHERE agent=? ORDER BY started_at, id`, agentName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Iteration
-	for rows.Next() {
-		it, err := scanIteration(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, it)
-	}
-	return out, rows.Err()
+	return s.FindIterations(agentName, IterationFilter{})
 }
 
 // IdleStreak returns how many of the most-recent iterations the agent

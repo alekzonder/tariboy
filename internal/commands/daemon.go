@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
@@ -83,6 +84,10 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, iterationLs())
 	mustRegister(r, iterationInspect())
 	mustRegister(r, iterationExtendTimeout())
+	mustGroup(r, "iteration.tag", "Tag iterations without changing them")
+	mustRegister(r, iterationTag(agent.TagOpAdd, "Add tags to one or more iterations"))
+	mustRegister(r, iterationTag(agent.TagOpRemove, "Remove tags from one or more iterations"))
+	mustRegister(r, iterationTag(agent.TagOpSet, "Replace the tags of one or more iterations"))
 	mustRegister(r, iterationLogs())
 	mustRegister(r, secretStore())
 	mustRegister(r, secretSet())
