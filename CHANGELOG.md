@@ -1,3 +1,11 @@
+## [0.66.2] - 2026-09-18
+
+### Fixed
+
+- Stop a recurring script after it publishes a result, so the agent handles one actionable result instead of receiving repeated wake-ups; a quiet configured exit remains scheduled, and a completed schedule can be explicitly resumed with Exec.
+
+[0.66.2]: https://github.com/alekzonder/tariboy/compare/v0.66.1...v0.66.2
+
 ## [0.66.1] - 2026-09-18
 
 ### Fixed
