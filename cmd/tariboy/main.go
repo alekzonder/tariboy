@@ -52,6 +52,16 @@ func main() {
 		stop()
 		os.Exit(code)
 	}
+	// `update` replaces the daemon and CLI binaries themselves, so it is
+	// CLI-local too and must work while the daemon is down.
+	if len(rest) > 0 && rest[0] == "update" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		handled, code := dispatchUpdate(ctx, rest, os.Getenv, os.Stdout, os.Stderr)
+		stop()
+		if handled {
+			os.Exit(code)
+		}
+	}
 	// Daemon lifecycle verbs (up/down/status/logs) are CLI-local: they spawn or
 	// signal the daemon and tail its log file, so they must not route over the
 	// socket (the daemon may be down). Other daemon.* verbs (config, reindex)

@@ -14,6 +14,7 @@ RELEASE_VERSION_FILE="$ROOT/scripts/release-version.txt"
 EXPECTED_VERSION="$(cat "$RELEASE_VERSION_FILE")"
 EXPECTED_NUMERIC_VERSION="${EXPECTED_VERSION%%-*}"
 APP="$ROOT/desktop/src-tauri/target/release/bundle/macos/Tariboy.app"
+LINUX_BIN="$ROOT/desktop/src-tauri/resources/bin/linux-x86_64"
 BUILT_DMG="$ROOT/desktop/src-tauri/target/release/bundle/dmg/Tariboy_${NUMERIC_VERSION}_aarch64.dmg"
 RELEASE_ROOT="$ROOT/dist/releases"
 RELEASE_DIR="$RELEASE_ROOT/$VERSION"
@@ -73,6 +74,15 @@ STAGE="$(mktemp -d "$RELEASE_ROOT/.${VERSION}.stage.XXXXXX")"
 ARTIFACT="Tariboy_${VERSION}_aarch64.dmg"
 install -m 0644 "$BUILT_DMG" "$STAGE/$ARTIFACT"
 ARTIFACT_SHA="$(shasum -a 256 "$STAGE/$ARTIFACT" | awk '{print $1}')"
+# The server archive is what `tariboy update` downloads: the same install layout
+# the desktop app uploads over SSH, published so a host can fetch it itself.
+SERVER_ARCHIVE="tariboy_${VERSION}_linux-x86_64.tar.gz"
+[ -d "$LINUX_BIN" ] || {
+  echo "FAIL: missing bundled Linux payload: $LINUX_BIN" >&2
+  exit 1
+}
+COPYFILE_DISABLE=1 tar -czf "$STAGE/$SERVER_ARCHIVE" -C "$LINUX_BIN" .
+chmod 0644 "$STAGE/$SERVER_ARCHIVE"
 COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 BUILT_AT="$(python3 - <<'PY'
 import datetime
@@ -109,7 +119,7 @@ with open(path, "w", encoding="utf-8", newline="\n") as output:
     json.dump(document, output, indent=2, sort_keys=True)
     output.write("\n")
 PY
-(cd "$STAGE" && shasum -a 256 "$ARTIFACT" release.json > SHA256SUMS)
+(cd "$STAGE" && shasum -a 256 "$ARTIFACT" "$SERVER_ARCHIVE" release.json > SHA256SUMS)
 "$ROOT/scripts/check-alpha-artifacts.sh" "$STAGE"
 
 if [ -e "$RELEASE_DIR" ]; then

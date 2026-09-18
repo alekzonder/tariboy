@@ -112,6 +112,20 @@ tariboy has three command surfaces:
 
 > Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
 
+### Host-local commands
+
+These verbs never route through the daemon, so they are absent from the
+registry listing above. They act on the host the CLI runs on and work while the
+daemon is down.
+
+| Command | Summary |
+| --- | --- |
+| `tariboy daemon start\|stop\|restart\|status\|logs` | Control and inspect the local daemon process |
+| `tariboy update [VERSION\|latest] [--force]` | Install a published release over this installer-managed installation and restart a running daemon |
+
+`tariboy update` updates only an installer-managed `linux-x86_64` installation
+and is described in [Remote hosts](/docs/remote-hosts#update-a-host-from-its-own-shell).
+
 ### Iteration tags
 
 Tags annotate an iteration without changing it: one agent marks the iterations
