@@ -61,7 +61,21 @@ if [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ]; then
 fi
 
 make -C "$ROOT" desktop-version-check
-make -C "$ROOT" DESKTOP_UPDATER_ARTIFACTS=true desktop
+# Tauri reports a DMG failure as a bare "failed to run bundle_dmg.sh" and drops
+# that script's own output, which leaves a failed release build undiagnosable.
+# Describe the disk image state, then reproduce the failure once with the
+# bundler's own log so the cause is in the build output either way.
+if ! make -C "$ROOT" DESKTOP_UPDATER_ARTIFACTS=true desktop; then
+  echo "WARN: desktop bundling failed; collecting diagnostics" >&2
+  "$ROOT/scripts/desktop-bundle-diagnostics.sh" >&2
+  echo "WARN: retrying the bundling once with verbose bundler output" >&2
+  if ! make -C "$ROOT" DESKTOP_UPDATER_ARTIFACTS=true DESKTOP_BUNDLE_VERBOSE=1 desktop; then
+    "$ROOT/scripts/desktop-bundle-diagnostics.sh" >&2
+    echo "FAIL: desktop bundling failed twice; the verbose attempt above carries bundle_dmg.sh output" >&2
+    exit 1
+  fi
+  echo "WARN: desktop bundling succeeded only on the verbose retry; the first failure is diagnosed above" >&2
+fi
 
 [ -d "$APP" ] || { echo "FAIL: missing app bundle: $APP" >&2; exit 1; }
 [ -f "$BUILT_DMG" ] || { echo "FAIL: missing DMG: $BUILT_DMG" >&2; exit 1; }
