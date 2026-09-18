@@ -17,8 +17,6 @@ export function AgentRow({
   state,
   outOfBudget = false,
   selected = false,
-  unread = false,
-  unreadLabel = "Unread customer question",
   unreadMessages = 0,
   interactive = true,
   className,
@@ -29,11 +27,6 @@ export function AgentRow({
   /** Budget exhausted — outranks the state in both the dot and the pill. */
   outOfBudget?: boolean
   selected?: boolean
-  /** An unread customer question for this agent. */
-  unread?: boolean
-  /** Accessible name of the unread dot — it is the only thing that names which
-   *  agent on which host the question belongs to. */
-  unreadLabel?: string
   /** Unread chat messages from this agent. Zero renders nothing at all. */
   unreadMessages?: number
   /** false → the agent has no tty; shown as a quiet marker after the name. */
@@ -58,14 +51,6 @@ export function AgentRow({
         <span className="shrink-0 text-[11px] text-muted-foreground" title="not interactive (no tty)">
           non-tty
         </span>
-      )}
-      {unread && (
-        <span
-          role="img"
-          aria-label={unreadLabel}
-          title={unreadLabel}
-          className="size-[5px] shrink-0 rounded-full bg-primary"
-        />
       )}
       {unreadMessages > 0 && (
         <span

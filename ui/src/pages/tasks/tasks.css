@@ -59,8 +59,7 @@
 }
 
 .tasks-center { min-width: 0; min-height: 0; overflow: auto; }
-.task-primary-action, .task-inline-form button, .task-inbox > header button,
-.task-inbox article > div button, .task-queues button {
+.task-primary-action, .task-inline-form button, .task-queues button {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--border);
   border-radius: 7px; padding: 7px 10px; background: var(--background-base); font-size: 12px; font-weight: 560;
 }
@@ -133,17 +132,8 @@
 .task-comment-copy { opacity: 0; transition: opacity 120ms ease; }
 .task-comment-list article:hover .task-comment-copy, .task-comment-list article:focus-within .task-comment-copy { opacity: 1; }
 
-.task-inbox, .task-queues { padding: 20px; }
-.task-inbox > header, .task-queues > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.task-inbox > header > div { display: flex; align-items: center; gap: 9px; }
-.task-inbox > header span { font-size: 11px; color: var(--muted-foreground); }
-.task-inbox article { display: flex; align-items: center; border-bottom: 1px solid var(--border); padding: 12px 4px; }
-.task-inbox article.is-read { opacity: .65; }
-.task-notification-main { display: grid; flex: 1; gap: 3px; text-align: left; }
-.task-notification-main strong { font-family: ui-monospace, monospace; font-size: 10px; color: var(--muted-foreground); }
-.task-notification-main span { font-size: 13px; }
-.task-notification-main time { font-size: 10px; color: var(--muted-foreground); }
-.task-inbox article > div { display: flex; gap: 5px; }
+.task-queues { padding: 20px; }
+.task-queues > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .task-queues > form { display: grid; gap: 10px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: 9px; padding: 14px; }
 .task-queues > form > div { display: flex; gap: 6px; }
 .task-queue-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }

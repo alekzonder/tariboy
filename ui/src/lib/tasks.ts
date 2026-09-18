@@ -540,9 +540,3 @@ export const markTaskNotificationRead = (id: string, target?: ApiTarget) =>
     "POST",
     `/api/task-notifications/${encodeURIComponent(id)}/read`,
   )
-export const dismissTaskNotification = (id: string, target?: ApiTarget) =>
-  call<TaskNotification>(
-    target,
-    "POST",
-    `/api/task-notifications/${encodeURIComponent(id)}/dismiss`,
-  )

@@ -9,7 +9,6 @@ import type { SidebarAgent } from "./sidebarModel";
 /** What every agent row needs to know, wherever the three tabs place it. */
 export interface AgentRowActions {
   selected?: { hostId: string; agent: string };
-  attention: ReadonlySet<string>;
   pinned: ReadonlySet<string>;
   onSelect: (hostId: string, agent: string) => void;
   onClone: (hostId: string, agent: string) => void;
@@ -54,8 +53,6 @@ export function SidebarAgentRow({ row, actions, dragKey }: {
     state: agent.state,
     outOfBudget: Boolean(agent.budget?.exhausted?.length),
     selected: actions.selected?.hostId === row.hostId && actions.selected.agent === agent.name,
-    unread: actions.attention.has(row.key),
-    unreadLabel: `Unread customer question for ${agent.name} on ${row.hostLabel}`,
     unreadMessages: row.chat?.unread ?? 0,
     interactive: agent.interactive !== false,
     "aria-label": `Open ${agent.name}`,

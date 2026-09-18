@@ -40,7 +40,7 @@ const taskDetail = {
   comments: [], waiting_for: [], relations: [],
 };
 
-function stubChat() {
+function stubChat(readTS = "") {
   const calls: Call[] = [];
   vi.stubGlobal("WebSocket", class {
     close = vi.fn();
@@ -52,7 +52,10 @@ function stubChat() {
     });
     let result: unknown = { ok: true };
     if (path.startsWith("/api/chats/worker?") || path === "/api/chats/worker") {
-      result = { customer: "user:customer", agent: "worker", messages: feed, count: feed.length };
+      result = {
+        customer: "user:customer", agent: "worker", messages: feed, count: feed.length,
+        read_ts: readTS,
+      };
     } else if (path.startsWith("/api/tasks/TEST-7/events")) {
       result = { events: [], count: 0 };
     } else if (path.startsWith("/api/tasks/TEST-7")) {
@@ -127,4 +130,22 @@ it("opens a task from its message without leaving the chat", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(screen.getByText("which option?")).toBeInTheDocument();
+});
+
+it("separates the messages that arrived since the chat was last read", async () => {
+  stubChat("2026-09-15T10:00:00.000000000Z");
+  renderChat();
+  const separator = await screen.findByText("New messages");
+  const first = screen.getByText("which option?");
+  // The line belongs above the first message the customer has not seen.
+  expect(separator.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Opening the chat moves the server's mark; the line stays until the tab does.
+  await waitFor(() => expect(screen.getByText("New messages")).toBeInTheDocument());
+});
+
+it("draws no separator when the whole conversation has been read", async () => {
+  stubChat("2026-09-15T10:06:00.000000000Z");
+  renderChat();
+  await screen.findByText("please look at this");
+  expect(screen.queryByText("New messages")).not.toBeInTheDocument();
 });

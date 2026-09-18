@@ -67,12 +67,6 @@ test("opens an agent customer question from the production Desktop notification 
   });
   expect(commented.status, commented.stderr || commented.stdout).toBe(0);
 
-  await expect.poll(() => desktop.execute<boolean>(`
-    return [...document.querySelectorAll('[role="img"]')]
-      .some((element) => element.getAttribute("aria-label")
-        === "Unread customer question for question-requester on This daemon (local)");
-  `), { timeout: 30_000 }).toBe(true);
-
   await expect.poll(() => desktop.execute<Record<string, string> | null>(`
     if (window.__customerQuestionNotification) return window.__customerQuestionNotification;
     if (window.__customerQuestionNotificationPending) return null;

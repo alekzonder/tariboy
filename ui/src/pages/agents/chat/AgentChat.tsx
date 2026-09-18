@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAgentName } from "@/lib/agent";
 import {
@@ -88,6 +88,10 @@ export default function AgentChat({ hostId = "" }: { hostId?: string }) {
   const [customer, setCustomer] = useState("user:customer");
   const [types, setTypes] = useState<string[]>(() => loadChatTypes());
   const [draft, setDraft] = useState("");
+  // The read mark this chat was opened at. It is captured once, before opening
+  // moves the server's mark forward, and kept for the life of the tab so the
+  // "New messages" line stays put while the customer reads.
+  const openedAt = useRef<string | null>(null);
   const [sending, setSending] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   // The task a message points at, opened over the chat rather than on Tasks.
@@ -99,6 +103,7 @@ export default function AgentChat({ hostId = "" }: { hostId?: string }) {
     if (!name) return;
     try {
       const page = await chatMessagesOn(target, name, { types });
+      if (openedAt.current === null) openedAt.current = page.read_ts ?? "";
       setMessages(page.messages ?? []);
       setCustomer(page.customer || "user:customer");
       const newest = page.messages?.[page.messages.length - 1];
@@ -156,6 +161,11 @@ export default function AgentChat({ hostId = "" }: { hostId?: string }) {
     }
   };
 
+  // Where the "New messages" line goes: the first message newer than the mark
+  // the chat was opened at. A chat opened with nothing unread has no line.
+  const openedAtTS = openedAt.current;
+  const firstUnread = openedAtTS ? messages.findIndex((message) => message.ts > openedAtTS) : -1;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -185,13 +195,21 @@ export default function AgentChat({ hostId = "" }: { hostId?: string }) {
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto rounded-md border p-3">
         {messages.length === 0 && <p className="text-sm text-muted-foreground">No messages in this chat yet.</p>}
-        {messages.map((message) => (
-          <Bubble
-            key={message.id}
-            message={message}
-            mine={message.from === customer}
-            onOpenTask={setTaskKey}
-          />
+        {messages.map((message, index) => (
+          <Fragment key={message.id}>
+            {index === firstUnread && (
+              <div className="flex items-center gap-2 text-[11px] font-medium text-primary">
+                <span className="h-px flex-1 bg-primary/40" />
+                New messages
+                <span className="h-px flex-1 bg-primary/40" />
+              </div>
+            )}
+            <Bubble
+              message={message}
+              mine={message.from === customer}
+              onOpenTask={setTaskKey}
+            />
+          </Fragment>
         ))}
         <div ref={bottom} />
       </div>

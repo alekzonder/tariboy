@@ -268,9 +268,6 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Notifications" }).click();
-  await expect(page.getByText("Inbox zero.")).toBeVisible();
-
   await page.getByRole("button", { name: "Waiting for me" }).click();
   await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
   await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();

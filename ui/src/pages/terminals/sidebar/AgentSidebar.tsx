@@ -144,7 +144,6 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
   const agentCount = hosts.reduce((total, host) => total + host.agents.length, 0);
   const rowActions: AgentRowActions = {
     selected,
-    attention,
     pinned,
     onSelect,
     onClone,

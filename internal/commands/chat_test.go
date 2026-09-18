@@ -49,8 +49,21 @@ func TestChatListFeedAndReadMark(t *testing.T) {
 		t.Fatalf("feed = %#v", messages)
 	}
 
+	// The feed carries the read mark the chat was opened at, which is what the
+	// "New messages" separator is drawn from; before any read it is empty.
+	if got := fed.(map[string]any)["read_ts"]; got != "" {
+		t.Fatalf("read_ts before the first read = %v, want empty", got)
+	}
+
 	if _, err := h(t, "chat.read")(c, registry.Params{"agent": "worker", "ts": lastTS}); err != nil {
 		t.Fatal(err)
+	}
+	fed, err = h(t, "chat.messages")(c, registry.Params{"agent": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fed.(map[string]any)["read_ts"]; got != lastTS {
+		t.Fatalf("read_ts after the read = %v, want %v", got, lastTS)
 	}
 	listed, err = h(t, "chat.ls")(c, registry.Params{})
 	if err != nil {

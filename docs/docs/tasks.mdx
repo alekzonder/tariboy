@@ -139,16 +139,18 @@ notification records.
 The top-level **Tasks** tab is global. Each Agent workspace includes the same
 component with `scope_agent` fixed to that agent. The layout is Tree-first:
 
-- left rail: All, My, Waiting for me, Notifications, and Queues;
+- left rail: All, My, Waiting for me, and Queues;
 - remaining width: dense expandable tree ordered by priority at every depth,
   with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain
   their existing row presentation. A small red indicator marks each task with
-  an unread, non-dismissed customer question notification. The same state adds
-  a red dot beside the agent that asked the question in the host's agent list;
-  customer-authored questions do not add an agent dot. Both indicators clear
-  when the notification is read or dismissed.
+  an unread, non-dismissed customer question notification; opening that task
+  marks its question notifications read and clears the indicator. There is no
+  notification inbox in the workspace: the questions themselves are readable
+  in the agent's **Chat**, where they arrive as messages, and
+  `ttasks notifications` remains the operator command for the inbox state. The
+  agent list carries no question dot — only the count of unread chat messages.
 
 Clicking a task opens a right-side sheet over the tree with its description,
 priority, assignment, status, block reason, pull request URL, comments, and open
