@@ -752,24 +752,19 @@ describe("TerminalsPage", () => {
     expect(a1Row.textContent).not.toMatch(/non-tty/);
   });
 
-  it("shows one host-scoped customer-question dot beside the matching same-named remote agent", async () => {
+  it("carries only the unread message count in an agent row, never a question dot", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
-        host: { id: "", label: "This daemon (local)" },
-        agents: [{ name: "alice", image: "bare:latest", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true }],
-      },
-      {
         host: { id: "remote-1", label: "prod" },
-        groups: [{ name: "platform", lead: "alice", members: 1 }],
-        agents: [{ name: "alice", image: "bare:latest", state: "running", harness: "claude", loop_enabled: false, group: "platform", interactive: true }],
+        agents: [{ name: "alice", image: "bare:latest", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true }],
+        chats: [{ agent: "alice", last_ts: "2026-09-15T10:00:00Z", last_from: "agent:alice", last_type: "message", last_text: "hi", unread: 3 }],
       },
     ])
 
     renderAt("/", new Set([JSON.stringify(["remote-1", "alice"])]))
 
-    expect(await screen.findAllByRole("img", { name: "Unread customer question for alice on prod" }))
-      .toHaveLength(1)
-    expect(screen.queryByRole("img", { name: /This daemon|platform/ })).toBeNull()
+    expect(await screen.findByLabelText("3 unread messages from alice")).toBeInTheDocument()
+    expect(screen.queryByRole("img", { name: /customer question/ })).toBeNull()
   });
 
   it("re-polls immediately after creating an agent instead of waiting for the next tick", async () => {

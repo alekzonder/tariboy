@@ -1047,7 +1047,11 @@ export const chatMessagesOn = (
   if (opts.limit) q.set("limit", String(opts.limit));
   if (opts.before) q.set("before", opts.before);
   const qs = q.toString();
-  return apiOn<{ customer: string; agent: string; messages: ChatMessage[]; count: number }>(
+  return apiOn<{
+    customer: string; agent: string; messages: ChatMessage[]; count: number;
+    // The mark the chat was last read at, so a reader can tell what is new.
+    read_ts?: string;
+  }>(
     resolveTarget(target),
     "GET",
     `/api/chats/${encodeURIComponent(agent)}${qs ? `?${qs}` : ""}`,

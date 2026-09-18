@@ -10,7 +10,6 @@ const api = vi.hoisted(() => ({
   addTaskRelation: vi.fn(),
   createTask: vi.fn(),
   createTaskQueue: vi.fn(),
-  dismissTaskNotification: vi.fn(),
   deleteTaskRelation: vi.fn(),
   getTask: vi.fn(),
   getTaskWorkflow: vi.fn(),
@@ -183,7 +182,6 @@ beforeEach(() => {
   api.deleteTaskRelation.mockResolvedValue({ deleted: true, relation_id: 9 })
   api.moveTask.mockResolvedValue({ ...child, parent_key: "", revision: 2 })
   api.markTaskNotificationRead.mockResolvedValue({ ...notification, read_at: root.updated_at })
-  api.dismissTaskNotification.mockResolvedValue({ ...notification, dismissed_at: root.updated_at })
   api.createTaskQueue.mockResolvedValue({ ...queue, prefix: "OPS", name: "Operations" })
 })
 
@@ -633,30 +631,23 @@ describe("TasksWorkspace", () => {
     expect(within(childRow).queryByRole("img", { name: "Unread question notification for TEST-2" })).toBeNull()
   })
 
-  it("clears a task row question indicator after marking its notification read", async () => {
+  it("marks a task's question notification read when the task is opened, clearing its indicator", async () => {
     render(<TasksWorkspace />)
 
     const rootRow = await screen.findByTestId("task-row-TEST-1")
     expect(await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" })).toBeVisible()
-    await userEvent.click(screen.getByRole("button", { name: /Notifications/ }))
-    const card = (await screen.findByText("Need a product decision")).closest("article")!
-    await userEvent.click(within(card).getByRole("button", { name: "Mark read" }))
-    await userEvent.click(screen.getByRole("button", { name: "All tasks" }))
+    await userEvent.click(within(rootRow).getByRole("button", { name: /Ship native tasks/ }))
 
+    await waitFor(() => expect(api.markTaskNotificationRead).toHaveBeenCalledWith("notification-1", undefined))
     expect(within(await screen.findByTestId("task-row-TEST-1")).queryByRole("img", { name: "Unread question notification for TEST-1" })).toBeNull()
   })
 
-  it("clears a task row question indicator after dismissing its notification", async () => {
+  it("has no notification inbox of its own: the task rows carry the questions", async () => {
     render(<TasksWorkspace />)
 
-    const rootRow = await screen.findByTestId("task-row-TEST-1")
-    expect(await within(rootRow).findByRole("img", { name: "Unread question notification for TEST-1" })).toBeVisible()
-    await userEvent.click(screen.getByRole("button", { name: /Notifications/ }))
-    const card = (await screen.findByText("Need a product decision")).closest("article")!
-    await userEvent.click(within(card).getByRole("button", { name: "Dismiss" }))
-    await userEvent.click(screen.getByRole("button", { name: "All tasks" }))
-
-    expect(within(await screen.findByTestId("task-row-TEST-1")).queryByRole("img", { name: "Unread question notification for TEST-1" })).toBeNull()
+    await screen.findByTestId("task-row-TEST-1")
+    expect(screen.queryByRole("button", { name: /Notifications/ })).toBeNull()
+    expect(screen.queryByText("Need a product decision")).toBeNull()
   })
 
   it("updates task row question indicators when realtime refreshes the notification inbox", async () => {
@@ -1283,9 +1274,8 @@ describe("TasksWorkspace", () => {
     )
   })
 
-  it("filters waiting work and manages the customer notification inbox", async () => {
-    const notificationsChanged = vi.fn()
-    render(<TasksWorkspace onNotificationsChanged={notificationsChanged} />)
+  it("filters waiting work by the customer principal", async () => {
+    render(<TasksWorkspace />)
     await screen.findByText("Ship native tasks")
 
     await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
@@ -1293,59 +1283,6 @@ describe("TasksWorkspace", () => {
       expect.objectContaining({ waiting_for: "user:owner" }),
       undefined,
     ))
-
-    await userEvent.click(screen.getByRole("button", { name: /Notifications/ }))
-    const row = await screen.findByText("Need a product decision")
-    const card = row.closest("article")!
-    await userEvent.click(within(card).getByRole("button", { name: "Mark read" }))
-    expect(api.markTaskNotificationRead).toHaveBeenCalledWith("notification-1", undefined)
-    expect(notificationsChanged).toHaveBeenCalledTimes(1)
-    await userEvent.click(within(card).getByRole("button", { name: "Dismiss" }))
-    expect(api.dismissTaskNotification).toHaveBeenCalledWith("notification-1", undefined)
-    expect(notificationsChanged).toHaveBeenCalledTimes(2)
-  })
-
-  it("marks every unread notification read at once", async () => {
-    const notificationsChanged = vi.fn()
-    api.listTaskNotifications.mockResolvedValue({
-      notifications: [
-        notification,
-        { ...notification, id: "notification-2", task_key: child.key },
-        { ...notification, id: "notification-read", read_at: root.updated_at },
-      ],
-      count: 3,
-    })
-    render(<TasksWorkspace onNotificationsChanged={notificationsChanged} />)
-    await screen.findByText("Ship native tasks")
-
-    await userEvent.click(screen.getByRole("button", { name: /Notifications/ }))
-    await userEvent.click(screen.getByRole("button", { name: "Mark as Read All" }))
-
-    await waitFor(() => expect(screen.getByText("0 unread")).toBeVisible())
-    expect(api.markTaskNotificationRead).toHaveBeenCalledTimes(2)
-    expect(api.markTaskNotificationRead).toHaveBeenNthCalledWith(1, "notification-1", undefined)
-    expect(api.markTaskNotificationRead).toHaveBeenNthCalledWith(2, "notification-2", undefined)
-    expect(notificationsChanged).toHaveBeenCalledTimes(1)
-  })
-
-  it("keeps failed notifications unread when marking all", async () => {
-    const notificationsChanged = vi.fn()
-    api.listTaskNotifications.mockResolvedValue({
-      notifications: [notification, { ...notification, id: "notification-2", task_key: child.key }],
-      count: 2,
-    })
-    api.markTaskNotificationRead
-      .mockResolvedValueOnce({ ...notification, read_at: root.updated_at })
-      .mockRejectedValueOnce(new Error("read failed"))
-    render(<TasksWorkspace onNotificationsChanged={notificationsChanged} />)
-    await screen.findByText("Ship native tasks")
-
-    await userEvent.click(screen.getByRole("button", { name: /Notifications/ }))
-    await userEvent.click(screen.getByRole("button", { name: "Mark as Read All" }))
-
-    await waitFor(() => expect(screen.getByText("1 unread")).toBeVisible())
-    expect(toast.error).toHaveBeenCalledWith("read failed")
-    expect(notificationsChanged).toHaveBeenCalledTimes(1)
   })
 
   it("creates and updates queues", async () => {

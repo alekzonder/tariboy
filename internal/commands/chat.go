@@ -119,13 +119,20 @@ func chatMessages() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			// The read mark rides along so the reader can separate what it has
+			// already seen from what arrived since, before opening the chat
+			// moves the mark forward.
+			marks, err := chatReadMarks(c)
+			if err != nil {
+				return nil, err
+			}
 			rows := messageViews(msgs)
 			for i, msg := range msgs {
 				rows[i]["channel"] = msg.Channel
 				rows[i]["from"] = bus.MessageFrom(msg)
 			}
 			return map[string]any{"customer": customer, "agent": str(p, "agent"),
-				"messages": rows, "count": len(rows)}, nil
+				"messages": rows, "count": len(rows), "read_ts": marks[str(p, "agent")]}, nil
 		},
 	}
 }

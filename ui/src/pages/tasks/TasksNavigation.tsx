@@ -1,13 +1,12 @@
-import { Bell, Inbox, ListTree, UserRound, UsersRound } from "lucide-react"
+import { Inbox, ListTree, UserRound, UsersRound } from "lucide-react"
 import type { TaskQueue } from "@/lib/tasks"
 
-export type TasksView = "all" | "mine" | "waiting" | "notifications" | "queues"
+export type TasksView = "all" | "mine" | "waiting" | "queues"
 
 const ITEMS = [
   { key: "all", label: "All tasks", icon: ListTree },
   { key: "mine", label: "My tasks", icon: UserRound },
   { key: "waiting", label: "Waiting for me", icon: Inbox },
-  { key: "notifications", label: "Notifications", icon: Bell },
   { key: "queues", label: "Queues", icon: UsersRound },
 ] as const
 
@@ -17,14 +16,12 @@ export default function TasksNavigation({
   queues,
   queue,
   onQueue,
-  unread,
 }: {
   view: TasksView
   onView: (view: TasksView) => void
   queues: TaskQueue[]
   queue: string
   onQueue: (prefix: string) => void
-  unread: number
 }) {
   return (
     <aside className="tasks-navigation">
@@ -42,7 +39,6 @@ export default function TasksNavigation({
           >
             <Icon aria-hidden="true" />
             <span>{label}</span>
-            {key === "notifications" && unread > 0 && <strong>{unread}</strong>}
           </button>
         ))}
       </nav>

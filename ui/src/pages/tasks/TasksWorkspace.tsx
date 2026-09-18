@@ -11,7 +11,6 @@ import {
   createTask,
   createTaskQueue,
   deleteTaskRelation,
-  dismissTaskNotification,
   getTask,
   getTaskWorkflow,
   listTaskNotifications,
@@ -41,7 +40,6 @@ import QueueSettings from "./QueueSettings"
 import { TaskFilterBar } from "./TaskFilterBar"
 import TaskDetail from "./TaskDetail"
 import TaskForm from "./TaskForm"
-import TaskNotifications from "./TaskNotifications"
 import TaskTree from "./TaskTree"
 import TasksNavigation, { type TasksView } from "./TasksNavigation"
 import {
@@ -279,7 +277,7 @@ function TasksWorkspaceContent({
   }, [target])
 
   const loadTree = useCallback(async () => {
-    if (view === "notifications" || view === "queues") return
+    if (view === "queues") return
     const request = ++treeRequestRef.current
     if (!scopeAgent && (view === "mine" || view === "waiting") && !principalFilter) {
       setLoading(!principalMetadataError)
@@ -378,6 +376,35 @@ function TasksWorkspaceContent({
       toast.error(error instanceof Error ? error.message : String(error))
     }
   }, [target])
+
+  // Opening a task is the customer seeing its question. Marking it read here is
+  // what clears the row's indicator, and the only place that does: the workspace
+  // has no notification inbox of its own.
+  useEffect(() => {
+    if (!selectedKey) return
+    const unread = notifications.filter((notification) =>
+      notification.task_key === selectedKey
+      && notification.type === "task.question"
+      && !notification.read_at
+      && !notification.dismissed_at)
+    if (unread.length === 0) return
+    void (async () => {
+      const read = new Set<string>()
+      for (const notification of unread) {
+        try {
+          await markTaskNotificationRead(notification.id, target)
+          read.add(notification.id)
+        } catch {
+          // The indicator stays; the next open of the task tries again.
+        }
+      }
+      if (!mountedRef.current || read.size === 0) return
+      const readAt = new Date().toISOString()
+      setNotifications((current) => current.map((notification) =>
+        read.has(notification.id) ? { ...notification, read_at: readAt } : notification))
+      onNotificationsChanged?.()
+    })()
+  }, [notifications, onNotificationsChanged, selectedKey, target])
 
   const refreshInbox = useCallback(async () => {
     try {
@@ -569,10 +596,6 @@ function TasksWorkspaceContent({
     setCreatingParent("")
   }
 
-  const unread = useMemo(
-    () => notifications.filter((notification) => !notification.read_at && !notification.dismissed_at).length,
-    [notifications],
-  )
   const activeQuestionTaskKeys = useMemo(
     () => new Set(notifications
       .filter((notification) => notification.type === "task.question" && !notification.read_at && !notification.dismissed_at)
@@ -596,7 +619,6 @@ function TasksWorkspaceContent({
         queues={queues}
         queue={queue}
         onQueue={setQueue}
-        unread={unread}
       />
       <TaskPanelResizeHandle
         panel="navigation"
@@ -660,36 +682,6 @@ function TasksWorkspaceContent({
               />
             )}
           </>
-        )}
-        {view === "notifications" && (
-          <TaskNotifications
-            notifications={notifications}
-            onOpen={(key) => {
-              setView("all")
-              void loadDetail(key)
-            }}
-            onRead={async (id) => {
-              await markTaskNotificationRead(id, target)
-              setNotifications((current) => current.map((item) => item.id === id ? { ...item, read_at: new Date().toISOString() } : item))
-              onNotificationsChanged?.()
-            }}
-            onReadAll={async (ids) => {
-              const results = await Promise.allSettled(ids.map((id) => markTaskNotificationRead(id, target)))
-              const readIds = new Set(ids.filter((_, index) => results[index]?.status === "fulfilled"))
-              if (readIds.size > 0) {
-                const readAt = new Date().toISOString()
-                setNotifications((current) => current.map((item) => readIds.has(item.id) ? { ...item, read_at: readAt } : item))
-                onNotificationsChanged?.()
-              }
-              const failed = results.find((result) => result.status === "rejected")
-              if (failed?.status === "rejected") toast.error(errorMessage(failed.reason))
-            }}
-            onDismiss={async (id) => {
-              await dismissTaskNotification(id, target)
-              setNotifications((current) => current.filter((item) => item.id !== id))
-              onNotificationsChanged?.()
-            }}
-          />
         )}
         {view === "queues" && (
           <QueueSettings queues={queues} onCreate={createQueue} onUpdate={updateQueue} target={target} />
