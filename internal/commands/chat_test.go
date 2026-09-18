@@ -102,3 +102,51 @@ func TestMessageSendSpeaksAsTheCustomer(t *testing.T) {
 		t.Fatalf("tail = %+v", tail)
 	}
 }
+
+// Marking a chat unread is the one write that has to move the read mark
+// backwards, so it asks for that explicitly: without `exact` the mark still
+// only moves forward. The feed carries the current mark so the client can place
+// its "new messages" divider without fetching the whole chat list.
+func TestChatReadExactMovesTheMarkBackAndFeedCarriesIt(t *testing.T) {
+	c, b := ctxWithBus(t)
+	for _, msg := range []bus.Message{
+		{Channel: "agent:worker:inbox", Source: "user:customer", Type: "message", Text: "customer says hi"},
+		{Channel: "user:customer", Source: "system:tasks", Type: "message",
+			Data: map[string]any{"from": "agent:worker"}, Text: "worker answers"},
+	} {
+		if _, err := b.Publish(msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fed, err := h(t, "chat.messages")(c, registry.Params{"agent": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := fed.(map[string]any)["read_ts"].(string); !ok || got != "" {
+		t.Fatalf("read_ts before any read = %v (present %v), want an empty string", got, ok)
+	}
+	messages := fed.(map[string]any)["messages"].([]map[string]any)
+	first, last := messages[0]["ts"].(string), messages[1]["ts"].(string)
+
+	if _, err := h(t, "chat.read")(c, registry.Params{"agent": "worker", "ts": last}); err != nil {
+		t.Fatal(err)
+	}
+	// Mark unread: the mark goes back to before the newest agent message.
+	if _, err := h(t, "chat.read")(c, registry.Params{"agent": "worker", "ts": first, "exact": "true"}); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := h(t, "chat.ls")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.(map[string]any)["chats"].([]map[string]any)[0]["unread"]; got != 1 {
+		t.Fatalf("unread after marking unread = %v, want 1", got)
+	}
+	fed, err = h(t, "chat.messages")(c, registry.Params{"agent": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fed.(map[string]any)["read_ts"]; got != first {
+		t.Fatalf("read_ts = %v, want %v", got, first)
+	}
+}

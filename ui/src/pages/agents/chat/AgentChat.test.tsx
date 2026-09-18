@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AgentChat from "./AgentChat";
 import { AgentNameContext } from "@/lib/agent";
@@ -40,7 +40,9 @@ const taskDetail = {
   comments: [], waiting_for: [], relations: [],
 };
 
-function stubChat(readTS = "") {
+/** `readTS` is the mark the daemon reports with the feed; an empty one is a
+ *  chat that has never been read, which draws no unread rule. */
+function stubChat(messages = feed, readTS = "") {
   const calls: Call[] = [];
   vi.stubGlobal("WebSocket", class {
     close = vi.fn();
@@ -53,8 +55,8 @@ function stubChat(readTS = "") {
     let result: unknown = { ok: true };
     if (path.startsWith("/api/chats/worker?") || path === "/api/chats/worker") {
       result = {
-        customer: "user:customer", agent: "worker", messages: feed, count: feed.length,
-        read_ts: readTS,
+        customer: "user:customer", agent: "worker",
+        messages, count: messages.length, read_ts: readTS,
       };
     } else if (path.startsWith("/api/tasks/TEST-7/events")) {
       result = { events: [], count: 0 };
@@ -78,18 +80,35 @@ function renderChat() {
   );
 }
 
+const readCalls = (calls: Call[]) => calls.filter((call) => call.path === "/api/chats/worker/read");
+
 it("renders both halves of the conversation and marks it read at the newest shown message", async () => {
   const calls = stubChat();
   renderChat();
   expect(await screen.findByText("please look at this")).toBeInTheDocument();
   expect(screen.getByText("which option?")).toBeInTheDocument();
+  expect(screen.getByText("you + worker · 3 messages")).toBeInTheDocument();
 
   const feedCall = calls.find((call) => call.path.startsWith("/api/chats/worker?"));
   expect(feedCall?.path).toContain(encodeURIComponent(DEFAULT_CHAT_TYPES.join(",")));
   await waitFor(() => {
-    const read = calls.find((call) => call.path === "/api/chats/worker/read");
-    expect(read?.body).toEqual({ ts: "2026-09-15T10:06:00.000000000Z" });
+    expect(readCalls(calls)[0]?.body).toEqual({ ts: "2026-09-15T10:06:00.000000000Z" });
   });
+});
+
+it("renders message Markdown without executing anything inside it", async () => {
+  stubChat([{
+    ...feed[0],
+    text: "**bold** and `code`\n\n<img src=x onerror=\"window.pwned = true\">\n\n```sql\nSELECT 1;\n```",
+  }]);
+  const { container } = renderChat();
+  expect(await screen.findByText("bold")).toHaveRole("strong");
+  expect(screen.getByText("code").tagName).toBe("CODE");
+  expect(screen.getByText("SELECT 1;")).toBeInTheDocument();
+  expect(screen.getByText("sql")).toBeInTheDocument();
+  // The raw HTML arrives as text, never as an element that could fire a handler.
+  expect(container.querySelector("img")).toBeNull();
+  expect((window as unknown as { pwned?: boolean }).pwned).toBeUndefined();
 });
 
 it("sends into the agent's inbox with the customer channel as the reply target", async () => {
@@ -106,46 +125,70 @@ it("sends into the agent's inbox with the customer channel as the reply target",
   });
 });
 
+it("sends with Meta+Enter from the composer", async () => {
+  const calls = stubChat();
+  renderChat();
+  await screen.findByText("please look at this");
+  await userEvent.type(screen.getByLabelText("Message worker"), "quick answer{Meta>}{Enter}{/Meta}");
+  await waitFor(() => {
+    expect(calls.find((call) => call.path === "/api/messages")?.body).toMatchObject({ text: "quick answer" });
+  });
+});
+
 it("keeps a chosen message-type filter and refetches with it", async () => {
   const calls = stubChat();
   renderChat();
   await screen.findByText("please look at this");
-  await userEvent.click(screen.getByRole("button", { name: "Message types" }));
-  await userEvent.click(screen.getByRole("button", { name: "task.goal" }));
+  await userEvent.click(screen.getByRole("button", { name: "Chat menu" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "task.goal" }));
   await waitFor(() => {
     expect(calls.some((call) => call.path.includes(encodeURIComponent("task.goal")))).toBe(true);
   });
   expect(JSON.parse(localStorage.getItem("terminals:chat-types:v1") ?? "[]")).toContain("task.goal");
 });
 
+it("draws the unread rule once against the mark the chat was opened at", async () => {
+  stubChat(feed, "2026-09-15T10:00:00.000000000Z");
+  renderChat();
+  const rule = await screen.findByTestId("chat-unread-divider");
+  expect(within(rule).getByText("2 new messages")).toBeInTheDocument();
+  expect(screen.getAllByTestId("chat-unread-divider")).toHaveLength(1);
+});
+
+it("dismisses the unread rule only on an explicit Mark read", async () => {
+  const calls = stubChat(feed, "2026-09-15T10:00:00.000000000Z");
+  renderChat();
+  const rule = await screen.findByTestId("chat-unread-divider");
+  await userEvent.click(within(rule).getByRole("button", { name: "Mark read" }));
+  await waitFor(() => expect(screen.queryByTestId("chat-unread-divider")).not.toBeInTheDocument());
+  expect(readCalls(calls).at(-1)?.body).toEqual({ ts: "2026-09-15T10:06:00.000000000Z" });
+});
+
+it("marks the chat unread by moving the daemon's mark back to before the agent's last word", async () => {
+  const calls = stubChat(feed, "2026-09-15T10:06:00.000000000Z");
+  renderChat();
+  await screen.findByText("please look at this");
+  // Nothing is new, so the toolbar offers the opposite action.
+  await userEvent.click(screen.getByRole("button", { name: "Mark unread" }));
+  await waitFor(() => {
+    expect(readCalls(calls).at(-1)?.body).toEqual({ ts: "2026-09-15T10:05:00.000000000Z", exact: true });
+  });
+  // The rule is back and the toolbar has flipped to the opposite action.
+  expect(await screen.findByTestId("chat-unread-divider")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Mark unread" })).not.toBeInTheDocument();
+});
+
 it("opens a task from its message without leaving the chat", async () => {
   const calls = stubChat();
   renderChat();
   await screen.findByText("which option?");
-  // The key rides in the message data, and a key written in plain text is a link too.
-  expect(screen.getByRole("button", { name: "TEST-8" })).toBeInTheDocument();
+  // A key written in the message text is a link inside the rendered Markdown;
+  // the key the daemon attached to the message is a chip under it.
+  expect(screen.getByRole("link", { name: "TEST-8" })).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "TEST-7" }));
   expect(await screen.findByText("Answer the question")).toBeInTheDocument();
   expect(calls.some((call) => call.path.startsWith("/api/tasks/TEST-7"))).toBe(true);
   await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(screen.getByText("which option?")).toBeInTheDocument();
-});
-
-it("separates the messages that arrived since the chat was last read", async () => {
-  stubChat("2026-09-15T10:00:00.000000000Z");
-  renderChat();
-  const separator = await screen.findByText("New messages");
-  const first = screen.getByText("which option?");
-  // The line belongs above the first message the customer has not seen.
-  expect(separator.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // Opening the chat moves the server's mark; the line stays until the tab does.
-  await waitFor(() => expect(screen.getByText("New messages")).toBeInTheDocument());
-});
-
-it("draws no separator when the whole conversation has been read", async () => {
-  stubChat("2026-09-15T10:06:00.000000000Z");
-  renderChat();
-  await screen.findByText("please look at this");
-  expect(screen.queryByText("New messages")).not.toBeInTheDocument();
 });

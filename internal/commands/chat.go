@@ -144,6 +144,7 @@ func chatRead() registry.Command {
 		Args: []registry.Arg{
 			{Name: "agent", Type: registry.String, Required: true, Help: "agent name"},
 			{Name: "ts", Flag: "ts", Type: registry.String, Required: true, Help: "timestamp of the newest message shown"},
+			{Name: "exact", Flag: "exact", Type: registry.Bool, Help: "set the mark to ts even when that moves it backwards (mark unread)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/chats/{agent}/read"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -156,8 +157,9 @@ func chatRead() registry.Command {
 				return nil, err
 			}
 			// The mark only moves forward: a late or duplicated request from a
-			// second window must not resurrect messages already seen.
-			if marks[agent] < ts {
+			// second window must not resurrect messages already seen. Marking a
+			// chat unread is the one deliberate exception, and says so.
+			if exact, _ := boolParam(p, "exact"); exact || marks[agent] < ts {
 				marks[agent] = ts
 			}
 			raw, err := json.Marshal(marks)

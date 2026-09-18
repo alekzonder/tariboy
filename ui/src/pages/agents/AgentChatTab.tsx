@@ -1,7 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 import ChannelsPage from "@/pages/ChannelsPage";
 import AgentChat from "./chat/AgentChat";
-import { Button } from "@/components/ui/button";
 
 // One section for both halves of an agent's messaging: the conversation the
 // customer holds with it, and the raw channels it is subscribed to. They share
@@ -20,27 +19,36 @@ export default function AgentChatTab({ hostId = "" }: { hostId?: string }) {
   const [params, setParams] = useSearchParams();
   const requested = params.get("view");
   const view: View = isView(requested) ? requested : "chat";
+  const pick = (key: View) => {
+    const next = new URLSearchParams(params);
+    next.set("view", key);
+    setParams(next, { replace: true });
+  };
+  /* The switch is rendered into the chat's own toolbar rather than above it,
+     so the section keeps one 48px control row instead of stacking two. */
+  const segment = (
+    <div role="group" aria-label="Messaging view" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
+      {VIEWS.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={view === key}
+          onClick={() => pick(key)}
+          className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${view === key
+            ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+            : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  if (view === "chat") return <AgentChat hostId={hostId} leading={segment} />;
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        {VIEWS.map(([key, label]) => (
-          <Button
-            key={key}
-            size="sm"
-            variant={view === key ? "secondary" : "ghost"}
-            aria-pressed={view === key}
-            onClick={() => {
-              const next = new URLSearchParams(params);
-              next.set("view", key);
-              setParams(next, { replace: true });
-            }}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
+      <div className="flex h-12 shrink-0 items-center pl-4">{segment}</div>
       <div className="min-h-0 flex-1">
-        {view === "chat" ? <AgentChat hostId={hostId} /> : <ChannelsPage />}
+        <ChannelsPage />
       </div>
     </div>
   );
