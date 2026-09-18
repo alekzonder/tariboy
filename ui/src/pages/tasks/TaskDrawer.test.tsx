@@ -11,10 +11,18 @@ const api = vi.hoisted(() => ({
   getTaskWorkflow: vi.fn(),
   listTaskEvents: vi.fn(),
   listTaskPrincipals: vi.fn(),
+  listTasks: vi.fn(),
   updateTask: vi.fn(),
 }))
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
-const taskSocket = vi.hoisted(() => ({ options: undefined as { onHint?: (hint: { sequence: number }) => void } | undefined }))
+const taskSocket = vi.hoisted(() => ({
+  options: undefined as {
+    after?: number
+    enabled?: boolean
+    onHint?: (hint: { sequence: number; task_key?: string }) => void
+    onReset?: (sequence: number) => void
+  } | undefined,
+}))
 
 vi.mock("@/lib/tasks", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/tasks")>(),
@@ -57,6 +65,7 @@ beforeEach(() => {
   api.getTask.mockResolvedValue(detail)
   api.getTaskWorkflow.mockRejectedValue(new ApiError(404, "workflow_not_found", "workflow not found"))
   api.listTaskEvents.mockResolvedValue({ events: [], count: 0 })
+  api.listTasks.mockResolvedValue({ tasks: [], sequence: 412 })
   api.listTaskPrincipals.mockResolvedValue({ customer: "user:owner", agents: ["worker"], groups: [] })
   api.updateTask.mockResolvedValue({ ...task, status: "in_progress", revision: 3 })
   api.addTaskComment.mockResolvedValue({ comment: null, created_waits: [], resolved_waits: [] })
@@ -102,4 +111,45 @@ it("reloads the task when the tasks socket hints a change", async () => {
   expect(api.getTask).toHaveBeenCalledTimes(1)
   taskSocket.options?.onHint?.({ sequence: 7 })
   await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
+})
+
+it("renders the task panel in the dialog's own column when it carries no resize handle", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  expect(screen.getByRole("dialog")).toHaveClass("task-detail-dialog-plain")
+})
+
+it("starts the tasks socket at the current sequence instead of replaying the whole log", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  await waitFor(() => expect(taskSocket.options?.enabled).toBe(true))
+  expect(taskSocket.options?.after).toBe(412)
+})
+
+it("keeps the socket closed until the current sequence is known", async () => {
+  let release: (page: { tasks: never[]; sequence: number }) => void = () => {}
+  api.listTasks.mockReturnValue(new Promise((resolve) => { release = resolve }))
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  expect(taskSocket.options?.enabled).toBe(false)
+  release({ tasks: [], sequence: 9 })
+  await waitFor(() => expect(taskSocket.options?.enabled).toBe(true))
+})
+
+it("ignores a hint about another task", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  expect(api.getTask).toHaveBeenCalledTimes(1)
+  taskSocket.options?.onHint?.({ sequence: 413, task_key: "OTHER-2" })
+  await waitFor(() => expect(taskSocket.options?.after).toBe(413))
+  expect(api.getTask).toHaveBeenCalledTimes(1)
+})
+
+it("reloads on a socket reset without rewinding the stream to the beginning", async () => {
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  await waitFor(() => expect(taskSocket.options?.after).toBe(412))
+  taskSocket.options?.onReset?.(412)
+  await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
+  expect(taskSocket.options?.after).toBe(412)
 })
