@@ -62,6 +62,20 @@ function markdownFence(content: string) {
   return "`".repeat(Array.from(content.matchAll(/`+/g)).reduce((length, match) => Math.max(length, match[0].length + 1), 3))
 }
 
+/**
+ * Tiptap serializes a trailing empty paragraph as `&nbsp;` so the empty block
+ * survives a Markdown round trip. Markdown has no trailing blank paragraph, so
+ * that entity is content the writer never typed, and `richMarkdown` cannot
+ * round-trip it back, which shows it as a literal code block. Trailing blank
+ * space carries no Markdown either way, so drop both from the emitted string
+ * and leave the editor document, and the writer's caret, alone. This runs on
+ * every keystroke, so it stays a trim of the serialized text rather than a
+ * second pass over the document.
+ */
+function editorMarkdown(editor: Editor) {
+  return editor.getMarkdown().replace(/(?:\s|&nbsp;)+$/, "")
+}
+
 function richMarkdown(value: string, editor: Editor) {
   return editor.markdown?.instance.lexer(value).map((token) => {
     const raw = token.raw ?? ""
@@ -157,7 +171,7 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
         class: `${markdownStyles} min-h-32 px-3 py-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring`,
       },
     },
-    onUpdate: ({ editor: current }) => onChange(current.getMarkdown()),
+    onUpdate: ({ editor: current }) => onChange(editorMarkdown(current)),
   })
   const showSource = mode ? mode === "source" : source
 
@@ -166,7 +180,7 @@ export function MarkdownEditor({ value, onChange, id, placeholder, disabled = fa
     editor.setEditable(!disabled && !showSource, false)
     if (!showSource) {
       const content = richMarkdown(value, editor)
-      if (editor.getMarkdown() === content) return
+      if (editorMarkdown(editor) === content) return
       editor.commands.setContent(content, { contentType: "markdown", emitUpdate: false })
     }
   }, [editor, value, disabled, showSource])

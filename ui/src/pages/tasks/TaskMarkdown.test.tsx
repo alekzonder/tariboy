@@ -115,6 +115,25 @@ describe("task Markdown", () => {
     expect(screen.getByRole("textbox")).toHaveValue(initial + "\n" + (initial.startsWith("1.") ? "2. Second" : initial.replace("First", "Second")))
   })
 
+  it("keeps trailing blank lines out of the emitted Markdown", () => {
+    function Draft() {
+      const [value, setValue] = useState("Hello")
+      return <><MarkdownEditor value={value} onChange={setValue} /><output>{value}</output></>
+    }
+    render(<Draft />)
+    const textbox = screen.getByRole("textbox")
+    const editor = (textbox as HTMLElement & { editor: Editor }).editor
+    act(() => { editor.commands.focus("end", { scrollIntoView: false }) })
+    act(() => { editor.commands.splitBlock() })
+    act(() => { editor.commands.splitBlock() })
+
+    expect(screen.getByRole("status").textContent).toBe("Hello")
+    expect(textbox.querySelector("pre")).toBeNull()
+    expect(textbox.querySelectorAll("p")).toHaveLength(3)
+    act(() => { editor.commands.insertContent("World") })
+    expect(screen.getByRole("status").textContent).toBe("Hello\n\n\n\nWorld")
+  })
+
   it("disables both source and rich editing when saving", () => {
     const { rerender } = render(<MarkdownEditor value="Hello" onChange={() => {}} disabled />)
     expect(screen.getByRole("textbox")).toHaveAttribute("contenteditable", "false")
