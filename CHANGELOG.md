@@ -1,3 +1,20 @@
+## [0.66.0] - 2026-09-18
+
+### Added
+
+- Turn the agent Chat tab into a real thread: a single toolbar, author-grouped messages with avatars and hover actions, Markdown with code blocks and task links, day separators and a New messages rule, read receipts, and a composer with Markdown marks, attach, preview and auto-grow. A dot on the Chat tab shows unread.
+
+### Changed
+
+- Read the per-agent unread mark the daemon already keeps instead of tracking unread in the tab, and anchor the New messages rule to the mark the chat was opened at, so it holds its place while the customer reads and is dismissed only by Mark read, by sending a message, or by leaving the chat.
+- Accept `--exact` on `tariboy chat read` (`exact` on `POST /api/chats/{agent}/read`), the one write allowed to move the read mark backwards, which is how a chat is marked unread. Without it the mark still only moves forward.
+
+### Fixed
+
+- Derive the remote install and update upload deadline from the payload instead of a fixed 120 seconds: a two-minute floor plus one second per 128 KiB, capped at thirty minutes, with SSH compression enabled. A ~100 MB bundle over a slow uplink no longer fails at "Upload release" with "SSH command timed out", leaving an abandoned staging directory behind.
+
+[0.66.0]: https://github.com/alekzonder/tariboy/compare/v0.65.0...v0.66.0
+
 ## [0.65.0] - 2026-09-18
 
 ### Added
