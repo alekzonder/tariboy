@@ -100,6 +100,37 @@ restart, so active agents do not require a second confirmation. A legacy daemon
 older than `0.10.1` instead fails closed before activation when active work
 exists or cannot be checked.
 
+## Update a host from its own shell
+
+A host can also fetch and install a release itself, without the desktop app
+uploading one:
+
+```bash
+ssh build-box 'tariboy update latest'
+ssh build-box 'tariboy update 0.64.0'
+```
+
+`latest` resolves the newest published GitHub release; an explicit version
+installs exactly that release. The command downloads
+`tariboy_<version>_linux-x86_64.tar.gz` and the release `SHA256SUMS`, verifies
+the archive checksum before unpacking, stages it under
+`~/.local/lib/tariboy/.stage-<token>`, and then runs the same fixed installer
+the desktop app uploads — so checksum validation, `flock` serialization,
+atomic symlink switching, and rollback are identical. A running daemon is
+restarted onto the new release and must report the installed version; a stopped
+daemon is left stopped.
+
+The command updates only an installer-managed `linux-x86_64` installation,
+where `~/.local/bin/tariboy` is a symlink into `~/.local/lib/tariboy/<version>/`.
+It refuses anything else — a hand-placed binary or a macOS installation
+belonging to the app bundle — and changes nothing. `--force` reinstalls a
+version that is already active. `TARIBOY_UPDATE_BASE_URL` overrides the GitHub
+releases root for a mirror.
+
+Releases published before this archive existed cannot be fetched this way:
+move to the first release that carries it through the desktop app once, then
+`tariboy update` works from there.
+
 The host dialog presents provisioning and updates as one vertical sequence:
 
 1. Connect to host.

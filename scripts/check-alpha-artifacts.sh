@@ -15,10 +15,14 @@ EXPECTED_VERSION="$(cat "$RELEASE_VERSION_FILE")"
 EXPECTED_NUMERIC_VERSION="${EXPECTED_VERSION%%-*}"
 RELEASE_DIR="${1:-}"
 EXPECTED_DMG="Tariboy_${VERSION}_aarch64.dmg"
+EXPECTED_SERVER_ARCHIVE="tariboy_${VERSION}_linux-x86_64.tar.gz"
+SERVER_PAYLOAD="tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram"
 MOUNT=""
 STRING_DUMP=""
+ARCHIVE_DIR=""
 
 cleanup() {
+  [ -z "$ARCHIVE_DIR" ] || [ ! -d "$ARCHIVE_DIR" ] || rm -rf "$ARCHIVE_DIR"
   if [ -n "$MOUNT" ]; then
     mounts="$(mount 2>/dev/null || true)"
     if grep -F " on $MOUNT " <<<"$mounts" >/dev/null; then
@@ -89,13 +93,13 @@ for command in codesign file hdiutil lipo mount python3 rg shasum strings; do
 done
 
 ACTUAL_FILES="$(find "$RELEASE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)"
-EXPECTED_FILES="$(printf '%s\n' "$EXPECTED_DMG" SHA256SUMS release.json | LC_ALL=C sort)"
+EXPECTED_FILES="$(printf '%s\n' "$EXPECTED_DMG" "$EXPECTED_SERVER_ARCHIVE" SHA256SUMS release.json | LC_ALL=C sort)"
 [ "$ACTUAL_FILES" = "$EXPECTED_FILES" ] || {
   echo "FAIL: unexpected release files; found:" >&2
   printf '%s\n' "$ACTUAL_FILES" >&2
   exit 1
 }
-for artifact in "$EXPECTED_DMG" SHA256SUMS release.json; do
+for artifact in "$EXPECTED_DMG" "$EXPECTED_SERVER_ARCHIVE" SHA256SUMS release.json; do
   [ -f "$RELEASE_DIR/$artifact" ] && [ ! -L "$RELEASE_DIR/$artifact" ] || {
     echo "FAIL: release entry is not a regular file: $artifact" >&2
     exit 1
@@ -213,17 +217,46 @@ for platform in darwin-arm64 linux-x86_64; do
     echo "FAIL: $platform/VERSION does not equal $VERSION" >&2; exit 1; }
 done
 
+# The server archive is the payload `tariboy update` installs, so it must carry
+# the complete install layout the fixed installer requires.
+ARCHIVE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tariboy-alpha-archive.XXXXXX")"
+tar -xzf "$RELEASE_DIR/$EXPECTED_SERVER_ARCHIVE" -C "$ARCHIVE_DIR"
+ACTUAL_ARCHIVE_FILES="$(find "$ARCHIVE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)"
+EXPECTED_ARCHIVE_FILES="$(printf '%s\n' $SERVER_PAYLOAD VERSION SHA256SUMS remote-install.sh | LC_ALL=C sort)"
+[ "$ACTUAL_ARCHIVE_FILES" = "$EXPECTED_ARCHIVE_FILES" ] || {
+  echo "FAIL: unexpected server archive entries; found:" >&2
+  printf '%s\n' "$ACTUAL_ARCHIVE_FILES" >&2
+  exit 1
+}
+[ "$(tr -d '\r\n' < "$ARCHIVE_DIR/VERSION")" = "$VERSION" ] || {
+  echo "FAIL: server archive VERSION does not equal $VERSION" >&2
+  exit 1
+}
+(cd "$ARCHIVE_DIR" && shasum -a 256 -c SHA256SUMS)
+cmp -s "$ARCHIVE_DIR/remote-install.sh" "$ROOT/desktop/src-tauri/src/remote-install.sh" || {
+  echo "FAIL: server archive installer differs from the repository installer" >&2
+  exit 1
+}
+for binary in $SERVER_PAYLOAD; do
+  path="$ARCHIVE_DIR/$binary"
+  [ -x "$path" ] || { echo "FAIL: server archive binary is not executable: $binary" >&2; exit 1; }
+  grep "ELF 64-bit.*x86-64" <<<"$(file "$path")" >/dev/null || {
+    echo "FAIL: server archive binary has the wrong architecture: $binary" >&2; exit 1; }
+  binary_contains "$path" "$VERSION" || {
+    echo "FAIL: server archive binary does not embed $VERSION: $binary" >&2; exit 1; }
+done
+
 credential_names="$(find "$MOUNT" \( -name '*.pem' -o -name '*.key' -o -name 'id_rsa*' \
   -o -name 'id_ed25519*' -o -name '.env' \) -print -quit)"
 if [ -n "$credential_names" ]; then
   echo "FAIL: app contains a credential-like filename" >&2
   exit 1
 fi
-if scan_old_version "$MOUNT" "$RELEASE_DIR"; then
+if scan_old_version "$MOUNT" "$RELEASE_DIR" "$ARCHIVE_DIR"; then
   echo "FAIL: release contains stale version 0.9.0-dev" >&2
   exit 1
 fi
-if scan_secrets "$MOUNT" "$RELEASE_DIR"; then
+if scan_secrets "$MOUNT" "$RELEASE_DIR" "$ARCHIVE_DIR"; then
   echo "FAIL: release contains private-key or token material" >&2
   exit 1
 fi

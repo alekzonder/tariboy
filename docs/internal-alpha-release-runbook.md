@@ -70,9 +70,17 @@ keeps updater artifacts disabled and does not require the release key.
 ```text
 dist/releases/0.64.0/
   Tariboy_0.64.0_aarch64.dmg
+  tariboy_0.64.0_linux-x86_64.tar.gz
   SHA256SUMS
   release.json
 ```
+
+`tariboy_<version>_linux-x86_64.tar.gz` is the server payload a Linux host
+installs with `tariboy update`. It is the same install layout the desktop app
+uploads over SSH: the five server binaries, `VERSION`, their `SHA256SUMS`, and
+the fixed `remote-install.sh`. The artifact gate extracts it, checks those
+entries, its `VERSION`, its internal checksums, and that its installer matches
+the repository copy.
 
 DMG creation intentionally uses Tauri's headless-safe mode. It skips Finder
 AppleScript layout automation, so release packaging does not require an
@@ -116,6 +124,7 @@ The release owner and backup reviewer each verify:
 - [ ] commit SHA in `release.json` is the reviewed `main` commit;
 - [ ] artifact gate exits zero on Apple Silicon;
 - [ ] `shasum -a 256 -c SHA256SUMS` exits zero;
+- [ ] the release lists `tariboy_<version>_linux-x86_64.tar.gz` for `tariboy update`;
 - [ ] release notes and known constraints match the artifact;
 - [ ] support/rollback contacts and process are understood;
 - [ ] a disposable-host product acceptance run is attached;
