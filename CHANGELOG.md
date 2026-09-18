@@ -1,3 +1,15 @@
+## [0.66.1] - 2026-09-18
+
+### Fixed
+
+- Diagnose a failed macOS release bundling run instead of reporting a bare
+  `failed to run bundle_dmg.sh`: the packager prints the disk image state — free
+  space, attached images, mounted volumes, running disk image processes and the
+  partial bundle output — and reproduces the failure once with verbose bundler
+  output, so `bundle_dmg.sh`'s own error reaches the build log.
+
+[0.66.1]: https://github.com/alekzonder/tariboy/compare/v0.66.0...v0.66.1
+
 ## [0.66.0] - 2026-09-18
 
 ### Added
