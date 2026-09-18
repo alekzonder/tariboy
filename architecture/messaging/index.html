@@ -77,7 +77,8 @@ customer principal, and carries <code>reply_to: user:&lt;customer&gt;</code> whe
 a chat, which is what makes an agent’s reply land in the conversation rather
 than back in its own inbox.</p>
 <p><code>GET /api/chats</code> ranks every conversation by its last message and counts what
-the customer has not read; <code>GET /api/chats/{agent}</code> returns one merged feed;
+the customer has not read; <code>GET /api/chats/{agent}</code> returns one merged feed and
+the agent’s current read mark, so a reader can separate what it has already seen;
 <code>POST /api/chats/{agent}/read</code> moves that agent’s read mark forward. Read marks
 live in one <code>chat_read_v1</code> value in <code>daemon_config</code>, keyed per agent. Both read
 endpoints take a <code>types</code> filter of globs and default to conversation types only,

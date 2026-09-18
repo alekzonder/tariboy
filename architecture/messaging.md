@@ -95,7 +95,8 @@ a chat, which is what makes an agent's reply land in the conversation rather
 than back in its own inbox.
 
 `GET /api/chats` ranks every conversation by its last message and counts what
-the customer has not read; `GET /api/chats/{agent}` returns one merged feed;
+the customer has not read; `GET /api/chats/{agent}` returns one merged feed and
+the agent's current read mark, so a reader can separate what it has already seen;
 `POST /api/chats/{agent}/read` moves that agent's read mark forward. Read marks
 live in one `chat_read_v1` value in `daemon_config`, keyed per agent. Both read
 endpoints take a `types` filter of globs and default to conversation types only,

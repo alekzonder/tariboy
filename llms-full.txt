@@ -980,7 +980,8 @@ a chat, which is what makes an agent's reply land in the conversation rather
 than back in its own inbox.
 
 `GET /api/chats` ranks every conversation by its last message and counts what
-the customer has not read; `GET /api/chats/{agent}` returns one merged feed;
+the customer has not read; `GET /api/chats/{agent}` returns one merged feed and
+the agent's current read mark, so a reader can separate what it has already seen;
 `POST /api/chats/{agent}/read` moves that agent's read mark forward. Read marks
 live in one `chat_read_v1` value in `daemon_config`, keyed per agent. Both read
 endpoints take a `types` filter of globs and default to conversation types only,
@@ -1226,6 +1227,19 @@ a reason: with none, both keys are omitted entirely rather than emitted empty.
 An agent-authored status line is never reported as a halt reason, since only
 the idle prefix qualifies.
 
+## Iteration tags
+
+An iteration row is immutable evidence of an execution, so tags are not a column
+on it. They are rows in `iteration_tags`, keyed by `(iteration_id, tag)`, with an
+`ON DELETE CASCADE` reference to `iterations`. Retention pruning and agent
+deletion therefore retire an iteration's tags with the iteration itself, and no
+tag write can touch the iteration row.
+
+A batch of tag changes over several iterations of one agent commits in one
+transaction, and an id belonging to another agent fails the whole batch rather
+than writing part of it. Tags are a property of the iteration, not of the agent
+that applied them: who tagged an iteration is not recorded.
+
 ## Customer identity and chat read marks
 
 Two `daemon_config` values carry the customer's side of messaging.
@@ -1263,8 +1277,14 @@ becomes blocked. Only the reconciler writes the delivery timestamp.
 
 Task queues, the unlimited parent tree, comments, waits, relations, events,
 notification outbox, customer notification state, and mutation idempotency
-records are normalized tables in the same `tariboyd.db`. Task keys include
-their queue prefix (`TEST-1`) and never change when a task moves. Recursive
+records are normalized tables in the same `tariboyd.db`. A task key is its
+queue prefix plus four random characters (`TEST-fkt3`), minted against the
+`task_key` UNIQUE constraint rather than a counter, and it never changes when a
+task moves between parents or between daemons. `task_key_aliases` holds the
+numeric keys retired by that migration so they keep resolving; the daemon
+rewrites any remaining numeric key at start, in one transaction that also
+rewrites `agents.current_goal_task_key`. `task_queues.next_number` is left in
+the schema but is no longer read or advanced. Recursive
 CTEs derive descendants, inherited access, blocking cycles, and active
 descendants without a configured depth limit.
 
@@ -1473,9 +1493,10 @@ with an unread customer question, then the rest by their most recent
 conversation, and only then in the operator's own order. The whole sort happens
 in Desktop, across every server, because only Desktop sees all of them; a host
 whose daemon does not project chats simply contributes no conversation dates.
-A row also carries the count of unread messages from that agent, which is a
-separate signal from the question dot: the dot means an unanswered question, the
-badge means unread messages. A
+An unanswered question therefore lifts a row, but adds no marker of its own: the
+one badge a row carries is the count of unread messages from that agent. The
+question itself is readable in that agent's **Chat**, and its task is marked in
+**Tasks**. A
 row's context menu pins and unpins it, and the Desktop WebView remembers the
 pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
 its members gathered across hosts, including a declared group with no members.
@@ -1504,6 +1525,19 @@ members, per-member runtime fields, rename/lead and membership controls,
 compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
 archive uploads and downloads.
+
+## Iteration tags in Activity
+
+The Activity tab filters its iteration list by tag and by iteration start date.
+Both filters and the selected iteration live in the URL query, so a filtered
+view is shareable and survives a reload; a filter change replaces the history
+entry instead of adding one per keystroke. Matching is the daemon's: an
+iteration matches any of the listed tags, and both date bounds are inclusive.
+
+Each row shows its tags beside its status. The selected iteration has a tag
+editor above its log that adds one tag or removes one, each saved as a complete
+replacement of that iteration's tag set. Batch tagging over many iterations is a
+CLI and API operation.
 
 ## Server Usage
 
@@ -1685,6 +1719,10 @@ Markdown` segment selects the mode, and in Task Detail it sits on the section's
 own label row beside `Send files` rather than inside the editor.
 Empty numbered-list items remain editable in rich text, including immediately
 after Enter adds a new item; they do not add an extra visible paragraph.
+Blank lines typed at the end of the text stay in the rich editor for further
+typing but are left out of the emitted Markdown, because a trailing empty
+paragraph has no Markdown form and would otherwise be written as an `&nbsp;`
+entity and shown back as a literal code block.
 The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
@@ -1715,7 +1753,11 @@ from the daemon's default conversation types, offers an agent's own wakes
 (`task.goal`, `script.result`, schedule alarms) explicitly, and the chosen set
 persists in the Desktop WebView under `terminals:chat-types:v1`. Opening the
 chat marks it read at the timestamp of the newest message actually shown, never
-at the current time. A message that names a task carries that key as a link
+at the current time. The feed also carries the read mark the chat was opened at,
+and a **New messages** line is drawn above the first message newer than it. That
+mark is captured once per open, before the chat moves it forward, so the line
+holds its place while the customer reads and while further messages arrive; it
+is gone the next time the tab is opened with nothing unread. A message that names a task carries that key as a link
 under its text: the key the daemon attached to the message, and any task key
 written in the message text. Opening one opens the task panel over the chat —
 the same detail panel Tasks shows, with its own load, its own live refresh and
@@ -1745,16 +1787,17 @@ active recurring definition with no pending or running attempt. Exec queues the
 stored command through the ordinary script worker; recurring definitions resume
 their fixed post-completion delay after that manual run.
 
-Notifications and customer-only queue administration live in the same
-workspace. **Mark as Read All** marks every currently unread notification read
-through the existing per-notification action and refreshes shared attention once.
-A small red indicator on a task row identifies an unread,
-non-dismissed `task.question` notification for that task; it updates from the
-same notification state used by the inbox. A route-independent coordinator
-also watches every configured host and projects agent-authored questions into
-host-and-agent-scoped dots in the common agent list. It derives the requesting
-agent from the notification's event actor projection, not from display text;
-customer-authored questions never produce an agent dot.
+The workspace has no notification inbox: customer-only queue administration is
+the left rail's remaining non-tree view, and the notification state is rendered
+as one indicator. A small red indicator on a task row identifies an unread,
+non-dismissed `task.question` notification for that task, and opening that task
+marks those notifications read, which is the only thing that clears the
+indicator in the UI. `ttasks notifications` remains the operator command for
+reading and dismissing inbox rows. A route-independent coordinator still
+watches every configured host and derives the requesting agent from the
+notification's event actor projection, not from display text; that shared
+attention orders the agent list and marks the agent workspace's **Tasks** tab,
+and customer-authored questions contribute neither.
 
 Each host watcher treats typed HTTP task and notification responses as
 authoritative. The resumable task WebSocket supplies refresh hints and sequence
@@ -1780,7 +1823,11 @@ never replaced with local authority.
 
 Task changes arrive over the resumable `/api/tasks/ws?after=<sequence>` socket.
 Hints trigger typed HTTP refetches; they never replace authoritative task
-responses. Remote targets map HTTP(S) to WS(S) and put the existing bearer
+responses. A surface opens the socket only once it knows the host's current
+sequence, read from the authoritative HTTP snapshot it already loads, so it
+never asks the daemon to replay the whole task log; the panel opened over a
+chat message reads that sequence for itself and refetches only for hints about
+its own task. Remote targets map HTTP(S) to WS(S) and put the existing bearer
 token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 
@@ -5286,13 +5333,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.64.0` alpha on an Apple Silicon Mac.
+This path is for the `0.65.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.64.0_aarch64.dmg`;
+- a verified `Tariboy_0.65.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -5793,7 +5840,7 @@ tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
 | Route | Returns |
 | --- | --- |
 | `GET /api/chats` | one row per conversation — `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — newest conversation first |
-| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
+| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
 | `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
 | `GET /api/messages/ws` | one live hint per publication for every agent on the host |
 
@@ -6027,9 +6074,12 @@ tariboy has three command surfaces:
 | `tariboy image provenance REF` | Show local source and immutable snapshot Git provenance |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
-| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, and prompt-template hash |
+| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, prompt-template hash, and tags |
 | `tariboy iteration logs` | Print an iteration's harness logs |
-| `tariboy iteration ls` | List an agent's iterations |
+| `tariboy iteration ls` | List an agent's iterations; `--tag`, `--started-after` and `--started-before` narrow the list |
+| `tariboy iteration tag add` | Add tags to one or more iterations |
+| `tariboy iteration tag rm` | Remove tags from one or more iterations |
+| `tariboy iteration tag set` | Replace the tags of one or more iterations |
 | `tariboy logs` | Stream or print an agent's events (-f to follow) |
 | `tariboy loop disable` | Turn the agent loop disable |
 | `tariboy loop enable` | Turn the agent loop enable |
@@ -6064,6 +6114,49 @@ tariboy has three command surfaces:
 | `tariboy version` | Print the Tariboy version locally without a daemon |
 
 > Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
+
+### Host-local commands
+
+These verbs never route through the daemon, so they are absent from the
+registry listing above. They act on the host the CLI runs on and work while the
+daemon is down.
+
+| Command | Summary |
+| --- | --- |
+| `tariboy daemon start\|stop\|restart\|status\|logs` | Control and inspect the local daemon process |
+| `tariboy update [VERSION\|latest] [--force]` | Install a published release over this installer-managed installation and restart a running daemon |
+
+`tariboy update` updates only an installer-managed `linux-x86_64` installation
+and is described in [Remote hosts](/docs/remote-hosts#update-a-host-from-its-own-shell).
+
+### Iteration tags
+
+Tags annotate an iteration without changing it: one agent marks the iterations
+of another agent it has already handled. An iteration can carry several tags.
+A tag is at most 64 characters and contains no comma, whitespace, or control
+character.
+
+The three mutations take a batch of iteration ids and a batch of tags, and apply
+in one transaction — the whole batch succeeds or nothing is written. An id that
+belongs to another agent fails the batch with `not_found`.
+
+```bash
+tariboy iteration tag add worker --id worker-20260918T10-1 --id worker-20260918T11-2 --tag processed
+tariboy iteration tag rm worker --id worker-20260918T10-1 --tag processed
+tariboy iteration tag set worker --id worker-20260918T10-1 --tag processed --tag reviewed
+tariboy iteration tag set worker --id worker-20260918T10-1   # no --tag clears every tag
+```
+
+`tariboy iteration ls` searches by tag and by iteration start date. `--tag`
+takes a comma-separated list and matches an iteration carrying **any** of them.
+Both date bounds are inclusive and accept RFC3339 or a bare `YYYY-MM-DD` day:
+
+```bash
+tariboy iteration ls worker --tag processed,reviewed
+tariboy iteration ls worker --started-after 2026-09-01 --started-before 2026-09-18
+```
+
+`iteration ls` rows and `iteration inspect` both report a sorted `tags` list.
 
 ## Agent capability scripts
 
@@ -6258,6 +6351,37 @@ one operation ID. Daemon `0.10.1` and newer preserves running shims across that
 restart, so active agents do not require a second confirmation. A legacy daemon
 older than `0.10.1` instead fails closed before activation when active work
 exists or cannot be checked.
+
+## Update a host from its own shell
+
+A host can also fetch and install a release itself, without the desktop app
+uploading one:
+
+```bash
+ssh build-box 'tariboy update latest'
+ssh build-box 'tariboy update 0.64.0'
+```
+
+`latest` resolves the newest published GitHub release; an explicit version
+installs exactly that release. The command downloads
+`tariboy_<version>_linux-x86_64.tar.gz` and the release `SHA256SUMS`, verifies
+the archive checksum before unpacking, stages it under
+`~/.local/lib/tariboy/.stage-<token>`, and then runs the same fixed installer
+the desktop app uploads — so checksum validation, `flock` serialization,
+atomic symlink switching, and rollback are identical. A running daemon is
+restarted onto the new release and must report the installed version; a stopped
+daemon is left stopped.
+
+The command updates only an installer-managed `linux-x86_64` installation,
+where `~/.local/bin/tariboy` is a symlink into `~/.local/lib/tariboy/<version>/`.
+It refuses anything else — a hand-placed binary or a macOS installation
+belonging to the app bundle — and changes nothing. `--force` reinstalls a
+version that is already active. `TARIBOY_UPDATE_BASE_URL` overrides the GitHub
+releases root for a mirror.
+
+Releases published before this archive existed cannot be fetched this way:
+move to the first release that carries it through the desktop app once, then
+`tariboy update` works from there.
 
 The host dialog presents provisioning and updates as one vertical sequence:
 
@@ -6477,7 +6601,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.64.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.65.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6574,7 +6698,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.64.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.65.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -7506,7 +7630,20 @@ retain the flexible model described below.
 ## Work model
 
 Every task belongs to a queue and receives an immutable queue key such as
-`TEST-1`. A task records its author, customer, assignee, optional group,
+`TEST-fkt3`: the queue prefix, a dash, and four random characters drawn from
+`23456789abcdefghjkmnpqrstuvwxyz` — the digits and lowercase letters that cannot
+be confused for one another when a key is read aloud or copied by hand. The key
+is random rather than a per-queue counter so that two daemons never mint the
+same key, which is what lets a task keep its key when it
+[moves to another server](#moving-a-task-to-another-server). Keys are matched
+case-insensitively, so `test-FKT3` finds the same task.
+
+Daemons upgraded from a numeric key such as `TEST-12` rewrite every task to a
+random key on first start and keep the old key as a permanent alias, so a key
+already written into an agent context, a branch name, a pull request title or a
+comment keeps resolving to its task.
+
+A task records its author, customer, assignee, optional group,
 status, priority, pull request URL, block reason, parent, ordered siblings,
 comments, dependencies, and principals whose answers are still required. A pull
 request is an optional normalized absolute `http` or `https` URL without
@@ -7615,16 +7752,18 @@ notification records.
 The top-level **Tasks** tab is global. Each Agent workspace includes the same
 component with `scope_agent` fixed to that agent. The layout is Tree-first:
 
-- left rail: All, My, Waiting for me, Notifications, and Queues;
+- left rail: All, My, Waiting for me, and Queues;
 - remaining width: dense expandable tree ordered by priority at every depth,
   with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain
   their existing row presentation. A small red indicator marks each task with
-  an unread, non-dismissed customer question notification. The same state adds
-  a red dot beside the agent that asked the question in the host's agent list;
-  customer-authored questions do not add an agent dot. Both indicators clear
-  when the notification is read or dismissed.
+  an unread, non-dismissed customer question notification; opening that task
+  marks its question notifications read and clears the indicator. There is no
+  notification inbox in the workspace: the questions themselves are readable
+  in the agent's **Chat**, where they arrive as messages, and
+  `ttasks notifications` remains the operator command for the inbox state. The
+  agent list carries no question dot — only the count of unread chat messages.
 
 Clicking a task opens a right-side sheet over the tree with its description,
 priority, assignment, status, block reason, pull request URL, comments, and open
@@ -7694,6 +7833,40 @@ client renders it as a root-level filtered orphan; the excluded parent is never
 included merely to reconstruct the tree. Switching views always refetches the
 authoritative selected view, and realtime refreshes retain that selection.
 
+## Moving a task to another server
+
+Each host keeps its own tasks, so work that belongs with another host is moved
+rather than copied by hand. In the task panel, the actions menu beside **Save
+task** opens **Move to another server**, which lists the other hosts registered
+in the desktop app.
+
+The desktop app is the only component authenticated against both daemons, so it
+drives the move: it exports the task tree from this daemon, imports it into the
+chosen one, then comments on the task here and sets it to `cancelled`. Nothing
+is deleted — the original task, its history and its events stay on the source
+host — so a failure part-way leaves the task readable on both sides.
+
+What moves: the task, its whole descendant subtree, their comments with the
+original authors and times, and the relations whose two ends are both inside
+that subtree. What does not move: the event log, notifications, reminders,
+relations pointing outside the subtree, and workflow execution state.
+
+The target daemon refuses the import, changing nothing, when:
+
+- it has no queue with the same prefix (`queue_not_found`);
+- a task or a retired key alias already uses one of the keys
+  (`task_key_taken`);
+- its queue runs a [task workflow](/docs/task-workflows)
+  (`transfer_managed_queue`).
+
+A task in a managed queue cannot be exported either
+(`transfer_managed_task`): its assignments, leases and requirement history are
+daemon-local runtime that a transfer would silently drop.
+
+The two endpoints behind the menu are `GET /api/tasks/{key}/export` and
+`POST /api/tasks/import`. Both are customer-authenticated; agents do not
+transfer tasks.
+
 ## Agent capability
 
 Tasks are native daemon functionality, but prompt and command exposure is
@@ -7759,19 +7932,19 @@ a queue**.
 ```bash
 ttasks mine
 ttasks ready --claim
-ttasks show TEST-12
+ttasks show TEST-fkt3
 ttasks create --queue TEST --title "Investigate failure" --priority P1
-ttasks create --parent TEST-12 --title "Add regression test"
-ttasks assign TEST-12 worker
-ttasks update TEST-12 --priority P0
-ttasks update TEST-12 --pull-request https://example.com/org/repo/pull/42
-ttasks comment TEST-12 "Found the boundary"
-ttasks ask TEST-12 user:login "Which behavior should win?"
-ttasks move TEST-12 --parent TEST-3
-ttasks move TEST-12 --to-root
-ttasks block TEST-12 --by TEST-2
-ttasks relate TEST-12 TEST-9
-ttasks done TEST-12
+ttasks create --parent TEST-fkt3 --title "Add regression test"
+ttasks assign TEST-fkt3 worker
+ttasks update TEST-fkt3 --priority P0
+ttasks update TEST-fkt3 --pull-request https://example.com/org/repo/pull/42
+ttasks comment TEST-fkt3 "Found the boundary"
+ttasks ask TEST-fkt3 user:login "Which behavior should win?"
+ttasks move TEST-fkt3 --parent TEST-9rmq
+ttasks move TEST-fkt3 --to-root
+ttasks block TEST-fkt3 --by TEST-2xwv
+ttasks relate TEST-fkt3 TEST-hb4k
+ttasks done TEST-fkt3
 ```
 
 For workflow-managed work, agents instead use `ttasks work next`, `ttasks work

@@ -73,6 +73,19 @@ a reason: with none, both keys are omitted entirely rather than emitted empty.
 An agent-authored status line is never reported as a halt reason, since only
 the idle prefix qualifies.
 
+## Iteration tags
+
+An iteration row is immutable evidence of an execution, so tags are not a column
+on it. They are rows in `iteration_tags`, keyed by `(iteration_id, tag)`, with an
+`ON DELETE CASCADE` reference to `iterations`. Retention pruning and agent
+deletion therefore retire an iteration's tags with the iteration itself, and no
+tag write can touch the iteration row.
+
+A batch of tag changes over several iterations of one agent commits in one
+transaction, and an id belonging to another agent fails the whole batch rather
+than writing part of it. Tags are a property of the iteration, not of the agent
+that applied them: who tagged an iteration is not recorded.
+
 ## Customer identity and chat read marks
 
 Two `daemon_config` values carry the customer's side of messaging.
@@ -110,8 +123,14 @@ becomes blocked. Only the reconciler writes the delivery timestamp.
 
 Task queues, the unlimited parent tree, comments, waits, relations, events,
 notification outbox, customer notification state, and mutation idempotency
-records are normalized tables in the same `tariboyd.db`. Task keys include
-their queue prefix (`TEST-1`) and never change when a task moves. Recursive
+records are normalized tables in the same `tariboyd.db`. A task key is its
+queue prefix plus four random characters (`TEST-fkt3`), minted against the
+`task_key` UNIQUE constraint rather than a counter, and it never changes when a
+task moves between parents or between daemons. `task_key_aliases` holds the
+numeric keys retired by that migration so they keep resolving; the daemon
+rewrites any remaining numeric key at start, in one transaction that also
+rewrites `agents.current_goal_task_key`. `task_queues.next_number` is left in
+the schema but is no longer read or advanced. Recursive
 CTEs derive descendants, inherited access, blocking cycles, and active
 descendants without a configured depth limit.
 

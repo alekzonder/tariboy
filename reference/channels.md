@@ -368,7 +368,7 @@ tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
 | Route | Returns |
 | --- | --- |
 | `GET /api/chats` | one row per conversation — `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — newest conversation first |
-| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
+| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
 | `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
 | `GET /api/messages/ws` | one live hint per publication for every agent on the host |
 

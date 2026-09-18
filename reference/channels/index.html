@@ -290,7 +290,7 @@ agent’s messages in <code>user:&lt;customer&gt;</code>.</p>
 </tr>
 <tr>
 <td><code>GET /api/chats/{agent}</code></td>
-<td>the merged feed, oldest first, each message carrying its <code>from</code> and <code>channel</code>; <code>limit</code> and <code>before</code> (a message timestamp, not an id — a merged feed does not sort by id) page backwards</td>
+<td>the merged feed, oldest first, each message carrying its <code>from</code> and <code>channel</code>, plus the <code>read_ts</code> the chat stood at when it was read; <code>limit</code> and <code>before</code> (a message timestamp, not an id — a merged feed does not sort by id) page backwards</td>
 </tr>
 <tr>
 <td><code>POST /api/chats/{agent}/read</code></td>

@@ -85,9 +85,10 @@ with an unread customer question, then the rest by their most recent
 conversation, and only then in the operator's own order. The whole sort happens
 in Desktop, across every server, because only Desktop sees all of them; a host
 whose daemon does not project chats simply contributes no conversation dates.
-A row also carries the count of unread messages from that agent, which is a
-separate signal from the question dot: the dot means an unanswered question, the
-badge means unread messages. A
+An unanswered question therefore lifts a row, but adds no marker of its own: the
+one badge a row carries is the count of unread messages from that agent. The
+question itself is readable in that agent's **Chat**, and its task is marked in
+**Tasks**. A
 row's context menu pins and unpins it, and the Desktop WebView remembers the
 pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
 its members gathered across hosts, including a declared group with no members.
@@ -116,6 +117,19 @@ members, per-member runtime fields, rename/lead and membership controls,
 compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
 archive uploads and downloads.
+
+## Iteration tags in Activity
+
+The Activity tab filters its iteration list by tag and by iteration start date.
+Both filters and the selected iteration live in the URL query, so a filtered
+view is shareable and survives a reload; a filter change replaces the history
+entry instead of adding one per keystroke. Matching is the daemon's: an
+iteration matches any of the listed tags, and both date bounds are inclusive.
+
+Each row shows its tags beside its status. The selected iteration has a tag
+editor above its log that adds one tag or removes one, each saved as a complete
+replacement of that iteration's tag set. Batch tagging over many iterations is a
+CLI and API operation.
 
 ## Server Usage
 
@@ -297,6 +311,10 @@ Markdown` segment selects the mode, and in Task Detail it sits on the section's
 own label row beside `Send files` rather than inside the editor.
 Empty numbered-list items remain editable in rich text, including immediately
 after Enter adds a new item; they do not add an extra visible paragraph.
+Blank lines typed at the end of the text stay in the rich editor for further
+typing but are left out of the emitted Markdown, because a trailing empty
+paragraph has no Markdown form and would otherwise be written as an `&nbsp;`
+entity and shown back as a literal code block.
 The comment form appears before newest-first comments and after oldest-first comments.
 Saved content renders through `react-markdown` and `remark-gfm`, without raw
 HTML execution. Markdown strings remain the API and persistence contract;
@@ -327,7 +345,11 @@ from the daemon's default conversation types, offers an agent's own wakes
 (`task.goal`, `script.result`, schedule alarms) explicitly, and the chosen set
 persists in the Desktop WebView under `terminals:chat-types:v1`. Opening the
 chat marks it read at the timestamp of the newest message actually shown, never
-at the current time. A message that names a task carries that key as a link
+at the current time. The feed also carries the read mark the chat was opened at,
+and a **New messages** line is drawn above the first message newer than it. That
+mark is captured once per open, before the chat moves it forward, so the line
+holds its place while the customer reads and while further messages arrive; it
+is gone the next time the tab is opened with nothing unread. A message that names a task carries that key as a link
 under its text: the key the daemon attached to the message, and any task key
 written in the message text. Opening one opens the task panel over the chat —
 the same detail panel Tasks shows, with its own load, its own live refresh and
@@ -357,16 +379,17 @@ active recurring definition with no pending or running attempt. Exec queues the
 stored command through the ordinary script worker; recurring definitions resume
 their fixed post-completion delay after that manual run.
 
-Notifications and customer-only queue administration live in the same
-workspace. **Mark as Read All** marks every currently unread notification read
-through the existing per-notification action and refreshes shared attention once.
-A small red indicator on a task row identifies an unread,
-non-dismissed `task.question` notification for that task; it updates from the
-same notification state used by the inbox. A route-independent coordinator
-also watches every configured host and projects agent-authored questions into
-host-and-agent-scoped dots in the common agent list. It derives the requesting
-agent from the notification's event actor projection, not from display text;
-customer-authored questions never produce an agent dot.
+The workspace has no notification inbox: customer-only queue administration is
+the left rail's remaining non-tree view, and the notification state is rendered
+as one indicator. A small red indicator on a task row identifies an unread,
+non-dismissed `task.question` notification for that task, and opening that task
+marks those notifications read, which is the only thing that clears the
+indicator in the UI. `ttasks notifications` remains the operator command for
+reading and dismissing inbox rows. A route-independent coordinator still
+watches every configured host and derives the requesting agent from the
+notification's event actor projection, not from display text; that shared
+attention orders the agent list and marks the agent workspace's **Tasks** tab,
+and customer-authored questions contribute neither.
 
 Each host watcher treats typed HTTP task and notification responses as
 authoritative. The resumable task WebSocket supplies refresh hints and sequence
@@ -392,7 +415,11 @@ never replaced with local authority.
 
 Task changes arrive over the resumable `/api/tasks/ws?after=<sequence>` socket.
 Hints trigger typed HTTP refetches; they never replace authoritative task
-responses. Remote targets map HTTP(S) to WS(S) and put the existing bearer
+responses. A surface opens the socket only once it knows the host's current
+sequence, read from the authoritative HTTP snapshot it already loads, so it
+never asks the daemon to replay the whole task log; the panel opened over a
+chat message reads that sequence for itself and refetches only for hints about
+its own task. Remote targets map HTTP(S) to WS(S) and put the existing bearer
 token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 
