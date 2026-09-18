@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import type { ApiTarget } from "@/lib/api"
+import { resolveDaemon } from "@/lib/daemons"
 import {
   addTaskComment,
   addTaskRelation,
@@ -11,6 +12,7 @@ import {
   listTaskEvents,
   listTaskPrincipals,
   listTasks,
+  transferTask,
   updateTask,
   type TaskDetail as Detail,
   type TaskEvent,
@@ -133,6 +135,14 @@ export default function TaskDrawer({
       width={detailWidth}
       resizeHandle={null}
       onClose={onClose}
+      onTransfer={async (hostID: string) => {
+        const host = await resolveDaemon(hostID)
+        if (!host) throw new Error("That server is no longer registered")
+        const label = host.label || host.id
+        await transferTask(detail.task.key, target, host, label, idempotencyKey())
+        toast.success(`${detail.task.key} moved to ${label}`)
+        await load()
+      }}
       onSave={async (input: {
         revision: number
         title: string

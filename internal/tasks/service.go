@@ -122,7 +122,7 @@ func (s *Service) CreateQueue(ctx context.Context, actor Actor, in CreateQueueIn
 	queue := Queue{
 		Prefix: in.Prefix, Name: in.Name, Description: strings.TrimSpace(in.Description),
 		Owners: owners, ResponsibleAgent: strings.TrimPrefix(normalizeAssignee(in.ResponsibleAgent), "agent:"),
-		NextNumber: 1, Revision: 1, CreatedAt: now, UpdatedAt: now,
+		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	if _, err := appendQueueEventTx(ctx, tx, queue, "task.queue_created", actor,
 		map[string]any{"name": queue.Name}, now); err != nil {
@@ -184,13 +184,13 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 	} else if queue == "" {
 		return Task{}, domainError(http.StatusBadRequest, "missing_queue", "queue is required for a root task")
 	}
-	var next int64
+	var exists int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT next_number FROM task_queues WHERE prefix = ?`, queue).Scan(&next); err != nil {
-		if err == sql.ErrNoRows {
-			return Task{}, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
-		}
+		`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, queue).Scan(&exists); err != nil {
 		return Task{}, err
+	}
+	if exists == 0 {
+		return Task{}, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
 	}
 	activeWorkflow, managed, err := activeWorkflowForQueue(ctx, tx, queue)
 	if err != nil {
@@ -219,11 +219,6 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE task_queues SET next_number = next_number + 1, revision = revision + 1,
-		 updated_at = ? WHERE prefix = ?`, s.now(), queue); err != nil {
-		return Task{}, err
-	}
 	var position int64
 	if err := tx.QueryRowContext(ctx, `
 		SELECT COALESCE(MAX(position), -1) + 1 FROM tasks
@@ -231,7 +226,10 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 		return Task{}, err
 	}
 	now := s.now()
-	key := fmt.Sprintf("%s-%d", queue, next)
+	key, err := reserveTaskKey(tx, queue)
+	if err != nil {
+		return Task{}, err
+	}
 	assignee := normalizeAssignee(in.Assignee)
 	status := StatusOpen
 	var workflowVersionID any

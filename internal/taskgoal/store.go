@@ -258,7 +258,13 @@ func readGoalTask(tx *sql.Tx, key, agent string) (tasks.Task, string, error) {
 	var task tasks.Task
 	var blocked bool
 	var waitAt string
-	err := tx.QueryRow(goalTaskSelect+` WHERE t.task_key=? AND t.assignee='agent:' || ?`, key, agent).Scan(
+	// A key reaches this path from an agent, so it is normalized, and a key
+	// retired by the random key migration resolves through its alias — an
+	// agent's stored context can still name the number it was given.
+	key = tasks.NormalizeKey(key)
+	err := tx.QueryRow(goalTaskSelect+`
+		WHERE (t.task_key=? OR t.id=(SELECT task_id FROM task_key_aliases WHERE old_key=?))
+		  AND t.assignee='agent:' || ?`, key, key, agent).Scan(
 		&task.ID, &task.Key, &task.Queue, &task.ParentKey,
 		&task.Position, &task.Priority, &task.Title, &task.Description, &task.Status, &task.PullRequest, &task.Author, &task.Customer,
 		&task.Group, &task.Assignee, &task.ManualBlockReason, &blocked,

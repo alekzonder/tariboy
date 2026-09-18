@@ -41,10 +41,17 @@ func scanTask(row rowScanner) (Task, error) {
 	return t, err
 }
 
+// taskByKey is the single key lookup for the whole service, so key spelling is
+// normalized here rather than at every caller, and a key retired by the random
+// key migration keeps resolving through its alias.
 func taskByKey(q interface {
 	QueryRow(query string, args ...any) *sql.Row
 }, key string) (Task, error) {
-	t, err := scanTask(q.QueryRow(taskSelect+` WHERE t.task_key = ?`, key))
+	normalized := NormalizeKey(key)
+	t, err := scanTask(q.QueryRow(taskSelect+`
+		WHERE t.task_key = ?
+		   OR t.id = (SELECT task_id FROM task_key_aliases WHERE old_key = ?)`,
+		normalized, normalized))
 	if err == sql.ErrNoRows {
 		return Task{}, notFound(key)
 	}

@@ -67,20 +67,23 @@ ttasks queue get OPS --json | grep -q '"prefix":"OPS"' || fail "operator queue a
 ttasks workflows create --definition '{"name":"cli-flow","version":1,"initial_status":"implement","statuses":[{"id":"implement","requirements":[{"id":"code","pool":"developers","dispatch":"claim_one","produces":["implementation"],"outcomes":["done"]}],"transitions":[{"when":"code.done","to":"done"}]},{"id":"done","terminal":true}]}' >/dev/null
 ttasks workflows publish cli-flow 1 >/dev/null
 ttasks workflows get cli-flow 1 --json | grep -q '"state":"published"' || fail "workflow definition was not published"
-ttasks create --queue OPS --title "operator task" >/dev/null
-ttasks create --queue AGT --title "agent task" >/dev/null
+# Task keys are random, so every later reference reads the key the daemon minted.
+task_key() { grep -o '"key":"[^"]*"' | head -1 | cut -d'"' -f4; }
+OPS_KEY="$(ttasks create --queue OPS --title "operator task" --json | task_key)"
+AGT_KEY="$(ttasks create --queue AGT --title "agent task" --json | task_key)"
+[ -n "$OPS_KEY" ] && [ -n "$AGT_KEY" ] || fail "task creation did not report a key"
 OPERATOR="$(ttasks mine --json)"
 printf '%s' "$OPERATOR" | grep -q '"queue":"OPS"' || fail "operator did not see OPS"
 printf '%s' "$OPERATOR" | grep -q '"queue":"AGT"' || fail "operator did not see AGT"
-ttasks update OPS-1 --title "operator updated" >/dev/null
-ttasks update AGT-1 --title "agent updated" >/dev/null
-ttasks show OPS-1 --json | grep -q '"title":"operator updated"' || fail "operator did not update OPS"
-ttasks show AGT-1 --json | grep -q '"title":"agent updated"' || fail "operator did not update AGT"
+ttasks update "$OPS_KEY" --title "operator updated" >/dev/null
+ttasks update "$AGT_KEY" --title "agent updated" >/dev/null
+ttasks show "$OPS_KEY" --json | grep -q '"title":"operator updated"' || fail "operator did not update OPS"
+ttasks show "$AGT_KEY" --json | grep -q '"title":"agent updated"' || fail "operator did not update AGT"
 
 echo "--- agent mode is identity-bound to its real tools socket"
 "$BIN/tariboy" --socket "$SOCK" agent run tasks-test:latest --name worker --harness stub --loop false \
   --env "STUB_SLEEP=300,STUB_CALL_DONE=0,STUB_TASKS_MINE=$RUNTIME/agent-tasks.json" >/dev/null
-ttasks assign AGT-1 worker >/dev/null
+ttasks assign "$AGT_KEY" worker >/dev/null
 "$BIN/tariboy" --socket "$SOCK" agent exec worker >/dev/null
 for _ in $(seq 1 200); do
   [ -S "$RUNTIME/worker.sock" ] && break

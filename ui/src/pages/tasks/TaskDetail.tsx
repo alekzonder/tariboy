@@ -1,4 +1,4 @@
-import { AlertCircle, HelpCircle, X } from "lucide-react"
+import { AlertCircle, HelpCircle, MoreHorizontal, X } from "lucide-react"
 import { type ComponentProps, type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react"
 import type {
   TaskDetail as Detail,
@@ -14,6 +14,8 @@ import TaskComments from "./TaskComments"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import TaskTransferDialog from "./TaskTransferDialog"
 import { MarkdownEditor, MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
 import { SendFilesButton } from "@/components/SendFilesButton"
 import { StatusPill } from "@/components/ui/status"
@@ -45,6 +47,7 @@ export default function TaskDetail({
   onComment,
   onAddRelation,
   onDeleteRelation,
+  onTransfer,
 }: {
   detail: Detail
   target?: ApiTarget
@@ -67,6 +70,7 @@ export default function TaskDetail({
   onComment: (body: string, idempotencyKey: string) => Promise<void>
   onAddRelation: (targetKey: string, type: TaskRelationType) => Promise<void>
   onDeleteRelation: (relationID: number) => Promise<void>
+  onTransfer: (hostID: string) => Promise<void>
 }) {
   const task = detail.task
   const managed = Boolean(task.workflow_version_id)
@@ -93,6 +97,7 @@ export default function TaskDetail({
   const [relationError, setRelationError] = useState("")
   const [commentOrder, setCommentOrder] = useState<"newest" | "oldest">("newest")
   const [historyOpen, setHistoryOpen] = useState(true)
+  const [transferOpen, setTransferOpen] = useState(false)
   const dirty = title !== baseline.title || description !== baseline.description
     || status !== baseline.status || pullRequest !== (baseline.pull_request ?? "")
     || priority !== baseline.priority || assignee !== baseline.assignee
@@ -139,7 +144,7 @@ export default function TaskDetail({
     if (!relationTarget.trim()) return
     setRelationBusy(true)
     setRelationError("")
-    void onAddRelation(relationTarget.trim().toUpperCase(), relationType)
+    void onAddRelation(relationTarget.trim(), relationType)
       .then(() => setRelationTarget(""))
       .catch((error) => setRelationError(error instanceof Error ? error.message : String(error)))
       .finally(() => setRelationBusy(false))
@@ -185,6 +190,8 @@ export default function TaskDetail({
       onOpenAutoFocus={(event) => { event.preventDefault(); initialFocusRef.current?.focus() }}
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus() }}>
     {resizeHandle}
+    <TaskTransferDialog taskKey={task.key} queue={task.queue} open={transferOpen}
+      onOpenChange={setTransferOpen} onTransfer={onTransfer} />
     <div className="task-detail-panel">
       {/* Sticky: whatever the panel is scrolled to, the key, the title and the
           status stay in view. The one shadow here is the same rule the selected
@@ -211,6 +218,17 @@ export default function TaskDetail({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {editable && <Button size="sm" className="h-7" disabled={pending || !title.trim()} onClick={() => void save()}>Save task</Button>}
+          {/* Everything that is not Save or Close lives behind one menu, so the
+              header keeps its two primary controls at any panel width. */}
+          {editable && <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Task actions" disabled={pending}
+                className="size-7 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"><MoreHorizontal className="size-3.5" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setTransferOpen(true)}>Move to another server…</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>}
           {/* The close button is the panel entry point now that Back is gone,
               so it takes the focus Back used to hold. */}
           <Button ref={initialFocusRef} variant="ghost" size="icon" aria-label="Close task detail" disabled={pending} onClick={close}

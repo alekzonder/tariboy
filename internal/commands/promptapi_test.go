@@ -165,7 +165,7 @@ func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T)
 	if strings.Count(prompt, "# Task Processing Order") != 1 || strings.Count(prompt, "## Messages") != 1 {
 		t.Fatalf("messages runtime was not rendered as one group: %q", prompt)
 	}
-	if got, err := as.Get("v2"); err != nil || got.CurrentGoalTaskKey != "NOGL-1" {
+	if got, err := as.Get("v2"); err != nil || !strings.HasPrefix(got.CurrentGoalTaskKey, "NOGL-") {
 		t.Fatalf("template-independent goal selected %q, err=%v", got.CurrentGoalTaskKey, err)
 	}
 }
@@ -185,10 +185,11 @@ func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
 	if _, err := taskService.CreateQueue(ctx, tasks.CustomerActor("customer"), tasks.CreateQueueInput{Prefix: "GOAL", Name: "Goals"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := taskService.CreateTask(ctx, tasks.CustomerActor("customer"), tasks.CreateTaskInput{
+	goal, err := taskService.CreateTask(ctx, tasks.CustomerActor("customer"), tasks.CreateTaskInput{
 		Queue: "GOAL", Title: "Render goal", Description: "line one\nline two",
 		Assignee: "agent:v2", Priority: tasks.PriorityP1,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,7 +218,7 @@ func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
 		t.Fatal(err)
 	}
 	prompt := res.(map[string]any)["prompt"].(string)
-	for _, want := range []string{"# Task Processing Order", "## Goal", "key: GOAL-1\ntitle: Render goal\npriority: P1\nstatus: open\ndescription: line one\nline two", "do not merge it yourself"} {
+	for _, want := range []string{"# Task Processing Order", "## Goal", "key: " + goal.Key + "\ntitle: Render goal\npriority: P1\nstatus: open\ndescription: line one\nline two", "do not merge it yourself"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("missing %q in %s", want, prompt)
 		}

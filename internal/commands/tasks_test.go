@@ -352,7 +352,7 @@ func TestTasksHTTPDerivesCustomerScopesListsAndRejectsStaleRevision(t *testing.T
 	if err := json.Unmarshal(env.Result, &created); err != nil {
 		t.Fatal(err)
 	}
-	if created.Author != "user:customer" || created.Key != "API-1" {
+	if created.Author != "user:customer" || !strings.HasPrefix(created.Key, "API-") {
 		t.Fatalf("created = %#v", created)
 	}
 	_, _ = taskService.CreateTask(t.Context(), tasks.CustomerActor("customer"),

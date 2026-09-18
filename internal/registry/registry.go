@@ -101,6 +101,8 @@ type TaskControl interface {
 	MoveTask(context.Context, tasks.Actor, string, tasks.MoveInput) (tasks.Task, error)
 	CompleteTask(context.Context, tasks.Actor, string, tasks.CompleteInput) (tasks.Task, error)
 	ClaimTask(context.Context, tasks.Actor, string, int64) (tasks.Task, error)
+	ExportTask(context.Context, tasks.Actor, string) (tasks.TransferBundle, error)
+	ImportTask(context.Context, tasks.Actor, tasks.TransferBundle) (tasks.Task, error)
 	Ready(context.Context, tasks.Actor, tasks.ReadyFilter) ([]tasks.Task, error)
 	ClaimReady(context.Context, tasks.Actor, tasks.ReadyFilter, string) (tasks.Task, error)
 	AddComment(context.Context, tasks.Actor, string, tasks.AddCommentInput) (tasks.CommentResult, error)

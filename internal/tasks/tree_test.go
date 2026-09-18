@@ -235,7 +235,13 @@ func TestListTasksOrdersEverySiblingSetByPriorityThenPosition(t *testing.T) {
 		}
 	}
 	wantRoots := []string{critical.Key, high.Key, normal.Key, low.Key}
-	wantChildren := []string{childHigh.Key, childHigh2.Key, childLow.Key}
+	// Both P1 children were forced to position 0, so the canonical order falls
+	// through to the task key, which is random rather than creation-ordered.
+	firstHigh, secondHigh := childHigh.Key, childHigh2.Key
+	if secondHigh < firstHigh {
+		firstHigh, secondHigh = secondHigh, firstHigh
+	}
+	wantChildren := []string{firstHigh, secondHigh, childLow.Key}
 	if strings.Join(roots, ",") != strings.Join(wantRoots, ",") {
 		t.Fatalf("root order = %v; want %v", roots, wantRoots)
 	}

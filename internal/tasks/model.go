@@ -124,7 +124,6 @@ type Queue struct {
 	Description      string   `json:"description"`
 	Owners           []string `json:"owners"`
 	ResponsibleAgent string   `json:"responsible_agent"`
-	NextNumber       int64    `json:"next_number"`
 	Revision         int64    `json:"revision"`
 	CreatedAt        string   `json:"created_at"`
 	UpdatedAt        string   `json:"updated_at"`
