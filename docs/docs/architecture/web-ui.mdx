@@ -392,7 +392,11 @@ never replaced with local authority.
 
 Task changes arrive over the resumable `/api/tasks/ws?after=<sequence>` socket.
 Hints trigger typed HTTP refetches; they never replace authoritative task
-responses. Remote targets map HTTP(S) to WS(S) and put the existing bearer
+responses. A surface opens the socket only once it knows the host's current
+sequence, read from the authoritative HTTP snapshot it already loads, so it
+never asks the daemon to replay the whole task log; the panel opened over a
+chat message reads that sequence for itself and refetches only for hints about
+its own task. Remote targets map HTTP(S) to WS(S) and put the existing bearer
 token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 

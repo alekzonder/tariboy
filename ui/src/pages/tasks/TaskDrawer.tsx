@@ -10,6 +10,7 @@ import {
   getTaskWorkflow,
   listTaskEvents,
   listTaskPrincipals,
+  listTasks,
   updateTask,
   type TaskDetail as Detail,
   type TaskEvent,
@@ -90,18 +91,33 @@ export default function TaskDrawer({
       .catch(() => {})
   }, [target])
 
+  // The socket replays everything after the sequence it is given, so it opens
+  // only once the current one is known: from zero it would replay the host's
+  // whole task log and reload this panel once per event.
   const [sequence, setSequence] = useState(0)
+  const [live, setLive] = useState(false)
+  useEffect(() => {
+    listTasks({ limit: 1 }, target)
+      .then((page) => {
+        if (!mountedRef.current) return
+        setSequence(page.sequence ?? 0)
+        setLive(true)
+      })
+      .catch(() => {})
+  }, [target])
   useTasksSocket({
     target,
     after: sequence,
+    enabled: live,
     onHint: (hint) => {
       setSequence(hint.sequence)
-      void load()
+      // Every task on the host shares this stream; only this one's events
+      // change what the panel shows.
+      if (!hint.task_key || hint.task_key === taskKey) void load()
     },
-    onReset: () => {
-      setSequence(0)
-      void load()
-    },
+    // A reset says the host pruned events this panel may have missed; the
+    // reload covers that, and the stream stays where it is.
+    onReset: () => { void load() },
   })
 
   if (!detail) return null

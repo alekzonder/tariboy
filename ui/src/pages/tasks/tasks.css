@@ -114,6 +114,10 @@
 .task-detail-dialog .task-panel-resize-handle:hover::before,
 .task-detail-dialog .task-panel-resize-handle:focus-visible::before { background: var(--muted-foreground); }
 
+/* Opened without the grip - from a chat message, say - the panel is the only
+   column there is. */
+.task-detail-dialog-plain[data-slot="dialog-content"] { grid-template-columns: minmax(0, 1fr); }
+
 /* The scroll lives in the panel, not on the page, so the header can stick. */
 .task-detail-panel { min-width: 0; min-height: 0; overflow: auto; background: var(--card); }
 .task-detail-body { min-width: 0; }
