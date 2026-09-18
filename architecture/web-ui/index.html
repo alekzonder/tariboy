@@ -300,27 +300,61 @@ Beside <strong>Send comment</strong>, a secondary <strong>Send Ok</strong> actio
 Ask mention and posts <code>Ok</code> without changing the Ask selection. It is hidden
 as soon as the comment contains text.</p>
 <p>The agent <strong>Chat</strong> tab is the first tab, directly before <strong>Tasks</strong>, and owns
-both halves of an agent’s messaging in one section. <strong>Chat</strong> is its default view: the conversation
-with that agent — the customer’s messages in its inbox merged with its messages
-in the customer’s channel — rendered as sided bubbles, with a composer that
-publishes into the agent’s inbox carrying the customer channel as its reply
-target. A message-type filter selects what the conversation shows; it starts
-from the daemon’s default conversation types, offers an agent’s own wakes
-(<code>task.goal</code>, <code>script.result</code>, schedule alarms) explicitly, and the chosen set
-persists in the Desktop WebView under <code>terminals:chat-types:v1</code>. Opening the
-chat marks it read at the timestamp of the newest message actually shown, never
-at the current time. The feed also carries the read mark the chat was opened at,
-and a <strong>New messages</strong> line is drawn above the first message newer than it. That
-mark is captured once per open, before the chat moves it forward, so the line
-holds its place while the customer reads and while further messages arrive; it
-is gone the next time the tab is opened with nothing unread. A message that names a task carries that key as a link
-under its text: the key the daemon attached to the message, and any task key
-written in the message text. Opening one opens the task panel over the chat —
-the same detail panel Tasks shows, with its own load, its own live refresh and
-its own writes, so status, priority, assignee, pull request, description,
-comments and relations are all editable there without leaving Chat. Closing it
-returns to the conversation. <strong>Channels</strong> is the same section’s second view and
-keeps the existing subscription list, channel tail, and channel send.</p>
+both halves of an agent’s messaging in one section. <strong>Chat</strong> is its default
+view: the conversation with that agent — the customer’s messages in its inbox
+merged with its messages in the customer’s channel — rendered as one thread.
+There is no conversation list: the conversation is whichever agent the sidebar
+has selected, one agent to one thread. Consecutive messages from one author are
+grouped under a single header, and a continuation row shows its own time in the
+avatar column on hover.</p>
+<p>The tab has one 48px toolbar: the <strong>Chat</strong>/<strong>Channels</strong> switch, a message
+search over the loaded page, <code>you + &lt;agent&gt; · N messages</code>, the read action,
+transcript export, and a menu. The message-type filter lives in that menu; it
+still starts from the daemon’s default conversation types, still offers an
+agent’s own wakes (<code>task.goal</code>, <code>script.result</code>, schedule alarms) explicitly,
+and the chosen set still persists in the Desktop WebView under
+<code>terminals:chat-types:v1</code>. Only the thread scrolls below the toolbar, and the
+composer stays at the bottom.</p>
+<p>Message text renders as Markdown through the same pipeline task comments use —
+<code>react-markdown</code> with <code>remark-gfm</code>, no raw HTML — so a message can no more
+execute script than a task comment can. Fenced blocks carry their language and
+a copy action. A task key written in the text becomes a link, rewritten in the
+Markdown tree rather than in the raw string so a key inside a code span or a
+fenced block is left alone; a key the daemon attached to the message instead
+appears as a chip under it. Opening either one opens the task panel over the
+chat — the same detail panel Tasks shows, with its own load, its own live
+refresh and its own writes, so status, priority, assignee, pull request,
+description, comments and relations are all editable there without leaving
+Chat. Closing it returns to the conversation. A message also offers reply,
+copy, and <strong>Create a task from this message</strong>, which opens a task in a chosen
+queue with the message as its description and the agent as its assignee.</p>
+<p>Unread belongs to the conversation, not to the tab. It is the daemon’s
+per-agent read mark, so the dot on the <strong>Chat</strong> tab, the unread badge on the
+sidebar row and the toolbar’s own state read one value and survive a remount.
+Opening the chat still marks it read at the timestamp of the newest message
+actually shown, never at the current time. The feed carries the read mark the
+chat was opened at, and the unread rule — a <code>N new messages</code> pill — is drawn
+once, above the first message from the agent newer than that mark; an empty
+mark means nothing has been read, exactly as the daemon counts it. The rule
+holds its place while the customer reads and while further messages arrive: it
+is dismissed only by <strong>Mark read</strong>, by sending a message, or by leaving the tab
+or agent, never by scrolling. While it is off screen a floating <strong>N new</strong>
+button scrolls back to it. The thread follows new messages only when the reader
+is already at its end. <strong>Mark unread</strong> is the one request that moves the
+daemon’s mark backwards — it sends <code>exact</code> with the timestamp before the
+agent’s last message — and it also suppresses the mark-read this visit would
+otherwise perform, so the chat is still unread after navigating away.</p>
+<p>The composer publishes into the agent’s inbox carrying the customer channel as
+its reply target. It offers Markdown marks, Attach, a preview, and a
+two-to-six row auto-growing field; <code>⌘↵</code>/<code>Ctrl↵</code> sends and <code>Esc</code> leaves the
+field. The customer’s own messages carry a receipt. There is no per-message
+delivery record for them, so it is derived and bounded: one tick while the
+publish is in flight, two quiet ticks once the daemon has stored it, and two
+primary ticks with <code>Read by &lt;agent&gt; · HH:MM</code> once the agent has spoken after
+it — shown once per run of own messages. A true receipt would need the agent
+side to record message consumption.</p>
+<p><strong>Channels</strong> is the same section’s second view and keeps the existing
+subscription list, channel tail, and channel send.</p>
 <p>Live updates ride one <code>/api/messages/ws</code> socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
 reconnect reloads unconditionally because the socket replays nothing. The

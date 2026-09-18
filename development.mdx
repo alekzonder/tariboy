@@ -474,6 +474,22 @@ private key; its matching public key is pinned in the Desktop bundle. Never prin
 or commit the signing Secrets. Key rotation requires a separately planned
 release because installed applications trust the embedded public key.
 
+Tauri runs the macOS disk image through its own `bundle_dmg.sh` and reports a
+failure there as a bare `failed to run bundle_dmg.sh`, without that script's
+output. When bundling fails, `make desktop-mac` therefore prints
+`scripts/desktop-bundle-diagnostics.sh` — host, free disk space, attached disk
+images, mounted volumes, running disk image processes, and the partial bundle
+output — and then reproduces the failure once with `DESKTOP_BUNDLE_VERBOSE=1`,
+which passes `--verbose` to `cargo tauri build` so the bundler streams
+`bundle_dmg.sh`'s own error. A build that fails twice ends with both reports in
+the log; a build that succeeds only on that retry says so instead of passing
+silently. The reporter never fails and names any tool it cannot run, so it can
+be called on its own:
+
+```bash
+scripts/desktop-bundle-diagnostics.sh
+```
+
 Pushing an exact `vX.Y.Z` tag whose version matches both canonical declarations
 runs the same target on GitHub's `macos-15` runner. The workflow requires both
 signing Secrets, finds the single generated `.app.tar.gz` and `.sig` pair, and

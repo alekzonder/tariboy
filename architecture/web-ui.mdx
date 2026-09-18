@@ -336,27 +336,66 @@ Ask mention and posts `Ok` without changing the Ask selection. It is hidden
 as soon as the comment contains text.
 
 The agent **Chat** tab is the first tab, directly before **Tasks**, and owns
-both halves of an agent's messaging in one section. **Chat** is its default view: the conversation
-with that agent — the customer's messages in its inbox merged with its messages
-in the customer's channel — rendered as sided bubbles, with a composer that
-publishes into the agent's inbox carrying the customer channel as its reply
-target. A message-type filter selects what the conversation shows; it starts
-from the daemon's default conversation types, offers an agent's own wakes
-(`task.goal`, `script.result`, schedule alarms) explicitly, and the chosen set
-persists in the Desktop WebView under `terminals:chat-types:v1`. Opening the
-chat marks it read at the timestamp of the newest message actually shown, never
-at the current time. The feed also carries the read mark the chat was opened at,
-and a **New messages** line is drawn above the first message newer than it. That
-mark is captured once per open, before the chat moves it forward, so the line
-holds its place while the customer reads and while further messages arrive; it
-is gone the next time the tab is opened with nothing unread. A message that names a task carries that key as a link
-under its text: the key the daemon attached to the message, and any task key
-written in the message text. Opening one opens the task panel over the chat —
-the same detail panel Tasks shows, with its own load, its own live refresh and
-its own writes, so status, priority, assignee, pull request, description,
-comments and relations are all editable there without leaving Chat. Closing it
-returns to the conversation. **Channels** is the same section's second view and
-keeps the existing subscription list, channel tail, and channel send.
+both halves of an agent's messaging in one section. **Chat** is its default
+view: the conversation with that agent — the customer's messages in its inbox
+merged with its messages in the customer's channel — rendered as one thread.
+There is no conversation list: the conversation is whichever agent the sidebar
+has selected, one agent to one thread. Consecutive messages from one author are
+grouped under a single header, and a continuation row shows its own time in the
+avatar column on hover.
+
+The tab has one 48px toolbar: the **Chat**/**Channels** switch, a message
+search over the loaded page, `you + <agent> · N messages`, the read action,
+transcript export, and a menu. The message-type filter lives in that menu; it
+still starts from the daemon's default conversation types, still offers an
+agent's own wakes (`task.goal`, `script.result`, schedule alarms) explicitly,
+and the chosen set still persists in the Desktop WebView under
+`terminals:chat-types:v1`. Only the thread scrolls below the toolbar, and the
+composer stays at the bottom.
+
+Message text renders as Markdown through the same pipeline task comments use —
+`react-markdown` with `remark-gfm`, no raw HTML — so a message can no more
+execute script than a task comment can. Fenced blocks carry their language and
+a copy action. A task key written in the text becomes a link, rewritten in the
+Markdown tree rather than in the raw string so a key inside a code span or a
+fenced block is left alone; a key the daemon attached to the message instead
+appears as a chip under it. Opening either one opens the task panel over the
+chat — the same detail panel Tasks shows, with its own load, its own live
+refresh and its own writes, so status, priority, assignee, pull request,
+description, comments and relations are all editable there without leaving
+Chat. Closing it returns to the conversation. A message also offers reply,
+copy, and **Create a task from this message**, which opens a task in a chosen
+queue with the message as its description and the agent as its assignee.
+
+Unread belongs to the conversation, not to the tab. It is the daemon's
+per-agent read mark, so the dot on the **Chat** tab, the unread badge on the
+sidebar row and the toolbar's own state read one value and survive a remount.
+Opening the chat still marks it read at the timestamp of the newest message
+actually shown, never at the current time. The feed carries the read mark the
+chat was opened at, and the unread rule — a `N new messages` pill — is drawn
+once, above the first message from the agent newer than that mark; an empty
+mark means nothing has been read, exactly as the daemon counts it. The rule
+holds its place while the customer reads and while further messages arrive: it
+is dismissed only by **Mark read**, by sending a message, or by leaving the tab
+or agent, never by scrolling. While it is off screen a floating **N new**
+button scrolls back to it. The thread follows new messages only when the reader
+is already at its end. **Mark unread** is the one request that moves the
+daemon's mark backwards — it sends `exact` with the timestamp before the
+agent's last message — and it also suppresses the mark-read this visit would
+otherwise perform, so the chat is still unread after navigating away.
+
+The composer publishes into the agent's inbox carrying the customer channel as
+its reply target. It offers Markdown marks, Attach, a preview, and a
+two-to-six row auto-growing field; `⌘↵`/`Ctrl↵` sends and `Esc` leaves the
+field. The customer's own messages carry a receipt. There is no per-message
+delivery record for them, so it is derived and bounded: one tick while the
+publish is in flight, two quiet ticks once the daemon has stored it, and two
+primary ticks with `Read by <agent> · HH:MM` once the agent has spoken after
+it — shown once per run of own messages. A true receipt would need the agent
+side to record message consumption.
+
+**Channels** is the same section's second view and keeps the existing
+subscription list, channel tail, and channel send.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
