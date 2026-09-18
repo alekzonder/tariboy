@@ -110,8 +110,12 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 	commands := make([]string, 0, len(job.Steps))
 	var publishEnv map[string]string
 	var buildEnv map[string]string
+	var cargoCache bool
 	for _, step := range job.Steps {
 		commands = append(commands, step.Run)
+		if step.Uses == "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6" && step.With["workspaces"] == "desktop/src-tauri -> target" {
+			cargoCache = true
+		}
 		if strings.HasPrefix(step.Uses, "actions/checkout@") && step.With["persist-credentials"] != false {
 			t.Fatalf("checkout persist-credentials = %v, want false", step.With["persist-credentials"])
 		}
@@ -151,5 +155,8 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 	}
 	if publishEnv["TAURI_SIGNING_PRIVATE_KEY"] != "" || publishEnv["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] != "" {
 		t.Fatal("release signing Secrets are exposed to publication step")
+	}
+	if !cargoCache {
+		t.Fatal("release workflow has no pinned Cargo cache for the desktop target")
 	}
 }
