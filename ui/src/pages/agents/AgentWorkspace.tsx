@@ -24,6 +24,7 @@ import { useCustomerQuestionNotifications } from "@/components/customerQuestionN
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
 import { GoalHelp } from "@/components/GoalHelp";
+import { useChatUnread } from "./chat/useChatUnread";
 
 const TABS = [
   ["chat", "Chat"],
@@ -58,6 +59,9 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     .filter(Boolean).join(" · ");
   const target = targetFor(hostId);
   const { attention, refreshHost } = useCustomerQuestionNotifications();
+  // The Chat tab's dot. It is the daemon's own unread count rather than tab
+  // state, so it is right while another tab is open and survives a remount.
+  const unreadChat = useChatUnread(target, agent.name, connection === "ready" && !unavailable);
 
   useEffect(() => {
     let cancelled = false;
@@ -243,6 +247,14 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                   }
                 >
                   {label}
+                  {key === "chat" && unreadChat > 0 && (
+                    <span
+                      role="img"
+                      aria-label={`${unreadChat} unread message${unreadChat === 1 ? "" : "s"} from ${agent.name}`}
+                      title={`${unreadChat} unread message${unreadChat === 1 ? "" : "s"}`}
+                      className="ml-1.5 size-[5px] rounded-full bg-primary"
+                    />
+                  )}
                   {key === "tasks" && hasOpenQuestion && (
                     <span
                       role="img"

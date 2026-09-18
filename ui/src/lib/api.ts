@@ -1060,13 +1060,20 @@ export const chatMessagesOn = (
 
 // ts is the timestamp of the newest message actually shown, never "now", so a
 // message arriving mid-render cannot be marked read without being seen. The
-// daemon only ever moves the mark forward.
-export const chatReadOn = (target: ApiTarget, agent: string, ts: string) =>
+// daemon only ever moves the mark forward, with one deliberate exception:
+// `exact` sets it to ts even when that moves it back, which is how a chat is
+// marked unread.
+export const chatReadOn = (
+  target: ApiTarget,
+  agent: string,
+  ts: string,
+  opts: { exact?: boolean } = {},
+) =>
   apiOn<{ agent: string; read_ts: string }>(
     resolveTarget(target),
     "POST",
     `/api/chats/${encodeURIComponent(agent)}/read`,
-    { ts },
+    opts.exact ? { ts, exact: true } : { ts },
   );
 
 // Publish as the customer. reply_to names the channel an agent reply must land
