@@ -117,6 +117,19 @@ compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
 archive uploads and downloads.
 
+## Iteration tags in Activity
+
+The Activity tab filters its iteration list by tag and by iteration start date.
+Both filters and the selected iteration live in the URL query, so a filtered
+view is shareable and survives a reload; a filter change replaces the history
+entry instead of adding one per keystroke. Matching is the daemon's: an
+iteration matches any of the listed tags, and both date bounds are inclusive.
+
+Each row shows its tags beside its status. The selected iteration has a tag
+editor above its log that adds one tag or removes one, each saved as a complete
+replacement of that iteration's tag set. Batch tagging over many iterations is a
+CLI and API operation.
+
 ## Server Usage
 
 The host-scoped **Settings → Advanced → Usage** screen loads current groups

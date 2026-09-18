@@ -132,6 +132,9 @@ export interface IterationSummary {
   // `productive` column is NOT NULL DEFAULT 1, so pre-field rows and
   // in-flight iterations serialize as true, never undefined.
   productive: boolean;
+  // tags are the external annotations another agent put on this iteration.
+  // Sorted, and absent only on a daemon older than iteration tags.
+  tags?: string[];
 }
 
 export interface IterationDetail {

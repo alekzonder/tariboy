@@ -73,6 +73,19 @@ a reason: with none, both keys are omitted entirely rather than emitted empty.
 An agent-authored status line is never reported as a halt reason, since only
 the idle prefix qualifies.
 
+## Iteration tags
+
+An iteration row is immutable evidence of an execution, so tags are not a column
+on it. They are rows in `iteration_tags`, keyed by `(iteration_id, tag)`, with an
+`ON DELETE CASCADE` reference to `iterations`. Retention pruning and agent
+deletion therefore retire an iteration's tags with the iteration itself, and no
+tag write can touch the iteration row.
+
+A batch of tag changes over several iterations of one agent commits in one
+transaction, and an id belonging to another agent fails the whole batch rather
+than writing part of it. Tags are a property of the iteration, not of the agent
+that applied them: who tagged an iteration is not recorded.
+
 ## Customer identity and chat read marks
 
 Two `daemon_config` values carry the customer's side of messaging.
