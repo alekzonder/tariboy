@@ -308,7 +308,7 @@ func TestScriptSupervisorRecoveryAndCancel(t *testing.T) {
 	if got, _ := st.GetRun("worker", stale.ID); got.Status != script.RunInterrupted {
 		t.Fatalf("recovered run=%#v", got)
 	}
-	if got, _ := st.GetDefinition("worker", staleDefinition.ID); got.State != script.StateActive || got.NextRunAt == "" {
+	if got, _ := st.GetDefinition("worker", staleDefinition.ID); got.State != script.StateCompleted || got.NextRunAt != "" {
 		t.Fatalf("recovered definition=%#v", got)
 	}
 	startScriptTestSupervisor(t, m)
@@ -326,7 +326,7 @@ func TestScriptSupervisorRecoveryAndCancel(t *testing.T) {
 	}
 }
 
-func TestCancelRecurringRunWaitsForProcessExitBeforeSchedulingNext(t *testing.T) {
+func TestCancelRecurringRunStopsItsDefinitionAfterProcessExit(t *testing.T) {
 	oldGrace := scriptCancelGrace
 	scriptCancelGrace = 200 * time.Millisecond
 	t.Cleanup(func() { scriptCancelGrace = oldGrace })
@@ -364,8 +364,8 @@ func TestCancelRecurringRunWaitsForProcessExitBeforeSchedulingNext(t *testing.T)
 	}
 	awaitScriptRun(t, st, "worker", run.ID, func(run script.Run) bool { return run.Status == script.RunCancelled })
 	currentDefinition, err = st.GetDefinition("worker", definition.ID)
-	if err != nil || currentDefinition.NextRunAt == "" {
-		t.Fatalf("successor was not scheduled after process exit: %#v err=%v", currentDefinition, err)
+	if err != nil || currentDefinition.State != script.StateCompleted || currentDefinition.NextRunAt != "" {
+		t.Fatalf("cancelled run kept its schedule: %#v err=%v", currentDefinition, err)
 	}
 }
 

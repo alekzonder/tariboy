@@ -174,7 +174,7 @@ func TestCompletedOneShotCanBeRerunAndListsNewestFirst(t *testing.T) {
 	}
 }
 
-func TestRecurringScriptCanRunNowBetweenScheduledRuns(t *testing.T) {
+func TestRecurringScriptStopsWhenItPublishesAResult(t *testing.T) {
 	now := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
 	st := newContractStore(t, now)
 	definition, first, err := st.CreateSchedule("alice", CreateSchedule{Name: "watch", Description: "watch", Command: "true", IntervalSeconds: 30})
@@ -187,31 +187,87 @@ func TestRecurringScriptCanRunNowBetweenScheduledRuns(t *testing.T) {
 	if _, err := st.CompleteRun("alice", first.ID, Completion{Status: RunSucceeded, ExitCode: intPtr(0), FinishedAt: now.Add(time.Second).Format(time.RFC3339)}); err != nil {
 		t.Fatal(err)
 	}
-
-	now = now.Add(10 * time.Second)
-	st.clock = func() time.Time { return now }
-	manual, err := st.Rerun("alice", definition.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	got, err := st.GetDefinition("alice", definition.ID)
-	if err != nil || manual.Status != RunPending || got.State != StateActive || got.NextRunAt != "" {
-		t.Fatalf("run=%#v definition=%#v err=%v", manual, got, err)
+	if err != nil || got.State != StateCompleted || got.NextRunAt != "" {
+		t.Fatalf("notified recurring definition kept running: %#v err=%v", got, err)
 	}
-	if claimed, err := st.ClaimRun("alice", manual.ID, now.Format(time.RFC3339), "/tmp/manual.log"); err != nil || !claimed {
-		t.Fatalf("claim=%v err=%v", claimed, err)
+	var outboxCount int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM script_result_outbox WHERE run_id=?`, first.ID).Scan(&outboxCount); err != nil || outboxCount != 1 {
+		t.Fatalf("outbox count=%d err=%v", outboxCount, err)
 	}
-	finished := now.Add(2 * time.Second)
-	if _, err := st.CompleteRun("alice", manual.ID, Completion{Status: RunSucceeded, ExitCode: intPtr(0), FinishedAt: finished.Format(time.RFC3339)}); err != nil {
-		t.Fatal(err)
-	}
-	got, err = st.GetDefinition("alice", definition.ID)
-	if err != nil || got.NextRunAt != finished.Add(30*time.Second).Format(time.RFC3339) {
-		t.Fatalf("definition=%#v err=%v", got, err)
+	due, err := st.DueDefinitions(now.Add(time.Hour).Format(time.RFC3339))
+	if err != nil || len(due) != 0 {
+		t.Fatalf("stopped definition is still due: %#v err=%v", due, err)
 	}
 }
 
-func TestCancelRecurringRunKeepsDefinitionActiveAndEnqueuesResult(t *testing.T) {
+func TestRerunResumesAStoppedRecurringScript(t *testing.T) {
+	now := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
+	st := newContractStore(t, now)
+	definition, first, err := st.CreateSchedule("alice", CreateSchedule{Name: "watch", Description: "watch", Command: "true", IntervalSeconds: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := st.ClaimRun("alice", first.ID, now.Format(time.RFC3339), "/tmp/first.log"); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	if _, err := st.CompleteRun("alice", first.ID, Completion{Status: RunFailed, ExitCode: intPtr(1), FinishedAt: now.Add(time.Second).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+
+	now = now.Add(10 * time.Second)
+	st.clock = func() time.Time { return now }
+	resumed, err := st.Rerun("alice", definition.ID)
+	if err != nil {
+		t.Fatalf("stopped recurring definition could not be resumed: %v", err)
+	}
+	got, err := st.GetDefinition("alice", definition.ID)
+	if err != nil || resumed.Status != RunPending || got.State != StateActive || got.NextRunAt != "" {
+		t.Fatalf("run=%#v definition=%#v err=%v", resumed, got, err)
+	}
+	if claimed, err := st.ClaimRun("alice", resumed.ID, now.Format(time.RFC3339), "/tmp/resumed.log"); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	finished := now.Add(2 * time.Second)
+	if _, err := st.CompleteRun("alice", resumed.ID, Completion{Status: RunSucceeded, ExitCode: intPtr(0), FinishedAt: finished.Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = st.GetDefinition("alice", definition.ID); err != nil || got.State != StateCompleted || got.NextRunAt != "" {
+		t.Fatalf("resumed definition kept running after its next result: %#v err=%v", got, err)
+	}
+}
+
+func TestQuietRecurringRunKeepsItsSchedule(t *testing.T) {
+	now := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
+	st := newContractStore(t, now)
+	definition, first, err := st.CreateSchedule("alice", CreateSchedule{Name: "watch", Description: "watch", Command: "true", IntervalSeconds: 30, QuietExit: intPtr(2)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed, err := st.ClaimRun("alice", first.ID, now.Format(time.RFC3339), "/tmp/first.log"); err != nil || !claimed {
+		t.Fatalf("claim=%v err=%v", claimed, err)
+	}
+	finished := now.Add(time.Second)
+	if _, err := st.CompleteRun("alice", first.ID, Completion{Status: RunFailed, ExitCode: intPtr(2), FinishedAt: finished.Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetDefinition("alice", definition.ID)
+	if err != nil || got.State != StateActive || got.NextRunAt != finished.Add(30*time.Second).Format(time.RFC3339) {
+		t.Fatalf("quiet run stopped its schedule: %#v err=%v", got, err)
+	}
+
+	now = now.Add(5 * time.Second)
+	st.clock = func() time.Time { return now }
+	manual, err := st.Rerun("alice", definition.ID)
+	if err != nil {
+		t.Fatalf("active recurring definition could not be run now: %v", err)
+	}
+	if got, err = st.GetDefinition("alice", definition.ID); err != nil || manual.Status != RunPending || got.State != StateActive || got.NextRunAt != "" {
+		t.Fatalf("run=%#v definition=%#v err=%v", manual, got, err)
+	}
+}
+
+func TestCancelRecurringRunStopsDefinitionAndEnqueuesResult(t *testing.T) {
 	now := time.Date(2026, 8, 20, 7, 0, 0, 0, time.UTC)
 	st := newContractStore(t, now)
 	definition, run, err := st.CreateSchedule("alice", CreateSchedule{Name: "watch", Description: "watch", Command: "sleep 30", IntervalSeconds: 15})
@@ -222,7 +278,7 @@ func TestCancelRecurringRunKeepsDefinitionActiveAndEnqueuesResult(t *testing.T) 
 		t.Fatal(err)
 	}
 	got, err := st.GetDefinition("alice", definition.ID)
-	if err != nil || got.State != StateActive || got.NextRunAt != now.Add(15*time.Second).Format(time.RFC3339) {
+	if err != nil || got.State != StateCompleted || got.NextRunAt != "" {
 		t.Fatalf("definition=%#v err=%v", got, err)
 	}
 	var count int
@@ -333,7 +389,7 @@ func TestRecoveryHonorsDurableCancellationIntent(t *testing.T) {
 	if got, err := st.GetRun("alice", recurringRun.ID); err != nil || got.Status != RunCancelled || got.CancelRequested {
 		t.Fatalf("recovered recurring run=%#v err=%v", got, err)
 	}
-	if got, err := st.GetDefinition("alice", recurring.ID); err != nil || got.State != StateActive || got.NextRunAt == "" {
+	if got, err := st.GetDefinition("alice", recurring.ID); err != nil || got.State != StateCompleted || got.NextRunAt != "" {
 		t.Fatalf("recovered recurring definition=%#v err=%v", got, err)
 	}
 	var cancelledResults int
