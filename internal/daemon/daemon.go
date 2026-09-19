@@ -37,6 +37,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/scriptnotify"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/stores"
 	"github.com/alekzonder/tariboy/internal/supportbundle"
 	"github.com/alekzonder/tariboy/internal/taskgoal"
 	"github.com/alekzonder/tariboy/internal/tasknotify"
@@ -623,7 +624,8 @@ func Run(ctx context.Context, o Options) error {
 		Retention: &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
 		Tasks:     taskService,
 	}
-	srv := api.NewServer(commands.BuildRegistry(), cctx)
+	reg := commands.BuildRegistry()
+	srv := api.NewServer(reg, cctx)
 	srv.SetEventSource(hub)
 	srv.SetTasks(taskHub, func() tasks.Actor {
 		return tasks.CustomerActor(taskService.CustomerLogin())
@@ -685,7 +687,7 @@ func Run(ctx context.Context, o Options) error {
 	// their final flush/refresh before the store closes.
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(10)
+	wg.Add(11)
 	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
 	go func() {
 		defer wg.Done()
@@ -744,6 +746,22 @@ func Run(ctx context.Context, o Options) error {
 	go func() {
 		defer wg.Done()
 		retRunner.Run(gctx)
+	}()
+	// Store automatic builds refresh due Stores and rebuild their selected
+	// outdated images through the same registry command the API and CLI use, so
+	// an automatic build is identical to an operator build (image_version plus
+	// latest). It runs on gctx like the goroutines above, so an in-flight build
+	// finishes before st.Close().
+	go func() {
+		defer wg.Done()
+		stores.New(st, p.Base).RunAuto(gctx, func(ctx context.Context, selector string) error {
+			command, ok := reg.Get("image.build")
+			if !ok {
+				return errors.New("image.build command is unavailable")
+			}
+			_, err := command.Handler(cctx, registry.Params{registry.RequestContextParam: ctx, "source": selector})
+			return err
+		}, log)
 	}()
 	// Defers run LIFO. Registration order top-to-bottom is:
 	//   st.Close (top of Run) -> manager.Shutdown -> [cancel+wg.Wait] -> proxy.Shutdown

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -270,5 +271,44 @@ func TestImageBuildPathCompatibility(t *testing.T) {
 	}
 	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "missing-path"}); err == nil || !strings.Contains(err.Error(), "path") {
 		t.Fatalf("missing path error = %v", err)
+	}
+}
+
+func TestStoreAutoCommandPersistsPolicy(t *testing.T) {
+	c := localCtx(t)
+	source := t.TempDir()
+	writeImageV2(t, filepath.Join(source, "images", "reviewer"), "3.4.5")
+	if _, err := cmdHandler(t, "store.add")(c, registry.Params{"name": "team", "source": source}); err != nil {
+		t.Fatal(err)
+	}
+
+	command, ok := BuildRegistry().Get("store.auto")
+	if !ok {
+		t.Fatal("missing store.auto")
+	}
+	if command.HTTP == nil || *command.HTTP != (registry.HTTPRoute{Method: http.MethodPost, Path: "/api/stores/{name}/auto"}) {
+		t.Fatalf("store.auto route = %#v", command.HTTP)
+	}
+
+	set, err := cmdHandler(t, "store.auto")(c, registry.Params{"name": "team", "interval": 45, "image": []string{"reviewer"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantAuto := map[string]any{"interval_minutes": float64(45), "images": []any{"reviewer"}}
+	if got := jsonObject(t, set)["auto"]; !reflect.DeepEqual(got, wantAuto) {
+		t.Fatalf("store.auto = %#v, want %#v", got, wantAuto)
+	}
+	shown, err := cmdHandler(t, "store.show")(c, registry.Params{"name": "team"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := jsonObject(t, shown)["auto"]; !reflect.DeepEqual(got, wantAuto) {
+		t.Fatalf("store.show auto = %#v, want %#v", got, wantAuto)
+	}
+
+	if _, err := cmdHandler(t, "store.auto")(c, registry.Params{"name": "team", "interval": 10, "image": []string{"ghost"}}); err == nil {
+		t.Fatal("unknown image was accepted")
+	} else if userErr, ok := err.(api.UserError); !ok || userErr.Status != http.StatusBadRequest {
+		t.Fatalf("unknown image error = %#v", err)
 	}
 }

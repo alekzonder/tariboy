@@ -26,6 +26,8 @@ var (
 	ErrExists   = errors.New("Store already exists")
 	ErrNotFound = errors.New("Store not found")
 	ErrUnsafe   = errors.New("unsafe Store path")
+
+	errDatabaseUnavailable = errors.New("Store database is unavailable")
 )
 
 type Store struct {
@@ -49,6 +51,7 @@ type Detail struct {
 	Source string       `json:"source"`
 	Path   string       `json:"path"`
 	Images []StoreImage `json:"images"`
+	Auto   AutoBuild    `json:"auto"`
 }
 
 type PreparedBuild struct {
@@ -59,6 +62,8 @@ type PreparedBuild struct {
 type Catalog struct {
 	DB      *sql.DB
 	BaseDir string
+	// Now overrides the automatic-build clock in tests.
+	Now func() time.Time
 }
 
 // ponytail: one daemon-wide lock; use per-Store locks if catalog concurrency becomes measurable.
@@ -102,7 +107,7 @@ func (c *Catalog) Add(ctx context.Context, name, source string) (Store, error) {
 		}
 	}
 	if c.DB == nil {
-		return Store{}, errors.New("Store database is unavailable")
+		return Store{}, errDatabaseUnavailable
 	}
 	if _, err := c.DB.ExecContext(ctx, `INSERT INTO image_stores(name,source) VALUES(?,?)`, name, normalized); err != nil {
 		if kind == sourceGit {
@@ -117,7 +122,7 @@ func (c *Catalog) List(ctx context.Context) ([]Store, error) {
 	catalogMu.Lock()
 	defer catalogMu.Unlock()
 	if c.DB == nil {
-		return nil, errors.New("Store database is unavailable")
+		return nil, errDatabaseUnavailable
 	}
 	rows, err := c.DB.QueryContext(ctx, `SELECT name,source FROM image_stores ORDER BY name`)
 	if err != nil {
@@ -279,7 +284,11 @@ func (c *Catalog) detail(ctx context.Context, name string) (Detail, error) {
 		}
 		images[i].UpdateNeeded = images[i].Error == "" && images[i].Version != "" && images[i].BuiltVersion != "" && images[i].Version != images[i].BuiltVersion
 	}
-	return Detail{Name: store.Name, Source: store.Source, Path: store.Path, Images: images}, nil
+	auto, err := c.readAuto(store.Name)
+	if err != nil {
+		return Detail{}, err
+	}
+	return Detail{Name: store.Name, Source: store.Source, Path: store.Path, Images: images, Auto: auto}, nil
 }
 
 func (c *Catalog) get(name string) (Store, error) {
@@ -287,7 +296,7 @@ func (c *Catalog) get(name string) (Store, error) {
 		return Store{}, err
 	}
 	if c.DB == nil {
-		return Store{}, errors.New("Store database is unavailable")
+		return Store{}, errDatabaseUnavailable
 	}
 	var source string
 	err := c.DB.QueryRow(`SELECT source FROM image_stores WHERE name=?`, name).Scan(&source)

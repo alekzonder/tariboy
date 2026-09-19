@@ -17,8 +17,14 @@ export interface StoreImage {
   latest_error?: string;
 }
 
+export interface StoreAuto {
+  interval_minutes: number;
+  images: string[];
+}
+
 export interface StoreDetail extends Store {
   images: StoreImage[];
+  auto?: StoreAuto;
 }
 
 type Target = Daemon | null;
@@ -31,6 +37,8 @@ export const getStore = (target: Target, name: string) =>
   apiOn<StoreDetail>(target, "GET", storePath(name));
 export const refreshStore = (target: Target, name: string) =>
   apiOn<StoreDetail>(target, "POST", `${storePath(name)}/refresh`);
+export const setStoreAuto = (target: Target, name: string, input: { interval: number; image: string[] }) =>
+  apiOn<StoreDetail>(target, "POST", `${storePath(name)}/auto`, input);
 export const removeStore = (target: Target, name: string) =>
   apiOn<{ removed: boolean }>(target, "DELETE", storePath(name));
 export const buildStoreImage = (target: Target, input: { source: string; name?: string; tag?: string }) =>

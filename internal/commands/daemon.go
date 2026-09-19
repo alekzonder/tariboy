@@ -23,6 +23,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, storeList())
 	mustRegister(r, storeShow())
 	mustRegister(r, storeRefresh())
+	mustRegister(r, storeAuto())
 	mustRegister(r, storeRemove())
 	mustRegister(r, imageBuild())
 	mustRegister(r, imageVersionGet())
