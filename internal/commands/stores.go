@@ -55,6 +55,17 @@ func storeRefresh() registry.Command {
 	}}
 }
 
+func storeAuto() registry.Command {
+	return registry.Command{Path: "store.auto", Summary: "Set a Store's automatic refresh and build policy", Args: []registry.Arg{
+		{Name: "name", Type: registry.String, Required: true, Help: "Store name"},
+		{Name: "interval", Flag: "interval", Type: registry.Int, Help: "refresh interval in whole minutes; 0 disables automatic builds"},
+		{Name: "image", Flag: "image", Type: registry.String, Repeatable: true, Help: "Store image selected for automatic builds"},
+	}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/stores/{name}/auto"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		detail, err := storeCatalog(c).SetAuto(registry.RequestContext(p), str(p, "name"), intOf(p, "interval", 0), stringSliceParam(p, "image"))
+		return detail, storeError(err)
+	}}
+}
+
 func storeRemove() registry.Command {
 	return registry.Command{Path: "store.remove", Summary: "Remove a Store registration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/stores/{name}"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
 		if err := storeCatalog(c).Remove(registry.RequestContext(p), str(p, "name")); err != nil {

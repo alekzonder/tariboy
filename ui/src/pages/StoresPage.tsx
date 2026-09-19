@@ -9,6 +9,7 @@ import {
   listStores,
   refreshStore,
   removeStore,
+  setStoreAuto,
   type Store,
   type StoreDetail,
   type StoreImage,
@@ -61,6 +62,8 @@ export default function StoresPage({ target, name, basePath }: {
   const [status, setStatus] = useState("");
   const [targetName, setTargetName] = useState("");
   const [targetTag, setTargetTag] = useState("");
+  const [autoInterval, setAutoInterval] = useState("0");
+  const [autoImages, setAutoImages] = useState<string[]>([]);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [removeError, setRemoveError] = useState("");
   const buildGeneration = useRef(0);
@@ -75,8 +78,12 @@ export default function StoresPage({ target, name, basePath }: {
     const request = name ? getStore(target, name) : listStores(target);
     void request.then((result) => {
       if (!current) return;
-      if (name) setDetail(result as StoreDetail);
-      else setStores(result as Store[]);
+      if (name) {
+        const loaded = result as StoreDetail;
+        setDetail(loaded);
+        setAutoInterval(String(loaded.auto?.interval_minutes ?? 0));
+        setAutoImages(loaded.auto?.images ?? []);
+      } else setStores(result as Store[]);
     }).catch((cause) => {
       if (current) setError(message(cause));
     }).finally(() => {
@@ -158,6 +165,33 @@ export default function StoresPage({ target, name, basePath }: {
     }
   };
 
+  const saveAuto = async () => {
+    if (!name) return;
+    const interval = Number(autoInterval);
+    if (!Number.isInteger(interval) || interval < 0) {
+      setError("Automatic build interval must be a whole number of minutes.");
+      return;
+    }
+    setBusy("auto");
+    setError("");
+    setStatus("");
+    try {
+      const saved = await setStoreAuto(target, name, { interval, image: autoImages });
+      if (mounted.current) {
+        setDetail(saved);
+        setAutoInterval(String(saved.auto?.interval_minutes ?? 0));
+        setAutoImages(saved.auto?.images ?? []);
+        setStatus(interval > 0
+          ? `Automatic builds run every ${interval} min for ${autoImages.length} image(s).`
+          : "Automatic builds disabled.");
+      }
+    } catch (cause) {
+      if (mounted.current) setError(message(cause));
+    } finally {
+      if (mounted.current) setBusy("");
+    }
+  };
+
   const remove = async () => {
     if (!name) return;
     buildGeneration.current++;
@@ -234,13 +268,43 @@ export default function StoresPage({ target, name, basePath }: {
           <Input aria-label="Target image tag" placeholder="image_version + latest" value={targetTag} disabled={Boolean(busy)} onChange={(event) => setTargetTag(event.target.value)} />
         </div>
         <p className="text-xs text-muted-foreground">Leave both blank to publish the source name with image_version and latest. If a target is immutable, choose another name or tag.</p>
+        <div className="grid gap-3 md:grid-cols-[14rem_auto]">
+          <Input
+            aria-label="Automatic build interval"
+            type="number"
+            min={0}
+            step={1}
+            placeholder="0"
+            value={autoInterval}
+            disabled={Boolean(busy)}
+            onChange={(event) => setAutoInterval(event.target.value)}
+          />
+          <Button variant="outline" disabled={Boolean(busy)} onClick={() => void saveAuto()}>
+            {busy === "auto" ? "Saving…" : "Save automatic builds"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Automatic builds refresh this Store every interval in minutes and rebuild the checked images that need an
+          update, publishing image_version and latest. An interval of 0 disables them.
+        </p>
         <div className="overflow-x-auto rounded border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr><th className="px-3 py-2">Image</th><th className="px-3 py-2">Source image_version</th><th className="px-3 py-2">Latest image_version</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr>
+              <tr><th className="px-3 py-2">Auto</th><th className="px-3 py-2">Image</th><th className="px-3 py-2">Source image_version</th><th className="px-3 py-2">Latest image_version</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr>
             </thead>
             <tbody>
               {detail.images.map((image) => <tr key={image.name} className={`border-t ${image.update_needed ? "bg-amber-50 dark:bg-amber-950/30" : ""}`}>
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label={`Automatic builds for ${image.name}`}
+                    checked={autoImages.includes(image.name)}
+                    disabled={Boolean(busy) || Boolean(image.error)}
+                    onChange={(event) => setAutoImages((current) => event.target.checked
+                      ? [...current, image.name]
+                      : current.filter((selected) => selected !== image.name))}
+                  />
+                </td>
                 <td className="px-3 py-2 font-mono">{image.name}</td>
                 <td className="px-3 py-2 font-mono text-xs">{image.version || "Not specified"}</td>
                 <td className="px-3 py-2 font-mono text-xs">{image.latest_status === "missing" ? "Not built" : image.latest_status === "error" ? "Inspection failed" : image.built_version || "Not specified"}</td>
@@ -257,7 +321,7 @@ export default function StoresPage({ target, name, basePath }: {
                   </Button>
                 </td>
               </tr>)}
-              {detail.images.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No images in this Store.</td></tr>}
+              {detail.images.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No images in this Store.</td></tr>}
             </tbody>
           </table>
         </div>
