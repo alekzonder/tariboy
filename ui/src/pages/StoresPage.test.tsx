@@ -420,3 +420,57 @@ describe("Stores workspace", () => {
     expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
   });
 });
+
+describe("Store automatic builds", () => {
+  it("loads the saved policy and posts the edited interval and image selection", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "This daemon (local)" }, agents: [] },
+    ]);
+    const calls: Call[] = [];
+    const images = [
+      { name: "reviewer", version: "1.2.3", built_version: "1.0.0", update_needed: true, latest_status: "built" },
+      { name: "writer", version: "1.0.0", built_version: "1.0.0", update_needed: false, latest_status: "built" },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      const method = init.method ?? "GET";
+      calls.push({ url, method, body: typeof init.body === "string" ? init.body : undefined });
+      if (url.endsWith("/api/stores/old/auto") && method === "POST") {
+        return Promise.resolve(envelope({
+          name: "old",
+          source: "/srv/old",
+          path: "/srv/old",
+          images,
+          auto: { interval_minutes: 30, images: ["reviewer", "writer"] },
+        }));
+      }
+      if (url.endsWith("/api/stores/old") && method === "GET") {
+        return Promise.resolve(envelope({
+          name: "old",
+          source: "/srv/old",
+          path: "/srv/old",
+          images,
+          auto: { interval_minutes: 15, images: ["reviewer"] },
+        }));
+      }
+      return Promise.resolve(envelope({ agents: [], groups: [], count: 0 }));
+    }));
+
+    renderPage("/servers/local/stores/old", "local");
+
+    const interval = await screen.findByLabelText("Automatic build interval");
+    await waitFor(() => expect(interval).toHaveValue(15));
+    expect(screen.getByLabelText("Automatic builds for reviewer")).toBeChecked();
+    expect(screen.getByLabelText("Automatic builds for writer")).not.toBeChecked();
+
+    fireEvent.click(screen.getByLabelText("Automatic builds for writer"));
+    fireEvent.change(interval, { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save automatic builds" }));
+
+    await waitFor(() => expect(calls.some((call) => call.url.endsWith("/api/stores/old/auto"))).toBe(true));
+    const saved = calls.find((call) => call.url.endsWith("/api/stores/old/auto"));
+    expect(saved?.method).toBe("POST");
+    expect(JSON.parse(saved?.body ?? "{}")).toEqual({ interval: 30, image: ["reviewer", "writer"] });
+    expect(await screen.findByText("Automatic builds run every 30 min for 2 image(s).")).toBeInTheDocument();
+  });
+});
