@@ -143,6 +143,7 @@ const notification: TaskNotification = {
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  sessionStorage.clear()
   daemonContext.activeId = ""
   taskSocket.options = undefined
   api.listTaskQueues.mockResolvedValue({ queues: [queue], count: 1 })
@@ -1364,5 +1365,25 @@ describe("TasksWorkspace", () => {
     expect(screen.queryByText("Rotate credentials")).toBeNull()
     expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
     for (const call of api.listTasks.mock.calls) expect(call[0].queue).toBeUndefined()
+  })
+  it("keeps the queue filter across the Agents and All tasks switch", async () => {
+    const ops: Task = { ...root, key: "OPS-1", queue: "OPS", title: "Rotate credentials" }
+    api.listTaskQueues.mockResolvedValue({
+      queues: [queue, { ...queue, prefix: "OPS", name: "Operations" }],
+      count: 2,
+    })
+    api.listTasks.mockResolvedValue({ tasks: [root, child, ops], sequence: 10 })
+
+    const agent = render(<TasksWorkspace scopeAgent="worker" />)
+    await screen.findByText("Ship native tasks")
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^OPS/ }))
+    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument()
+    agent.unmount()
+
+    render(<TasksWorkspace />)
+    expect(await screen.findByRole("button", { name: "Queue: OPS" })).toBeInTheDocument()
+    expect(await screen.findByText("Rotate credentials")).toBeInTheDocument()
+    expect(screen.queryByText("Ship native tasks")).toBeNull()
   })
 })

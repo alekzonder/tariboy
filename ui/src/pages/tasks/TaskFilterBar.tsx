@@ -114,7 +114,6 @@ export function TaskFilterBar({
           {items.map((item) => (
             <DropdownMenuItem
               key={item.prefix || "__all__"}
-              aria-label={item.label}
               onSelect={() => onQueue(item.prefix)}
               className={cn(
                 "h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]",

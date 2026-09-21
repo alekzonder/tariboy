@@ -32,7 +32,7 @@
 }
 
 .tasks-center { min-width: 0; min-height: 0; overflow: auto; }
-.task-primary-action, .task-inline-form button, .task-queues button {
+.task-primary-action, .task-inline-form button, .task-queues form button {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--border);
   border-radius: 7px; padding: 7px 10px; background: var(--background-base); font-size: 12px; font-weight: 560;
 }
