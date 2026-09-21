@@ -205,6 +205,11 @@ not detect changed bytes when the source keeps the same <code>image_version</cod
 Store build controls also accept a target name and optional explicit tag. Every
 non-reserved tag can be replaced, including a source version and <code>latest</code>. An
 explicit tag publishes only that tag.
+The detail also edits that Store’s automatic refresh-and-build policy: an
+interval in whole minutes and one <strong>Auto</strong> checkbox per image, saved together
+and reported back from the daemon. An interval of <code>0</code> disables it. See
+<a href="/tariboy/docs/images#automatic-refresh-and-build">Images → Automatic refresh and build</a>
+for the daemon-side cycle.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources

@@ -233,6 +233,11 @@ not detect changed bytes when the source keeps the same `image_version`.
 Store build controls also accept a target name and optional explicit tag. Every
 non-reserved tag can be replaced, including a source version and `latest`. An
 explicit tag publishes only that tag.
+The detail also edits that Store's automatic refresh-and-build policy: an
+interval in whole minutes and one **Auto** checkbox per image, saved together
+and reported back from the daemon. An interval of `0` disables it. See
+[Images → Automatic refresh and build](/docs/images#automatic-refresh-and-build)
+for the daemon-side cycle.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources

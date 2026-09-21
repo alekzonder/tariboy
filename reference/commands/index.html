@@ -333,6 +333,10 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <td>Fast-forward pull a Git source, or reread a non-Git local directory</td>
 </tr>
 <tr>
+<td><code>tariboy store auto NAME [--interval MINUTES] [--image IMAGE]</code></td>
+<td>Set the automatic refresh-and-build policy; the daemon refreshes every interval and rebuilds the selected images that need an update, and <code>--interval 0</code> disables it</td>
+</tr>
+<tr>
 <td><code>tariboy store remove NAME</code></td>
 <td>Unregister a Store and remove only its managed clone; preserve local sources and built images</td>
 </tr>

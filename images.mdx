@@ -116,6 +116,8 @@ tariboy store add local /srv/company-images
 tariboy store list
 tariboy store show team
 tariboy store refresh team
+tariboy store auto team --interval 60 --image reviewer --image writer
+tariboy store auto team --interval 0
 tariboy image build team/reviewer
 tariboy image build team/reviewer --name company-reviewer
 tariboy store remove team
@@ -130,8 +132,30 @@ A local source such as `/srv/company-images` is used in place, without a copy.
 Stores are the source of canonical agent images and skills; the daemon no
 longer installs a separate built-in Store tree.
 
-Only the registration's name and source are persisted in the daemon database.
-Viewing a Store reads the current disk inventory and `image_version` values;
+### Automatic refresh and build
+
+A Store can refresh and rebuild itself on a schedule. `tariboy store auto NAME
+--interval MINUTES --image IMAGE` stores a whole-minute interval and the images
+selected for automatic builds; the Store detail exposes the same policy as an
+interval field and one **Auto** checkbox per image. An interval of `0` disables
+it, which is the default for a new Store.
+
+Every minute the daemon runs the cycle for each Store whose interval has
+elapsed: it refreshes that Store exactly as **Refresh** does, then builds each
+selected image that reports an update, using the default tags so both
+`<image_name>:<image_version>` and `<image_name>:latest` are published. An image
+is built only when the source and latest both declare versions and those values
+differ, so an unbuilt or unversioned image is never built automatically.
+
+A failed refresh skips that Store's builds for the cycle, and a failed build
+does not stop the remaining selections or Stores. Failures are logged and
+retried at the next interval; missed cycles are not replayed, so a daemon
+restart can delay a due cycle by up to one interval. Saving a policy restarts
+the interval from that moment.
+
+The registration's name and source are persisted in the daemon database
+together with this policy (interval, selected images, and the last cycle time).
+Viewing a Store still reads the current disk inventory and `image_version` values;
 there is no saved image list to become stale. For each valid source, the detail
 inspects `<image_name>:latest` directly and shows that manifest's
 `image_version`. It marks an update only when the source and latest both declare

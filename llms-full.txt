@@ -1641,6 +1641,11 @@ not detect changed bytes when the source keeps the same `image_version`.
 Store build controls also accept a target name and optional explicit tag. Every
 non-reserved tag can be replaced, including a source version and `latest`. An
 explicit tag publishes only that tag.
+The detail also edits that Store's automatic refresh-and-build policy: an
+interval in whole minutes and one **Auto** checkbox per image, saved together
+and reported back from the daemon. An interval of `0` disables it. See
+[Images → Automatic refresh and build](/docs/images#automatic-refresh-and-build)
+for the daemon-side cycle.
 Every request carries the explicit host target, including builds through the
 existing image-build endpoint. Requests for a previous route cannot replace the
 new Store view. Removal uses an in-app confirmation and preserves local sources
@@ -3378,6 +3383,8 @@ tariboy store add local /srv/company-images
 tariboy store list
 tariboy store show team
 tariboy store refresh team
+tariboy store auto team --interval 60 --image reviewer --image writer
+tariboy store auto team --interval 0
 tariboy image build team/reviewer
 tariboy image build team/reviewer --name company-reviewer
 tariboy store remove team
@@ -3392,8 +3399,30 @@ A local source such as `/srv/company-images` is used in place, without a copy.
 Stores are the source of canonical agent images and skills; the daemon no
 longer installs a separate built-in Store tree.
 
-Only the registration's name and source are persisted in the daemon database.
-Viewing a Store reads the current disk inventory and `image_version` values;
+### Automatic refresh and build
+
+A Store can refresh and rebuild itself on a schedule. `tariboy store auto NAME
+--interval MINUTES --image IMAGE` stores a whole-minute interval and the images
+selected for automatic builds; the Store detail exposes the same policy as an
+interval field and one **Auto** checkbox per image. An interval of `0` disables
+it, which is the default for a new Store.
+
+Every minute the daemon runs the cycle for each Store whose interval has
+elapsed: it refreshes that Store exactly as **Refresh** does, then builds each
+selected image that reports an update, using the default tags so both
+`<image_name>:<image_version>` and `<image_name>:latest` are published. An image
+is built only when the source and latest both declare versions and those values
+differ, so an unbuilt or unversioned image is never built automatically.
+
+A failed refresh skips that Store's builds for the cycle, and a failed build
+does not stop the remaining selections or Stores. Failures are logged and
+retried at the next interval; missed cycles are not replayed, so a daemon
+restart can delay a due cycle by up to one interval. Saving a policy restarts
+the interval from that moment.
+
+The registration's name and source are persisted in the daemon database
+together with this policy (interval, selected images, and the last cycle time).
+Viewing a Store still reads the current disk inventory and `image_version` values;
 there is no saved image list to become stale. For each valid source, the detail
 inspects `<image_name>:latest` directly and shows that manifest's
 `image_version`. It marks an update only when the source and latest both declare
@@ -5400,13 +5429,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.66.2` alpha on an Apple Silicon Mac.
+This path is for the `0.67.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.66.2_aarch64.dmg`;
+- a verified `Tariboy_0.67.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -6176,6 +6205,7 @@ tariboy has three command surfaces:
 | `tariboy store list` | List this daemon's Store registrations |
 | `tariboy store show NAME` | Read current images, versions and diagnostics from disk |
 | `tariboy store refresh NAME` | Fast-forward pull a Git source, or reread a non-Git local directory |
+| `tariboy store auto NAME [--interval MINUTES] [--image IMAGE]` | Set the automatic refresh-and-build policy; the daemon refreshes every interval and rebuilds the selected images that need an update, and `--interval 0` disables it |
 | `tariboy store remove NAME` | Unregister a Store and remove only its managed clone; preserve local sources and built images |
 | `ttasks queue create` | Create a task queue |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
@@ -6680,7 +6710,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.66.2` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.67.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6777,7 +6807,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.66.2`. Resolve a local mismatch with
+The app and bundled daemons must report `0.67.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
