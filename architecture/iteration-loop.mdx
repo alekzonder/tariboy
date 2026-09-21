@@ -117,7 +117,12 @@ source tree. Publication is owner-only and atomic. The current adapter contract
 version is `2`. A complete bridge is reused across iterations and daemon
 restarts, while an incomplete or modified cache is rebuilt. A preparation or
 harness-support failure leaves the previous image active and records the
-pending-image error.
+pending-image error. Because no iteration row exists yet, such a failure also
+halts the loop and records its cause in the agent's `error_reason`, which the
+agent status surfaces as `halt_reason` and the workspace header displays; the
+audit timeline records one `iteration_failed` event with the
+`image_activation_failed` reason. `Start` or `Restart` clears it and resumes the
+loop.
 
 The adapters attach the bridge additively:
 

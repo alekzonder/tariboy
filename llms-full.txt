@@ -774,7 +774,12 @@ source tree. Publication is owner-only and atomic. The current adapter contract
 version is `2`. A complete bridge is reused across iterations and daemon
 restarts, while an incomplete or modified cache is rebuilt. A preparation or
 harness-support failure leaves the previous image active and records the
-pending-image error.
+pending-image error. Because no iteration row exists yet, such a failure also
+halts the loop and records its cause in the agent's `error_reason`, which the
+agent status surfaces as `halt_reason` and the workspace header displays; the
+audit timeline records one `iteration_failed` event with the
+`image_activation_failed` reason. `Start` or `Restart` clears it and resumes the
+loop.
 
 The adapters attach the bridge additively:
 
@@ -1683,7 +1688,7 @@ Tasks uses one reusable workspace at `/servers/:hostId/tasks` and inside each
 Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
 `scope_agent=<name>` to render only that agent's inherited view. The tree fills
-all remaining width after task navigation and is expandable, ordered at every
+the full width of the island and is expandable, ordered at every
 depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
@@ -1705,15 +1710,35 @@ with its error code, or an unanswered customer question — and other statuses
 speak through the status pill alone. History rows read as time, kind, a
 one-line `key value · key value` payload summary and actor; the panel never
 prints a raw JSON payload.
-On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
-the left task navigation. Arrow keys move the separator, Shift increases the
-step, Home and double-click restore its default,
-and the clamped navigation width persists in the versioned WebView localStorage
-record `tasks:workspace:v1` alongside the detail width. Route changes and app
-reloads restore that record.
-An active resize reserves the tree's minimum usable width. At responsive
-breakpoints, fixed or hidden mobile navigation takes precedence; the inactive
-separator is hidden without discarding the stored desktop navigation width.
+The detail sheet's own keyboard- and pointer-accessible separator is the only
+one the workspace has. Arrow keys move it, Shift increases the step, Home and
+double-click restore its default, and the clamped width persists in the
+versioned WebView localStorage record `tasks:workspace:v1`. Route changes and
+app reloads restore that record; a record written before the task rail was
+removed still reads, its rail width ignored.
+
+One toolbar sits above the table in both places. It carries the search field,
+the `Active | Closed | All` segment, the queue control, the `My tasks` and
+`Waiting for me` chips — off by default, and still the daemon's `assignee` and
+`waiting_for` filters — the agent chip in an Agent tab, refresh, and
+**New task**. The queue control opens a menu of `All queues` and every queue
+with the number of tasks it contributes to the current list, and
+`Manage queues…` under a separator opens queue settings as a 340px right sheet:
+one card per queue with its agents, a `Rename` section over the existing
+`PATCH`, a `Workflow` section, and a footer that creates a queue. The queue
+filter is applied in the client so that menu can count from the load the tree
+already performs; `scope_agent`, `status_view`, the text search, `assignee` and
+`waiting_for` stay daemon-side. A new task is created in the selected queue,
+or in the first queue when `All queues` is selected.
+
+The table header and its rows read one set of column widths, so a column cannot
+drift from its heading. `Key` is a fixed 168px holding the tree indents, the
+chevron and the key, which truncates rather than wrapping; `Task` takes the
+rest. The agent table adds `Pri` and `Duration` — creation to completion, or to
+now while the task is open — and the server table adds `Agent`. There is no
+`Queue` column: the key prefix already names the queue. In the server table the
+header is sticky. The drag grip lives in the row's left padding and appears on
+hover.
 
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
@@ -1833,7 +1858,7 @@ stored command through the ordinary script worker; a recurring definition
 resumes its fixed post-completion delay from there while its runs stay quiet.
 
 The workspace has no notification inbox: customer-only queue administration is
-the left rail's remaining non-tree view, and the notification state is rendered
+the queue sheet, and the notification state is rendered
 as one indicator. A small red indicator on a task row identifies an unread,
 non-dismissed `task.question` notification for that task, and opening that task
 marks those notifications read, which is the only thing that clears the
@@ -1977,11 +2002,15 @@ The workspace header also consumes daemon-authoritative message status. When
 recomputes queue state in the browser. The normal three-second status refresh
 removes the indicator after processing or clearing lowers the queue.
 
-When the daemon reports a halt reason for the agent, the Autopilot card shows
-it under the Running/Stopped line, toned as an error for an `error`
-halt and neutrally for an `idle_limit` one. The line is deliberately not gated
-on whether Autopilot is currently enabled, because a stop-policy or idle-limit
-reason matters exactly when the loop is off. When there is no reason, nothing
+When the daemon reports a halt reason for the agent, the workspace header shows
+it under the identity line, so a loop that stopped before any iteration existed
+— a failed image activation, for example — is visible on every tab rather than
+only on Autopilot. It is toned as an error for an `error` halt and neutrally for
+an `idle_limit` one, and falls back to `error_reason` when the daemon reports one
+without a halt. The Autopilot card shows the same reason
+under the Running/Stopped line, toned the same way. Neither line is gated on
+whether Autopilot is currently enabled, because a stop-policy, idle-limit or
+launch-failure reason matters exactly when the loop is off. When there is no reason, nothing
 extra is rendered at all — no empty element and no placeholder.
 
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
@@ -5429,13 +5458,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.67.0` alpha on an Apple Silicon Mac.
+This path is for the `0.68.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.67.0_aarch64.dmg`;
+- a verified `Tariboy_0.68.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -6710,7 +6739,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.67.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.68.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6807,7 +6836,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.67.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.68.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -7861,8 +7890,10 @@ notification records.
 The top-level **Tasks** tab is global. Each Agent workspace includes the same
 component with `scope_agent` fixed to that agent. The layout is Tree-first:
 
-- left rail: All, My, Waiting for me, and Queues;
-- remaining width: dense expandable tree ordered by priority at every depth,
+- one toolbar: search, the Active/Closed/All segment, the queue filter with its
+  `Manage queues…` sheet, and the optional `My tasks` and `Waiting for me`
+  chips;
+- full width: dense expandable tree ordered by priority at every depth,
   with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain

@@ -242,7 +242,7 @@ download API.</p>
 Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
 <code>scope_agent=&lt;name&gt;</code> to render only that agent’s inherited view. The tree fills
-all remaining width after task navigation and is expandable, ordered at every
+the full width of the island and is expandable, ordered at every
 depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task’s P0-P3 priority bucket, while dropping
@@ -264,15 +264,33 @@ with its error code, or an unanswered customer question — and other statuses
 speak through the status pill alone. History rows read as time, kind, a
 one-line <code>key value · key value</code> payload summary and actor; the panel never
 prints a raw JSON payload.
-On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
-the left task navigation. Arrow keys move the separator, Shift increases the
-step, Home and double-click restore its default,
-and the clamped navigation width persists in the versioned WebView localStorage
-record <code>tasks:workspace:v1</code> alongside the detail width. Route changes and app
-reloads restore that record.
-An active resize reserves the tree’s minimum usable width. At responsive
-breakpoints, fixed or hidden mobile navigation takes precedence; the inactive
-separator is hidden without discarding the stored desktop navigation width.</p>
+The detail sheet’s own keyboard- and pointer-accessible separator is the only
+one the workspace has. Arrow keys move it, Shift increases the step, Home and
+double-click restore its default, and the clamped width persists in the
+versioned WebView localStorage record <code>tasks:workspace:v1</code>. Route changes and
+app reloads restore that record; a record written before the task rail was
+removed still reads, its rail width ignored.</p>
+<p>One toolbar sits above the table in both places. It carries the search field,
+the <code>Active | Closed | All</code> segment, the queue control, the <code>My tasks</code> and
+<code>Waiting for me</code> chips — off by default, and still the daemon’s <code>assignee</code> and
+<code>waiting_for</code> filters — the agent chip in an Agent tab, refresh, and
+<strong>New task</strong>. The queue control opens a menu of <code>All queues</code> and every queue
+with the number of tasks it contributes to the current list, and
+<code>Manage queues…</code> under a separator opens queue settings as a 340px right sheet:
+one card per queue with its agents, a <code>Rename</code> section over the existing
+<code>PATCH</code>, a <code>Workflow</code> section, and a footer that creates a queue. The queue
+filter is applied in the client so that menu can count from the load the tree
+already performs; <code>scope_agent</code>, <code>status_view</code>, the text search, <code>assignee</code> and
+<code>waiting_for</code> stay daemon-side. A new task is created in the selected queue,
+or in the first queue when <code>All queues</code> is selected.</p>
+<p>The table header and its rows read one set of column widths, so a column cannot
+drift from its heading. <code>Key</code> is a fixed 168px holding the tree indents, the
+chevron and the key, which truncates rather than wrapping; <code>Task</code> takes the
+rest. The agent table adds <code>Pri</code> and <code>Duration</code> — creation to completion, or to
+now while the task is open — and the server table adds <code>Agent</code>. There is no
+<code>Queue</code> column: the key prefix already names the queue. In the server table the
+header is sticky. The drag grip lives in the row’s left padding and appears on
+hover.</p>
 <p>Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
 links, lists, checklists, code, and tables are supported. Unsupported blocks
@@ -380,7 +398,7 @@ active recurring definition with no pending or running attempt. Exec queues the
 stored command through the ordinary script worker; a recurring definition
 resumes its fixed post-completion delay from there while its runs stay quiet.</p>
 <p>The workspace has no notification inbox: customer-only queue administration is
-the left rail’s remaining non-tree view, and the notification state is rendered
+the queue sheet, and the notification state is rendered
 as one indicator. A small red indicator on a task row identifies an unread,
 non-dismissed <code>task.question</code> notification for that task, and opening that task
 marks those notifications read, which is the only thing that clears the
@@ -509,11 +527,15 @@ the additive projection.</p>
 <strong>Message queue full: pending / limit</strong> in destructive styling; it never
 recomputes queue state in the browser. The normal three-second status refresh
 removes the indicator after processing or clearing lowers the queue.</p>
-<p>When the daemon reports a halt reason for the agent, the Autopilot card shows
-it under the Running/Stopped line, toned as an error for an <code>error</code>
-halt and neutrally for an <code>idle_limit</code> one. The line is deliberately not gated
-on whether Autopilot is currently enabled, because a stop-policy or idle-limit
-reason matters exactly when the loop is off. When there is no reason, nothing
+<p>When the daemon reports a halt reason for the agent, the workspace header shows
+it under the identity line, so a loop that stopped before any iteration existed
+— a failed image activation, for example — is visible on every tab rather than
+only on Autopilot. It is toned as an error for an <code>error</code> halt and neutrally for
+an <code>idle_limit</code> one, and falls back to <code>error_reason</code> when the daemon reports one
+without a halt. The Autopilot card shows the same reason
+under the Running/Stopped line, toned the same way. Neither line is gated on
+whether Autopilot is currently enabled, because a stop-policy, idle-limit or
+launch-failure reason matters exactly when the loop is off. When there is no reason, nothing
 extra is rendered at all — no empty element and no placeholder.</p>
 <p>The common agent list can be hidden and restored throughout the hierarchy. On macOS the
 main Tauri window retains native traffic lights under an overlay titlebar, and

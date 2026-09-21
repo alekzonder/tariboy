@@ -139,8 +139,10 @@ notification records.
 The top-level **Tasks** tab is global. Each Agent workspace includes the same
 component with `scope_agent` fixed to that agent. The layout is Tree-first:
 
-- left rail: All, My, Waiting for me, and Queues;
-- remaining width: dense expandable tree ordered by priority at every depth,
+- one toolbar: search, the Active/Closed/All segment, the queue filter with its
+  `Manage queues…` sheet, and the optional `My tasks` and `Waiting for me`
+  chips;
+- full width: dense expandable tree ordered by priority at every depth,
   with inline task/child creation and same-queue drag reparenting; manual before/after drag
   order is limited to the task's current priority bucket. In-progress tasks
   show an explicit **In progress** label, while open and done tasks retain
