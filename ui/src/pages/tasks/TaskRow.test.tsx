@@ -71,6 +71,27 @@ describe("task table columns", () => {
     expect(key.parentElement!.style.width).toBe("168px")
   })
 
+  it("holds a deeply indented key inside the same column", () => {
+    render(
+      <TaskRow
+        row={{ task, depth: 9, hasChildren: true, orphaned: false }}
+        mode="agent"
+        hasActiveQuestion={false}
+        expanded={false}
+        selected={false}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+        onAddChild={vi.fn()}
+      />,
+    )
+
+    const column = screen.getByText("IMPROVE-136").parentElement!
+    expect(column.style.width).toBe(`${TASK_COLUMNS.key}px`)
+    // The indents are capped, so they cannot push the key out of the column.
+    const indents = [...column.children].filter((child) => (child as HTMLElement).style.width === "14px")
+    expect(indents).toHaveLength(6)
+  })
+
   it("carries a duration in the agent table and an agent instead of a queue in the all table", () => {
     const agent = renderRow("agent")
     expect(screen.getByTestId("task-table-header")).toHaveTextContent("Duration")

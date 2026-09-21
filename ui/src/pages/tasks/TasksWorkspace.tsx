@@ -36,7 +36,7 @@ import {
   type TaskStatusView,
   type WorkflowExecutionView,
 } from "@/lib/tasks"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import QueueSettings from "./QueueSettings"
 import { TaskFilterBar, type TaskPrincipalFilter } from "./TaskFilterBar"
 import TaskDetail from "./TaskDetail"
@@ -59,6 +59,28 @@ function idempotencyKey(): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+// The queue filter has to survive the Agents <-> All tasks switch, which mounts
+// a different workspace, so it lives beside the session rather than in state
+// alone. It is per-session on purpose: a filter that outlived a restart would
+// greet the next launch with a list that looks empty for no visible reason.
+const TASK_QUEUE_FILTER_KEY = "tasks:queue-filter:v1"
+
+function readTaskQueueFilter(): string {
+  try {
+    return globalThis.sessionStorage?.getItem(TASK_QUEUE_FILTER_KEY) ?? ""
+  } catch {
+    return ""
+  }
+}
+
+function persistTaskQueueFilter(prefix: string): void {
+  try {
+    globalThis.sessionStorage?.setItem(TASK_QUEUE_FILTER_KEY, prefix)
+  } catch {
+    // Web Storage is a best-effort Desktop convenience.
+  }
 }
 
 type TasksWorkspaceProps = {
@@ -213,8 +235,12 @@ function TasksWorkspaceContent({
   const [view, setView] = useState<TaskPrincipalFilter>("")
   const [queuesOpen, setQueuesOpen] = useState(false)
   const [statusView, setStatusView] = useState<TaskStatusView>("active")
-  const [queue, setQueue] = useState("")
+  const [queue, setQueue] = useState(readTaskQueueFilter)
   const [query, setQuery] = useState("")
+  const selectQueue = useCallback((prefix: string) => {
+    setQueue(prefix)
+    persistTaskQueueFilter(prefix)
+  }, [])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedKey, setSelectedKey] = useState("")
   const selectedKeyRef = useRef("")
@@ -546,7 +572,7 @@ function TasksWorkspaceContent({
     try {
       const created = await createTaskQueue(input, target)
       setQueues((current) => [...current, created])
-      setQueue(created.prefix)
+      selectQueue(created.prefix)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
@@ -612,7 +638,7 @@ function TasksWorkspaceContent({
           onPrincipalFilter={setView}
           queues={queues}
           queue={queue}
-          onQueue={setQueue}
+          onQueue={selectQueue}
           queueCounts={queueCounts}
           onManageQueues={() => setQueuesOpen(true)}
           scopeAgent={scopeAgent}
@@ -660,6 +686,9 @@ function TasksWorkspaceContent({
         <SheetContent style={{ width: 340, maxWidth: 340 }} className="gap-0 p-0">
           <SheetHeader className="px-4 pt-4 pb-2">
             <SheetTitle className="text-[14px] font-semibold">Queues</SheetTitle>
+            <SheetDescription className="sr-only">
+              Create a queue, rename one, or bind its workflow.
+            </SheetDescription>
           </SheetHeader>
           <QueueSettings queues={queues} onCreate={createQueue} onUpdate={updateQueue} target={target} />
         </SheetContent>

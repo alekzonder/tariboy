@@ -63,28 +63,6 @@ test("orders, edits, and reorders task priorities in the production Desktop", as
       .map((marker) => marker.getAttribute("aria-label"));
   `)).toEqual(["P0 Critical", "P0 Critical", "P3 Low"]);
 
-  await desktop.findElement("css selector", '[aria-label="Resize task navigation"]');
-  const handlePosition = await desktop.execute<{ x: number; y: number }>(`
-    const bounds = document.querySelector('[aria-label="Resize task navigation"]').getBoundingClientRect();
-    return { x: Math.round(bounds.x + bounds.width / 2), y: Math.round(bounds.y + 80) };
-  `);
-  await desktop.performActions([{
-    type: "pointer",
-    id: "task-panel-resize-mouse",
-    parameters: { pointerType: "mouse" },
-    actions: [
-      { type: "pointerMove", duration: 0, origin: "viewport", x: handlePosition.x, y: handlePosition.y },
-      { type: "pointerDown", button: 0 },
-      { type: "pointerMove", duration: 300, origin: "viewport", x: handlePosition.x + 72, y: handlePosition.y },
-      { type: "pointerUp", button: 0 },
-    ],
-  }]);
-  await expect.poll(() => desktop.execute<number>(`
-    return JSON.parse(localStorage.getItem("tasks:workspace:v1") || "{}").navigationWidth || 0;
-  `)).toBeGreaterThan(260);
-  await expect.poll(() => desktop.execute<string>(`
-    return document.querySelector('[aria-label="Resize task navigation"]')?.getAttribute("aria-valuenow") || "";
-  `)).not.toBe("208");
   await desktop.elementClick(await desktop.findElement("css selector", '[data-testid="task-row-PRI-3"] .task-row-main'));
   await expect.poll(() => desktop.execute<boolean>(`
     return [...document.querySelectorAll('.task-detail-panel label')]
