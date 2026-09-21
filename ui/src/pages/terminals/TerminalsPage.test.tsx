@@ -736,6 +736,79 @@ describe("TerminalsPage", () => {
     expect(screen.queryByRole("button", { name: "Update prod" })).toBeNull();
   });
 
+  /** Two SSH hosts behind the app version: the state "Update all (N)" renders for. */
+  async function staleHosts() {
+    serversTab();
+    vi.stubGlobal("__TAURI_INTERNALS__", {});
+    vi.spyOn(desktop, "daemonState").mockResolvedValue({
+      state: "ready",
+      base_url: "http://127.0.0.1:9990",
+      daemon_version: "0.12.0",
+      app_version: "0.12.0",
+      base_dir: "/tmp/tariboy",
+      pid: 42,
+      adopted: false,
+      message: "",
+    });
+    const host = (id: string, label: string) => ({
+      id,
+      label,
+      kind: "ssh" as const,
+      ssh_alias: `${label}-box`,
+      remote_install_dir: "~/.local/lib/tariboy",
+      remote_port: 9990,
+      https_base_url: "",
+      last_daemon_version: "0.11.5",
+      state: "ready" as const,
+      base_url: "http://127.0.0.1:18444",
+      local_port: 18444,
+      phase: "connect",
+      platform: "Linux",
+      arch: "x86_64",
+      prerequisites: [],
+      message: "",
+    });
+    vi.spyOn(desktop, "hostsList").mockResolvedValue([host("d1", "alpha"), host("d2", "beta")]);
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "d1", label: "alpha" }, agents: [] },
+      { host: { id: "d2", label: "beta" }, agents: [] },
+    ]);
+    renderAt("/terminals");
+    return screen.findByRole("button", { name: "Update all (2)" });
+  }
+
+  it("updates every outdated server once Update all is confirmed", async () => {
+    const update = vi.spyOn(desktop, "hostUpdate").mockResolvedValue({ operation_id: "op" });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    fireEvent.click(await staleHosts());
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update.mock.calls.map(([id]) => id)).toEqual(["d1", "d2"]);
+  });
+
+  it("updates nothing when Update all is cancelled", async () => {
+    const update = vi.spyOn(desktop, "hostUpdate").mockResolvedValue({ operation_id: "op" });
+    vi.stubGlobal("confirm", vi.fn(() => false));
+
+    fireEvent.click(await staleHosts());
+
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed server and still updates the rest", async () => {
+    const update = vi.spyOn(desktop, "hostUpdate")
+      .mockRejectedValueOnce(new Error("ssh closed"))
+      .mockResolvedValue({ operation_id: "op" });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    fireEvent.click(await staleHosts());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("alpha");
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
   it("empty state prompts to pick or create an agent when none selected", async () => {
     serversTab();
     renderAt("/terminals");

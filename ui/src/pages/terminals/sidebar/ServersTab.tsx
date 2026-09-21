@@ -45,6 +45,7 @@ export interface ServerTabActions {
   onSelectTeam: (hostId: string, team: string) => void;
   onCreate: (hostId: string) => void;
   onEditServer: (hostId: string) => void;
+  onUpdateAll: (hostIds: string[]) => void;
   onRemoveServer: (hostId: string) => void;
   onConnectHost: (hostId: string) => void;
 }
@@ -78,7 +79,7 @@ export function ServersTab({ hosts, filtering, daemonViews, appVersion, actions,
             size="sm"
             className="h-5 rounded-[6px] border-border px-[7px] text-[10.5px] font-medium tracking-[.02em] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
             title="Update all servers with available updates"
-            onClick={() => { for (const host of pendingUpdates) servers.onEditServer(host.host.id); }}
+            onClick={() => servers.onUpdateAll(pendingUpdates.map((host) => host.host.id))}
           >
             Update all ({pendingUpdates.length})
           </Button>

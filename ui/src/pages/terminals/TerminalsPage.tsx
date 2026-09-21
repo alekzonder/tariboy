@@ -11,7 +11,7 @@ import { useDaemons } from "@/components/DaemonProvider";
 import { listDaemons, removeDaemon, resolveDaemon, type DaemonMeta } from "@/lib/daemons";
 import { apiOn } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { hostConnect } from "@/lib/desktop";
+import { hostConnect, hostUpdate } from "@/lib/desktop";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import {
   TerminalWorkspace,
@@ -147,6 +147,27 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const editServer = async (id: string) => {
     const server = (await listDaemons()).find((m) => m.id === id);
     if (server) setServerDialog({ mode: "edit", server });
+  };
+
+  // Every host behind the app version, updated in turn by the same native
+  // command the server dialog's Update button runs. One failure is reported
+  // and the remaining hosts still go.
+  const updateAllServers = async (ids: string[]) => {
+    const labelOf = (id: string) => daemons.find((host) => host.id === id)?.label ?? id;
+    if (!window.confirm(
+      `Update ${ids.length} server(s) to ${appVersion}? ${ids.map(labelOf).join(", ")}`,
+    )) return;
+    setHostError("");
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await hostUpdate(id);
+      } catch (cause) {
+        failures.push(`${labelOf(id)}: ${String(cause)}`);
+      }
+    }
+    if (failures.length > 0) setHostError(`Could not update ${failures.join("; ")}`);
+    await registryChanged();
   };
 
   const removeServer = async (id: string) => {
@@ -289,6 +310,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         onCreate={(hostId) => setCreateFor({ hostId })}
         onAddServer={() => setServerDialog({ mode: "add" })}
         onEditServer={(id) => void editServer(id)}
+        onUpdateAll={(ids) => void updateAllServers(ids)}
         onRemoveServer={(id) => void removeServer(id)}
         daemonViews={daemons}
         appVersion={appVersion}

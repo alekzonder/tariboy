@@ -97,7 +97,10 @@ sources, because it is the only one with a persisted order. The selected tab is
 remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
 **Agents**. Each server heading states its own reachability and carries the
 **Update** action for a host running an older daemon, with **Update all (N)**
-above the list when more than one host is behind.
+above the list when more than one host is behind. **Update all** confirms the
+named hosts first, then runs the same host update on each of them in turn; a
+host that fails is reported in the page error line and the remaining hosts are
+still updated.
 
 In the Servers tab the sidebar partitions each host into expandable **Teams**
 and **Individual agents** without changing agent navigation or membership.
