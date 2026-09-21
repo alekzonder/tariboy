@@ -38,13 +38,18 @@ type Layer struct {
 	SHA256 string `json:"sha256"`
 }
 
-// Manifest is the versioned metadata of an image. Digest is filled from the
-// sidecar .digest file after build; it is empty inside the archived copy.
+// Manifest is the versioned metadata of an image. ID is the ref identity
+// derived from name and image_version at build time and stored in the archive;
+// an image that declares no version leaves it empty and stays addressed by its
+// archive bytes. Tag is not part of the archive: a tag only points at a ref, so
+// Tag is filled from the ref the caller asked for. Digest carries the resolved
+// ref id for every consumer that pins an image.
 type Manifest struct {
 	SchemaVersion        int               `json:"schema_version"`
 	ImageVersion         string            `json:"image_version,omitempty"`
+	ID                   string            `json:"id,omitempty"`
 	Name                 string            `json:"name"`
-	Tag                  string            `json:"tag"`
+	Tag                  string            `json:"tag,omitempty"`
 	Digest               string            `json:"digest,omitempty"`
 	BuiltAt              string            `json:"built_at"`
 	Parents              []string          `json:"parents"`

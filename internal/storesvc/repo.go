@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/alekzonder/tariboy/internal/image"
 )
@@ -22,9 +20,11 @@ import (
 var ErrDigestMismatch = errors.New("digest mismatch")
 var ErrInvalidArchive = errors.New("invalid image archive")
 
-// Repo is the content-addressed image repository on disk. Its layout is
-// byte-identical to internal/image.Store (<Dir>/<name>/<tag>.tar.gz + .digest)
-// so an image.Store rooted at the same Dir reads pushed blobs directly.
+// Repo is the image repository on disk. It delegates to internal/image.Store,
+// so its layout is exactly the daemon's: content under <Dir>/<name>/refs/<id>
+// with a tag pointer per ref. The digest a client claims and receives is the
+// sha256 of the transferred archive, which is what detects a tampered or
+// truncated transfer; the ref identity is carried inside the archive.
 type Repo struct {
 	Dir string
 	img *image.Store
@@ -32,44 +32,49 @@ type Repo struct {
 
 func NewRepo(dir string) *Repo { return &Repo{Dir: dir, img: &image.Store{Dir: dir}} }
 
-func (r *Repo) refDir(ref image.Ref) string { return filepath.Join(r.Dir, ref.Name) }
-func (r *Repo) tarPath(ref image.Ref) string {
-	return filepath.Join(r.Dir, ref.Name, ref.Tag+".tar.gz")
-}
-func (r *Repo) digestPath(ref image.Ref) string {
-	return filepath.Join(r.Dir, ref.Name, ref.Tag+".digest")
-}
-
-// Head reports whether the blob exists and its stored digest (from the sidecar).
+// Head reports whether the ref exists and the sha256 of its stored archive.
 func (r *Repo) Head(ref image.Ref) (string, bool) {
-	if !r.img.Exists(ref) {
-		return "", false
-	}
-	b, err := os.ReadFile(r.digestPath(ref))
+	path, err := r.img.ArchivePath(ref)
 	if err != nil {
 		return "", false
 	}
-	return strings.TrimSpace(string(b)), true
+	digest, err := fileDigest(path)
+	if err != nil {
+		return "", false
+	}
+	return digest, true
 }
 
-// Put streams body to a temp file, computes sha256(body), rejects a mismatch
-// against claimed, then atomically renames into place and writes the .digest
-// sidecar. ref MUST already be image.ParseRef-validated by the caller (the
-// path-traversal guard). Mirrors internal/image.Store.writeArchive's
-// temp+rename+sidecar discipline.
+func fileDigest(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+// Put streams body to a temp file, rejects an identity that differs from
+// claimed, then publishes it through the image store. ref MUST already be
+// image.ParseRef-validated by the caller (the path-traversal guard). A failed
+// upload never replaces the stored ref.
 func (r *Repo) Put(ref image.Ref, body io.Reader, claimed string) (string, error) {
 	if claimed == "" {
 		return "", errors.New("missing claimed digest")
 	}
-	if err := os.MkdirAll(r.refDir(ref), 0o700); err != nil {
+	if err := os.MkdirAll(r.Dir, 0o700); err != nil {
 		return "", err
 	}
-	tmp, err := os.CreateTemp(r.refDir(ref), ref.Tag+".*.tmp")
+	tmp, err := os.CreateTemp(r.Dir, "."+ref.Name+"-push-*.tmp")
 	if err != nil {
 		return "", err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // no-op once renamed
+	defer os.Remove(tmpName) // no-op once published
 	hasher := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(tmp, hasher), body); err != nil {
 		tmp.Close()
@@ -85,22 +90,23 @@ func (r *Repo) Put(ref image.Ref, body io.Reader, claimed string) (string, error
 	if _, err := image.ValidateArchive(tmpName, ref); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrInvalidArchive, err)
 	}
-	if err := os.Rename(tmpName, r.tarPath(ref)); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(r.digestPath(ref), []byte(got+"\n"), 0o600); err != nil {
+	if _, err := r.img.PublishArchiveFile(ref, tmpName); err != nil {
 		return "", err
 	}
 	return got, nil
 }
 
-// Open returns a reader over the blob and its stored digest, for GET streaming.
+// Open returns a reader over the stored content and its archive digest.
 func (r *Repo) Open(ref image.Ref) (io.ReadCloser, string, error) {
 	digest, ok := r.Head(ref)
 	if !ok {
 		return nil, "", fmt.Errorf("image %s not found", ref.String())
 	}
-	f, err := os.Open(r.tarPath(ref))
+	path, err := r.img.ArchivePath(ref)
+	if err != nil {
+		return nil, "", err
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, "", err
 	}

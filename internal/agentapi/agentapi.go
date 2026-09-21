@@ -1111,9 +1111,8 @@ func (s *Server) imageBuild(w http.ResponseWriter, r *http.Request) {
 		api.WriteErr(w, http.StatusBadRequest, "missing_args", "name and path are required")
 		return
 	}
-	if body.Tag == "" {
-		body.Tag = "latest"
-	}
+	// An empty tag is passed through: the builder then publishes the source
+	// image_version plus latest, exactly as the operator CLI does.
 	res, err := s.d.BuildImage(body.Name, body.Tag, body.Path)
 	if err != nil {
 		api.WriteErr(w, http.StatusBadRequest, "build_failed", err.Error())

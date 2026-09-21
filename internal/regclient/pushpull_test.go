@@ -51,12 +51,12 @@ func TestPushThenPullMovesBytesAndVerifies(t *testing.T) {
 	if _, err := Pull(dstImages, ref, cl); err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
-	got, err := os.ReadFile(filepath.Join(dstImages, "demo", "latest.digest"))
+	pulled, err := (&image.Store{Dir: dstImages}).ArchiveBytes(ref)
 	if err != nil {
-		t.Fatalf("pulled sidecar: %v", err)
+		t.Fatalf("pulled archive: %v", err)
 	}
-	if strings.TrimSpace(string(got)) != digest {
-		t.Fatalf("pulled digest = %s, want %s", strings.TrimSpace(string(got)), digest)
+	if sha256hex(pulled) != digest {
+		t.Fatalf("pulled digest = %s, want %s", sha256hex(pulled), digest)
 	}
 }
 
@@ -94,22 +94,31 @@ func TestPullRejectsDigestMismatch(t *testing.T) {
 		t.Fatalf("expected a digest-mismatch error, got %v", err)
 	}
 
-	// Nothing must be installed: no archive, no sidecar, and the refDir must
-	// hold no leftover temp files.
-	if _, err := os.Stat(filepath.Join(dst, "demo", "latest.tar.gz")); !os.IsNotExist(err) {
+	// Nothing must be installed, and no staging file may be left behind.
+	if (&image.Store{Dir: dst}).Exists(image.Ref{Name: "demo", Tag: "latest"}) {
 		t.Fatalf("rejected pull must NOT install the archive (stat err=%v)", err)
 	}
-	if _, err := os.Stat(filepath.Join(dst, "demo", "latest.digest")); !os.IsNotExist(err) {
-		t.Fatalf("rejected pull must NOT write a sidecar (stat err=%v)", err)
-	}
-	entries, _ := os.ReadDir(filepath.Join(dst, "demo"))
-	for _, e := range entries {
-		t.Fatalf("rejected pull left a leftover file: %s", e.Name())
-	}
+	requireNoTempFiles(t, dst)
 
 	// And it must not be retrievable from the local store.
 	if (&image.Store{Dir: dst}).Exists(ref) {
 		t.Fatal("rejected pull must not be locally retrievable")
+	}
+}
+
+// requireNoTempFiles fails when a rejected pull left staging files behind.
+func requireNoTempFiles(t *testing.T, root string) {
+	t.Helper()
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(info.Name(), ".tmp") {
+			t.Fatalf("rejected pull left a leftover file: %s", path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -127,15 +136,15 @@ func TestPullRejectsInvalidArchiveWithoutReplacingExisting(t *testing.T) {
 	}
 	dst := t.TempDir()
 	ref, _ := buildImage(t, dst)
-	archive := filepath.Join(dst, ref.Name, ref.Tag+".tar.gz")
-	want, err := os.ReadFile(archive)
+	store := &image.Store{Dir: dst}
+	want, err := store.ArchiveBytes(ref)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Pull(dst, ref, client); err == nil {
 		t.Fatal("correct-digest invalid archive was installed")
 	}
-	got, err := os.ReadFile(archive)
+	got, err := store.ArchiveBytes(ref)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,18 +186,11 @@ func TestPullRejectsMissingDigest(t *testing.T) {
 		t.Fatalf("expected a missing-digest error, got %v", err)
 	}
 
-	// Nothing must be installed: no archive, no sidecar, and the refDir must
-	// hold no leftover temp files.
-	if _, err := os.Stat(filepath.Join(dst, "demo", "latest.tar.gz")); !os.IsNotExist(err) {
+	// Nothing must be installed, and no staging file may be left behind.
+	if (&image.Store{Dir: dst}).Exists(image.Ref{Name: "demo", Tag: "latest"}) {
 		t.Fatalf("rejected pull must NOT install the archive (stat err=%v)", err)
 	}
-	if _, err := os.Stat(filepath.Join(dst, "demo", "latest.digest")); !os.IsNotExist(err) {
-		t.Fatalf("rejected pull must NOT write a sidecar (stat err=%v)", err)
-	}
-	entries, _ := os.ReadDir(filepath.Join(dst, "demo"))
-	for _, e := range entries {
-		t.Fatalf("rejected pull left a leftover file: %s", e.Name())
-	}
+	requireNoTempFiles(t, dst)
 
 	// And it must not be retrievable from the local store.
 	if (&image.Store{Dir: dst}).Exists(ref) {

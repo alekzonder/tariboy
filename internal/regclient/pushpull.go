@@ -6,37 +6,41 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/alekzonder/tariboy/internal/image"
 )
 
-func tarPath(dir string, ref image.Ref) string {
-	return filepath.Join(dir, ref.Name, ref.Tag+".tar.gz")
-}
-func digestPath(dir string, ref image.Ref) string {
-	return filepath.Join(dir, ref.Name, ref.Tag+".digest")
-}
-
 // Push uploads the local archive for ref, skipping the transfer when the store
 // already HEADs the same digest.
+func fileDigest(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
 func Push(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 	local := &image.Store{Dir: imagesDir}
-	if !local.Exists(ref) {
+	archive, err := local.ArchivePath(ref)
+	if err != nil {
 		return nil, fmt.Errorf("image %s not found locally (build it first)", ref.String())
 	}
-	db, err := os.ReadFile(digestPath(imagesDir, ref))
+	digest, err := fileDigest(archive)
 	if err != nil {
-		return nil, fmt.Errorf("read local digest: %w", err)
+		return nil, err
 	}
-	digest := strings.TrimSpace(string(db))
 	if have, exists, err := c.Head(ref); err != nil {
 		return nil, err
 	} else if exists && have == digest {
 		return map[string]any{"name": ref.Name, "tag": ref.Tag, "digest": digest, "skipped": true}, nil
 	}
-	if err := c.Put(ref, tarPath(imagesDir, ref), digest); err != nil {
+	if err := c.Put(ref, archive, digest); err != nil {
 		return nil, err
 	}
 	return map[string]any{"name": ref.Name, "tag": ref.Tag, "digest": digest, "pushed": true}, nil
@@ -47,11 +51,10 @@ func Push(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 // re-Inspects the manifest (schema-version re-check via image.Store.Inspect). A
 // tampered/corrupt download can never install (spec §13).
 func Pull(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
-	refDir := filepath.Join(imagesDir, ref.Name)
-	if err := os.MkdirAll(refDir, 0o700); err != nil {
+	if err := os.MkdirAll(imagesDir, 0o700); err != nil {
 		return nil, err
 	}
-	tmp, err := os.CreateTemp(refDir, ref.Tag+".*.tmp")
+	tmp, err := os.CreateTemp(imagesDir, "."+ref.Name+"-pull-*.tmp")
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +69,10 @@ func Pull(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 	if err := tmp.Close(); err != nil {
 		return nil, err
 	}
-	got := hex.EncodeToString(hasher.Sum(nil))
 	if header == "" {
 		return nil, fmt.Errorf("store advertised no digest for %s; refusing to install unverified", ref.String())
 	}
+	got := hex.EncodeToString(hasher.Sum(nil))
 	if header != got {
 		return nil, fmt.Errorf("digest mismatch on pull: server=%s downloaded=%s (refusing to install)", header, got)
 	}
@@ -77,10 +80,7 @@ func Pull(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pulled archive failed inspect (corrupt or unsupported schema): %w", err)
 	}
-	if err := os.Rename(tmpName, tarPath(imagesDir, ref)); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(digestPath(imagesDir, ref), []byte(got+"\n"), 0o600); err != nil {
+	if _, err := (&image.Store{Dir: imagesDir}).PublishArchiveFile(ref, tmpName); err != nil {
 		return nil, err
 	}
 	return map[string]any{"name": m.Name, "tag": m.Tag, "digest": got, "pulled": true}, nil

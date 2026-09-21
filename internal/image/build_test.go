@@ -3,6 +3,7 @@ package image
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -285,29 +286,26 @@ func TestBuildErrors(t *testing.T) {
 	}
 }
 
-func TestBuildMutableRetainsPinnedGeneration(t *testing.T) {
+func TestBuildRetainsPinnedGeneration(t *testing.T) {
 	source := t.TempDir()
 	prompt := promptFile(t, source, "prompt.md", "first generation")
 	store := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 	imagefile := &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}
 
-	first, err := buildLegacy(t, imagefile, ref, store, fixedClock(), WithMutableRef())
+	first, err := buildLegacy(t, imagefile, ref, store, fixedClock())
 	if err != nil {
 		t.Fatal(err)
-	}
-	if !store.IsMutable(ref) {
-		t.Fatal("mutable build did not mark ref")
 	}
 	if err := os.WriteFile(prompt, []byte("second generation"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := buildLegacy(t, imagefile, ref, store, fixedClock(), WithMutableRef())
+	second, err := buildLegacy(t, imagefile, ref, store, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.Digest == second.Digest {
-		t.Fatal("mutable rebuild did not change digest")
+		t.Fatal("rebuilt content did not change the ref id")
 	}
 	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
 		t.Fatalf("inspect pinned generation = %#v, %v", pinned, err)
@@ -321,13 +319,13 @@ func TestBuildMutableRetainsPinnedGeneration(t *testing.T) {
 	}
 }
 
-func TestBuildMutableArchiveReturnsPublishedBytes(t *testing.T) {
+func TestBuildArchiveReturnsPublishedBytes(t *testing.T) {
 	source := t.TempDir()
 	prompt := promptFile(t, source, "prompt.md", "published bytes")
 	store := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 
-	manifest, archive, err := buildMutableLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, store, fixedClock())
+	manifest, archive, err := buildArchiveLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, store, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +338,7 @@ func TestBuildMutableArchiveReturnsPublishedBytes(t *testing.T) {
 	}
 }
 
-func TestBuildMutableUpdatesUnmarkedExistingRef(t *testing.T) {
+func TestBuildUpdatesExistingRef(t *testing.T) {
 	source := t.TempDir()
 	prompt := promptFile(t, source, "prompt.md", "immutable generation")
 	store := &Store{Dir: t.TempDir()}
@@ -353,40 +351,41 @@ func TestBuildMutableUpdatesUnmarkedExistingRef(t *testing.T) {
 	if err := os.WriteFile(prompt, []byte("mutable generation"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := buildLegacy(t, imageSpec, ref, store, fixedClock(), WithMutableRef())
+	second, err := buildLegacy(t, imageSpec, ref, store, fixedClock())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if current, err := store.Inspect(ref); err != nil || current.Digest != second.Digest || current.Digest == first.Digest {
 		t.Fatalf("current generation = %#v, %v", current, err)
 	}
-	if !store.IsMutable(ref) {
-		t.Fatal("updated ref was not marked mutable")
-	}
 	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
 		t.Fatalf("pinned immutable generation = %#v, %v", pinned, err)
 	}
 }
 
-func TestBuildMutableRejectsReservedRef(t *testing.T) {
-	store := &Store{Dir: t.TempDir()}
-	ref := Ref{Name: "basic", Tag: "latest"}
-	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: t.TempDir()}, ref, store, fixedClock(), WithMutableRef()); err == nil {
-		t.Fatal("mutable build accepted daemon-managed ref")
+// TestBuildRefsRejectsReservedTags covers the screen every build entry point
+// applies before it reaches the one publication mechanism.
+func TestBuildRefsRejectsReservedTags(t *testing.T) {
+	if _, _, err := BuildRefs("basic", []string{"latest"}, ""); !errors.Is(err, ErrTagReserved) {
+		t.Fatalf("BuildRefs error = %v, want ErrTagReserved", err)
 	}
-	if store.Exists(ref) || store.IsMutable(ref) {
-		t.Fatal("rejected reserved ref left publication state")
+	if _, _, err := BuildRefs("reviewer", []string{"v1", "v1"}, ""); !errors.Is(err, ErrDuplicateTag) {
+		t.Fatalf("BuildRefs error = %v, want ErrDuplicateTag", err)
+	}
+	refs, defaulted, err := BuildRefs("reviewer", nil, "1.2.3")
+	if err != nil || !defaulted || len(refs) != 2 || refs[0].Tag != "1.2.3" || refs[1].Tag != "latest" {
+		t.Fatalf("BuildRefs = %#v, %v, %v", refs, defaulted, err)
 	}
 }
 
-func TestBuildMutableConcurrentPublishesRetainEveryGeneration(t *testing.T) {
+func TestBuildConcurrentPublishesRetainEveryGeneration(t *testing.T) {
 	previous := runtime.GOMAXPROCS(4)
 	defer runtime.GOMAXPROCS(previous)
 
 	storeDir := t.TempDir()
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 	baseSource := t.TempDir()
-	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: baseSource}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef()); err != nil {
+	if _, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: baseSource}, ref, &Store{Dir: storeDir}, fixedClock()); err != nil {
 		t.Fatal(err)
 	}
 	for round := 0; round < 6; round++ {
@@ -401,7 +400,7 @@ func TestBuildMutableConcurrentPublishesRetainEveryGeneration(t *testing.T) {
 			prompt := promptFile(t, source, "prompt.md", fmt.Sprintf("round %d worker %d", round, worker))
 			go func(source, prompt string) {
 				<-start
-				manifest, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, &Store{Dir: storeDir}, fixedClock(), WithMutableRef())
+				manifest, err := buildLegacy(t, &imagefile.Imagefile{SchemaVersion: 1, Dir: source, Prompts: []imagefile.Prompt{{Filepath: prompt}}}, ref, &Store{Dir: storeDir}, fixedClock())
 				results <- struct {
 					manifest Manifest
 					err      error
@@ -424,7 +423,7 @@ func TestBuildMutableConcurrentPublishesRetainEveryGeneration(t *testing.T) {
 // readMember is a test helper reading one file out of an image tarball.
 func readMember(t *testing.T, s *Store, ref Ref, name string) string {
 	t.Helper()
-	b, err := readFileFromTar(s.tarPath(ref), name)
+	b, err := readFileFromTar(archivePathFor(t, s, ref), name)
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}

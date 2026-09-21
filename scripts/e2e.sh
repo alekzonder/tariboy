@@ -504,7 +504,8 @@ sa push demo:latest --registry https://127.0.0.1:8444 | grep -Eq "pushed: true|s
   || { echo "FAIL: store push"; kill "$STORE_PID" 2>/dev/null; exit 1; }
 
 echo "--- store: pull into a fresh base dir and verify digest"
-SRC_DIGEST="$(cat "$TARIBOY_BASE_DIR/images/demo/latest.digest" | tr -d '[:space:]')"
+# A tag is a pointer file naming the ref id its content is stored under.
+SRC_DIGEST="$(cat "$TARIBOY_BASE_DIR/images/demo/tags/latest" | tr -d '[:space:]')"
 # The login credentials live under the original base dir; the pull base dir has no
 # registries.json, so copy the credentials across for the fresh-dir pull to auth.
 mkdir -p "$STORE_PULL_BASE"
@@ -512,7 +513,7 @@ cp "$TARIBOY_BASE_DIR/registries.json" "$STORE_PULL_BASE/registries.json"
 TARIBOY_BASE_DIR="$STORE_PULL_BASE" sa pull demo:latest --registry https://127.0.0.1:8444 \
   | grep -q "pulled: true" || { echo "FAIL: store pull"; kill "$STORE_PID" 2>/dev/null; exit 1; }
 
-PULLED_DIGEST="$(cat "$STORE_PULL_BASE/images/demo/latest.digest" | tr -d '[:space:]')"
+PULLED_DIGEST="$(cat "$STORE_PULL_BASE/images/demo/tags/latest" | tr -d '[:space:]')"
 [ "$PULLED_DIGEST" = "$SRC_DIGEST" ] || { echo "FAIL: pulled digest $PULLED_DIGEST != source $SRC_DIGEST"; kill "$STORE_PID" 2>/dev/null; exit 1; }
 echo "--- store: digest matches end to end ($SRC_DIGEST)"
 kill "$STORE_PID" 2>/dev/null || true

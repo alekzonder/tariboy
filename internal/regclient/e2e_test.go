@@ -137,7 +137,10 @@ func TestPullDetectsTampering(t *testing.T) {
 
 	// Tamper the stored blob on the server's disk WITHOUT updating the sidecar,
 	// so the GET streams bytes that no longer hash to the advertised digest.
-	blobPath := filepath.Join(storeDir, ref.Name, ref.Tag+".tar.gz")
+	blobPath, err := (&image.Store{Dir: storeDir}).ArchivePath(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(blobPath, []byte("tampered-bytes"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +149,7 @@ func TestPullDetectsTampering(t *testing.T) {
 		t.Fatal("pull of a tampered blob must fail the digest re-verify")
 	}
 	// Nothing was installed into the fresh store.
-	if _, err := os.Stat(filepath.Join(dstImages, ref.Name, ref.Tag+".tar.gz")); err == nil {
+	if (&image.Store{Dir: dstImages}).Exists(ref) {
 		t.Fatal("a tampered pull must not install the archive")
 	}
 }

@@ -145,7 +145,7 @@ function ImageDetail({ hostKey, name, tag, basePath }: { hostKey: string; name: 
                 <AlertDialogHeader>
                   <AlertDialogTitle>Remove image {ref}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Deletes this immutable runnable image. Original build files are not managed by Tariboy.
+                    Deletes this runnable image tag. Original build files are not managed by Tariboy.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

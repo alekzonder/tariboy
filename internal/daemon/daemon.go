@@ -26,7 +26,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
-	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -278,10 +277,8 @@ func Run(ctx context.Context, o Options) error {
 	currentGoal := goalStore.Current
 	taskService.SetGoalSignal(goalReconciler.Signal)
 	imgStore := &image.Store{Dir: p.ImagesDir()}
-	if err := image.WithPublicationGate(func() error {
-		return imgStore.RecoverMutablePublications((imageprovenance.Store{DB: st.DB}).IsCommitted)
-	}); err != nil {
-		return fmt.Errorf("recover image publications: %w", err)
+	if err := image.WithPublicationGate(imgStore.Migrate); err != nil {
+		return fmt.Errorf("migrate image store: %w", err)
 	}
 	if err := image.EnsureBare(imgStore, time.Now); err != nil {
 		log.Error("seed bare image", "err", err)

@@ -264,8 +264,10 @@ func (c *Catalog) detail(ctx context.Context, name string) (Detail, error) {
 		ref := image.Ref{Name: images[i].Name, Tag: "latest"}
 		manifest, err := built.Inspect(ref)
 		if err != nil {
-			_, statErr := os.Stat(filepath.Join(built.Dir, images[i].Name, "latest.tar.gz"))
-			if errors.Is(statErr, os.ErrNotExist) {
+			// No tag pointer means the image was never built here; anything
+			// else is a real read failure worth surfacing.
+			exists, statErr := built.TagExists(ref)
+			if statErr == nil && !exists {
 				images[i].LatestStatus = "missing"
 			} else {
 				images[i].LatestStatus = "error"

@@ -54,32 +54,30 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 		if err != nil {
 			return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
 		}
-		if m.cfg.ImgStore.IsMutable(activeRef) {
-			current, err = m.cfg.ImgStore.Inspect(activeRef)
+		current, err = m.cfg.ImgStore.Inspect(activeRef)
+		if err != nil {
+			recorded, recordErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
+			if recordErr != nil {
+				return activatedImage{}, recordErr
+			}
+			if recorded {
+				return activatedImage{}, err
+			}
+			pending, err = m.cfg.Store.PendingImage(ag.Name)
 			if err != nil {
-				recorded, recordErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
-				if recordErr != nil {
-					return activatedImage{}, recordErr
-				}
-				if recorded {
-					return activatedImage{}, err
-				}
+				return activatedImage{}, err
+			}
+		} else if current.Digest != ag.ImageDigest {
+			won, err := m.cfg.Store.SetPendingImageIfEmpty(ag.Name, activeRef.String(), current.Digest)
+			if err != nil {
+				return activatedImage{}, err
+			}
+			if won {
+				pending = agent.ImageAssignment{Ref: activeRef.String(), Digest: current.Digest}
+			} else {
 				pending, err = m.cfg.Store.PendingImage(ag.Name)
 				if err != nil {
 					return activatedImage{}, err
-				}
-			} else if current.Digest != ag.ImageDigest {
-				won, err := m.cfg.Store.SetPendingImageIfEmpty(ag.Name, activeRef.String(), current.Digest)
-				if err != nil {
-					return activatedImage{}, err
-				}
-				if won {
-					pending = agent.ImageAssignment{Ref: activeRef.String(), Digest: current.Digest}
-				} else {
-					pending, err = m.cfg.Store.PendingImage(ag.Name)
-					if err != nil {
-						return activatedImage{}, err
-					}
 				}
 			}
 		}
@@ -158,7 +156,7 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 	if err := json.Unmarshal(data, &staged); err != nil {
 		return fail(err)
 	}
-	if staged.Name != ref.Name || staged.Tag != ref.Tag {
+	if staged.Name != ref.Name {
 		return fail(fmt.Errorf("staged image ref mismatch"))
 	}
 	staged.Digest = pending.Digest
@@ -319,7 +317,12 @@ func recoverImageSwap(l agentdir.Layout, activeRef, activeDigest string) (bool, 
 			return "", ""
 		}
 		digest, _ := os.ReadFile(filepath.Join(dir, ".image-digest"))
-		return manifest.Name + ":" + manifest.Tag, strings.TrimSpace(string(digest))
+		refText, err := os.ReadFile(filepath.Join(dir, ".image-ref"))
+		if err != nil {
+			// An image unpacked before tags became pointers still names its tag.
+			return manifest.Name + ":" + manifest.Tag, strings.TrimSpace(string(digest))
+		}
+		return strings.TrimSpace(string(refText)), strings.TrimSpace(string(digest))
 	}
 	currentRef, currentDigest := imageIdentity(l.ImageDir())
 	backupRef, backupDigest := imageIdentity(backup)

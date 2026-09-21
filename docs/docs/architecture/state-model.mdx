@@ -173,27 +173,29 @@ capabilities, and promotes active plus pending state in one guarded transaction.
 Every new iteration snapshots its image ref, source `image_version` when
 present, digest, and prompt-template hash, so later switches cannot rewrite
 historical execution identity. Historical iterations and legacy images keep an
-empty version instead of inheriting a mutable ref's current value.
+empty version instead of inheriting the ref's current value.
 
 The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
-already-promoted image digest matches the row. Each unpacked image carries a
-daemon-owned digest marker, so two generations of one mutable ref cannot be
-confused. Ordinary mutable-build archive generations are retained by digest,
-so active and pending assignments survive a rebuilt ref. Harness,
-model, effort, environment,
-CWD, context, workdir, messages, history, group, and subscriptions are not image
-assignment fields.
+already-promoted image digest matches the row. Each unpacked image records the
+ref it was materialized for and a daemon-owned id marker, so two generations of
+one ref cannot be confused. Generations are kept by id under
+`images/<name>/refs/`, so active and pending assignments survive a moved tag.
+Harness, model, effort, environment, CWD, context, workdir, messages, history,
+group, and subscriptions are not image assignment fields.
 
-An ordinary multi-tag build stages every complete archive before publication,
-writes an owner-only batch journal, advances the refs, and commits every source
-snapshot and provenance row in one SQLite transaction. Any synchronous failure
-rolls back the whole ref stack. On daemon startup, a surviving journal is
-finalized only when both authoritative metadata rows name every candidate
-digest; otherwise every moved ref is restored before agents or clients can use
-it. Removing a ref or installing a new immutable import deletes the paired
-ordinary-build authority rows transactionally before filesystem visibility, so
-matching bytes from an older lifecycle cannot authorize mutable replacement.
+Image content is addressed by ref id — derived from the image name and the
+source `image_version`, or from the archive bytes when no version is declared —
+and a tag is a pointer file naming that id. One build publishes one ref and
+moves every requested tag onto it, so a versioned tag and `latest` always agree.
+The build records where those tags pointed, then commits every source snapshot
+and provenance row in one SQLite transaction; a failure restores the tags and
+deletes only content the build introduced, never a generation an agent may be
+pinned to. There is no separate immutable mode and no publication journal:
+rebuilding any non-reserved ref is always allowed, so no build path can be
+refused for a ref that already exists. A store written before this model is
+migrated once at daemon startup, keeping each archive's content digest as its
+ref id so pinned digests keep resolving.
 One publication gate spans ordinary, editable-source, team-import,
 agent-authored, compose, and controlled-release publication plus assignment,
 activation, provisioning, reprovisioning, import, and removal, so none can

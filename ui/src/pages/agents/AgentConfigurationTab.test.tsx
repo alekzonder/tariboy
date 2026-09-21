@@ -31,7 +31,7 @@ const projection = {
   name: "worker",
   current: { ref: "worker:latest", digest: "old-digest", image_version: "1.0.0" },
   pending: { ref: "", digest: "", error: "" },
-  next: { ref: "worker:latest", digest: "new-digest", image_version: "1.1.0", reason: "mutable_ref" },
+  next: { ref: "worker:latest", digest: "new-digest", image_version: "1.1.0", reason: "ref_moved" },
 } satisfies AgentImageStatus;
 
 function configurationTree(target = remote, name = "worker", status: AgentStatus | null = null) {
@@ -69,7 +69,7 @@ it("shows inspection and activation failures without a pending ref", async () =>
   vi.stubGlobal("fetch", imageFetch(() => ({
     ...projection,
     current: { ...projection.current, image_version: undefined },
-    next: { ref: "worker:latest", digest: "", reason: "mutable_ref", error: "latest is unreadable" },
+    next: { ref: "worker:latest", digest: "", reason: "ref_moved", error: "latest is unreadable" },
     pending: { ref: "", digest: "", error: "bridge preparation failed" },
   })));
   render(configurationTree());
@@ -144,7 +144,7 @@ it("preserves the selected image draft on refresh and disables assignment after 
   expect(screen.getByRole("button", { name: "Use next iteration" })).toBeDisabled();
 });
 
-it("cancels explicit pending and previews the mutable ref again", async () => {
+it("cancels explicit pending and previews the moved ref again", async () => {
   let state: AgentImageStatus = {
     ...projection,
     pending: { ref: "explicit:v2", digest: "explicit-digest", error: "" },

@@ -30,19 +30,21 @@ func (s *Store) List() ([]Manifest, error) {
 	}
 	var out []Manifest
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		tags, err := os.ReadDir(filepath.Join(s.Dir, e.Name()))
+		tags, err := os.ReadDir(s.tagsDir(e.Name()))
+		if os.IsNotExist(err) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
 		for _, tf := range tags {
-			n := tf.Name()
-			if !strings.HasSuffix(n, ".tar.gz") {
+			if tf.IsDir() || strings.HasPrefix(tf.Name(), ".") {
 				continue
 			}
-			m, err := s.Inspect(Ref{Name: e.Name(), Tag: strings.TrimSuffix(n, ".tar.gz")})
+			m, err := s.Inspect(Ref{Name: e.Name(), Tag: tf.Name()})
 			if err != nil {
 				return nil, err
 			}
@@ -59,8 +61,9 @@ func (s *Store) List() ([]Manifest, error) {
 }
 
 func (s *Store) RenderPrompt(ref Ref) (string, error) {
-	if !s.Exists(ref) {
-		return "", fmt.Errorf("image %s not found", ref.String())
+	archivePath, err := s.archiveFor(ref)
+	if err != nil {
+		return "", err
 	}
 	manifest, err := s.Inspect(ref)
 	if err != nil {
@@ -85,11 +88,11 @@ func (s *Store) RenderPrompt(ref Ref) (string, error) {
 		}
 		return strings.Join(parts, "\n\n"), nil
 	}
-	prompt, err := readFileFromTar(s.tarPath(ref), "PROMPT.md")
+	prompt, err := readFileFromTar(archivePath, "PROMPT.md")
 	if err != nil {
 		return "", err
 	}
-	tail, err := readFileFromTar(s.tarPath(ref), "PROMPT_TAIL.md")
+	tail, err := readFileFromTar(archivePath, "PROMPT_TAIL.md")
 	if err != nil {
 		return "", err
 	}
@@ -99,10 +102,11 @@ func (s *Store) RenderPrompt(ref Ref) (string, error) {
 // ListFiles enumerates every member of the image's tar.gz (paths like
 // manifest.json, PROMPT.md, skills/<name>/...), modelled on the Unpack reader.
 func (s *Store) ListFiles(ref Ref) ([]FileEntry, error) {
-	if !s.Exists(ref) {
-		return nil, fmt.Errorf("image %s not found", ref.String())
+	archivePath, err := s.archiveFor(ref)
+	if err != nil {
+		return nil, err
 	}
-	f, err := os.Open(s.tarPath(ref))
+	f, err := os.Open(archivePath)
 	if err != nil {
 		return nil, err
 	}
@@ -136,14 +140,15 @@ func (s *Store) ListFiles(ref Ref) ([]FileEntry, error) {
 // The path is normalised and traversal ('..' / absolute) is rejected before the
 // lookup, so a caller can never escape the archive namespace.
 func (s *Store) ReadFile(ref Ref, name string) ([]byte, error) {
-	if !s.Exists(ref) {
-		return nil, fmt.Errorf("image %s not found", ref.String())
+	archivePath, err := s.archiveFor(ref)
+	if err != nil {
+		return nil, err
 	}
 	clean, err := cleanTarPath(name)
 	if err != nil {
 		return nil, err
 	}
-	return readFileFromTar(s.tarPath(ref), clean)
+	return readFileFromTar(archivePath, clean)
 }
 
 // cleanTarPath normalises a slash-separated in-archive path and rejects any
@@ -165,91 +170,76 @@ func cleanTarPath(name string) (string, error) {
 	return clean, nil
 }
 
+// Remove drops one tag. The content it pointed at is deleted once no other tag
+// of the same image names it.
 func (s *Store) Remove(ref Ref) error {
 	if IsReserved(ref) {
 		return fmt.Errorf("%w: %s", ErrReserved, ref.String())
 	}
-	if !s.Exists(ref) {
-		return fmt.Errorf("image %s not found", ref.String())
-	}
-	if err := os.Remove(s.tarPath(ref)); err != nil {
+	id, err := s.Resolve(ref)
+	if err != nil {
 		return err
 	}
-	_ = os.Remove(s.digestPath(ref))
-	_ = os.Remove(s.mutablePath(ref))
-	_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
-	_ = os.Remove(s.refDir(ref)) // best-effort: drops the dir when it becomes empty
+	if err := os.Remove(s.tagPath(ref)); err != nil {
+		return err
+	}
+	if err := syncDirectory(s.tagsDir(ref.Name)); err != nil {
+		return err
+	}
+	used, err := s.tagReferences(ref.Name, id)
+	if err != nil {
+		return err
+	}
+	if !used {
+		if err := os.Remove(s.contentPath(ref.Name, id)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	// best-effort: drop the directories once they become empty
+	_ = os.Remove(s.tagsDir(ref.Name))
+	_ = os.Remove(s.refsDir(ref.Name))
+	_ = os.Remove(s.nameDir(ref.Name))
 	return syncDirectory(s.Dir)
 }
 
-// RestoreMutable returns a moved ref to one of its retained digests and prior
-// mutable state without removing retained mutable generations.
-func (s *Store) RestoreMutable(ref Ref, digest string, wasMutable bool) error {
-	mutablePublishMu.Lock()
-	defer mutablePublishMu.Unlock()
-	current, err := s.Inspect(ref)
+// tagReferences reports whether any tag of name still points at id.
+func (s *Store) tagReferences(name, id string) (bool, error) {
+	entries, err := os.ReadDir(s.tagsDir(name))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
 	if err != nil {
-		return err
+		return false, err
 	}
-	if current.Digest != digest {
-		history := s.pinnedMutablePath(ref, digest)
-		if _, err := ValidateArchive(history, ref); err != nil {
-			return fmt.Errorf("restore mutable image %s@%s: %w", ref.String(), digest, err)
+	for _, entry := range entries {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
 		}
-		tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".restore-*.tmp")
+		other, err := s.Resolve(Ref{Name: name, Tag: entry.Name()})
 		if err != nil {
-			return err
+			continue
 		}
-		tmpName := tmp.Name()
-		if err := tmp.Close(); err != nil {
-			return err
-		}
-		defer os.Remove(tmpName)
-		if err := os.Remove(tmpName); err != nil {
-			return err
-		}
-		if err := os.Link(history, tmpName); err != nil {
-			return err
-		}
-		if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
-			return err
-		}
-		if err := syncDirectory(s.refDir(ref)); err != nil {
-			return err
-		}
-		if err := writeDigestCache(s.digestPath(ref), digest); err != nil {
-			_ = os.Remove(s.digestPath(ref))
+		if other == id {
+			return true, nil
 		}
 	}
-	if !wasMutable {
-		_ = os.Remove(s.mutablePath(ref))
-		_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
-	}
-	return nil
+	return false, nil
 }
 
 func (s *Store) Unpack(ref Ref, destDir string) error {
-	if !s.Exists(ref) {
-		return fmt.Errorf("image %s not found", ref.String())
-	}
-	return unpackArchive(s.tarPath(ref), ref, destDir)
-}
-
-// UnpackPinned materializes the exact immutable digest assigned to an agent.
-// For daemon-managed refs this may be a retained pre-upgrade archive rather
-// than the current bytes published under the moving reserved ref.
-func (s *Store) UnpackPinned(ref Ref, digest, destDir string) error {
-	manifest, err := s.InspectPinned(ref, digest)
+	archivePath, err := s.archiveFor(ref)
 	if err != nil {
 		return err
 	}
-	archivePath := s.tarPath(ref)
-	if current, currentErr := s.Inspect(ref); currentErr != nil || current.Digest != manifest.Digest {
-		if IsReserved(ref) {
-			archivePath = s.pinnedManagedPath(ref, digest)
-		} else {
-			archivePath = s.pinnedMutablePath(ref, digest)
-		}
+	return unpackArchive(archivePath, ref, destDir)
+}
+
+// UnpackPinned materializes the exact generation assigned to an agent, which
+// may be an earlier ref id than the one the tag points at today.
+func (s *Store) UnpackPinned(ref Ref, id, destDir string) error {
+	_, archivePath, err := s.inspectPinnedArchive(ref, id)
+	if err != nil {
+		return err
 	}
 	return unpackArchive(archivePath, ref, destDir)
 }
@@ -302,6 +292,11 @@ func unpackArchive(archivePath string, ref Ref, destDir string) error {
 			return err
 		}
 		out.Close()
+	}
+	// The archive carries no tag, so the unpacked tree records the ref it was
+	// materialized for alongside its id.
+	if err := os.WriteFile(filepath.Join(destDir, ".image-ref"), []byte(ref.String()+"\n"), 0o600); err != nil {
+		return err
 	}
 	return os.WriteFile(filepath.Join(destDir, ".image-digest"), []byte(manifest.Digest+"\n"), 0o600)
 }

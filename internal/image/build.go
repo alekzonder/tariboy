@@ -22,7 +22,6 @@ func sha256hex(b []byte) string {
 type buildOpts struct {
 	externalPlugins  plugincaps.ExternalResolver
 	builtinStoreRoot string
-	mutableRef       bool
 	archiveOut       *[]byte
 }
 
@@ -40,19 +39,11 @@ func WithExternalPlugins(f plugincaps.ExternalResolver) BuildOption {
 	return func(o *buildOpts) { o.externalPlugins = f }
 }
 
-// WithMutableRef publishes an ordinary authoring ref that may later advance.
-func WithMutableRef() BuildOption {
-	return func(o *buildOpts) { o.mutableRef = true }
-}
-
-// BuildMutableArchive publishes a mutable schema-v1 image and returns the
-// validated archive bytes used for that publication.
-func BuildMutableArchive(imgFile *imagefile.Imagefile, ref Ref, store *Store, clock func() time.Time, options ...BuildOption) (Manifest, []byte, error) {
+// BuildArchive builds a schema-v1 image and returns the validated archive
+// bytes used for that publication.
+func BuildArchive(imgFile *imagefile.Imagefile, ref Ref, store *Store, clock func() time.Time, options ...BuildOption) (Manifest, []byte, error) {
 	var archive []byte
-	options = append(options, func(o *buildOpts) {
-		o.mutableRef = true
-		o.archiveOut = &archive
-	})
+	options = append(options, func(o *buildOpts) { o.archiveOut = &archive })
 	manifest, err := Build(imgFile, ref, store, clock, options...)
 	return manifest, archive, err
 }
@@ -308,7 +299,7 @@ func Build(imgFile *imagefile.Imagefile, ref Ref, store *Store, clock func() tim
 		Policy:          policy,
 		Layers:          layers,
 	}
-	digest, err := store.writeArchive(ref, man, prompt, tail, body, imgFile.Skills, opts.mutableRef, opts.archiveOut)
+	digest, err := store.writeArchive(ref, man, prompt, tail, body, imgFile.Skills, opts.archiveOut)
 	if err != nil {
 		return Manifest{}, err
 	}

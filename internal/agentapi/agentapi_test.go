@@ -914,7 +914,9 @@ func TestImageBuildGatedAndDispatched(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("build status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if gotTag != "authored:latest" || gotPath != "authored" {
+	// An empty tag reaches the builder, which then publishes the source
+	// image_version plus latest, exactly as the operator CLI does.
+	if gotTag != "authored:" || gotPath != "authored" {
 		t.Fatalf("BuildImage called with (%q,%q)", gotTag, gotPath)
 	}
 	if !strings.Contains(rec.Body.String(), "deadbeef") {

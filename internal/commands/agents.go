@@ -112,7 +112,7 @@ func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error)
 		ref, err := image.ParseRef(refText)
 		var manifest image.Manifest
 		if err == nil {
-			if reason == "mutable_ref" {
+			if reason == "ref_moved" {
 				manifest, err = images.Inspect(ref)
 			} else {
 				manifest, err = images.InspectPinned(ref, digest)
@@ -131,8 +131,10 @@ func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error)
 	next.Reason = "current"
 	if pending.Ref != "" {
 		next = inspect(pending.Ref, pending.Digest, "pending")
-	} else if ref, err := image.ParseRef(a.ImageRef); err == nil && images.IsMutable(ref) {
-		next = inspect(a.ImageRef, "", "mutable_ref")
+	} else if _, err := image.ParseRef(a.ImageRef); err == nil {
+		// Any ref can be rebuilt, so the active ref's current content is what
+		// the next iteration would adopt.
+		next = inspect(a.ImageRef, "", "ref_moved")
 	}
 	return map[string]any{"name": name, "current": current, "pending": pending, "next": next}, nil
 }

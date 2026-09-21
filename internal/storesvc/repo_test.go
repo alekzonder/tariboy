@@ -31,15 +31,16 @@ func validBlob(t *testing.T, ref image.Ref) ([]byte, string) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	manifest, err := image.BuildV2(f.V2, imagefile.ResolveRoots{}, ref, &image.Store{Dir: dir}, time.Now, nil)
+	store := &image.Store{Dir: dir}
+	if _, err := image.BuildV2(f.V2, imagefile.ResolveRoots{}, ref, store, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := store.ArchiveBytes(ref)
 	if err != nil {
 		t.Fatal(err)
 	}
-	blob, err := os.ReadFile(filepath.Join(dir, ref.Name, ref.Tag+".tar.gz"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return blob, manifest.Digest
+	// The registry claims and advertises the transferred bytes.
+	return blob, sha256hex(blob)
 }
 
 func TestRepoPutVerifiesAndStores(t *testing.T) {

@@ -2575,8 +2575,9 @@ func (m *Manager) toolsLoopControl(name, action string) (agent.Agent, error) {
 
 // buildImageForAgent authors + builds a new image from a Tariboyfile. Relative
 // paths resolve against the managed workdir; absolute paths are used as given.
-// It calls image.Build against the daemon's shared image store, exactly as
-// commands/image.go does, so the result is runnable via `agent run`.
+// It calls image.BuildV2 against the daemon's shared image store through the
+// one publication mechanism the operator CLI uses, so an existing ref — latest
+// included — is moved onto the new content instead of being refused.
 func buildImageForAgent(imgStore *image.Store, workdir, name, tag, path string, externalPlugins ...plugincaps.ExternalResolver) (map[string]any, error) {
 	var result map[string]any
 	err := image.WithPublicationGate(func() error {
@@ -2588,18 +2589,11 @@ func buildImageForAgent(imgStore *image.Store, workdir, name, tag, path string, 
 }
 
 func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path string, externalPlugins ...plugincaps.ExternalResolver) (map[string]any, error) {
-	if tag == "" {
-		tag = "latest"
-	}
-	ref, err := image.ParseRef(name + ":" + tag)
-	if err != nil {
-		return nil, fmt.Errorf("bad ref: %w", err)
-	}
 	abs := path
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(workdir, abs)
 	}
-	abs, err = filepath.EvalSymlinks(filepath.Clean(abs))
+	abs, err := filepath.EvalSymlinks(filepath.Clean(abs))
 	if err != nil {
 		return nil, err
 	}
@@ -2610,6 +2604,16 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	if parsed.Version != 2 {
 		return nil, errors.New(imagefile.SchemaV1MigrationMessage)
 	}
+	// An empty tag publishes the declared image_version and latest, exactly as
+	// the operator CLI does.
+	var requested []string
+	if tag != "" {
+		requested = []string{tag}
+	}
+	refs, _, err := image.BuildRefs(name, requested, parsed.V2.ImageVersion)
+	if err != nil {
+		return nil, err
+	}
 	baseDir := filepath.Dir(imgStore.Dir)
 	layout := paths.Paths{Base: baseDir}
 	pluginsDir := layout.PluginsDir()
@@ -2617,11 +2621,23 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	if len(externalPlugins) > 0 && externalPlugins[0] != nil {
 		resolver = externalPlugins[0]
 	}
-	man, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir}, ref, imgStore, time.Now, resolver)
+	if err := imgStore.Migrate(); err != nil {
+		return nil, err
+	}
+	man, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir}, refs[0], imgStore, time.Now, resolver)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)}, nil
+	tags := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref != refs[0] {
+			if err := imgStore.SetTag(ref, man.Digest); err != nil {
+				return nil, err
+			}
+		}
+		tags = append(tags, ref.Tag)
+	}
+	return map[string]any{"name": man.Name, "tag": refs[0].Tag, "tags": tags, "digest": man.Digest, "layers": len(man.Layers)}, nil
 }
 
 func cwdOf(ag agent.Agent, l agentdir.Layout) string {

@@ -35,8 +35,9 @@ const (
 type v2PortableManifest struct {
 	SchemaVersion        int                `json:"schema_version"`
 	ImageVersion         string             `json:"image_version,omitempty"`
+	ID                   string             `json:"id,omitempty"`
 	Name                 string             `json:"name"`
-	Tag                  string             `json:"tag"`
+	Tag                  string             `json:"tag,omitempty"`
 	BuiltAt              string             `json:"built_at"`
 	Plugins              []v2PortablePlugin `json:"plugins"`
 	Skills               []ManifestSkill    `json:"skills"`
@@ -128,9 +129,10 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 	if manifest.SchemaVersion != 1 && manifest.SchemaVersion != 2 {
 		return Manifest{}, fmt.Errorf("unsupported image schema_version %d", manifest.SchemaVersion)
 	}
-	if manifest.Name != ref.Name || manifest.Tag != ref.Tag {
-		return Manifest{}, fmt.Errorf("archive ref %s:%s does not match %s", manifest.Name, manifest.Tag, ref.String())
+	if manifest.Name != ref.Name {
+		return Manifest{}, fmt.Errorf("archive image %s does not match %s", manifest.Name, ref.String())
 	}
+	manifest.Tag = ref.Tag
 	if manifest.SchemaVersion == 2 {
 		if err := validateV2PortableMembers(manifestBody, members, ref, &manifest, resolver, enforceContract); err != nil {
 			return Manifest{}, err
@@ -146,6 +148,10 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 				return Manifest{}, fmt.Errorf("unexpected schema-v1 image member %q", name)
 			}
 		}
+	}
+	if manifest.ID != "" {
+		manifest.Digest = manifest.ID
+		return manifest, nil
 	}
 	sum := sha256.Sum256(archive)
 	manifest.Digest = hex.EncodeToString(sum[:])
@@ -172,13 +178,16 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 	if err := requireJSONEOF(dec); err != nil {
 		return fmt.Errorf("invalid schema-v2 manifest: %w", err)
 	}
-	if strict.SchemaVersion != 2 || strict.Name != ref.Name || strict.Tag != ref.Tag || strict.PromptTemplateSHA256 == "" {
+	if strict.SchemaVersion != 2 || strict.Name != ref.Name || strict.PromptTemplateSHA256 == "" {
 		return errors.New("invalid schema-v2 manifest identity")
 	}
 	if strict.ImageVersion != "" {
 		if err := imagefile.ValidateImageVersion(strict.ImageVersion); err != nil {
 			return err
 		}
+	}
+	if strict.ID != "" && strict.ID != RefID(ref.Name, strict.ImageVersion) {
+		return errors.New("invalid schema-v2 manifest id")
 	}
 	if _, err := time.Parse(time.RFC3339, strict.BuiltAt); err != nil {
 		return errors.New("invalid schema-v2 manifest built_at")

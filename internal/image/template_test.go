@@ -7,16 +7,16 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagefile"
 )
 
-func TestReadTemplatePinnedRetainsImageIdentityAfterMutableRebuild(t *testing.T) {
+func TestReadTemplatePinnedRetainsImageIdentityAfterRebuild(t *testing.T) {
 	s := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 	source := &imagefile.V2{SchemaVersion: 2, Prompts: []imagefile.PromptEntry{{Runtime: "user-prompt"}}}
-	first, err := BuildV2Mutable(source, imagefile.ResolveRoots{}, ref, s, time.Now, nil)
+	first, err := BuildV2(source, imagefile.ResolveRoots{}, ref, s, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	source.Prompts = []imagefile.PromptEntry{{Runtime: "one-shot"}}
-	second, err := BuildV2Mutable(source, imagefile.ResolveRoots{}, ref, s, time.Now, nil)
+	second, err := BuildV2(source, imagefile.ResolveRoots{}, ref, s, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

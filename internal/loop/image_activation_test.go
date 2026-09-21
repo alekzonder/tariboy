@@ -35,7 +35,10 @@ type imageBoundaryRunner struct {
 	release chan struct{}
 }
 
-func TestActiveImageLaunchRejectsDigestDifferentFromPinnedAgentIdentity(t *testing.T) {
+// A ref can always move, so an agent whose pinned generation is gone follows
+// the ref's current content. A pending assignment naming content that is not
+// stored still fails instead of silently substituting another generation.
+func TestPendingImageLaunchRejectsDigestDifferentFromStoredIdentity(t *testing.T) {
 	m, _, _, _ := newManager(t, &fakeRunner{})
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte("trusted"), 0o600); err != nil {
@@ -49,12 +52,15 @@ func TestActiveImageLaunchRejectsDigestDifferentFromPinnedAgentIdentity(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: strings.Repeat("0", len(manifest.Digest))}
+	ag := agent.Agent{Name: "worker", ImageRef: ref.String(), ImageDigest: manifest.Digest}
 	if err := m.cfg.Store.Create(ag); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.activatePendingImage(&ag); err == nil || !strings.Contains(err.Error(), "digest") {
-		t.Fatalf("active launch accepted archive outside pinned digest: %v", err)
+	if err := m.cfg.Store.SetPendingImage(ag.Name, ref.String(), strings.Repeat("0", len(manifest.Digest))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.activatePendingImage(&ag); err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("activation accepted content outside the stored identity: %v", err)
 	}
 }
 
@@ -73,7 +79,7 @@ func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		manifest, err := image.BuildV2Mutable(&imagefile.V2{
+		manifest, err := image.BuildV2(&imagefile.V2{
 			SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}},
 		}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
 		if err != nil {
@@ -131,7 +137,7 @@ func TestMutableRefIterationsSnapshotSourceVersion(t *testing.T) {
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
 	source := t.TempDir()
 	build := func(version string) image.Manifest {
-		manifest, err := image.BuildV2Mutable(&imagefile.V2{
+		manifest, err := image.BuildV2(&imagefile.V2{
 			SchemaVersion: 2, ImageVersion: version, Dir: source,
 		}, imagefile.ResolveRoots{}, ref, m.cfg.ImgStore, time.Now, nil)
 		if err != nil {
@@ -183,7 +189,7 @@ func TestMutableRefIterationsSnapshotSourceVersion(t *testing.T) {
 	}
 }
 
-func TestMutableActivationWaitsForPublicationRollback(t *testing.T) {
+func TestActivationWaitsForPublicationGate(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))
 	if err != nil {
@@ -198,7 +204,7 @@ func TestMutableActivationWaitsForPublicationRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := &imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}
-	first, err := image.BuildV2Mutable(spec, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+	first, err := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,13 +224,14 @@ func TestMutableActivationWaitsForPublicationRollback(t *testing.T) {
 	locked := make(chan error, 1)
 	go func() {
 		locked <- image.WithPublicationGate(func() error {
-			_, buildErr := image.BuildV2Mutable(spec, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+			_, buildErr := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
 			published <- buildErr
 			if buildErr != nil {
 				return buildErr
 			}
 			<-release
-			return images.RestoreMutable(ref, first.Digest, true)
+			// move the ref back, as a failed publication would
+			return images.SetTag(ref, first.Digest)
 		})
 	}()
 	if err := <-published; err != nil {
@@ -256,11 +263,11 @@ func TestMutableActivationWaitsForPublicationRollback(t *testing.T) {
 	}
 	stored, err := as.Get(ag.Name)
 	if returnedEarly || err != nil || stored.ImageDigest != first.Digest || ag.ImageDigest != first.Digest {
-		t.Fatalf("activation crossed rollback: early=%v stored=%+v in_memory=%+v err=%v", returnedEarly, stored, ag, err)
+		t.Fatalf("activation crossed the publication gate: early=%v stored=%+v in_memory=%+v err=%v", returnedEarly, stored, ag, err)
 	}
 }
 
-func TestImmutableRecoveryClearsEmptyAssignmentError(t *testing.T) {
+func TestRecoveryClearsEmptyAssignmentError(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))
 	if err != nil {
@@ -302,7 +309,7 @@ func TestImmutableRecoveryClearsEmptyAssignmentError(t *testing.T) {
 	}
 }
 
-func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
+func TestRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	base := t.TempDir()
 	db, err := storedb.Open(filepath.Join(base, "state.db"))
 	if err != nil {
@@ -316,7 +323,7 @@ func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte("first"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	first, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
+	first, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, ref, images, time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,12 +339,16 @@ func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(images.Dir, ref.Name, ref.Tag+".tar.gz")); err != nil {
+	content, err := images.ArchivePath(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(content); err != nil {
 		t.Fatal(err)
 	}
 	m := &Manager{cfg: ManagerConfig{AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images}}
 	if _, err := m.activatePendingImage(&ag); err == nil {
-		t.Fatal("mutable discovery failure did not fail activation")
+		t.Fatal("ref discovery failure did not fail activation")
 	}
 	pending, err := as.PendingImage(ag.Name)
 	if err != nil || pending.Ref != "" || pending.Digest != "" || pending.Error == "" {
@@ -351,7 +362,7 @@ func TestMutableRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 	if err != nil || strings.TrimSpace(string(localDigest)) != first.Digest {
 		t.Fatalf("active bytes changed after discovery failure: %q err=%v", localDigest, err)
 	}
-	if err := os.WriteFile(filepath.Join(images.Dir, ref.Name, ref.Tag+".tar.gz"), archive, 0o600); err != nil {
+	if err := os.WriteFile(content, archive, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.activatePendingImage(&ag); err != nil {
@@ -434,7 +445,7 @@ func TestMutableRefreshLosesToExplicitPendingDuringStaging(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		manifest, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Dir: source, Plugins: plugins, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, mutableRef, images, time.Now, func(string) (plugincaps.ResolvedPlugin, error) {
+		manifest, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Plugins: plugins, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, mutableRef, images, time.Now, func(string) (plugincaps.ResolvedPlugin, error) {
 			return plugincaps.ResolvedPlugin{Installed: true}, nil
 		})
 		if err != nil {
@@ -578,7 +589,7 @@ func TestExplicitPendingImageBeatsMutableRefresh(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		manifest, err := image.BuildV2Mutable(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, mutableRef, images, time.Now, nil)
+		manifest, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}, imagefile.ResolveRoots{}, mutableRef, images, time.Now, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -988,7 +999,7 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 		return archive
 	}
 	basicRef := image.Ref{Name: "basic", Tag: "latest"}
-	if err := images.InstallManagedArchive(basicRef, managedArchive("1.0.0")); err != nil {
+	if _, err := images.InstallArchive(basicRef, managedArchive("1.0.0")); err != nil {
 		t.Fatal(err)
 	}
 	pendingManifest, err := images.Inspect(basicRef)
@@ -1012,7 +1023,7 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 		t.Fatal(err)
 	}
 	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)) + 10*time.Millisecond)
-	if err := images.InstallManagedArchive(basicRef, managedArchive("1.1.0")); err != nil {
+	if _, err := images.InstallArchive(basicRef, managedArchive("1.1.0")); err != nil {
 		t.Fatal(err)
 	}
 	current, err := images.Inspect(basicRef)

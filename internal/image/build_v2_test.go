@@ -367,7 +367,7 @@ func TestRetagPortableV2ArchivePreservesSkillModes(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := Ref{Name: "retagged-skill", Tag: "v2"}
-	if _, err := store.RetagPortableArchive(original, target, archive); err != nil {
+	if _, err := store.RetagArchive(original, target, archive); err != nil {
 		t.Fatal(err)
 	}
 	retagged, err := store.ArchiveBytes(target)
@@ -446,7 +446,7 @@ func TestBuildV2AddsNoImplicitContent(t *testing.T) {
 	}
 }
 
-func TestBuildV2MutableRetainsPinnedGeneration(t *testing.T) {
+func TestBuildV2RetainsPinnedGeneration(t *testing.T) {
 	source := t.TempDir()
 	prompt := filepath.Join(source, "prompt.md")
 	if err := os.WriteFile(prompt, []byte("first generation"), 0o600); err != nil {
@@ -456,22 +456,19 @@ func TestBuildV2MutableRetainsPinnedGeneration(t *testing.T) {
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 	src := &imagefile.V2{SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}
 
-	first, err := BuildV2Mutable(src, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
+	first, err := BuildV2(src, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if !store.IsMutable(ref) {
-		t.Fatal("mutable build did not mark ref")
 	}
 	if err := os.WriteFile(prompt, []byte("second generation"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := BuildV2Mutable(src, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
+	second, err := BuildV2(src, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.Digest == second.Digest {
-		t.Fatal("mutable rebuild did not change digest")
+		t.Fatal("rebuilt content did not change the ref id")
 	}
 	if pinned, err := store.InspectPinned(ref, first.Digest); err != nil || pinned.Digest != first.Digest {
 		t.Fatalf("inspect pinned generation = %#v, %v", pinned, err)
@@ -485,11 +482,11 @@ func TestBuildV2MutableRetainsPinnedGeneration(t *testing.T) {
 	}
 }
 
-func TestBuildV2MutableArchiveReturnsPublishedBytes(t *testing.T) {
+func TestBuildV2ArchiveReturnsPublishedBytes(t *testing.T) {
 	store := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "reviewer", Tag: "latest"}
 
-	manifest, archive, err := BuildV2MutableArchive(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
+	manifest, archive, err := BuildV2Archive(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, store, fixedClock(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,8 +515,8 @@ func TestPortableV2ArchiveRejectsUnmanifestedHarnessSkills(t *testing.T) {
 	}
 	archive = appendArchiveMember(t, archive, "skills/evil/SKILL.md", "do not run")
 	target := &Store{Dir: t.TempDir()}
-	if err := target.InstallPortableArchive(ref, archive); err == nil || !strings.Contains(err.Error(), "unexpected schema-v2 image member") {
-		t.Fatalf("InstallPortableArchive error = %v", err)
+	if _, err := target.InstallArchive(ref, archive); err == nil || !strings.Contains(err.Error(), "unexpected schema-v2 image member") {
+		t.Fatalf("InstallArchive error = %v", err)
 	}
 }
 
@@ -536,8 +533,8 @@ func TestPortableV2ArchiveRejectsTrailingTemplateJSON(t *testing.T) {
 	archive = rewriteArchiveMember(t, archive, "prompt/template.json", func(body []byte) []byte {
 		return append(body, []byte("\n{}")...)
 	})
-	if err := (&Store{Dir: t.TempDir()}).InstallPortableArchive(ref, archive); err == nil || !strings.Contains(err.Error(), "multiple JSON values") {
-		t.Fatalf("InstallPortableArchive error = %v", err)
+	if _, err := (&Store{Dir: t.TempDir()}).InstallArchive(ref, archive); err == nil || !strings.Contains(err.Error(), "multiple JSON values") {
+		t.Fatalf("InstallArchive error = %v", err)
 	}
 }
 

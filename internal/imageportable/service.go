@@ -139,13 +139,14 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	if err != nil {
 		return Preview{}, err
 	}
-	actual := sha256.Sum256(body)
-	if hex.EncodeToString(actual[:]) != meta.Digest {
-		return Preview{}, errors.New("image portable: image digest mismatch")
-	}
 	inner, err := image.ValidatePortableArchiveContract(body, ref, s.ExternalPlugins)
 	if err != nil {
 		return Preview{}, fmt.Errorf("image portable: invalid runnable artifact: %w", err)
+	}
+	// Transport integrity is checked while staging; this compares the ref
+	// identity the producer recorded with the one the artifact resolves to.
+	if inner.Digest != meta.Digest {
+		return Preview{}, errors.New("image portable: image digest mismatch")
 	}
 	if len(inner.Plugins) != len(meta.Plugins) {
 		return Preview{}, errors.New("image portable: plugin metadata mismatch")
@@ -211,23 +212,14 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 		return Result{}, fmt.Errorf("image portable: incompatible runnable artifact: %w", err)
 	}
 	candidateArchive := body
-	if target.String() != preview.Ref {
-		staged := &image.Store{Dir: filepath.Join(stage, ".retagged")}
-		candidate, err = staged.RetagMutableArchiveManifest(source, target, body)
-		if err != nil {
-			return Result{}, err
-		}
-		candidateArchive, err = staged.ArchiveBytes(target)
+	if target.Name != source.Name {
+		candidateArchive, candidate, err = image.RetagArchiveBytes(source, target, body)
 		if err != nil {
 			return Result{}, err
 		}
 	}
 	store := s.imageStore()
-	committed := func(string, string) (bool, error) { return false, nil }
-	if s.Snapshots != nil && s.Snapshots.DB != nil {
-		committed = (imageprovenance.Store{DB: s.Snapshots.DB}).IsCommitted
-	}
-	if err := store.RecoverMutablePublications(committed); err != nil {
+	if err := store.Migrate(); err != nil {
 		return Result{}, err
 	}
 	targetExists := store.Exists(target)
@@ -248,25 +240,12 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 			return Result{}, err
 		}
 	}
-	publication, err := store.BeginMutablePublication([]image.PublicationCandidate{{Ref: target, Digest: candidate.Digest}})
+	published, err := store.InstallArchive(target, candidateArchive)
 	if err != nil {
 		return Result{}, err
 	}
-	rollback := func(cause error) error {
-		if rollbackErr := publication.Rollback(); rollbackErr != nil {
-			return errors.Join(cause, fmt.Errorf("roll back image import: %w", rollbackErr))
-		}
-		return cause
-	}
-	published, err := store.InstallMutableArchive(target, candidateArchive)
-	if err != nil {
-		return Result{}, rollback(err)
-	}
 	if published.Digest != candidate.Digest {
-		return Result{}, rollback(errors.New("image portable: installed digest mismatch"))
-	}
-	if err := publication.Complete(); err != nil {
-		return Result{}, rollback(err)
+		return Result{}, errors.New("image portable: installed digest mismatch")
 	}
 	_ = os.RemoveAll(stage)
 	return Result{Ref: target.String(), Digest: published.Digest, Reused: targetExists && previousDigest == published.Digest}, nil
