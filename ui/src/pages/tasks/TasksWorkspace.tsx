@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useOptionalDaemons } from "@/components/DaemonProvider"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
@@ -36,18 +36,15 @@ import {
   type TaskStatusView,
   type WorkflowExecutionView,
 } from "@/lib/tasks"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import QueueSettings from "./QueueSettings"
-import { TaskFilterBar } from "./TaskFilterBar"
+import { TaskFilterBar, type TaskPrincipalFilter } from "./TaskFilterBar"
 import TaskDetail from "./TaskDetail"
 import TaskForm from "./TaskForm"
 import TaskTree from "./TaskTree"
-import TasksNavigation, { type TasksView } from "./TasksNavigation"
 import {
   defaultTaskDetailWidth,
-  DEFAULT_TASK_NAVIGATION_WIDTH,
-  MAX_TASK_NAVIGATION_WIDTH,
   MIN_TASK_DETAIL_WIDTH,
-  MIN_TASK_NAVIGATION_WIDTH,
   useTaskPanelWidths,
 } from "./useTaskPanelWidths"
 import "./tasks.css"
@@ -71,25 +68,21 @@ type TasksWorkspaceProps = {
   onNotificationsChanged?: () => void
 }
 
-const TASK_CENTER_MIN_WIDTH = 360
 function TaskPanelResizeHandle({
-  panel,
   width,
   maximum,
   workspaceRef,
   onResize,
 }: {
-  panel: "navigation" | "detail"
   width: number
   maximum: number
   workspaceRef: React.RefObject<HTMLDivElement | null>
   onResize: (width: number) => void
 }) {
   const cleanupDragRef = useRef<(() => void) | null>(null)
-  const navigation = panel === "navigation"
-  const minimum = navigation ? MIN_TASK_NAVIGATION_WIDTH : MIN_TASK_DETAIL_WIDTH
-  const defaultWidth = navigation ? DEFAULT_TASK_NAVIGATION_WIDTH : defaultTaskDetailWidth()
-  const label = navigation ? "Resize task navigation" : "Resize task details"
+  const minimum = MIN_TASK_DETAIL_WIDTH
+  const defaultWidth = defaultTaskDetailWidth()
+  const label = "Resize task details"
   const resize = (requestedWidth: number) => {
     onResize(Math.min(requestedWidth, maximum))
   }
@@ -110,7 +103,7 @@ function TaskPanelResizeHandle({
       if (isDifferentPointer(moveEvent.pointerId)) return
       const bounds = workspaceRef.current?.getBoundingClientRect()
       if (!bounds) return
-      resize(navigation ? moveEvent.clientX - bounds.left : bounds.right - moveEvent.clientX)
+      resize(bounds.right - moveEvent.clientX)
     }
     const cleanup = () => {
       if (finished) return
@@ -156,7 +149,7 @@ function TaskPanelResizeHandle({
   }
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    const step = (event.shiftKey ? 32 : 8) * (navigation ? 1 : -1)
+    const step = (event.shiftKey ? 32 : 8) * -1
     if (event.key === "ArrowLeft") {
       event.preventDefault()
       resize(width - step)
@@ -193,12 +186,7 @@ function TasksWorkspaceContent({
   onNotificationsChanged,
 }: TasksWorkspaceProps) {
   const workspaceRef = useRef<HTMLDivElement | null>(null)
-  const {
-    navigationWidth,
-    detailWidth,
-    setNavigationWidth,
-    setDetailWidth,
-  } = useTaskPanelWidths()
+  const { detailWidth, setDetailWidth } = useTaskPanelWidths()
   const [workspaceWidth, setWorkspaceWidth] = useState(0)
   useEffect(() => {
     const workspace = workspaceRef.current
@@ -213,10 +201,6 @@ function TasksWorkspaceContent({
       window.removeEventListener("resize", measure)
     }
   }, [])
-  const navigationMaximum = workspaceWidth > 0
-    ? Math.min(MAX_TASK_NAVIGATION_WIDTH, Math.max(MIN_TASK_NAVIGATION_WIDTH, workspaceWidth - TASK_CENTER_MIN_WIDTH - 4))
-    : MAX_TASK_NAVIGATION_WIDTH
-  const effectiveNavigationWidth = Math.min(navigationWidth, navigationMaximum)
   const detailMaximum = workspaceWidth > 0
     ? Math.max(MIN_TASK_DETAIL_WIDTH, workspaceWidth - 80)
     : Math.max(MIN_TASK_DETAIL_WIDTH, (globalThis.innerWidth || 820) - 80)
@@ -226,7 +210,8 @@ function TasksWorkspaceContent({
   const [metadataError, setMetadataError] = useState("")
   const [tasks, setTasks] = useState<Task[]>([])
   const [notifications, setNotifications] = useState<TaskNotification[]>([])
-  const [view, setView] = useState<TasksView>("all")
+  const [view, setView] = useState<TaskPrincipalFilter>("")
+  const [queuesOpen, setQueuesOpen] = useState(false)
   const [statusView, setStatusView] = useState<TaskStatusView>("active")
   const [queue, setQueue] = useState("")
   const [query, setQuery] = useState("")
@@ -247,12 +232,8 @@ function TasksWorkspaceContent({
   const detailRequestRef = useRef(0)
   const mountedRef = useRef(true)
   const realtimeRefreshRef = useRef({ running: false, pending: false, scheduled: false })
-  const principalFilter = !scopeAgent && (view === "mine" || view === "waiting")
-    ? principals?.customer
-    : undefined
-  const principalMetadataError = !scopeAgent && (view === "mine" || view === "waiting")
-    ? metadataError
-    : ""
+  const principalFilter = !scopeAgent && view !== "" ? principals?.customer : undefined
+  const principalMetadataError = !scopeAgent && view !== "" ? metadataError : ""
 
   const loadMetadata = useCallback(async () => {
     const request = ++metadataRequestRef.current
@@ -277,9 +258,8 @@ function TasksWorkspaceContent({
   }, [target])
 
   const loadTree = useCallback(async () => {
-    if (view === "queues") return
     const request = ++treeRequestRef.current
-    if (!scopeAgent && (view === "mine" || view === "waiting") && !principalFilter) {
+    if (!scopeAgent && view !== "" && !principalFilter) {
       setLoading(!principalMetadataError)
       setRefreshing(false)
       return
@@ -289,7 +269,6 @@ function TasksWorkspaceContent({
     else setRefreshing(true)
     try {
       const filters: Parameters<typeof listTasks>[0] = {
-        queue,
         text: query,
         scope_agent: scopeAgent,
         status_view: statusView,
@@ -323,7 +302,7 @@ function TasksWorkspaceContent({
         if (!initial) setRefreshing(false)
       }
     }
-  }, [principalFilter, principalMetadataError, query, queue, scopeAgent, statusView, target, view])
+  }, [principalFilter, principalMetadataError, query, scopeAgent, statusView, target, view])
 
   const loadDetail = useCallback(async (key: string) => {
     const refreshingSelection = selectedKeyRef.current === key
@@ -603,90 +582,88 @@ function TasksWorkspaceContent({
     [notifications],
   )
 
+  // The queue filter is applied here rather than in `listTasks`, so the queue
+  // menu can count the queues from the same load instead of asking again.
+  const visibleTasks = useMemo(
+    () => queue ? tasks.filter((task) => task.queue === queue) : tasks,
+    [queue, tasks],
+  )
+  const queueCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const task of tasks) counts.set(task.queue, (counts.get(task.queue) ?? 0) + 1)
+    return counts
+  }, [tasks])
+
   return (
     <div
       ref={workspaceRef}
       className="tasks-workspace"
       data-testid="tasks-workspace"
       data-scope-agent={scopeAgent ?? ""}
-      style={{
-        "--tasks-navigation-width": `${effectiveNavigationWidth}px`,
-      } as CSSProperties}
     >
-      <TasksNavigation
-        view={view}
-        onView={setView}
-        queues={queues}
-        queue={queue}
-        onQueue={setQueue}
-      />
-      <TaskPanelResizeHandle
-        panel="navigation"
-        width={effectiveNavigationWidth}
-        maximum={navigationMaximum}
-        workspaceRef={workspaceRef}
-        onResize={setNavigationWidth}
-      />
       <main className="tasks-center">
-        {(view === "all" || view === "mine" || view === "waiting") && (
-          <>
-            <header className="flex items-center gap-2.5 px-4 pt-3.5 text-[13px]">
-              <h2 className="font-medium">
-                {view === "all" ? "All tasks" : view === "mine" ? "My tasks" : "Waiting for me"}
-              </h2>
-            </header>
-            <TaskFilterBar
-              mode={mode}
-              query={query}
-              onQuery={setQuery}
-              statusView={statusView}
-              onStatusView={setStatusView}
-              scopeAgent={scopeAgent}
-              refreshing={refreshing}
-              onRefresh={() => {
-                if (!scopeAgent && (view === "mine" || view === "waiting") && !principalFilter) void loadMetadata()
-                else void loadTree()
-              }}
-              onCreate={startCreate}
-            />
-            {creatingParent === "" && (
-              <TaskForm queues={queues} initialQueue={queue} onCreate={create} onCancel={() => setCreatingParent(null)} />
-            )}
-            {principalMetadataError && !principalFilter
-              ? <div className="tasks-empty" role="alert">{principalMetadataError}</div>
-              : loading ? <div className="tasks-empty">Loading tasks…</div> : (
-              <TaskTree
-                tasks={tasks}
-                mode={mode}
-                activeQuestionTaskKeys={activeQuestionTaskKeys}
-                expanded={expanded}
-                selectedKey={selectedKey}
-                onToggle={(key) => setExpanded((current) => {
-                  const next = new Set(current)
-                  if (next.has(key)) next.delete(key)
-                  else next.add(key)
-                  return next
-                })}
-                onSelect={(key) => void loadDetail(key)}
-                onAddChild={setCreatingParent}
-                onMove={(key, parentKey, beforeKey) => void performMove(key, parentKey, beforeKey)}
-              />
-            )}
-            {creatingParent && (
-              <TaskForm
-                queues={queues}
-                initialQueue={tasks.find((task) => task.key === creatingParent)?.queue || queue}
-                parentKey={creatingParent}
-                onCreate={create}
-                onCancel={() => setCreatingParent(null)}
-              />
-            )}
-          </>
+        <TaskFilterBar
+          mode={mode}
+          query={query}
+          onQuery={setQuery}
+          statusView={statusView}
+          onStatusView={setStatusView}
+          principalFilter={view}
+          onPrincipalFilter={setView}
+          queues={queues}
+          queue={queue}
+          onQueue={setQueue}
+          queueCounts={queueCounts}
+          onManageQueues={() => setQueuesOpen(true)}
+          scopeAgent={scopeAgent}
+          refreshing={refreshing}
+          onRefresh={() => {
+            if (!scopeAgent && view !== "" && !principalFilter) void loadMetadata()
+            else void loadTree()
+          }}
+          onCreate={startCreate}
+        />
+        {creatingParent === "" && (
+          <TaskForm queues={queues} initialQueue={queue} onCreate={create} onCancel={() => setCreatingParent(null)} />
         )}
-        {view === "queues" && (
-          <QueueSettings queues={queues} onCreate={createQueue} onUpdate={updateQueue} target={target} />
+        {principalMetadataError && !principalFilter
+          ? <div className="tasks-empty" role="alert">{principalMetadataError}</div>
+          : loading ? <div className="tasks-empty">Loading tasks…</div> : (
+          <TaskTree
+            tasks={visibleTasks}
+            mode={mode}
+            activeQuestionTaskKeys={activeQuestionTaskKeys}
+            expanded={expanded}
+            selectedKey={selectedKey}
+            onToggle={(key) => setExpanded((current) => {
+              const next = new Set(current)
+              if (next.has(key)) next.delete(key)
+              else next.add(key)
+              return next
+            })}
+            onSelect={(key) => void loadDetail(key)}
+            onAddChild={setCreatingParent}
+            onMove={(key, parentKey, beforeKey) => void performMove(key, parentKey, beforeKey)}
+          />
+        )}
+        {creatingParent && (
+          <TaskForm
+            queues={queues}
+            initialQueue={tasks.find((task) => task.key === creatingParent)?.queue || queue}
+            parentKey={creatingParent}
+            onCreate={create}
+            onCancel={() => setCreatingParent(null)}
+          />
         )}
       </main>
+      <Sheet open={queuesOpen} onOpenChange={setQueuesOpen}>
+        <SheetContent className="w-[340px] gap-0 p-0 sm:max-w-[340px]">
+          <SheetHeader className="px-4 pt-4 pb-2">
+            <SheetTitle className="text-[14px] font-semibold">Queues</SheetTitle>
+          </SheetHeader>
+          <QueueSettings queues={queues} onCreate={createQueue} onUpdate={updateQueue} target={target} />
+        </SheetContent>
+      </Sheet>
       {detail && (
         <TaskDetail
           key={detail.task.key}
@@ -695,7 +672,6 @@ function TasksWorkspaceContent({
           principals={principals}
           width={effectiveDetailWidth}
           resizeHandle={<TaskPanelResizeHandle
-            panel="detail"
             width={effectiveDetailWidth}
             maximum={detailMaximum}
             workspaceRef={workspaceRef}
