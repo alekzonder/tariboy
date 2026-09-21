@@ -170,7 +170,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
 }) => {
   test.setTimeout(60_000);
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
-  await expect(page.getByLabel("Search all tasks")).toBeVisible();
+  await expect(page.getByLabel("Search tasks")).toBeVisible();
 
   await page.getByRole("button", { name: "Queue: all" }).click();
   await page.getByRole("menuitem", { name: "Manage queues…" }).click();
@@ -271,7 +271,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByText("Please confirm the browser workflow")).toBeVisible();
 
   await page.reload();
-  await expect(page.getByLabel("Search all tasks")).toBeVisible();
+  await expect(page.getByLabel("Search tasks")).toBeVisible();
   await page.getByRole("button", { name: "Waiting for me" }).click();
   await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
   await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();

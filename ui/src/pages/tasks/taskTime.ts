@@ -16,3 +16,24 @@ export function formatTaskTime(iso: string, now = new Date()): string {
   if (days >= 0 && days < 7) return at.toLocaleDateString("en-US", { weekday: "short" })
   return at.toLocaleDateString("en-US", { day: "numeric", month: "short" })
 }
+
+/** How long a task has been worked: creation to completion, or to now while it
+ *  is still open. Read down a column beside the clock, so it is compact and
+ *  never longer than two units. */
+export function formatTaskDuration(
+  task: { created_at: string; completed_at: string },
+  now = new Date(),
+): string {
+  if (!task.created_at) return "—"
+  const from = new Date(task.created_at)
+  const to = task.completed_at ? new Date(task.completed_at) : now
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return "—"
+  const seconds = Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000))
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 1) return `${seconds}s`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 1) return `${minutes}m`
+  const days = Math.floor(hours / 24)
+  if (days < 1) return minutes % 60 === 0 ? `${hours}h` : `${hours}h ${minutes % 60}m`
+  return hours % 24 === 0 ? `${days}d` : `${days}d ${hours % 24}h`
+}
