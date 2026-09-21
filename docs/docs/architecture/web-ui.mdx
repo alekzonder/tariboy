@@ -275,7 +275,7 @@ Tasks uses one reusable workspace at `/servers/:hostId/tasks` and inside each
 Agent tab. The server route shows every task visible on that host;
 an Agent tab sends
 `scope_agent=<name>` to render only that agent's inherited view. The tree fills
-all remaining width after task navigation and is expandable, ordered at every
+the full width of the island and is expandable, ordered at every
 depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
@@ -297,15 +297,35 @@ with its error code, or an unanswered customer question — and other statuses
 speak through the status pill alone. History rows read as time, kind, a
 one-line `key value · key value` payload summary and actor; the panel never
 prints a raw JSON payload.
-On desktop-width layouts, a keyboard- and pointer-accessible separator resizes
-the left task navigation. Arrow keys move the separator, Shift increases the
-step, Home and double-click restore its default,
-and the clamped navigation width persists in the versioned WebView localStorage
-record `tasks:workspace:v1` alongside the detail width. Route changes and app
-reloads restore that record.
-An active resize reserves the tree's minimum usable width. At responsive
-breakpoints, fixed or hidden mobile navigation takes precedence; the inactive
-separator is hidden without discarding the stored desktop navigation width.
+The detail sheet's own keyboard- and pointer-accessible separator is the only
+one the workspace has. Arrow keys move it, Shift increases the step, Home and
+double-click restore its default, and the clamped width persists in the
+versioned WebView localStorage record `tasks:workspace:v1`. Route changes and
+app reloads restore that record; a record written before the task rail was
+removed still reads, its rail width ignored.
+
+One toolbar sits above the table in both places. It carries the search field,
+the `Active | Closed | All` segment, the queue control, the `My tasks` and
+`Waiting for me` chips — off by default, and still the daemon's `assignee` and
+`waiting_for` filters — the agent chip in an Agent tab, refresh, and
+**New task**. The queue control opens a menu of `All queues` and every queue
+with the number of tasks it contributes to the current list, and
+`Manage queues…` under a separator opens queue settings as a 340px right sheet:
+one card per queue with its agents, a `Rename` section over the existing
+`PATCH`, a `Workflow` section, and a footer that creates a queue. The queue
+filter is applied in the client so that menu can count from the load the tree
+already performs; `scope_agent`, `status_view`, the text search, `assignee` and
+`waiting_for` stay daemon-side. A new task is created in the selected queue,
+or in the first queue when `All queues` is selected.
+
+The table header and its rows read one set of column widths, so a column cannot
+drift from its heading. `Key` is a fixed 168px holding the tree indents, the
+chevron and the key, which truncates rather than wrapping; `Task` takes the
+rest. The agent table adds `Pri` and `Duration` — creation to completion, or to
+now while the task is open — and the server table adds `Agent`. There is no
+`Queue` column: the key prefix already names the queue. In the server table the
+header is sticky. The drag grip lives in the row's left padding and appears on
+hover.
 
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
