@@ -57,18 +57,6 @@ export default function QueueSettings({
 
   return (
     <section className="task-queues" aria-label="Queue settings">
-      <header>
-        <button type="button" onClick={() => setCreating((current) => !current)}>New queue</button>
-      </header>
-      {creating && (
-        <form onSubmit={(event) => void submit(event)}>
-          <label>Queue prefix<Input aria-label="Queue prefix" value={prefix} placeholder="NEW-QUEUE" onChange={(event) => setPrefix(event.target.value.toUpperCase())} /></label>
-          <label>Queue name<Input aria-label="New queue name" value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label>Owner agents<Input value={owners} placeholder="alice, agent:bob" onChange={(event) => setOwners(event.target.value)} /></label>
-          <label>Responsible agent<Input value={responsible} onChange={(event) => setResponsible(event.target.value)} /></label>
-          <div><button type="submit" disabled={!prefix.trim() || !name.trim()}>Add queue</button><button type="button" onClick={() => setCreating(false)}>Cancel</button></div>
-        </form>
-      )}
       <div className="task-queue-list">
         {queues.map((queue) => (
           <article key={`${queue.prefix}:${queue.revision}`}>
@@ -124,6 +112,18 @@ export default function QueueSettings({
           </article>
         ))}
       </div>
+      <footer>
+        <button type="button" onClick={() => setCreating((current) => !current)}>New queue</button>
+        {creating && (
+          <form onSubmit={(event) => void submit(event)}>
+            <label>Queue prefix<Input aria-label="Queue prefix" value={prefix} placeholder="NEW-QUEUE" onChange={(event) => setPrefix(event.target.value.toUpperCase())} /></label>
+            <label>Queue name<Input aria-label="New queue name" value={name} onChange={(event) => setName(event.target.value)} /></label>
+            <label>Owner agents<Input value={owners} placeholder="alice, agent:bob" onChange={(event) => setOwners(event.target.value)} /></label>
+            <label>Responsible agent<Input value={responsible} onChange={(event) => setResponsible(event.target.value)} /></label>
+            <div><button type="submit" disabled={!prefix.trim() || !name.trim()}>Add queue</button><button type="button" onClick={() => setCreating(false)}>Cancel</button></div>
+          </form>
+        )}
+      </footer>
     </section>
   )
 }
