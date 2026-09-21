@@ -38,7 +38,7 @@ function move(ids: string[], active: string, over: string): string[] {
  * border and no surface of its own, and only the list between the tabs and the
  * foot scrolls.
  */
-export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
+export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onUpdateAll, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
   hosts: HostAgents[];
   selectedHostId?: string;
   selected?: { hostId: string; agent: string };
@@ -50,6 +50,7 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
   onCreate: (hostId: string) => void;
   onAddServer: () => void;
   onEditServer: (hostId: string) => void;
+  onUpdateAll: (hostIds: string[]) => void;
   onRemoveServer: (hostId: string) => void;
   daemonViews: DaemonMeta[];
   appVersion: string;
@@ -197,6 +198,7 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
                 onSelectTeam,
                 onCreate,
                 onEditServer,
+                onUpdateAll,
                 onRemoveServer,
                 onConnectHost,
               }}
