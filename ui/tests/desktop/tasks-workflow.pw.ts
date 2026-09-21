@@ -24,9 +24,11 @@ test("configures and inspects managed tasks in the production Desktop", async ({
   `)
   await expect.poll(() => desktop.execute<string>("return window.__workflowSetup || '';"), { timeout: 60_000 }).toBe("ready")
   await desktop.execute(`window.location.hash = "#/servers/local/tasks"; return true;`)
-  await expect.poll(() => desktop.execute<string>("return document.body?.innerText || '';"), { timeout: 30_000 }).toContain("Queues")
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Queues']"))
+  await expect.poll(() => desktop.execute<string>("return document.body?.innerText || '';"), { timeout: 30_000 }).toContain("Queue:")
+  await desktop.elementClick(await desktop.findElement("xpath", "//button[starts-with(@aria-label,'Queue:')]"))
+  await desktop.elementClick(await desktop.findElement("xpath", "//*[@role='menuitem'][contains(normalize-space(.),'Manage queues')]"))
   await expect.poll(() => desktop.execute<string>("return document.body?.innerText || '';" )).toContain("Workflow Desktop")
+  await desktop.elementClick(await desktop.findElement("css selector", '[aria-label="Workflow settings WFD"]'))
 
   await desktop.elementSendKeys(await desktop.findElement("css selector", '[aria-label="Pool name WFD"]'), "workers")
   await desktop.elementSendKeys(await desktop.findElement("css selector", '[aria-label="Pool agents WFD"]'), "workflow-desktop, workflow-desktop-qa")

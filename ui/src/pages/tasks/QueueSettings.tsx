@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { ApiError, type ApiTarget } from "@/lib/api"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -32,6 +33,8 @@ export default function QueueSettings({
   target?: ApiTarget
 }) {
   const [creating, setCreating] = useState(false)
+  // One card section at a time: the sheet is 340px wide.
+  const [open, setOpen] = useState("")
   const [prefix, setPrefix] = useState("")
   const [name, setName] = useState("")
   const [owners, setOwners] = useState("")
@@ -53,39 +56,71 @@ export default function QueueSettings({
   }
 
   return (
-    <section className="task-queues">
-      <header><h2>Queues</h2><button type="button" onClick={() => setCreating(true)}>New queue</button></header>
+    <section className="task-queues" aria-label="Queue settings">
+      <header>
+        <button type="button" onClick={() => setCreating((current) => !current)}>New queue</button>
+      </header>
       {creating && (
         <form onSubmit={(event) => void submit(event)}>
-          <label>Queue prefix<Input aria-label="Queue prefix" value={prefix} onChange={(event) => setPrefix(event.target.value)} /></label>
+          <label>Queue prefix<Input aria-label="Queue prefix" value={prefix} placeholder="NEW-QUEUE" onChange={(event) => setPrefix(event.target.value.toUpperCase())} /></label>
           <label>Queue name<Input aria-label="New queue name" value={name} onChange={(event) => setName(event.target.value)} /></label>
           <label>Owner agents<Input value={owners} placeholder="alice, agent:bob" onChange={(event) => setOwners(event.target.value)} /></label>
           <label>Responsible agent<Input value={responsible} onChange={(event) => setResponsible(event.target.value)} /></label>
-          <div><button type="submit" disabled={!prefix.trim() || !name.trim()}>Create queue</button><button type="button" onClick={() => setCreating(false)}>Cancel</button></div>
+          <div><button type="submit" disabled={!prefix.trim() || !name.trim()}>Add queue</button><button type="button" onClick={() => setCreating(false)}>Cancel</button></div>
         </form>
       )}
       <div className="task-queue-list">
         {queues.map((queue) => (
           <article key={`${queue.prefix}:${queue.revision}`}>
-            <strong>{queue.prefix}</strong><h3>{queue.name}</h3>
-            <form onSubmit={(event) => {
-              event.preventDefault()
-              const values = new FormData(event.currentTarget)
-              void onUpdate(queue.prefix, {
-                name: String(values.get("name") ?? "").trim(),
-                description: String(values.get("description") ?? "").trim(),
-                owners: String(values.get("owners") ?? "").split(",").map((value) => value.trim()).filter(Boolean),
-                responsible_agent: String(values.get("responsible") ?? "").trim(),
-                revision: queue.revision,
-              })
-            }}>
-              <label>Queue name<Input name="name" aria-label={`Queue name ${queue.prefix}`} defaultValue={queue.name} /></label>
-              <label>Description<Textarea name="description" aria-label={`Queue description ${queue.prefix}`} defaultValue={queue.description} /></label>
-              <label>Owner agents<Input name="owners" aria-label={`Queue owners ${queue.prefix}`} defaultValue={queue.owners.join(", ")} /></label>
-              <label>Responsible agent<Input name="responsible" aria-label={`Queue triager ${queue.prefix}`} defaultValue={queue.responsible_agent} /></label>
-              <button type="submit">Save {queue.prefix}</button>
-            </form>
-            <QueueWorkflowEditor queue={queue} target={target} />
+            <div className="task-queue-card-head">
+              <strong>{queue.prefix}</strong>
+              <h3>{queue.name}</h3>
+            </div>
+            <p className="task-queue-card-agents">
+              Agents: <span>{queue.owners.length > 0 ? queue.owners.join(", ") : "—"}</span>
+            </p>
+            <div className="task-queue-card-actions">
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                aria-label={`Rename ${queue.prefix}`}
+                aria-expanded={open === `name:${queue.prefix}`}
+                onClick={() => setOpen((current) => current === `name:${queue.prefix}` ? "" : `name:${queue.prefix}`)}
+              >
+                Rename
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="secondary"
+                aria-label={`Workflow settings ${queue.prefix}`}
+                aria-expanded={open === `workflow:${queue.prefix}`}
+                onClick={() => setOpen((current) => current === `workflow:${queue.prefix}` ? "" : `workflow:${queue.prefix}`)}
+              >
+                Workflow
+              </Button>
+            </div>
+            {open === `name:${queue.prefix}` && (
+              <form onSubmit={(event) => {
+                event.preventDefault()
+                const values = new FormData(event.currentTarget)
+                void onUpdate(queue.prefix, {
+                  name: String(values.get("name") ?? "").trim(),
+                  description: String(values.get("description") ?? "").trim(),
+                  owners: String(values.get("owners") ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+                  responsible_agent: String(values.get("responsible") ?? "").trim(),
+                  revision: queue.revision,
+                })
+              }}>
+                <label>Queue name<Input name="name" aria-label={`Queue name ${queue.prefix}`} defaultValue={queue.name} /></label>
+                <label>Description<Textarea name="description" aria-label={`Queue description ${queue.prefix}`} defaultValue={queue.description} /></label>
+                <label>Owner agents<Input name="owners" aria-label={`Queue owners ${queue.prefix}`} defaultValue={queue.owners.join(", ")} /></label>
+                <label>Responsible agent<Input name="responsible" aria-label={`Queue triager ${queue.prefix}`} defaultValue={queue.responsible_agent} /></label>
+                <button type="submit">Save {queue.prefix}</button>
+              </form>
+            )}
+            {open === `workflow:${queue.prefix}` && <QueueWorkflowEditor queue={queue} target={target} />}
           </article>
         ))}
       </div>

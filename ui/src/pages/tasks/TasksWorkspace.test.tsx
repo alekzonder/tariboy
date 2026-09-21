@@ -296,9 +296,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />)
 
     const workspace = await screen.findByTestId("tasks-workspace")
-    expect(workspace.style.getPropertyValue("--tasks-navigation-width")).toBe("280px")
     expect(workspace.style.getPropertyValue("--tasks-detail-width")).toBe("")
-    expect(screen.getByRole("separator", { name: "Resize task navigation" })).toHaveAttribute("aria-valuenow", "280")
     expect(screen.queryByRole("separator", { name: "Resize task details" })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
@@ -317,20 +315,25 @@ describe("TasksWorkspace", () => {
     vi.unstubAllGlobals()
   })
 
-  it("resizes navigation with the keyboard and retains the legacy storage record", async () => {
+  it("resizes the detail sheet with the keyboard and keeps the legacy storage record readable", async () => {
+    localStorage.setItem("tasks:workspace:v1", JSON.stringify({
+      schemaVersion: 1,
+      navigationWidth: 280,
+      detailWidth: 512,
+    }))
     render(<TasksWorkspace />)
-    await screen.findByTestId("tasks-workspace")
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
 
-    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task navigation" }), { key: "ArrowRight" })
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task details" }), { key: "ArrowRight" })
+    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
+      .toEqual({ schemaVersion: 1, detailWidth: 504 })
 
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task details" }), { key: "Home" })
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 216, detailWidth: 512 })
-    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize task navigation" }), { key: "Home" })
-    expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 512 })
+      .toEqual({ schemaVersion: 1, detailWidth: 512 })
   })
 
-  it("drags panel handles, stops at pointer-up, and resets on double-click", async () => {
+  it("drags the detail handle, stops at pointer-up, and resets on double-click", async () => {
     render(<TasksWorkspace />)
     const workspace = await screen.findByTestId("tasks-workspace")
     vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
@@ -345,18 +348,19 @@ describe("TasksWorkspace", () => {
       toJSON: () => ({}),
     })
     fireEvent(window, new Event("resize"))
-    const navigationHandle = screen.getByRole("separator", { name: "Resize task navigation" })
+    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    const handle = screen.getByRole("separator", { name: "Resize task details" })
 
-    fireEvent.pointerDown(navigationHandle, { pointerId: 1, button: 0, isPrimary: true })
+    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, isPrimary: true })
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 420 })
     fireEvent.pointerUp(window, { pointerId: 1 })
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 300 })
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ navigationWidth: 320 })
+      .toMatchObject({ detailWidth: 780 })
 
-    fireEvent.doubleClick(navigationHandle)
+    fireEvent.doubleClick(handle)
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toEqual({ schemaVersion: 1, navigationWidth: 208, detailWidth: 512 })
+      .toEqual({ schemaVersion: 1, detailWidth: 512 })
   })
 
   it("cleans up an active resize on pointer cancellation and unmount", async () => {
@@ -366,27 +370,29 @@ describe("TasksWorkspace", () => {
       x: 0, y: 0, left: 0, right: 1400, top: 0, bottom: 800, width: 1400, height: 800,
       toJSON: () => ({}),
     })
-    const handle = screen.getByRole("separator", { name: "Resize task navigation" })
+    fireEvent(window, new Event("resize"))
+    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    const handle = screen.getByRole("separator", { name: "Resize task details" })
 
     fireEvent.pointerDown(handle, { pointerId: 7, button: 0, isPrimary: true })
-    fireEvent.pointerMove(window, { pointerId: 7, clientX: 280 })
+    fireEvent.pointerMove(window, { pointerId: 7, clientX: 1000 })
     fireEvent.pointerCancel(window, { pointerId: 7 })
-    fireEvent.pointerMove(window, { pointerId: 7, clientX: 340 })
+    fireEvent.pointerMove(window, { pointerId: 7, clientX: 900 })
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ navigationWidth: 280 })
+      .toMatchObject({ detailWidth: 400 })
     expect(document.body.style.cursor).toBe("")
     expect(document.body.style.userSelect).toBe("")
 
     fireEvent.pointerDown(handle, { pointerId: 8, button: 0, isPrimary: true })
     view.unmount()
-    fireEvent.pointerMove(window, { pointerId: 8, clientX: 320 })
+    fireEvent.pointerMove(window, { pointerId: 8, clientX: 800 })
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ navigationWidth: 280 })
+      .toMatchObject({ detailWidth: 400 })
     expect(document.body.style.cursor).toBe("")
     expect(document.body.style.userSelect).toBe("")
   })
 
-  it("clamps navigation resize to preserve the tree", async () => {
+  it("clamps the detail resize to the workspace width", async () => {
     render(<TasksWorkspace />)
     const workspace = await screen.findByTestId("tasks-workspace")
     vi.spyOn(workspace, "getBoundingClientRect").mockReturnValue({
@@ -394,17 +400,17 @@ describe("TasksWorkspace", () => {
       toJSON: () => ({}),
     })
     fireEvent(window, new Event("resize"))
-    expect(screen.getByRole("separator", { name: "Resize task navigation" }))
-      .toHaveAttribute("aria-valuemax", "360")
+    await userEvent.click(screen.getByRole("button", { name: /Ship native tasks/ }))
+    const handle = screen.getByRole("separator", { name: "Resize task details" })
+    expect(handle).toHaveAttribute("aria-valuemax", "1020")
 
-    fireEvent.pointerDown(screen.getByRole("separator", { name: "Resize task navigation" }), {
-      pointerId: 9, button: 0, isPrimary: true,
-    })
-    fireEvent.pointerMove(window, { pointerId: 9, clientX: 5000 })
+    fireEvent.pointerDown(handle, { pointerId: 9, button: 0, isPrimary: true })
+    fireEvent.pointerMove(window, { pointerId: 9, clientX: -5000 })
     fireEvent.pointerUp(window, { pointerId: 9 })
 
+    // The handle stops at the workspace, the stored width at the viewport.
     expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
-      .toMatchObject({ navigationWidth: 360, detailWidth: 512 })
+      .toMatchObject({ detailWidth: 944 })
   })
 
   it("opens the task named by an initial deep-link key after loading the workspace", async () => {
@@ -544,7 +550,9 @@ describe("TasksWorkspace", () => {
     api.rebindAgentPool.mockResolvedValue({ id: 4, queue: "TEST", name: "developers", agents: ["dev-a", "dev-b"], revision: 3, created_at: root.created_at, updated_at: root.updated_at })
 
     render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: "Queues" }))
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Workflow settings TEST" }))
     await screen.findByText(/Active: development@1/)
     await userEvent.click(screen.getByRole("button", { name: "Load versions" }))
     await userEvent.selectOptions(await screen.findByLabelText("Published workflow version TEST"), "8")
@@ -567,7 +575,9 @@ describe("TasksWorkspace", () => {
       .mockResolvedValueOnce({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 6, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
 
     render(<TasksWorkspace />)
-    await userEvent.click(await screen.findByRole("button", { name: "Queues" }))
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
+    await userEvent.click(await screen.findByRole("button", { name: "Workflow settings TEST" }))
     expect(await screen.findByRole("alert", { name: "Workflow TEST error" })).toHaveTextContent("permission denied")
     expect(screen.queryByText("Legacy queue (no workflow)")).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole("button", { name: "Retry workflow state TEST" }))
@@ -1107,7 +1117,7 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace scopeAgent="worker" />)
 
     expect(await screen.findByText("Ship native tasks")).toBeInTheDocument()
-    expect(screen.getByRole("combobox", { name: "Queue" })).toHaveValue("")
+    expect(screen.getByRole("button", { name: "Queue: all" })).toBeInTheDocument()
     expect(screen.queryByText("Desktop tree")).toBeNull()
     await userEvent.click(screen.getByRole("button", { name: "Expand TEST-1" }))
     expect(screen.getByText("Desktop tree")).toBeInTheDocument()
@@ -1289,16 +1299,18 @@ describe("TasksWorkspace", () => {
     render(<TasksWorkspace />)
     await screen.findByText("Ship native tasks")
 
-    await userEvent.click(screen.getByRole("button", { name: "Queues" }))
-    await userEvent.click(screen.getByRole("button", { name: "New queue" }))
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
+    await userEvent.click(await screen.findByRole("button", { name: "New queue" }))
     fireEvent.change(screen.getByLabelText("Queue prefix"), { target: { value: "OPS" } })
     fireEvent.change(screen.getByLabelText("New queue name"), { target: { value: "Operations" } })
-    await userEvent.click(screen.getByRole("button", { name: "Create queue" }))
+    await userEvent.click(screen.getByRole("button", { name: "Add queue" }))
     expect(api.createTaskQueue).toHaveBeenCalledWith(
       expect.objectContaining({ prefix: "OPS", name: "Operations" }),
       undefined,
     )
 
+    await userEvent.click(screen.getByRole("button", { name: "Rename TEST" }))
     fireEvent.change(screen.getByLabelText("Queue name TEST"), { target: { value: "Tests updated" } })
     await userEvent.click(screen.getByRole("button", { name: "Save TEST" }))
     expect(api.updateTaskQueue).toHaveBeenCalledWith(
@@ -1307,5 +1319,50 @@ describe("TasksWorkspace", () => {
       undefined,
     )
 
+  })
+  it("replaces the navigation rail with toolbar filters", async () => {
+    render(<TasksWorkspace />)
+    await screen.findByText("Ship native tasks")
+
+    expect(document.querySelector(".tasks-navigation")).toBeNull()
+    expect(screen.queryByRole("separator", { name: "Resize task navigation" })).toBeNull()
+
+    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "false")
+    await userEvent.click(screen.getByRole("button", { name: "My tasks" }))
+    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ assignee: "user:owner" }),
+      undefined,
+    ))
+    expect(screen.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "true")
+
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
+    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ waiting_for: "user:owner" }),
+      undefined,
+    ))
+    expect(api.listTasks.mock.calls.at(-1)?.[0].assignee).toBeUndefined()
+
+    await userEvent.click(screen.getByRole("button", { name: "Waiting for me" }))
+    await waitFor(() => expect(api.listTasks.mock.calls.at(-1)?.[0].waiting_for).toBeUndefined())
+  })
+
+  it("filters the tree by queue from the toolbar without narrowing the daemon request", async () => {
+    const ops: Task = { ...root, key: "OPS-1", queue: "OPS", title: "Rotate credentials" }
+    api.listTaskQueues.mockResolvedValue({
+      queues: [queue, { ...queue, prefix: "OPS", name: "Operations" }],
+      count: 2,
+    })
+    api.listTasks.mockResolvedValue({ tasks: [root, child, ops], sequence: 10 })
+    render(<TasksWorkspace />)
+    await screen.findByText("Ship native tasks")
+    expect(screen.getByText("Rotate credentials")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^TEST/ }))
+
+    expect(await screen.findByRole("button", { name: "Queue: TEST" })).toBeInTheDocument()
+    expect(screen.queryByText("Rotate credentials")).toBeNull()
+    expect(screen.getByText("Ship native tasks")).toBeInTheDocument()
+    for (const call of api.listTasks.mock.calls) expect(call[0].queue).toBeUndefined()
   })
 })

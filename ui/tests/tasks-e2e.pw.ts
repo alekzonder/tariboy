@@ -150,7 +150,9 @@ test("Tasks production workspace publishes and selects a workflow version", asyn
   }
 
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks")
-  await page.getByRole("button", { name: "Queues" }).click()
+  await page.getByRole("button", { name: "Queue: all" }).click()
+  await page.getByRole("menuitem", { name: "Manage queues…" }).click()
+  await page.getByRole("button", { name: "Workflow settings FLOW" }).click()
   await page.getByLabel("Workflow FLOW").getByText("Create definition (JSON)").click()
   await page.getByLabel("Workflow definition FLOW").fill(JSON.stringify(definition))
   await page.getByRole("button", { name: "Validate and publish" }).click()
@@ -168,22 +170,24 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
 }) => {
   test.setTimeout(60_000);
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
-  await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Search all tasks")).toBeVisible();
 
-  await page.getByRole("button", { name: "Queues" }).click();
+  await page.getByRole("button", { name: "Queue: all" }).click();
+  await page.getByRole("menuitem", { name: "Manage queues…" }).click();
   await page.getByRole("button", { name: "New queue" }).click();
   await page.getByLabel("Queue prefix").fill("test");
   await page.getByLabel("New queue name").fill("Tasks E2E");
-  await page.getByRole("button", { name: "Create queue" }).click();
+  await page.getByRole("button", { name: "Add queue" }).click();
   await expect(page.getByRole("heading", { name: "Tasks E2E" })).toBeVisible();
 
+  await page.getByRole("button", { name: "Rename TEST" }).click();
   await page.getByLabel("Queue name TEST").fill("Tasks E2E updated");
   await page.getByLabel("Queue description TEST").fill("Saved through PATCH from a browser origin");
   await page.getByRole("button", { name: "Save TEST" }).click();
   await expect(page.getByText("Queue updated", { exact: true })).toBeVisible();
   await assertNoLoadFailedToast(page);
 
-  await page.getByRole("button", { name: "All tasks" }).click();
+  await page.getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "New task" }).click();
   await page.getByLabel("Task queue").selectOption("TEST");
   await page.getByLabel("Task title").fill("Root task");
@@ -267,7 +271,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByText("Please confirm the browser workflow")).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Search all tasks")).toBeVisible();
   await page.getByRole("button", { name: "Waiting for me" }).click();
   await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
   await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
@@ -277,7 +281,7 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(detail.getByText("Confirmed from the customer")).toBeVisible();
 
   await detail.getByRole("button", { name: "Close task detail" }).click();
-  await page.getByRole("button", { name: "All tasks" }).click();
+  await page.getByRole("button", { name: "Waiting for me" }).click();
   await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
   await detail.getByLabel("Relation type").selectOption("related");
   await detail.getByLabel("Related task key").fill("TEST-3");
@@ -343,8 +347,8 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   }).toBe(true);
 
   await page.getByRole("button", { name: "My tasks" }).click();
-  await expect(page.getByRole("heading", { name: "My tasks" })).toBeVisible();
-  await page.getByRole("button", { name: "All tasks" }).click();
+  await expect(page.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "My tasks" }).click();
   await page.getByLabel("Search tasks").fill("Root task updated");
   await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
   await expect(page.getByTestId("task-row-TEST-3")).toHaveCount(0);
