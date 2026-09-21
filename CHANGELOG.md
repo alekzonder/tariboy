@@ -1,3 +1,39 @@
+## [0.68.0] - 2026-09-21
+
+### Added
+
+- Show why an agent loop halted: a pre-launch failure (an image manifest that
+  does not verify, a missing image skill bridge, an unusable harness) now halts
+  the loop with its cause, records one `iteration_failed` audit event, and shows
+  the halt reason in the agent workspace header next to the message-queue and
+  budget lines, so it is visible on every tab instead of only on Autopilot.
+  Start and Restart clear it.
+- Report how long a task took: the agent task table gains a `Duration` column,
+  measured from creation to completion, or to now while the task is still open.
+
+### Changed
+
+- Rebuild the Tasks workspace around one toolbar. `All tasks`, `My tasks` and
+  `Waiting for me` become toolbar chips, the queue rail becomes a
+  `Queue: <value>` control listing every queue with its task count, and queue
+  administration opens as a 340px right sheet whose cards scroll on their own
+  with queue creation in a footer. The list takes the full width of the island.
+  The queue filter is applied in the client and now survives switching between
+  an Agent tab and All tasks; it is per session on purpose.
+- Give the task table one set of column widths shared by its header and rows.
+  `Key` is a fixed 168px holding the tree indents, the chevron and the key, with
+  deep indents capped and the key truncating rather than wrapping; `Task` takes
+  the remaining width; the `Queue` column is gone, since the key prefix already
+  names the queue; the drag grip moves into the row padding and appears on hover.
+
+### Fixed
+
+- Name the queue settings sheet for assistive technology and drop the
+  `aria-label` that hid the task count and the check mark from a screen reader
+  on each queue menu item.
+
+[0.68.0]: https://github.com/alekzonder/tariboy/compare/v0.67.0...v0.68.0
+
 ## [0.67.0] - 2026-09-21
 
 ### Added
