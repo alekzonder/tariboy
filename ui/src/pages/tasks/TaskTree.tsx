@@ -10,7 +10,8 @@ import {
 } from "@dnd-kit/core"
 import { buildTaskForest, canDropTaskInside, canReorderTaskBeside, flattenVisible } from "@/lib/taskTree"
 import type { Task } from "@/lib/tasks"
-import TaskRow, { TaskTableHeader, type TaskRowMode } from "./TaskRow"
+import type { TaskRowMode } from "./taskColumns"
+import TaskRow, { TaskTableHeader } from "./TaskRow"
 
 function preferSpecificDropTarget(args: Parameters<typeof pointerWithin>[0]) {
   const collisions = pointerWithin(args)

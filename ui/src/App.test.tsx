@@ -91,7 +91,7 @@ describe("product routing", () => {
   it("renders Tasks inside an explicit server workspace", async () => {
     renderAt("/servers/local/tasks");
 
-    expect(await screen.findByRole("heading", { name: "Tasks" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Search tasks")).toBeInTheDocument();
     expect(screen.getByTestId("tasks-workspace")).toHaveAttribute("data-scope-agent", "");
     expect(screen.getByRole("navigation", { name: "Server workspace" }))
       .toBeInTheDocument();

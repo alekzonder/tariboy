@@ -10,7 +10,7 @@ import {
 import { Segmented } from "@/components/ui/segmented"
 import { cn } from "@/lib/utils"
 import type { TaskQueue, TaskStatusView } from "@/lib/tasks"
-import type { TaskRowMode } from "./TaskRow"
+import type { TaskRowMode } from "./taskColumns"
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
