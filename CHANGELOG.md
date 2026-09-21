@@ -1,3 +1,11 @@
+## [0.67.0] - 2026-09-21
+
+### Added
+
+- A Store can refresh and rebuild itself on a schedule: `tariboy store auto NAME --interval MINUTES --image IMAGE` (`POST /api/stores/{name}/auto`) stores a whole-minute interval and the images selected for automatic builds, and the Store detail edits the same policy. Every minute the daemon refreshes each Store whose interval has elapsed and rebuilds the selected images that report an update, publishing both `image_version` and `latest`. Automatic refresh is disabled by default (`--interval 0`), a failed refresh skips that Store builds for the cycle, a failed build does not stop the remaining selections, and `tariboy store show` reports the policy.
+
+[0.67.0]: https://github.com/alekzonder/tariboy/compare/v0.66.2...v0.67.0
+
 ## [0.66.2] - 2026-09-18
 
 ### Fixed
