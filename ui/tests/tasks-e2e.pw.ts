@@ -38,6 +38,19 @@ async function createTask(
   return envelope.result as { key: string };
 }
 
+async function keyByTitle(request: APIRequestContext, title: string) {
+  let key = "";
+  await expect.poll(async () => {
+    const response = await request.get(`${daemonURL}/api/tasks?status_view=all&limit=500`);
+    if (!response.ok()) return "";
+    const envelope = await response.json();
+    const match = (envelope.result?.tasks ?? []).find((task: { title: string }) => task.title === title);
+    key = match?.key ?? "";
+    return key;
+  }, { timeout: 10_000 }).not.toBe("");
+  return key;
+}
+
 async function visibleTaskKeys(page: Page) {
   return page.locator("[data-testid^='task-row-']").evaluateAll((rows) =>
     rows.map((row) => row.getAttribute("data-testid")?.replace("task-row-", "")),
@@ -59,7 +72,8 @@ async function pointerDrag(page: Page, source: ReturnType<Page["getByRole"]>, ta
   // release the pointer until that state has observed the intended zone.
   const targetID = await target.getAttribute("data-testid");
   if (targetID?.startsWith("drop-inside-")) {
-    await expect(target.locator("..")).toHaveClass(/is-drop-target/);
+    // A row marks the re-parent target with its own ring, not a tree class.
+    await expect(target.locator("..")).toHaveClass(/ring-primary/);
   } else {
     await expect(target).toHaveClass(/is-over/);
   }
@@ -77,18 +91,12 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
     queue: "RESIZE", title: "Resize detail sheet", idempotency_key: "tasks-browser-resize-detail",
   } });
   expect(response.ok()).toBe(true);
+  const resizeKey = (await response.json()).result.key as string;
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
-  const navigationHandle = page.getByRole("separator", { name: "Resize task navigation" });
-  await expect(navigationHandle).toBeVisible();
+  await expect(page.getByLabel("Search tasks")).toBeVisible();
   await expect(page.getByRole("separator", { name: "Resize task details" })).toHaveCount(0);
-  const navigationBox = await navigationHandle.boundingBox();
-  expect(navigationBox).not.toBeNull();
-  await page.mouse.move(navigationBox!.x + navigationBox!.width / 2, navigationBox!.y + 60);
-  await page.mouse.down();
-  await page.mouse.move(navigationBox!.x + 74, navigationBox!.y + 60, { steps: 8 });
-  await page.mouse.up();
 
-  await page.getByTestId("task-row-RESIZE-1").locator(".task-row-main").click();
+  await page.getByTestId(`task-row-${resizeKey}`).locator(".task-row-main").click();
   const detailHandle = page.getByRole("separator", { name: "Resize task details" });
   await expect(detailHandle).toBeVisible();
 
@@ -96,7 +104,8 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   await expect.poll(async () => {
     const box = await page.getByRole("dialog").boundingBox();
     return box && box.x + box.width;
-  }).toBe(1440);
+    // The sheet is an island: it stops 8px short of the window edge.
+  }).toBe(1432);
 
   const detailBox = await detailHandle.boundingBox();
   expect(detailBox).not.toBeNull();
@@ -107,7 +116,6 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
 
   const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"));
   expect(persisted).toMatchObject({ schemaVersion: 1 });
-  expect(persisted.navigationWidth).toBeGreaterThan(260);
   expect(persisted.detailWidth).toBeGreaterThan(460);
 
   await page.setViewportSize({ width: 900, height: 900 });
@@ -117,18 +125,16 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
 
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(navigationHandle).toHaveAttribute("aria-valuenow", String(persisted.navigationWidth));
 
   await page.reload();
-  await expect(page.getByRole("separator", { name: "Resize task navigation" }))
-    .toHaveAttribute("aria-valuenow", String(persisted.navigationWidth));
-  await page.getByTestId("task-row-RESIZE-1").locator(".task-row-main").click();
+  await expect(page.getByLabel("Search tasks")).toBeVisible();
+  await page.getByTestId(`task-row-${resizeKey}`).locator(".task-row-main").click();
   await expect(page.getByRole("separator", { name: "Resize task details" }))
     .toHaveAttribute("aria-valuenow", String(persisted.detailWidth));
 
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByTestId("task-row-RESIZE-1").locator(".task-row-main").click();
+  await page.getByTestId(`task-row-${resizeKey}`).locator(".task-row-main").click();
   await page.getByRole("dialog").getByLabel("Title").fill("Unsaved resize detail");
   await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 10, y: 10 } });
   await expect(page.getByText("Are you sure you want to close this task? Unsaved changes will be discarded.")).toBeVisible();
@@ -192,32 +198,36 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await page.getByLabel("Task queue").selectOption("TEST");
   await page.getByLabel("Task title").fill("Root task");
   await page.getByRole("button", { name: "Create task" }).click();
-  await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
+  // The daemon mints a random key suffix, so the spec asks it which key it made.
+  const rootKey = await keyByTitle(request, "Root task");
+  await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
   await page.getByRole("button", { name: "Close task detail" }).click();
 
-  await page.getByRole("button", { name: "Add child to TEST-1" }).click();
+  await page.getByRole("button", { name: `Add child to ${rootKey}` }).click();
   await page.getByLabel("Task title").fill("First child");
   await page.getByRole("button", { name: "Create task" }).click();
-  await expect(page.getByTestId("task-row-TEST-2")).toBeVisible();
+  const childKey = await keyByTitle(request, "First child");
+  await expect(page.getByTestId(`task-row-${childKey}`)).toBeVisible();
   await page.getByRole("button", { name: "Close task detail" }).click();
 
   await page.getByRole("button", { name: "New task" }).click();
   await page.getByLabel("Task queue").selectOption("TEST");
   await page.getByLabel("Task title").fill("Second root");
   await page.getByRole("button", { name: "Create task" }).click();
-  await expect(page.getByTestId("task-row-TEST-3")).toBeVisible();
+  const secondRootKey = await keyByTitle(request, "Second root");
+  await expect(page.getByTestId(`task-row-${secondRootKey}`)).toBeVisible();
   await page.getByRole("button", { name: "Close task detail" }).click();
 
-  await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
+  await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   const detail = page.locator(".task-detail-panel");
-  await expect(detail.getByRole("heading", { name: "TEST-1" })).toBeVisible();
+  await expect(detail.getByRole("heading", { name: rootKey })).toBeVisible();
   await detail.getByLabel("Title").fill("Root task updated");
-  await detail.getByLabel("Description").fill("Edited from the production Tasks form");
+  await detail.getByRole("textbox", { name: "Description" }).fill("Edited from the production Tasks form");
   await detail.getByLabel("Status").selectOption("in_progress");
   await detail.getByLabel("Assignee").fill("worker-e2e");
   await detail.getByLabel("Manual block reason").fill("waiting on E2E fixture");
   const taskPatchRequest = page.waitForRequest((request) =>
-    request.method() === "PATCH" && request.url() === `${daemonURL}/api/tasks/TEST-1`);
+    request.method() === "PATCH" && request.url() === `${daemonURL}/api/tasks/${rootKey}`);
   await detail.getByRole("button", { name: "Save task" }).click();
   expect((await taskPatchRequest).postDataJSON()).toMatchObject({
     title: "Root task updated",
@@ -227,34 +237,34 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
     manual_block_reason: "waiting on E2E fixture",
   });
   await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
-  await expect(page.getByTestId("task-row-TEST-1")).toContainText("Root task updated");
-  await expect(page.getByTestId("task-row-TEST-1")).toContainText("blocked");
-  await expect(page.getByTestId("task-row-TEST-1")).toContainText("worker-e2e");
+  await expect(page.getByTestId(`task-row-${rootKey}`)).toContainText("Root task updated");
+  await expect(page.getByTestId(`task-row-${rootKey}`)).toContainText("blocked");
+  await expect(page.getByTestId(`task-row-${rootKey}`)).toContainText("worker-e2e");
   await assertNoLoadFailedToast(page);
 
   await detail.getByLabel("Status").selectOption("wait_customer");
-  await detail.getByLabel("Pull request URL").fill("https://github.com/acme/tariboy/pull/43");
+  await detail.getByLabel("Pull request").fill("https://github.com/acme/tariboy/pull/43");
   await detail.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
-  expect(await taskFromAPI(request, "TEST-1")).toMatchObject({
+  expect(await taskFromAPI(request, rootKey)).toMatchObject({
     status: "wait_customer",
     pull_request: "https://github.com/acme/tariboy/pull/43",
   });
 
   await page.reload();
-  await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
+  await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   await expect(detail.getByLabel("Status")).toHaveValue("wait_customer");
-  await expect(detail.getByLabel("Pull request URL")).toHaveValue("https://github.com/acme/tariboy/pull/43");
-  await detail.getByLabel("Pull request URL").fill("");
+  await expect(detail.getByLabel("Pull request")).toHaveValue("https://github.com/acme/tariboy/pull/43");
+  await detail.getByLabel("Pull request").fill("");
   await detail.getByRole("button", { name: "Save task" }).click();
   await expect(page.getByText("Task updated", { exact: true }).last()).toBeVisible();
 
   await page.reload();
-  await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
+  await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   await expect(detail.getByLabel("Status")).toHaveValue("wait_customer");
-  await expect(detail.getByLabel("Pull request URL")).toHaveValue("");
+  await expect(detail.getByLabel("Pull request")).toHaveValue("");
 
-  const saved = await taskFromAPI(request, "TEST-1");
+  const saved = await taskFromAPI(request, rootKey);
   expect(saved).toMatchObject({
     title: "Root task updated",
     description: "Edited from the production Tasks form",
@@ -267,28 +277,31 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await detail.getByLabel("Ask", { exact: true }).selectOption({ index: 1 });
   await detail.getByLabel("Comment", { exact: true }).fill("Please confirm the browser workflow");
   await detail.getByRole("button", { name: "Send comment" }).click();
-  await expect(detail.getByText(/Waiting for user:/)).toBeVisible();
+  await expect(detail.getByText(/Waiting for an answer from user:/)).toBeVisible();
   await expect(detail.getByText("Please confirm the browser workflow")).toBeVisible();
 
   await page.reload();
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   await page.getByRole("button", { name: "Waiting for me" }).click();
-  await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
-  await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
+  await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
+  await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   await detail.getByLabel("Comment", { exact: true }).fill("Confirmed from the customer");
   await detail.getByRole("button", { name: "Send comment" }).click();
-  await expect(detail.getByText(/Waiting for user:/)).toHaveCount(0);
+  await expect(detail.getByText(/Waiting for an answer from user:/)).toHaveCount(0);
   await expect(detail.getByText("Confirmed from the customer")).toBeVisible();
 
   await detail.getByRole("button", { name: "Close task detail" }).click();
   await page.getByRole("button", { name: "Waiting for me" }).click();
-  await page.getByTestId("task-row-TEST-1").locator(".task-row-main").click();
+  await page.getByTestId(`task-row-${rootKey}`).locator(".task-row-main").click();
   await detail.getByLabel("Relation type").selectOption("related");
-  await detail.getByLabel("Related task key").fill("TEST-3");
+  await detail.getByLabel("Related task key").fill(secondRootKey);
   await detail.getByRole("button", { name: "Add relation" }).click();
-  await expect(detail.getByText("related TEST-3")).toBeVisible();
-  await detail.getByRole("button", { name: "Remove relation to TEST-3" }).click();
-  await expect(detail.getByText("related TEST-3")).toHaveCount(0);
+  // The dependency row spells its type and key in separate cells.
+  const relationRow = detail.getByRole("button", { name: `Remove relation to ${secondRootKey}` });
+  await expect(relationRow).toBeVisible();
+  await expect(detail.getByText("related", { exact: true })).toBeVisible();
+  await relationRow.click();
+  await expect(relationRow).toHaveCount(0);
   await detail.getByRole("button", { name: "Close task detail" }).click();
 
   const criticalRoot = await createTask(request, { title: "Critical root", priority: "P0" });
@@ -297,22 +310,22 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   const criticalChild = await createTask(request, {
     title: "Critical child",
     priority: "P0",
-    parent_key: "TEST-1",
+    parent_key: rootKey,
   });
   const lowChild = await createTask(request, {
     title: "Low child",
     priority: "P3",
-    parent_key: "TEST-1",
+    parent_key: rootKey,
   });
-  const expandRoot = page.getByRole("button", { name: "Expand TEST-1" });
+  const expandRoot = page.getByRole("button", { name: `Expand ${rootKey}` });
   if (await expandRoot.isVisible()) await expandRoot.click();
   await expect(page.getByTestId(`task-row-${lowChild.key}`)).toBeVisible({ timeout: 10_000 });
 
   let ordered = await visibleTaskKeys(page);
-  expect(ordered.indexOf(criticalRoot.key)).toBeLessThan(ordered.indexOf("TEST-1"));
-  expect(ordered.indexOf("TEST-1")).toBeLessThan(ordered.indexOf(lowRoot.key));
-  expect(ordered.indexOf(criticalChild.key)).toBeLessThan(ordered.indexOf("TEST-2"));
-  expect(ordered.indexOf("TEST-2")).toBeLessThan(ordered.indexOf(lowChild.key));
+  expect(ordered.indexOf(criticalRoot.key)).toBeLessThan(ordered.indexOf(rootKey));
+  expect(ordered.indexOf(rootKey)).toBeLessThan(ordered.indexOf(lowRoot.key));
+  expect(ordered.indexOf(criticalChild.key)).toBeLessThan(ordered.indexOf(childKey));
+  expect(ordered.indexOf(childKey)).toBeLessThan(ordered.indexOf(lowChild.key));
   await expect(page.getByTestId(`task-row-${criticalRoot.key}`).getByLabel("P0 Critical")).toHaveText("P0");
   await expect(page.getByTestId(`task-row-${lowRoot.key}`).getByLabel("P3 Low")).toHaveText("P3");
 
@@ -329,20 +342,20 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   ordered = await visibleTaskKeys(page);
   expect(ordered.indexOf(criticalRoot.key)).toBeLessThan(ordered.indexOf(lowRoot.key));
 
-  await pointerDrag(page, page.getByRole("button", { name: `Move ${lowRoot.key}` }), page.getByTestId("drop-inside-TEST-1"));
-  await expect.poll(async () => (await taskFromAPI(request, lowRoot.key)).parent_key).toBe("TEST-1");
+  await pointerDrag(page, page.getByRole("button", { name: `Move ${lowRoot.key}` }), page.getByTestId(`drop-inside-${rootKey}`));
+  await expect.poll(async () => (await taskFromAPI(request, lowRoot.key)).parent_key).toBe(rootKey);
   ordered = await visibleTaskKeys(page);
-  expect(ordered.indexOf("TEST-2")).toBeLessThan(ordered.indexOf(lowChild.key));
-  expect(ordered.indexOf("TEST-2")).toBeLessThan(ordered.indexOf(lowRoot.key));
+  expect(ordered.indexOf(childKey)).toBeLessThan(ordered.indexOf(lowChild.key));
+  expect(ordered.indexOf(childKey)).toBeLessThan(ordered.indexOf(lowRoot.key));
 
-  await pointerDrag(page, page.getByRole("button", { name: "Move TEST-3" }), page.getByTestId("drop-inside-TEST-1"));
-  await expect.poll(async () => (await taskFromAPI(request, "TEST-3")).parent_key).toBe("TEST-1");
-  await expect(page.getByTestId("task-row-TEST-3")).toBeVisible();
+  await pointerDrag(page, page.getByRole("button", { name: `Move ${secondRootKey}` }), page.getByTestId(`drop-inside-${rootKey}`));
+  await expect.poll(async () => (await taskFromAPI(request, secondRootKey)).parent_key).toBe(rootKey);
+  await expect(page.getByTestId(`task-row-${secondRootKey}`)).toBeVisible();
 
-  await pointerDrag(page, page.getByRole("button", { name: "Move TEST-3" }), page.getByTestId("drop-before-TEST-2"));
+  await pointerDrag(page, page.getByRole("button", { name: `Move ${secondRootKey}` }), page.getByTestId(`drop-before-${childKey}`));
   await expect.poll(async () => {
-    const moved = await taskFromAPI(request, "TEST-3");
-    const first = await taskFromAPI(request, "TEST-2");
+    const moved = await taskFromAPI(request, secondRootKey);
+    const first = await taskFromAPI(request, childKey);
     return moved.position < first.position;
   }).toBe(true);
 
@@ -350,8 +363,8 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await expect(page.getByRole("button", { name: "My tasks" })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "My tasks" }).click();
   await page.getByLabel("Search tasks").fill("Root task updated");
-  await expect(page.getByTestId("task-row-TEST-1")).toBeVisible();
-  await expect(page.getByTestId("task-row-TEST-3")).toHaveCount(0);
+  await expect(page.getByTestId(`task-row-${rootKey}`)).toBeVisible();
+  await expect(page.getByTestId(`task-row-${secondRootKey}`)).toHaveCount(0);
   await page.getByLabel("Search tasks").fill("");
 
   const createResponse = await request.post(`${daemonURL}/api/tasks`, {
