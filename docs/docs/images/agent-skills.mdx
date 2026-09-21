@@ -6,7 +6,7 @@ sidebar:
   icon: package-check
 ---
 
-Schema-v2 images can carry Agent Skills as immutable, portable directories.
+Schema-v2 images can carry Agent Skills as packaged, portable directories.
 Tariboy validates each declared directory at build time, records its metadata
 and content hash in the image, and exposes it through a harness-specific bridge
 when an iteration starts. Claude Code and OpenCode use native discovery;
@@ -297,9 +297,10 @@ remains in the manifest:
 | `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |
 
 Skill paths, normalized modes, bytes, hashes, metadata, and manifest records
-contribute to the immutable image digest. Runnable image export includes the
-canonical skill trees and import revalidates their members and metadata before
-installation.
+are recorded in the built image; packaging them does not change the ref id,
+which comes from the image name and its declared `image_version`. Runnable
+image export includes the canonical skill trees and import revalidates their
+members and metadata before installation.
 
 An exported runnable image is not an editable source backup. Keep the original
 directory and its referenced paths when the image must be rebuilt.
@@ -310,7 +311,7 @@ For a schema-v2 image with packaged skills, iteration activation follows this
 flow:
 
 ```text
-immutable image skill tree
+packaged image skill tree
         ↓
 digest-keyed per-agent bridge
         ↓
@@ -338,7 +339,7 @@ CWD skill discovery, and it does not change the agent's effective CWD.
 
 Tariboy prepends the same catalog to the prompt used by batch `codex exec` and
 the interactive Codex TUI. The catalog is launch metadata rather than an image
-prompt layer, so it does not change the immutable prompt-template hash. The
+prompt layer, so it does not change the image prompt-template hash. The
 iteration prompt hash covers the final rendered catalog and prompt.
 
 The catalog contains no `SKILL.md` body, reference, asset, or script bytes.

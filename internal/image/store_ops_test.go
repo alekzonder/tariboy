@@ -3,6 +3,8 @@ package image
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -12,6 +14,32 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/imagefile"
 )
+
+// archivePathFor resolves the file a ref currently points at.
+func archivePathFor(t *testing.T, st *Store, ref Ref) string {
+	t.Helper()
+	path, err := st.archiveFor(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// plantRawRef writes opaque bytes as the content of ref, bypassing validation.
+func plantRawRef(t *testing.T, st *Store, ref Ref, body string) {
+	t.Helper()
+	sum := sha256.Sum256([]byte(body))
+	id := hex.EncodeToString(sum[:])
+	if err := os.MkdirAll(st.refsDir(ref.Name), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(st.contentPath(ref.Name, id), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetTag(ref, id); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func seed(t *testing.T, st *Store, name string) {
 	t.Helper()
@@ -75,7 +103,7 @@ func TestStoreRemoveAndUnpack(t *testing.T) {
 	}
 }
 
-func TestRetagMutableArchiveReusesPayload(t *testing.T) {
+func TestRetagArchiveReusesPayload(t *testing.T) {
 	store := &Store{Dir: t.TempDir()}
 	source := Ref{Name: "reviewer", Tag: "latest"}
 	seed(t, store, source.Name)
@@ -84,7 +112,7 @@ func TestRetagMutableArchiveReusesPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := Ref{Name: "reviewer", Tag: "v2"}
-	manifest, err := store.RetagMutableArchiveManifest(source, target, archive)
+	manifest, err := store.RetagArchive(source, target, archive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,23 +123,19 @@ func TestRetagMutableArchiveReusesPayload(t *testing.T) {
 	if err != nil || manifest.Digest != published.Digest {
 		t.Fatalf("returned manifest digest = %q, published = %#v, %v", manifest.Digest, published, err)
 	}
-	if !store.IsMutable(target) {
-		t.Fatal("retagged authoring ref is not mutable")
-	}
 	if got, err := store.RenderPrompt(target); err != nil || !strings.Contains(got, "BODY reviewer") {
 		t.Fatalf("retagged payload = %q, %v", got, err)
 	}
 }
 
-func TestBuildNeverOverwritesAnExistingRef(t *testing.T) {
+// TestBuildMovesAnExistingRef is the store-level contract: rebuilding a ref
+// that already exists moves it and keeps the prior generation reachable by its
+// own id, so pinned agents are unaffected.
+func TestBuildMovesAnExistingRef(t *testing.T) {
 	st := &Store{Dir: t.TempDir()}
 	ref := Ref{Name: "app", Tag: "latest"}
 	seed(t, st, ref.Name)
 
-	beforeArchive, err := os.ReadFile(st.tarPath(ref))
-	if err != nil {
-		t.Fatal(err)
-	}
 	before, err := st.Inspect(ref)
 	if err != nil {
 		t.Fatal(err)
@@ -127,32 +151,29 @@ func TestBuildNeverOverwritesAnExistingRef(t *testing.T) {
 		Prompts:       []imagefile.Prompt{{Filepath: prompt}},
 		Dir:           src,
 	}
-	if _, err := buildLegacy(t, im, ref, st, fixedClock()); !errors.Is(err, ErrExists) {
-		t.Fatalf("rebuild error = %v, want ErrExists", err)
-	}
-
-	afterArchive, err := os.ReadFile(st.tarPath(ref))
+	rebuilt, err := buildLegacy(t, im, ref, st, fixedClock())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("rebuilding an existing ref: %v", err)
+	}
+	if rebuilt.Digest == before.Digest {
+		t.Fatal("rebuilt content kept the previous ref id")
 	}
 	after, err := st.Inspect(ref)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(afterArchive) != string(beforeArchive) || after.Digest != before.Digest {
-		t.Fatal("failed immutable rebuild changed the existing image")
+	if after.Digest != rebuilt.Digest {
+		t.Fatalf("tag points at %s, want %s", after.Digest, rebuilt.Digest)
+	}
+	if pinned, err := st.InspectPinned(ref, before.Digest); err != nil || pinned.Digest != before.Digest {
+		t.Fatalf("previous generation = %#v, %v", pinned, err)
 	}
 }
 
 func TestReservedDefaultRefsCannotBeRemoved(t *testing.T) {
 	for _, ref := range []Ref{{Name: "bare", Tag: "latest"}, {Name: "basic", Tag: "latest"}} {
 		st := &Store{Dir: t.TempDir()}
-		if err := os.MkdirAll(st.refDir(ref), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(st.tarPath(ref), []byte("managed"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		plantRawRef(t, st, ref, "managed")
 		if err := st.Remove(ref); !errors.Is(err, ErrReserved) {
 			t.Fatalf("Remove(%s) error = %v, want ErrReserved", ref, err)
 		}
@@ -163,12 +184,7 @@ func TestReservedDefaultRefsCannotBeRemoved(t *testing.T) {
 
 	ordinary := Ref{Name: "basic", Tag: "custom"}
 	st := &Store{Dir: t.TempDir()}
-	if err := os.MkdirAll(st.refDir(ordinary), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(st.tarPath(ordinary), []byte("ordinary"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	plantRawRef(t, st, ordinary, "ordinary")
 	if err := st.Remove(ordinary); err != nil {
 		t.Fatalf("Remove(%s): %v", ordinary, err)
 	}
@@ -206,14 +222,14 @@ func TestBuildPacksSkillsDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	names := tarEntryNames(t, st.tarPath(ref))
+	names := tarEntryNames(t, archivePathFor(t, st, ref))
 	want := []string{"skills/myskill/SKILL.md", "skills/myskill/sub/helper.md"}
 	for _, w := range want {
 		if !names[w] {
 			t.Fatalf("archive missing %q; entries: %v", w, names)
 		}
 	}
-	body, err := readFileFromTar(st.tarPath(ref), "skills/myskill/SKILL.md")
+	body, err := readFileFromTar(archivePathFor(t, st, ref), "skills/myskill/SKILL.md")
 	if err != nil {
 		t.Fatal(err)
 	}

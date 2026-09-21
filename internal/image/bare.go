@@ -1,7 +1,6 @@
 package image
 
 import (
-	"errors"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -17,9 +16,6 @@ func EnsureBare(s *Store, clock func() time.Time) error {
 	if s.Exists(BareRef) {
 		return nil
 	}
-	_, err := BuildV2(&imagefile.V2{SchemaVersion: 2, Plugins: []imagefile.V2Plugin{}, Prompts: []imagefile.PromptEntry{}}, imagefile.ResolveRoots{}, BareRef, s, clock, nil)
-	if errors.Is(err, ErrExists) {
-		return nil
-	}
+	_, err := buildV2(&imagefile.V2{SchemaVersion: 2, Plugins: []imagefile.V2Plugin{}, Prompts: []imagefile.PromptEntry{}}, imagefile.ResolveRoots{}, BareRef, s, clock, nil, nil)
 	return err
 }

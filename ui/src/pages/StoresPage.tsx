@@ -267,7 +267,7 @@ export default function StoresPage({ target, name, basePath }: {
           <Input aria-label="Target image name" placeholder="Source image name" value={targetName} disabled={Boolean(busy)} onChange={(event) => setTargetName(event.target.value)} />
           <Input aria-label="Target image tag" placeholder="image_version + latest" value={targetTag} disabled={Boolean(busy)} onChange={(event) => setTargetTag(event.target.value)} />
         </div>
-        <p className="text-xs text-muted-foreground">Leave both blank to publish the source name with image_version and latest. If a target is immutable, choose another name or tag.</p>
+        <p className="text-xs text-muted-foreground">Leave both blank to publish the source name with image_version and latest. A reserved target requires another name or tag.</p>
         <div className="grid gap-3 md:grid-cols-[14rem_auto]">
           <Input
             aria-label="Automatic build interval"

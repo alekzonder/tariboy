@@ -210,13 +210,18 @@ func TestImageBuildStoreSelectorUpdatesExistingVersionTag(t *testing.T) {
 	if updated == "" {
 		t.Fatalf("build result = %#v", result)
 	}
+	// The declared image_version is unchanged, so the store build republishes
+	// the same ref and both tags keep naming it with the new content.
 	current, err := imageStore(c).Inspect(ref)
-	if err != nil || current.Digest == before.Digest || !imageStore(c).IsMutable(ref) {
-		t.Fatalf("version ref = %#v, err %v, mutable %v", current, err, imageStore(c).IsMutable(ref))
+	if err != nil || current.Digest != before.Digest || current.Digest != updated {
+		t.Fatalf("version ref = %#v, err %v", current, err)
 	}
 	currentLatest, err := imageStore(c).Inspect(latest)
-	if err != nil || currentLatest.Digest == beforeLatest.Digest || !imageStore(c).IsMutable(latest) {
-		t.Fatalf("latest ref = %#v, err %v, mutable %v", currentLatest, err, imageStore(c).IsMutable(latest))
+	if err != nil || currentLatest.Digest != beforeLatest.Digest || currentLatest.Digest != updated {
+		t.Fatalf("latest ref = %#v, err %v", currentLatest, err)
+	}
+	if prompt, err := imageStore(c).RenderPrompt(ref); err != nil || strings.Contains(prompt, "old image") {
+		t.Fatalf("republished prompt = %q, %v", prompt, err)
 	}
 	if raw, err := os.ReadFile(logPath); err != nil || string(raw) != "called\ncalled\n" {
 		t.Fatalf("npx log = %q, err %v", raw, err)

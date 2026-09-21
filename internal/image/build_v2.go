@@ -158,36 +158,35 @@ func ValidateV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver plugin
 	return validated.Template, nil
 }
 
+// BuildV2 is the one schema-v2 build mechanism. Operators, agents, Store
+// sources and team imports all publish through it, and it may always rebuild a
+// ref that already exists. Callers that accept a user-supplied ref screen it
+// with BuildRefs or IsReserved first.
 func BuildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, error) {
-	return buildV2(src, roots, ref, store, clock, resolver, false, nil)
+	return buildV2(src, roots, ref, store, clock, resolver, nil)
 }
 
-// BuildV2Mutable publishes a schema-v2 ordinary authoring ref that may later advance.
-func BuildV2Mutable(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, error) {
-	return buildV2(src, roots, ref, store, clock, resolver, true, nil)
-}
-
-// BuildV2MutableArchive publishes a mutable schema-v2 image and returns the
-// validated archive bytes used for that publication.
-func BuildV2MutableArchive(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, []byte, error) {
+// BuildV2Archive builds through BuildV2 and also returns the published archive
+// bytes, so a caller can move other tags onto the same content.
+func BuildV2Archive(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver) (Manifest, []byte, error) {
 	var archive []byte
-	manifest, err := buildV2(src, roots, ref, store, clock, resolver, true, &archive)
+	manifest, err := buildV2(src, roots, ref, store, clock, resolver, &archive)
 	return manifest, archive, err
 }
 
-func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver, mutable bool, archiveOut *[]byte) (Manifest, error) {
+func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *Store, clock func() time.Time, resolver plugincaps.ExternalResolver, archiveOut *[]byte) (Manifest, error) {
 	prepared, err := prepareV2(src, roots, resolver)
 	if err != nil {
 		return Manifest{}, err
 	}
-	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, Name: ref.Name, Tag: ref.Tag, BuiltAt: clock().UTC().Format(time.RFC3339), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
+	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, ID: RefID(ref.Name, src.ImageVersion), Name: ref.Name, Tag: ref.Tag, BuiltAt: clock().UTC().Format(time.RFC3339), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
 	if manifest.Plugins == nil {
 		manifest.Plugins = []ManifestPlugin{}
 	}
 	if manifest.Skills == nil {
 		manifest.Skills = []ManifestSkill{}
 	}
-	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, mutable, archiveOut)
+	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, archiveOut)
 	if err != nil {
 		return Manifest{}, err
 	}
@@ -195,11 +194,11 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	return manifest, nil
 }
 
-func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, mutable bool, archiveOut *[]byte) (string, error) {
-	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
+func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, archiveOut *[]byte) (string, error) {
+	if err := os.MkdirAll(s.nameDir(ref.Name), 0o700); err != nil {
 		return "", err
 	}
-	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".*.tmp")
+	tmp, err := os.CreateTemp(s.nameDir(ref.Name), "."+ref.Tag+"-*.tmp")
 	if err != nil {
 		return "", err
 	}
@@ -210,13 +209,13 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 	manifestJSON, err := json.MarshalIndent(struct {
 		SchemaVersion        int              `json:"schema_version"`
 		ImageVersion         string           `json:"image_version,omitempty"`
+		ID                   string           `json:"id,omitempty"`
 		Name                 string           `json:"name"`
-		Tag                  string           `json:"tag"`
 		BuiltAt              string           `json:"built_at"`
 		Plugins              []ManifestPlugin `json:"plugins"`
 		Skills               []ManifestSkill  `json:"skills"`
 		PromptTemplateSHA256 string           `json:"prompt_template_sha256"`
-	}{man.SchemaVersion, man.ImageVersion, man.Name, man.Tag, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256}, "", "  ")
+	}{man.SchemaVersion, man.ImageVersion, man.ID, man.Name, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256}, "", "  ")
 	if err != nil {
 		tmp.Close()
 		return "", err
@@ -267,5 +266,5 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
-	return s.publishArchive(ref, tmpName, mutable, archiveOut)
+	return s.publishArchive(ref, tmpName, archiveOut)
 }

@@ -60,7 +60,7 @@ tariboy has three command surfaces:
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
-| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build mutable image refs and an immutable source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); Git provenance must be paired |
+| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired |
 | `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest` |
 | `tariboy image version get [--path FILE_OR_DIR]` | Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required |
@@ -68,7 +68,7 @@ tariboy has three command surfaces:
 | `tariboy image inspect` | Show an image manifest |
 | `tariboy image ls` | List built agent images |
 | `tariboy image prompt` | Print an image's assembled prompt |
-| `tariboy image provenance REF` | Show local source and immutable snapshot Git provenance |
+| `tariboy image provenance REF` | Show local source and frozen snapshot Git provenance |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
 | `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, prompt-template hash, and tags |

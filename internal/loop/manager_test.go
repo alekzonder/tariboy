@@ -561,7 +561,7 @@ func buildContractInvalidImage(t *testing.T, st *image.Store, name string) {
 	if err := gz.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(st.Dir, name, "latest.tar.gz"), out.Bytes(), 0o600); err != nil {
+	if _, err := st.InstallArchive(ref, out.Bytes()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2809,8 +2809,10 @@ func TestBuildImageForAgentRejectsSkillSymlink(t *testing.T) {
 	}
 
 	// Sanity: the outside secret content is NOT packed anywhere in the store.
-	if data, err := os.ReadFile(filepath.Join(imgStore.Dir, "leak-inner", "latest.tar.gz")); err == nil {
-		if strings.Contains(string(data), "TOP-SECRET-KEY") {
+	packed, _ := filepath.Glob(filepath.Join(imgStore.Dir, "leak-inner", "refs", "*.tar.gz"))
+	for _, path := range packed {
+		data, err := os.ReadFile(path)
+		if err == nil && strings.Contains(string(data), "TOP-SECRET-KEY") {
 			t.Fatal("outside secret content was packed into the built image")
 		}
 	}

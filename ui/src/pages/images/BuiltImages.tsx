@@ -287,7 +287,7 @@ export default function BuiltImages({ hostId, basePath = "/images", imageName }:
                           <AlertDialogHeader>
                             <AlertDialogTitle>Remove image {ref}?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Deletes this immutable runnable image. Original build files are not managed by Tariboy.
+                              Deletes this runnable image tag. Original build files are not managed by Tariboy.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

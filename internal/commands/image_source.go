@@ -246,7 +246,13 @@ func imageSourceBuild() registry.Command {
 			store := imageStore(c)
 			var record imagesource.BuildRecord
 			err = image.WithPublicationGate(func() error {
-				var err error
+				if err := store.Migrate(); err != nil {
+					return err
+				}
+				publication, err := store.BeginPublication([]image.Ref{ref})
+				if err != nil {
+					return err
+				}
 				record, err = sources.RecordBuild(name, func(dir string) (imagesource.BuildRecord, error) {
 					parsed, err := imagefile.ParseAny(dir)
 					if err != nil {
@@ -270,9 +276,7 @@ func imageSourceBuild() registry.Command {
 					return imagesource.BuildRecord{
 						Ref: ref.String(), Digest: manifest.Digest, BuiltAt: manifest.BuiltAt,
 					}, nil
-				}, func() error {
-					return store.Remove(ref)
-				})
+				}, publication.Restore)
 				return err
 			})
 			if err != nil {
@@ -283,13 +287,6 @@ func imageSourceBuild() registry.Command {
 				}
 				if userErr, ok := imageSourceUserError(err); ok {
 					return nil, userErr
-				}
-				if errors.Is(err, image.ErrExists) {
-					return nil, api.UserError{
-						Code:   "image_exists",
-						Msg:    err.Error(),
-						Status: http.StatusConflict,
-					}
 				}
 				return nil, api.UserError{Code: "build_failed", Msg: err.Error(), Status: http.StatusBadRequest}
 			}

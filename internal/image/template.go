@@ -79,7 +79,11 @@ func ValidatePromptTemplate(template PromptTemplate) error {
 }
 
 func (s *Store) ReadTemplate(ref Ref) (PromptTemplate, error) {
-	return readTemplate(s.tarPath(ref))
+	archivePath, err := s.archiveFor(ref)
+	if err != nil {
+		return PromptTemplate{}, err
+	}
+	return readTemplate(archivePath)
 }
 
 // ReadTemplatePinned reads and validates the template belonging to an exact

@@ -135,17 +135,10 @@ func TestCatalogDetailReportsLatestImageVersionAndComparisonStatus(t *testing.T)
 	built := &image.Store{Dir: filepath.Join(base, "images")}
 	buildStoreImage(t, built, source, "alpha", "alpha", "latest", "1.0.0", "2026-09-08T10:00:00Z")
 	buildStoreImage(t, built, source, "alpha", "alpha", "2.0.0", "2.0.0", "2026-09-09T10:00:00Z")
-	if err := os.WriteFile(filepath.Join(base, "images", "alpha", "irrelevant.tar.gz"), []byte("broken"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	plantBrokenLatest(t, filepath.Join(base, "images"), "alpha", "irrelevant")
 	buildStoreImage(t, built, source, "beta", "beta", "latest", "1.0.0", "2026-09-08T10:00:00Z")
 	buildStoreImage(t, built, source, "gamma", "gamma", "latest", "", "2026-09-08T10:00:00Z")
-	if err := os.MkdirAll(filepath.Join(base, "images", "epsilon"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(base, "images", "epsilon", "latest.tar.gz"), []byte("broken"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	plantBrokenLatest(t, filepath.Join(base, "images"), "epsilon", "latest")
 
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
@@ -170,6 +163,24 @@ func TestCatalogDetailReportsLatestImageVersionAndComparisonStatus(t *testing.T)
 	got[3].LatestError = ""
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("images = %#v, want %#v", got, want)
+	}
+}
+
+// plantBrokenLatest writes a tag pointing at content that cannot be read.
+func plantBrokenLatest(t *testing.T, imagesDir, name, tag string) {
+	t.Helper()
+	id := strings.Repeat("ab", 32)
+	if err := os.MkdirAll(filepath.Join(imagesDir, name, "refs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(imagesDir, name, "tags"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(imagesDir, name, "refs", id+".tar.gz"), []byte("broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(imagesDir, name, "tags", tag), []byte(id+"\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -200,13 +211,7 @@ func TestCatalogDetailReportsLatestPathInspectionError(t *testing.T) {
 func TestCatalogDetailIgnoresCorruptBuiltArtifactForAnotherImage(t *testing.T) {
 	base, source := t.TempDir(), t.TempDir()
 	writeImage(t, source, "alpha", "1.0.0")
-	unrelated := filepath.Join(base, "images", "unrelated")
-	if err := os.MkdirAll(unrelated, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(unrelated, "latest.tar.gz"), []byte("broken"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	plantBrokenLatest(t, filepath.Join(base, "images"), "unrelated", "latest")
 	catalog, db := openCatalog(t, base)
 	defer db.Close()
 	if _, err := catalog.Add(context.Background(), "team", source); err != nil {

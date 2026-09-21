@@ -10,10 +10,9 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagefile"
 )
 
-var (
-	ErrExists   = errors.New("image ref already exists")
-	ErrReserved = errors.New("image ref is daemon-managed")
-)
+// ErrReserved marks the refs the daemon seeds itself; public authoring cannot
+// replace or remove them.
+var ErrReserved = errors.New("image ref is daemon-managed")
 
 var refPart = regexp.MustCompile(`^[a-z0-9._-]+$`)
 
@@ -39,7 +38,48 @@ func ParseRef(s string) (Ref, error) {
 func (r Ref) String() string { return r.Name + ":" + r.Tag }
 
 // IsReserved reports refs owned by daemon startup rather than public image
-// authoring. Every other tag is an ordinary mutable reference.
+// authoring. Every other ref is ordinary and can be rebuilt at any time.
 func IsReserved(r Ref) bool {
 	return r.Tag == "latest" && (r.Name == "bare" || r.Name == "basic")
+}
+
+// ErrDuplicateTag and ErrTagReserved classify BuildRefs input so callers can
+// map them onto their own error surfaces.
+var (
+	ErrDuplicateTag = errors.New("duplicate image tag")
+	ErrTagReserved  = errors.New("image ref is managed by tariboyd")
+)
+
+// BuildRefs resolves the tags that one build publishes. No requested tag means
+// the declared image_version plus latest. Every build path — the operator CLI
+// and the agent tool alike — uses this one rule, and every returned ref points
+// at the same content.
+func BuildRefs(name string, tags []string, imageVersion string) ([]Ref, bool, error) {
+	defaultTags := len(tags) == 0
+	if defaultTags {
+		if imageVersion == "" {
+			imageVersion = "latest"
+		}
+		tags = []string{imageVersion}
+		if imageVersion != "latest" {
+			tags = append(tags, "latest")
+		}
+	}
+	refs := make([]Ref, 0, len(tags))
+	seen := make(map[string]bool, len(tags))
+	for _, tag := range tags {
+		ref, err := ParseRef(name + ":" + tag)
+		if err != nil {
+			return nil, defaultTags, err
+		}
+		if seen[ref.String()] {
+			return nil, defaultTags, fmt.Errorf("%w %s", ErrDuplicateTag, tag)
+		}
+		if IsReserved(ref) {
+			return nil, defaultTags, fmt.Errorf("%w: %s", ErrTagReserved, ref.String())
+		}
+		seen[ref.String()] = true
+		refs = append(refs, ref)
+	}
+	return refs, defaultTags, nil
 }

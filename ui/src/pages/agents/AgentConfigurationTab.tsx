@@ -367,7 +367,7 @@ export default function AgentConfigurationTab({
             {value.error && <p role="alert" className="mt-1 text-destructive">{value.error}</p>}
           </div>)}
           {imageStatus.next && <>
-            <p className="text-xs text-muted-foreground">{imageStatus.next.reason === "pending" ? "Explicit pending assignment" : imageStatus.next.reason === "mutable_ref" ? "Latest build of the active mutable ref" : "Current pinned image"}</p>
+            <p className="text-xs text-muted-foreground">{imageStatus.next.reason === "pending" ? "Explicit pending assignment" : imageStatus.next.reason === "ref_moved" ? "Content the active ref points at now" : "Current pinned image"}</p>
             {!imageStatus.next.error && imageStatus.next.digest && imageStatus.next.digest !== imageStatus.current.digest && <p role="status">Update on next iteration</p>}
             <p className="text-xs text-muted-foreground">This preview is not a reservation; the image may change before launch.</p>
           </>}

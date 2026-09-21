@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +37,7 @@ func readAgentImageStatus(t *testing.T, c *registry.Ctx) imageStatusJSON {
 }
 
 func TestAgentImageProjection(t *testing.T) {
-	for _, scenario := range []string{"mutable", "same version", "unchanged", "pending", "immutable", "unversioned", "broken latest", "broken current", "broken pending", "activation error"} {
+	for _, scenario := range []string{"rebuilt", "same version", "unchanged", "pending", "unversioned", "broken latest", "broken current", "broken pending", "activation error"} {
 		t.Run(scenario, func(t *testing.T) {
 			c := localCtx(t)
 			as := agentStore(c)
@@ -48,11 +49,7 @@ func TestAgentImageProjection(t *testing.T) {
 					t.Fatal(err)
 				}
 				spec := &imagefile.V2{SchemaVersion: 2, ImageVersion: version, Dir: src, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}}}
-				builder := image.BuildV2Mutable
-				if scenario == "immutable" {
-					builder = image.BuildV2
-				}
-				manifest, err := builder(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
+				manifest, err := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -67,11 +64,8 @@ func TestAgentImageProjection(t *testing.T) {
 			if err := as.Create(a); err != nil {
 				t.Fatal(err)
 			}
-			nextVersion, nextDigest, reason := version, first.Digest, "mutable_ref"
-			if scenario == "immutable" {
-				reason = "current"
-			}
-			if scenario != "immutable" && scenario != "unchanged" && scenario != "unversioned" {
+			nextVersion, nextDigest, reason := version, first.Digest, "ref_moved"
+			if scenario != "unchanged" && scenario != "unversioned" {
 				nextVersion = "1.1.0"
 				if scenario == "same version" {
 					nextVersion = version
@@ -85,8 +79,14 @@ func TestAgentImageProjection(t *testing.T) {
 				nextDigest, nextVersion, reason = first.Digest, version, "pending"
 			}
 			if scenario == "broken latest" {
-				// Keep the mutable marker and retained current generation.
-				if err := os.WriteFile(filepath.Join(c.BaseDir, "images", "reviewer", "latest.tar.gz"), []byte("broken"), 0o600); err != nil {
+				// Corrupt only the content latest points at; the pinned
+				// generation the agent still runs stays intact.
+				pointer, err := os.ReadFile(filepath.Join(c.BaseDir, "images", "reviewer", "tags", "latest"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				content := filepath.Join(c.BaseDir, "images", "reviewer", "refs", strings.TrimSpace(string(pointer))+".tar.gz")
+				if err := os.WriteFile(content, []byte("broken"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -141,13 +141,13 @@ func TestAgentImageProjection(t *testing.T) {
 	}
 }
 
-func TestAgentImageReadWaitsForPublicationRollback(t *testing.T) {
+func TestAgentImageReadWaitsForPublicationGate(t *testing.T) {
 	for _, command := range []string{"agent.image.status", "agent.image.cancel"} {
 		t.Run(command, func(t *testing.T) {
 			c := localCtx(t)
 			ref := image.Ref{Name: "reviewer", Tag: "latest"}
 			spec := &imagefile.V2{SchemaVersion: 2, ImageVersion: "1.0.0"}
-			first, err := image.BuildV2Mutable(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
+			first, err := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,13 +158,13 @@ func TestAgentImageReadWaitsForPublicationRollback(t *testing.T) {
 			go func() {
 				finished <- image.WithPublicationGate(func() error {
 					spec.ImageVersion = "9.0.0"
-					_, err := image.BuildV2Mutable(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
+					_, err := image.BuildV2(spec, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 					published <- err
 					<-release
 					if err != nil {
 						return err
 					}
-					return imageStore(c).RestoreMutable(ref, first.Digest, true)
+					return imageStore(c).SetTag(ref, first.Digest)
 				})
 			}()
 			if err := <-published; err != nil {

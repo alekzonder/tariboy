@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -117,9 +118,7 @@ func imageBuild() registry.Command {
 				return nil, err
 			}
 			if err := image.WithPublicationGate(func() error {
-				store := imageStore(c)
-				provenanceStore := imageprovenance.Store{DB: c.Store.DB}
-				return store.RecoverMutablePublications(provenanceStore.IsCommitted)
+				return imageStore(c).Migrate()
 			}); err != nil {
 				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
 			}
@@ -166,95 +165,54 @@ func imageBuild() registry.Command {
 			}
 			builtAt := time.Now()
 			clock := func() time.Time { return builtAt }
-			stageRoot, err := os.MkdirTemp(c.BaseDir, ".image-build-")
-			if err != nil {
-				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-			}
-			defer os.RemoveAll(stageRoot)
-			stagedStore := &image.Store{Dir: filepath.Join(stageRoot, "images")}
-			type stagedImage struct {
-				ref      image.Ref
-				manifest image.Manifest
-				archive  []byte
-			}
-			staged := make([]stagedImage, 0, len(refs))
-			var sourceArchive []byte
 			if parsed.Version != 2 {
 				return nil, api.UserError{Code: "build_failed", Msg: imagefile.SchemaV1MigrationMessage}
-			}
-			for i, ref := range refs {
-				var man image.Manifest
-				if i == 0 {
-					man, err = image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir, SourceSkills: frozen.SourceSkills}, ref, stagedStore, clock, resolver)
-					if err == nil {
-						sourceArchive, err = stagedStore.ArchiveBytes(ref)
-					}
-				} else {
-					_, err = stagedStore.RetagPortableArchive(refs[0], ref, sourceArchive)
-					if err == nil {
-						man, err = stagedStore.Inspect(ref)
-					}
-				}
-				if err != nil {
-					return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-				}
-				archive, err := stagedStore.ArchiveBytes(ref)
-				if err != nil {
-					return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-				}
-				staged = append(staged, stagedImage{ref: ref, manifest: man, archive: archive})
 			}
 			var result any
 			err = image.WithPublicationGate(func() error {
 				store := imageStore(c)
-				provenanceStore := imageprovenance.Store{DB: c.Store.DB}
-				if err := store.RecoverMutablePublications(provenanceStore.IsCommitted); err != nil {
+				if err := store.Migrate(); err != nil {
 					return api.UserError{Code: "build_failed", Msg: err.Error()}
 				}
-				candidates := make([]image.PublicationCandidate, 0, len(staged))
-				for _, candidate := range staged {
-					candidates = append(candidates, image.PublicationCandidate{Ref: candidate.ref, Digest: candidate.manifest.Digest})
-				}
-				publication, err := store.BeginMutablePublication(candidates)
+				publication, err := store.BeginPublication(refs)
 				if err != nil {
 					return api.UserError{Code: "build_failed", Msg: err.Error()}
 				}
-				rollback := func(code string, cause error) error {
-					if rollbackErr := publication.Rollback(); rollbackErr != nil {
-						return api.UserError{Code: code, Msg: fmt.Sprintf("%v; rollback images: %v", cause, rollbackErr)}
+				restore := func(code string, cause error) error {
+					if restoreErr := publication.Restore(); restoreErr != nil {
+						return api.UserError{Code: code, Msg: fmt.Sprintf("%v; restore images: %v", cause, restoreErr)}
 					}
 					return api.UserError{Code: code, Msg: cause.Error()}
 				}
-				for _, candidate := range staged {
-					published, err := store.InstallMutableArchive(candidate.ref, candidate.archive)
-					if err != nil {
-						return rollback("build_failed", err)
-					}
-					if published.Digest != candidate.manifest.Digest {
-						return rollback("build_failed", fmt.Errorf("published image %s digest changed", candidate.ref.String()))
+				// One build produces one ref; every requested tag is moved onto it,
+				// so a versioned tag and latest always name the same content.
+				man, err := image.BuildV2(parsed.V2, imagefile.ResolveRoots{Plugins: pluginsDir, SourceSkills: frozen.SourceSkills}, refs[0], store, clock, resolver)
+				if err != nil {
+					return restore("build_failed", err)
+				}
+				for _, ref := range refs[1:] {
+					if err := store.SetTag(ref, man.Digest); err != nil {
+						return restore("build_failed", err)
 					}
 				}
 				results := make([]map[string]any, 0, len(refs))
 				tx, err := c.Store.DB.BeginTx(context.Background(), nil)
 				if err != nil {
-					return rollback("provenance_failed", err)
+					return restore("provenance_failed", err)
 				}
 				defer tx.Rollback()
-				for _, candidate := range staged {
-					man := candidate.manifest
-					if _, err := snapshotStore.CaptureFrozenTx(context.Background(), tx, candidate.ref.String(), man.Digest, name, frozen, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
-						return rollback("provenance_failed", err)
+				provenanceStore := imageprovenance.Store{DB: c.Store.DB}
+				for _, ref := range refs {
+					if _, err := snapshotStore.CaptureFrozenTx(context.Background(), tx, ref.String(), man.Digest, name, frozen, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
+						return restore("provenance_failed", err)
 					}
-					if err := provenanceStore.UpsertTx(tx, imageprovenance.Record{Ref: candidate.ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
-						return rollback("provenance_failed", err)
+					if err := provenanceStore.UpsertTx(tx, imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
+						return restore("provenance_failed", err)
 					}
-					results = append(results, map[string]any{"name": man.Name, "tag": man.Tag, "digest": man.Digest, "layers": len(man.Layers)})
+					results = append(results, map[string]any{"name": man.Name, "tag": ref.Tag, "digest": man.Digest, "layers": len(man.Layers)})
 				}
 				if err := tx.Commit(); err != nil {
-					return rollback("provenance_failed", err)
-				}
-				if err := publication.Complete(); err != nil {
-					return api.UserError{Code: "build_failed", Msg: err.Error()}
+					return restore("provenance_failed", err)
 				}
 				if len(results) == 1 || defaultTags {
 					result = results[0]
@@ -272,39 +230,23 @@ func imageBuild() registry.Command {
 }
 
 func imageBuildRefs(name string, tags []string, parsed *imagefile.Parsed) ([]image.Ref, bool, error) {
-	defaultTags := len(tags) == 0
-	if defaultTags {
-		imageVersion := ""
-		if parsed.Version == 2 {
-			imageVersion = parsed.V2.ImageVersion
-		} else {
-			imageVersion = parsed.V1.ImageVersion
-		}
-		if imageVersion == "" {
-			imageVersion = "latest"
-		}
-		tags = []string{imageVersion}
-		if imageVersion != "latest" {
-			tags = append(tags, "latest")
-		}
+	imageVersion := ""
+	if parsed.Version == 2 {
+		imageVersion = parsed.V2.ImageVersion
+	} else {
+		imageVersion = parsed.V1.ImageVersion
 	}
-	refs := make([]image.Ref, 0, len(tags))
-	seen := make(map[string]bool, len(tags))
-	for _, tag := range tags {
-		ref, err := image.ParseRef(name + ":" + tag)
-		if err != nil {
-			return nil, defaultTags, api.UserError{Code: "bad_ref", Msg: err.Error()}
-		}
-		if seen[ref.String()] {
-			return nil, defaultTags, api.UserError{Code: "duplicate_tag", Msg: "duplicate image tag " + tag}
-		}
-		if image.IsReserved(ref) {
-			return nil, defaultTags, api.UserError{Code: "reserved_image", Msg: "image " + ref.String() + " is managed by tariboyd"}
-		}
-		seen[ref.String()] = true
-		refs = append(refs, ref)
+	refs, defaultTags, err := image.BuildRefs(name, tags, imageVersion)
+	switch {
+	case err == nil:
+		return refs, defaultTags, nil
+	case errors.Is(err, image.ErrDuplicateTag):
+		return nil, defaultTags, api.UserError{Code: "duplicate_tag", Msg: err.Error()}
+	case errors.Is(err, image.ErrTagReserved):
+		return nil, defaultTags, api.UserError{Code: "reserved_image", Msg: err.Error()}
+	default:
+		return nil, defaultTags, api.UserError{Code: "bad_ref", Msg: err.Error()}
 	}
-	return refs, defaultTags, nil
 }
 
 func canonicalSourceDir(input string) (string, error) {

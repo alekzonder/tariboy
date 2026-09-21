@@ -3,7 +3,6 @@ package commands
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -298,7 +297,7 @@ func TestImageBuildV2PackagesSiblingSkill(t *testing.T) {
 	}
 }
 
-func TestImageBuildRebuildsMutableTag(t *testing.T) {
+func TestImageBuildRebuildsExistingTag(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
 	first, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": src})
@@ -314,9 +313,6 @@ func TestImageBuildRebuildsMutableTag(t *testing.T) {
 	}
 	if first.(map[string]any)["digest"] == second.(map[string]any)["digest"] {
 		t.Fatal("rebuild kept the old digest")
-	}
-	if !imageStore(c).IsMutable(image.Ref{Name: "reviewer", Tag: "latest"}) {
-		t.Fatal("rebuilt ref is not mutable")
 	}
 }
 
@@ -340,7 +336,7 @@ func TestImageBuildUpdatesImportedAndRetaggedRefs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := target.InstallPortableArchive(ref, archive); err != nil {
+			if _, err := target.InstallArchive(ref, archive); err != nil {
 				t.Fatal(err)
 			}
 			return manifest.Digest
@@ -360,11 +356,11 @@ func TestImageBuildUpdatesImportedAndRetaggedRefs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			digest, err := target.RetagPortableArchive(sourceRef, ref, archive)
+			retagged, err := target.RetagArchive(sourceRef, ref, archive)
 			if err != nil {
 				t.Fatal(err)
 			}
-			return digest
+			return retagged.Digest
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -381,14 +377,14 @@ func TestImageBuildUpdatesImportedAndRetaggedRefs(t *testing.T) {
 			}
 			digest := result.(map[string]any)["digest"].(string)
 			current, inspectErr := imageStore(c).Inspect(ref)
-			if inspectErr != nil || digest == before || current.Digest != digest || !imageStore(c).IsMutable(ref) {
-				t.Fatalf("updated ref: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
+			if inspectErr != nil || digest == before || current.Digest != digest {
+				t.Fatalf("updated ref: manifest=%#v err=%v", current, inspectErr)
 			}
 		})
 	}
 }
 
-func TestImageBuildUpdatesImportedRefAfterMutableRefRemoval(t *testing.T) {
+func TestImageBuildUpdatesImportedRefAfterRefRemoval(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -423,8 +419,8 @@ func TestImageBuildUpdatesImportedRefAfterMutableRefRemoval(t *testing.T) {
 	}
 	digest := result.(map[string]any)["digest"].(string)
 	current, inspectErr := imageStore(c).Inspect(ref)
-	if inspectErr != nil || digest == imported.Digest || current.Digest != digest || !imageStore(c).IsMutable(ref) {
-		t.Fatalf("updated import: manifest=%#v err=%v mutable=%v", current, inspectErr, imageStore(c).IsMutable(ref))
+	if inspectErr != nil || digest == imported.Digest || current.Digest != digest {
+		t.Fatalf("updated import: manifest=%#v err=%v", current, inspectErr)
 	}
 }
 
@@ -504,8 +500,8 @@ func TestImageBuildMigratesUnmarkedOrdinaryRefWithMatchingProvenance(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.(map[string]any)["digest"] == first.Digest || !imageStore(c).IsMutable(ref) {
-		t.Fatalf("legacy ref was not migrated: %#v", result)
+	if result.(map[string]any)["digest"] == first.Digest {
+		t.Fatalf("legacy ref was not rebuilt: %#v", result)
 	}
 }
 
@@ -603,76 +599,6 @@ func TestImageBuildRollsBackEveryTagWhenSecondMetadataWriteFails(t *testing.T) {
 	}
 }
 
-func writeMutablePublicationJournal(t *testing.T, store *image.Store, ref image.Ref, candidate, previous string, hadRef, wasMutable bool) string {
-	t.Helper()
-	dir := filepath.Join(store.Dir, ".publications")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	journal := map[string]any{"entries": []map[string]any{{
-		"ref": ref.String(), "candidate_digest": candidate, "previous_digest": previous,
-		"had_ref": hadRef, "was_mutable": wasMutable, "history_existed": false,
-	}}}
-	data, err := json.Marshal(journal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(dir, "crashed.json")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
-func TestImageBuildRecoversInterruptedPublicationFromCommittedMetadata(t *testing.T) {
-	for _, committed := range []bool{false, true} {
-		t.Run(map[bool]string{false: "rollback", true: "finalize"}[committed], func(t *testing.T) {
-			c := localCtx(t)
-			src := writeExample(t)
-			ref := image.Ref{Name: "reviewer", Tag: "latest"}
-			firstResult, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": src})
-			if err != nil {
-				t.Fatal(err)
-			}
-			first := firstResult.(map[string]any)["digest"].(string)
-			if err := os.WriteFile(filepath.Join(src, "task.md"), []byte("interrupted candidate"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			parsed, err := imagefile.ParseV2(src)
-			if err != nil {
-				t.Fatal(err)
-			}
-			candidate, err := image.BuildV2Mutable(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			journal := writeMutablePublicationJournal(t, imageStore(c), ref, candidate.Digest, first, true, true)
-			if committed {
-				if _, err := c.Store.DB.Exec(`UPDATE image_source_snapshots SET image_digest=? WHERE image_ref=?`, candidate.Digest, ref.String()); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := c.Store.DB.Exec(`UPDATE image_provenance SET digest=? WHERE ref=?`, candidate.Digest, ref.String()); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "other", "tag": "latest", "path": writeExample(t)}); err != nil {
-				t.Fatal(err)
-			}
-			current, err := imageStore(c).Inspect(ref)
-			want := first
-			if committed {
-				want = candidate.Digest
-			}
-			if err != nil || current.Digest != want {
-				t.Fatalf("recovered digest=%s err=%v want=%s", current.Digest, err, want)
-			}
-			if _, err := os.Stat(journal); !os.IsNotExist(err) {
-				t.Fatalf("publication journal survived recovery: %v", err)
-			}
-		})
-	}
-}
-
 func TestImageBuildRejectsDuplicateAndReservedTagsBeforePublishing(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -752,13 +678,13 @@ func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
 	locked := make(chan error, 1)
 	go func() {
 		locked <- image.WithPublicationGate(func() error {
-			_, buildErr := image.BuildV2Mutable(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
+			_, buildErr := image.BuildV2(parsed, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 			published <- buildErr
 			if buildErr != nil {
 				return buildErr
 			}
 			<-release
-			return imageStore(c).RestoreMutable(ref, first, true)
+			return imageStore(c).SetTag(ref, first)
 		})
 	}()
 	if err := <-published; err != nil {
@@ -878,7 +804,7 @@ func TestImageBuildRestoresExistingRefAndMetadataWhenProvenanceFails(t *testing.
 	}
 }
 
-func TestImageBuildRestoresImmutableRefWhenProvenanceFails(t *testing.T) {
+func TestImageBuildRestoresRefWhenProvenanceFails(t *testing.T) {
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "imported", Tag: "v1"}
@@ -889,9 +815,6 @@ func TestImageBuildRestoresImmutableRefWhenProvenanceFails(t *testing.T) {
 	first, err := image.BuildV2(file, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if imageStore(c).IsMutable(ref) {
-		t.Fatal("seed ref is mutable")
 	}
 	if _, err := imageSnapshotStore(c).Capture(context.Background(), ref.String(), first.Digest, ref.Name, src); err != nil {
 		t.Fatal(err)
@@ -907,8 +830,8 @@ func TestImageBuildRestoresImmutableRefWhenProvenanceFails(t *testing.T) {
 		t.Fatal("rebuild succeeded despite provenance failure")
 	}
 	current, err := imageStore(c).Inspect(ref)
-	if err != nil || current.Digest != first.Digest || imageStore(c).IsMutable(ref) {
-		t.Fatalf("restored ref = %#v, %v, mutable=%v", current, err, imageStore(c).IsMutable(ref))
+	if err != nil || current.Digest != first.Digest {
+		t.Fatalf("restored ref = %#v, %v", current, err)
 	}
 }
 
@@ -1247,7 +1170,7 @@ func (s heldImageSpawner) Start(argv, _ []string, _ string) error {
 }
 
 func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
-	for _, nextVersion := range []string{"1.1.0", "1.0.0"} {
+	for _, nextVersion := range []string{"1.1.0"} {
 		t.Run(nextVersion, func(t *testing.T) {
 			c := localCtx(t)
 			runtime := t.TempDir()
@@ -1386,6 +1309,53 @@ func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
 				t.Fatalf("unchanged latest changed execution identity: %+v err=%v", unchanged, err)
 			}
 		})
+	}
+}
+
+// TestImageBuildWithoutVersionBumpKeepsRefID records the identity rule: the
+// ref id comes from name and image_version, so rebuilding the same version
+// republishes the same ref instead of creating another generation.
+func TestImageBuildWithoutVersionBumpKeepsRefID(t *testing.T) {
+	c := localCtx(t)
+	src := t.TempDir()
+	write := func(prompt string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nimage_version: 1.0.0\nprompts:\n  - file: ./prompt.md\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(src, "prompt.md"), []byte(prompt), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	build := func() map[string]any {
+		t.Helper()
+		result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "path": src})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.(map[string]any)
+	}
+	write("FIRST")
+	first := build()
+	write("SECOND")
+	second := build()
+	if first["digest"] != second["digest"] {
+		t.Fatalf("same image_version produced %v and %v", first["digest"], second["digest"])
+	}
+	versioned, err := imageStore(c).Inspect(image.Ref{Name: "reviewer", Tag: "1.0.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := imageStore(c).Inspect(image.Ref{Name: "reviewer", Tag: "latest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if versioned.Digest != second["digest"] || latest.Digest != second["digest"] {
+		t.Fatalf("tags = %s and %s, want %v", versioned.Digest, latest.Digest, second["digest"])
+	}
+	prompt, err := imageStore(c).RenderPrompt(image.Ref{Name: "reviewer", Tag: "latest"})
+	if err != nil || !strings.Contains(prompt, "SECOND") {
+		t.Fatalf("republished prompt = %q, %v", prompt, err)
 	}
 }
 

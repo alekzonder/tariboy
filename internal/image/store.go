@@ -12,391 +12,250 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
 
 // Store is an on-disk image store rooted at Dir (paths.ImagesDir()).
+//
+// Layout:
+//
+//	<dir>/<name>/refs/<id>.tar.gz   the image content, addressed by ref id
+//	<dir>/<name>/tags/<tag>         one line naming the id that tag points at
+//
+// A tag is only a pointer. Building writes the content of its ref id and moves
+// the requested tags onto it, so every ref can be rebuilt at any time and by
+// any caller. Agents and the operator CLI share this one mechanism.
 type Store struct{ Dir string }
 
-type PublicationCandidate struct {
-	Ref    Ref
-	Digest string
-}
+var refIDPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-type publicationEntry struct {
-	Ref             string `json:"ref"`
-	CandidateDigest string `json:"candidate_digest"`
-	PreviousDigest  string `json:"previous_digest"`
-	HadRef          bool   `json:"had_ref"`
-	WasMutable      bool   `json:"was_mutable"`
-	HistoryExisted  bool   `json:"history_existed"`
-}
-
-type publicationJournal struct {
-	Entries []publicationEntry `json:"entries"`
-}
-
-type MutablePublication struct {
-	store   *Store
-	path    string
-	journal publicationJournal
-}
-
-// ponytail: global lock, use per-ref locks if mutable image publication becomes a bottleneck.
-var mutablePublishMu sync.Mutex
-
-// ponytail: global lock, use per-ref locks if controlled image publication becomes a bottleneck.
+// ponytail: global lock, use per-ref locks if image publication becomes a bottleneck.
 var publicationGate sync.Mutex
 
-// WithPublicationGate prevents ordinary mutable authoring from racing a
-// controlled release's immutable archive and release record.
+// WithPublicationGate serializes publication against concurrent readers that
+// resolve a tag and then open its content.
 func WithPublicationGate(fn func() error) error {
 	publicationGate.Lock()
 	defer publicationGate.Unlock()
 	return fn()
 }
 
-func (s *Store) publicationsDir() string { return filepath.Join(s.Dir, ".publications") }
+// RefID derives a ref's identity from its image name and the image_version
+// declared in Tariboyfile.yaml. Rebuilding the same version rewrites the same
+// ref; bumping the version creates another one, so a pinned agent keeps the
+// generation it was assigned. An image that declares no version has no derived
+// id and stays content-addressed by its archive bytes.
+func RefID(name, imageVersion string) string {
+	if imageVersion == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(name + "\n" + imageVersion))
+	return hex.EncodeToString(sum[:])
+}
 
-// BeginMutablePublication writes the recovery intent before any ref moves.
-func (s *Store) BeginMutablePublication(candidates []PublicationCandidate) (*MutablePublication, error) {
-	journal := publicationJournal{Entries: make([]publicationEntry, 0, len(candidates))}
-	seen := make(map[string]bool, len(candidates))
-	for _, candidate := range candidates {
-		if seen[candidate.Ref.String()] || len(candidate.Digest) != sha256.Size*2 {
-			return nil, errors.New("invalid mutable publication candidate")
-		}
-		seen[candidate.Ref.String()] = true
-		entry := publicationEntry{Ref: candidate.Ref.String(), CandidateDigest: candidate.Digest}
-		if s.Exists(candidate.Ref) {
-			current, err := s.Inspect(candidate.Ref)
-			if err != nil {
-				return nil, err
-			}
-			entry.HadRef, entry.WasMutable, entry.PreviousDigest = true, s.IsMutable(candidate.Ref), current.Digest
-			_, err = os.Stat(s.pinnedMutablePath(candidate.Ref, current.Digest))
-			entry.HistoryExisted = err == nil
-			if err != nil && !os.IsNotExist(err) {
-				return nil, err
-			}
-		}
-		journal.Entries = append(journal.Entries, entry)
-	}
-	if err := os.MkdirAll(s.publicationsDir(), 0o700); err != nil {
-		return nil, err
-	}
-	data, err := json.Marshal(journal)
+func (s *Store) nameDir(name string) string { return filepath.Join(s.Dir, name) }
+func (s *Store) refsDir(name string) string { return filepath.Join(s.Dir, name, "refs") }
+func (s *Store) tagsDir(name string) string { return filepath.Join(s.Dir, name, "tags") }
+func (s *Store) tagPath(ref Ref) string     { return filepath.Join(s.tagsDir(ref.Name), ref.Tag) }
+func (s *Store) contentPath(name, id string) string {
+	return filepath.Join(s.refsDir(name), id+".tar.gz")
+}
+
+// Resolve reports the ref id a tag currently points at.
+func (s *Store) Resolve(ref Ref) (string, error) {
+	data, err := os.ReadFile(s.tagPath(ref))
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("image %s not found", ref.String())
+		}
+		return "", err
 	}
-	tmp, err := os.CreateTemp(s.publicationsDir(), ".publication-*.tmp")
+	id := strings.TrimSpace(string(data))
+	if !refIDPattern.MatchString(id) {
+		return "", fmt.Errorf("image %s has an invalid tag pointer", ref.String())
+	}
+	return id, nil
+}
+
+// archiveFor resolves the tag and returns the path of its content.
+func (s *Store) archiveFor(ref Ref) (string, error) {
+	id, err := s.Resolve(ref)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return nil, err
+	path := s.contentPath(ref.Name, id)
+	if _, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("image %s content %s is unavailable", ref.String(), id)
 	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return nil, err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return nil, err
-	}
-	if err := tmp.Close(); err != nil {
-		return nil, err
-	}
-	path := strings.TrimSuffix(tmpName, ".tmp") + ".json"
-	if err := os.Rename(tmpName, path); err != nil {
-		return nil, err
-	}
-	if err := syncDirectory(s.publicationsDir()); err != nil {
-		return nil, err
-	}
-	return &MutablePublication{store: s, path: path, journal: journal}, nil
+	return path, nil
 }
 
-func (p *MutablePublication) Complete() error {
-	if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
-		return err
+// TagExists reports whether the tag pointer exists, which distinguishes a ref
+// that was never built here from one whose content cannot be read. A stat
+// failure other than "not exist" is returned rather than reported as absent.
+func (s *Store) TagExists(ref Ref) (bool, error) {
+	if _, err := os.Stat(s.tagPath(ref)); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
 	}
-	return syncDirectory(filepath.Dir(p.path))
-}
-
-func (p *MutablePublication) Rollback() error {
-	var rollbackErrors []error
-	for i := len(p.journal.Entries) - 1; i >= 0; i-- {
-		if err := p.store.restorePublicationEntry(p.journal.Entries[i]); err != nil {
-			rollbackErrors = append(rollbackErrors, err)
-		}
-	}
-	if len(rollbackErrors) == 0 {
-		return p.Complete()
-	}
-	return errors.Join(rollbackErrors...)
-}
-
-func (s *Store) restorePublicationEntry(entry publicationEntry) error {
-	ref, err := ParseRef(entry.Ref)
-	if err != nil {
-		return err
-	}
-	if !entry.HadRef {
-		if !s.Exists(ref) {
-			_ = os.Remove(s.digestPath(ref))
-			_ = os.Remove(s.mutablePath(ref))
-			_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
-			_ = os.Remove(s.refDir(ref))
-			return syncDirectory(s.Dir)
-		}
-		current, err := s.Inspect(ref)
-		if err != nil {
-			return err
-		}
-		if current.Digest != entry.CandidateDigest {
-			return fmt.Errorf("recover mutable image %s: unexpected digest %s", ref.String(), current.Digest)
-		}
-		return s.Remove(ref)
-	}
-	current, err := s.Inspect(ref)
-	if err != nil {
-		return err
-	}
-	if current.Digest != entry.PreviousDigest {
-		if current.Digest != entry.CandidateDigest {
-			return fmt.Errorf("recover mutable image %s: unexpected digest %s", ref.String(), current.Digest)
-		}
-		if err := s.RestoreMutable(ref, entry.PreviousDigest, entry.WasMutable); err != nil {
-			return err
-		}
-	} else if !entry.WasMutable {
-		_ = os.Remove(s.mutablePath(ref))
-	}
-	if entry.WasMutable && !entry.HistoryExisted {
-		_ = os.Remove(s.pinnedMutablePath(ref, entry.PreviousDigest))
-	}
-	if !entry.WasMutable {
-		_ = os.RemoveAll(filepath.Dir(s.pinnedMutablePath(ref, "")))
-	}
-	return nil
-}
-
-// RecoverMutablePublications rolls incomplete batches back unless both
-// authoritative metadata rows committed every candidate digest.
-func (s *Store) RecoverMutablePublications(committed func(string, string) (bool, error)) error {
-	entries, err := os.ReadDir(s.publicationsDir())
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(s.publicationsDir(), entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		var journal publicationJournal
-		if err := json.Unmarshal(data, &journal); err != nil || len(journal.Entries) == 0 {
-			return fmt.Errorf("invalid mutable publication journal %s", entry.Name())
-		}
-		publication := &MutablePublication{store: s, path: path, journal: journal}
-		allCommitted := true
-		for _, item := range journal.Entries {
-			ok, err := committed(item.Ref, item.CandidateDigest)
-			if err != nil {
-				return err
-			}
-			allCommitted = allCommitted && ok
-		}
-		if !allCommitted {
-			if err := publication.Rollback(); err != nil {
-				return err
-			}
-			continue
-		}
-		for _, item := range journal.Entries {
-			ref, err := ParseRef(item.Ref)
-			if err != nil {
-				return err
-			}
-			current, err := s.Inspect(ref)
-			if err != nil || current.Digest != item.CandidateDigest || !s.IsMutable(ref) {
-				return fmt.Errorf("committed mutable image %s@%s is unavailable", item.Ref, item.CandidateDigest)
-			}
-		}
-		if err := publication.Complete(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *Store) refDir(ref Ref) string     { return filepath.Join(s.Dir, ref.Name) }
-func (s *Store) tarPath(ref Ref) string    { return filepath.Join(s.Dir, ref.Name, ref.Tag+".tar.gz") }
-func (s *Store) digestPath(ref Ref) string { return filepath.Join(s.Dir, ref.Name, ref.Tag+".digest") }
-func (s *Store) mutablePath(ref Ref) string {
-	return filepath.Join(s.Dir, ref.Name, ref.Tag+".mutable")
-}
-func (s *Store) pinnedManagedPath(ref Ref, digest string) string {
-	return filepath.Join(s.Dir, ".managed", ref.Name, ref.Tag, digest+".tar.gz")
-}
-func (s *Store) pinnedMutablePath(ref Ref, digest string) string {
-	return filepath.Join(s.Dir, ".mutable", ref.Name, ref.Tag, digest+".tar.gz")
+	return true, nil
 }
 
 func (s *Store) Exists(ref Ref) bool {
-	_, err := os.Stat(s.tarPath(ref))
+	_, err := s.archiveFor(ref)
 	return err == nil
 }
 
-// IsMutable reports whether ref was published through the mutable authoring path.
-func (s *Store) IsMutable(ref Ref) bool {
-	info, err := os.Stat(s.mutablePath(ref))
-	return err == nil && info.Mode().IsRegular()
-}
+// ArchivePath returns the on-disk file a ref currently points at.
+func (s *Store) ArchivePath(ref Ref) (string, error) { return s.archiveFor(ref) }
 
 func (s *Store) ArchiveBytes(ref Ref) ([]byte, error) {
-	if !s.Exists(ref) {
-		return nil, fmt.Errorf("image %s not found", ref.String())
+	path, err := s.archiveFor(ref)
+	if err != nil {
+		return nil, err
 	}
-	return os.ReadFile(s.tarPath(ref))
+	return os.ReadFile(path)
 }
 
-// InstallMutableArchive publishes already-validated authoring bytes.
-func (s *Store) InstallMutableArchive(ref Ref, archive []byte) (Manifest, error) {
-	manifest, err := validatePortableArchive(archive, ref)
-	if err != nil {
-		return Manifest{}, err
+// SetTag points one tag at content that is already stored. This is how a build
+// publishes several tags — a versioned tag and latest — without building twice.
+func (s *Store) SetTag(ref Ref, id string) error {
+	if !refIDPattern.MatchString(id) {
+		return fmt.Errorf("invalid image ref id %q", id)
 	}
-	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
-		return Manifest{}, err
+	if _, err := os.Stat(s.contentPath(ref.Name, id)); err != nil {
+		return fmt.Errorf("image %s content %s is unavailable", ref.String(), id)
 	}
-	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".publish-*.tmp")
+	if err := os.MkdirAll(s.tagsDir(ref.Name), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(s.tagsDir(ref.Name), "."+ref.Tag+"-*.tmp")
 	if err != nil {
-		return Manifest{}, err
+		return err
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
 	if err := tmp.Chmod(0o600); err != nil {
 		tmp.Close()
-		return Manifest{}, err
+		return err
 	}
-	if _, err := tmp.Write(archive); err != nil {
+	if _, err := io.WriteString(tmp, id+"\n"); err != nil {
 		tmp.Close()
-		return Manifest{}, err
+		return err
 	}
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return Manifest{}, err
+		return err
 	}
 	if err := tmp.Close(); err != nil {
-		return Manifest{}, err
+		return err
 	}
-	digest, err := s.publishArchive(ref, tmpName, true, nil)
+	if err := os.Rename(tmpName, s.tagPath(ref)); err != nil {
+		return err
+	}
+	return syncDirectory(s.tagsDir(ref.Name))
+}
+
+// InstallArchive publishes validated archive bytes as the content of their ref
+// and moves ref onto it. Existing content of the same id is replaced.
+func (s *Store) InstallArchive(ref Ref, archive []byte) (Manifest, error) {
+	manifest, err := validatePortableArchive(archive, ref)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("validate image %s: %w", ref.String(), err)
+	}
+	tmpName, err := s.stageBytes(ref, "install", archive)
 	if err != nil {
 		return Manifest{}, err
 	}
-	manifest.Digest = digest
+	defer os.Remove(tmpName)
+	if err := s.install(ref, manifest.Digest, tmpName); err != nil {
+		return Manifest{}, err
+	}
 	return manifest, nil
 }
 
-// InstallPortableArchive publishes a validated runnable archive without
-// reconstructing it from source files.
-func (s *Store) InstallPortableArchive(ref Ref, archive []byte) error {
-	if IsReserved(ref) {
-		return fmt.Errorf("portable install cannot replace reserved ref: %s", ref.String())
-	}
-	manifest, err := validatePortableArchive(archive, ref)
+// PublishArchiveFile publishes an already staged archive file, checking only
+// its manifest identity, and consumes the file. Callers holding untrusted
+// bytes use InstallArchive, which applies the full portable contract.
+func (s *Store) PublishArchiveFile(ref Ref, path string) (string, error) {
+	return s.publishArchive(ref, path, nil)
+}
+
+// RetagArchive publishes a runnable archive under another image name by
+// rewriting only its manifest identity. Payload bytes and their declared order
+// are preserved.
+func (s *Store) RetagArchive(source, target Ref, archive []byte) (Manifest, error) {
+	retagged, _, err := RetagArchiveBytes(source, target, archive)
 	if err != nil {
-		return fmt.Errorf("validate imported image: %w", err)
+		return Manifest{}, err
 	}
-	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".import-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	defer os.Remove(name)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(archive); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Link(name, s.tarPath(ref)); err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("%w: %s", ErrExists, ref.String())
-		}
-		return err
-	}
-	if err := writeDigestCache(s.digestPath(ref), manifest.Digest); err != nil {
-		_ = os.Remove(s.digestPath(ref))
-	}
-	return nil
+	return s.InstallArchive(target, retagged)
 }
 
-// RetagPortableArchive installs a runnable archive under a different immutable
-// ref by rewriting only manifest identity. Prompt/plugin payload bytes and their
-// declared order are preserved; the resulting archive has its own digest.
-func (s *Store) RetagPortableArchive(source, target Ref, archive []byte) (string, error) {
-	return s.retagPortableArchive(source, target, archive, false, nil)
-}
-
-// RetagMutableArchive rewrites only manifest identity while publishing the
-// target through the ordinary mutable authoring path.
-func (s *Store) RetagMutableArchive(source, target Ref, archive []byte) (string, error) {
-	return s.retagPortableArchive(source, target, archive, true, nil)
-}
-
-// RetagMutableArchiveManifest also returns the validated manifest used for
-// publication, avoiding a fallible read after the target ref has moved.
-func (s *Store) RetagMutableArchiveManifest(source, target Ref, archive []byte) (Manifest, error) {
-	var manifest Manifest
-	_, err := s.retagPortableArchive(source, target, archive, true, &manifest)
-	return manifest, err
-}
-
-func (s *Store) retagPortableArchive(source, target Ref, archive []byte, mutable bool, manifestOut *Manifest) (string, error) {
-	if IsReserved(target) {
-		return "", fmt.Errorf("portable install cannot replace reserved ref: %s", target.String())
-	}
-	if _, err := validatePortableArchive(archive, source); err != nil {
-		return "", fmt.Errorf("validate imported image: %w", err)
-	}
-	if err := os.MkdirAll(s.refDir(target), 0o700); err != nil {
+func (s *Store) stageBytes(ref Ref, kind string, archive []byte) (string, error) {
+	if err := os.MkdirAll(s.nameDir(ref.Name), 0o700); err != nil {
 		return "", err
 	}
-	in, err := gzip.NewReader(bytes.NewReader(archive))
-	if err != nil {
-		return "", err
-	}
-	defer in.Close()
-	tmp, err := os.CreateTemp(s.refDir(target), target.Tag+".retag-*.tmp")
+	tmp, err := os.CreateTemp(s.nameDir(ref.Name), "."+kind+"-*.tmp")
 	if err != nil {
 		return "", err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	defer tmp.Close()
-	hasher := sha256.New()
-	gz := gzip.NewWriter(io.MultiWriter(tmp, hasher))
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return "", err
+	}
+	if _, err := tmp.Write(archive); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return "", err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return "", err
+	}
+	return tmpName, nil
+}
+
+// install moves staged content into place and advances ref onto it.
+func (s *Store) install(ref Ref, id, tmpName string) error {
+	if !refIDPattern.MatchString(id) {
+		return fmt.Errorf("invalid image ref id for %s", ref.String())
+	}
+	if err := os.MkdirAll(s.refsDir(ref.Name), 0o700); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, s.contentPath(ref.Name, id)); err != nil {
+		return fmt.Errorf("publish image %s: %w", ref.String(), err)
+	}
+	if err := syncDirectory(s.refsDir(ref.Name)); err != nil {
+		return err
+	}
+	return s.SetTag(ref, id)
+}
+
+// RetagArchiveBytes rewrites manifest identity without touching a store.
+func RetagArchiveBytes(source, target Ref, archive []byte) ([]byte, Manifest, error) {
+	if _, err := validatePortableArchive(archive, source); err != nil {
+		return nil, Manifest{}, fmt.Errorf("validate imported image: %w", err)
+	}
+	in, err := gzip.NewReader(bytes.NewReader(archive))
+	if err != nil {
+		return nil, Manifest{}, err
+	}
+	defer in.Close()
+	var out bytes.Buffer
+	gz := gzip.NewWriter(&out)
 	tw := tar.NewWriter(gz)
 	tr := tar.NewReader(in)
 	seenManifest := false
@@ -406,128 +265,88 @@ func (s *Store) retagPortableArchive(source, target Ref, archive []byte, mutable
 			break
 		}
 		if nextErr != nil {
-			return "", nextErr
+			return nil, Manifest{}, nextErr
 		}
 		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
-			return "", fmt.Errorf("invalid image archive member %q", header.Name)
+			return nil, Manifest{}, fmt.Errorf("invalid image archive member %q", header.Name)
 		}
 		body, readErr := io.ReadAll(tr)
 		if readErr != nil {
-			return "", readErr
+			return nil, Manifest{}, readErr
 		}
 		if header.Name == "manifest.json" {
 			if seenManifest {
-				return "", errors.New("duplicate image manifest")
+				return nil, Manifest{}, errors.New("duplicate image manifest")
 			}
 			seenManifest = true
 			var fields map[string]any
 			if err := json.Unmarshal(body, &fields); err != nil {
-				return "", err
+				return nil, Manifest{}, err
 			}
 			fields["name"] = target.Name
-			fields["tag"] = target.Tag
+			delete(fields, "tag")
 			delete(fields, "digest")
+			imageVersion, _ := fields["image_version"].(string)
+			if id := RefID(target.Name, imageVersion); id != "" {
+				fields["id"] = id
+			} else {
+				delete(fields, "id")
+			}
 			body, err = json.MarshalIndent(fields, "", "  ")
 			if err != nil {
-				return "", err
+				return nil, Manifest{}, err
 			}
 		}
 		if err := writeTarFileMode(tw, header.Name, body, header.Mode&0o7777); err != nil {
-			return "", err
+			return nil, Manifest{}, err
 		}
 	}
 	if !seenManifest {
-		return "", errors.New("image manifest is missing")
+		return nil, Manifest{}, errors.New("image manifest is missing")
 	}
 	if err := tw.Close(); err != nil {
-		return "", err
+		return nil, Manifest{}, err
 	}
 	if err := gz.Close(); err != nil {
-		return "", err
+		return nil, Manifest{}, err
 	}
-	if err := tmp.Close(); err != nil {
-		return "", err
-	}
-	digest := hex.EncodeToString(hasher.Sum(nil))
-	retagged, err := os.ReadFile(tmpName)
-	if err != nil {
-		return "", err
-	}
+	retagged := out.Bytes()
 	manifest, err := validatePortableArchive(retagged, target)
 	if err != nil {
-		return "", fmt.Errorf("validate retagged image: %w", err)
+		return nil, Manifest{}, fmt.Errorf("validate retagged image: %w", err)
 	}
-	if mutable {
-		digest, err := s.publishArchive(target, tmpName, true, nil)
-		if err != nil {
-			return "", err
-		}
-		if manifestOut != nil {
-			*manifestOut = manifest
-		}
-		return digest, nil
-	}
-	if err := os.Link(tmpName, s.tarPath(target)); err != nil {
-		if errors.Is(err, os.ErrExist) {
-			existing, inspectErr := s.Inspect(target)
-			if inspectErr == nil && existing.Digest == digest {
-				return digest, nil
-			}
-			return "", fmt.Errorf("%w: %s", ErrExists, target.String())
-		}
-		return "", err
-	}
-	if err := writeDigestCache(s.digestPath(target), digest); err != nil {
-		_ = os.Remove(s.digestPath(target))
-	}
-	return digest, nil
+	return retagged, manifest, nil
 }
 
-// Inspect reads manifest.json from the archive and derives Digest from the
-// immutable archive itself. The sidecar is only an optimization/diagnostic
-// artifact and is never trusted as the source of truth.
+// Inspect reads manifest.json from the content the tag points at.
 func (s *Store) Inspect(ref Ref) (Manifest, error) {
-	if !s.Exists(ref) {
-		return Manifest{}, fmt.Errorf("image %s not found", ref.String())
+	path, err := s.archiveFor(ref)
+	if err != nil {
+		return Manifest{}, err
 	}
-	return inspectArchive(s.tarPath(ref), ref)
+	return inspectArchive(path, ref)
 }
 
-// InspectPinned resolves the exact archive identity assigned to an agent.
-// Managed and ordinary mutable refs retain prior validated generations by
-// digest; immutable refs must still match their current archive.
-func (s *Store) InspectPinned(ref Ref, digest string) (Manifest, error) {
-	manifest, _, err := s.inspectPinnedArchive(ref, digest)
+// InspectPinned resolves the exact generation assigned to an agent. Content is
+// kept by id, so a moved tag never invalidates a pinned assignment.
+func (s *Store) InspectPinned(ref Ref, id string) (Manifest, error) {
+	manifest, _, err := s.inspectPinnedArchive(ref, id)
 	return manifest, err
 }
 
-func (s *Store) inspectPinnedArchive(ref Ref, digest string) (Manifest, string, error) {
-	if len(digest) != sha256.Size*2 {
-		return Manifest{}, "", errors.New("invalid pinned image digest")
+func (s *Store) inspectPinnedArchive(ref Ref, id string) (Manifest, string, error) {
+	if !refIDPattern.MatchString(id) {
+		return Manifest{}, "", errors.New("invalid pinned image id")
 	}
-	if _, err := hex.DecodeString(digest); err != nil {
-		return Manifest{}, "", errors.New("invalid pinned image digest")
-	}
-	if current, err := s.Inspect(ref); err == nil && current.Digest == digest {
-		return current, s.tarPath(ref), nil
-	}
-	if !IsReserved(ref) && !s.IsMutable(ref) {
-		return Manifest{}, "", fmt.Errorf("image %s digest does not match pinned identity", ref.String())
-	}
-	historyPath := s.pinnedManagedPath(ref, digest)
-	kind := "managed"
-	if !IsReserved(ref) {
-		historyPath = s.pinnedMutablePath(ref, digest)
-		kind = "mutable"
-	}
-	pinned, err := inspectArchive(historyPath, ref)
+	path := s.contentPath(ref.Name, id)
+	manifest, err := inspectArchive(path, ref)
 	if err != nil {
-		return Manifest{}, "", fmt.Errorf("pinned %s image %s@%s is unavailable: %w", kind, ref.String(), digest, err)
+		return Manifest{}, "", fmt.Errorf("pinned image %s@%s is unavailable: %w", ref.String(), id, err)
 	}
-	if pinned.Digest != digest {
-		return Manifest{}, "", fmt.Errorf("%s image %s history digest mismatch", kind, ref.String())
+	if manifest.Digest != id {
+		return Manifest{}, "", fmt.Errorf("image %s id mismatch for %s", ref.String(), id)
 	}
-	return pinned, historyPath, nil
+	return manifest, path, nil
 }
 
 func inspectArchive(archivePath string, ref Ref) (Manifest, error) {
@@ -542,20 +361,33 @@ func inspectArchive(archivePath string, ref Ref) (Manifest, error) {
 	if m.SchemaVersion > ManifestSchemaVersion {
 		return Manifest{}, fmt.Errorf("image %s manifest schema_version %d is newer than supported %d", ref.String(), m.SchemaVersion, ManifestSchemaVersion)
 	}
-	if m.Name != ref.Name || m.Tag != ref.Tag {
-		return Manifest{}, fmt.Errorf("archive ref %s:%s does not match %s", m.Name, m.Tag, ref.String())
+	if m.Name != ref.Name {
+		return Manifest{}, fmt.Errorf("archive image %s does not match %s", m.Name, ref.String())
 	}
-	archive, err := os.Open(archivePath)
+	m.Tag = ref.Tag
+	if m.ID != "" {
+		m.Digest = m.ID
+		return m, nil
+	}
+	digest, err := fileDigest(archivePath)
 	if err != nil {
-		return Manifest{}, err
+		return Manifest{}, fmt.Errorf("digest image %s: %w", ref.String(), err)
+	}
+	m.Digest = digest
+	return m, nil
+}
+
+func fileDigest(path string) (string, error) {
+	archive, err := os.Open(path)
+	if err != nil {
+		return "", err
 	}
 	defer archive.Close()
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, archive); err != nil {
-		return Manifest{}, fmt.Errorf("digest image %s: %w", ref.String(), err)
+		return "", err
 	}
-	m.Digest = hex.EncodeToString(hasher.Sum(nil))
-	return m, nil
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 // ValidateArchive verifies a staged archive before callers publish it at ref.
@@ -563,64 +395,12 @@ func ValidateArchive(archivePath string, ref Ref) (Manifest, error) {
 	return inspectArchive(archivePath, ref)
 }
 
-// InstallManagedArchive atomically replaces one daemon-managed ref with a
-// validated complete archive. Public authoring does not call this trusted path.
-func (s *Store) InstallManagedArchive(ref Ref, archive []byte) error {
-	if !IsReserved(ref) {
-		return fmt.Errorf("managed install requires reserved ref: %s", ref.String())
-	}
-	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".managed-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(archive); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	manifest, err := inspectArchive(tmpName, ref)
-	if err != nil {
-		return fmt.Errorf("validate managed image %s: %w", ref.String(), err)
-	}
-	if s.Exists(ref) {
-		current, err := s.Inspect(ref)
-		if err != nil {
-			return fmt.Errorf("inspect current managed image %s: %w", ref.String(), err)
-		}
-		historyPath := s.pinnedManagedPath(ref, current.Digest)
-		if err := os.MkdirAll(filepath.Dir(historyPath), 0o700); err != nil {
-			return err
-		}
-		if err := os.Link(s.tarPath(ref), historyPath); err != nil && !errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("preserve managed image %s@%s: %w", ref.String(), current.Digest, err)
-		}
-	}
-	if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
-		return fmt.Errorf("publish managed image %s: %w", ref.String(), err)
-	}
-	if err := writeDigestCache(s.digestPath(ref), manifest.Digest); err != nil {
-		_ = os.Remove(s.digestPath(ref))
-	}
-	return nil
-}
-
 func (s *Store) ReadBody(ref Ref) (string, error) {
-	b, err := readFileFromTar(s.tarPath(ref), "BODY.md")
+	path, err := s.archiveFor(ref)
+	if err != nil {
+		return "", err
+	}
+	b, err := readFileFromTar(path, "BODY.md")
 	if err != nil {
 		return "", err
 	}
@@ -654,13 +434,12 @@ func readFileFromTar(archive, want string) ([]byte, error) {
 	return nil, fmt.Errorf("%s not found in %s", want, archive)
 }
 
-// writeArchive builds the tar.gz in a temporary file. publishArchive keeps the
-// immutable no-clobber default and optionally advances a marked mutable ref.
-func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, skillDirs []string, mutable bool, archiveOut *[]byte) (string, error) {
-	if err := os.MkdirAll(s.refDir(ref), 0o700); err != nil {
+// writeArchive builds the schema-v1 tar.gz in a temporary file and publishes it.
+func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, skillDirs []string, archiveOut *[]byte) (string, error) {
+	if err := os.MkdirAll(s.nameDir(ref.Name), 0o700); err != nil {
 		return "", err
 	}
-	tmp, err := os.CreateTemp(s.refDir(ref), ref.Tag+".*.tmp")
+	tmp, err := os.CreateTemp(s.nameDir(ref.Name), "."+ref.Tag+"-*.tmp")
 	if err != nil {
 		return "", err
 	}
@@ -725,13 +504,12 @@ func (s *Store) writeArchive(ref Ref, man Manifest, prompt, tail, body string, s
 	if err := tmp.Close(); err != nil {
 		return "", err
 	}
-	return s.publishArchive(ref, tmpName, mutable, archiveOut)
+	return s.publishArchive(ref, tmpName, archiveOut)
 }
 
-func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool, archiveOut *[]byte) (string, error) {
-	if mutable && IsReserved(ref) {
-		return "", fmt.Errorf("%w: %s", ErrReserved, ref.String())
-	}
+// publishArchive validates staged content, stores it under its ref id and
+// moves ref onto it. There is no no-clobber mode: rebuilding is always allowed.
+func (s *Store) publishArchive(ref Ref, tmpName string, archiveOut *[]byte) (string, error) {
 	manifest, err := ValidateArchive(tmpName, ref)
 	if err != nil {
 		return "", fmt.Errorf("validate image %s: %w", ref.String(), err)
@@ -743,87 +521,13 @@ func (s *Store) publishArchive(ref Ref, tmpName string, mutable bool, archiveOut
 			return "", err
 		}
 	}
-	if !mutable {
-		if err := os.Link(tmpName, s.tarPath(ref)); err != nil {
-			if errors.Is(err, os.ErrExist) {
-				return "", fmt.Errorf("%w: %s", ErrExists, ref.String())
-			}
-			return "", fmt.Errorf("publish image %s: %w", ref.String(), err)
-		}
-	} else {
-		mutablePublishMu.Lock()
-		defer mutablePublishMu.Unlock()
-		markerCreated := false
-		if !s.IsMutable(ref) {
-			if err := writeMutableMarker(s.mutablePath(ref)); err != nil {
-				return "", fmt.Errorf("mark mutable image %s: %w", ref.String(), err)
-			}
-			markerCreated = true
-			if err := syncDirectory(s.refDir(ref)); err != nil {
-				return "", err
-			}
-		}
-		defer func() {
-			if markerCreated {
-				_ = os.Remove(s.mutablePath(ref))
-			}
-		}()
-		if s.Exists(ref) {
-			current, err := s.Inspect(ref)
-			if err != nil {
-				return "", fmt.Errorf("inspect current mutable image %s: %w", ref.String(), err)
-			}
-			historyPath := s.pinnedMutablePath(ref, current.Digest)
-			if err := os.MkdirAll(filepath.Dir(historyPath), 0o700); err != nil {
-				return "", err
-			}
-			if err := os.Link(s.tarPath(ref), historyPath); err != nil && !errors.Is(err, os.ErrExist) {
-				return "", fmt.Errorf("preserve mutable image %s@%s: %w", ref.String(), current.Digest, err)
-			}
-			if err := syncDirectory(filepath.Dir(historyPath)); err != nil {
-				return "", err
-			}
-		}
-		if err := os.Rename(tmpName, s.tarPath(ref)); err != nil {
-			return "", fmt.Errorf("publish mutable image %s: %w", ref.String(), err)
-		}
-		if err := syncDirectory(s.refDir(ref)); err != nil {
-			return "", err
-		}
-		markerCreated = false
-	}
-	if err := writeDigestCache(s.digestPath(ref), manifest.Digest); err != nil {
-		_ = os.Remove(s.digestPath(ref))
+	if err := s.install(ref, manifest.Digest, tmpName); err != nil {
+		return "", err
 	}
 	if archiveOut != nil {
 		*archiveOut = archive
 	}
 	return manifest.Digest, nil
-}
-
-func writeMutableMarker(path string) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".mutable-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := io.WriteString(tmp, "mutable\n"); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
 }
 
 func syncDirectory(path string) error {
@@ -833,31 +537,6 @@ func syncDirectory(path string) error {
 	}
 	defer dir.Close()
 	return dir.Sync()
-}
-
-func writeDigestCache(path, digest string) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".digest-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if _, err := io.WriteString(tmp, digest+"\n"); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
 }
 
 func writeTarFile(tw *tar.Writer, name string, data []byte) error {

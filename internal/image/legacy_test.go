@@ -48,7 +48,7 @@ func buildLegacy(t *testing.T, source *imagefile.Imagefile, ref Ref, store *Stor
 	return Build(source, ref, store, clock, append(options, WithBuiltinStoreRoot(legacyTestStore))...)
 }
 
-func buildMutableLegacy(t *testing.T, source *imagefile.Imagefile, ref Ref, store *Store, clock func() time.Time, options ...BuildOption) (Manifest, []byte, error) {
+func buildArchiveLegacy(t *testing.T, source *imagefile.Imagefile, ref Ref, store *Store, clock func() time.Time, options ...BuildOption) (Manifest, []byte, error) {
 	t.Helper()
-	return BuildMutableArchive(source, ref, store, clock, append(options, WithBuiltinStoreRoot(legacyTestStore))...)
+	return BuildArchive(source, ref, store, clock, append(options, WithBuiltinStoreRoot(legacyTestStore))...)
 }

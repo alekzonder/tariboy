@@ -231,8 +231,8 @@ func TestArtifactImportUpdatesExistingTags(t *testing.T) {
 			first := apply(artifact("old"))
 			second := apply(artifact("new"))
 			store := &image.Store{Dir: filepath.Join(target, "images")}
-			if first.Digest == second.Digest || second.Reused || !store.IsMutable(ref) {
-				t.Fatalf("first=%#v second=%#v mutable=%v", first, second, store.IsMutable(ref))
+			if first.Digest == second.Digest || second.Reused {
+				t.Fatalf("first=%#v second=%#v", first, second)
 			}
 			if prompt, err := store.RenderPrompt(ref); err != nil || prompt != "new" {
 				t.Fatalf("prompt=%q err=%v", prompt, err)
