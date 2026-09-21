@@ -227,6 +227,18 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                 onDeleted={() => navigate("/")}
               />
             </div>
+            {/* Why the loop is off: a halted loop (including a failed iteration
+                launch, which never creates an iteration row) is otherwise only
+                visible on the Autopilot tab. */}
+            {(status?.halt_reason || status?.error_reason) && (
+              <p
+                data-testid="agent-halt-reason"
+                className={cn("px-4 pb-2 text-[11px] font-medium",
+                  status.halt_kind === "idle_limit" ? "text-muted-foreground" : "text-destructive")}
+              >
+                {status.halt_reason || status.error_reason}
+              </p>
+            )}
             {status?.messages_queue_full && (
               <p className="px-4 pb-2 text-[11px] font-medium text-destructive">
                 Message queue full: {status.messages_pending} / {status.messages_max_queue}

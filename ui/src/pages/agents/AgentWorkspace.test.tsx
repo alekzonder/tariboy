@@ -157,6 +157,31 @@ describe("AgentWorkspace", () => {
     expect(await screen.findByText("Message queue full: 100 / 100")).toHaveClass("text-destructive");
   });
 
+  it("shows why the loop halted, so a failed iteration launch is visible on every tab", async () => {
+    vi.mocked(agentGetOn).mockResolvedValue({
+      name: "worker", state: "error", loop_enabled: false, iterations: 0,
+      last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
+      halt_kind: "error",
+      halt_reason: "halted: image activation failed: prepare claude image skill bridge: skills missing",
+      error_reason: "halted: image activation failed: prepare claude image skill bridge: skills missing",
+    });
+
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    expect(await screen.findByTestId("agent-halt-reason")).toHaveTextContent(
+      "halted: image activation failed: prepare claude image skill bridge: skills missing",
+    );
+    expect(screen.getByTestId("agent-halt-reason")).toHaveClass("text-destructive");
+  });
+
   it("renders configured budget rows when an older daemon omits exhausted periods", async () => {
     vi.mocked(agentGetOn).mockResolvedValue({
       name: "worker", state: "running", loop_enabled: false, iterations: 0,
