@@ -2,6 +2,7 @@ package loop
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -1364,5 +1365,41 @@ func TestDisableLoopSetsError(t *testing.T) {
 	}
 	if a.ErrorReason == "" || a.LoopEnabled {
 		t.Fatalf("after error-stop halt: reason=%q loop=%v, want set/false", a.ErrorReason, a.LoopEnabled)
+	}
+}
+
+// TestRunOnceBeforeLaunchErrorSurfacesReason pins the operator-visible outcome
+// of a pre-launch failure (unverifiable image manifest, missing image skills,
+// unusable harness): the loop halts with the real cause in error_reason and one
+// iteration_failed audit event, instead of failing silently every tick.
+func TestRunOnceBeforeLaunchErrorSurfacesReason(t *testing.T) {
+	e, as := newEngine(t, baseAgent(), &fakeRunner{})
+	e.SetBeforeLaunch(func(*agent.Agent) (activatedImage, error) {
+		return activatedImage{}, errors.New("image manifest verify: digest mismatch")
+	})
+	var events []string
+	e.SetAudit(func(typ, _, _ string, data map[string]any) {
+		events = append(events, typ+":"+asStr(data["reason"])+":"+asStr(data["error"]))
+	})
+
+	if res := e.runOnce(context.Background(), "interval", ""); res != TickErrorHalt {
+		t.Fatalf("res = %q, want error_halt", res)
+	}
+	got, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.ErrorReason, "image manifest verify: digest mismatch") {
+		t.Fatalf("error_reason = %q, want the activation error text", got.ErrorReason)
+	}
+	if got.LoopEnabled {
+		t.Fatal("a pre-launch failure must halt the loop instead of repeating every tick")
+	}
+	want := "iteration_failed:image_activation_failed:image manifest verify: digest mismatch"
+	if len(events) != 1 || events[0] != want {
+		t.Fatalf("audit = %v, want [%s]", events, want)
+	}
+	if its, _ := as.ListIterations("smoke"); len(its) != 0 {
+		t.Fatalf("iterations = %+v, want none (the iteration never started)", its)
 	}
 }

@@ -579,8 +579,17 @@ func (e *Engine) runOnceGuarded(
 		var err error
 		activated, err = e.beforeLaunch(&e.ag)
 		if err != nil {
+			// Pre-launch failures (unverifiable manifest, missing image skills,
+			// unusable harness) produce no iteration row, so the daemon log was
+			// their only trace and the loop repeated the same failure every
+			// tick. Halt with the cause in error_reason, which the agent status
+			// surfaces as halt_reason; Start/Restart clears it.
 			e.log.Error("prepare image activation", "agent", e.ag.Name, "err", err)
-			return TickError
+			e.disableLoop("image activation failed: " + err.Error())
+			e.recordAudit("iteration_failed", "system", "", map[string]any{
+				"reason": "image_activation_failed", "error": err.Error(),
+			})
+			return TickErrorHalt
 		}
 	}
 	now := e.clock()

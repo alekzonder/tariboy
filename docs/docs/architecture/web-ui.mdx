@@ -589,11 +589,15 @@ The workspace header also consumes daemon-authoritative message status. When
 recomputes queue state in the browser. The normal three-second status refresh
 removes the indicator after processing or clearing lowers the queue.
 
-When the daemon reports a halt reason for the agent, the Autopilot card shows
-it under the Running/Stopped line, toned as an error for an `error`
-halt and neutrally for an `idle_limit` one. The line is deliberately not gated
-on whether Autopilot is currently enabled, because a stop-policy or idle-limit
-reason matters exactly when the loop is off. When there is no reason, nothing
+When the daemon reports a halt reason for the agent, the workspace header shows
+it under the identity line, so a loop that stopped before any iteration existed
+— a failed image activation, for example — is visible on every tab rather than
+only on Autopilot. It is toned as an error for an `error` halt and neutrally for
+an `idle_limit` one, and falls back to `error_reason` when the daemon reports one
+without a halt. The Autopilot card shows the same reason
+under the Running/Stopped line, toned the same way. Neither line is gated on
+whether Autopilot is currently enabled, because a stop-policy, idle-limit or
+launch-failure reason matters exactly when the loop is off. When there is no reason, nothing
 extra is rendered at all — no empty element and no placeholder.
 
 The common agent list can be hidden and restored throughout the hierarchy. On macOS the
