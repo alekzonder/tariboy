@@ -107,11 +107,11 @@
 
 /* The queue panel is the 340px sheet: one column of cards, its own scroll, and
    the new-queue form pinned under them. */
-.task-queues { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; overflow: auto; padding: 0 14px 14px; }
-.task-queues > header { display: flex; align-items: center; justify-content: flex-end; }
-.task-queues > form { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 11px; }
-.task-queues > form > div { display: flex; gap: 6px; }
-.task-queue-list { display: grid; gap: 8px; }
+.task-queues { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.task-queues > footer { display: grid; gap: 8px; border-top: 1px solid var(--border); padding: 12px 14px; }
+.task-queues > footer form { display: grid; gap: 8px; }
+.task-queues > footer form > div { display: flex; gap: 6px; }
+.task-queue-list { display: grid; min-height: 0; flex: 1; align-content: start; gap: 8px; overflow: auto; padding: 0 14px 14px; }
 .task-queue-list article { display: grid; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; }
 .task-queue-card-head { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
 .task-queue-list strong { font-family: ui-monospace, monospace; font-size: 12px; font-weight: 500; color: var(--foreground); }

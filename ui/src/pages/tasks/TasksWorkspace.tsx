@@ -657,7 +657,7 @@ function TasksWorkspaceContent({
         )}
       </main>
       <Sheet open={queuesOpen} onOpenChange={setQueuesOpen}>
-        <SheetContent className="w-[340px] gap-0 p-0 sm:max-w-[340px]">
+        <SheetContent style={{ width: 340, maxWidth: 340 }} className="gap-0 p-0">
           <SheetHeader className="px-4 pt-4 pb-2">
             <SheetTitle className="text-[14px] font-semibold">Queues</SheetTitle>
           </SheetHeader>
