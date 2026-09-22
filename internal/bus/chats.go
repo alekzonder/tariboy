@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Chat is a conversation as an entity: an identity, a kind, a title and exactly
@@ -314,7 +315,10 @@ func (b *Bus) upsertChat(c Chat) error {
 // upsertParticipant adds the principal or leaves an existing row alone: role,
 // read mark and mute belong to whoever set them last, not to reconciliation.
 func (b *Bus) upsertParticipant(chatID, principal, role string) error {
-	_, err := b.db.Exec(`INSERT INTO chat_participants(chat_id, principal, role)
-		VALUES (?, ?, ?) ON CONFLICT(chat_id, principal) DO NOTHING`, chatID, principal, role)
+	// joined_at comes from the bus clock, not SQLite's, because it is compared
+	// against message timestamps: the unanswered queue starts at the join.
+	_, err := b.db.Exec(`INSERT INTO chat_participants(chat_id, principal, role, joined_at)
+		VALUES (?, ?, ?, ?) ON CONFLICT(chat_id, principal) DO NOTHING`,
+		chatID, principal, role, b.clock().UTC().Format(time.RFC3339Nano))
 	return err
 }

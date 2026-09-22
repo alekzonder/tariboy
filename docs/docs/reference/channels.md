@@ -380,7 +380,30 @@ tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
 | `GET /api/chats` | one row per chat the customer takes part in — `id`, `kind`, `title`, `channel`, `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — most recently active first |
 | `GET /api/chats/{agent}` | that agent's conversation, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
 | `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
+| `GET /api/chats/{chat}/unanswered` | the messages `principal` has not answered in that chat, oldest first |
+| `GET /api/chats/{chat}/participants` | the chat principals with their role, join time, read mark and mute flag |
 | `GET /api/messages/ws` | one live hint per publication for every agent on the host |
+
+### Processing and answering are two obligations
+
+A delivery and a message are answered separately, and neither implies the other:
+
+- **Processing** satisfies the transport. Every delivered message must be marked
+  processed with a non-empty text result
+  (`scripts/messages.sh message processed <id> "<result>"`); an unprocessed
+  delivery is redelivered on the next iteration and reaches the DLQ after the
+  attempt limit. A reply also processes the original, with the result
+  `replied: <reply id>`.
+- **Answering** satisfies the conversation. A message is answered only when a
+  reply of that principal points at it through `in_reply_to`, which is what a
+  reply fills and a plain send does not. `GET /api/chats/{chat}/unanswered` — and,
+  for an agent, `GET /tools/chat/unanswered` across every chat it takes part in —
+  is that queue: the messages another participant sent at or after this
+  principal joined, with no reply of its own pointing at them. Marking a delivery
+  processed removes nothing from it.
+
+The answer is published into the chat as an ordinary message, so the
+conversation carries both the question and the answer, exactly as any chat does.
 
 `types` is a comma-separated list of type globs. The default is
 `task.question`, `task.answered`, `task.assigned`, `task.triage`, `message`,
