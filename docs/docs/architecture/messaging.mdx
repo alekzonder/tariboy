@@ -65,8 +65,9 @@ accepted through the provider registry rather than this list. Well-known shapes:
 - `user:<name>` — user-facing channel.
 
 Native Tasks publishes `task.assigned`, `task.question`, `task.answered`,
-`task.triage`, and daemon-owned `task.goal`. Agent recipients use their existing inbox channel and customer
-recipients use `user:<login>`. Mentions and unresolved-answer state remain in
+`task.triage`, and daemon-owned `task.goal`. An agent recipient reads the first
+four in its tasks chat, `chat:tasks:<agent>`, and `task.goal` in its service
+chat, `chat:service:<agent>`; customer recipients use `user:<login>`. Mentions and unresolved-answer state remain in
 the task itself; the channel message is the delivery mechanism, not the source
 of truth.
 
@@ -139,8 +140,8 @@ does not introduce a second agent-delivery path.
 
 ## Agent goal delivery
 
-The per-agent Goal reconciler publishes `task.goal` to
-`agent:<name>:inbox` with the selected task key and `selected` or
+The per-agent Goal reconciler publishes `task.goal` to the agent's service
+chat, `chat:service:<name>`, with the selected task key and `selected` or
 `iteration_completed` reason. Its idempotency key includes the agent, task key,
 task revision, and terminal iteration identity, so recovery and repeated scans
 do not duplicate a generation. An unprocessed Goal delivery outside the DLQ
@@ -152,9 +153,14 @@ directly. Disabled agents or disabled loops receive no new goal wake.
 
 An agent's unfiltered subscription to its own inbox is protected system state.
 Agent creation provisions it, and daemon startup reconciles all persisted
-agents before starting their loops. Task notifications therefore follow the
-ordinary `Publish -> delivery -> WakeMessage` path: enabled loops wake for
-pending deliveries, while disabled loops leave them queued.
+agents before starting their loops. The same startup step provisions each
+agent's chats and the participant subscription that carries `chat:tasks:<a>`
+and `chat:service:<a>`, so a chat-addressed wake exists before any publisher
+runs. Task notifications therefore follow the ordinary
+`Publish -> delivery -> WakeMessage` path unchanged, whichever channel carries
+them: enabled loops wake for pending deliveries, while disabled loops leave
+them queued. `agent:<a>:inbox` remains the direct inbox for group sends,
+request replies and system events.
 
 Workflow runtime wakes use the same bus/outbox path. An incoming message never
 changes a workflow status directly. An operator-declared external trigger may

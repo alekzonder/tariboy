@@ -80,7 +80,7 @@ func (p *Publisher) Flush(ctx context.Context) error {
 		}
 		message, publishErr := p.bus.Publish(bus.Message{
 			IdempotencyKey:  row.idempotencyKey,
-			Channel:         bus.InboxChannel(row.agent),
+			Channel:         bus.ChatChannelFor(bus.ChatIDService(row.agent)),
 			Source:          "script",
 			Type:            "script.result",
 			ProducedByAgent: row.agent,

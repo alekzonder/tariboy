@@ -19,7 +19,7 @@ func TestReconcilerPublishesGoalThroughInbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	msg := onlyGoalMessage(t, messageBus, "worker")
-	if msg.Type != "task.goal" || msg.Channel != "agent:worker:inbox" || msg.Source != "tasks" ||
+	if msg.Type != "task.goal" || msg.Channel != "chat:service:worker" || msg.Source != "tasks" ||
 		msg.Data["task_key"] != "T-1" || msg.Data["reason"] != "selected" {
 		t.Fatalf("message = %#v", msg)
 	}
@@ -94,10 +94,10 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 				s := NewStore(base)
 				seedAgent(t, s, "broken", goalNow.Add(-time.Hour))
 				seedTask(t, s, "T-2", "agent:broken", "P0", "open", "2026-09-01T00:00:00Z")
-				if _, err := messageBus.Subscribe("broken", bus.InboxChannel("broken"), bus.Matcher{}, nil); err != nil {
+				if err := messageBus.ReconcileChats([]string{"broken"}, "user:customer"); err != nil {
 					return err
 				}
-				failing := &failOncePublisher{delegate: messageBus, channel: bus.InboxChannel("broken")}
+				failing := &failOncePublisher{delegate: messageBus, channel: bus.ChatChannelFor(bus.ChatIDService("broken"))}
 				r := NewReconciler(ReconcilerConfig{Store: base, Bus: failing, Clock: func() time.Time { return goalNow }})
 				err := r.Reconcile(context.Background(), "", "")
 				if err == nil || !strings.Contains(err.Error(), "broken") {
@@ -114,7 +114,7 @@ func TestReconcilerGoalGenerations(t *testing.T) {
 			if err := tt.run(t, r, messageBus, base); err != nil {
 				t.Fatal(err)
 			}
-			messages, err := messageBus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+			messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -222,7 +222,7 @@ func TestReconcilerDeliversNewGoalAfterDeadLetteredCooldown(t *testing.T) {
 	if err := r.Reconcile(context.Background(), "worker", "later"); err != nil {
 		t.Fatal(err)
 	}
-	if messages, err := messageBus.MessagesSince(bus.InboxChannel("worker"), "", 10); err != nil || len(messages) != 2 {
+	if messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10); err != nil || len(messages) != 2 {
 		t.Fatalf("messages with pending new goal = %#v, %v; want 2", messages, err)
 	}
 }
@@ -241,14 +241,14 @@ func TestReconcilerDeliversAgainAfterProcessedCooldown(t *testing.T) {
 	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
 		t.Fatal(err)
 	}
-	if messages, err := messageBus.MessagesSince(bus.InboxChannel("worker"), "", 10); err != nil || len(messages) != 1 {
+	if messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10); err != nil || len(messages) != 1 {
 		t.Fatalf("messages before cooldown = %#v, %v", messages, err)
 	}
 	now = now.Add(time.Minute)
 	if err := r.Reconcile(context.Background(), "worker", "next"); err != nil {
 		t.Fatal(err)
 	}
-	if messages, err := messageBus.MessagesSince(bus.InboxChannel("worker"), "", 10); err != nil || len(messages) != 2 {
+	if messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10); err != nil || len(messages) != 2 {
 		t.Fatalf("messages after cooldown = %#v, %v", messages, err)
 	}
 }
@@ -274,13 +274,18 @@ func goalBus(t *testing.T, base *basestore.Store, agents ...string) *bus.Bus {
 		if _, err := messageBus.Subscribe(name, bus.InboxChannel(name), bus.Matcher{}, nil); err != nil {
 			t.Fatal(err)
 		}
+		// The daemon provisions the per-agent chats at startup; a Goal wake is
+		// delivered through the service chat's participant subscription.
+		if err := messageBus.ReconcileChats([]string{name}, "user:customer"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return messageBus
 }
 
 func onlyGoalMessage(t *testing.T, messageBus *bus.Bus, agent string) bus.Message {
 	t.Helper()
-	messages, err := messageBus.MessagesSince(bus.InboxChannel(agent), "", 10)
+	messages, err := messageBus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService(agent)), "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

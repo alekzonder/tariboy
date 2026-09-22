@@ -125,3 +125,28 @@ func readTS(t *testing.T, b *Bus, chatID, principal string) string {
 	t.Fatalf("participant %q not in chat %q", principal, chatID)
 	return ""
 }
+
+// The requirement the whole change is measured against: a message addressed to
+// a chat wakes the agent exactly as an inbox message did. The service chat is
+// the strictest case — its publisher is a system component, not a participant.
+func TestServiceChatPublishStillWakesTheAgent(t *testing.T) {
+	b := newBus(t)
+	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
+		t.Fatal(err)
+	}
+	var woken []string
+	b.SetPublishHook(func(_ Message, deliveredTo []string) { woken = append(woken, deliveredTo...) })
+	if _, err := b.Publish(Message{
+		Channel: ChatChannelFor(ChatIDService("worker")), Source: "system:scripts",
+		Type: "script.result", Text: "done",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(woken) != 1 || woken[0] != "worker" {
+		t.Fatalf("a service-chat publish must wake exactly the agent: %v", woken)
+	}
+	has, err := b.HasPending("worker")
+	if err != nil || !has {
+		t.Fatalf("HasPending must see the delivery: has=%v err=%v", has, err)
+	}
+}

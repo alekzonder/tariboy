@@ -77,10 +77,10 @@ func TestFlushPublishesAssignmentQuestionAnswerAndTriageChannels(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"task.triage":   "agent:triager:inbox",
-		"task.assigned": "agent:worker:inbox",
+		"task.triage":   "chat:tasks:triager",
+		"task.assigned": "chat:tasks:worker",
 		"task.question": "user:customer",
-		"task.answered": "agent:worker:inbox",
+		"task.answered": "chat:tasks:worker",
 	}
 	for typ, channel := range want {
 		if got[typ] != channel {

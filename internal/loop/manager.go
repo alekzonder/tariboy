@@ -1068,7 +1068,10 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 				return nil, fmt.Errorf("schedule store not configured")
 			}
 			if channel == "" {
-				channel = bus.InboxChannel(agName)
+				// A schedule the agent set for itself is service traffic; an
+				// explicit channel still wins, so an existing schedule and a
+				// deliberate chat target both keep working.
+				channel = bus.ChatChannelFor(bus.ChatIDService(agName))
 			}
 			sch, err := m.cfg.Schedules.Add(schedule.Schedule{
 				Agent: agName, Kind: kind, Spec: spec, Channel: channel, MessageTemplate: tpl})

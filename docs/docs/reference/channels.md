@@ -342,18 +342,19 @@ scripts/schedule.sh cancel <id>
 ```
 
 If no channel is passed, the agent API defaults the schedule target to the
-agent's own inbox.
+agent's service chat, `chat:service:<agent>`. An explicit `--channel` still
+wins, and a schedule created before this default keeps the channel it stores.
 
 Scripts are also agent-owned, but they execute only local commands; they do not
 schedule arbitrary channel publication. `scripts/scripts.sh run NAME -- COMMAND`
 queues one attempt, while `scripts/scripts.sh schedule NAME --every N -- COMMAND`
 runs immediately and then after a fixed post-completion delay. Non-quiet runs
-publish `script.result` to the owner's inbox. Its structured data contains
+publish `script.result` to the owner's service chat, `chat:service:<agent>`. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
 The log starts with the resolved execution CWD; combined stdout and stderr
 follow in that file and are not copied into the message. Publishing that result
 also stops the recurring definition, so one failing command cannot flood the
-inbox; `scripts/scripts.sh rerun scr-...` resumes it once the agent has handled
+chat; `scripts/scripts.sh rerun scr-...` resumes it once the agent has handled
 the message. A quiet run publishes nothing and keeps the schedule running. An
 idle recurring definition can also be run immediately; the active-run constraint
 still prevents overlap.
