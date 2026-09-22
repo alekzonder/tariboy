@@ -12,6 +12,9 @@ import (
 // the unread counter is measured against.
 func TestChatListFeedAndReadMark(t *testing.T) {
 	c, b := ctxWithBus(t)
+	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
+		t.Fatal(err)
+	}
 	for _, msg := range []bus.Message{
 		{Channel: "agent:worker:inbox", Source: "user:customer", Type: "message", Text: "customer says hi"},
 		{Channel: "user:customer", Source: "system:tasks", Type: "task.question",
@@ -32,7 +35,11 @@ func TestChatListFeedAndReadMark(t *testing.T) {
 		t.Fatalf("customer = %v", list["customer"])
 	}
 	chats := list["chats"].([]map[string]any)
-	if len(chats) != 1 || chats[0]["agent"] != "worker" || chats[0]["unread"] != 1 {
+	if len(chats) != 3 {
+		t.Fatalf("a reconciled agent has a conversation, a tasks and a service chat: %#v", chats)
+	}
+	if chats[0]["agent"] != "worker" || chats[0]["id"] != "dm:worker" ||
+		chats[0]["kind"] != "direct" || chats[0]["unread"] != 1 {
 		t.Fatalf("chats = %#v", chats)
 	}
 	lastTS, _ := chats[0]["last_ts"].(string)
@@ -78,12 +85,14 @@ func TestChatListFeedAndReadMark(t *testing.T) {
 	if _, err := h(t, "chat.read")(c, registry.Params{"agent": "worker", "ts": "2000-01-01T00:00:00.000000000Z"}); err != nil {
 		t.Fatal(err)
 	}
-	value, _, err := c.Store.ConfigGet("chat_read_v1")
+	parts, err := b.Participants("dm:worker")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value != `{"worker":"`+lastTS+`"}` {
-		t.Fatalf("read state = %s", value)
+	for _, part := range parts {
+		if part.Principal == "user:customer" && part.ReadTS != lastTS {
+			t.Fatalf("read mark = %q, want %q", part.ReadTS, lastTS)
+		}
 	}
 }
 
@@ -109,6 +118,9 @@ func TestMessageSendSpeaksAsTheCustomer(t *testing.T) {
 // its "new messages" divider without fetching the whole chat list.
 func TestChatReadExactMovesTheMarkBackAndFeedCarriesIt(t *testing.T) {
 	c, b := ctxWithBus(t)
+	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
+		t.Fatal(err)
+	}
 	for _, msg := range []bus.Message{
 		{Channel: "agent:worker:inbox", Source: "user:customer", Type: "message", Text: "customer says hi"},
 		{Channel: "user:customer", Source: "system:tasks", Type: "message",

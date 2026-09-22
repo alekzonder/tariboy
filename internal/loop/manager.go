@@ -895,6 +895,11 @@ func (m *Manager) ensureOwnInbox(agentName string) error {
 	if err != nil {
 		return fmt.Errorf("subscribe agent %q to own inbox: %w", agentName, err)
 	}
+	// A new agent gets its chats here, not only at the next daemon start, so the
+	// customer can open a conversation with it immediately.
+	if err := m.cfg.Bus.EnsureAgentChats(agentName); err != nil {
+		return fmt.Errorf("provision chats for agent %q: %w", agentName, err)
+	}
 	return nil
 }
 

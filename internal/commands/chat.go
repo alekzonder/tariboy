@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -10,17 +10,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
-
-// chatReadKey holds the customer's per-agent read marks as one JSON object
-// mapping an agent name to the timestamp of the newest message it has shown.
-// One daemon has one customer, so a second dimension would buy nothing; several
-// customers on one daemon would key this per customer instead.
-//
-// Known ceiling: the update is a read-modify-write, not a transaction, so two
-// windows marking different chats read at the same instant can lose one mark.
-// It costs an unread count that the next open restores, which is why this is
-// one config value rather than a table with its own locking.
-const chatReadKey = "chat_read_v1"
 
 // customerPrincipal is the channel the customer receives on and the identity
 // operator-published messages speak with.
@@ -43,18 +32,37 @@ func chatTypes(p registry.Params) []string {
 	return bus.DefaultChatTypes
 }
 
-func chatReadMarks(c *registry.Ctx) (map[string]string, error) {
-	marks := map[string]string{}
-	value, ok, err := c.Store.ConfigGet(chatReadKey)
-	if err != nil || !ok {
-		return marks, err
+// personalChat resolves the customer conversation with one agent. The
+// per-agent chats are provisioned at daemon startup and on agent creation; an
+// agent first touched between the two is provisioned here, so the route keeps
+// working instead of answering an empty feed.
+func personalChat(b *bus.Bus, agent string) (bus.Chat, error) {
+	if agent == "" {
+		return bus.Chat{}, api.UserError{Code: "missing_agent", Msg: "agent is required"}
 	}
-	if err := json.Unmarshal([]byte(value), &marks); err != nil {
-		// Unreadable optional UI state must not hide the conversations
-		// themselves; the customer simply sees everything as unread again.
-		return map[string]string{}, nil
+	chat, err := b.GetChat(bus.ChatIDDirect(agent))
+	if err == nil || !errors.Is(err, bus.ErrNotFound) {
+		return chat, err
 	}
-	return marks, nil
+	if err := b.EnsureAgentChats(agent); err != nil {
+		return bus.Chat{}, err
+	}
+	return b.GetChat(bus.ChatIDDirect(agent))
+}
+
+// participantReadTS is one participant read mark, empty when that principal has
+// read nothing in the chat.
+func participantReadTS(b *bus.Bus, chatID, principal string) (string, error) {
+	parts, err := b.Participants(chatID)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range parts {
+		if p.Principal == principal {
+			return p.ReadTS, nil
+		}
+	}
+	return "", nil
 }
 
 func chatLs() registry.Command {
@@ -70,21 +78,19 @@ func chatLs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			marks, err := chatReadMarks(c)
-			if err != nil {
-				return nil, err
-			}
 			customer := customerPrincipal(c)
-			summaries, err := b.ChatSummaries(customer, chatTypes(p), marks)
+			summaries, err := b.ChatList(customer, chatTypes(p))
 			if err != nil {
 				return nil, err
 			}
 			rows := make([]map[string]any, 0, len(summaries))
 			for _, summary := range summaries {
 				rows = append(rows, map[string]any{
-					"agent": summary.Agent, "last_ts": summary.LastTS, "last_from": summary.LastFrom,
+					"id": summary.ID, "kind": summary.Kind, "title": summary.Title,
+					"channel": summary.Channel,
+					"agent":   summary.Agent, "last_ts": summary.LastTS, "last_from": summary.LastFrom,
 					"last_type": summary.LastType, "last_text": summary.LastText,
-					"unread": summary.Unread, "read_ts": marks[summary.Agent],
+					"unread": summary.Unread, "read_ts": summary.ReadTS,
 				})
 			}
 			return map[string]any{"customer": customer, "chats": rows, "count": len(rows)}, nil
@@ -115,14 +121,18 @@ func chatMessages() registry.Command {
 				}
 			}
 			customer := customerPrincipal(c)
-			msgs, err := b.ChatMessages(customer, str(p, "agent"), chatTypes(p), limit, str(p, "before"))
+			chat, err := personalChat(b, str(p, "agent"))
+			if err != nil {
+				return nil, err
+			}
+			msgs, err := b.ChatFeed(chat, customer, chatTypes(p), limit, str(p, "before"))
 			if err != nil {
 				return nil, err
 			}
 			// The read mark rides along so the reader can separate what it has
 			// already seen from what arrived since, before opening the chat
 			// moves the mark forward.
-			marks, err := chatReadMarks(c)
+			readTS, err := participantReadTS(b, chat.ID, customer)
 			if err != nil {
 				return nil, err
 			}
@@ -132,7 +142,8 @@ func chatMessages() registry.Command {
 				rows[i]["from"] = bus.MessageFrom(msg)
 			}
 			return map[string]any{"customer": customer, "agent": str(p, "agent"),
-				"messages": rows, "count": len(rows), "read_ts": marks[str(p, "agent")]}, nil
+				"chat": chat.ID, "channel": chat.Channel,
+				"messages": rows, "count": len(rows), "read_ts": readTS}, nil
 		},
 	}
 }
@@ -152,24 +163,27 @@ func chatRead() registry.Command {
 			if agent == "" || ts == "" {
 				return nil, api.UserError{Code: "missing_ts", Msg: "agent and ts are required"}
 			}
-			marks, err := chatReadMarks(c)
+			b, err := requireBus(c)
+			if err != nil {
+				return nil, err
+			}
+			chat, err := personalChat(b, agent)
 			if err != nil {
 				return nil, err
 			}
 			// The mark only moves forward: a late or duplicated request from a
 			// second window must not resurrect messages already seen. Marking a
 			// chat unread is the one deliberate exception, and says so.
-			if exact, _ := boolParam(p, "exact"); exact || marks[agent] < ts {
-				marks[agent] = ts
+			exact, _ := boolParam(p, "exact")
+			customer := customerPrincipal(c)
+			if err := b.SetReadTS(chat.ID, customer, ts, exact); err != nil {
+				return nil, err
 			}
-			raw, err := json.Marshal(marks)
+			readTS, err := participantReadTS(b, chat.ID, customer)
 			if err != nil {
 				return nil, err
 			}
-			if err := c.Store.ConfigSet(chatReadKey, string(raw)); err != nil {
-				return nil, err
-			}
-			return map[string]any{"agent": agent, "read_ts": marks[agent]}, nil
+			return map[string]any{"agent": agent, "chat": chat.ID, "read_ts": readTS}, nil
 		},
 	}
 }
