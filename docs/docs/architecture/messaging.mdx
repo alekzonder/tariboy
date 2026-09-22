@@ -1,6 +1,6 @@
 ---
 title: The channel bus & messaging
-description: Messages move over a store-backed fan-out bus — four tables, per-agent delivery queues, and durable ack with redelivery.
+description: Messages move over a store-backed fan-out bus — six tables, per-agent delivery queues, and durable ack with redelivery.
 sidebar:
   label: Channel bus
   icon: radio
@@ -11,7 +11,9 @@ Messages move over a **store-backed fan-out bus** (fan-out/query logic in
 the architectural summary; the [channel bus reference](/docs/reference/channels)
 covers the full model, tools, and debugging.
 
-## Four tables
+## Six tables
+
+The four transport tables carry every message:
 
 - **channels** — named streams (`agent:<a>:inbox`, `group:<g>:broadcast`, …);
 - **messages** — immutable rows published to a channel;
@@ -19,6 +21,16 @@ covers the full model, tools, and debugging.
   content `matcher` and `type` globs;
 - **deliveries** — one row per matching `(subscription, message)`; this *is* the
   per-agent queue.
+
+Two more make a chat an entity rather than a projection of those four:
+
+- **chats** — one row per chat, owning exactly one transport channel;
+- **chat_participants** — who takes part, with each principal's role, read mark
+  and mute flag.
+
+The transport four are unaware of the other two: a chat is addressed by
+publishing to the channel it owns, so `Publish -> delivery -> WakeMessage` is
+the same code path it was before chats existed.
 
 ## Publish is a write, not a push
 
@@ -60,7 +72,7 @@ accepted through the provider registry rather than this list. Well-known shapes:
 - `agent:<a>:stream` — stream channel for one agent,
 - `group:<g>:broadcast` — fan-out to all group members,
 - `group:<g>:inbox` — group lead inbox,
-- `chat:<name>` — chat / plugin-facing channel,
+- `chat:<id>` — the one transport channel a chat owns,
 - `chat:telegram:<agent>` — one bundled Telegram forum topic mapped to an agent,
 - `user:<name>` — user-facing channel.
 
@@ -101,6 +113,16 @@ the same for a new agent:
 | `tasks:<agent>` | `tasks` | task notifications for that agent |
 | `service:<agent>` | `service` | that agent's own wakes — `task.goal`, `script.result`, schedule alarms |
 
+A chat the customer creates belongs to no agent and may hold several, which is
+how a multi-agent conversation exists at all. Its id is a channel segment and is
+refused when it is already in use or falls in a namespace the daemon provisions
+itself (`dm:`, `tasks:`, `service:`, `group:`, `telegram:`, `plugin:`), so two
+chats can never share one channel and quietly interleave their history.
+Membership is what carries delivery: adding an agent subscribes it to the chat
+channel, removing one revokes that subscription and leaves the deliveries it
+already holds in its queue, because leaving a chat ends membership, not work
+already handed out.
+
 The personal chat carries a `legacy_agent`, which is how history written before
 the chats migration stays readable: that history is the two inboxes merged by
 time — the customer's messages in `agent:<a>:inbox` and the agent's messages in
@@ -115,6 +137,18 @@ because moving the author into `source` would exclude an agent from a
 notification it addressed to itself. An operator publish is attributed to the
 customer principal, and carries `reply_to: user:<customer>` when it is sent from
 a chat.
+
+Processing a delivery and answering a message are separate obligations, and
+neither implies the other. Processing satisfies the transport — every delivered
+message is marked processed with a text result, or it is redelivered and
+eventually dead-lettered. Answering satisfies the conversation: a message counts
+as answered only when a reply of that principal points at it through
+`in_reply_to`, which a reply fills and a plain send does not.
+`GET /api/chats/{chat}/unanswered`, and for an agent `GET /tools/chat/unanswered`
+across every chat it takes part in, is that queue — the messages another
+participant sent at or after this principal joined with no reply of its own
+pointing at them. The answer is published into the chat as an ordinary message,
+so the conversation carries both halves.
 
 `GET /api/chats` ranks every chat the customer takes part in by its last message
 and counts what that participant has not read; `GET /api/chats/{chat}` returns

@@ -21,6 +21,10 @@ The bus is a store-backed fan-out system with four core tables:
 - `subscriptions`: an agent's standing interest in a channel, optionally filtered.
 - `deliveries`: one per matching `(subscription, message)` pair; this is the per-agent queue.
 
+Two further tables, `chats` and `chat_participants`, sit over these four and
+are described under [Chats](#chats). They add no path of their own: a chat owns
+one channel, so everything below applies to it unchanged.
+
 Publishing to a channel does not push text directly into an agent process.
 Instead, `Publish` writes the message and creates delivery rows for all matching
 subscriptions. An agent receives messages only when its loop starts an iteration
@@ -51,7 +55,7 @@ Built-in helpers define the main system channel shapes:
 - `group:<group>:broadcast`: fan-out channel for all members of a group.
 - `group:<group>:inbox`: group lead inbox.
 - `group:<group>:direct:<agent>`: direct group lane; where a `group request` from a teammate lands.
-- `chat:<name>`: chat/plugin-facing channel.
+- `chat:<id>`: the one transport channel a chat owns.
 - `chat:telegram:<agent>`: the bundled Telegram topic for one agent.
 - `user:<name>`: user-facing channel.
 
@@ -439,8 +443,10 @@ one row per participant; the single pre-chats `chat_read_v1` value in
 `daemon_config` is carried into those rows by the migration. Only messages
 another participant sent can be unread — a participant's own never count.
 
-The `/api/messages/ws` frame is `{agent, id, channel, type, from, ts}` and is a
-refetch hint, not the message: HTTP stays authoritative. It replays nothing,
+The `/api/messages/ws` frame is `{chat, agent, id, channel, type, from, ts}`
+and is a refetch hint, not the message: HTTP stays authoritative. `chat` names
+the chat that owns the channel, so a client refetches exactly one conversation,
+and is absent for a channel no chat owns. It replays nothing,
 because a client refetches on connect and on every reconnect. A message on the
 customer's channel has no agent recipient, so it is streamed under the agent
 that sent it.
