@@ -106,6 +106,15 @@ func IsProtectedSubscription(agent, channel string) bool {
 	if channel == "agent:"+agent+":inbox" {
 		return true
 	}
+	// An agent own chats are as protected as its inbox: an operator unsubscribe
+	// must not be able to cut it out of its own conversation, its task
+	// notifications or its service feed. An ad-hoc or multi-agent chat is not
+	// protected, because leaving one is a legitimate membership change.
+	for _, own := range []string{ChatIDDirect(agent), ChatIDTasks(agent), ChatIDService(agent)} {
+		if channel == ChatChannelFor(own) {
+			return true
+		}
+	}
 	return strings.HasPrefix(channel, "group:")
 }
 

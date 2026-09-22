@@ -109,7 +109,13 @@ func (b *Bus) GetChat(id string) (Chat, error) {
 // channel outside the chat namespace, which is how the reply router falls
 // through to the existing inbox and origin rules.
 func (b *Bus) ChatByChannel(channel string) (Chat, bool, error) {
-	c, err := scanChat(b.db.QueryRow(`SELECT `+chatColumns+` FROM chats WHERE channel = ?`, channel))
+	return chatByChannel(b.db, channel)
+}
+
+// chatByChannel is ChatByChannel against any dbtx, so a reply can resolve the
+// owning chat inside the transaction that publishes it.
+func chatByChannel(x dbtx, channel string) (Chat, bool, error) {
+	c, err := scanChat(x.QueryRow(`SELECT `+chatColumns+` FROM chats WHERE channel = ?`, channel))
 	if err == sql.ErrNoRows {
 		return Chat{}, false, nil
 	}
@@ -117,6 +123,49 @@ func (b *Bus) ChatByChannel(channel string) (Chat, bool, error) {
 		return Chat{}, false, err
 	}
 	return c, true, nil
+}
+
+// AddParticipant puts a principal in a chat. An agent participant also gets a
+// subscription to the chat channel, which is what gives it a delivery queue:
+// the customer reads over HTTP and needs none. Publish -> delivery -> wake is
+// therefore unchanged — a chat message is an ordinary channel message.
+func (b *Bus) AddParticipant(chatID, principal, role string) error {
+	chat, err := b.GetChat(chatID)
+	if err != nil {
+		return err
+	}
+	if role == "" {
+		role = "member"
+	}
+	if err := b.upsertParticipant(chatID, principal, role); err != nil {
+		return err
+	}
+	if name, ok := strings.CutPrefix(principal, "agent:"); ok {
+		if _, err := b.Subscribe(name, chat.Channel, Matcher{}, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RemoveParticipant takes a principal out of a chat and, for an agent, removes
+// its subscription. Deliveries already created stay pending: leaving a chat does
+// not erase a message the agent was asked to handle.
+func (b *Bus) RemoveParticipant(chatID, principal string) error {
+	chat, err := b.GetChat(chatID)
+	if err != nil {
+		return err
+	}
+	if _, err := b.db.Exec(`DELETE FROM chat_participants WHERE chat_id = ? AND principal = ?`,
+		chatID, principal); err != nil {
+		return err
+	}
+	if name, ok := strings.CutPrefix(principal, "agent:"); ok {
+		if _, err := b.RevokeChannel(name, chat.Channel); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (b *Bus) ListChats() ([]Chat, error) {
@@ -206,10 +255,10 @@ func (b *Bus) ReconcileChats(agents []string, customer string) error {
 			}); err != nil {
 				return fmt.Errorf("reconcile chat %q: %w", seed.id, err)
 			}
-			if err := b.upsertParticipant(seed.id, "agent:"+a, "member"); err != nil {
+			if err := b.AddParticipant(seed.id, "agent:"+a, "member"); err != nil {
 				return fmt.Errorf("reconcile participant of %q: %w", seed.id, err)
 			}
-			if err := b.upsertParticipant(seed.id, customer, seed.customerRole); err != nil {
+			if err := b.AddParticipant(seed.id, customer, seed.customerRole); err != nil {
 				return fmt.Errorf("reconcile customer of %q: %w", seed.id, err)
 			}
 		}

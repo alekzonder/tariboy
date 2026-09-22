@@ -311,16 +311,33 @@ func messageAuthor(m Message) string {
 	return ""
 }
 
-// replyTarget resolves the channel a reply to M lands on (§4.1 rule): explicit
-// reply_to first, else the source agent's inbox, else the originating channel.
-func replyTarget(m Message) string {
+// replyTarget resolves the channel a reply to m lands on:
+//
+//  1. explicit reply_to — the override external sinks (Telegram) rely on;
+//  2. the chat that owns m's channel — a conversation answer belongs in the
+//     conversation, which is also what makes a multi-agent chat possible;
+//  3. the source agent's inbox;
+//  4. the originating channel.
+//
+// It takes a dbtx so Reply can resolve the chat inside its own transaction,
+// against the same snapshot the publish sees.
+func replyTarget(x dbtx, m Message) (string, error) {
 	if m.ReplyTo != "" {
-		return m.ReplyTo
+		return m.ReplyTo, nil
+	}
+	if _, ok := ChatIDFromChannel(m.Channel); ok {
+		chat, found, err := chatByChannel(x, m.Channel)
+		if err != nil {
+			return "", err
+		}
+		if found {
+			return chat.Channel, nil
+		}
 	}
 	if strings.HasPrefix(m.Source, "agent:") {
-		return m.Source + ":inbox"
+		return m.Source + ":inbox", nil
 	}
-	return m.Channel
+	return m.Channel, nil
 }
 
 // Reply publishes a kind=reply answer to the message msgID on its resolved
@@ -375,8 +392,12 @@ func (b *Bus) Reply(actor, msgID, text string, data map[string]any, typeOverride
 	// route replies back to external systems via subject.chat_id/message_id and
 	// have no bus read API, so the routing keys must ride along on the reply.
 	subject := inheritSubject(orig.Subject)
+	target, err := replyTarget(tx, orig)
+	if err != nil {
+		return Message{}, err
+	}
 	reply, delivered, _, err := b.publishTx(tx, Message{
-		Channel:         replyTarget(orig),
+		Channel:         target,
 		Type:            typ,
 		Subject:         subject,
 		Kind:            "reply",

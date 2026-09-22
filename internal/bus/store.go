@@ -435,6 +435,11 @@ func (b *Bus) Subscribe(agent, channel string, m Matcher, typeFilter []string) (
 	err := b.db.QueryRow(`SELECT id FROM subscriptions WHERE agent=? AND channel=? AND matcher=? AND type_filter IS ?`,
 		agent, channel, matcher, tf).Scan(&existing)
 	if err == nil {
+		// Re-subscribing resumes a revoked row rather than adding a second one,
+		// so rejoining a chat keeps the queue it already had.
+		if _, err := b.db.Exec(`UPDATE subscriptions SET revoked_at='' WHERE id=?`, existing); err != nil {
+			return Subscription{}, err
+		}
 		return b.getSubscription(existing)
 	}
 	if err != sql.ErrNoRows {
@@ -489,6 +494,20 @@ func (b *Bus) Unsubscribe(agent, id string) error {
 	return nil
 }
 
+// RevokeChannel stops future delivery of channel to agent without removing the
+// subscription rows, so the deliveries they already own stay in that agent
+// queue. This is how leaving a chat works: membership ends, outstanding work
+// does not. Returns the number of rows revoked.
+func (b *Bus) RevokeChannel(agent, channel string) (int, error) {
+	res, err := b.db.Exec(`UPDATE subscriptions SET revoked_at=? WHERE agent=? AND channel=? AND revoked_at=''`,
+		b.clock().UTC().Format(time.RFC3339Nano), agent, channel)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 // UnsubscribeChannel removes every subscription (agent, channel) holds, regardless
 // of matcher. Scoped to the given agent so it can never affect another agent's
 // identically-named subscription. Returns the number removed; zero maps to
@@ -518,7 +537,7 @@ func (b *Bus) UnsubscribeChannel(agent, channel string) (int, error) {
 
 func (b *Bus) ListSubscriptions(agent string) ([]Subscription, error) {
 	rows, err := b.db.Query(`SELECT id, agent, channel, matcher, type_filter, created_at, params, watch, locked
-		FROM subscriptions WHERE agent=? ORDER BY created_at, id`, agent)
+		FROM subscriptions WHERE agent=? AND revoked_at='' ORDER BY created_at, id`, agent)
 	if err != nil {
 		return nil, err
 	}
@@ -770,8 +789,10 @@ func (b *Bus) DeleteChannel(name string) error {
 // --- helpers ---
 
 func subscriptionsFor(x dbtx, channel string) ([]Subscription, error) {
+	// A revoked subscription is skipped: its owner left the channel, but the
+	// deliveries it already holds stay in its queue (migration 0047).
 	rows, err := x.Query(`SELECT id, agent, channel, matcher, type_filter, created_at, params, watch, locked
-		FROM subscriptions WHERE channel=?`, channel)
+		FROM subscriptions WHERE channel=? AND revoked_at=''`, channel)
 	if err != nil {
 		return nil, err
 	}
