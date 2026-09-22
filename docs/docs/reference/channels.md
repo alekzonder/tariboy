@@ -369,16 +369,34 @@ written before the chats migration, which lives on the two inboxes merged by
 time: the customer's messages in `agent:<a>:inbox` and that agent's messages in
 `user:<customer>`.
 
+A chat the customer creates belongs to no agent and may hold several, which is
+how a multi-agent conversation is made. Its id is a channel segment
+(`^[a-z0-9][a-z0-9_-]*$`) and is refused when it is already in use or falls in a
+namespace the daemon provisions itself: `dm:`, `tasks:`, `service:`, `group:`,
+`telegram:` and `plugin:`. Two chats can therefore never share one channel.
+
+Membership is what carries delivery. Adding an agent subscribes it to the chat
+channel, so a message there wakes it exactly as one in its own conversation
+does; removing it revokes that subscription but leaves the deliveries it has
+already been given in its queue — leaving a chat ends membership, not work.
+
 ```bash
 tariboy chat ls
 tariboy chat messages worker
 tariboy chat messages worker --types 'message,task.*' --limit 50
 tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
+tariboy chat create team-alpha --title 'Team Alpha' \
+  --participants agent:worker,agent:reviewer
+tariboy chat join team-alpha agent:analyst
+tariboy chat leave team-alpha agent:reviewer
 ```
 
 | Route | Returns |
 | --- | --- |
-| `GET /api/chats` | one row per chat the customer takes part in — `id`, `kind`, `title`, `channel`, `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — most recently active first |
+| `GET /api/chats` | one row per chat the customer takes part in — `id`, `kind`, `title`, `channel`, `agent`, `participants`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — most recently active first. `agent` is empty for a chat no single agent owns |
+| `POST /api/chats` | creates a chat from `id`, `title` and a comma-separated `participants` list; the customer is always a participant. Answers `chat`, `kind`, `title`, `channel`, `agent`, `participants` |
+| `POST /api/chats/{chat}/participants` | adds `principal` (`user:<login>` or `agent:<name>`) with an optional `role` of `member`, `observer` or `owner` |
+| `DELETE /api/chats/{chat}/participants/{principal}` | removes that principal, keeping the deliveries it already holds |
 | `GET /api/chats/{chat}` | one chat, oldest first, each message carrying its `from` and `channel`, plus the chat's `id`, `kind`, `title`, `agent` and the `read_ts` it stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards. `{chat}` is a chat id (`tasks:worker`) or a bare agent name, which reads that agent's conversation |
 | `POST /api/chats/{chat}/read` | moves the customer's read mark in that chat to `ts`; `{chat}` is a chat id or an agent name |
 | `GET /api/chats/{chat}/unanswered` | the messages `principal` has not answered in that chat, oldest first |

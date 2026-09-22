@@ -1017,6 +1017,9 @@ export interface ChatSummary {
   last_text: string;
   unread: number;
   read_ts?: string;
+  /** Every principal taking part, so a group chat is recognisable without a
+   *  second request per chat. */
+  participants?: string[];
 }
 
 export interface ChatMessage {
@@ -1084,6 +1087,47 @@ export const chatReadOn = (
     `/api/chats/${encodeURIComponent(chat)}/read`,
     opts.exact ? { ts, exact: true } : { ts },
   );
+
+// A chat the customer creates: it belongs to no single agent and may hold
+// several. The daemon refuses an id in a namespace it provisions itself
+// (dm:, tasks:, service:, group:, telegram:, plugin:) and an id already in use,
+// so two conversations can never end up sharing one channel.
+export const chatCreateOn = (
+  target: ApiTarget,
+  chat: { id: string; title?: string; participants?: string[] },
+) =>
+  apiOn<ChatDetail>(resolveTarget(target), "POST", "/api/chats", {
+    id: chat.id,
+    title: chat.title ?? "",
+    participants: (chat.participants ?? []).join(","),
+  });
+
+// Membership is what carries delivery: an agent added here is subscribed to the
+// chat channel, and one removed keeps the deliveries it was already given.
+export const chatJoinOn = (target: ApiTarget, chat: string, principal: string, role?: string) =>
+  apiOn<ChatDetail>(
+    resolveTarget(target),
+    "POST",
+    `/api/chats/${encodeURIComponent(chat)}/participants`,
+    role ? { principal, role } : { principal },
+  );
+
+export const chatLeaveOn = (target: ApiTarget, chat: string, principal: string) =>
+  apiOn<ChatDetail>(
+    resolveTarget(target),
+    "DELETE",
+    `/api/chats/${encodeURIComponent(chat)}/participants/${encodeURIComponent(principal)}`,
+  );
+
+/** What every chat write answers with: the chat the caller now has. */
+export interface ChatDetail {
+  chat: string;
+  kind: string;
+  title: string;
+  channel: string;
+  agent: string;
+  participants: string[];
+}
 
 // Publish as the customer. A message sent into a chat channel needs no reply_to:
 // the daemon routes an agent reply into the chat that owns the original.

@@ -247,3 +247,113 @@ func TestChatMessagesAndReadAddressAChatByID(t *testing.T) {
 		t.Fatalf("read mark = %q, want %q", mark, ts)
 	}
 }
+
+// A chat id is a channel segment and a namespace at once: the per-agent
+// namespaces are provisioned, not claimed by hand, and an id already in use
+// must never be silently taken over by a second chat.
+func TestCreateChatRejectsReservedAndTakenIDs(t *testing.T) {
+	c, _ := ctxWithBus(t)
+	create := func(id string) error {
+		_, err := h(t, "chat.create")(c, registry.Params{"id": id, "title": "Team Alpha"})
+		return err
+	}
+	for _, id := range []string{
+		"", "Team Alpha", "team alpha", "-team",
+		"dm:worker", "tasks:worker", "service:worker", "telegram:worker", "group:dev-team",
+	} {
+		if err := create(id); err == nil {
+			t.Fatalf("id %q must be rejected", id)
+		}
+	}
+	if err := create("team-alpha"); err != nil {
+		t.Fatalf("an ordinary slug must be accepted: %v", err)
+	}
+	if err := create("team-alpha"); err == nil {
+		t.Fatal("a duplicate id must be rejected, not silently reused")
+	}
+}
+
+// Creating a chat puts the customer and the named agents in it, and the
+// participant commands move principals in and out afterwards. Membership is
+// what carries delivery, so an agent added here is subscribed and an agent
+// removed is not.
+func TestChatCreateAndParticipantCommands(t *testing.T) {
+	c, b := ctxWithBus(t)
+	created, err := h(t, "chat.create")(c, registry.Params{
+		"id": "team-alpha", "title": "Team Alpha", "participants": "agent:worker,agent:reviewer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := created.(map[string]any)
+	if page["chat"] != "team-alpha" || page["channel"] != "chat:team-alpha" || page["kind"] != "group" {
+		t.Fatalf("created chat = %#v", page)
+	}
+	principals := func() []string {
+		t.Helper()
+		listed, err := h(t, "chat.participants")(c, registry.Params{"chat": "team-alpha"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, row := range listed.(map[string]any)["participants"].([]map[string]any) {
+			out = append(out, row["principal"].(string))
+		}
+		return out
+	}
+	if got := principals(); len(got) != 3 {
+		t.Fatalf("the customer and both agents take part: %v", got)
+	}
+
+	if _, err := h(t, "chat.leave")(c, registry.Params{
+		"chat": "team-alpha", "principal": "agent:reviewer",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := principals(); len(got) != 2 {
+		t.Fatalf("participants after the removal = %v", got)
+	}
+	subs, err := b.ListSubscriptions("reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sub := range subs {
+		if sub.Channel == "chat:team-alpha" {
+			t.Fatalf("a removed participant keeps no live subscription: %+v", sub)
+		}
+	}
+
+	if _, err := h(t, "chat.join")(c, registry.Params{
+		"chat": "team-alpha", "principal": "agent:reviewer", "role": "member",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := principals(); len(got) != 3 {
+		t.Fatalf("participants after the re-add = %v", got)
+	}
+
+	// A malformed principal is a user error, not a row with a nonsense name.
+	if _, err := h(t, "chat.join")(c, registry.Params{
+		"chat": "team-alpha", "principal": "reviewer",
+	}); err == nil {
+		t.Fatal("a principal without a user:/agent: prefix must be rejected")
+	}
+
+	// The chat the customer was put in is one of the customer's chats, and it
+	// names who is in it so a reader can tell a group apart from a duplicate.
+	listed, err := h(t, "chat.ls")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range listed.(map[string]any)["chats"].([]map[string]any) {
+		if row["id"] != "team-alpha" {
+			continue
+		}
+		parts, _ := row["participants"].([]string)
+		if len(parts) != 3 || row["agent"] != "" {
+			t.Fatalf("a group chat belongs to no single agent and names its participants: %#v", row)
+		}
+		return
+	}
+	t.Fatal("the created chat must appear in the customer's chat list")
+}

@@ -1,9 +1,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { ArrowDown, Check, Download, Mail, MessageSquare, MoreHorizontal, Search } from "lucide-react";
+import { ArrowDown, Check, Download, Mail, MessageSquare, MoreHorizontal, Plus, Search } from "lucide-react";
 import { useAgentName } from "@/lib/agent";
 import {
-  ApiError, chatMessagesOn, chatReadOn, messageSendOn, type ChatMessage,
+  ApiError, chatListOn, chatMessagesOn, chatReadOn, messageSendOn,
+  type ChatMessage, type ChatSummary,
 } from "@/lib/api";
 import { useMessagesSocket } from "@/hooks/useMessagesSocket";
 import { targetFor } from "@/lib/terminalsHost";
@@ -20,6 +21,8 @@ import { buildFeed, unreadCount, type FeedMessage } from "./chatFeed";
 import ChatMessageRow from "./ChatMessage";
 import ChatComposer from "./ChatComposer";
 import ChatTaskFromMessage from "./ChatTaskFromMessage";
+import ChatCreate from "./ChatCreate";
+import { sharedChats } from "./chatModel";
 import { DayDivider, UnreadDivider } from "./ChatDivider";
 
 const ALL_TYPES = [...DEFAULT_CHAT_TYPES, ...EXTRA_CHAT_TYPES];
@@ -38,6 +41,10 @@ const KINDS = [
   ["service", "Service"],
 ] as const;
 type Kind = typeof KINDS[number][0];
+
+function isKind(value: string): value is Kind {
+  return KINDS.some(([key]) => key === value);
+}
 
 function transcript(messages: ChatMessage[], agent: string): string {
   return [`# Chat with ${agent}`, "", ...messages.map((message) =>
@@ -79,7 +86,10 @@ export default function AgentChat({ hostId = "", leading }: {
   // Set by Mark unread: the chat must stay unread after this visit, so opening
   // must not quietly mark it read again.
   const keepUnread = useRef(false);
-  const [kind, setKind] = useState<Kind>("dm");
+  // Either one of the agent's three kinds or the id of a shared chat it is in.
+  const [selected, setSelected] = useState<string>("dm");
+  const [shared, setShared] = useState<ChatSummary[]>([]);
+  const [creating, setCreating] = useState(false);
   const [taskKey, setTaskKey] = useState("");
   const [taskFrom, setTaskFrom] = useState<ChatMessage | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
@@ -88,10 +98,12 @@ export default function AgentChat({ hostId = "", leading }: {
   const typesKey = types.join(",");
   // The chat id the endpoints are addressed by. An agent name still resolves to
   // the personal chat, so the sidebar keeps working with what it knows.
-  const chatId = name ? `${kind}:${name}` : "";
-  // Only the conversation is written into: the other two are the agent's own
-  // notification feeds, and the customer is an observer in the service one.
-  const writable = kind === "dm";
+  const chatId = !name ? "" : isKind(selected) ? `${selected}:${name}` : selected;
+  // Only the conversation and the shared chats are written into: the other two
+  // are the agent's own notification feeds, and the customer is an observer in
+  // the service one.
+  const writable = selected === "dm" || !isKind(selected);
+  const current = shared.find((chat) => chat.id === selected);
 
   const load = useCallback(async () => {
     if (!name) return;
@@ -118,7 +130,7 @@ export default function AgentChat({ hostId = "", leading }: {
     // target is derived from hostId and typesKey stands for the type list; both
     // change identity on every render otherwise.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, hostId, typesKey, kind]);
+  }, [name, hostId, typesKey, selected]);
 
   // A different agent is a different conversation: its own anchor, its own
   // unread rule, its own draft.
@@ -128,9 +140,23 @@ export default function AgentChat({ hostId = "", leading }: {
     setAnchor(null);
     setMessages([]);
     setPending(null);
-  }, [name, hostId, kind]);
+  }, [name, hostId, selected]);
+
+  // The shared chats are read from the same list the sidebar reads, so a chat
+  // created in another window appears here without its own endpoint.
+  const loadShared = useCallback(async () => {
+    if (!name) return;
+    try {
+      const page = await chatListOn(target);
+      setShared(sharedChats(page.chats ?? [], name));
+    } catch {
+      // A transient failure keeps the tabs that are already shown.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, hostId]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadShared(); }, [loadShared]);
   useMessagesSocket({
     target,
     enabled: (!target || Boolean(target.baseURL)) && Boolean(name),
@@ -212,7 +238,7 @@ export default function AgentChat({ hostId = "", leading }: {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
-    const chatChannel = `chat:dm:${name}`;
+    const chatChannel = `chat:${chatId}`;
     setPending({
       id: `pending:${Date.now()}`, channel: chatChannel, ts: new Date().toISOString(),
       from: customer, source: customer, type: "message", text,
@@ -243,20 +269,31 @@ export default function AgentChat({ hostId = "", leading }: {
       <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
         {leading}
         <div role="tablist" aria-label="Agent chats" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
-          {KINDS.map(([key, label]) => (
+          {[...KINDS.map(([key, label]) => [key, label] as [string, string]),
+            ...shared.map((chat) => [chat.id, chat.title || chat.id] as [string, string]),
+          ].map(([key, label]) => (
             <button
               key={key}
               type="button"
               role="tab"
-              aria-selected={kind === key}
-              onClick={() => setKind(key)}
-              className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${kind === key
+              aria-selected={selected === key}
+              onClick={() => setSelected(key)}
+              className={`h-[22px] max-w-[140px] truncate rounded-[7px] px-[9px] text-[11.5px] ${selected === key
                 ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
                 : "text-muted-foreground hover:text-foreground"}`}
             >
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            aria-label="New chat"
+            title="Start a chat with this agent and others"
+            onClick={() => setCreating(true)}
+            className="grid size-[22px] place-items-center rounded-[7px] text-muted-foreground hover:bg-card hover:text-foreground"
+          >
+            <Plus className="size-3.5" aria-hidden />
+          </button>
         </div>
         <label className="flex h-7 w-[232px] items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
           <Search className="size-3 shrink-0" aria-hidden />
@@ -270,9 +307,13 @@ export default function AgentChat({ hostId = "", leading }: {
           />
         </label>
         <span className="truncate text-[11.5px] text-muted-foreground">
-          {messages.length === 0
-            ? "no messages"
-            : `you + ${name} · ${messages.length} message${messages.length === 1 ? "" : "s"}`}
+          {/* A shared chat says who is in it: in a multi-agent conversation the
+              author of a message is not deducible from the thread it is in. */}
+          {current
+            ? (current.participants ?? []).map((principal) => principal.split(":")[1]).join(", ")
+            : messages.length === 0
+              ? "no messages"
+              : `you + ${name} · ${messages.length} message${messages.length === 1 ? "" : "s"}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
           {newCount > 0 ? (
@@ -406,7 +447,7 @@ export default function AgentChat({ hostId = "", leading }: {
       />
       ) : (
         <p className="border-t px-4 py-3 text-[12px] text-muted-foreground">
-          {kind === "tasks"
+          {selected === "tasks"
             ? `Task notifications addressed to ${name}. Answer a task in its own drawer.`
             : `Service wake-ups for ${name}: script results, goals and schedules.`}
         </p>
@@ -417,6 +458,14 @@ export default function AgentChat({ hostId = "", leading }: {
           taskKey={taskKey}
           target={target}
           onClose={() => setTaskKey("")}
+        />
+      )}
+      {creating && (
+        <ChatCreate
+          agent={name}
+          target={target}
+          onClose={() => setCreating(false)}
+          onCreated={(chat) => { setCreating(false); setSelected(chat); void loadShared(); }}
         />
       )}
       {taskFrom && (

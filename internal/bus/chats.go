@@ -42,6 +42,38 @@ const (
 	ChatKindService = "service"
 )
 
+// ChatKindGroup is a chat nobody provisions: the customer creates it and names
+// its participants, so it belongs to no single agent and may hold several.
+const ChatKindGroup = "group"
+
+// reservedChatPrefixes are the id namespaces reconciliation owns. A hand-made
+// chat may not claim one, because provisioning would otherwise collide with it
+// on the next daemon start and two different conversations would fight over one
+// channel.
+var reservedChatPrefixes = []string{"dm:", "tasks:", "service:", "telegram:", "group:", "plugin:"}
+
+// ReservedChatID reports whether id falls in a namespace only the daemon may
+// provision.
+func ReservedChatID(id string) bool {
+	for _, prefix := range reservedChatPrefixes {
+		if strings.HasPrefix(id, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidPrincipal reports whether p names a chat participant: a login or an
+// agent, spelled the way every other principal on the bus is spelled.
+func ValidPrincipal(p string) bool {
+	for _, prefix := range []string{"user:", "agent:"} {
+		if name, ok := strings.CutPrefix(p, prefix); ok {
+			return name != "" && channelSegRE.MatchString(name)
+		}
+	}
+	return false
+}
+
 // legacyReadKey is the pre-chats read mark: one JSON object in daemon_config
 // mapping an agent name to the newest timestamp the customer had seen. It is
 // read once per reconciliation and folded into chat_participants.read_ts.
@@ -90,6 +122,15 @@ func (b *Bus) CreateChat(c Chat) (Chat, error) {
 	}
 	if c.Kind == "" {
 		c.Kind = ChatKindDirect
+	}
+	// An id already in use is a conflict, never a takeover: two chats sharing
+	// one channel would merge two conversations into one feed.
+	_, taken, err := b.ChatByChannel(c.Channel)
+	if err != nil {
+		return Chat{}, err
+	}
+	if taken {
+		return Chat{}, ErrChatExists
 	}
 	if _, err := b.db.Exec(`INSERT INTO chats(id, kind, title, channel, legacy_agent)
 		VALUES (?, ?, ?, ?, ?)`, c.ID, c.Kind, c.Title, c.Channel, c.LegacyAgent); err != nil {
