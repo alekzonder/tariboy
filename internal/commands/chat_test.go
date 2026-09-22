@@ -206,3 +206,44 @@ func TestChatUnansweredAndParticipants(t *testing.T) {
 		t.Fatalf("participants = %#v", rows)
 	}
 }
+
+// The UI opens a tasks or service chat by its id, and a personal chat by the
+// agent name the sidebar already knows. Both address the same endpoint, so one
+// argument carries either.
+func TestChatMessagesAndReadAddressAChatByID(t *testing.T) {
+	c, b := ctxWithBus(t)
+	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Publish(bus.Message{
+		Channel: bus.ChatChannelFor(bus.ChatIDTasks("worker")), Source: "system:tasks",
+		Type: "task.assigned", Text: "DEV-1 assigned",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	fed, err := h(t, "chat.messages")(c, registry.Params{"agent": "tasks:worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := fed.(map[string]any)
+	if page["chat"] != "tasks:worker" || page["agent"] != "worker" {
+		t.Fatalf("a chat id names its own chat and its agent: %#v", page)
+	}
+	messages := page["messages"].([]map[string]any)
+	if len(messages) != 1 || messages[0]["text"] != "DEV-1 assigned" {
+		t.Fatalf("tasks feed = %#v", messages)
+	}
+
+	ts, _ := messages[0]["ts"].(string)
+	if _, err := h(t, "chat.read")(c, registry.Params{"agent": "tasks:worker", "ts": ts}); err != nil {
+		t.Fatal(err)
+	}
+	mark, err := participantReadTS(b, "tasks:worker", "user:customer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mark != ts {
+		t.Fatalf("read mark = %q, want %q", mark, ts)
+	}
+}

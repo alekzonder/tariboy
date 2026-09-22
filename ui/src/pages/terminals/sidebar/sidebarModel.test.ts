@@ -4,7 +4,8 @@ import type { AgentSummary } from "@/lib/types";
 import { agentKey, allAgents, filterHosts, groupSections, rankAgents } from "./sidebarModel";
 import type { ChatSummary } from "@/lib/api";
 
-const chat = (agent: string, last_ts: string, unread = 0): ChatSummary => ({
+const chat = (agent: string, last_ts: string, unread = 0, kind = "direct"): ChatSummary => ({
+  id: `${kind === "direct" ? "dm" : kind}:${agent}`, kind, title: agent,
   agent, last_ts, unread, last_from: `agent:${agent}`, last_type: "message", last_text: "...",
 });
 
@@ -64,6 +65,23 @@ describe("sidebar agent list", () => {
     // gamma spoke last, alpha before it, and the two silent agents keep the
     // operator's own order behind them.
     expect(rest.map((row) => row.agent.name)).toEqual(["gamma", "alpha", "beta", "delta"]);
+  });
+
+  it("folds an agent's three chats into one row: newest activity, all unread", () => {
+    const chatted: HostAgents[] = [
+      {
+        ...hosts[0],
+        chats: [
+          chat("alpha", "2026-09-15T10:00:00Z", 1),
+          chat("alpha", "2026-09-15T13:00:00Z", 2, "tasks"),
+          chat("alpha", "2026-09-15T09:00:00Z", 0, "service"),
+        ],
+      },
+      hosts[1],
+    ];
+    const row = allAgents(chatted).find((item) => item.agent.name === "alpha");
+    expect(row?.chat?.unread).toBe(3);
+    expect(row?.chat?.last_ts).toBe("2026-09-15T13:00:00Z");
   });
 
   it("keeps an agent calling for a person above a more recent conversation", () => {

@@ -117,18 +117,22 @@ customer principal, and carries `reply_to: user:<customer>` when it is sent from
 a chat.
 
 `GET /api/chats` ranks every chat the customer takes part in by its last message
-and counts what that participant has not read; `GET /api/chats/{agent}` returns
-that agent's conversation and the customer's current read mark, so a reader can
-separate what it has already seen; `POST /api/chats/{agent}/read` moves that mark
-forward. Read marks are `chat_participants.read_ts`, one per participant; the
+and counts what that participant has not read; `GET /api/chats/{chat}` returns
+one chat and the customer's current read mark, so a reader can separate what it
+has already seen; `POST /api/chats/{chat}/read` moves that mark forward. Both
+take a chat id — `dm:worker`, `tasks:worker`, `service:worker` — and still
+accept a bare agent name for that agent's conversation, which is what a caller
+holding only a name can address. An existing chat wins over the name reading,
+so an agent can never shadow a chat. Read marks are `chat_participants.read_ts`, one per participant; the
 single pre-chats `chat_read_v1` value in `daemon_config` is carried into them by
 the migration. Both read endpoints take a `types` filter of globs and default to
 conversation types only, so an agent's own `task.goal`, `script.result` and
 schedule wakes neither appear in the conversation nor move it up the list.
 
 `GET /api/messages/ws` streams one hint per publication for every agent on the
-host. A frame carries `{agent, id, channel, type, from, ts}` and is only a
-refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
+host. A frame carries `{chat, agent, id, channel, type, from, ts}` — `chat` is
+the channel's own chat and is absent for a channel no chat owns, so a client can
+refetch exactly one conversation — and is only a refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
 because a client refetches on connect and on every reconnect.
 
 The bundled Telegram process remains outside the daemon. It authorizes and

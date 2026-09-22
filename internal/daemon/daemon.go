@@ -1069,15 +1069,24 @@ func emitMessageEvent(hub *events.Hub, msg bus.Message, agents []string) {
 	if a, ok := ownerOfChannel(msg.Channel); ok {
 		targets = appendUnique(targets, a)
 	}
-	if strings.HasPrefix(msg.Channel, "user:") {
+	chatID, inChat := bus.ChatIDFromChannel(msg.Channel)
+	// A message an agent wrote reaches no agent delivery, so without attributing
+	// it to its author the half of the conversation the customer receives would
+	// never reach a live client.
+	if inChat || strings.HasPrefix(msg.Channel, "user:") {
 		if sender, ok := strings.CutPrefix(from, "agent:"); ok {
 			targets = appendUnique(targets, sender)
 		}
 	}
 	for _, a := range targets {
-		hub.Emit(events.Event{Agent: a, Type: typ, Time: msg.TS,
-			Data: map[string]any{"id": msg.ID, "channel": msg.Channel, "type": msg.Type,
-				"source": msg.Source, "from": from, "text": msg.Text}})
+		data := map[string]any{"id": msg.ID, "channel": msg.Channel, "type": msg.Type,
+			"source": msg.Source, "from": from, "text": msg.Text}
+		// The chat id is the channel's own suffix, so naming the chat costs no
+		// lookup and a non-chat channel carries no chat key at all.
+		if inChat {
+			data["chat"] = chatID
+		}
+		hub.Emit(events.Event{Agent: a, Type: typ, Time: msg.TS, Data: data})
 	}
 }
 

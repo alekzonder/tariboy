@@ -28,6 +28,17 @@ const ALL_TYPES = [...DEFAULT_CHAT_TYPES, ...EXTRA_CHAT_TYPES];
  *  the next message will do. */
 const QUESTION_TYPE = "task.question";
 
+/** One agent owns three chats: the conversation the customer holds with it, the
+ *  task notifications addressed to it, and its service wake-ups. They are read
+ *  here rather than listed apart, because the sidebar already groups by agent
+ *  and these three are that agent's row expanded. */
+const KINDS = [
+  ["dm", "Chat"],
+  ["tasks", "Tasks"],
+  ["service", "Service"],
+] as const;
+type Kind = typeof KINDS[number][0];
+
 function transcript(messages: ChatMessage[], agent: string): string {
   return [`# Chat with ${agent}`, "", ...messages.map((message) =>
     `## ${message.from} · ${message.ts}\n\n${message.text}\n`)].join("\n");
@@ -68,17 +79,24 @@ export default function AgentChat({ hostId = "", leading }: {
   // Set by Mark unread: the chat must stay unread after this visit, so opening
   // must not quietly mark it read again.
   const keepUnread = useRef(false);
+  const [kind, setKind] = useState<Kind>("dm");
   const [taskKey, setTaskKey] = useState("");
   const [taskFrom, setTaskFrom] = useState<ChatMessage | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
   const unreadRule = useRef<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const typesKey = types.join(",");
+  // The chat id the endpoints are addressed by. An agent name still resolves to
+  // the personal chat, so the sidebar keeps working with what it knows.
+  const chatId = name ? `${kind}:${name}` : "";
+  // Only the conversation is written into: the other two are the agent's own
+  // notification feeds, and the customer is an observer in the service one.
+  const writable = kind === "dm";
 
   const load = useCallback(async () => {
     if (!name) return;
     try {
-      const page = await chatMessagesOn(target, name, { types });
+      const page = await chatMessagesOn(target, chatId, { types });
       if (anchorRef.current === null) {
         anchorRef.current = page.read_ts ?? "";
         setAnchor(anchorRef.current);
@@ -92,7 +110,7 @@ export default function AgentChat({ hostId = "", leading }: {
       // counting its messages as unread. A chat the customer deliberately
       // marked unread is not marked read again either.
       if (newest && !keepUnread.current && document.visibilityState !== "hidden") {
-        await chatReadOn(target, name, newest.ts);
+        await chatReadOn(target, chatId, newest.ts);
       }
     } catch {
       // Keep the last conversation on a transient failure.
@@ -100,7 +118,7 @@ export default function AgentChat({ hostId = "", leading }: {
     // target is derived from hostId and typesKey stands for the type list; both
     // change identity on every render otherwise.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, hostId, typesKey]);
+  }, [name, hostId, typesKey, kind]);
 
   // A different agent is a different conversation: its own anchor, its own
   // unread rule, its own draft.
@@ -110,13 +128,17 @@ export default function AgentChat({ hostId = "", leading }: {
     setAnchor(null);
     setMessages([]);
     setPending(null);
-  }, [name, hostId]);
+  }, [name, hostId, kind]);
 
   useEffect(() => { void load(); }, [load]);
   useMessagesSocket({
     target,
     enabled: (!target || Boolean(target.baseURL)) && Boolean(name),
-    onHint: (hint) => { if (hint.agent === name) void load(); },
+    // A frame that names its chat refetches only that one; a publication on a
+    // channel no chat owns still falls back to the agent it concerns.
+    onHint: (hint) => {
+      if (hint.chat ? hint.chat === chatId : hint.agent === name) void load();
+    },
     onOpen: () => { void load(); },
   });
 
@@ -150,7 +172,7 @@ export default function AgentChat({ hostId = "", leading }: {
     keepUnread.current = false;
     anchorRef.current = newest?.ts ?? "";
     setAnchor(anchorRef.current);
-    if (newest && name) void chatReadOn(target, name, newest.ts).catch(() => undefined);
+    if (newest && name) void chatReadOn(target, chatId, newest.ts).catch(() => undefined);
   }
 
   async function markUnread() {
@@ -164,7 +186,7 @@ export default function AgentChat({ hostId = "", leading }: {
     anchorRef.current = back;
     setAnchor(back);
     try {
-      await chatReadOn(target, name, back, { exact: true });
+      await chatReadOn(target, chatId, back, { exact: true });
     } catch (error) {
       toast.error(`Could not mark the chat unread: ${error instanceof ApiError ? error.message : String(error)}`);
     }
@@ -220,6 +242,22 @@ export default function AgentChat({ hostId = "", leading }: {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
         {leading}
+        <div role="tablist" aria-label="Agent chats" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
+          {KINDS.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={kind === key}
+              onClick={() => setKind(key)}
+              className={`h-[22px] rounded-[7px] px-[9px] text-[11.5px] ${kind === key
+                ? "bg-card font-medium text-foreground shadow-[var(--raise)]"
+                : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <label className="flex h-7 w-[232px] items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
           <Search className="size-3 shrink-0" aria-hidden />
           <input
@@ -356,6 +394,7 @@ export default function AgentChat({ hostId = "", leading }: {
           </button>
         </div>
       )}
+      {writable ? (
       <ChatComposer
         agent={name}
         target={target}
@@ -365,6 +404,13 @@ export default function AgentChat({ hostId = "", leading }: {
         sending={sending}
         hint={openQuestion ? "Answers the agent's open question" : undefined}
       />
+      ) : (
+        <p className="border-t px-4 py-3 text-[12px] text-muted-foreground">
+          {kind === "tasks"
+            ? `Task notifications addressed to ${name}. Answer a task in its own drawer.`
+            : `Service wake-ups for ${name}: script results, goals and schedules.`}
+        </p>
+      )}
       {taskKey && (
         <TaskDrawer
           key={taskKey}

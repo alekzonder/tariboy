@@ -29,6 +29,15 @@ const feed = [
   },
 ];
 
+// The agent's tasks chat is its own conversation: task notifications only.
+const tasksFeed = [
+  {
+    id: "t1", channel: "chat:tasks:worker", ts: "2026-09-15T11:00:00.000000000Z",
+    from: "system:tasks", source: "system:tasks", type: "task.assigned",
+    text: "assigned to you", data: { task_key: "TEST-7" },
+  },
+];
+
 const taskDetail = {
   task: {
     key: "TEST-7", queue: "TEST", parent_key: "", position: 0, priority: "P1",
@@ -53,10 +62,15 @@ function stubChat(messages = feed, readTS = "") {
       body: init?.body ? JSON.parse(init.body as string) : undefined,
     });
     let result: unknown = { ok: true };
-    if (path.startsWith("/api/chats/worker?") || path === "/api/chats/worker") {
+    if (path.startsWith(`/api/chats/${encodeURIComponent("dm:worker")}`)) {
       result = {
-        customer: "user:customer", agent: "worker",
+        customer: "user:customer", agent: "worker", chat: "dm:worker", kind: "direct",
         messages, count: messages.length, read_ts: readTS,
+      };
+    } else if (path.startsWith(`/api/chats/${encodeURIComponent("tasks:worker")}`)) {
+      result = {
+        customer: "user:customer", agent: "worker", chat: "tasks:worker", kind: "tasks",
+        messages: tasksFeed, count: tasksFeed.length, read_ts: "",
       };
     } else if (path.startsWith("/api/tasks/TEST-7/events")) {
       result = { events: [], count: 0 };
@@ -80,7 +94,8 @@ function renderChat() {
   );
 }
 
-const readCalls = (calls: Call[]) => calls.filter((call) => call.path === "/api/chats/worker/read");
+const DM = `/api/chats/${encodeURIComponent("dm:worker")}`;
+const readCalls = (calls: Call[]) => calls.filter((call) => call.path === `${DM}/read`);
 
 it("renders both halves of the conversation and marks it read at the newest shown message", async () => {
   const calls = stubChat();
@@ -89,7 +104,7 @@ it("renders both halves of the conversation and marks it read at the newest show
   expect(screen.getByText("which option?")).toBeInTheDocument();
   expect(screen.getByText("you + worker · 3 messages")).toBeInTheDocument();
 
-  const feedCall = calls.find((call) => call.path.startsWith("/api/chats/worker?"));
+  const feedCall = calls.find((call) => call.path.startsWith(`${DM}?`));
   expect(feedCall?.path).toContain(encodeURIComponent(DEFAULT_CHAT_TYPES.join(",")));
   await waitFor(() => {
     expect(readCalls(calls)[0]?.body).toEqual({ ts: "2026-09-15T10:06:00.000000000Z" });
@@ -191,4 +206,43 @@ it("opens a task from its message without leaving the chat", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Close task detail" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   expect(screen.getByText("which option?")).toBeInTheDocument();
+});
+
+it("opens the agent's tasks chat by its own id and keeps its task card", async () => {
+  const calls = stubChat();
+  renderChat();
+  await screen.findByText("please look at this");
+
+  await userEvent.click(screen.getByRole("tab", { name: "Tasks" }));
+  expect(await screen.findByText("assigned to you")).toBeInTheDocument();
+  expect(calls.some((call) => call.path.startsWith(`/api/chats/${encodeURIComponent("tasks:worker")}?`))).toBe(true);
+  // The task key stays a button into the existing drawer, wherever it is read.
+  await userEvent.click(screen.getByRole("button", { name: "TEST-7" }));
+  expect(await screen.findByText("Answer the question")).toBeInTheDocument();
+});
+
+it("refetches only the chat a live hint names", async () => {
+  const sockets: Array<{ onmessage: ((event: MessageEvent) => void) | null }> = [];
+  const calls = stubChat();
+  vi.stubGlobal("WebSocket", class {
+    onmessage: ((event: MessageEvent) => void) | null = null;
+    close = vi.fn();
+    constructor() { sockets.push(this as never); }
+  });
+  renderChat();
+  await screen.findByText("please look at this");
+  const before = calls.filter((call) => call.path.startsWith(`${DM}?`)).length;
+
+  sockets.forEach((socket) => socket.onmessage?.(new MessageEvent("message", {
+    data: JSON.stringify({ agent: "worker", chat: "tasks:worker", id: "t9", channel: "chat:tasks:worker", type: "task.assigned", from: "system:tasks", ts: "t" }),
+  })));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(calls.filter((call) => call.path.startsWith(`${DM}?`)).length).toBe(before);
+
+  sockets.forEach((socket) => socket.onmessage?.(new MessageEvent("message", {
+    data: JSON.stringify({ agent: "worker", chat: "dm:worker", id: "m9", channel: "chat:dm:worker", type: "message", from: "agent:worker", ts: "t" }),
+  })));
+  await waitFor(() => {
+    expect(calls.filter((call) => call.path.startsWith(`${DM}?`)).length).toBeGreaterThan(before);
+  });
 });

@@ -9,6 +9,9 @@ const RECONNECT_MAX_MS = 5000
  *  refetches over HTTP, which stays authoritative. */
 export interface MessageHint {
   agent: string
+  /** The chat the publication landed in, absent for a message on a channel no
+   *  chat owns. A client that knows it refetches only that conversation. */
+  chat?: string
   id: string
   channel: string
   type: string
@@ -103,7 +106,10 @@ export function useMessagesSocket({
           return
         }
         const hint = parsed as Partial<MessageHint>
-        if (!hint || typeof hint.agent !== "string" || typeof hint.id !== "string") return
+        // A shared chat belongs to no single agent, so a frame that names its
+        // chat is addressed even without one.
+        if (!hint || typeof hint.id !== "string") return
+        if (typeof hint.agent !== "string" && typeof hint.chat !== "string") return
         onHintRef.current(hint as MessageHint)
       }
       current.onclose = () => {
