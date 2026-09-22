@@ -134,6 +134,14 @@ func (b *Bus) ChatList(principal string, types []string) ([]ChatSummary, error) 
 		summary.ID, summary.Kind, summary.Title = e.chat.ID, e.chat.Kind, e.chat.Title
 		summary.Channel, summary.ReadTS = e.chat.Channel, e.readTS
 		summary.Agent = ChatAgent(e.chat)
+		parts, err := b.Participants(e.chat.ID)
+		if err != nil {
+			return nil, err
+		}
+		summary.Participants = make([]string, 0, len(parts))
+		for _, part := range parts {
+			summary.Participants = append(summary.Participants, part.Principal)
+		}
 		out = append(out, summary)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].LastTS > out[j].LastTS })

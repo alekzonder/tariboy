@@ -22,6 +22,11 @@ var ErrNotFound = errors.New("not found")
 var ErrPublishGuardDenied = errors.New("publish guard denied")
 var ErrRequiredDelivery = errors.New("required agent delivery missing")
 
+// ErrChatExists is returned when a chat id is already owned. It is a conflict
+// rather than an idempotent reuse: a second chat on one channel would merge two
+// conversations into a single feed.
+var ErrChatExists = errors.New("chat already exists")
+
 // ErrDeadlineUnsupported is returned by Request when a --deadline is given but
 // no deadline hook is wired (SetDeadlineHooks), so no timeout could ever fire.
 // The full arming path lands with the schedule subsystem (EPIC R).

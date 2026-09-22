@@ -372,15 +372,22 @@ conversation, and that agent's three chats — **Chat**, **Tasks** and
 **Service** — are a tablist in the toolbar. **Chat** is the conversation with
 the customer, **Tasks** the task notifications addressed to the agent, and
 **Service** its own wake-ups: script results, goal reconciliation and schedule
-alarms. Only **Chat** has a composer; the other two are the agent's feeds, and
-the customer is an observer in the service one. A task key in any of them is
+alarms. Any shared chat the agent takes part in — one the customer created,
+belonging to no single agent and possibly holding several — follows those three
+in the same tablist, and a **New chat** button beside them starts one with this
+agent and any others picked. **Chat** and a shared chat have a composer; the
+other two are the agent's feeds, and the customer is an observer in the service
+one. A shared chat names its participants where the conversation names its
+message count, because in a multi-agent thread the author cannot be deduced from
+the thread itself. A task key in any of them is
 still a chip that opens the task panel, which is how a task is answered from
 its notification. Consecutive messages from one author are grouped under a
 single header, and a continuation row shows its own time in the avatar column
 on hover.
 
-The tab has one 48px toolbar: the **Chat**/**Channels** switch, the three-chat
-search over the loaded page, `you + <agent> · N messages`, the read action,
+The tab has one 48px toolbar: the **Chat**/**Channels** switch, the chat
+tablist, search over the loaded page, `you + <agent> · N messages` (the
+participants in a shared chat), the read action,
 transcript export, and a menu. The message-type filter lives in that menu; it
 still starts from the daemon's default conversation types, still offers an
 agent's own wakes (`task.goal`, `script.result`, schedule alarms) explicitly,

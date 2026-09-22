@@ -78,6 +78,9 @@ type ChatSummary struct {
 	LastType string
 	LastText string
 	Unread   int
+	// Participants is every principal taking part, so a reader can tell a
+	// group chat from a personal one without a second request per chat.
+	Participants []string
 }
 
 // typeFilterSQL renders an OR of GLOB comparisons for types, or an always-true

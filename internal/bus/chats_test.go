@@ -150,3 +150,60 @@ func TestServiceChatPublishStillWakesTheAgent(t *testing.T) {
 		t.Fatalf("HasPending must see the delivery: has=%v err=%v", has, err)
 	}
 }
+
+// A chat with more than one agent is an ordinary channel with more than one
+// subscribed participant: every other agent gets its delivery, and the author
+// never receives its own message back into its own queue. This is what keeps a
+// multi-agent chat on the one wake path instead of inventing a second.
+func TestThreeParticipantChatDeliversToEveryOtherAgent(t *testing.T) {
+	b := newBus(t)
+	chat, err := b.CreateChat(Chat{ID: "team-alpha", Kind: ChatKindGroup, Title: "Team Alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, principal := range []string{"user:customer", "agent:worker", "agent:reviewer"} {
+		if err := b.AddParticipant(chat.ID, principal, "member"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := b.Publish(Message{
+		Channel: chat.Channel, Source: "agent:worker", ProducedByAgent: "worker",
+		Type: "message", Text: "ready",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := b.Pending("reviewer", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].Text != "ready" {
+		t.Fatalf("reviewer must receive the other agent's message, got %+v", pending)
+	}
+	own, err := b.Pending("worker", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(own) != 0 {
+		t.Fatalf("the author must not receive its own message, got %+v", own)
+	}
+
+	// Leaving stops future deliveries; the customer reads over HTTP and never
+	// needed a subscription at all.
+	if err := b.RemoveParticipant(chat.ID, "agent:reviewer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Publish(Message{
+		Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "after",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := b.Pending("reviewer", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The message it was already asked to handle stays; nothing new arrives.
+	if len(after) != 1 || after[0].Text != "ready" {
+		t.Fatalf("a former participant keeps its pending work and gains nothing new: %+v", after)
+	}
+}

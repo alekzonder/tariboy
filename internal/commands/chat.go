@@ -109,6 +109,7 @@ func chatLs() registry.Command {
 					"agent":   summary.Agent, "last_ts": summary.LastTS, "last_from": summary.LastFrom,
 					"last_type": summary.LastType, "last_text": summary.LastText,
 					"unread": summary.Unread, "read_ts": summary.ReadTS,
+					"participants": summary.Participants,
 				})
 			}
 			return map[string]any{"customer": customer, "chats": rows, "count": len(rows)}, nil
@@ -269,4 +270,163 @@ func chatParticipants() registry.Command {
 			return map[string]any{"chat": chat, "participants": rows, "count": len(rows)}, nil
 		},
 	}
+}
+
+// chatView is the one shape a chat write answers with, so create, add and
+// remove all describe the chat the caller now has.
+func chatView(b *bus.Bus, chat bus.Chat) (map[string]any, error) {
+	parts, err := b.Participants(chat.ID)
+	if err != nil {
+		return nil, err
+	}
+	principals := make([]string, 0, len(parts))
+	for _, part := range parts {
+		principals = append(principals, part.Principal)
+	}
+	return map[string]any{"chat": chat.ID, "kind": chat.Kind, "title": chat.Title,
+		"channel": chat.Channel, "agent": bus.ChatAgent(chat), "participants": principals}, nil
+}
+
+// chatCreate makes a chat nobody provisions: the customer names it and says who
+// is in it. Its id is a channel segment and a namespace at once, so the
+// namespaces reconciliation owns are refused here rather than quietly taken
+// over — two chats on one channel would merge two conversations into one feed.
+func chatCreate() registry.Command {
+	return registry.Command{
+		Path:    "chat.create",
+		Summary: "Create a chat and put the customer and the named principals in it",
+		Args: []registry.Arg{
+			{Name: "id", Type: registry.String, Required: true, Help: "chat id, a lowercase slug"},
+			{Name: "title", Flag: "title", Type: registry.String, Help: "display title (defaults to the id)"},
+			{Name: "participants", Flag: "participants", Type: registry.String,
+				Help: "comma-separated user:<login> or agent:<name> principals"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/chats"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			b, err := requireBus(c)
+			if err != nil {
+				return nil, err
+			}
+			id := strings.TrimSpace(str(p, "id"))
+			if id == "" {
+				return nil, api.UserError{Code: "missing_id", Msg: "id is required"}
+			}
+			if bus.ReservedChatID(id) {
+				return nil, api.UserError{Code: "reserved_chat_id",
+					Msg: "chat id " + id + " is in a namespace the daemon provisions"}
+			}
+			if !bus.ValidChannel(bus.ChatChannelFor(id)) {
+				return nil, api.UserError{Code: "bad_chat_id",
+					Msg: "chat id must be lowercase letters, digits, '-' or '_'"}
+			}
+			title := strings.TrimSpace(str(p, "title"))
+			if title == "" {
+				title = id
+			}
+			// Every participant is checked before the chat exists, so a typo
+			// leaves no half-built chat behind.
+			principals := []string{customerPrincipal(c)}
+			for _, principal := range splitCommaList(str(p, "participants")) {
+				if !bus.ValidPrincipal(principal) {
+					return nil, api.UserError{Code: "bad_principal",
+						Msg: "participant " + principal + " must be user:<login> or agent:<name>"}
+				}
+				if principal != principals[0] {
+					principals = append(principals, principal)
+				}
+			}
+			chat, err := b.CreateChat(bus.Chat{ID: id, Kind: bus.ChatKindGroup, Title: title})
+			if errors.Is(err, bus.ErrChatExists) {
+				return nil, api.UserError{Code: "chat_exists", Msg: "chat " + id + " already exists"}
+			}
+			if err != nil {
+				return nil, err
+			}
+			for _, principal := range principals {
+				if err := b.AddParticipant(chat.ID, principal, "member"); err != nil {
+					return nil, err
+				}
+			}
+			return chatView(b, chat)
+		},
+	}
+}
+
+// chatJoin puts one principal in an existing chat. For an agent that is also
+// its subscription, so membership is what carries delivery.
+//
+// It is spelled join/leave rather than participants.add/rm because
+// `chat.participants` is already the command that lists them, and a command
+// path cannot also be a group.
+func chatJoin() registry.Command {
+	return registry.Command{
+		Path:    "chat.join",
+		Summary: "Add a principal to a chat",
+		Args: []registry.Arg{
+			{Name: "chat", Type: registry.String, Required: true, Help: "chat id"},
+			{Name: "principal", Type: registry.String, Required: true, Help: "user:<login> or agent:<name>"},
+			{Name: "role", Flag: "role", Type: registry.String, Help: "member (default) or observer"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/chats/{chat}/participants"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			b, chat, principal, err := chatAndPrincipal(c, p)
+			if err != nil {
+				return nil, err
+			}
+			role := strings.TrimSpace(str(p, "role"))
+			if role != "" && role != "member" && role != "observer" && role != "owner" {
+				return nil, api.UserError{Code: "bad_role", Msg: "role must be member, observer or owner"}
+			}
+			if err := b.AddParticipant(chat.ID, principal, role); err != nil {
+				return nil, err
+			}
+			return chatView(b, chat)
+		},
+	}
+}
+
+// chatLeave takes a principal out of a chat. An agent's outstanding deliveries
+// stay in its queue: leaving a chat ends membership, not the work it was
+// already asked to handle.
+func chatLeave() registry.Command {
+	return registry.Command{
+		Path:    "chat.leave",
+		Summary: "Remove a principal from a chat, keeping its outstanding deliveries",
+		Args: []registry.Arg{
+			{Name: "chat", Type: registry.String, Required: true, Help: "chat id"},
+			{Name: "principal", Type: registry.String, Required: true, Help: "user:<login> or agent:<name>"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/chats/{chat}/participants/{principal}"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			b, chat, principal, err := chatAndPrincipal(c, p)
+			if err != nil {
+				return nil, err
+			}
+			if err := b.RemoveParticipant(chat.ID, principal); err != nil {
+				return nil, err
+			}
+			return chatView(b, chat)
+		},
+	}
+}
+
+// chatAndPrincipal resolves the two arguments both participant commands take.
+func chatAndPrincipal(c *registry.Ctx, p registry.Params) (*bus.Bus, bus.Chat, string, error) {
+	b, err := requireBus(c)
+	if err != nil {
+		return nil, bus.Chat{}, "", err
+	}
+	principal := strings.TrimSpace(str(p, "principal"))
+	if !bus.ValidPrincipal(principal) {
+		return nil, bus.Chat{}, "", api.UserError{Code: "bad_principal",
+			Msg: "principal must be user:<login> or agent:<name>"}
+	}
+	chat, err := b.GetChat(strings.TrimSpace(str(p, "chat")))
+	if errors.Is(err, bus.ErrNotFound) {
+		return nil, bus.Chat{}, "", api.UserError{Code: "not_found", Msg: "chat not found"}
+	}
+	if err != nil {
+		return nil, bus.Chat{}, "", err
+	}
+	return b, chat, principal, nil
 }
