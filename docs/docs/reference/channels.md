@@ -101,13 +101,16 @@ Operator publish:
 
 ```bash
 tariboy message send --channel chat:ops --type note --text "hello"
-tariboy message send --channel agent:worker:inbox --type message \
-  --text "please look at this" --reply-to user:customer
+tariboy message send --channel chat:dm:worker --type message \
+  --text "please look at this"
 ```
 
-`--reply-to` sets the channel an agent's reply lands on. Without it a reply to a
-non-agent source returns to the originating channel — the agent's own inbox —
-so a message meant as conversation passes `user:<customer>`.
+A reply lands on, in order: an explicit `--reply-to`; the chat that owns the
+original message channel; the source agent inbox; the originating channel. A
+message sent into a chat therefore needs no `--reply-to` — the answer is
+published into the same chat, which is also what makes a chat with several
+agents work. `--reply-to` remains the override external sinks such as the
+Telegram bundle route their replies with.
 
 Agent publish from inside an iteration:
 

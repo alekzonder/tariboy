@@ -120,7 +120,7 @@ it("sends into the agent's inbox with the customer channel as the reply target",
   await waitFor(() => {
     const sent = calls.find((call) => call.path === "/api/messages");
     expect(sent?.body).toEqual({
-      channel: "agent:worker:inbox", type: "message", text: "on it", reply_to: "user:customer",
+      channel: "chat:dm:worker", type: "message", text: "on it",
     });
   });
 });

@@ -190,16 +190,15 @@ export default function AgentChat({ hostId = "", leading }: {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
+    const chatChannel = `chat:dm:${name}`;
     setPending({
-      id: `pending:${Date.now()}`, channel: `agent:${name}:inbox`, ts: new Date().toISOString(),
+      id: `pending:${Date.now()}`, channel: chatChannel, ts: new Date().toISOString(),
       from: customer, source: customer, type: "message", text,
     });
     try {
-      // reply_to is what keeps the agent's reply in this chat instead of in its
-      // own inbox.
-      await messageSendOn(target, {
-        channel: `agent:${name}:inbox`, type: "message", text, reply_to: customer,
-      });
+      // The chat owns this channel, so the agent reply lands here without the
+      // client having to name a reply target.
+      await messageSendOn(target, { channel: chatChannel, type: "message", text });
       setDraft("");
       // Speaking is reading: the customer has answered whatever was new.
       markRead();

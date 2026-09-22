@@ -1076,9 +1076,9 @@ export const chatReadOn = (
     opts.exact ? { ts, exact: true } : { ts },
   );
 
-// Publish as the customer. reply_to names the channel an agent reply must land
-// on, which is what keeps a reply in the chat instead of in the agent's own
-// inbox.
+// Publish as the customer. A message sent into a chat channel needs no reply_to:
+// the daemon routes an agent reply into the chat that owns the original.
+// reply_to stays available for a send outside a chat.
 export const messageSendOn = (
   target: ApiTarget,
   message: { channel: string; type?: string; text: string; reply_to?: string },
