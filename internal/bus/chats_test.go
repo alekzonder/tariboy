@@ -94,7 +94,7 @@ func TestReconcileChatsCarriesLegacyReadMarks(t *testing.T) {
 	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:05Z" {
 		t.Fatalf("legacy read mark not carried, got %q", got)
 	}
-	if err := b.MarkRead("dm:worker", "user:customer", "2026-07-06T10:00:07Z"); err != nil {
+	if err := b.SetReadTS("dm:worker", "user:customer", "2026-07-06T10:00:07Z", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
@@ -103,11 +103,11 @@ func TestReconcileChatsCarriesLegacyReadMarks(t *testing.T) {
 	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:07Z" {
 		t.Fatalf("read mark moved backwards to %q", got)
 	}
-	if err := b.MarkRead("dm:worker", "user:customer", "2026-07-06T10:00:06Z"); err != nil {
+	if err := b.SetReadTS("dm:worker", "user:customer", "2026-07-06T10:00:06Z", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:07Z" {
-		t.Fatalf("MarkRead is forward-only, got %q", got)
+		t.Fatalf("SetReadTS is forward-only, got %q", got)
 	}
 }
 

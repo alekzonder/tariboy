@@ -154,12 +154,34 @@ func (b *Bus) Participants(chatID string) ([]Participant, error) {
 	return out, rows.Err()
 }
 
-// MarkRead moves a participant read mark forward. It is forward-only: a second
-// window marking an older timestamp must not resurrect messages already read.
-func (b *Bus) MarkRead(chatID, principal, ts string) error {
-	_, err := b.db.Exec(`UPDATE chat_participants SET read_ts = ?
-		WHERE chat_id = ? AND principal = ? AND read_ts < ?`, ts, chatID, principal, ts)
-	return err
+// customerLoginKey and defaultCustomerLogin mirror the daemon's customer
+// identity so a chat write on any path can resolve the one participant that is
+// not an agent without threading the login through every caller. The daemon
+// owns the value; the bus only reads it.
+const customerLoginKey = "customer_login"
+const defaultCustomerLogin = "customer"
+
+// CustomerPrincipal is the principal of the customer this daemon serves.
+func (b *Bus) CustomerPrincipal() (string, error) {
+	var login string
+	err := b.db.QueryRow(`SELECT value FROM daemon_config WHERE key = ?`, customerLoginKey).Scan(&login)
+	if err != nil && err != sql.ErrNoRows {
+		return "", err
+	}
+	if login = strings.TrimSpace(login); login == "" {
+		login = defaultCustomerLogin
+	}
+	return "user:" + strings.TrimPrefix(login, "user:"), nil
+}
+
+// EnsureAgentChats provisions one agent's chats, for the paths that create or
+// first touch an agent between two daemon startups.
+func (b *Bus) EnsureAgentChats(agent string) error {
+	customer, err := b.CustomerPrincipal()
+	if err != nil {
+		return err
+	}
+	return b.ReconcileChats([]string{agent}, customer)
 }
 
 // ReconcileChats provisions the per-agent chats and their participants, and
@@ -194,7 +216,7 @@ func (b *Bus) ReconcileChats(agents []string, customer string) error {
 		// The legacy mark was per agent and belonged to the customer's view of
 		// the merged inboxes, which is exactly the personal chat's history.
 		if ts := legacy[a]; ts != "" {
-			if err := b.MarkRead(ChatIDDirect(a), customer, ts); err != nil {
+			if err := b.SetReadTS(ChatIDDirect(a), customer, ts, false); err != nil {
 				return fmt.Errorf("carry read mark of %q: %w", a, err)
 			}
 		}

@@ -78,12 +78,34 @@ transaction, carrying existing tasks, comments, waits, notification state and
 the old `user:<$USER>` channel — messages and subscriptions included — over to
 the new principal instead of orphaning them.
 
-## Chats are a projection, not a fifth table
+## Chats are an entity over the channel bus
 
-A chat with one agent is the two inboxes that already exist, merged by time:
+A chat is a row in `chats`: an id, a kind, a title and exactly one transport
+channel `chat:<id>` that it owns. Who takes part lives in `chat_participants`,
+one row per principal (`user:<login>` or `agent:<name>`) with its role, its read
+mark and its mute flag. `messages`, `subscriptions` and `deliveries` are
+untouched, so `Publish -> delivery -> WakeMessage` and `HasPending` keep working
+exactly as before: the wake path never learns that chats exist.
 
-- messages in `agent:<a>:inbox` whose sender is the customer;
-- messages in `user:<customer>` whose sender is that agent.
+A chat channel is deliberately never an agent inbox. The bus suppresses an
+author's own delivery only on non-inbox channels, so an inbox-backed chat would
+echo an agent's own reply straight back into its own queue.
+
+Startup reconciliation provisions three chats per agent, and agent creation does
+the same for a new agent:
+
+| Chat | Kind | Carries |
+| --- | --- | --- |
+| `dm:<agent>` | `direct` | the conversation between the customer and that agent |
+| `tasks:<agent>` | `tasks` | task notifications for that agent |
+| `service:<agent>` | `service` | that agent's own wakes — `task.goal`, `script.result`, schedule alarms |
+
+The personal chat carries a `legacy_agent`, which is how history written before
+the chats migration stays readable: that history is the two inboxes merged by
+time — the customer's messages in `agent:<a>:inbox` and the agent's messages in
+`user:<customer>` — and no message is ever rewritten onto the new channel. The
+feed reads the chat channel and, for a chat with a `legacy_agent`, unions that
+projection.
 
 The sender is `data.from` when a producer wrote one, else a principal-shaped
 `source`, else `produced_by_agent`, else `system`. Task notifications carry the
@@ -91,17 +113,17 @@ principal that caused them in `data.from` and keep `source` as `system:tasks`,
 because moving the author into `source` would exclude an agent from a
 notification it addressed to itself. An operator publish is attributed to the
 customer principal, and carries `reply_to: user:<customer>` when it is sent from
-a chat, which is what makes an agent's reply land in the conversation rather
-than back in its own inbox.
+a chat.
 
-`GET /api/chats` ranks every conversation by its last message and counts what
-the customer has not read; `GET /api/chats/{agent}` returns one merged feed and
-the agent's current read mark, so a reader can separate what it has already seen;
-`POST /api/chats/{agent}/read` moves that agent's read mark forward. Read marks
-live in one `chat_read_v1` value in `daemon_config`, keyed per agent. Both read
-endpoints take a `types` filter of globs and default to conversation types only,
-so an agent's own `task.goal`, `script.result` and schedule wakes neither appear
-in a chat nor move that agent up the list.
+`GET /api/chats` ranks every chat the customer takes part in by its last message
+and counts what that participant has not read; `GET /api/chats/{agent}` returns
+that agent's conversation and the customer's current read mark, so a reader can
+separate what it has already seen; `POST /api/chats/{agent}/read` moves that mark
+forward. Read marks are `chat_participants.read_ts`, one per participant; the
+single pre-chats `chat_read_v1` value in `daemon_config` is carried into them by
+the migration. Both read endpoints take a `types` filter of globs and default to
+conversation types only, so an agent's own `task.goal`, `script.result` and
+schedule wakes neither appear in the conversation nor move it up the list.
 
 `GET /api/messages/ws` streams one hint per publication for every agent on the
 host. A frame carries `{agent, id, channel, type, from, ts}` and is only a

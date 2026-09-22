@@ -67,6 +67,11 @@ const chatRowsSQL = `
 // ChatSummary is one conversation in the chat list: when it last moved, what
 // was said, and how much of it the customer has not read yet.
 type ChatSummary struct {
+	ID       string
+	Kind     string
+	Title    string
+	Channel  string
+	ReadTS   string
 	Agent    string
 	LastTS   string
 	LastFrom string

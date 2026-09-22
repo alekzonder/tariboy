@@ -357,9 +357,13 @@ still prevents overlap.
 
 ## Chats
 
-A chat is not a fifth table. The conversation with one agent is the two existing
-inboxes merged by time: the customer's messages in `agent:<a>:inbox` and that
-agent's messages in `user:<customer>`.
+A chat is a row in `chats` that owns one transport channel `chat:<id>`, plus one
+participant row per principal in `chat_participants`. Every agent gets three
+chats: `dm:<agent>` for the conversation, `tasks:<agent>` for task notifications
+and `service:<agent>` for its own wakes. The conversation also shows history
+written before the chats migration, which lives on the two inboxes merged by
+time: the customer's messages in `agent:<a>:inbox` and that agent's messages in
+`user:<customer>`.
 
 ```bash
 tariboy chat ls
@@ -370,8 +374,8 @@ tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
 
 | Route | Returns |
 | --- | --- |
-| `GET /api/chats` | one row per conversation — `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — newest conversation first |
-| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
+| `GET /api/chats` | one row per chat the customer takes part in — `id`, `kind`, `title`, `channel`, `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — most recently active first |
+| `GET /api/chats/{agent}` | that agent's conversation, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
 | `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
 | `GET /api/messages/ws` | one live hint per publication for every agent on the host |
 
@@ -385,9 +389,10 @@ to read them.
 `ts` is the timestamp of a message actually shown, never "now", so a message
 arriving mid-render cannot be marked read without being seen; the daemon only
 ever moves a mark forward, so a late or duplicated request from a second window
-cannot resurrect messages already read. The marks live in one `chat_read_v1`
-value in `daemon_config`, keyed per agent. Only messages an agent sent can be
-unread — the customer's own never count.
+cannot resurrect messages already read. A mark is `chat_participants.read_ts`,
+one row per participant; the single pre-chats `chat_read_v1` value in
+`daemon_config` is carried into those rows by the migration. Only messages
+another participant sent can be unread — a participant's own never count.
 
 The `/api/messages/ws` frame is `{agent, id, channel, type, from, ts}` and is a
 refetch hint, not the message: HTTP stays authoritative. It replays nothing,
