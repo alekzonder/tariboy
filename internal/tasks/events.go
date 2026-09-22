@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/bus"
 )
 
 func appendEventTx(
@@ -58,7 +60,11 @@ func appendQueueEventTx(
 func principalChannel(principal string) string {
 	switch {
 	case strings.HasPrefix(principal, "agent:"):
-		return principal + ":inbox"
+		// An agent reads its task notifications in its tasks chat, where the
+		// customer sits too and can open the task behind each one. Delivery is
+		// unchanged: the agent participant holds a subscription to that chat
+		// channel, so the notification still wakes it through the same path.
+		return bus.ChatChannelFor(bus.ChatIDTasks(strings.TrimPrefix(principal, "agent:")))
 	case strings.HasPrefix(principal, "user:"):
 		return principal
 	default:

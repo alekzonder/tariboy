@@ -146,7 +146,7 @@ func (r *Reconciler) latestTerminalIteration(agentName string) (string, error) {
 func goalMessage(goal Goal, iterationID string) bus.Message {
 	return bus.Message{
 		IdempotencyKey: fmt.Sprintf("task-goal:%s:%s:%d:%s", goal.Agent, goal.TaskKey, goal.Revision, iterationID),
-		Channel:        bus.InboxChannel(goal.Agent),
+		Channel:        bus.ChatChannelFor(bus.ChatIDService(goal.Agent)),
 		Source:         "tasks",
 		Type:           "task.goal",
 		Data:           map[string]any{"task_key": goal.TaskKey, "reason": goal.Reason},

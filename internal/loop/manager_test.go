@@ -176,7 +176,7 @@ func TestScriptSupervisorKeepsOutputInLogAndPublishesPath(t *testing.T) {
 	if err := publisher.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
 	if err != nil || len(messages) != 1 || messages[0].Type != "script.result" {
 		t.Fatalf("messages=%#v err=%v", messages, err)
 	}
@@ -226,7 +226,7 @@ func TestScriptSupervisorExplicitQuietExitTwoSchedulesWithoutResult(t *testing.T
 	if err := raw.DB.QueryRow(`SELECT COUNT(*) FROM script_result_outbox WHERE run_id=?`, r.ID).Scan(&outboxCount); err != nil || outboxCount != 0 {
 		t.Fatalf("quiet outbox count=%d err=%v", outboxCount, err)
 	}
-	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
 	if err != nil || len(messages) != 0 {
 		t.Fatalf("quiet result messages=%#v err=%v", messages, err)
 	}
@@ -256,7 +256,7 @@ func TestScriptSupervisorMakeExitTwoCreatesFailureResult(t *testing.T) {
 	if err := publisher.Flush(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
 	if err != nil || len(messages) != 1 || messages[0].Type != "script.result" || messages[0].Data["exit_code"] != float64(2) {
 		t.Fatalf("messages=%#v err=%v", messages, err)
 	}
@@ -276,7 +276,7 @@ func TestFinishScriptDoesNotPublishResultWithoutLogPath(t *testing.T) {
 
 	m.finishScript(r.ID, r, -1, errors.New("log path unavailable"), "")
 
-	messages, err := m.cfg.Bus.MessagesSince(bus.InboxChannel("worker"), "", 10)
+	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3289,4 +3289,34 @@ func TestReprovisionBridgeFailurePreservesIdentityAndTree(t *testing.T) {
 // buildBasic2 builds a second image "basic2:latest" for image-swap tests.
 func buildBasic2(t *testing.T, st *image.Store) {
 	buildTestImage(t, st, "basic2", "BODY2")
+}
+
+// A schedule the agent arms for itself carries no channel, and its wake is
+// service traffic: it belongs in the agent's service chat, not in the inbox.
+func TestAgentScheduleWithoutChannelWakesTheServiceChat(t *testing.T) {
+	m, as, agentsDir, st := newManager(t, &fakeRunner{})
+	m.cfg.Schedules = schedule.NewStore(st, time.Now)
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "worker", Harness: "stub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.Plugins = append(ag.Plugins, "schedule")
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/tools/schedule/add",
+		strings.NewReader(`{"kind":"cron","spec":"*/5 * * * *"}`))
+	m.newToolsAPIServer(ag, agentdir.New(agentsDir, name)).Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("schedule add status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	want := bus.ChatChannelFor(bus.ChatIDService(name))
+	if !strings.Contains(recorder.Body.String(), want) {
+		t.Fatalf("schedule channel is not the service chat %q: %s", want, recorder.Body.String())
+	}
 }

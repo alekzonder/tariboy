@@ -62,7 +62,7 @@ func TestPublisherFlushPublishesScriptResultWithRunIdempotency(t *testing.T) {
 		t.Fatalf("messages=%d want 1", len(fake.messages))
 	}
 	message := fake.messages[0]
-	if message.IdempotencyKey != "script-result:"+runID || message.Channel != bus.InboxChannel("alice") || message.Source != "script" || message.Type != "script.result" || message.ProducedByAgent != "alice" {
+	if message.IdempotencyKey != "script-result:"+runID || message.Channel != bus.ChatChannelFor(bus.ChatIDService("alice")) || message.Source != "script" || message.Type != "script.result" || message.ProducedByAgent != "alice" {
 		t.Fatalf("message=%#v", message)
 	}
 	if message.Data["run_id"] != runID || message.Data["exit_code"] != float64(2) || message.Data["log_path"] != "/tmp/check.log" {

@@ -163,7 +163,8 @@ sa agent rm alice --force --purge >/dev/null || { echo "FAIL: rm alice"; exit 1;
 sa agent rm bob --force --purge >/dev/null || { echo "FAIL: rm bob"; exit 1; }
 
 # Opt-in wall-clock schedule check (timing-sensitive; off by default). A one-shot
-# ~2s out fires as an inbox message that triggers an extra iteration.
+# ~2s out fires into the agent's service chat and triggers an extra iteration:
+# the participant subscription provisioned with that chat carries the delivery.
 if [ -n "${E2E_SLOW:-}" ]; then
   echo "--- schedule: agent arms a one-shot that wakes it (E2E_SLOW)"
   sa agent run basic-example:latest --name sched --harness stub --loop true \
@@ -172,7 +173,8 @@ if [ -n "${E2E_SLOW:-}" ]; then
     || { echo "FAIL: run sched"; exit 1; }
   sa loop enable sched >/dev/null || { echo "FAIL: enable sched loop"; exit 1; }
   sa agent start sched >/dev/null || { echo "FAIL: start sched"; exit 1; }
-  # First iteration subscribes to its own inbox and arms the one-shot.
+  # First iteration subscribes to its own inbox and arms the one-shot; the
+  # schedule takes no channel, so it targets chat:service:sched.
   sa agent exec sched >/dev/null || { echo "FAIL: exec sched"; exit 1; }
   SCHED_ARMED=0
   for _ in $(seq 1 100); do

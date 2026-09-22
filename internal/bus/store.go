@@ -418,6 +418,21 @@ func messageByIdempotency(x dbtx, key string) (Message, bool, error) {
 	return m, true, nil
 }
 
+// nextSubscriptionID numbers a subscription within its timestamp, exactly as
+// nextMessageID does. A bare timestamp collided whenever one agent gained two
+// subscriptions inside the same clock tick — provisioning an agent's three
+// chats is precisely that case.
+func nextSubscriptionID(x dbtx, agent string, now time.Time) (string, error) {
+	prefix := "sub-" + agent + "-" + now.UTC().Format("20060102150405") + "-"
+	var maxSeq int64
+	if err := x.QueryRow(`SELECT COALESCE(MAX(CAST(substr(id, ?) AS INTEGER)), 0)
+		FROM subscriptions WHERE agent = ? AND substr(id, 1, ?) = ?`,
+		len(prefix)+1, agent, len(prefix), prefix).Scan(&maxSeq); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s%0*d", prefix, seqWidth, maxSeq+1), nil
+}
+
 func (b *Bus) Subscribe(agent, channel string, m Matcher, typeFilter []string) (Subscription, error) {
 	now := b.clock().UTC()
 	if err := ensureChannel(b.db, channel, now); err != nil {
@@ -445,7 +460,10 @@ func (b *Bus) Subscribe(agent, channel string, m Matcher, typeFilter []string) (
 	if err != sql.ErrNoRows {
 		return Subscription{}, err
 	}
-	id := "sub-" + agent + "-" + now.Format("20060102150405.000000000")
+	id, err := nextSubscriptionID(b.db, agent, now)
+	if err != nil {
+		return Subscription{}, err
+	}
 	if _, err := b.db.Exec(`INSERT INTO subscriptions(id, agent, channel, matcher, type_filter, created_at)
 		VALUES (?,?,?,?,?,?)`, id, agent, channel, matcher, tf, now.Format(time.RFC3339Nano)); err != nil {
 		return Subscription{}, err

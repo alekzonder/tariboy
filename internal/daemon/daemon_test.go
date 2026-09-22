@@ -440,7 +440,7 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 		FROM messages WHERE idempotency_key='task-goal:worker:GOAL-9xk2:1:'`).Scan(&channel, &typ, &source, &data, &idempotencyKey); err != nil {
 		t.Fatal(err)
 	}
-	if channel != "agent:worker:inbox" || typ != "task.goal" || source != "tasks" || idempotencyKey != "task-goal:worker:GOAL-9xk2:1:" {
+	if channel != "chat:service:worker" || typ != "task.goal" || source != "tasks" || idempotencyKey != "task-goal:worker:GOAL-9xk2:1:" {
 		t.Fatalf("goal = channel:%q type:%q source:%q idempotency:%q", channel, typ, source, idempotencyKey)
 	}
 	var payload map[string]any
