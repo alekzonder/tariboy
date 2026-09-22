@@ -1057,6 +1057,12 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 			}
 			return m.cfg.Bus.UnsubscribeChannel(agName, channel)
 		},
+		Unanswered: func() (map[string][]bus.Message, error) {
+			if m.cfg.Bus == nil {
+				return nil, fmt.Errorf("bus not configured")
+			}
+			return m.cfg.Bus.UnansweredForPrincipal("agent:" + agName)
+		},
 		AddSchedule: func(kind, spec, channel, tpl string) (map[string]any, error) {
 			if m.cfg.Schedules == nil {
 				return nil, fmt.Errorf("schedule store not configured")

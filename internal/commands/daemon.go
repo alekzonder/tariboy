@@ -131,6 +131,8 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, chatLs())
 	mustRegister(r, chatMessages())
 	mustRegister(r, chatRead())
+	mustRegister(r, chatUnanswered())
+	mustRegister(r, chatParticipants())
 	mustRegister(r, agentInbox())
 	mustRegister(r, agentInboxClear())
 	mustRegister(r, agentInboxProcessed())

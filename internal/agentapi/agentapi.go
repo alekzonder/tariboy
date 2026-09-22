@@ -66,6 +66,11 @@ type Deps struct {
 	SubscribeParams    func(channel string, matcher bus.Matcher, typeFilter []string, params map[string]any) (bus.Subscription, error)
 	UnsubscribeChannel func(channel string) (int, error)
 
+	// Unanswered is the agent's answering obligation across the chats it takes
+	// part in, keyed by chat id (design: replying is a separate act from
+	// processing a delivery).
+	Unanswered func() (map[string][]bus.Message, error)
+
 	// Schedule/script surface (OPTIONAL plugins: gated).
 	AddSchedule        func(kind, spec, channel, template string) (map[string]any, error)
 	ListSchedules      func() ([]map[string]any, error)
@@ -182,6 +187,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /tools/message/ls", s.gated("messages", s.messageLs))
 	mux.HandleFunc("POST /tools/message/processed", s.gated("messages", s.messageProcessed))
 	mux.HandleFunc("POST /tools/message/reply", s.gated("messages", s.workflowGated("messages.reply", s.messageReply)))
+	mux.HandleFunc("GET /tools/chat/unanswered", s.gated("messages", s.chatUnanswered))
 	mux.HandleFunc("GET /tools/message/dlq", s.gated("messages", s.messageDLQ))
 	mux.HandleFunc("POST /tools/message/dlq/requeue", s.gated("messages", s.messageDLQRequeue))
 	mux.HandleFunc("POST /tools/request", s.gated("messages", s.workflowGated("messages.request", s.request)))
@@ -600,6 +606,36 @@ func inboxRows(items []bus.InboxItem) []map[string]any {
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// chatUnanswered lists, per chat, the messages this agent has not replied to
+// yet. A delivery marked processed is NOT an answer: the conversation is
+// answered only by a reply published into it.
+func (s *Server) chatUnanswered(w http.ResponseWriter, r *http.Request) {
+	if s.d.Unanswered == nil {
+		api.WriteErr(w, http.StatusServiceUnavailable, "bus_unavailable", "channel bus is not available")
+		return
+	}
+	queues, err := s.d.Unanswered()
+	if err != nil {
+		api.WriteErr(w, http.StatusInternalServerError, "internal", err.Error())
+		return
+	}
+	chats := make([]map[string]any, 0, len(queues))
+	total := 0
+	for chatID, msgs := range queues {
+		rows := make([]map[string]any, 0, len(msgs))
+		for _, m := range msgs {
+			rows = append(rows, map[string]any{"id": m.ID, "channel": m.Channel, "ts": m.TS,
+				"from": bus.MessageFrom(m), "type": m.Type, "text": m.Text})
+		}
+		chats = append(chats, map[string]any{"chat": chatID, "messages": rows, "count": len(rows)})
+		total += len(rows)
+	}
+	sort.Slice(chats, func(i, j int) bool {
+		return chats[i]["chat"].(string) < chats[j]["chat"].(string)
+	})
+	api.WriteOK(w, map[string]any{"chats": chats, "count": total})
 }
 
 // messageLs lists the agent's own inbox: pending by default, or the whole

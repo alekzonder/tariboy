@@ -187,3 +187,68 @@ func chatRead() registry.Command {
 		},
 	}
 }
+
+// chatUnanswered is the answering obligation as a queue: the chat messages one
+// principal has not replied to yet. It is not the delivery queue — processing a
+// delivery satisfies the transport, a reply satisfies the conversation.
+func chatUnanswered() registry.Command {
+	return registry.Command{
+		Path:    "chat.unanswered",
+		Summary: "List the chat messages a principal has not answered yet",
+		Args: []registry.Arg{
+			{Name: "chat", Type: registry.String, Required: true, Help: "chat id"},
+			{Name: "principal", Flag: "principal", Type: registry.String, Required: true,
+				Help: "user:<login> or agent:<name>"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/chats/{chat}/unanswered"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			b, err := requireBus(c)
+			if err != nil {
+				return nil, err
+			}
+			chat, principal := str(p, "chat"), str(p, "principal")
+			if chat == "" || principal == "" {
+				return nil, api.UserError{Code: "missing_principal", Msg: "chat and principal are required"}
+			}
+			msgs, err := b.Unanswered(chat, principal)
+			if err != nil {
+				return nil, err
+			}
+			rows := messageViews(msgs)
+			for i, msg := range msgs {
+				rows[i]["channel"] = msg.Channel
+				rows[i]["from"] = bus.MessageFrom(msg)
+			}
+			return map[string]any{"chat": chat, "principal": principal,
+				"messages": rows, "count": len(rows)}, nil
+		},
+	}
+}
+
+func chatParticipants() registry.Command {
+	return registry.Command{
+		Path:    "chat.participants",
+		Summary: "List the principals taking part in a chat",
+		Args: []registry.Arg{
+			{Name: "chat", Type: registry.String, Required: true, Help: "chat id"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/chats/{chat}/participants"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			b, err := requireBus(c)
+			if err != nil {
+				return nil, err
+			}
+			chat := str(p, "chat")
+			parts, err := b.Participants(chat)
+			if err != nil {
+				return nil, err
+			}
+			rows := make([]map[string]any, 0, len(parts))
+			for _, part := range parts {
+				rows = append(rows, map[string]any{"principal": part.Principal, "role": part.Role,
+					"joined_at": part.JoinedAt, "read_ts": part.ReadTS, "muted": part.Muted})
+			}
+			return map[string]any{"chat": chat, "participants": rows, "count": len(rows)}, nil
+		},
+	}
+}

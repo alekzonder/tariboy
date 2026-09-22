@@ -162,3 +162,47 @@ func TestChatReadExactMovesTheMarkBackAndFeedCarriesIt(t *testing.T) {
 		t.Fatalf("read_ts = %v, want %v", got, first)
 	}
 }
+
+// The unanswered queue is the answering obligation, and it is not the delivery
+// queue: a reply retires a message, a plain send does not.
+func TestChatUnansweredAndParticipants(t *testing.T) {
+	c, b := ctxWithBus(t)
+	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
+		t.Fatal(err)
+	}
+	asked, err := b.Publish(bus.Message{
+		Channel: "chat:dm:worker", Source: "user:customer", Type: "message", Text: "please answer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := h(t, "chat.unanswered")(c, registry.Params{"chat": "dm:worker", "principal": "agent:worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue := listed.(map[string]any)["messages"].([]map[string]any)
+	if len(queue) != 1 || queue[0]["id"] != asked.ID || queue[0]["from"] != "user:customer" {
+		t.Fatalf("queue = %#v", queue)
+	}
+
+	if _, err := b.Reply("worker", asked.ID, "answered", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	listed, err = h(t, "chat.unanswered")(c, registry.Params{"chat": "dm:worker", "principal": "agent:worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := listed.(map[string]any)["count"]; got != 0 {
+		t.Fatalf("count after the reply = %v, want 0", got)
+	}
+
+	parts, err := h(t, "chat.participants")(c, registry.Params{"chat": "dm:worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := parts.(map[string]any)["participants"].([]map[string]any)
+	if len(rows) != 2 {
+		t.Fatalf("participants = %#v", rows)
+	}
+}

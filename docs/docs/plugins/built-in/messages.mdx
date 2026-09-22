@@ -18,6 +18,7 @@ must declare it explicitly.
 | Publish | `scripts/messages.sh message send`, `scripts/messages.sh request` |
 | Inbox | `scripts/messages.sh message ls`, `processed`, `reply` |
 | Recovery | `scripts/messages.sh message dlq`, `scripts/messages.sh message dlq requeue` |
+| Answering | `GET /tools/chat/unanswered` — the chat messages this agent has not replied to yet |
 | Subscriptions | `scripts/messages.sh sources`, `scripts/messages.sh channel subscribe`, `ls`, `unsubscribe` |
 
 Messages are published to named channels and routed to durable per-agent
