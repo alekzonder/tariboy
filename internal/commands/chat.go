@@ -50,6 +50,24 @@ func personalChat(b *bus.Bus, agent string) (bus.Chat, error) {
 	return b.GetChat(bus.ChatIDDirect(agent))
 }
 
+// resolveChat takes either a chat id or an agent name in the one argument the
+// chat endpoints carry. The sidebar knows agent names and nothing else; the
+// chat list knows ids. An existing chat wins, so an agent whose name happens to
+// read like an id can never be shadowed by one.
+func resolveChat(b *bus.Bus, value string) (bus.Chat, error) {
+	if value == "" {
+		return bus.Chat{}, api.UserError{Code: "missing_agent", Msg: "agent is required"}
+	}
+	chat, err := b.GetChat(value)
+	if err == nil {
+		return chat, nil
+	}
+	if !errors.Is(err, bus.ErrNotFound) {
+		return bus.Chat{}, err
+	}
+	return personalChat(b, value)
+}
+
 // participantReadTS is one participant read mark, empty when that principal has
 // read nothing in the chat.
 func participantReadTS(b *bus.Bus, chatID, principal string) (string, error) {
@@ -101,9 +119,9 @@ func chatLs() registry.Command {
 func chatMessages() registry.Command {
 	return registry.Command{
 		Path:    "chat.messages",
-		Summary: "Read the conversation with one agent, oldest first",
+		Summary: "Read one chat, oldest first, by chat id or agent name",
 		Args: []registry.Arg{
-			{Name: "agent", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "agent", Type: registry.String, Required: true, Help: "chat id or agent name"},
 			{Name: "types", Flag: "types", Type: registry.String, Help: "comma-separated message type globs"},
 			{Name: "limit", Flag: "limit", Type: registry.String, Help: "max messages (default 200)"},
 			{Name: "before", Flag: "before", Type: registry.String, Help: "page older: only messages before this timestamp"},
@@ -121,7 +139,7 @@ func chatMessages() registry.Command {
 				}
 			}
 			customer := customerPrincipal(c)
-			chat, err := personalChat(b, str(p, "agent"))
+			chat, err := resolveChat(b, str(p, "agent"))
 			if err != nil {
 				return nil, err
 			}
@@ -141,8 +159,8 @@ func chatMessages() registry.Command {
 				rows[i]["channel"] = msg.Channel
 				rows[i]["from"] = bus.MessageFrom(msg)
 			}
-			return map[string]any{"customer": customer, "agent": str(p, "agent"),
-				"chat": chat.ID, "channel": chat.Channel,
+			return map[string]any{"customer": customer, "agent": bus.ChatAgent(chat),
+				"chat": chat.ID, "channel": chat.Channel, "kind": chat.Kind, "title": chat.Title,
 				"messages": rows, "count": len(rows), "read_ts": readTS}, nil
 		},
 	}
@@ -151,9 +169,9 @@ func chatMessages() registry.Command {
 func chatRead() registry.Command {
 	return registry.Command{
 		Path:    "chat.read",
-		Summary: "Mark the chat with one agent read up to a message timestamp",
+		Summary: "Mark a chat read up to a message timestamp, by chat id or agent name",
 		Args: []registry.Arg{
-			{Name: "agent", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "agent", Type: registry.String, Required: true, Help: "chat id or agent name"},
 			{Name: "ts", Flag: "ts", Type: registry.String, Required: true, Help: "timestamp of the newest message shown"},
 			{Name: "exact", Flag: "exact", Type: registry.Bool, Help: "set the mark to ts even when that moves it backwards (mark unread)"},
 		},
@@ -167,7 +185,7 @@ func chatRead() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			chat, err := personalChat(b, agent)
+			chat, err := resolveChat(b, agent)
 			if err != nil {
 				return nil, err
 			}
@@ -183,7 +201,7 @@ func chatRead() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"agent": agent, "chat": chat.ID, "read_ts": readTS}, nil
+			return map[string]any{"agent": bus.ChatAgent(chat), "chat": chat.ID, "read_ts": readTS}, nil
 		},
 	}
 }

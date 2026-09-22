@@ -43,6 +43,24 @@ describe("messages websocket", () => {
     )
   })
 
+  it("carries the chat id and keeps a chat frame that names no agent", () => {
+    const onHint = vi.fn()
+    renderHook(() => useMessagesSocket({ target: null, onHint }))
+    const socket = FakeWebSocket.instances[0]
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ agent: "worker", chat: "tasks:worker", id: "m1", channel: "chat:tasks:worker", type: "task.assigned", from: "system:tasks", ts: "t" }),
+      }))
+      // A shared chat belongs to no single agent, so the frame names only the chat.
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ chat: "release-team", id: "m2", channel: "chat:release-team", type: "message", from: "user:customer", ts: "t" }),
+      }))
+    })
+    expect(onHint).toHaveBeenCalledTimes(2)
+    expect(onHint.mock.calls[0][0].chat).toBe("tasks:worker")
+    expect(onHint.mock.calls[1][0].chat).toBe("release-team")
+  })
+
   it("delivers hints and refetches on every (re)connect instead of replaying", () => {
     vi.useFakeTimers()
     const onHint = vi.fn()

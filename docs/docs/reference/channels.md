@@ -379,11 +379,11 @@ tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
 | Route | Returns |
 | --- | --- |
 | `GET /api/chats` | one row per chat the customer takes part in — `id`, `kind`, `title`, `channel`, `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — most recently active first |
-| `GET /api/chats/{agent}` | that agent's conversation, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
-| `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
+| `GET /api/chats/{chat}` | one chat, oldest first, each message carrying its `from` and `channel`, plus the chat's `id`, `kind`, `title`, `agent` and the `read_ts` it stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards. `{chat}` is a chat id (`tasks:worker`) or a bare agent name, which reads that agent's conversation |
+| `POST /api/chats/{chat}/read` | moves the customer's read mark in that chat to `ts`; `{chat}` is a chat id or an agent name |
 | `GET /api/chats/{chat}/unanswered` | the messages `principal` has not answered in that chat, oldest first |
 | `GET /api/chats/{chat}/participants` | the chat principals with their role, join time, read mark and mute flag |
-| `GET /api/messages/ws` | one live hint per publication for every agent on the host |
+| `GET /api/messages/ws` | one live hint per publication for every agent on the host — `{chat, agent, id, channel, type, from, ts}`, with `chat` absent for a channel no chat owns |
 
 ### Processing and answering are two obligations
 

@@ -830,7 +830,7 @@ describe("TerminalsPage", () => {
       {
         host: { id: "remote-1", label: "prod" },
         agents: [{ name: "alice", image: "bare:latest", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true }],
-        chats: [{ agent: "alice", last_ts: "2026-09-15T10:00:00Z", last_from: "agent:alice", last_type: "message", last_text: "hi", unread: 3 }],
+        chats: [{ id: "dm:alice", kind: "direct", title: "alice", agent: "alice", last_ts: "2026-09-15T10:00:00Z", last_from: "agent:alice", last_type: "message", last_text: "hi", unread: 3 }],
       },
     ])
 

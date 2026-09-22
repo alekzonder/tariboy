@@ -79,6 +79,52 @@ func TestMessagesWebSocketStreamsEveryAgentsMessageHints(t *testing.T) {
 	}
 }
 
+// A chat publish names its chat in the frame, so a client can refetch exactly
+// that conversation. A message outside any chat carries no chat key at all, so
+// existing consumers keep working unchanged.
+func TestMessageHintCarriesTheChatID(t *testing.T) {
+	httpServer, hub := messagesWSServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws, _, err := websocket.Dial(ctx, messagesWSURL(httpServer.URL), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		ticker := time.NewTicker(25 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			hub.Emit(events.Event{Agent: "worker", Type: "message", Time: "t", Data: map[string]any{
+				"id": "m1", "channel": "chat:tasks:worker", "chat": "tasks:worker",
+				"type": "task.assigned", "from": "system:tasks",
+			}})
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	_, raw, err := ws.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hint map[string]any
+	if err := json.Unmarshal(raw, &hint); err != nil {
+		t.Fatal(err)
+	}
+	if hint["chat"] != "tasks:worker" {
+		t.Fatalf("a chat publish must name its chat, got %#v", hint)
+	}
+	if hint["agent"] != "worker" {
+		t.Fatalf("the agent field stays for existing consumers, got %#v", hint)
+	}
+}
+
 // Terminal stream bytes are not conversation, so the chat socket must ask the
 // hub for message events only, and for every agent rather than one.
 func TestMessagesWebSocketWatchesEveryAgentAndOnlyMessages(t *testing.T) {

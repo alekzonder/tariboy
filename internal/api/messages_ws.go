@@ -44,7 +44,7 @@ func (s *Server) serveMessages(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			hint := map[string]any{"agent": event.Agent, "ts": event.Time}
-			for _, key := range []string{"id", "channel", "type", "from"} {
+			for _, key := range []string{"id", "channel", "chat", "type", "from"} {
 				if value, present := event.Data[key]; present {
 					hint[key] = value
 				}

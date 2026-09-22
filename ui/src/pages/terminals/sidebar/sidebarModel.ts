@@ -17,8 +17,31 @@ export interface SidebarAgent {
   hostError?: string;
   group: string;
   agent: AgentSummary;
-  /** This agent's conversation with the customer, when there is one. */
+  /** This agent's chats folded into one row, when it has any. */
   chat?: ChatSummary;
+}
+
+/**
+ * One sidebar row stands for the whole agent, and an agent owns three chats —
+ * its conversation, its task notifications and its service wake-ups. The row
+ * shows whichever of them moved last and counts every one of them as unread,
+ * so a task the customer has not read cannot hide behind a quiet conversation.
+ */
+export function foldAgentChats(chats: ChatSummary[]): Map<string, ChatSummary> {
+  const byAgent = new Map<string, ChatSummary>();
+  for (const chat of chats) {
+    if (!chat.agent) continue;
+    const seen = byAgent.get(chat.agent);
+    if (!seen) {
+      byAgent.set(chat.agent, { ...chat });
+      continue;
+    }
+    seen.unread += chat.unread;
+    if (chat.last_ts > seen.last_ts) {
+      Object.assign(seen, chat, { unread: seen.unread });
+    }
+  }
+  return byAgent;
 }
 
 /** Sort `items` by an explicit id order, keeping unlisted items in their
@@ -33,7 +56,7 @@ export function ordered<T>(items: T[], ids: string[], id: (item: T) => string): 
 
 /** Agents of one host in the operator's saved order. */
 export function hostAgents(host: HostAgents): SidebarAgent[] {
-  const chats = new Map((host.chats ?? []).map((chat) => [chat.agent, chat]));
+  const chats = foldAgentChats(host.chats ?? []);
   return ordered(host.agents, host.sidebarOrder?.agents ?? [], (agent) => agent.name)
     .map((agent) => ({
       key: agentKey(host.host.id, agent.name),

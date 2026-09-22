@@ -1004,6 +1004,12 @@ export const agentInboxRequeue = (name: string, id: string) =>
 // it, sends through the ordinary message endpoint, and marks it read.
 
 export interface ChatSummary {
+  /** The chat's own id, e.g. `dm:worker`, `tasks:worker`, `service:worker`. */
+  id: string;
+  kind: string;
+  title: string;
+  channel?: string;
+  /** The agent the chat belongs to, empty for a chat no single agent owns. */
   agent: string;
   last_ts: string;
   last_from: string;
@@ -1035,9 +1041,11 @@ export const chatListOn = (target: ApiTarget, types?: string[]) =>
     `/api/chats${types?.length ? `?types=${encodeURIComponent(types.join(","))}` : ""}`,
   );
 
+// `chat` is a chat id (`tasks:worker`), and an agent name still resolves to that
+// agent's conversation, which is what the sidebar knows.
 export const chatMessagesOn = (
   target: ApiTarget,
-  agent: string,
+  chat: string,
   // before is a message timestamp, not an id: the feed merges two channels
   // whose ids embed their own channel name and therefore do not sort together.
   opts: { types?: string[]; limit?: number; before?: string } = {},
@@ -1048,13 +1056,14 @@ export const chatMessagesOn = (
   if (opts.before) q.set("before", opts.before);
   const qs = q.toString();
   return apiOn<{
-    customer: string; agent: string; messages: ChatMessage[]; count: number;
+    customer: string; agent: string; chat: string; kind: string; title: string;
+    messages: ChatMessage[]; count: number;
     // The mark the chat was last read at, so a reader can tell what is new.
     read_ts?: string;
   }>(
     resolveTarget(target),
     "GET",
-    `/api/chats/${encodeURIComponent(agent)}${qs ? `?${qs}` : ""}`,
+    `/api/chats/${encodeURIComponent(chat)}${qs ? `?${qs}` : ""}`,
   );
 };
 
@@ -1065,14 +1074,14 @@ export const chatMessagesOn = (
 // marked unread.
 export const chatReadOn = (
   target: ApiTarget,
-  agent: string,
+  chat: string,
   ts: string,
   opts: { exact?: boolean } = {},
 ) =>
-  apiOn<{ agent: string; read_ts: string }>(
+  apiOn<{ agent: string; chat: string; read_ts: string }>(
     resolveTarget(target),
     "POST",
-    `/api/chats/${encodeURIComponent(agent)}/read`,
+    `/api/chats/${encodeURIComponent(chat)}/read`,
     opts.exact ? { ts, exact: true } : { ts },
   );
 
