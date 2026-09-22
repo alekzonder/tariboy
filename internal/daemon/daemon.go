@@ -262,6 +262,9 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return fmt.Errorf("resolve customer login: %w", err)
 	}
+	if err := reconcileAgentChats(as, channelBus, "user:"+customerLogin); err != nil {
+		return fmt.Errorf("reconcile agent chats: %w", err)
+	}
 	if err := tasks.MigrateLegacyKeys(st.DB, time.Now); err != nil {
 		return fmt.Errorf("migrate task keys: %w", err)
 	}
@@ -878,6 +881,21 @@ func pricingErrorClass(d pricingcatalog.Diagnostic) string {
 	default:
 		return "other"
 	}
+}
+
+// reconcileAgentChats provisions every persisted agent's chats and their
+// participants. It runs beside the inbox reconciliation at startup, so an agent
+// created before the chats migration gets its conversations on the next start.
+func reconcileAgentChats(agents *agent.Store, channelBus *bus.Bus, customerPrincipal string) error {
+	rows, err := agents.List()
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(rows))
+	for _, row := range rows {
+		names = append(names, row.Name)
+	}
+	return channelBus.ReconcileChats(names, customerPrincipal)
 }
 
 func reconcileAgentInboxes(agents *agent.Store, channelBus *bus.Bus) error {
