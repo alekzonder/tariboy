@@ -1,3 +1,49 @@
+## [0.69.0] - 2026-09-23
+
+### Added
+
+- Chats over the existing channel bus. Every agent has three chats:
+  `dm:<agent>` for the conversation, `tasks:<agent>` for task notifications
+  and `service:<agent>` for its own wakes. The customer can create a chat that
+  belongs to no single agent and holds several:
+  `tariboy chat create ID --title TITLE --participants agent:a,agent:b`,
+  `tariboy chat join ID PRINCIPAL` and `tariboy chat leave ID PRINCIPAL`
+  (`POST /api/chats`, `POST|DELETE /api/chats/{chat}/participants`). Joining
+  a chat subscribes an agent to it. Leaving ends membership but keeps
+  deliveries the agent already holds.
+- The chat list and feed come from the new `chats` and `chat_participants`
+  tables (`GET /api/chats`, `GET /api/chats/{chat}`,
+  `GET /api/chats/{chat}/participants`), and
+  `GET /api/chats/{chat}/unanswered` lists the messages a principal has not
+  answered.
+- The agent Chat tab opens the agent's tasks and service chats as tabs beside
+  the conversation. The sidebar row sums unread messages across all three
+  chats and previews whichever chat moved last.
+
+### Changed
+
+- Task `task.*` notifications now publish to `chat:tasks:<agent>`, and
+  `task.goal`, `script.result` and channel-less schedules to
+  `chat:service:<agent>`. Delivery, wake-up and idempotency behavior is
+  unchanged. Schedules created earlier keep their stored channel.
+- A reply without `--reply-to` lands in the chat that owns the original
+  message, and websocket message hints carry that chat's id.
+- An image ref can be rebuilt through every build path: a build publishes one
+  ref derived from the image name and `image_version` and moves every
+  requested tag, including `latest`, onto it. The mutable/immutable
+  publication split is gone. The daemon converts an existing image store once
+  at startup and keeps each archive's content digest as its ref id, so pinned
+  digests keep resolving.
+
+### Fixed
+
+- The sidebar `Update all` button now asks for confirmation and updates every
+  outdated server in turn, instead of only opening one edit dialog.
+- Subscription ids no longer collide when two subscriptions are created
+  within the same clock tick.
+
+[0.69.0]: https://github.com/alekzonder/tariboy/compare/v0.68.0...v0.69.0
+
 ## [0.68.0] - 2026-09-21
 
 ### Added
