@@ -6,8 +6,8 @@ sidebar:
   icon: package-plus
 ---
 
-`image-creator` allows an agent to publish a new immutable image to the current
-host's image store. It is optional and is not included in the official Store's
+`image-creator` allows an agent to publish an image to the current host's image
+store, through the same build mechanism the operator CLI uses. It is optional and is not included in the official Store's
 `basic` source.
 
 ## Capability surface
@@ -21,10 +21,16 @@ scripts/image_creator.sh build \
   --path ./reviewer-image
 ```
 
-`--name` and `--path` are required. The tag defaults to `latest`. A successful
-response identifies the name, tag, digest, and layer count. The new immutable
-image is stored on the same host and can be assigned to an agent through the
-normal image workflow.
+`--name` and `--path` are required. Omitting `--tag` publishes the source's
+`image_version` and `latest`, exactly as the operator CLI does, or only
+`latest` when the source declares no version. A successful response identifies
+the name, the published tags, the ref digest, and the layer count. The image is
+stored on the same host and can be assigned to an agent through the normal
+image workflow.
+
+A tag that already exists, `latest` included, is moved onto the new build
+rather than refused. Reserved refs (`bare:latest`, `basic:latest`) stay
+rejected.
 
 ## Source paths
 
@@ -45,8 +51,9 @@ prompt/runtime template. Schema-v1 source builds fail with migration guidance.
 Built-in names are validated against Tariboy's registry; external names must
 resolve to installed plugin metadata on the same daemon.
 
-The build writes to the daemon's shared immutable image store. It does not
-assign the image to the creating agent or change a running iteration.
+The build writes to the daemon's shared image store through the one publication
+mechanism. It does not assign the image to the creating agent or change a
+running iteration; an agent adopts a moved ref at its next launch gate.
 
 ## Prompt integration
 

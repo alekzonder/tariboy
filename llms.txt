@@ -23,7 +23,7 @@
 
 - [Daemon architecture](https://alekzonder.github.io/tariboy/architecture): How tariboyd owns durable state, agent execution, APIs, plugins, policy, and recovery.
 - [Agents & the iteration loop](https://alekzonder.github.io/tariboy/architecture/iteration-loop): An agent runs a series of supervised iterations, driven by a timer or by messages, on top of a whoami / loop / channels core.
-- [The channel bus & messaging](https://alekzonder.github.io/tariboy/architecture/messaging): Messages move over a store-backed fan-out bus — four tables, per-agent delivery queues, and durable ack with redelivery.
+- [The channel bus & messaging](https://alekzonder.github.io/tariboy/architecture/messaging): Messages move over a store-backed fan-out bus — six tables, per-agent delivery queues, and durable ack with redelivery.
 - [The shim](https://alekzonder.github.io/tariboy/architecture/shim): tariboy-shim runs a single harness iteration under a watchdog, so a runaway iteration can be killed without touching the daemon.
 - [State model — the DB is the source of truth](https://alekzonder.github.io/tariboy/architecture/state-model): The SQLite DB is the single source of configuration; live state is computed, not stored, which is why test daemons must be isolated.
 - [The AI proxy & the audit log](https://alekzonder.github.io/tariboy/architecture/ai-proxy): Every LLM call routes through the in-process AI proxy, which enforces budgets and writes a per-iteration audit transcript.

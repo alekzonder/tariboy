@@ -29,7 +29,7 @@ actions. Import stays on the Images root. Select a tag for its existing
 Overview, Template, Skills, and Files tabs; breadcrumbs return to its name or
 the root, and existing direct tag URLs keep working.
 
-Detail reads carry the displayed manifest digest. If a mutable ref changes
+Detail reads carry the displayed manifest digest. If a ref changes
 between reads, the UI reports the update, discards the old content, and reloads
 once. A further change offers **Refresh image**, so repeated rebuilds cannot
 cause an endless refresh loop. The read API accepts optional
@@ -46,7 +46,7 @@ required name and an optional tag, then select **Validate** or **Build**. The
 default build publishes both the source `image_version` and `latest`, or only
 `latest` when the source has no version. An explicit tag publishes only that
 tag. Tariboy records the canonical source CWD as local provenance and retains
-an immutable source snapshot for evidence. Rebuilding still reads the original
+a frozen source snapshot for evidence. Rebuilding still reads the original
 directory and its current paths.
 
 **Validate** is read-only. Before a build it shows the schema version, explicit
@@ -78,30 +78,44 @@ tariboy image ls
 ```
 
 Provide `--repository-id` and `--git-commit` together when the source is an
-exact Git revision. Tariboy records those explicit values in the immutable
+exact Git revision. Tariboy records those explicit values in the frozen
 source snapshot; it never infers a commit from the current working directory.
 
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
 
-Ordinary operator `tariboy image build` refs are mutable: rebuilding a tag,
-including `latest`, replaces it only after validation and retains the prior
-archive by digest for active and pending assignments. Repeat `--tag` to publish
-several refs from one parsed source; each result has its own ref and digest,
-while frozen static image content, source provenance, and build time are
-shared. The requested refs and their snapshot/provenance metadata commit as one
-batch; a failure on any tag restores every ref exactly. Duplicate tags are
-rejected. When the operator CLI omits `--tag`, a frozen source with
-`image_version` publishes both that version and `latest`; the existing
-single-result output reports the versioned ref. Older files without a version
-publish only `latest`. Explicit tags, including `--tag latest`, take priority
-and do not add another ref.
+### Refs, tags and identity
 
-Runnable archives remain immutable, while their ordinary tags are mutable
-pointers. Build and import can therefore advance any existing non-reserved tag,
-including version tags and `latest`; the prior archive remains addressable by
-digest for pinned assignments. The daemon-managed `bare:latest` and
-`basic:latest` refs remain reserved.
+A **ref** is the stored image content. Its identity is derived from the image
+name and the `image_version` declared in `Tariboyfile.yaml`, so rebuilding the
+same version republishes the same ref and bumping the version creates another
+one. A source with no declared version stays addressed by its archive bytes.
+A **tag** is only a pointer to a ref, held in `images/<name>/tags/<tag>`; the
+content lives once in `images/<name>/refs/<id>.tar.gz`.
+
+Every build therefore publishes without restriction: rebuilding an existing
+ref, including `latest`, always succeeds and moves the tag. Generations that
+other tags no longer name stay on disk, so agents pinned to an earlier ref keep
+running until their next launch gate.
+
+There is one build mechanism. The operator CLI, the Store build, an agent's
+own `image-creator`, and team import all publish the same way and behave
+identically, including how they default tags. Repeat `--tag` to move several
+tags onto one build; every requested tag names the same ref and reports the
+same digest, so a versioned tag and `latest` can never disagree. The requested
+refs and their snapshot/provenance metadata commit as one batch; a failure on
+any tag restores every tag exactly. Duplicate tags are rejected. When `--tag`
+is omitted, a source with `image_version` publishes both that version and
+`latest`, and the single-result output reports the versioned ref; a source
+without a version publishes only `latest`. Explicit tags, including
+`--tag latest`, take priority and do not add another ref.
+
+The daemon-managed `bare:latest` and `basic:latest` refs remain reserved and
+cannot be built, imported over, or removed.
+
+A store written by an earlier release is migrated once, when the daemon starts:
+each archive keeps its content digest as its ref id, so every digest already
+pinned on an agent continues to resolve. The migration is one-way.
 
 ## Stores on a server
 
@@ -229,8 +243,8 @@ fields, and comments; YAML formatting may change. Missing or invalid versions
 produce an error without changing the file. Old sources may omit the field
 for build compatibility, but version commands require it.
 
-The runnable manifest preserves `image_version` independently of its ref tag.
-For mutable refs such as `latest`, every new iteration snapshots the source
+The runnable manifest preserves `image_version`; the archive carries no tag,
+since a tag only points at a ref. Every new iteration snapshots the source
 version with the ref and digest, exposes it through `iteration inspect`, and
 includes it in `runtime: identity` and iteration audit exports. Older runnable
 images and historical iterations simply omit the version.
@@ -287,14 +301,14 @@ Each static `file` is resolved and embedded at build time. Supported forms are:
 The builder expands only those literal variables; it never performs shell or
 environment expansion. A prompt may use `../` only to read a file below a
 source-relative directory already declared in `skills`; validation reads that
-directory directly and build reads its immutable snapshot. Other traversal,
+directory directly and build reads its frozen snapshot. Other traversal,
 symlinks, missing files, non-regular files, and oversized prompt files are
 rejected.
 
 ## Packaged Agent Skills
 
 Each `skills` entry explicitly packages one Agent Skill directory into the
-immutable image. The skill travels with runnable export/import. At iteration
+image. The skill travels with runnable export/import. At iteration
 launch Claude Code and OpenCode receive it through native skill configuration;
 Codex receives a compact prompt catalog with its absolute `SKILL.md` path and
 reads the file on demand. This is separate from image plugins and prompt
@@ -306,7 +320,7 @@ portability, harness adapters, discovery precedence, and activation failures.
 
 ## Runtime placeholders
 
-Runtime entries remain visible placeholders inside the immutable image. Before
+Runtime entries remain visible placeholders inside the built image. Before
 every iteration, the runner replaces ordinary values at their declared
 positions. Work inputs are always grouped in the platform block:
 
@@ -374,24 +388,24 @@ their next launch gate. An image in either list cannot be removed.
 
 Configuration shows **Current** (or **Activated version** when stopped) with
 the version read from the agent's pinned ref and digest. **Next iteration**
-previews the explicit pending digest first, otherwise the current build of an
-ordinary mutable active ref, otherwise the current pinned image. Viewing this
+previews the explicit pending digest first, otherwise the content the active
+ref points at now, otherwise the current pinned image. Viewing this
 projection does not create pending state or activate anything. Inspection and
 activation errors remain visible even when there is no pending ref; missing
 version metadata is labelled **Version not specified**.
 
-When an agent's active ordinary build ref moves to a new digest, the launch gate
-stages and promotes that digest at the next iteration. The running iteration
-keeps its original prompt, version, and digest. Configuration marks the update
-by digest difference even when both builds declare the same version. Its
-preview is not a reservation: the ref can move again before launch. Cancelling
-an explicit pending assignment does not disable following the mutable active
-ref. The preview refreshes with agent status and after UI image builds.
+When an agent's active ref moves to another id, the launch gate stages and
+promotes it at the next iteration. The running iteration keeps its original
+prompt, version, and digest. A rebuild that does not change `image_version`
+republishes the same ref, so there is nothing new to adopt and running agents
+are undisturbed; bump the version to roll a change out. The preview is not a
+reservation: the ref can move again before launch. Cancelling an explicit
+pending assignment does not disable following the active ref. The preview refreshes with agent status and after UI image builds.
 
 ## Import and export
 
 **Export** downloads a runnable image artifact named
-`<name>-<tag>.tariboy-image.tar.gz`. It includes the immutable image
+`<name>-<tag>.tariboy-image.tar.gz`. It includes the runnable image
 archive, including packaged skills, and its digest, but never original source
 files or source CWD. After the browser download starts, Tariboy confirms the
 saved image ref and portable filename in a toast. **Import runnable image** verifies both the portable wrapper and the inner runnable

@@ -84,7 +84,7 @@ flat list, ordered the way a chat list is: pinned agents first, then the agents
 with an unread customer question, then the rest by their most recent
 conversation, and only then in the operator's own order. The whole sort happens
 in Desktop, across every server, because only Desktop sees all of them; a host
-whose daemon does not project chats simply contributes no conversation dates.
+whose daemon serves no chats simply contributes no conversation dates.
 An unanswered question therefore lifts a row, but adds no marker of its own: the
 one badge a row carries is the count of unread messages from that agent. The
 question itself is readable in that agent's **Chat**, and its task is marked in
@@ -97,7 +97,10 @@ sources, because it is the only one with a persisted order. The selected tab is
 remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
 **Agents**. Each server heading states its own reachability and carries the
 **Update** action for a host running an older daemon, with **Update all (N)**
-above the list when more than one host is behind.
+above the list when more than one host is behind. **Update all** confirms the
+named hosts first, then runs the same host update on each of them in turn; a
+host that fails is reported in the page error line and the remaining hosts are
+still updated.
 
 In the Servers tab the sidebar partitions each host into expandable **Teams**
 and **Individual agents** without changing agent navigation or membership.
@@ -364,13 +367,27 @@ The agent **Chat** tab is the first tab, directly before **Tasks**, and owns
 both halves of an agent's messaging in one section. **Chat** is its default
 view: the conversation with that agent — the customer's messages in its inbox
 merged with its messages in the customer's channel — rendered as one thread.
-There is no conversation list: the conversation is whichever agent the sidebar
-has selected, one agent to one thread. Consecutive messages from one author are
-grouped under a single header, and a continuation row shows its own time in the
-avatar column on hover.
+There is no separate conversation list: the sidebar's selected agent is the
+conversation, and that agent's three chats — **Chat**, **Tasks** and
+**Service** — are a tablist in the toolbar. **Chat** is the conversation with
+the customer, **Tasks** the task notifications addressed to the agent, and
+**Service** its own wake-ups: script results, goal reconciliation and schedule
+alarms. Any shared chat the agent takes part in — one the customer created,
+belonging to no single agent and possibly holding several — follows those three
+in the same tablist, and a **New chat** button beside them starts one with this
+agent and any others picked. **Chat** and a shared chat have a composer; the
+other two are the agent's feeds, and the customer is an observer in the service
+one. A shared chat names its participants where the conversation names its
+message count, because in a multi-agent thread the author cannot be deduced from
+the thread itself. A task key in any of them is
+still a chip that opens the task panel, which is how a task is answered from
+its notification. Consecutive messages from one author are grouped under a
+single header, and a continuation row shows its own time in the avatar column
+on hover.
 
-The tab has one 48px toolbar: the **Chat**/**Channels** switch, a message
-search over the loaded page, `you + <agent> · N messages`, the read action,
+The tab has one 48px toolbar: the **Chat**/**Channels** switch, the chat
+tablist, search over the loaded page, `you + <agent> · N messages` (the
+participants in a shared chat), the read action,
 transcript export, and a menu. The message-type filter lives in that menu; it
 still starts from the daemon's default conversation types, still offers an
 agent's own wakes (`task.goal`, `script.result`, schedule alarms) explicitly,
@@ -392,9 +409,12 @@ Chat. Closing it returns to the conversation. A message also offers reply,
 copy, and **Create a task from this message**, which opens a task in a chosen
 queue with the message as its description and the agent as its assignee.
 
-Unread belongs to the conversation, not to the tab. It is the daemon's
-per-agent read mark, so the dot on the **Chat** tab, the unread badge on the
-sidebar row and the toolbar's own state read one value and survive a remount.
+Unread belongs to the conversation, not to the tab. It is the read mark of the
+customer's participant row in each chat. One sidebar row stands for the whole
+agent, so the dot on the **Chat** tab and the badge on the sidebar row are the
+sum over that agent's three chats and the row previews whichever of them moved
+last — an unread task notification cannot hide behind a quiet conversation. The
+toolbar's own state is the open chat's mark, and all of them survive a remount.
 Opening the chat still marks it read at the timestamp of the newest message
 actually shown, never at the current time. The feed carries the read mark the
 chat was opened at, and the unread rule — a `N new messages` pill — is drawn
@@ -424,7 +444,11 @@ subscription list, channel tail, and channel send.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
-reconnect reloads unconditionally because the socket replays nothing. The
+reconnect reloads unconditionally because the socket replays nothing. A frame
+for a publication a chat owns names that chat — `{chat, agent, id, channel,
+type, from, ts}` — so an open conversation refetches only when its own chat is
+named; `chat` is absent for a channel no chat owns, and such a frame still
+falls back to the agent it concerns, which is what existing consumers read. The
 sidebar mounts one such socket per configured host, so the chat order changes as
 a message lands rather than on the next poll. **Advanced → Messages**
 (Queue/Archive/DLQ) is unchanged: it is the delivery queue, not the

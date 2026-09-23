@@ -256,7 +256,7 @@ controls](/docs/security-controls) for the full transport and credential rules.
 | Store and migrations | `tariboyd.db`, configuration, agent/task/message records, workflow history, and durable outboxes | UI state or a second in-memory source of truth |
 | Agent store and loop manager | Agent configuration, per-agent engines, iteration adoption, shim refresh, and orphan-session reaping | Harness business logic |
 | Loop engine and shim runner | At most one iteration per agent, prompt preparation, timeouts, completion, and process supervision | Task/workflow transition rules |
-| Image store and builder | Immutable plugin/prompt artifacts, source provenance, runnable import/export, and Store path resolution | Harness/model/runtime policy or editable source snapshots |
+| Image store and builder | Built plugin/prompt artifacts addressed by ref id, source provenance, runnable import/export, and Store path resolution | Harness/model/runtime policy or editable source snapshots |
 | Bus | Channels, subscriptions, deliveries, acknowledgement, and redelivery | Direct process-to-process delivery guarantees |
 | Native Tasks service | Queues, task trees, workflow versions, pools, assignments, artifacts, questions, and observations | Agent authentication |
 | Plugin host | Plugin process lifecycle, plugin tokens, and provider-channel watches | Provider credentials in plugin environments |
@@ -273,7 +273,7 @@ delivery hint.
 Path resolution lives in `internal/paths`:
 
 - **Data dir** — `$TARIBOY_BASE_DIR`, else `~/.tariboy`. Holds the DB,
-  agent working dirs, immutable images, and side-by-side external plugin
+  agent working dirs, built images, and side-by-side external plugin
   versions.
 - **Runtime dir** — `$TARIBOY_RUNTIME_DIR`, else `~/.tariboyd`. Holds the
   control socket (`tariboyd.sock`), pidfile, and log.
@@ -901,7 +901,9 @@ Messages move over a **store-backed fan-out bus** (fan-out/query logic in
 the architectural summary; the [channel bus reference](/docs/reference/channels)
 covers the full model, tools, and debugging.
 
-## Four tables
+## Six tables
+
+The four transport tables carry every message:
 
 - **channels** — named streams (`agent:<a>:inbox`, `group:<g>:broadcast`, …);
 - **messages** — immutable rows published to a channel;
@@ -909,6 +911,16 @@ covers the full model, tools, and debugging.
   content `matcher` and `type` globs;
 - **deliveries** — one row per matching `(subscription, message)`; this *is* the
   per-agent queue.
+
+Two more make a chat an entity rather than a projection of those four:
+
+- **chats** — one row per chat, owning exactly one transport channel;
+- **chat_participants** — who takes part, with each principal's role, read mark
+  and mute flag.
+
+The transport four are unaware of the other two: a chat is addressed by
+publishing to the channel it owns, so `Publish -> delivery -> WakeMessage` is
+the same code path it was before chats existed.
 
 ## Publish is a write, not a push
 
@@ -950,13 +962,14 @@ accepted through the provider registry rather than this list. Well-known shapes:
 - `agent:<a>:stream` — stream channel for one agent,
 - `group:<g>:broadcast` — fan-out to all group members,
 - `group:<g>:inbox` — group lead inbox,
-- `chat:<name>` — chat / plugin-facing channel,
+- `chat:<id>` — the one transport channel a chat owns,
 - `chat:telegram:<agent>` — one bundled Telegram forum topic mapped to an agent,
 - `user:<name>` — user-facing channel.
 
 Native Tasks publishes `task.assigned`, `task.question`, `task.answered`,
-`task.triage`, and daemon-owned `task.goal`. Agent recipients use their existing inbox channel and customer
-recipients use `user:<login>`. Mentions and unresolved-answer state remain in
+`task.triage`, and daemon-owned `task.goal`. An agent recipient reads the first
+four in its tasks chat, `chat:tasks:<agent>`, and `task.goal` in its service
+chat, `chat:service:<agent>`; customer recipients use `user:<login>`. Mentions and unresolved-answer state remain in
 the task itself; the channel message is the delivery mechanism, not the source
 of truth.
 
@@ -968,12 +981,44 @@ transaction, carrying existing tasks, comments, waits, notification state and
 the old `user:<$USER>` channel — messages and subscriptions included — over to
 the new principal instead of orphaning them.
 
-## Chats are a projection, not a fifth table
+## Chats are an entity over the channel bus
 
-A chat with one agent is the two inboxes that already exist, merged by time:
+A chat is a row in `chats`: an id, a kind, a title and exactly one transport
+channel `chat:<id>` that it owns. Who takes part lives in `chat_participants`,
+one row per principal (`user:<login>` or `agent:<name>`) with its role, its read
+mark and its mute flag. `messages`, `subscriptions` and `deliveries` are
+untouched, so `Publish -> delivery -> WakeMessage` and `HasPending` keep working
+exactly as before: the wake path never learns that chats exist.
 
-- messages in `agent:<a>:inbox` whose sender is the customer;
-- messages in `user:<customer>` whose sender is that agent.
+A chat channel is deliberately never an agent inbox. The bus suppresses an
+author's own delivery only on non-inbox channels, so an inbox-backed chat would
+echo an agent's own reply straight back into its own queue.
+
+Startup reconciliation provisions three chats per agent, and agent creation does
+the same for a new agent:
+
+| Chat | Kind | Carries |
+| --- | --- | --- |
+| `dm:<agent>` | `direct` | the conversation between the customer and that agent |
+| `tasks:<agent>` | `tasks` | task notifications for that agent |
+| `service:<agent>` | `service` | that agent's own wakes — `task.goal`, `script.result`, schedule alarms |
+
+A chat the customer creates belongs to no agent and may hold several, which is
+how a multi-agent conversation exists at all. Its id is a channel segment and is
+refused when it is already in use or falls in a namespace the daemon provisions
+itself (`dm:`, `tasks:`, `service:`, `group:`, `telegram:`, `plugin:`), so two
+chats can never share one channel and quietly interleave their history.
+Membership is what carries delivery: adding an agent subscribes it to the chat
+channel, removing one revokes that subscription and leaves the deliveries it
+already holds in its queue, because leaving a chat ends membership, not work
+already handed out.
+
+The personal chat carries a `legacy_agent`, which is how history written before
+the chats migration stays readable: that history is the two inboxes merged by
+time — the customer's messages in `agent:<a>:inbox` and the agent's messages in
+`user:<customer>` — and no message is ever rewritten onto the new channel. The
+feed reads the chat channel and, for a chat with a `legacy_agent`, unions that
+projection.
 
 The sender is `data.from` when a producer wrote one, else a principal-shaped
 `source`, else `produced_by_agent`, else `system`. Task notifications carry the
@@ -981,21 +1026,37 @@ principal that caused them in `data.from` and keep `source` as `system:tasks`,
 because moving the author into `source` would exclude an agent from a
 notification it addressed to itself. An operator publish is attributed to the
 customer principal, and carries `reply_to: user:<customer>` when it is sent from
-a chat, which is what makes an agent's reply land in the conversation rather
-than back in its own inbox.
+a chat.
 
-`GET /api/chats` ranks every conversation by its last message and counts what
-the customer has not read; `GET /api/chats/{agent}` returns one merged feed and
-the agent's current read mark, so a reader can separate what it has already seen;
-`POST /api/chats/{agent}/read` moves that agent's read mark forward. Read marks
-live in one `chat_read_v1` value in `daemon_config`, keyed per agent. Both read
-endpoints take a `types` filter of globs and default to conversation types only,
-so an agent's own `task.goal`, `script.result` and schedule wakes neither appear
-in a chat nor move that agent up the list.
+Processing a delivery and answering a message are separate obligations, and
+neither implies the other. Processing satisfies the transport — every delivered
+message is marked processed with a text result, or it is redelivered and
+eventually dead-lettered. Answering satisfies the conversation: a message counts
+as answered only when a reply of that principal points at it through
+`in_reply_to`, which a reply fills and a plain send does not.
+`GET /api/chats/{chat}/unanswered`, and for an agent `GET /tools/chat/unanswered`
+across every chat it takes part in, is that queue — the messages another
+participant sent at or after this principal joined with no reply of its own
+pointing at them. The answer is published into the chat as an ordinary message,
+so the conversation carries both halves.
+
+`GET /api/chats` ranks every chat the customer takes part in by its last message
+and counts what that participant has not read; `GET /api/chats/{chat}` returns
+one chat and the customer's current read mark, so a reader can separate what it
+has already seen; `POST /api/chats/{chat}/read` moves that mark forward. Both
+take a chat id — `dm:worker`, `tasks:worker`, `service:worker` — and still
+accept a bare agent name for that agent's conversation, which is what a caller
+holding only a name can address. An existing chat wins over the name reading,
+so an agent can never shadow a chat. Read marks are `chat_participants.read_ts`, one per participant; the
+single pre-chats `chat_read_v1` value in `daemon_config` is carried into them by
+the migration. Both read endpoints take a `types` filter of globs and default to
+conversation types only, so an agent's own `task.goal`, `script.result` and
+schedule wakes neither appear in the conversation nor move it up the list.
 
 `GET /api/messages/ws` streams one hint per publication for every agent on the
-host. A frame carries `{agent, id, channel, type, from, ts}` and is only a
-refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
+host. A frame carries `{chat, agent, id, channel, type, from, ts}` — `chat` is
+the channel's own chat and is absent for a channel no chat owns, so a client can
+refetch exactly one conversation — and is only a refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
 because a client refetches on connect and on every reconnect.
 
 The bundled Telegram process remains outside the daemon. It authorizes and
@@ -1007,8 +1068,8 @@ does not introduce a second agent-delivery path.
 
 ## Agent goal delivery
 
-The per-agent Goal reconciler publishes `task.goal` to
-`agent:<name>:inbox` with the selected task key and `selected` or
+The per-agent Goal reconciler publishes `task.goal` to the agent's service
+chat, `chat:service:<name>`, with the selected task key and `selected` or
 `iteration_completed` reason. Its idempotency key includes the agent, task key,
 task revision, and terminal iteration identity, so recovery and repeated scans
 do not duplicate a generation. An unprocessed Goal delivery outside the DLQ
@@ -1020,9 +1081,14 @@ directly. Disabled agents or disabled loops receive no new goal wake.
 
 An agent's unfiltered subscription to its own inbox is protected system state.
 Agent creation provisions it, and daemon startup reconciles all persisted
-agents before starting their loops. Task notifications therefore follow the
-ordinary `Publish -> delivery -> WakeMessage` path: enabled loops wake for
-pending deliveries, while disabled loops leave them queued.
+agents before starting their loops. The same startup step provisions each
+agent's chats and the participant subscription that carries `chat:tasks:<a>`
+and `chat:service:<a>`, so a chat-addressed wake exists before any publisher
+runs. Task notifications therefore follow the ordinary
+`Publish -> delivery -> WakeMessage` path unchanged, whichever channel carries
+them: enabled loops wake for pending deliveries, while disabled loops leave
+them queued. `agent:<a>:inbox` remains the direct inbox for group sends,
+request replies and system events.
 
 Workflow runtime wakes use the same bus/outbox path. An incoming message never
 changes a workflow status directly. An operator-declared external trigger may
@@ -1245,17 +1311,46 @@ transaction, and an id belonging to another agent fails the whole batch rather
 than writing part of it. Tags are a property of the iteration, not of the agent
 that applied them: who tagged an iteration is not recorded.
 
-## Customer identity and chat read marks
+## Chats and participants
 
-Two `daemon_config` values carry the customer's side of messaging.
-`customer_login` is the fixed customer login, defaulted to `customer` and
-adopted once — with existing tasks, comments, waits, notification state and the
-old `user:<$USER>` channel carried over in the same transaction — instead of
-following whichever account runs `tariboyd`. `chat_read_v1` is one JSON object
-mapping an agent name to the newest message timestamp the customer has seen in
-that chat; it only ever moves forward. Neither is a new table, and both are UI
-state rather than authority: a lost read mark costs an unread count, not a
-message.
+A chat is persisted state, not a view over the bus. `chats` holds one row per
+chat — `id`, `kind`, `title`, the one transport `channel` it owns, an optional
+`legacy_agent`, `created_at` and `archived_at` — and `chat_participants` holds
+one row per principal in it, keyed by `(chat_id, principal)`, with its `role`,
+`joined_at`, `read_ts` and `muted` flag. The `channel` column is unique, so two
+chats can never address the same transport channel.
+
+Ownership follows how the chat came to exist. The daemon owns the three chats
+it provisions for every agent — `dm:<agent>`, `tasks:<agent>` and
+`service:<agent>` — reconciling them at startup and at agent creation, which
+makes them self-healing: a missing row is recreated, and the namespaces they
+live in are refused to anyone else. A chat the customer creates is owned by the
+customer: nothing reconciles it, and its lifetime is exactly its row.
+
+Membership is durable and revocable, and its lifetime is not the delivery's.
+Adding an agent participant materializes its locked subscription to the chat
+channel; removing one sets `subscriptions.revoked_at` instead of deleting the
+row, because `deliveries` joins `subscriptions` and a delete would make the
+agent's already-created, unacknowledged deliveries vanish from its queue.
+A revoked subscription is skipped by fan-out and still owns its past deliveries.
+
+The invariant underneath all of it: **`messages` rows are never rewritten.**
+No chat operation re-channels, edits or deletes a published message. That is
+what lets pre-chats history stay readable without a data migration — a personal
+chat carries `legacy_agent`, and its feed unions the chat channel with the old
+projection of `agent:<a>:inbox` and `user:<customer>` merged by time — and it is
+why a chat can be created, joined and left without risking history.
+
+## Customer identity and read marks
+
+`customer_login` in `daemon_config` is the fixed customer login, defaulted to
+`customer` and adopted once — with existing tasks, comments, waits, notification
+state and the old `user:<$USER>` channel carried over in the same transaction —
+instead of following whichever account runs `tariboyd`. Read marks are
+`chat_participants.read_ts`, one per participant, and only ever move forward;
+the single pre-chats `chat_read_v1` JSON object in `daemon_config` was carried
+into those rows by the chats migration. A read mark is UI state rather than
+authority: losing one costs an unread count, not a message.
 
 ## Message queue state
 
@@ -1332,27 +1427,29 @@ capabilities, and promotes active plus pending state in one guarded transaction.
 Every new iteration snapshots its image ref, source `image_version` when
 present, digest, and prompt-template hash, so later switches cannot rewrite
 historical execution identity. Historical iterations and legacy images keep an
-empty version instead of inheriting a mutable ref's current value.
+empty version instead of inheriting the ref's current value.
 
 The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
-already-promoted image digest matches the row. Each unpacked image carries a
-daemon-owned digest marker, so two generations of one mutable ref cannot be
-confused. Ordinary mutable-build archive generations are retained by digest,
-so active and pending assignments survive a rebuilt ref. Harness,
-model, effort, environment,
-CWD, context, workdir, messages, history, group, and subscriptions are not image
-assignment fields.
+already-promoted image digest matches the row. Each unpacked image records the
+ref it was materialized for and a daemon-owned id marker, so two generations of
+one ref cannot be confused. Generations are kept by id under
+`images/<name>/refs/`, so active and pending assignments survive a moved tag.
+Harness, model, effort, environment, CWD, context, workdir, messages, history,
+group, and subscriptions are not image assignment fields.
 
-An ordinary multi-tag build stages every complete archive before publication,
-writes an owner-only batch journal, advances the refs, and commits every source
-snapshot and provenance row in one SQLite transaction. Any synchronous failure
-rolls back the whole ref stack. On daemon startup, a surviving journal is
-finalized only when both authoritative metadata rows name every candidate
-digest; otherwise every moved ref is restored before agents or clients can use
-it. Removing a ref or installing a new immutable import deletes the paired
-ordinary-build authority rows transactionally before filesystem visibility, so
-matching bytes from an older lifecycle cannot authorize mutable replacement.
+Image content is addressed by ref id — derived from the image name and the
+source `image_version`, or from the archive bytes when no version is declared —
+and a tag is a pointer file naming that id. One build publishes one ref and
+moves every requested tag onto it, so a versioned tag and `latest` always agree.
+The build records where those tags pointed, then commits every source snapshot
+and provenance row in one SQLite transaction; a failure restores the tags and
+deletes only content the build introduced, never a generation an agent may be
+pinned to. There is no separate immutable mode and no publication journal:
+rebuilding any non-reserved ref is always allowed, so no build path can be
+refused for a ref that already exists. A store written before this model is
+migrated once at daemon startup, keeping each archive's content digest as its
+ref id so pinned digests keep resolving.
 One publication gate spans ordinary, editable-source, team-import,
 agent-authored, compose, and controlled-release publication plus assignment,
 activation, provisioning, reprovisioning, import, and removal, so none can
@@ -1497,7 +1594,7 @@ flat list, ordered the way a chat list is: pinned agents first, then the agents
 with an unread customer question, then the rest by their most recent
 conversation, and only then in the operator's own order. The whole sort happens
 in Desktop, across every server, because only Desktop sees all of them; a host
-whose daemon does not project chats simply contributes no conversation dates.
+whose daemon serves no chats simply contributes no conversation dates.
 An unanswered question therefore lifts a row, but adds no marker of its own: the
 one badge a row carries is the count of unread messages from that agent. The
 question itself is readable in that agent's **Chat**, and its task is marked in
@@ -1510,7 +1607,10 @@ sources, because it is the only one with a persisted order. The selected tab is
 remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
 **Agents**. Each server heading states its own reachability and carries the
 **Update** action for a host running an older daemon, with **Update all (N)**
-above the list when more than one host is behind.
+above the list when more than one host is behind. **Update all** confirms the
+named hosts first, then runs the same host update on each of them in turn; a
+host that fails is reported in the page error line and the remaining hosts are
+still updated.
 
 In the Servers tab the sidebar partitions each host into expandable **Teams**
 and **Individual agents** without changing agent navigation or membership.
@@ -1777,13 +1877,27 @@ The agent **Chat** tab is the first tab, directly before **Tasks**, and owns
 both halves of an agent's messaging in one section. **Chat** is its default
 view: the conversation with that agent — the customer's messages in its inbox
 merged with its messages in the customer's channel — rendered as one thread.
-There is no conversation list: the conversation is whichever agent the sidebar
-has selected, one agent to one thread. Consecutive messages from one author are
-grouped under a single header, and a continuation row shows its own time in the
-avatar column on hover.
+There is no separate conversation list: the sidebar's selected agent is the
+conversation, and that agent's three chats — **Chat**, **Tasks** and
+**Service** — are a tablist in the toolbar. **Chat** is the conversation with
+the customer, **Tasks** the task notifications addressed to the agent, and
+**Service** its own wake-ups: script results, goal reconciliation and schedule
+alarms. Any shared chat the agent takes part in — one the customer created,
+belonging to no single agent and possibly holding several — follows those three
+in the same tablist, and a **New chat** button beside them starts one with this
+agent and any others picked. **Chat** and a shared chat have a composer; the
+other two are the agent's feeds, and the customer is an observer in the service
+one. A shared chat names its participants where the conversation names its
+message count, because in a multi-agent thread the author cannot be deduced from
+the thread itself. A task key in any of them is
+still a chip that opens the task panel, which is how a task is answered from
+its notification. Consecutive messages from one author are grouped under a
+single header, and a continuation row shows its own time in the avatar column
+on hover.
 
-The tab has one 48px toolbar: the **Chat**/**Channels** switch, a message
-search over the loaded page, `you + <agent> · N messages`, the read action,
+The tab has one 48px toolbar: the **Chat**/**Channels** switch, the chat
+tablist, search over the loaded page, `you + <agent> · N messages` (the
+participants in a shared chat), the read action,
 transcript export, and a menu. The message-type filter lives in that menu; it
 still starts from the daemon's default conversation types, still offers an
 agent's own wakes (`task.goal`, `script.result`, schedule alarms) explicitly,
@@ -1805,9 +1919,12 @@ Chat. Closing it returns to the conversation. A message also offers reply,
 copy, and **Create a task from this message**, which opens a task in a chosen
 queue with the message as its description and the agent as its assignee.
 
-Unread belongs to the conversation, not to the tab. It is the daemon's
-per-agent read mark, so the dot on the **Chat** tab, the unread badge on the
-sidebar row and the toolbar's own state read one value and survive a remount.
+Unread belongs to the conversation, not to the tab. It is the read mark of the
+customer's participant row in each chat. One sidebar row stands for the whole
+agent, so the dot on the **Chat** tab and the badge on the sidebar row are the
+sum over that agent's three chats and the row previews whichever of them moved
+last — an unread task notification cannot hide behind a quiet conversation. The
+toolbar's own state is the open chat's mark, and all of them survive a remount.
 Opening the chat still marks it read at the timestamp of the newest message
 actually shown, never at the current time. The feed carries the read mark the
 chat was opened at, and the unread rule — a `N new messages` pill — is drawn
@@ -1837,7 +1954,11 @@ subscription list, channel tail, and channel send.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
-reconnect reloads unconditionally because the socket replays nothing. The
+reconnect reloads unconditionally because the socket replays nothing. A frame
+for a publication a chat owns names that chat — `{chat, agent, id, channel,
+type, from, ts}` — so an open conversation refetches only when its own chat is
+named; `chat` is absent for a channel no chat owns, and such a frame still
+falls back to the agent it concerns, which is what existing consumers read. The
 sidebar mounts one such socket per configured host, so the chat order changes as
 a message lands rather than on the next poll. **Advanced → Messages**
 (Queue/Archive/DLQ) is unchanged: it is the delivery queue, not the
@@ -3325,7 +3446,7 @@ actions. Import stays on the Images root. Select a tag for its existing
 Overview, Template, Skills, and Files tabs; breadcrumbs return to its name or
 the root, and existing direct tag URLs keep working.
 
-Detail reads carry the displayed manifest digest. If a mutable ref changes
+Detail reads carry the displayed manifest digest. If a ref changes
 between reads, the UI reports the update, discards the old content, and reloads
 once. A further change offers **Refresh image**, so repeated rebuilds cannot
 cause an endless refresh loop. The read API accepts optional
@@ -3342,7 +3463,7 @@ required name and an optional tag, then select **Validate** or **Build**. The
 default build publishes both the source `image_version` and `latest`, or only
 `latest` when the source has no version. An explicit tag publishes only that
 tag. Tariboy records the canonical source CWD as local provenance and retains
-an immutable source snapshot for evidence. Rebuilding still reads the original
+a frozen source snapshot for evidence. Rebuilding still reads the original
 directory and its current paths.
 
 **Validate** is read-only. Before a build it shows the schema version, explicit
@@ -3374,30 +3495,44 @@ tariboy image ls
 ```
 
 Provide `--repository-id` and `--git-commit` together when the source is an
-exact Git revision. Tariboy records those explicit values in the immutable
+exact Git revision. Tariboy records those explicit values in the frozen
 source snapshot; it never infers a commit from the current working directory.
 
 For CLI calls, a relative `--path` is resolved against the shell's current
 working directory before the request is sent to the daemon.
 
-Ordinary operator `tariboy image build` refs are mutable: rebuilding a tag,
-including `latest`, replaces it only after validation and retains the prior
-archive by digest for active and pending assignments. Repeat `--tag` to publish
-several refs from one parsed source; each result has its own ref and digest,
-while frozen static image content, source provenance, and build time are
-shared. The requested refs and their snapshot/provenance metadata commit as one
-batch; a failure on any tag restores every ref exactly. Duplicate tags are
-rejected. When the operator CLI omits `--tag`, a frozen source with
-`image_version` publishes both that version and `latest`; the existing
-single-result output reports the versioned ref. Older files without a version
-publish only `latest`. Explicit tags, including `--tag latest`, take priority
-and do not add another ref.
+### Refs, tags and identity
 
-Runnable archives remain immutable, while their ordinary tags are mutable
-pointers. Build and import can therefore advance any existing non-reserved tag,
-including version tags and `latest`; the prior archive remains addressable by
-digest for pinned assignments. The daemon-managed `bare:latest` and
-`basic:latest` refs remain reserved.
+A **ref** is the stored image content. Its identity is derived from the image
+name and the `image_version` declared in `Tariboyfile.yaml`, so rebuilding the
+same version republishes the same ref and bumping the version creates another
+one. A source with no declared version stays addressed by its archive bytes.
+A **tag** is only a pointer to a ref, held in `images/<name>/tags/<tag>`; the
+content lives once in `images/<name>/refs/<id>.tar.gz`.
+
+Every build therefore publishes without restriction: rebuilding an existing
+ref, including `latest`, always succeeds and moves the tag. Generations that
+other tags no longer name stay on disk, so agents pinned to an earlier ref keep
+running until their next launch gate.
+
+There is one build mechanism. The operator CLI, the Store build, an agent's
+own `image-creator`, and team import all publish the same way and behave
+identically, including how they default tags. Repeat `--tag` to move several
+tags onto one build; every requested tag names the same ref and reports the
+same digest, so a versioned tag and `latest` can never disagree. The requested
+refs and their snapshot/provenance metadata commit as one batch; a failure on
+any tag restores every tag exactly. Duplicate tags are rejected. When `--tag`
+is omitted, a source with `image_version` publishes both that version and
+`latest`, and the single-result output reports the versioned ref; a source
+without a version publishes only `latest`. Explicit tags, including
+`--tag latest`, take priority and do not add another ref.
+
+The daemon-managed `bare:latest` and `basic:latest` refs remain reserved and
+cannot be built, imported over, or removed.
+
+A store written by an earlier release is migrated once, when the daemon starts:
+each archive keeps its content digest as its ref id, so every digest already
+pinned on an agent continues to resolve. The migration is one-way.
 
 ## Stores on a server
 
@@ -3525,8 +3660,8 @@ fields, and comments; YAML formatting may change. Missing or invalid versions
 produce an error without changing the file. Old sources may omit the field
 for build compatibility, but version commands require it.
 
-The runnable manifest preserves `image_version` independently of its ref tag.
-For mutable refs such as `latest`, every new iteration snapshots the source
+The runnable manifest preserves `image_version`; the archive carries no tag,
+since a tag only points at a ref. Every new iteration snapshots the source
 version with the ref and digest, exposes it through `iteration inspect`, and
 includes it in `runtime: identity` and iteration audit exports. Older runnable
 images and historical iterations simply omit the version.
@@ -3583,14 +3718,14 @@ Each static `file` is resolved and embedded at build time. Supported forms are:
 The builder expands only those literal variables; it never performs shell or
 environment expansion. A prompt may use `../` only to read a file below a
 source-relative directory already declared in `skills`; validation reads that
-directory directly and build reads its immutable snapshot. Other traversal,
+directory directly and build reads its frozen snapshot. Other traversal,
 symlinks, missing files, non-regular files, and oversized prompt files are
 rejected.
 
 ## Packaged Agent Skills
 
 Each `skills` entry explicitly packages one Agent Skill directory into the
-immutable image. The skill travels with runnable export/import. At iteration
+image. The skill travels with runnable export/import. At iteration
 launch Claude Code and OpenCode receive it through native skill configuration;
 Codex receives a compact prompt catalog with its absolute `SKILL.md` path and
 reads the file on demand. This is separate from image plugins and prompt
@@ -3602,7 +3737,7 @@ portability, harness adapters, discovery precedence, and activation failures.
 
 ## Runtime placeholders
 
-Runtime entries remain visible placeholders inside the immutable image. Before
+Runtime entries remain visible placeholders inside the built image. Before
 every iteration, the runner replaces ordinary values at their declared
 positions. Work inputs are always grouped in the platform block:
 
@@ -3670,24 +3805,24 @@ their next launch gate. An image in either list cannot be removed.
 
 Configuration shows **Current** (or **Activated version** when stopped) with
 the version read from the agent's pinned ref and digest. **Next iteration**
-previews the explicit pending digest first, otherwise the current build of an
-ordinary mutable active ref, otherwise the current pinned image. Viewing this
+previews the explicit pending digest first, otherwise the content the active
+ref points at now, otherwise the current pinned image. Viewing this
 projection does not create pending state or activate anything. Inspection and
 activation errors remain visible even when there is no pending ref; missing
 version metadata is labelled **Version not specified**.
 
-When an agent's active ordinary build ref moves to a new digest, the launch gate
-stages and promotes that digest at the next iteration. The running iteration
-keeps its original prompt, version, and digest. Configuration marks the update
-by digest difference even when both builds declare the same version. Its
-preview is not a reservation: the ref can move again before launch. Cancelling
-an explicit pending assignment does not disable following the mutable active
-ref. The preview refreshes with agent status and after UI image builds.
+When an agent's active ref moves to another id, the launch gate stages and
+promotes it at the next iteration. The running iteration keeps its original
+prompt, version, and digest. A rebuild that does not change `image_version`
+republishes the same ref, so there is nothing new to adopt and running agents
+are undisturbed; bump the version to roll a change out. The preview is not a
+reservation: the ref can move again before launch. Cancelling an explicit
+pending assignment does not disable following the active ref. The preview refreshes with agent status and after UI image builds.
 
 ## Import and export
 
 **Export** downloads a runnable image artifact named
-`<name>-<tag>.tariboy-image.tar.gz`. It includes the immutable image
+`<name>-<tag>.tariboy-image.tar.gz`. It includes the runnable image
 archive, including packaged skills, and its digest, but never original source
 files or source CWD. After the browser download starts, Tariboy confirms the
 saved image ref and portable filename in a toast. **Import runnable image** verifies both the portable wrapper and the inner runnable
@@ -3768,9 +3903,10 @@ Source: https://alekzonder.github.io/tariboy/images-and-groups
 
 ## Images
 
-An **image** is an immutable plugin list, optional packaged Agent Skills, and
+An **image** is an explicit plugin list, optional packaged Agent Skills, and
 an exactly ordered prompt template, built from an original directory containing
-`Tariboyfile.yaml`.
+`Tariboyfile.yaml`. A ref's identity comes from the image name and its declared
+`image_version`, and a tag is only a pointer to a ref.
 Schema v2 does not contain runtime defaults or inherit another image. Static
 prompt files are embedded during build; dynamic values remain ordered runtime
 placeholders. Packaged skills travel with runnable image export/import and are
@@ -3859,7 +3995,7 @@ and checking the destination settings.
 # Agent Skills in images
 Source: https://alekzonder.github.io/tariboy/images/agent-skills
 
-Schema-v2 images can carry Agent Skills as immutable, portable directories.
+Schema-v2 images can carry Agent Skills as packaged, portable directories.
 Tariboy validates each declared directory at build time, records its metadata
 and content hash in the image, and exposes it through a harness-specific bridge
 when an iteration starts. Claude Code and OpenCode use native discovery;
@@ -4150,9 +4286,10 @@ remains in the manifest:
 | `tree_sha256` | Hash of normalized paths, modes, sizes, and file hashes |
 
 Skill paths, normalized modes, bytes, hashes, metadata, and manifest records
-contribute to the immutable image digest. Runnable image export includes the
-canonical skill trees and import revalidates their members and metadata before
-installation.
+are recorded in the built image; packaging them does not change the ref id,
+which comes from the image name and its declared `image_version`. Runnable
+image export includes the canonical skill trees and import revalidates their
+members and metadata before installation.
 
 An exported runnable image is not an editable source backup. Keep the original
 directory and its referenced paths when the image must be rebuilt.
@@ -4163,7 +4300,7 @@ For a schema-v2 image with packaged skills, iteration activation follows this
 flow:
 
 ```text
-immutable image skill tree
+packaged image skill tree
         ↓
 digest-keyed per-agent bridge
         ↓
@@ -4191,7 +4328,7 @@ CWD skill discovery, and it does not change the agent's effective CWD.
 
 Tariboy prepends the same catalog to the prompt used by batch `codex exec` and
 the interactive Codex TUI. The catalog is launch metadata rather than an image
-prompt layer, so it does not change the immutable prompt-template hash. The
+prompt layer, so it does not change the image prompt-template hash. The
 iteration prompt hash covers the final rendered catalog and prompt.
 
 The catalog contains no `SKILL.md` body, reference, asset, or script bytes.
@@ -4686,8 +4823,8 @@ the authoritative Native Task.
 # image-creator
 Source: https://alekzonder.github.io/tariboy/plugins/built-in/image-creator
 
-`image-creator` allows an agent to publish a new immutable image to the current
-host's image store. It is optional and is not included in the official Store's
+`image-creator` allows an agent to publish an image to the current host's image
+store, through the same build mechanism the operator CLI uses. It is optional and is not included in the official Store's
 `basic` source.
 
 ## Capability surface
@@ -4701,10 +4838,16 @@ scripts/image_creator.sh build \
   --path ./reviewer-image
 ```
 
-`--name` and `--path` are required. The tag defaults to `latest`. A successful
-response identifies the name, tag, digest, and layer count. The new immutable
-image is stored on the same host and can be assigned to an agent through the
-normal image workflow.
+`--name` and `--path` are required. Omitting `--tag` publishes the source's
+`image_version` and `latest`, exactly as the operator CLI does, or only
+`latest` when the source declares no version. A successful response identifies
+the name, the published tags, the ref digest, and the layer count. The image is
+stored on the same host and can be assigned to an agent through the normal
+image workflow.
+
+A tag that already exists, `latest` included, is moved onto the new build
+rather than refused. Reserved refs (`bare:latest`, `basic:latest`) stay
+rejected.
 
 ## Source paths
 
@@ -4725,8 +4868,9 @@ prompt/runtime template. Schema-v1 source builds fail with migration guidance.
 Built-in names are validated against Tariboy's registry; external names must
 resolve to installed plugin metadata on the same daemon.
 
-The build writes to the daemon's shared immutable image store. It does not
-assign the image to the creating agent or change a running iteration.
+The build writes to the daemon's shared image store through the one publication
+mechanism. It does not assign the image to the creating agent or change a
+running iteration; an agent adopts a moved ref at its next launch gate.
 
 ## Prompt integration
 
@@ -4843,6 +4987,7 @@ must declare it explicitly.
 | Publish | `scripts/messages.sh message send`, `scripts/messages.sh request` |
 | Inbox | `scripts/messages.sh message ls`, `processed`, `reply` |
 | Recovery | `scripts/messages.sh message dlq`, `scripts/messages.sh message dlq requeue` |
+| Answering | `GET /tools/chat/unanswered` — the chat messages this agent has not replied to yet |
 | Subscriptions | `scripts/messages.sh sources`, `scripts/messages.sh channel subscribe`, `ls`, `unsubscribe` |
 
 Messages are published to named channels and routed to durable per-agent
@@ -5458,13 +5603,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.68.0` alpha on an Apple Silicon Mac.
+This path is for the `0.69.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.68.0_aarch64.dmg`;
+- a verified `Tariboy_0.69.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -5618,6 +5763,10 @@ The bus is a store-backed fan-out system with four core tables:
 - `subscriptions`: an agent's standing interest in a channel, optionally filtered.
 - `deliveries`: one per matching `(subscription, message)` pair; this is the per-agent queue.
 
+Two further tables, `chats` and `chat_participants`, sit over these four and
+are described under [Chats](#chats). They add no path of their own: a chat owns
+one channel, so everything below applies to it unchanged.
+
 Publishing to a channel does not push text directly into an agent process.
 Instead, `Publish` writes the message and creates delivery rows for all matching
 subscriptions. An agent receives messages only when its loop starts an iteration
@@ -5648,7 +5797,7 @@ Built-in helpers define the main system channel shapes:
 - `group:<group>:broadcast`: fan-out channel for all members of a group.
 - `group:<group>:inbox`: group lead inbox.
 - `group:<group>:direct:<agent>`: direct group lane; where a `group request` from a teammate lands.
-- `chat:<name>`: chat/plugin-facing channel.
+- `chat:<id>`: the one transport channel a chat owns.
 - `chat:telegram:<agent>`: the bundled Telegram topic for one agent.
 - `user:<name>`: user-facing channel.
 
@@ -5698,13 +5847,16 @@ Operator publish:
 
 ```bash
 tariboy message send --channel chat:ops --type note --text "hello"
-tariboy message send --channel agent:worker:inbox --type message \
-  --text "please look at this" --reply-to user:customer
+tariboy message send --channel chat:dm:worker --type message \
+  --text "please look at this"
 ```
 
-`--reply-to` sets the channel an agent's reply lands on. Without it a reply to a
-non-agent source returns to the originating channel — the agent's own inbox —
-so a message meant as conversation passes `user:<customer>`.
+A reply lands on, in order: an explicit `--reply-to`; the chat that owns the
+original message channel; the source agent inbox; the originating channel. A
+message sent into a chat therefore needs no `--reply-to` — the answer is
+published into the same chat, which is also what makes a chat with several
+agents work. `--reply-to` remains the override external sinks such as the
+Telegram bundle route their replies with.
 
 Agent publish from inside an iteration:
 
@@ -5936,41 +6088,87 @@ scripts/schedule.sh cancel <id>
 ```
 
 If no channel is passed, the agent API defaults the schedule target to the
-agent's own inbox.
+agent's service chat, `chat:service:<agent>`. An explicit `--channel` still
+wins, and a schedule created before this default keeps the channel it stores.
 
 Scripts are also agent-owned, but they execute only local commands; they do not
 schedule arbitrary channel publication. `scripts/scripts.sh run NAME -- COMMAND`
 queues one attempt, while `scripts/scripts.sh schedule NAME --every N -- COMMAND`
 runs immediately and then after a fixed post-completion delay. Non-quiet runs
-publish `script.result` to the owner's inbox. Its structured data contains
+publish `script.result` to the owner's service chat, `chat:service:<agent>`. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
 The log starts with the resolved execution CWD; combined stdout and stderr
 follow in that file and are not copied into the message. Publishing that result
 also stops the recurring definition, so one failing command cannot flood the
-inbox; `scripts/scripts.sh rerun scr-...` resumes it once the agent has handled
+chat; `scripts/scripts.sh rerun scr-...` resumes it once the agent has handled
 the message. A quiet run publishes nothing and keeps the schedule running. An
 idle recurring definition can also be run immediately; the active-run constraint
 still prevents overlap.
 
 ## Chats
 
-A chat is not a fifth table. The conversation with one agent is the two existing
-inboxes merged by time: the customer's messages in `agent:<a>:inbox` and that
-agent's messages in `user:<customer>`.
+A chat is a row in `chats` that owns one transport channel `chat:<id>`, plus one
+participant row per principal in `chat_participants`. Every agent gets three
+chats: `dm:<agent>` for the conversation, `tasks:<agent>` for task notifications
+and `service:<agent>` for its own wakes. The conversation also shows history
+written before the chats migration, which lives on the two inboxes merged by
+time: the customer's messages in `agent:<a>:inbox` and that agent's messages in
+`user:<customer>`.
+
+A chat the customer creates belongs to no agent and may hold several, which is
+how a multi-agent conversation is made. Its id is a channel segment
+(`^[a-z0-9][a-z0-9_-]*$`) and is refused when it is already in use or falls in a
+namespace the daemon provisions itself: `dm:`, `tasks:`, `service:`, `group:`,
+`telegram:` and `plugin:`. Two chats can therefore never share one channel.
+
+Membership is what carries delivery. Adding an agent subscribes it to the chat
+channel, so a message there wakes it exactly as one in its own conversation
+does; removing it revokes that subscription but leaves the deliveries it has
+already been given in its queue — leaving a chat ends membership, not work.
 
 ```bash
 tariboy chat ls
 tariboy chat messages worker
 tariboy chat messages worker --types 'message,task.*' --limit 50
 tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
+tariboy chat create team-alpha --title 'Team Alpha' \
+  --participants agent:worker,agent:reviewer
+tariboy chat join team-alpha agent:analyst
+tariboy chat leave team-alpha agent:reviewer
 ```
 
 | Route | Returns |
 | --- | --- |
-| `GET /api/chats` | one row per conversation — `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — newest conversation first |
-| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
-| `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
-| `GET /api/messages/ws` | one live hint per publication for every agent on the host |
+| `GET /api/chats` | one row per chat the customer takes part in — `id`, `kind`, `title`, `channel`, `agent`, `participants`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — most recently active first. `agent` is empty for a chat no single agent owns |
+| `POST /api/chats` | creates a chat from `id`, `title` and a comma-separated `participants` list; the customer is always a participant. Answers `chat`, `kind`, `title`, `channel`, `agent`, `participants` |
+| `POST /api/chats/{chat}/participants` | adds `principal` (`user:<login>` or `agent:<name>`) with an optional `role` of `member`, `observer` or `owner` |
+| `DELETE /api/chats/{chat}/participants/{principal}` | removes that principal, keeping the deliveries it already holds |
+| `GET /api/chats/{chat}` | one chat, oldest first, each message carrying its `from` and `channel`, plus the chat's `id`, `kind`, `title`, `agent` and the `read_ts` it stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards. `{chat}` is a chat id (`tasks:worker`) or a bare agent name, which reads that agent's conversation |
+| `POST /api/chats/{chat}/read` | moves the customer's read mark in that chat to `ts`; `{chat}` is a chat id or an agent name |
+| `GET /api/chats/{chat}/unanswered` | the messages `principal` has not answered in that chat, oldest first |
+| `GET /api/chats/{chat}/participants` | the chat principals with their role, join time, read mark and mute flag |
+| `GET /api/messages/ws` | one live hint per publication for every agent on the host — `{chat, agent, id, channel, type, from, ts}`, with `chat` absent for a channel no chat owns |
+
+### Processing and answering are two obligations
+
+A delivery and a message are answered separately, and neither implies the other:
+
+- **Processing** satisfies the transport. Every delivered message must be marked
+  processed with a non-empty text result
+  (`scripts/messages.sh message processed <id> "<result>"`); an unprocessed
+  delivery is redelivered on the next iteration and reaches the DLQ after the
+  attempt limit. A reply also processes the original, with the result
+  `replied: <reply id>`.
+- **Answering** satisfies the conversation. A message is answered only when a
+  reply of that principal points at it through `in_reply_to`, which is what a
+  reply fills and a plain send does not. `GET /api/chats/{chat}/unanswered` — and,
+  for an agent, `GET /tools/chat/unanswered` across every chat it takes part in —
+  is that queue: the messages another participant sent at or after this
+  principal joined, with no reply of its own pointing at them. Marking a delivery
+  processed removes nothing from it.
+
+The answer is published into the chat as an ordinary message, so the
+conversation carries both the question and the answer, exactly as any chat does.
 
 `types` is a comma-separated list of type globs. The default is
 `task.question`, `task.answered`, `task.assigned`, `task.triage`, `message`,
@@ -5982,12 +6180,15 @@ to read them.
 `ts` is the timestamp of a message actually shown, never "now", so a message
 arriving mid-render cannot be marked read without being seen; the daemon only
 ever moves a mark forward, so a late or duplicated request from a second window
-cannot resurrect messages already read. The marks live in one `chat_read_v1`
-value in `daemon_config`, keyed per agent. Only messages an agent sent can be
-unread — the customer's own never count.
+cannot resurrect messages already read. A mark is `chat_participants.read_ts`,
+one row per participant; the single pre-chats `chat_read_v1` value in
+`daemon_config` is carried into those rows by the migration. Only messages
+another participant sent can be unread — a participant's own never count.
 
-The `/api/messages/ws` frame is `{agent, id, channel, type, from, ts}` and is a
-refetch hint, not the message: HTTP stays authoritative. It replays nothing,
+The `/api/messages/ws` frame is `{chat, agent, id, channel, type, from, ts}`
+and is a refetch hint, not the message: HTTP stays authoritative. `chat` names
+the chat that owns the channel, so a client refetches exactly one conversation,
+and is absent for a channel no chat owns. It replays nothing,
 because a client refetches on connect and on every reconnect. A message on the
 customer's channel has no agent recipient, so it is streamed under the agent
 that sent it.
@@ -6191,7 +6392,7 @@ tariboy has three command surfaces:
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
-| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build mutable image refs and an immutable source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); Git provenance must be paired |
+| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired |
 | `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest` |
 | `tariboy image version get [--path FILE_OR_DIR]` | Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required |
@@ -6199,7 +6400,7 @@ tariboy has three command surfaces:
 | `tariboy image inspect` | Show an image manifest |
 | `tariboy image ls` | List built agent images |
 | `tariboy image prompt` | Print an image's assembled prompt |
-| `tariboy image provenance REF` | Show local source and immutable snapshot Git provenance |
+| `tariboy image provenance REF` | Show local source and frozen snapshot Git provenance |
 | `tariboy image template` | Show the ordered schema-v2 static/runtime template |
 | `tariboy image rm` | Remove a built image |
 | `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, prompt-template hash, and tags |
@@ -6739,7 +6940,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.68.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.69.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -6814,8 +7015,8 @@ Portable image and team archives use a versioned manifest and bounded streaming
 validation. Import rejects absolute or parent paths, NULs, duplicate/colliding
 paths, symlinks, hardlinks, devices, FIFOs, excessive compressed/expanded size,
 file count and path length, unmanifested content, and digest mismatches before
-adopting staged data. Runnable image archives contain only the immutable image
-artifact and its digest: never original source files or source CWD. Team
+adopting staged data. Runnable image archives contain only the runnable image
+artifact and its ref identity: never original source files or source CWD. Team
 archives are compose-only and contain no image build contexts, source trees, or
 runnable image bytes. They also never contain agent workspaces/data,
 credentials, environment values outside the explicit compose contract,
@@ -6836,7 +7037,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.68.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.69.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 

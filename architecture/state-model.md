@@ -86,17 +86,46 @@ transaction, and an id belonging to another agent fails the whole batch rather
 than writing part of it. Tags are a property of the iteration, not of the agent
 that applied them: who tagged an iteration is not recorded.
 
-## Customer identity and chat read marks
+## Chats and participants
 
-Two `daemon_config` values carry the customer's side of messaging.
-`customer_login` is the fixed customer login, defaulted to `customer` and
-adopted once — with existing tasks, comments, waits, notification state and the
-old `user:<$USER>` channel carried over in the same transaction — instead of
-following whichever account runs `tariboyd`. `chat_read_v1` is one JSON object
-mapping an agent name to the newest message timestamp the customer has seen in
-that chat; it only ever moves forward. Neither is a new table, and both are UI
-state rather than authority: a lost read mark costs an unread count, not a
-message.
+A chat is persisted state, not a view over the bus. `chats` holds one row per
+chat — `id`, `kind`, `title`, the one transport `channel` it owns, an optional
+`legacy_agent`, `created_at` and `archived_at` — and `chat_participants` holds
+one row per principal in it, keyed by `(chat_id, principal)`, with its `role`,
+`joined_at`, `read_ts` and `muted` flag. The `channel` column is unique, so two
+chats can never address the same transport channel.
+
+Ownership follows how the chat came to exist. The daemon owns the three chats
+it provisions for every agent — `dm:<agent>`, `tasks:<agent>` and
+`service:<agent>` — reconciling them at startup and at agent creation, which
+makes them self-healing: a missing row is recreated, and the namespaces they
+live in are refused to anyone else. A chat the customer creates is owned by the
+customer: nothing reconciles it, and its lifetime is exactly its row.
+
+Membership is durable and revocable, and its lifetime is not the delivery's.
+Adding an agent participant materializes its locked subscription to the chat
+channel; removing one sets `subscriptions.revoked_at` instead of deleting the
+row, because `deliveries` joins `subscriptions` and a delete would make the
+agent's already-created, unacknowledged deliveries vanish from its queue.
+A revoked subscription is skipped by fan-out and still owns its past deliveries.
+
+The invariant underneath all of it: **`messages` rows are never rewritten.**
+No chat operation re-channels, edits or deletes a published message. That is
+what lets pre-chats history stay readable without a data migration — a personal
+chat carries `legacy_agent`, and its feed unions the chat channel with the old
+projection of `agent:<a>:inbox` and `user:<customer>` merged by time — and it is
+why a chat can be created, joined and left without risking history.
+
+## Customer identity and read marks
+
+`customer_login` in `daemon_config` is the fixed customer login, defaulted to
+`customer` and adopted once — with existing tasks, comments, waits, notification
+state and the old `user:<$USER>` channel carried over in the same transaction —
+instead of following whichever account runs `tariboyd`. Read marks are
+`chat_participants.read_ts`, one per participant, and only ever move forward;
+the single pre-chats `chat_read_v1` JSON object in `daemon_config` was carried
+into those rows by the chats migration. A read mark is UI state rather than
+authority: losing one costs an unread count, not a message.
 
 ## Message queue state
 
@@ -173,27 +202,29 @@ capabilities, and promotes active plus pending state in one guarded transaction.
 Every new iteration snapshots its image ref, source `image_version` when
 present, digest, and prompt-template hash, so later switches cannot rewrite
 historical execution identity. Historical iterations and legacy images keep an
-empty version instead of inheriting a mutable ref's current value.
+empty version instead of inheriting the ref's current value.
 
 The agent row remains authoritative during crash recovery. An incomplete local
 image swap is either rolled back to the DB-active backup or completed when the
-already-promoted image digest matches the row. Each unpacked image carries a
-daemon-owned digest marker, so two generations of one mutable ref cannot be
-confused. Ordinary mutable-build archive generations are retained by digest,
-so active and pending assignments survive a rebuilt ref. Harness,
-model, effort, environment,
-CWD, context, workdir, messages, history, group, and subscriptions are not image
-assignment fields.
+already-promoted image digest matches the row. Each unpacked image records the
+ref it was materialized for and a daemon-owned id marker, so two generations of
+one ref cannot be confused. Generations are kept by id under
+`images/<name>/refs/`, so active and pending assignments survive a moved tag.
+Harness, model, effort, environment, CWD, context, workdir, messages, history,
+group, and subscriptions are not image assignment fields.
 
-An ordinary multi-tag build stages every complete archive before publication,
-writes an owner-only batch journal, advances the refs, and commits every source
-snapshot and provenance row in one SQLite transaction. Any synchronous failure
-rolls back the whole ref stack. On daemon startup, a surviving journal is
-finalized only when both authoritative metadata rows name every candidate
-digest; otherwise every moved ref is restored before agents or clients can use
-it. Removing a ref or installing a new immutable import deletes the paired
-ordinary-build authority rows transactionally before filesystem visibility, so
-matching bytes from an older lifecycle cannot authorize mutable replacement.
+Image content is addressed by ref id — derived from the image name and the
+source `image_version`, or from the archive bytes when no version is declared —
+and a tag is a pointer file naming that id. One build publishes one ref and
+moves every requested tag onto it, so a versioned tag and `latest` always agree.
+The build records where those tags pointed, then commits every source snapshot
+and provenance row in one SQLite transaction; a failure restores the tags and
+deletes only content the build introduced, never a generation an agent may be
+pinned to. There is no separate immutable mode and no publication journal:
+rebuilding any non-reserved ref is always allowed, so no build path can be
+refused for a ref that already exists. A store written before this model is
+migrated once at daemon startup, keeping each archive's content digest as its
+ref id so pinned digests keep resolving.
 One publication gate spans ordinary, editable-source, team-import,
 agent-authored, compose, and controlled-release publication plus assignment,
 activation, provisioning, reprovisioning, import, and removal, so none can

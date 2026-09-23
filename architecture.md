@@ -72,7 +72,7 @@ controls](/docs/security-controls) for the full transport and credential rules.
 | Store and migrations | `tariboyd.db`, configuration, agent/task/message records, workflow history, and durable outboxes | UI state or a second in-memory source of truth |
 | Agent store and loop manager | Agent configuration, per-agent engines, iteration adoption, shim refresh, and orphan-session reaping | Harness business logic |
 | Loop engine and shim runner | At most one iteration per agent, prompt preparation, timeouts, completion, and process supervision | Task/workflow transition rules |
-| Image store and builder | Immutable plugin/prompt artifacts, source provenance, runnable import/export, and Store path resolution | Harness/model/runtime policy or editable source snapshots |
+| Image store and builder | Built plugin/prompt artifacts addressed by ref id, source provenance, runnable import/export, and Store path resolution | Harness/model/runtime policy or editable source snapshots |
 | Bus | Channels, subscriptions, deliveries, acknowledgement, and redelivery | Direct process-to-process delivery guarantees |
 | Native Tasks service | Queues, task trees, workflow versions, pools, assignments, artifacts, questions, and observations | Agent authentication |
 | Plugin host | Plugin process lifecycle, plugin tokens, and provider-channel watches | Provider credentials in plugin environments |
@@ -89,7 +89,7 @@ delivery hint.
 Path resolution lives in `internal/paths`:
 
 - **Data dir** — `$TARIBOY_BASE_DIR`, else `~/.tariboy`. Holds the DB,
-  agent working dirs, immutable images, and side-by-side external plugin
+  agent working dirs, built images, and side-by-side external plugin
   versions.
 - **Runtime dir** — `$TARIBOY_RUNTIME_DIR`, else `~/.tariboyd`. Holds the
   control socket (`tariboyd.sock`), pidfile, and log.

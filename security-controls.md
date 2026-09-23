@@ -129,7 +129,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.68.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.69.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -204,8 +204,8 @@ Portable image and team archives use a versioned manifest and bounded streaming
 validation. Import rejects absolute or parent paths, NULs, duplicate/colliding
 paths, symlinks, hardlinks, devices, FIFOs, excessive compressed/expanded size,
 file count and path length, unmanifested content, and digest mismatches before
-adopting staged data. Runnable image archives contain only the immutable image
-artifact and its digest: never original source files or source CWD. Team
+adopting staged data. Runnable image archives contain only the runnable image
+artifact and its ref identity: never original source files or source CWD. Team
 archives are compose-only and contain no image build contexts, source trees, or
 runnable image bytes. They also never contain agent workspaces/data,
 credentials, environment values outside the explicit compose contract,

@@ -21,6 +21,10 @@ The bus is a store-backed fan-out system with four core tables:
 - `subscriptions`: an agent's standing interest in a channel, optionally filtered.
 - `deliveries`: one per matching `(subscription, message)` pair; this is the per-agent queue.
 
+Two further tables, `chats` and `chat_participants`, sit over these four and
+are described under [Chats](#chats). They add no path of their own: a chat owns
+one channel, so everything below applies to it unchanged.
+
 Publishing to a channel does not push text directly into an agent process.
 Instead, `Publish` writes the message and creates delivery rows for all matching
 subscriptions. An agent receives messages only when its loop starts an iteration
@@ -51,7 +55,7 @@ Built-in helpers define the main system channel shapes:
 - `group:<group>:broadcast`: fan-out channel for all members of a group.
 - `group:<group>:inbox`: group lead inbox.
 - `group:<group>:direct:<agent>`: direct group lane; where a `group request` from a teammate lands.
-- `chat:<name>`: chat/plugin-facing channel.
+- `chat:<id>`: the one transport channel a chat owns.
 - `chat:telegram:<agent>`: the bundled Telegram topic for one agent.
 - `user:<name>`: user-facing channel.
 
@@ -101,13 +105,16 @@ Operator publish:
 
 ```bash
 tariboy message send --channel chat:ops --type note --text "hello"
-tariboy message send --channel agent:worker:inbox --type message \
-  --text "please look at this" --reply-to user:customer
+tariboy message send --channel chat:dm:worker --type message \
+  --text "please look at this"
 ```
 
-`--reply-to` sets the channel an agent's reply lands on. Without it a reply to a
-non-agent source returns to the originating channel — the agent's own inbox —
-so a message meant as conversation passes `user:<customer>`.
+A reply lands on, in order: an explicit `--reply-to`; the chat that owns the
+original message channel; the source agent inbox; the originating channel. A
+message sent into a chat therefore needs no `--reply-to` — the answer is
+published into the same chat, which is also what makes a chat with several
+agents work. `--reply-to` remains the override external sinks such as the
+Telegram bundle route their replies with.
 
 Agent publish from inside an iteration:
 
@@ -339,41 +346,87 @@ scripts/schedule.sh cancel <id>
 ```
 
 If no channel is passed, the agent API defaults the schedule target to the
-agent's own inbox.
+agent's service chat, `chat:service:<agent>`. An explicit `--channel` still
+wins, and a schedule created before this default keeps the channel it stores.
 
 Scripts are also agent-owned, but they execute only local commands; they do not
 schedule arbitrary channel publication. `scripts/scripts.sh run NAME -- COMMAND`
 queues one attempt, while `scripts/scripts.sh schedule NAME --every N -- COMMAND`
 runs immediately and then after a fixed post-completion delay. Non-quiet runs
-publish `script.result` to the owner's inbox. Its structured data contains
+publish `script.result` to the owner's service chat, `chat:service:<agent>`. Its structured data contains
 script/run IDs, name, mode, status, optional exit code, and absolute `log_path`.
 The log starts with the resolved execution CWD; combined stdout and stderr
 follow in that file and are not copied into the message. Publishing that result
 also stops the recurring definition, so one failing command cannot flood the
-inbox; `scripts/scripts.sh rerun scr-...` resumes it once the agent has handled
+chat; `scripts/scripts.sh rerun scr-...` resumes it once the agent has handled
 the message. A quiet run publishes nothing and keeps the schedule running. An
 idle recurring definition can also be run immediately; the active-run constraint
 still prevents overlap.
 
 ## Chats
 
-A chat is not a fifth table. The conversation with one agent is the two existing
-inboxes merged by time: the customer's messages in `agent:<a>:inbox` and that
-agent's messages in `user:<customer>`.
+A chat is a row in `chats` that owns one transport channel `chat:<id>`, plus one
+participant row per principal in `chat_participants`. Every agent gets three
+chats: `dm:<agent>` for the conversation, `tasks:<agent>` for task notifications
+and `service:<agent>` for its own wakes. The conversation also shows history
+written before the chats migration, which lives on the two inboxes merged by
+time: the customer's messages in `agent:<a>:inbox` and that agent's messages in
+`user:<customer>`.
+
+A chat the customer creates belongs to no agent and may hold several, which is
+how a multi-agent conversation is made. Its id is a channel segment
+(`^[a-z0-9][a-z0-9_-]*$`) and is refused when it is already in use or falls in a
+namespace the daemon provisions itself: `dm:`, `tasks:`, `service:`, `group:`,
+`telegram:` and `plugin:`. Two chats can therefore never share one channel.
+
+Membership is what carries delivery. Adding an agent subscribes it to the chat
+channel, so a message there wakes it exactly as one in its own conversation
+does; removing it revokes that subscription but leaves the deliveries it has
+already been given in its queue — leaving a chat ends membership, not work.
 
 ```bash
 tariboy chat ls
 tariboy chat messages worker
 tariboy chat messages worker --types 'message,task.*' --limit 50
 tariboy chat read worker --ts 2026-09-15T10:05:00.000000000Z
+tariboy chat create team-alpha --title 'Team Alpha' \
+  --participants agent:worker,agent:reviewer
+tariboy chat join team-alpha agent:analyst
+tariboy chat leave team-alpha agent:reviewer
 ```
 
 | Route | Returns |
 | --- | --- |
-| `GET /api/chats` | one row per conversation — `agent`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — newest conversation first |
-| `GET /api/chats/{agent}` | the merged feed, oldest first, each message carrying its `from` and `channel`, plus the `read_ts` the chat stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards |
-| `POST /api/chats/{agent}/read` | moves that agent's read mark to `ts` |
-| `GET /api/messages/ws` | one live hint per publication for every agent on the host |
+| `GET /api/chats` | one row per chat the customer takes part in — `id`, `kind`, `title`, `channel`, `agent`, `participants`, `last_ts`, `last_from`, `last_type`, `last_text`, `unread`, `read_ts` — most recently active first. `agent` is empty for a chat no single agent owns |
+| `POST /api/chats` | creates a chat from `id`, `title` and a comma-separated `participants` list; the customer is always a participant. Answers `chat`, `kind`, `title`, `channel`, `agent`, `participants` |
+| `POST /api/chats/{chat}/participants` | adds `principal` (`user:<login>` or `agent:<name>`) with an optional `role` of `member`, `observer` or `owner` |
+| `DELETE /api/chats/{chat}/participants/{principal}` | removes that principal, keeping the deliveries it already holds |
+| `GET /api/chats/{chat}` | one chat, oldest first, each message carrying its `from` and `channel`, plus the chat's `id`, `kind`, `title`, `agent` and the `read_ts` it stood at when it was read; `limit` and `before` (a message timestamp, not an id — a merged feed does not sort by id) page backwards. `{chat}` is a chat id (`tasks:worker`) or a bare agent name, which reads that agent's conversation |
+| `POST /api/chats/{chat}/read` | moves the customer's read mark in that chat to `ts`; `{chat}` is a chat id or an agent name |
+| `GET /api/chats/{chat}/unanswered` | the messages `principal` has not answered in that chat, oldest first |
+| `GET /api/chats/{chat}/participants` | the chat principals with their role, join time, read mark and mute flag |
+| `GET /api/messages/ws` | one live hint per publication for every agent on the host — `{chat, agent, id, channel, type, from, ts}`, with `chat` absent for a channel no chat owns |
+
+### Processing and answering are two obligations
+
+A delivery and a message are answered separately, and neither implies the other:
+
+- **Processing** satisfies the transport. Every delivered message must be marked
+  processed with a non-empty text result
+  (`scripts/messages.sh message processed <id> "<result>"`); an unprocessed
+  delivery is redelivered on the next iteration and reaches the DLQ after the
+  attempt limit. A reply also processes the original, with the result
+  `replied: <reply id>`.
+- **Answering** satisfies the conversation. A message is answered only when a
+  reply of that principal points at it through `in_reply_to`, which is what a
+  reply fills and a plain send does not. `GET /api/chats/{chat}/unanswered` — and,
+  for an agent, `GET /tools/chat/unanswered` across every chat it takes part in —
+  is that queue: the messages another participant sent at or after this
+  principal joined, with no reply of its own pointing at them. Marking a delivery
+  processed removes nothing from it.
+
+The answer is published into the chat as an ordinary message, so the
+conversation carries both the question and the answer, exactly as any chat does.
 
 `types` is a comma-separated list of type globs. The default is
 `task.question`, `task.answered`, `task.assigned`, `task.triage`, `message`,
@@ -385,12 +438,15 @@ to read them.
 `ts` is the timestamp of a message actually shown, never "now", so a message
 arriving mid-render cannot be marked read without being seen; the daemon only
 ever moves a mark forward, so a late or duplicated request from a second window
-cannot resurrect messages already read. The marks live in one `chat_read_v1`
-value in `daemon_config`, keyed per agent. Only messages an agent sent can be
-unread — the customer's own never count.
+cannot resurrect messages already read. A mark is `chat_participants.read_ts`,
+one row per participant; the single pre-chats `chat_read_v1` value in
+`daemon_config` is carried into those rows by the migration. Only messages
+another participant sent can be unread — a participant's own never count.
 
-The `/api/messages/ws` frame is `{agent, id, channel, type, from, ts}` and is a
-refetch hint, not the message: HTTP stays authoritative. It replays nothing,
+The `/api/messages/ws` frame is `{chat, agent, id, channel, type, from, ts}`
+and is a refetch hint, not the message: HTTP stays authoritative. `chat` names
+the chat that owns the channel, so a client refetches exactly one conversation,
+and is absent for a channel no chat owns. It replays nothing,
 because a client refetches on connect and on every reconnect. A message on the
 customer's channel has no agent recipient, so it is streamed under the agent
 that sent it.

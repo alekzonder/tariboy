@@ -99,7 +99,7 @@ controls</a> for the full transport and credential rules.</p>
 </tr>
 <tr>
 <td>Image store and builder</td>
-<td>Immutable plugin/prompt artifacts, source provenance, runnable import/export, and Store path resolution</td>
+<td>Built plugin/prompt artifacts addressed by ref id, source provenance, runnable import/export, and Store path resolution</td>
 <td>Harness/model/runtime policy or editable source snapshots</td>
 </tr>
 <tr>
@@ -137,7 +137,7 @@ delivery hint.</p>
 <p>Path resolution lives in <code>internal/paths</code>:</p>
 <ul>
 <li><strong>Data dir</strong> — <code>$TARIBOY_BASE_DIR</code>, else <code>~/.tariboy</code>. Holds the DB,
-agent working dirs, immutable images, and side-by-side external plugin
+agent working dirs, built images, and side-by-side external plugin
 versions.</li>
 <li><strong>Runtime dir</strong> — <code>$TARIBOY_RUNTIME_DIR</code>, else <code>~/.tariboyd</code>. Holds the
 control socket (<code>tariboyd.sock</code>), pidfile, and log.</li>

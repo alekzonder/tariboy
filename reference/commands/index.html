@@ -162,7 +162,7 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]</code></td>
-<td>Build mutable image refs and an immutable source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); Git provenance must be paired</td>
+<td>Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired</td>
 </tr>
 <tr>
 <td><code>tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]</code></td>
@@ -194,7 +194,7 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy image provenance REF</code></td>
-<td>Show local source and immutable snapshot Git provenance</td>
+<td>Show local source and frozen snapshot Git provenance</td>
 </tr>
 <tr>
 <td><code>tariboy image template</code></td>

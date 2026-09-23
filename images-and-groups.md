@@ -8,9 +8,10 @@ sidebar:
 
 ## Images
 
-An **image** is an immutable plugin list, optional packaged Agent Skills, and
+An **image** is an explicit plugin list, optional packaged Agent Skills, and
 an exactly ordered prompt template, built from an original directory containing
-`Tariboyfile.yaml`.
+`Tariboyfile.yaml`. A ref's identity comes from the image name and its declared
+`image_version`, and a tag is only a pointer to a ref.
 Schema v2 does not contain runtime defaults or inherit another image. Static
 prompt files are embedded during build; dynamic values remain ordered runtime
 placeholders. Packaged skills travel with runnable image export/import and are
