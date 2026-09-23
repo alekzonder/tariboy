@@ -19,6 +19,8 @@ func storeError(err error) error {
 		return api.UserError{Code: "store_exists", Msg: err.Error(), Status: http.StatusConflict}
 	case errors.Is(err, stores.ErrNotFound):
 		return api.UserError{Code: "store_not_found", Msg: err.Error(), Status: http.StatusNotFound}
+	case errors.Is(err, stores.ErrRefresh):
+		return api.UserError{Code: "store_refresh_failed", Msg: err.Error(), Status: http.StatusConflict}
 	default:
 		return err
 	}

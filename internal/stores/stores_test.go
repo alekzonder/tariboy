@@ -2,6 +2,7 @@ package stores
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -289,8 +290,8 @@ func TestCatalogClonesRefreshesAndSafelyRemovesGitStore(t *testing.T) {
 	gitRun(t, "-C", seed, "add", "README.md")
 	gitRun(t, "-C", seed, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "conflict")
 	gitRun(t, "-C", seed, "push", "origin", "main")
-	if _, err := catalog.Refresh(ctx, "team"); err == nil {
-		t.Fatal("Refresh succeeded despite local conflict")
+	if _, err := catalog.Refresh(ctx, "team"); !errors.Is(err, ErrRefresh) || !strings.Contains(err.Error(), "README.md") {
+		t.Fatalf("Refresh with local conflict = %v, want ErrRefresh naming git's blocked file", err)
 	}
 	if body, err := os.ReadFile(filepath.Join(managed, "README.md")); err != nil || string(body) != "local conflict\n" {
 		t.Fatalf("failed refresh changed local work: %q, %v", body, err)
@@ -353,5 +354,36 @@ func TestCatalogRemoveRefusesLinkedManagedParentAndKeepsRegistration(t *testing.
 	}
 	if list, err := catalog.List(context.Background()); err != nil || len(list) != 1 || list[0].Name != "team" {
 		t.Fatalf("registration after refused Remove = %#v, %v", list, err)
+	}
+}
+
+func TestRestoreBuildLocksKeepsStoreLockFilesUnchanged(t *testing.T) {
+	source := t.TempDir()
+	writeImage(t, source, "alpha", "1.0.0")
+	imageDir := filepath.Join(source, "images", "alpha")
+	const original = "{\"original\":true}\n"
+	for _, dir := range []string{source, imageDir} {
+		if err := os.WriteFile(filepath.Join(dir, "skills-lock.json"), []byte(original), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tools := t.TempDir()
+	script := "#!/bin/sh\nprintf rewritten >skills-lock.json\nexit ${NPX_EXIT-0}\n"
+	if err := os.WriteFile(filepath.Join(tools, "npx"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+	catalog := &Catalog{}
+	for _, exit := range []string{"0", "7"} {
+		t.Setenv("NPX_EXIT", exit)
+		err := catalog.RestoreBuildLocks(context.Background(), PreparedBuild{Name: "alpha", Path: imageDir})
+		if (err != nil) != (exit != "0") {
+			t.Fatalf("exit %s: RestoreBuildLocks() = %v", exit, err)
+		}
+		for _, dir := range []string{source, imageDir} {
+			if body, err := os.ReadFile(filepath.Join(dir, "skills-lock.json")); err != nil || string(body) != original {
+				t.Fatalf("exit %s: %s lock = %q, %v", exit, dir, body, err)
+			}
+		}
 	}
 }

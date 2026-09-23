@@ -186,7 +186,10 @@ checkout roots, including Git worktrees. A local directory without its own
 `.git` entry is simply reread; Tariboy does not pull an ancestor repository.
 A conflict, missing
 upstream, or authentication failure is reported without resetting or stashing
-local edits. **Remove** unregisters the Store and deletes its managed clone;
+local edits. The failure is returned as `store_refresh_failed` (HTTP 409) and
+carries the tail of Git's error output, so the UI and CLI name the cause, such
+as a locally modified file that blocks the fast-forward. Resolve it in the
+checkout, for example after `git -C <path> status`, then refresh again. **Remove** unregisters the Store and deletes its managed clone;
 it preserves local source directories and already built images.
 
 Store builds use the existing image builder. By default, a versioned source
@@ -203,7 +206,10 @@ explicit tag publishes only that ref; other refs remain unchanged.
 
 Before freezing sources, the daemon runs `npx skills experimental_install` in
 the Store root when `skills-lock.json` exists there, then in the image directory
-when it has a separate lock. An installation failure stops the build before
+when it has a separate lock. The installer rewrites `skills-lock.json`, so the
+daemon restores each lock file's original content after it runs, including on
+failure; a build leaves the Store checkout's tracked lock files unchanged and
+does not block a later Refresh. An installation failure stops the build before
 publication. Git must be installed on the daemon host; lock restoration also
 requires Node.js/npm and access to the skill sources. Private repositories use
 the server account's configured SSH or Git credential helpers. Configure access
