@@ -2,6 +2,7 @@
 package stores
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -26,6 +27,7 @@ var (
 	ErrExists   = errors.New("Store already exists")
 	ErrNotFound = errors.New("Store not found")
 	ErrUnsafe   = errors.New("unsafe Store path")
+	ErrRefresh  = errors.New("Store refresh failed")
 
 	errDatabaseUnavailable = errors.New("Store database is unavailable")
 )
@@ -70,6 +72,9 @@ type Catalog struct {
 var catalogMu sync.Mutex
 
 const commandTimeout = 2 * time.Minute
+
+// maxCommandError bounds the command stderr tail carried in an error.
+const maxCommandError = 2048
 
 var scpSource = regexp.MustCompile(`^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+:[^[:space:]]+$`)
 
@@ -166,7 +171,7 @@ func (c *Catalog) Refresh(ctx context.Context, name string) (Detail, error) {
 	}
 	if git {
 		if err := run(ctx, store.Path, "git", "pull", "--ff-only", "--no-autostash"); err != nil {
-			return Detail{}, fmt.Errorf("refresh Store %s: %w", name, err)
+			return Detail{}, fmt.Errorf("%w: %s: %w", ErrRefresh, name, err)
 		}
 	}
 	return c.detail(ctx, name)
@@ -243,8 +248,21 @@ func (c *Catalog) RestoreBuildLocks(ctx context.Context, prepared PreparedBuild)
 		if err := regularFile(lock); err != nil {
 			return err
 		}
-		if err := run(ctx, dir, "npx", "skills", "experimental_install"); err != nil {
-			return fmt.Errorf("install Store skills lock: %w", err)
+		original, err := os.ReadFile(lock)
+		if err != nil {
+			return err
+		}
+		installErr := run(ctx, dir, "npx", "skills", "experimental_install")
+		// The installer rewrites the tracked lock; restoring it keeps the
+		// Store checkout clean so a later Refresh can fast-forward.
+		if err := os.Remove(lock); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return errors.Join(installErr, fmt.Errorf("restore Store skills lock: %w", err))
+		}
+		if err := os.WriteFile(lock, original, 0o644); err != nil {
+			return errors.Join(installErr, fmt.Errorf("restore Store skills lock: %w", err))
+		}
+		if installErr != nil {
+			return fmt.Errorf("install Store skills lock: %w", installErr)
 		}
 	}
 	return nil
@@ -526,11 +544,20 @@ func run(ctx context.Context, dir, name string, args ...string) error {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return fmt.Errorf("%s failed: %w", name, err)
+		detail := strings.TrimSpace(stderr.String())
+		if len(detail) > maxCommandError {
+			detail = "..." + strings.ToValidUTF8(detail[len(detail)-maxCommandError:], "")
+		}
+		if detail == "" {
+			return fmt.Errorf("%s failed: %w", name, err)
+		}
+		return fmt.Errorf("%s failed: %w: %s", name, err, detail)
 	}
 	return nil
 }

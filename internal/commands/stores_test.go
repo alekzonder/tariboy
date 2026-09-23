@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/stores"
 )
 
 func TestStoreCommandsRegisteredWithRoutes(t *testing.T) {
@@ -315,5 +317,13 @@ func TestStoreAutoCommandPersistsPolicy(t *testing.T) {
 		t.Fatal("unknown image was accepted")
 	} else if userErr, ok := err.(api.UserError); !ok || userErr.Status != http.StatusBadRequest {
 		t.Fatalf("unknown image error = %#v", err)
+	}
+}
+
+func TestStoreErrorReportsRefreshFailureAsConflict(t *testing.T) {
+	err := storeError(fmt.Errorf("%w team: git failed: exit status 1: error: Your local changes", stores.ErrRefresh))
+	userErr, ok := err.(api.UserError)
+	if !ok || userErr.Code != "store_refresh_failed" || userErr.Status != http.StatusConflict || !strings.Contains(userErr.Msg, "Your local changes") {
+		t.Fatalf("storeError() = %#v", err)
 	}
 }
