@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { agentDeleteOn } from "@/lib/api";
@@ -147,7 +147,7 @@ describe("delete from the overflow menu", () => {
 });
 
 describe("Exec in the header", () => {
-  let agentPostOn: ReturnType<typeof vi.spyOn<typeof api, "agentPostOn">>;
+  let agentPostOn: MockInstance<typeof api.agentPostOn>;
   beforeEach(() => { agentPostOn = vi.spyOn(api, "agentPostOn"); });
 
   function renderExec({ alive = true, image = "basic:latest" } = {}) {
