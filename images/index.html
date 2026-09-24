@@ -146,7 +146,10 @@ checkout roots, including Git worktrees. A local directory without its own
 <code>.git</code> entry is simply reread; Tariboy does not pull an ancestor repository.
 A conflict, missing
 upstream, or authentication failure is reported without resetting or stashing
-local edits. <strong>Remove</strong> unregisters the Store and deletes its managed clone;
+local edits. The failure is returned as <code>store_refresh_failed</code> (HTTP 409) and
+carries the tail of Git’s error output, so the UI and CLI name the cause, such
+as a locally modified file that blocks the fast-forward. Resolve it in the
+checkout, for example after <code>git -C &lt;path&gt; status</code>, then refresh again. <strong>Remove</strong> unregisters the Store and deletes its managed clone;
 it preserves local source directories and already built images.</p>
 <p>Store builds use the existing image builder. By default, a versioned source
 publishes both <code>&lt;image_name&gt;:&lt;image_version&gt;</code> and <code>&lt;image_name&gt;:latest</code>, while a
@@ -160,7 +163,10 @@ leave them blank for the defaults or use them to publish another ref. An
 explicit tag publishes only that ref; other refs remain unchanged.</p>
 <p>Before freezing sources, the daemon runs <code>npx skills experimental_install</code> in
 the Store root when <code>skills-lock.json</code> exists there, then in the image directory
-when it has a separate lock. An installation failure stops the build before
+when it has a separate lock. The installer rewrites <code>skills-lock.json</code>, so the
+daemon restores each lock file’s original content after it runs, including on
+failure; a build leaves the Store checkout’s tracked lock files unchanged and
+does not block a later Refresh. An installation failure stops the build before
 publication. Git must be installed on the daemon host; lock restoration also
 requires Node.js/npm and access to the skill sources. Private repositories use
 the server account’s configured SSH or Git credential helpers. Configure access
