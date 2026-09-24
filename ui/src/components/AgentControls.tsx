@@ -14,7 +14,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -179,6 +179,7 @@ export function AgentControls({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Exec one-shot iteration</DialogTitle>
+            <DialogDescription>Runs one iteration now; the optional text applies only to it.</DialogDescription>
           </DialogHeader>
           <Textarea
             value={prompt}
@@ -188,7 +189,7 @@ export function AgentControls({
           />
           <DialogFooter>
             <Button variant="outline" disabled={execPending} onClick={() => setExecOpen(false)}>Cancel</Button>
-            <Button disabled={execPending} onClick={() => void exec()}>Exec</Button>
+            <Button disabled={execPending || disabled} onClick={() => void exec()}>Exec</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
