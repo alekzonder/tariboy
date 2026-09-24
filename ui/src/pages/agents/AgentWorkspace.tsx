@@ -58,6 +58,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   const runtime = [currentView?.harness || agent.harness, currentView?.model, currentView?.effort]
     .filter(Boolean).join(" · ");
   const target = targetFor(hostId);
+  const [execCount, setExecCount] = useState(0);
   const { attention, refreshHost } = useCustomerQuestionNotifications();
   // The Chat tab's dot. It is the daemon's own unread count rather than tab
   // state, so it is right while another tab is open and survives a remount.
@@ -130,7 +131,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   const alive = agent.enabled ?? agent.state !== "stopped";
   const hasOpenQuestion = attention.has(customerQuestionAttentionKey(hostId, agent.name));
   const content =
-    tab === "console" ? <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} />
+    tab === "console" ? <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
     : tab === "autopilot" ? <AgentAutopilotTab />
     : tab === "activity" ? <AgentActivityTab />
     : tab === "tasks" ? <TasksWorkspace
@@ -221,9 +222,11 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                 target={target}
                 name={agent.name}
                 alive={alive}
+                image={agent.image}
                 disabled={unavailable}
                 configurationPath={`${base}/configuration`}
                 refresh={refresh}
+                onExec={() => setExecCount((n) => n + 1)}
                 onDeleted={() => navigate("/")}
               />
             </div>

@@ -719,12 +719,13 @@ lines (tmux's own default is 2,000), so older output is discarded by tmux and
 cannot be recovered from the browser. Nothing about the history is persisted by
 the UI.
 
-The Console action row also exposes manual Exec for interactive and
-non-interactive agents. Its optional, memory-only one-shot text is sent to the
-route-selected host and affects only the newly requested iteration. Exec does
-not enable Autopilot or persist the draft. A successful interactive request
-reconnects terminal startup handling; a rejected request retains the draft for
-retry.
+The agent header exposes manual **Exec** before Start/Stop, only while the
+agent is enabled and not `bare:latest`, for interactive and non-interactive
+agents alike. It opens a dialog whose optional, memory-only one-shot text is
+sent to the route-selected host and affects only the newly requested iteration.
+Exec does not enable Autopilot or persist the draft. A successful request closes
+the dialog and, when the Console shows an interactive terminal, reconnects its
+startup handling; a rejected request keeps the dialog and the draft for retry.
 
 Permanent agent deletion requires confirmation in an in-app dialog that names
 the agent and warns that its durable data is also removed. Confirm sends the

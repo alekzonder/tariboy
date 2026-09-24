@@ -45,10 +45,11 @@ before timeout enforcement starts.
 
 ## Controls
 
-- **Console Exec** — start one manual iteration immediately, whether Autopilot
-  is enabled or paused. It is available for both interactive and
-  non-interactive agents; optional one-shot text is appended only to that
-  iteration's assembled prompt.
+- **Exec** (agent header, shown while the agent is enabled) — start one manual
+  iteration immediately, whether Autopilot is enabled or paused. It is
+  available for both interactive and non-interactive agents; optional one-shot
+  text, entered in its dialog, is appended only to that iteration's assembled
+  prompt.
 - **Pause / Disable Autopilot** — prevent new autonomous iterations.
 - **Kill** — immediately stop current iteration or session; use when work is
   unsafe or stuck.
