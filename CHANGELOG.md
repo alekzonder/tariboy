@@ -1,3 +1,21 @@
+## [0.69.1] - 2026-09-24
+
+### Fixed
+
+- Deliver `script.result` and channel-less self schedules to the agent again.
+  Since 0.69.0 they were published to `chat:service:<agent>` with the agent as
+  author, and the bus dropped an author's own delivery there, so the message
+  was stored but never woke the agent. The service chat now delivers like the
+  inbox; DM, tasks and group chats still suppress an agent's own replies.
+- A failed Store refresh now returns `store_refresh_failed` (HTTP 409) with the
+  tail of Git's error output instead of a generic internal error, so the UI and
+  CLI name the cause, such as a local change blocking the fast-forward.
+- Store builds restore each tracked `skills-lock.json` after
+  `npx skills experimental_install` rewrites it, including on failure, so a
+  build no longer leaves the checkout dirty and blocks a later Refresh.
+
+[0.69.1]: https://github.com/alekzonder/tariboy/compare/v0.69.0...v0.69.1
+
 ## [0.69.0] - 2026-09-23
 
 ### Added
