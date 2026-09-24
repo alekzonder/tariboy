@@ -1,3 +1,36 @@
+## [0.70.0] - 2026-09-24
+
+### Added
+
+- Nightly database maintenance. The daemon backs up `tariboyd.db` with
+  `VACUUM INTO`, keeps the newest backups, then deletes data older than the
+  retention period (finished Native Task trees, AI proxy Usage rows outside the
+  longest budget period, fully delivered and consumed messages, daemon events,
+  task idempotency records) and compacts the file when enough pages are free.
+  Defaults: enabled, 03:00 local, 7 backups, 90 days, compaction at 10% free
+  pages. Manage it with `tariboy maintenance get|set|run`, `/api/maintenance`
+  or the Backup & data retention card in Settings → General.
+
+### Changed
+
+- Exec moved from the Console tab to the agent header, before Start/Stop, and
+  opens a dialog for the optional one-shot prompt. It shows only while the
+  agent is enabled and respects an unavailable host.
+- The task drawer opens immediately with a loading state instead of waiting
+  for the task and its history.
+- Refreshing a managed Git Store clone now fetches, hard-resets to the upstream
+  branch and removes untracked files, so local modifications no longer block
+  it. Local Store checkouts keep fast-forward-only pulls.
+
+### Security
+
+- Database backups are written to the owner-only `<base-dir>/backups/db/`
+  (files mode `0600`) and are complete, unmasked copies of the database,
+  including agent secret values in plaintext. They are outside the support
+  bundle allowlist.
+
+[0.70.0]: https://github.com/alekzonder/tariboy/compare/v0.69.1...v0.70.0
+
 ## [0.69.1] - 2026-09-24
 
 ### Fixed
