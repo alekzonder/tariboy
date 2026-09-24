@@ -27,6 +27,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/loop"
+	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/pricingcatalog"
@@ -529,6 +530,9 @@ func Run(ctx context.Context, o Options) error {
 	retPolicies := retention.NewStore(st)
 	retPruner := retention.NewPruner(st, as, retPolicies, p.AgentsDir(), time.Now, log)
 	retRunner := retention.NewRunner(retPruner, time.Hour, time.After, log)
+	// Nightly database backup, then cleanup and compaction. Drained before
+	// st.Close like the retention runner.
+	maint := maintenance.New(st, filepath.Join(p.Base, "backups", "db"), time.Now, log)
 
 	manager := loop.NewManager(loop.ManagerConfig{
 		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), ShimBin: shimBin,
@@ -619,10 +623,11 @@ func Run(ctx context.Context, o Options) error {
 	cctx := &registry.Ctx{
 		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
 		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: channelBus, Plugins: pluginHost,
-		Groups:    groupProv,
-		Operator:  taskService.CustomerLogin(),
-		Retention: &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
-		Tasks:     taskService,
+		Groups:      groupProv,
+		Operator:    taskService.CustomerLogin(),
+		Retention:   &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
+		Maintenance: maint,
+		Tasks:       taskService,
 	}
 	reg := commands.BuildRegistry()
 	srv := api.NewServer(reg, cctx)
@@ -687,7 +692,7 @@ func Run(ctx context.Context, o Options) error {
 	// their final flush/refresh before the store closes.
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(11)
+	wg.Add(12)
 	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
 	go func() {
 		defer wg.Done()
@@ -746,6 +751,10 @@ func Run(ctx context.Context, o Options) error {
 	go func() {
 		defer wg.Done()
 		retRunner.Run(gctx)
+	}()
+	go func() {
+		defer wg.Done()
+		maint.Loop(gctx, time.After)
 	}()
 	// Store automatic builds refresh due Stores and rebuild their selected
 	// outdated images through the same registry command the API and CLI use, so

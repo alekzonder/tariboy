@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/retention"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/shim"
@@ -73,17 +74,18 @@ type Ctx struct {
 	// HTTPAddr is the loopback host:port of the API/WS listener, empty when the
 	// daemon runs socket-only. The desktop app reads it from the status payload
 	// to build a base URL for a daemon it adopted rather than started.
-	HTTPAddr  string
-	Version   string
-	StartedAt time.Time
-	Control   ServiceControl
-	Scripts   ScriptControl
-	Bus       *bus.Bus
-	Plugins   PluginControl
-	Groups    GroupControl
-	Operator  string
-	Retention *retention.RetentionAPI
-	Tasks     TaskControl
+	HTTPAddr    string
+	Version     string
+	StartedAt   time.Time
+	Control     ServiceControl
+	Scripts     ScriptControl
+	Bus         *bus.Bus
+	Plugins     PluginControl
+	Groups      GroupControl
+	Operator    string
+	Retention   *retention.RetentionAPI
+	Maintenance *maintenance.Service
+	Tasks       TaskControl
 }
 
 // TaskControl is the daemon-owned native Tasks surface consumed by typed HTTP

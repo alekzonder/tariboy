@@ -187,6 +187,9 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, retentionSet())
 	mustRegister(r, pruneCommand())
 	mustRegister(r, backupCommand())
+	mustRegister(r, maintenanceGet())
+	mustRegister(r, maintenanceSet())
+	mustRegister(r, maintenanceRun())
 	mustRegister(r, restoreCommand())
 	for _, command := range taskCommands() {
 		mustRegister(r, command)
@@ -229,6 +232,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "team.import", "Import agent teams")
 	mustGroup(r, "team.import.archive", "Import portable team archives")
 	mustGroup(r, "retention", "Manage data retention")
+	mustGroup(r, "maintenance", "Nightly database backup, cleanup, and compaction")
 	mustGroup(r, "prompt", "Read composed agent prompt")
 	mustGroup(r, "fs", "Browse the daemon filesystem root ($HOME-jailed)")
 	mustGroup(r, "files", "Upload files to the server")

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage, { GeneralSettings } from "./SettingsPage";
 import {
   getGlobalAgentShellScriptOn,
+  getMaintenanceOn,
   getPluginContributionsOn,
   setGlobalAgentShellScriptOn,
 } from "@/lib/api";
@@ -11,6 +12,7 @@ import {
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/api")>(),
   getGlobalAgentShellScriptOn: vi.fn(),
+  getMaintenanceOn: vi.fn(),
   getPluginContributionsOn: vi.fn(),
   setGlobalAgentShellScriptOn: vi.fn(),
 }));
@@ -20,6 +22,10 @@ beforeEach(() => {
   vi.mocked(getGlobalAgentShellScriptOn).mockResolvedValue({ script: "export OK=1" });
   vi.mocked(getPluginContributionsOn).mockResolvedValue({ plugins: [], count: 0 });
   vi.mocked(setGlobalAgentShellScriptOn).mockResolvedValue({ saved: true });
+  vi.mocked(getMaintenanceOn).mockResolvedValue({
+    settings: { enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, compact: true, compact_threshold_pct: 10 },
+    last_run: null,
+  });
 });
 
 describe("SettingsPage", () => {

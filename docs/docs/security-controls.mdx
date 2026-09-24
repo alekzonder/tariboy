@@ -93,6 +93,12 @@ that host before freezing sources. Register and build sources you trust to
 install their declared skills. Store source contents remain outside the
 support-bundle allowlist.
 
+Database backups written by nightly maintenance live in the owner-only
+`<base-dir>/backups/db/` directory, and each backup file is mode `0600`. A
+backup is a complete copy of `tariboyd.db`, including task text, messages, and
+Usage rows, so treat it like the database itself. Backups are outside the
+support-bundle allowlist.
+
 ## Pricing catalog boundary
 
 The daemon downloads model prices only from LiteLLM's fixed production HTTPS

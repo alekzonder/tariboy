@@ -85,6 +85,9 @@ tariboy has three command surfaces:
 | `tariboy loop on-error` | Get or set loop on-error policy; omit value to read |
 | `tariboy loop on-timeout` | Get or set loop on-timeout policy; omit value to read |
 | `tariboy loop timeout` | Get or set loop timeout (seconds); omit value to read |
+| `tariboy maintenance get` | Show database maintenance settings and the last run |
+| `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
+| `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
 | `tariboy message send` | Publish a message to a channel (operator) |
 | `tariboy plugin inspect` | Show one plugin's manifest, state and socket |
 | `tariboy plugin install` | Install and start a plugin from a directory with plugin.json |
