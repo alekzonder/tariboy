@@ -128,26 +128,53 @@ func readTS(t *testing.T, b *Bus, chatID, principal string) string {
 
 // The requirement the whole change is measured against: a message addressed to
 // a chat wakes the agent exactly as an inbox message did. The service chat is
-// the strictest case — its publisher is a system component, not a participant.
+// the strictest case — its publisher is a system component, not a participant,
+// and the script-result publisher and self-targeted schedules tag it with the
+// recipient itself as ProducedByAgent.
 func TestServiceChatPublishStillWakesTheAgent(t *testing.T) {
+	for _, msg := range []Message{
+		{Source: "script", Type: "script.result", Text: "done", ProducedByAgent: "worker"},
+		{Source: "schedule", Type: "schedule.fire", Text: "tick", ProducedByAgent: "worker"},
+		{Source: "system:scripts", Type: "script.result", Text: "done"},
+	} {
+		t.Run(msg.Source, func(t *testing.T) {
+			b := newBus(t)
+			if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
+				t.Fatal(err)
+			}
+			var woken []string
+			b.SetPublishHook(func(_ Message, deliveredTo []string) { woken = append(woken, deliveredTo...) })
+			msg.Channel = ChatChannelFor(ChatIDService("worker"))
+			if _, err := b.Publish(msg); err != nil {
+				t.Fatal(err)
+			}
+			if len(woken) != 1 || woken[0] != "worker" {
+				t.Fatalf("a service-chat publish must wake exactly the agent: %v", woken)
+			}
+			has, err := b.HasPending("worker")
+			if err != nil || !has {
+				t.Fatalf("HasPending must see the delivery: has=%v err=%v", has, err)
+			}
+		})
+	}
+}
+
+// Only the inbox and the service chat deliver to their own author: an agent's
+// reply in its personal chat must not echo back into its own queue.
+func TestPersonalChatReplyDoesNotWakeItsAuthor(t *testing.T) {
 	b := newBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
 	}
-	var woken []string
-	b.SetPublishHook(func(_ Message, deliveredTo []string) { woken = append(woken, deliveredTo...) })
 	if _, err := b.Publish(Message{
-		Channel: ChatChannelFor(ChatIDService("worker")), Source: "system:scripts",
-		Type: "script.result", Text: "done",
+		Channel: ChatChannelFor(ChatIDDirect("worker")), Source: "agent:worker", ProducedByAgent: "worker",
+		Type: "message", Text: "reply",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(woken) != 1 || woken[0] != "worker" {
-		t.Fatalf("a service-chat publish must wake exactly the agent: %v", woken)
-	}
 	has, err := b.HasPending("worker")
-	if err != nil || !has {
-		t.Fatalf("HasPending must see the delivery: has=%v err=%v", has, err)
+	if err != nil || has {
+		t.Fatalf("an agent must not receive its own personal-chat reply: has=%v err=%v", has, err)
 	}
 }
 
