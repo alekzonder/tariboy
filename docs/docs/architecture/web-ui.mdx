@@ -297,7 +297,10 @@ The sheet is one `--card` island with its own scroll and a sticky identity
 header carrying the task key, title, status, workflow version and assignee. A
 single banner under that header reports what needs a person — a frozen workflow
 with its error code, or an unanswered customer question — and other statuses
-speak through the status pill alone. History rows read as time, kind, a
+speak through the status pill alone. The sheet opens as soon as a task is
+chosen, in Tasks or from a chat, showing the task key and a loading line until
+the task and its history arrive; refreshing the task already open keeps the
+loaded panel in place. History rows read as time, kind, a
 one-line `key value · key value` payload summary and actor; the panel never
 prints a raw JSON payload.
 The detail sheet's own keyboard- and pointer-accessible separator is the only
