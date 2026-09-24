@@ -39,7 +39,7 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import QueueSettings from "./QueueSettings"
 import { TaskFilterBar, type TaskPrincipalFilter } from "./TaskFilterBar"
-import TaskDetail from "./TaskDetail"
+import TaskDetail, { TaskDetailLoading } from "./TaskDetail"
 import TaskForm from "./TaskForm"
 import TaskTree from "./TaskTree"
 import {
@@ -245,6 +245,9 @@ function TasksWorkspaceContent({
   const [selectedKey, setSelectedKey] = useState("")
   const selectedKeyRef = useRef("")
   const [detail, setDetail] = useState<Detail | null>(null)
+  // The task a click asked for whose detail has not arrived yet; the sheet
+  // opens on it at once instead of waiting for the read.
+  const [loadingKey, setLoadingKey] = useState("")
   const [events, setEvents] = useState<TaskEvent[]>([])
   const [workflow, setWorkflow] = useState<WorkflowExecutionView | null>(null)
   const [creatingParent, setCreatingParent] = useState<string | null>(null)
@@ -334,6 +337,7 @@ function TasksWorkspaceContent({
     const refreshingSelection = selectedKeyRef.current === key
     selectedKeyRef.current = key
     const request = ++detailRequestRef.current
+    if (!refreshingSelection) setLoadingKey(key)
     try {
       const loadHistory = async (): Promise<TaskEvent[]> => {
         const history: TaskEvent[] = []
@@ -353,6 +357,7 @@ function TasksWorkspaceContent({
         loadHistory(),
       ])
       if (!mountedRef.current || request !== detailRequestRef.current || selectedKeyRef.current !== key) return
+      setLoadingKey("")
       setDetail(next)
       setEvents(history)
       setWorkflow(null)
@@ -369,6 +374,7 @@ function TasksWorkspaceContent({
       }
     } catch (error) {
       if (!mountedRef.current || request !== detailRequestRef.current) return
+      setLoadingKey("")
       if (refreshingSelection) {
         toast.error(errorMessage(error))
         return
@@ -620,6 +626,22 @@ function TasksWorkspaceContent({
     return counts
   }, [tasks])
 
+  const closeDetail = () => {
+    detailRequestRef.current += 1
+    selectedKeyRef.current = ""
+    setLoadingKey("")
+    setSelectedKey("")
+    setDetail(null)
+    setEvents([])
+    setWorkflow(null)
+  }
+  const detailResizeHandle = <TaskPanelResizeHandle
+    width={effectiveDetailWidth}
+    maximum={detailMaximum}
+    workspaceRef={workspaceRef}
+    onResize={setDetailWidth}
+  />
+
   return (
     <div
       ref={workspaceRef}
@@ -693,27 +715,22 @@ function TasksWorkspaceContent({
           <QueueSettings queues={queues} onCreate={createQueue} onUpdate={updateQueue} target={target} />
         </SheetContent>
       </Sheet>
-      {detail && (
+      {loadingKey && detail?.task.key !== loadingKey ? (
+        <TaskDetailLoading
+          taskKey={loadingKey}
+          width={effectiveDetailWidth}
+          resizeHandle={detailResizeHandle}
+          onClose={closeDetail}
+        />
+      ) : detail && (
         <TaskDetail
           key={detail.task.key}
           target={target}
           detail={detail}
           principals={principals}
           width={effectiveDetailWidth}
-          resizeHandle={<TaskPanelResizeHandle
-            width={effectiveDetailWidth}
-            maximum={detailMaximum}
-            workspaceRef={workspaceRef}
-            onResize={setDetailWidth}
-          />}
-          onClose={() => {
-            detailRequestRef.current += 1
-            selectedKeyRef.current = ""
-            setSelectedKey("")
-            setDetail(null)
-            setEvents([])
-            setWorkflow(null)
-          }}
+          resizeHandle={detailResizeHandle}
+          onClose={closeDetail}
           events={events}
           workflow={workflow}
           onSave={saveDetail}

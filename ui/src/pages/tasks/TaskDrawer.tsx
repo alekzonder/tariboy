@@ -22,7 +22,7 @@ import {
   type TaskStatus,
   type WorkflowExecutionView,
 } from "@/lib/tasks"
-import TaskDetail from "./TaskDetail"
+import TaskDetail, { TaskDetailLoading } from "./TaskDetail"
 import { useTaskPanelWidths } from "./useTaskPanelWidths"
 import "./tasks.css"
 
@@ -122,7 +122,9 @@ export default function TaskDrawer({
     onReset: () => { void load() },
   })
 
-  if (!detail) return null
+  if (detail?.task.key !== taskKey) {
+    return <TaskDetailLoading taskKey={taskKey} width={detailWidth} resizeHandle={null} onClose={onClose} />
+  }
 
   return (
     <TaskDetail

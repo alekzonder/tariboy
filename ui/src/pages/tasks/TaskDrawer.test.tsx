@@ -153,3 +153,25 @@ it("reloads on a socket reset without rewinding the stream to the beginning", as
   await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
   expect(taskSocket.options?.after).toBe(412)
 })
+
+it("opens at once in a loading state and fills in when the task arrives", async () => {
+  let resolve!: (value: Detail) => void
+  api.getTask.mockReturnValue(new Promise<Detail>((done) => { resolve = done }))
+  const onClose = vi.fn()
+  render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />)
+  const dialog = await screen.findByRole("dialog", { name: "TEST-1" })
+  expect(within(dialog).getByText("Loading task…")).toBeInTheDocument()
+  expect(screen.queryByText("Ship the drawer")).not.toBeInTheDocument()
+  resolve(detail)
+  expect(await screen.findByText("Ship the drawer")).toBeInTheDocument()
+  expect(screen.queryByText("Loading task…")).not.toBeInTheDocument()
+})
+
+it("closes from the loading state", async () => {
+  api.getTask.mockReturnValue(new Promise<Detail>(() => {}))
+  const onClose = vi.fn()
+  render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />)
+  await screen.findByText("Loading task…")
+  await userEvent.click(screen.getByRole("button", { name: "Close task detail" }))
+  expect(onClose).toHaveBeenCalled()
+})
