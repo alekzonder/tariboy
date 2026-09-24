@@ -101,8 +101,12 @@ untouched, so `Publish -> delivery -> WakeMessage` and `HasPending` keep working
 exactly as before: the wake path never learns that chats exist.
 
 A chat channel is deliberately never an agent inbox. The bus suppresses an
-author's own delivery only on non-inbox channels, so an inbox-backed chat would
-echo an agent's own reply straight back into its own queue.
+author's own delivery on every channel except that agent's inbox and its
+`service:<agent>` chat, so an inbox-backed chat would echo an agent's own reply
+straight back into its own queue. The service chat is the exception because
+`script.result` and self-targeted schedule alarms are published there with
+`produced_by_agent` set to the recipient; they are messages for that agent, and
+suppressing them would leave it asleep.
 
 Startup reconciliation provisions three chats per agent, and agent creation does
 the same for a new agent:

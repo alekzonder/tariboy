@@ -322,20 +322,21 @@ func (b *Bus) publishTx(tx *sql.Tx, msg Message, now time.Time, guard func(*sql.
 	// message out, other agents, group members — still gets its delivery.
 	//
 	// The suppression is OUTBOUND-ONLY: it never applies on the author's own
-	// inbox. ProducedByAgent is also the provenance tag on system messages
-	// generated FOR an agent and delivered TO its inbox (request-reply timeout
-	// events, proxy budget.warn, script.result, self-targeted schedules). Those
-	// land on InboxChannel(author) with author == the recipient, and the inbox
-	// is by definition where messages FOR that agent belong — so an inbox
-	// delivery to the author must go through, even though the author "produced"
-	// it. Suppress the author's own delivery only on NON-inbox channels.
+	// inbox or service chat. ProducedByAgent is also the provenance tag on
+	// system messages generated FOR an agent (request-reply timeout events,
+	// proxy budget.warn, script.result, self-targeted schedules). Those land on
+	// InboxChannel(author) or the author's service chat with author == the
+	// recipient, and both are by definition where messages FOR that agent
+	// belong — so such a delivery to the author must go through, even though
+	// the author "produced" it. Suppress the author's own delivery only on
+	// other channels.
 	author := messageAuthor(msg)
-	authorInbox := InboxChannel(author)
+	ownChannel := msg.Channel == InboxChannel(author) || msg.Channel == ChatChannelFor(ChatIDService(author))
 	deliveredSet := map[string]bool{}
 	queueFull := map[string]bool{}
 	queueChecked := map[string]bool{}
 	for _, s := range subs {
-		if author != "" && s.Agent == author && msg.Channel != authorInbox {
+		if author != "" && s.Agent == author && !ownChannel {
 			continue
 		}
 		if !MatchType(s.TypeFilter, msg.Type) || !s.Matcher.Match(msg) {
