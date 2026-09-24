@@ -162,15 +162,22 @@ func (c *Catalog) Refresh(ctx context.Context, name string) (Detail, error) {
 	if err != nil {
 		return Detail{}, err
 	}
-	git := kind == sourceGit
-	if !git {
-		git, err = isGitCheckout(ctx, store.Path)
-		if err != nil {
-			return Detail{}, err
+	// A managed clone is daemon-owned: discard local edits so it always
+	// matches upstream. A local Store is user work and only fast-forwards.
+	var commands [][]string
+	if kind == sourceGit {
+		commands = [][]string{
+			{"fetch", "--prune"},
+			{"reset", "--hard", "@{upstream}"},
+			{"clean", "-fd"},
 		}
+	} else if git, err := isGitCheckout(ctx, store.Path); err != nil {
+		return Detail{}, err
+	} else if git {
+		commands = [][]string{{"pull", "--ff-only", "--no-autostash"}}
 	}
-	if git {
-		if err := run(ctx, store.Path, "git", "pull", "--ff-only", "--no-autostash"); err != nil {
+	for _, args := range commands {
+		if err := run(ctx, store.Path, "git", args...); err != nil {
 			return Detail{}, fmt.Errorf("%w: %s: %w", ErrRefresh, name, err)
 		}
 	}

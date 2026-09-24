@@ -102,7 +102,7 @@ tariboy has three command surfaces:
 | `tariboy store add NAME SOURCE` | Register a Git URL or absolute local directory on the daemon host |
 | `tariboy store list` | List this daemon's Store registrations |
 | `tariboy store show NAME` | Read current images, versions and diagnostics from disk |
-| `tariboy store refresh NAME` | Fast-forward pull a Git source, or reread a non-Git local directory |
+| `tariboy store refresh NAME` | Reset a managed Git clone to its upstream, discarding local changes; fast-forward pull a local Git checkout; or reread a non-Git local directory |
 | `tariboy store auto NAME [--interval MINUTES] [--image IMAGE]` | Set the automatic refresh-and-build policy; the daemon refreshes every interval and rebuilds the selected images that need an update, and `--interval 0` disables it |
 | `tariboy store remove NAME` | Unregister a Store and remove only its managed clone; preserve local sources and built images |
 | `ttasks queue create` | Create a task queue |

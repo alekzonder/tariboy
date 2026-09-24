@@ -181,15 +181,18 @@ when the source is versioned. A missing `images/` directory shows an empty
 list. An invalid source reports its own error and disables its Build action
 while valid sibling images remain available.
 
-**Refresh** runs `git pull --ff-only` for both managed clones and local Git
-checkout roots, including Git worktrees. A local directory without its own
-`.git` entry is simply reread; Tariboy does not pull an ancestor repository.
-A conflict, missing
-upstream, or authentication failure is reported without resetting or stashing
-local edits. The failure is returned as `store_refresh_failed` (HTTP 409) and
-carries the tail of Git's error output, so the UI and CLI name the cause, such
-as a locally modified file that blocks the fast-forward. Resolve it in the
-checkout, for example after `git -C <path> status`, then refresh again. **Remove** unregisters the Store and deletes its managed clone;
+**Refresh** of a managed clone makes it match its upstream exactly: it runs
+`git fetch --prune`, `git reset --hard @{upstream}` and `git clean -fd`, so
+local edits, local commits and untracked files in `<base-dir>/stores/<name>/`
+are discarded on every refresh; files ignored by `.gitignore` are kept. A local
+Git checkout root, including a Git worktree, is refreshed with
+`git pull --ff-only` and its local edits are never reset or stashed. A local
+directory without its own `.git` entry is simply reread; Tariboy does not pull
+an ancestor repository. A fetch, missing upstream, conflict or authentication
+failure is returned as `store_refresh_failed` (HTTP 409) and carries the tail of
+Git's error output, so the UI and CLI name the cause. For a local checkout,
+resolve it there, for example after `git -C <path> status`, then refresh again.
+**Remove** unregisters the Store and deletes its managed clone;
 it preserves local source directories and already built images.
 
 Store builds use the existing image builder. By default, a versioned source
