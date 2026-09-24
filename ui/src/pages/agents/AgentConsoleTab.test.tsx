@@ -103,62 +103,23 @@ describe("AgentConsoleTab non-interactive uploads", () => {
   });
 });
 
-describe("AgentConsoleTab manual Exec", () => {
-  it.each([
-    ["interactive", agent({ interactive: true, state: "running" })],
-    ["non-interactive", agent({ interactive: false })],
-  ])("renders the composer for a stopped or running %s agent", (_label, value) => {
-    renderTab(value);
-    expect(screen.getByPlaceholderText("one-shot exec prompt (optional)")).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Exec" })).toBeEnabled();
+describe("AgentConsoleTab and header Exec", () => {
+  it("no longer renders its own Exec composer", () => {
+    renderTab(agent({ interactive: true, state: "running" }));
+    expect(screen.queryByRole("button", { name: "Exec" })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("one-shot exec prompt (optional)")).not.toBeInTheDocument();
   });
 
-  it("sends a one-shot prompt to the route-selected host and reconnects an interactive terminal", async () => {
-    vi.mocked(agentPostOn).mockResolvedValue({});
-    const refresh = renderTab(agent({ interactive: true, state: "running" }));
-    const input = screen.getByPlaceholderText("one-shot exec prompt (optional)");
-
-    fireEvent.change(input, { target: { value: "continue this task" } });
-    fireEvent.click(screen.getByRole("button", { name: "Exec" }));
-
-    await waitFor(() => expect(agentPostOn).toHaveBeenCalledWith(
-      target, "worker", "exec", { prompt: "continue this task" },
-    ));
-    await waitFor(() => expect(input).toHaveValue(""));
-    expect(refresh).toHaveBeenCalledOnce();
-    expect(reconnect).toHaveBeenCalledOnce();
-  });
-
-  it("omits an empty prompt and prevents duplicate requests while Exec is pending", async () => {
-    let resolveRequest!: (value: unknown) => void;
-    vi.mocked(agentPostOn).mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve; }));
-    renderTab();
-    const input = screen.getByPlaceholderText("one-shot exec prompt (optional)");
-    const button = screen.getByRole("button", { name: "Exec" });
-
-    fireEvent.click(button);
-    fireEvent.click(button);
-
-    expect(agentPostOn).toHaveBeenCalledOnce();
-    expect(agentPostOn).toHaveBeenCalledWith(target, "worker", "exec", undefined);
-    expect(input).toBeDisabled();
-    expect(button).toBeDisabled();
-    resolveRequest({});
-    await waitFor(() => expect(button).toBeEnabled());
+  it("reconnects an interactive terminal when the header reports a started Exec", () => {
+    const value = agent({ interactive: true, state: "running" });
+    const { rerender } = render(
+      <MemoryRouter><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={2} /></MemoryRouter>,
+    );
     expect(reconnect).not.toHaveBeenCalled();
-  });
 
-  it("retains the prompt and restores controls after an API failure", async () => {
-    vi.mocked(agentPostOn).mockRejectedValue(new Error("iteration already running"));
-    renderTab();
-    const input = screen.getByPlaceholderText("one-shot exec prompt (optional)");
-    const button = screen.getByRole("button", { name: "Exec" });
-
-    fireEvent.change(input, { target: { value: "retry me" } });
-    fireEvent.click(button);
-
-    await waitFor(() => expect(agentPostOn).toHaveBeenCalledOnce());
-    await waitFor(() => expect(button).toBeEnabled());
-    expect(input).toHaveValue("retry me");
+    rerender(
+      <MemoryRouter><AgentConsoleTab hostId="remote" agent={value} refresh={vi.fn()} execCount={3} /></MemoryRouter>,
+    );
+    expect(reconnect).toHaveBeenCalledOnce();
   });
 });

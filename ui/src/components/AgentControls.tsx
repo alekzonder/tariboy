@@ -13,6 +13,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 function useAction(refresh?: () => void) {
   return async (label: string, fn: () => Promise<unknown>) => {
@@ -50,26 +54,53 @@ export function RunStateActions({ name, refresh }: { name: string; refresh?: () 
  * reachable from every tab — which is why the Console tab no longer carries a
  * second copy of these buttons.
  *
+ * Exec (a one-shot iteration with an optional prompt) sits in front of the
+ * toggle and only while the agent is enabled.
+ *
  * Every call is host-scoped (`agentPostOn(target, …)`): the workspace is
  * addressed by route, and must never fall back to the active daemon.
  */
 export function AgentControls({
-  target, name, alive, disabled = false, configurationPath, refresh, onDeleted,
+  target, name, alive, image, disabled = false, configurationPath, refresh, onExec, onDeleted,
 }: {
   target: Daemon | null;
   name: string;
   /** The agent is up — the toggle offers Stop; otherwise it offers Start. */
   alive: boolean;
+  /** `bare:latest` has no iteration loop, so it gets no Exec. */
+  image?: string;
   disabled?: boolean;
   /** Route of this agent's Configuration tab, for the menu's Settings item. */
   configurationPath: string;
   refresh?: () => void;
+  /** Called after an Exec request succeeds, e.g. to reconnect a terminal. */
+  onExec?: () => void;
   /** Called after the agent is deleted, so the caller can leave the route. */
   onDeleted?: () => void;
 }) {
   const run = useAction(refresh);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  const [execOpen, setExecOpen] = useState(false);
+  const [execPending, setExecPending] = useState(false);
+  const [prompt, setPrompt] = useState("");
+
+  const exec = async () => {
+    if (execPending) return;
+    setExecPending(true);
+    try {
+      await agentPostOn(target, name, "exec", prompt ? { prompt } : undefined);
+      setPrompt("");
+      setExecOpen(false);
+      refresh?.();
+      onExec?.();
+      toast.success("exec started");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : String(error));
+    } finally {
+      setExecPending(false);
+    }
+  };
 
   const remove = async () => {
     if (deletePending) return;
@@ -87,6 +118,9 @@ export function AgentControls({
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
+      {alive && image !== "bare:latest" && (
+        <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setExecOpen(true)}>Exec</Button>
+      )}
       {alive ? (
         <Button size="sm" variant="secondary" disabled={disabled}
           onClick={() => run("stop", () => agentPostOn(target, name, "stop"))}>Stop</Button>
@@ -140,6 +174,24 @@ export function AgentControls({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={execOpen} onOpenChange={(open) => { if (!execPending) setExecOpen(open); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exec one-shot iteration</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder="one-shot prompt (optional)"
+            disabled={execPending}
+          />
+          <DialogFooter>
+            <Button variant="outline" disabled={execPending} onClick={() => setExecOpen(false)}>Cancel</Button>
+            <Button disabled={execPending} onClick={() => void exec()}>Exec</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={deleteOpen}

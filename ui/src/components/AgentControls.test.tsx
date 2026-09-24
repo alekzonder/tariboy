@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { agentDeleteOn } from "@/lib/api";
+import * as api from "@/lib/api";
 import { AgentControls } from "./AgentControls";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -142,5 +143,92 @@ describe("delete from the overflow menu", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Delete agent" })).toBeEnabled());
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(onDeleted).not.toHaveBeenCalled();
+  });
+});
+
+describe("Exec in the header", () => {
+  let agentPostOn: ReturnType<typeof vi.spyOn<typeof api, "agentPostOn">>;
+  beforeEach(() => { agentPostOn = vi.spyOn(api, "agentPostOn"); });
+
+  function renderExec({ alive = true, image = "basic:latest" } = {}) {
+    const refresh = vi.fn();
+    const onExec = vi.fn();
+    render(
+      <MemoryRouter>
+        <AgentControls
+          target={target}
+          name="worker"
+          alive={alive}
+          image={image}
+          configurationPath="/agents/remote/worker/configuration"
+          refresh={refresh}
+          onExec={onExec}
+        />
+      </MemoryRouter>,
+    );
+    return { refresh, onExec };
+  }
+
+  it("is shown before Stop only for an enabled agent that is not bare", () => {
+    renderExec();
+    const buttons = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(buttons.indexOf("Exec")).toBeGreaterThanOrEqual(0);
+    expect(buttons.indexOf("Exec")).toBeLessThan(buttons.indexOf("Stop"));
+  });
+
+  it.each([
+    ["disabled", { alive: false }],
+    ["bare", { image: "bare:latest" }],
+  ])("is hidden for a %s agent", (_label, opts) => {
+    renderExec(opts);
+    expect(screen.queryByRole("button", { name: "Exec" })).not.toBeInTheDocument();
+  });
+
+  it("sends the optional one-shot prompt from the modal and closes it", async () => {
+    agentPostOn.mockResolvedValue({});
+    const { refresh, onExec } = renderExec();
+    fireEvent.click(screen.getByRole("button", { name: "Exec" }));
+    const input = screen.getByPlaceholderText("one-shot prompt (optional)");
+    fireEvent.change(input, { target: { value: "continue this task" } });
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" }));
+
+    await waitFor(() => expect(agentPostOn).toHaveBeenCalledWith(
+      target, "worker", "exec", { prompt: "continue this task" },
+    ));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(onExec).toHaveBeenCalledOnce();
+  });
+
+  it("omits an empty prompt and prevents duplicate requests while pending", async () => {
+    let resolveRequest!: (value: unknown) => void;
+    agentPostOn.mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve; }));
+    renderExec();
+    fireEvent.click(screen.getByRole("button", { name: "Exec" }));
+    const submit = within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" });
+
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    expect(agentPostOn).toHaveBeenCalledOnce();
+    expect(agentPostOn).toHaveBeenCalledWith(target, "worker", "exec", undefined);
+    expect(submit).toBeDisabled();
+    resolveRequest({});
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps the modal and the prompt after an API failure", async () => {
+    agentPostOn.mockRejectedValue(new Error("iteration already running"));
+    const { onExec } = renderExec();
+    fireEvent.click(screen.getByRole("button", { name: "Exec" }));
+    const input = screen.getByPlaceholderText("one-shot prompt (optional)");
+    fireEvent.change(input, { target: { value: "retry me" } });
+    const submit = within(screen.getByRole("dialog")).getByRole("button", { name: "Exec" });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(agentPostOn).toHaveBeenCalledOnce());
+    await waitFor(() => expect(submit).toBeEnabled());
+    expect(input).toHaveValue("retry me");
+    expect(onExec).not.toHaveBeenCalled();
   });
 });

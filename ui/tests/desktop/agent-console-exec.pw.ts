@@ -9,17 +9,26 @@ async function openConsole(desktop: W3CClient, name: string): Promise<void> {
 }
 
 async function execPrompt(desktop: W3CClient, prompt: string): Promise<void> {
+  // Exec lives in the agent header and opens a modal with the optional prompt.
+  const open = await expect.poll(async () => {
+    try {
+      return await desktop.findElement("xpath", "//header//button[normalize-space(.)='Exec']");
+    } catch {
+      return null;
+    }
+  }).not.toBeNull().then(() => desktop.findElement("xpath", "//header//button[normalize-space(.)='Exec']"));
+  await desktop.elementClick(open);
   const input = await expect.poll(async () => {
     try {
-      return await desktop.findElement("css selector", '[placeholder="one-shot exec prompt (optional)"]');
+      return await desktop.findElement("css selector", '[placeholder="one-shot prompt (optional)"]');
     } catch {
       return null;
     }
   }).not.toBeNull().then(() => desktop.findElement(
-    "css selector", '[placeholder="one-shot exec prompt (optional)"]',
+    "css selector", '[placeholder="one-shot prompt (optional)"]',
   ));
   await desktop.elementSendKeys(input, prompt);
-  const button = await desktop.findElement("xpath", "//button[normalize-space(.)='Exec']");
+  const button = await desktop.findElement("xpath", "//*[@role='dialog']//button[normalize-space(.)='Exec']");
   await desktop.elementClick(button);
 }
 
@@ -50,6 +59,9 @@ test("manual Exec reaches the isolated daemon for interactive and non-interactiv
           image: "basic:latest", name: "exec-batch-e2e", harness: "stub",
           interactive: false, loop: false,
         });
+        // The header offers Exec only for an enabled agent.
+        await call("POST", "/api/agents/exec-interactive-e2e/start", {});
+        await call("POST", "/api/agents/exec-batch-e2e/start", {});
         const originalFetch = window.fetch.bind(window);
         window.fetch = (input, init) => {
           const url = typeof input === "string" ? input : input.url;
