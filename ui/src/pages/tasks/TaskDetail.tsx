@@ -438,8 +438,9 @@ export function TaskDetailLoading({ taskKey, width, resizeHandle, onClose }: {
     <div className="task-detail-panel" aria-busy="true">
       <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
         <div className="flex min-w-0 flex-1 items-center gap-[9px]">
+          {/* Names the dialog without being the task heading, which marks a loaded task. */}
           <DialogTitle asChild>
-            <h2 className="shrink-0 font-mono text-[12px] font-medium tabular-nums text-muted-foreground">{taskKey}</h2>
+            <span className="shrink-0 font-mono text-[12px] font-medium tabular-nums text-muted-foreground">{taskKey}</span>
           </DialogTitle>
         </div>
         <Button variant="ghost" size="icon" aria-label="Close task detail" onClick={onClose}
