@@ -415,6 +415,45 @@ export default function TaskDetail({
   )
 }
 
+/**
+ * The same sheet while its task is still being read, so a click opens the panel
+ * at once. It takes no focus: the element that opened it stays the one the
+ * loaded panel returns focus to.
+ */
+export function TaskDetailLoading({ taskKey, width, resizeHandle, onClose }: {
+  taskKey: string
+  width: number
+  resizeHandle: ReactNode
+  onClose: () => void
+}) {
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+    <DialogContent className={cn("task-detail-dialog bg-card ring-0", !resizeHandle && "task-detail-dialog-plain")}
+      showCloseButton={false} aria-describedby={undefined}
+      overlayClassName="bg-[color-mix(in_oklab,var(--foreground)_7%,transparent)] supports-backdrop-filter:backdrop-blur-none"
+      style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      onCloseAutoFocus={(event) => event.preventDefault()}>
+    {resizeHandle}
+    <div className="task-detail-panel" aria-busy="true">
+      <header className="sticky top-0 z-[3] flex items-start gap-2.5 bg-card px-3.5 pt-[11px] pb-2.5 shadow-[var(--raise)]">
+        <div className="flex min-w-0 flex-1 items-center gap-[9px]">
+          <DialogTitle asChild>
+            <h2 className="shrink-0 font-mono text-[12px] font-medium tabular-nums text-muted-foreground">{taskKey}</h2>
+          </DialogTitle>
+        </div>
+        <Button variant="ghost" size="icon" aria-label="Close task detail" onClick={onClose}
+          className="size-7 shrink-0 rounded-[8px] text-muted-foreground hover:bg-accent hover:text-foreground"><X className="size-3.5" /></Button>
+      </header>
+      <div className="task-detail-body px-4 pt-3.5 pb-7">
+        <span className={EMPTY} role="status">Loading task…</span>
+      </div>
+    </div>
+    </DialogContent>
+    </Dialog>
+  )
+}
+
 /** `label value` in the header strip: the word is quiet, the value is mono. */
 function MetaInline({ label, value }: { label: string; value: string }) {
   return <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
