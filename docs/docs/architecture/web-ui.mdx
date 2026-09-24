@@ -262,6 +262,13 @@ error after rejection, and keep drafts only in React memory. Save and Discard
 remain unavailable until loading succeeds and while a save is pending, so saves
 cannot overlap. Edits made during a save remain an unsaved draft.
 
+**Settings → General** also carries **Backup & data retention** for the same
+explicit host: the nightly switch and time, retention days, backups to keep,
+compaction switch and threshold, **Save**, and **Run now**. The card shows the
+last run's time, deleted counts, and size change; a failed save or run is
+reported in place. See
+[State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that

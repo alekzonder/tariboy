@@ -4,6 +4,7 @@ import { getGlobalAgentShellScriptOn, getPluginContributionsOn, setGlobalAgentSh
 import { cn } from "@/lib/utils";
 import { ShellScriptEditor } from "@/components/ShellScriptEditor";
 import { SupportBundle } from "@/components/SupportBundle";
+import { MaintenanceSettingsCard } from "@/components/MaintenanceSettings";
 
 const SECTIONS = [
   { suffix: "", label: "General", end: true },
@@ -122,6 +123,7 @@ export function GeneralSettings() {
         load={load}
         save={save}
       />
+      <MaintenanceSettingsCard target={target} />
       <SupportBundle />
     </div>
   );

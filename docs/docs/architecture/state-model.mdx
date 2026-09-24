@@ -110,11 +110,55 @@ agent's already-created, unacknowledged deliveries vanish from its queue.
 A revoked subscription is skipped by fan-out and still owns its past deliveries.
 
 The invariant underneath all of it: **`messages` rows are never rewritten.**
-No chat operation re-channels, edits or deletes a published message. That is
+No chat operation re-channels, edits or deletes a published message; only
+[nightly retention](#nightly-backup-and-data-retention) deletes fully delivered
+messages older than the retention period. That is
 what lets pre-chats history stay readable without a data migration — a personal
 chat carries `legacy_agent`, and its feed unions the chat channel with the old
 projection of `agent:<a>:inbox` and `user:<customer>` merged by time — and it is
 why a chat can be created, joined and left without risking history.
+
+## Nightly backup and data retention
+
+Maintenance settings are one JSON value under `maintenance` in `daemon_config`;
+a missing value means the defaults: enabled, 03:00 daemon-host local time, 7
+backups, 90 days of retention, compaction on at 10% free pages. The last run's
+result (times, trigger, backup path, rows deleted per category, logical size
+before and after, compaction, error) is stored under `maintenance_last_run`.
+Operators change both with **Settings → General → Backup & data retention**,
+`tariboy maintenance get|set|run`, or `/api/maintenance`.
+
+A run, scheduled or manual, is serialized and always starts with a backup:
+`VACUUM INTO` writes a consistent copy while the daemon keeps serving, to
+`<base-dir>/backups/db/tariboyd-<UTC time>.db`, and only the newest configured
+number are kept. **If the backup fails, nothing is deleted.** Cleanup then
+removes data older than the retention period, each category in its own
+transaction:
+
+- **Native Tasks** — only whole trees whose every task is `done` or
+  `cancelled` with `completed_at` before the cutoff, with their comments,
+  waits, events, notifications and read state, relations, and workflow
+  executions, assignments, artifacts, questions, holds, subscriptions,
+  observations, and outbox rows. A tree related to a task that stays is kept.
+- **AI proxy Usage** — `ai_requests` rows. Retention is `0` (keep everything)
+  or at least 31 days, so the calendar-month budget window never loses rows.
+- **Messages** — messages whose every delivery is acknowledged or
+  dead-lettered, with those deliveries. Unacknowledged work is never deleted.
+  This is the only path that removes `messages` rows; old chat history
+  therefore ends at the retention period.
+- **Daemon events** (`events`) and task mutation idempotency records.
+
+When compaction is on and at least the threshold share of pages is free, a
+full `VACUUM` plus `wal_checkpoint(TRUNCATE)` returns the space to the file
+system. The daemon uses one SQLite connection, so every other database request
+waits for the few seconds this takes, and the disk needs free space about the
+size of the database. A failed `VACUUM` is rolled back by SQLite and recorded in
+the run result. A run missed while the daemon was down is not caught up.
+
+To restore, stop the daemon, replace `tariboyd.db` with a backup file (and
+remove any `tariboyd.db-wal` and `tariboyd.db-shm`), then start it again.
+
+The per-agent iteration pruner (`tariboy retention`) is separate and unchanged.
 
 ## Customer identity and read marks
 

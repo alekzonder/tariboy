@@ -159,8 +159,10 @@ logged for its agent without preventing unrelated agents from starting.
 
 In steady state it runs the schedule publisher, task-workflow outbox publisher,
 the per-agent goal reconciler, workflow question and observation reconcilers, AI ingestion, the daily pricing
-catalog worker, budget cache refresh, retention pruner, loop engines,
-and plugin supervisors.
+catalog worker, budget cache refresh, retention pruner, nightly database
+maintenance (backup, cleanup, compaction; see
+[State model](/docs/architecture/state-model#nightly-backup-and-data-retention)),
+loop engines, and plugin supervisors.
 Shutdown stops the proxy first, then cancels and awaits the pricing worker and
 the other workers before loops/plugins and SQLite stop. That ordering prevents
 a catalog publication, final outbox, or usage write from racing a closed

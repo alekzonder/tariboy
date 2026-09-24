@@ -313,6 +313,38 @@ export const getGlobalAgentShellScriptOn = (target: ApiTarget) =>
   apiOn<AgentShellScript>(resolveTarget(target), "GET", "/api/daemon/agent-shell-script");
 export const setGlobalAgentShellScriptOn = (target: ApiTarget, script: string) =>
   apiOn<{ saved: true }>(resolveTarget(target), "POST", "/api/daemon/agent-shell-script", { script });
+export interface MaintenanceSettings {
+  enabled: boolean;
+  time: string;
+  keep_backups: number;
+  retention_days: number;
+  compact: boolean;
+  compact_threshold_pct: number;
+}
+export interface MaintenanceRun {
+  started_at: string;
+  finished_at: string;
+  trigger: string;
+  backup: string;
+  deleted: Record<string, number>;
+  size_before: number;
+  size_after: number;
+  compacted: boolean;
+  error?: string;
+}
+export const getMaintenanceOn = (target: ApiTarget) =>
+  apiOn<{ settings: MaintenanceSettings; last_run: MaintenanceRun | null }>(resolveTarget(target), "GET", "/api/maintenance");
+export const setMaintenanceOn = (target: ApiTarget, settings: MaintenanceSettings) =>
+  apiOn<MaintenanceSettings>(resolveTarget(target), "POST", "/api/maintenance", {
+    enabled: settings.enabled,
+    time: settings.time,
+    "keep-backups": settings.keep_backups,
+    "retention-days": settings.retention_days,
+    compact: settings.compact,
+    "compact-threshold-pct": settings.compact_threshold_pct,
+  });
+export const runMaintenanceOn = (target: ApiTarget) =>
+  apiOn<MaintenanceRun>(resolveTarget(target), "POST", "/api/maintenance/run");
 export const getAgentShellScriptOn = (target: ApiTarget, name: string) =>
   agentGetOn<AgentShellScript>(target, name, "shell-script");
 export const setAgentShellScriptOn = (target: ApiTarget, name: string, script: string) =>
