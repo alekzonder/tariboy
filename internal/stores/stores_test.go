@@ -2,7 +2,6 @@ package stores
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -283,18 +282,23 @@ func TestCatalogClonesRefreshesAndSafelyRemovesGitStore(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(managed, "README.md"), []byte("local conflict\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	gitRun(t, "-C", managed, "config", "merge.autoStash", "true")
+	if err := os.WriteFile(filepath.Join(managed, "untracked.txt"), []byte("local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("remote conflict\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	gitRun(t, "-C", seed, "add", "README.md")
 	gitRun(t, "-C", seed, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "conflict")
 	gitRun(t, "-C", seed, "push", "origin", "main")
-	if _, err := catalog.Refresh(ctx, "team"); !errors.Is(err, ErrRefresh) || !strings.Contains(err.Error(), "README.md") {
-		t.Fatalf("Refresh with local conflict = %v, want ErrRefresh naming git's blocked file", err)
+	if _, err := catalog.Refresh(ctx, "team"); err != nil {
+		t.Fatalf("Refresh with local changes = %v, want managed clone reset to upstream", err)
 	}
-	if body, err := os.ReadFile(filepath.Join(managed, "README.md")); err != nil || string(body) != "local conflict\n" {
-		t.Fatalf("failed refresh changed local work: %q, %v", body, err)
+	if body, err := os.ReadFile(filepath.Join(managed, "README.md")); err != nil || string(body) != "remote conflict\n" {
+		t.Fatalf("refresh kept local change: %q, %v", body, err)
+	}
+	if _, err := os.Lstat(filepath.Join(managed, "untracked.txt")); !os.IsNotExist(err) {
+		t.Fatalf("refresh kept untracked file: %v", err)
 	}
 
 	if err := catalog.Remove(ctx, "team"); err != nil {
@@ -302,6 +306,34 @@ func TestCatalogClonesRefreshesAndSafelyRemovesGitStore(t *testing.T) {
 	}
 	if _, err := os.Lstat(managed); !os.IsNotExist(err) {
 		t.Fatalf("managed clone survived Remove: %v", err)
+	}
+}
+
+func TestCatalogRefreshKeepsLocalGitStoreChanges(t *testing.T) {
+	ctx := context.Background()
+	seed, remote, local := t.TempDir(), filepath.Join(t.TempDir(), "remote.git"), filepath.Join(t.TempDir(), "local")
+	gitRun(t, "init", "-b", "main", seed)
+	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("one\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, "-C", seed, "add", "README.md")
+	gitRun(t, "-C", seed, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "one")
+	gitRun(t, "clone", "--bare", seed, remote)
+	gitRun(t, "clone", remote, local)
+	if err := os.WriteFile(filepath.Join(local, "README.md"), []byte("local edit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	catalog, db := openCatalog(t, t.TempDir())
+	defer db.Close()
+	if _, err := catalog.Add(ctx, "local", local); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := catalog.Refresh(ctx, "local"); err != nil {
+		t.Fatal(err)
+	}
+	if body, err := os.ReadFile(filepath.Join(local, "README.md")); err != nil || string(body) != "local edit\n" {
+		t.Fatalf("refresh changed local Store work: %q, %v", body, err)
 	}
 }
 
