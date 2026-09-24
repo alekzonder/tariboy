@@ -131,7 +131,8 @@ Operators change both with **Settings → General → Backup & data retention**,
 A run, scheduled or manual, is serialized and always starts with a backup:
 `VACUUM INTO` writes a consistent copy while the daemon keeps serving, to
 `<base-dir>/backups/db/tariboyd-<UTC time>.db`, and only the newest configured
-number are kept. **If the backup fails, nothing is deleted.** Cleanup then
+number of those exact names are kept; other files in the directory are never
+rotated. **If the backup fails, nothing is deleted.** Cleanup then
 removes data older than the retention period, each category in its own
 transaction:
 
@@ -141,9 +142,13 @@ transaction:
   executions, assignments, artifacts, questions, holds, subscriptions,
   observations, and outbox rows. A tree related to a task that stays is kept.
 - **AI proxy Usage** — `ai_requests` rows. Retention is `0` (keep everything)
-  or at least 31 days, so the calendar-month budget window never loses rows.
+  or at least 31 days, so the calendar-month budget window never loses rows,
+  and rows inside the longest rolling `budgets` period are kept even when it
+  exceeds the retention period. `tariboy daemon reindex` can restore deleted
+  rows from retained transcripts; the next run deletes them again.
 - **Messages** — messages whose every delivery is acknowledged or
-  dead-lettered, with those deliveries. Unacknowledged work is never deleted.
+  dead-lettered, with those deliveries. Unacknowledged work, and messages that
+  workflow ingress has not consumed yet, are never deleted.
   This is the only path that removes `messages` rows; old chat history
   therefore ends at the retention period.
 - **Daemon events** (`events`) and task mutation idempotency records.
@@ -153,7 +158,9 @@ full `VACUUM` plus `wal_checkpoint(TRUNCATE)` returns the space to the file
 system. The daemon uses one SQLite connection, so every other database request
 waits for the few seconds this takes, and the disk needs free space about the
 size of the database. A failed `VACUUM` is rolled back by SQLite and recorded in
-the run result. A run missed while the daemon was down is not caught up.
+the run result. The scheduler checks the wall clock every minute, so the slot
+holds across system sleep; a slot noticed more than 15 minutes late — the
+daemon was down or the machine asleep — is skipped, not caught up.
 
 To restore, stop the daemon, replace `tariboyd.db` with a backup file (and
 remove any `tariboyd.db-wal` and `tariboyd.db-shm`), then start it again.
