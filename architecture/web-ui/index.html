@@ -231,6 +231,12 @@ the route’s explicit host target, retain an invalid draft and accessible Bash
 error after rejection, and keep drafts only in React memory. Save and Discard
 remain unavailable until loading succeeds and while a save is pending, so saves
 cannot overlap. Edits made during a save remain an unsaved draft.</p>
+<p><strong>Settings → General</strong> also carries <strong>Backup &amp; data retention</strong> for the same
+explicit host: the nightly switch and time, retention days, backups to keep,
+compaction switch and threshold, <strong>Save</strong>, and <strong>Run now</strong>. The card shows the
+last run’s time, deleted counts, and size change; a failed save or run is
+reported in place. See
+<a href="/tariboy/docs/architecture/state-model#nightly-backup-and-data-retention">State model</a>.</p>
 <p>Activity loads a terminal iteration’s proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -264,7 +270,10 @@ The sheet is one <code>--card</code> island with its own scroll and a sticky ide
 header carrying the task key, title, status, workflow version and assignee. A
 single banner under that header reports what needs a person — a frozen workflow
 with its error code, or an unanswered customer question — and other statuses
-speak through the status pill alone. History rows read as time, kind, a
+speak through the status pill alone. The sheet opens as soon as a task is
+chosen, in Tasks or from a chat, showing the task key and a loading line until
+the task and its history arrive; refreshing the task already open keeps the
+loaded panel in place. History rows read as time, kind, a
 one-line <code>key value · key value</code> payload summary and actor; the panel never
 prints a raw JSON payload.
 The detail sheet’s own keyboard- and pointer-accessible separator is the only
@@ -636,12 +645,13 @@ it is bounded: the shim sets each managed session’s <code>history-limit</code>
 lines (tmux’s own default is 2,000), so older output is discarded by tmux and
 cannot be recovered from the browser. Nothing about the history is persisted by
 the UI.</p>
-<p>The Console action row also exposes manual Exec for interactive and
-non-interactive agents. Its optional, memory-only one-shot text is sent to the
-route-selected host and affects only the newly requested iteration. Exec does
-not enable Autopilot or persist the draft. A successful interactive request
-reconnects terminal startup handling; a rejected request retains the draft for
-retry.</p>
+<p>The agent header exposes manual <strong>Exec</strong> before Start/Stop, only while the
+agent is enabled and not <code>bare:latest</code>, for interactive and non-interactive
+agents alike. It opens a dialog whose optional, memory-only one-shot text is
+sent to the route-selected host and affects only the newly requested iteration.
+Exec does not enable Autopilot or persist the draft. A successful request closes
+the dialog and, when the Console shows an interactive terminal, reconnects its
+startup handling; a rejected request keeps the dialog and the draft for retry.</p>
 <p>Permanent agent deletion requires confirmation in an in-app dialog that names
 the agent and warns that its durable data is also removed. Confirm sends the
 existing <code>force=true</code> and <code>purge=true</code> request. While that request is pending,

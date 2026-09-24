@@ -33,10 +33,11 @@ remains available on each AI call. A running soft deadline may be extended only
 before timeout enforcement starts.</p>
 <h2 id="controls"><a class="blume-heading-anchor" href="#controls">Controls</a></h2>
 <ul>
-<li><strong>Console Exec</strong> — start one manual iteration immediately, whether Autopilot
-is enabled or paused. It is available for both interactive and
-non-interactive agents; optional one-shot text is appended only to that
-iteration’s assembled prompt.</li>
+<li><strong>Exec</strong> (agent header, shown while the agent is enabled) — start one manual
+iteration immediately, whether Autopilot is enabled or paused. It is
+available for both interactive and non-interactive agents; optional one-shot
+text, entered in its dialog, is appended only to that iteration’s assembled
+prompt.</li>
 <li><strong>Pause / Disable Autopilot</strong> — prevent new autonomous iterations.</li>
 <li><strong>Kill</strong> — immediately stop current iteration or session; use when work is
 unsafe or stuck.</li>

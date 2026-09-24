@@ -93,6 +93,15 @@ that host before freezing sources. Register and build sources you trust to
 install their declared skills. Store source contents remain outside the
 support-bundle allowlist.
 
+Database backups written by nightly maintenance live in the owner-only
+`<base-dir>/backups/db/` directory, and each backup file is mode `0600`. A
+backup is a complete, unmasked copy of `tariboyd.db`: task text, messages,
+Usage rows, and **agent secret values in plaintext**. Unlike `tariboy backup`,
+nothing is masked, and a deleted or rotated secret remains in each kept backup
+until rotation removes it. Treat backups like the database itself and never
+copy them off the host casually. Backups are outside the support-bundle
+allowlist.
+
 ## Pricing catalog boundary
 
 The daemon downloads model prices only from LiteLLM's fixed production HTTPS
@@ -129,7 +138,7 @@ to localStorage.
 
 ## Alpha signing and Gatekeeper
 
-`0.69.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.70.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

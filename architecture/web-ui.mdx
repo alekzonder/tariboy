@@ -262,6 +262,13 @@ error after rejection, and keep drafts only in React memory. Save and Discard
 remain unavailable until loading succeeds and while a save is pending, so saves
 cannot overlap. Edits made during a save remain an unsaved draft.
 
+**Settings → General** also carries **Backup & data retention** for the same
+explicit host: the nightly switch and time, retention days, backups to keep,
+compaction switch and threshold, **Save**, and **Run now**. The card shows the
+last run's time, deleted counts, and size change; a failed save or run is
+reported in place. See
+[State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -297,7 +304,10 @@ The sheet is one `--card` island with its own scroll and a sticky identity
 header carrying the task key, title, status, workflow version and assignee. A
 single banner under that header reports what needs a person — a frozen workflow
 with its error code, or an unanswered customer question — and other statuses
-speak through the status pill alone. History rows read as time, kind, a
+speak through the status pill alone. The sheet opens as soon as a task is
+chosen, in Tasks or from a chat, showing the task key and a loading line until
+the task and its history arrive; refreshing the task already open keeps the
+loaded panel in place. History rows read as time, kind, a
 one-line `key value · key value` payload summary and actor; the panel never
 prints a raw JSON payload.
 The detail sheet's own keyboard- and pointer-accessible separator is the only
@@ -709,12 +719,13 @@ lines (tmux's own default is 2,000), so older output is discarded by tmux and
 cannot be recovered from the browser. Nothing about the history is persisted by
 the UI.
 
-The Console action row also exposes manual Exec for interactive and
-non-interactive agents. Its optional, memory-only one-shot text is sent to the
-route-selected host and affects only the newly requested iteration. Exec does
-not enable Autopilot or persist the draft. A successful interactive request
-reconnects terminal startup handling; a rejected request retains the draft for
-retry.
+The agent header exposes manual **Exec** before Start/Stop, only while the
+agent is enabled and not `bare:latest`, for interactive and non-interactive
+agents alike. It opens a dialog whose optional, memory-only one-shot text is
+sent to the route-selected host and affects only the newly requested iteration.
+Exec does not enable Autopilot or persist the draft. A successful request closes
+the dialog and, when the Console shows an interactive terminal, reconnects its
+startup handling; a rejected request keeps the dialog and the draft for retry.
 
 Permanent agent deletion requires confirmation in an in-app dialog that names
 the agent and warns that its durable data is also removed. Confirm sends the

@@ -85,6 +85,9 @@ tariboy has three command surfaces:
 | `tariboy loop on-error` | Get or set loop on-error policy; omit value to read |
 | `tariboy loop on-timeout` | Get or set loop on-timeout policy; omit value to read |
 | `tariboy loop timeout` | Get or set loop timeout (seconds); omit value to read |
+| `tariboy maintenance get` | Show database maintenance settings and the last run |
+| `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
+| `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
 | `tariboy message send` | Publish a message to a channel (operator) |
 | `tariboy plugin inspect` | Show one plugin's manifest, state and socket |
 | `tariboy plugin install` | Install and start a plugin from a directory with plugin.json |
@@ -102,7 +105,7 @@ tariboy has three command surfaces:
 | `tariboy store add NAME SOURCE` | Register a Git URL or absolute local directory on the daemon host |
 | `tariboy store list` | List this daemon's Store registrations |
 | `tariboy store show NAME` | Read current images, versions and diagnostics from disk |
-| `tariboy store refresh NAME` | Fast-forward pull a Git source, or reread a non-Git local directory |
+| `tariboy store refresh NAME` | Reset a managed Git clone to its upstream, discarding local changes; fast-forward pull a local Git checkout; or reread a non-Git local directory |
 | `tariboy store auto NAME [--interval MINUTES] [--image IMAGE]` | Set the automatic refresh-and-build policy; the daemon refreshes every interval and rebuilds the selected images that need an update, and `--interval 0` disables it |
 | `tariboy store remove NAME` | Unregister a Store and remove only its managed clone; preserve local sources and built images |
 | `ttasks queue create` | Create a task queue |

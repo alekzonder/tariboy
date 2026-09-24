@@ -77,6 +77,14 @@ Building a Store with <code>skills-lock.json</code> invokes npm’s skills insta
 that host before freezing sources. Register and build sources you trust to
 install their declared skills. Store source contents remain outside the
 support-bundle allowlist.</p>
+<p>Database backups written by nightly maintenance live in the owner-only
+<code>&lt;base-dir&gt;/backups/db/</code> directory, and each backup file is mode <code>0600</code>. A
+backup is a complete, unmasked copy of <code>tariboyd.db</code>: task text, messages,
+Usage rows, and <strong>agent secret values in plaintext</strong>. Unlike <code>tariboy backup</code>,
+nothing is masked, and a deleted or rotated secret remains in each kept backup
+until rotation removes it. Treat backups like the database itself and never
+copy them off the host casually. Backups are outside the support-bundle
+allowlist.</p>
 <h2 id="pricing-catalog-boundary"><a class="blume-heading-anchor" href="#pricing-catalog-boundary">Pricing catalog boundary</a></h2>
 <p>The daemon downloads model prices only from LiteLLM’s fixed production HTTPS
 URL; proxy input, model names, and operator configuration cannot redirect that
@@ -107,7 +115,7 @@ paths are discarded when their tile unmounts. Pointer coordinates, drop
 previews, and drag ghost labels are transient React state and are never written
 to localStorage.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.69.1</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.70.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;
