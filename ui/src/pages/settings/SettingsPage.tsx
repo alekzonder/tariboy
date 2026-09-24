@@ -123,7 +123,7 @@ export function GeneralSettings() {
         load={load}
         save={save}
       />
-      <MaintenanceSettingsCard target={target} />
+      <MaintenanceSettingsCard key={target?.id ?? "active"} target={target} />
       <SupportBundle />
     </div>
   );

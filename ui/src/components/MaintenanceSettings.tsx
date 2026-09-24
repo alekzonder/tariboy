@@ -24,8 +24,10 @@ function describeRun(run: MaintenanceRun) {
   ].join(" · ");
 }
 
+// Mount with a per-host key so a draft for one host is never saved to another.
 export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
   const [form, setForm] = useState<MaintenanceSettings | null>(null);
+  const [saved, setSaved] = useState<MaintenanceSettings | null>(null);
   const [lastRun, setLastRun] = useState<MaintenanceRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -33,7 +35,13 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
   useEffect(() => {
     let current = true;
     getMaintenanceOn(target)
-      .then((r) => { if (current) { setForm(r.settings); setLastRun(r.last_run); } })
+      .then((r) => {
+        if (!current) return;
+        setForm(r.settings);
+        setSaved(r.settings);
+        setLastRun(r.last_run);
+        setError(r.last_run?.error ?? "");
+      })
       .catch((e) => { if (current) setError(reason(e)); });
     return () => { current = false; };
   }, [target]);
@@ -44,14 +52,20 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
     try { await fn(); } catch (e) { setError(reason(e)); }
     setBusy(false);
   };
-  const save = () => act(async () => { if (form) setForm(await setMaintenanceOn(target, form)); });
+  const save = () => act(async () => {
+    if (!form) return;
+    const next = await setMaintenanceOn(target, form);
+    setForm(next);
+    setSaved(next);
+  });
   const run = () => act(async () => {
     const r = await runMaintenanceOn(target);
     setLastRun(r);
     if (r.error) setError(r.error);
   });
   const patch = (p: Partial<MaintenanceSettings>) => setForm((f) => (f ? { ...f, ...p } : f));
-  const num = (v: string) => (v === "" ? 0 : Number(v));
+  const num = (v: string) => Number.parseInt(v, 10) || 0;
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
 
   return (
     <Card>
@@ -99,8 +113,9 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" disabled={busy} onClick={() => void save()}>Save</Button>
-              <Button size="sm" variant="secondary" disabled={busy} onClick={() => void run()}>Run now</Button>
+              <Button size="sm" variant="secondary" disabled={busy || dirty} onClick={() => void run()}>Run now</Button>
             </div>
+            {dirty && <p className="text-xs text-muted-foreground">Save before running: Run now uses the saved settings.</p>}
           </>
         )}
         {lastRun && <p className="text-xs text-muted-foreground">Last run: {describeRun(lastRun)}</p>}

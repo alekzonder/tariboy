@@ -73,6 +73,14 @@ var ErrBusy = errors.New("maintenance is already running")
 const (
 	settingsKey = "maintenance"
 	resultKey   = "maintenance_last_run"
+	backupStamp = "20060102T150405Z"
+	// pollInterval bounds how late a slot is noticed; timers stop during
+	// system sleep, so the loop re-reads the wall clock instead of trusting
+	// one long timer.
+	pollInterval = time.Minute
+	// lateGrace is how late a slot may still run; a later wake (a laptop
+	// resuming at noon) skips it, as missed runs are not caught up.
+	lateGrace = 15 * time.Minute
 )
 
 type Service struct {
@@ -197,10 +205,15 @@ func (s *Service) backup(keep int) (string, error) {
 	if err := os.Chmod(s.backupDir, 0o700); err != nil {
 		return "", err
 	}
-	name := "tariboyd-" + s.now().UTC().Format("20060102T150405Z") + ".db"
+	name := "tariboyd-" + s.now().UTC().Format(backupStamp) + ".db"
 	final := filepath.Join(s.backupDir, name)
 	tmp := final + ".partial"
-	_ = os.Remove(tmp)
+	// Leftovers of interrupted runs are never valid backups.
+	if stale, _ := filepath.Glob(filepath.Join(s.backupDir, "*.partial")); len(stale) > 0 {
+		for _, f := range stale {
+			_ = os.Remove(f)
+		}
+	}
 	if _, err := s.st.DB.Exec(`VACUUM INTO ?`, tmp); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
@@ -211,9 +224,17 @@ func (s *Service) backup(keep int) (string, error) {
 	if err := os.Rename(tmp, final); err != nil {
 		return "", err
 	}
-	all, err := filepath.Glob(filepath.Join(s.backupDir, "tariboyd-*.db"))
+	matches, err := filepath.Glob(filepath.Join(s.backupDir, "tariboyd-*.db"))
 	if err != nil {
 		return final, err
+	}
+	// Rotate only files this service named, never an operator's own copy.
+	var all []string
+	for _, f := range matches {
+		stamp := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(f), "tariboyd-"), ".db")
+		if _, err := time.Parse(backupStamp, stamp); err == nil {
+			all = append(all, f)
+		}
 	}
 	sort.Strings(all) // UTC timestamps sort chronologically
 	for _, old := range all[:max(0, len(all)-keep)] {
@@ -261,7 +282,23 @@ func (s *Service) cleanup(cutoff string, deleted map[string]int64) error {
 		}
 	}
 	step("tasks", func(tx *sql.Tx) (int64, error) { return purgeTasks(tx, cutoff) })
-	step("ai_requests", simple(`DELETE FROM ai_requests WHERE `+older("ts")))
+	step("ai_requests", func(tx *sql.Tx) (int64, error) {
+		// A rolling budget sums spend over its own period, which may be
+		// longer than the retention period; keep what it can still count.
+		aiCutoff := cutoff
+		var longest int64
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(period_s),0) FROM budgets`).Scan(&longest); err != nil {
+			return 0, err
+		}
+		if c := s.now().UTC().Add(-time.Duration(longest) * time.Second).Format(time.RFC3339Nano); longest > 0 && c < aiCutoff {
+			aiCutoff = c
+		}
+		r, err := tx.Exec(`DELETE FROM ai_requests WHERE `+older("ts"), aiCutoff)
+		if err != nil {
+			return 0, err
+		}
+		return r.RowsAffected()
+	})
 	step("messages", func(tx *sql.Tx) (int64, error) { return purgeMessages(tx, cutoff) })
 	step("events", simple(`DELETE FROM events WHERE `+older("ts")))
 	step("task_idempotency", simple(`DELETE FROM task_idempotency WHERE `+older("created_at")))
@@ -349,10 +386,14 @@ func purgeTasks(tx *sql.Tx, cutoff string) (int64, error) {
 }
 
 // purgeMessages removes old messages whose every delivery is acknowledged or
-// dead-lettered, with those deliveries. Unacknowledged work is never deleted.
+// dead-lettered, with those deliveries. Unacknowledged work and messages
+// workflow ingress has not consumed yet are never deleted.
 func purgeMessages(tx *sql.Tx, cutoff string) (int64, error) {
 	victims := `(SELECT id FROM messages m WHERE ` + older("m.ts") + ` AND NOT EXISTS (
-		SELECT 1 FROM deliveries d WHERE d.message_id = m.id AND d.acked_at IS NULL AND d.dlq = 0))`
+		SELECT 1 FROM deliveries d WHERE d.message_id = m.id AND d.acked_at IS NULL AND d.dlq = 0)
+		AND NOT EXISTS (SELECT 1 FROM task_workflow_message_sequence q
+		  JOIN task_workflow_ingress_state i ON i.singleton = 1
+		  WHERE q.message_id = m.id AND q.sequence > i.last_message_sequence))`
 	if _, err := tx.Exec(`DELETE FROM deliveries WHERE message_id IN `+victims, cutoff); err != nil {
 		return 0, err
 	}
@@ -397,34 +438,39 @@ func nextRun(now time.Time, hhmm string) time.Time {
 	return next
 }
 
-// Loop runs the scheduled maintenance until ctx ends. A settings change
-// re-plans the next run. A run missed while the daemon was down is not
-// caught up.
+// Loop runs the scheduled maintenance until ctx ends. It polls the wall
+// clock, so a slot is honored across system sleep, and a settings change
+// re-plans the next slot. A slot noticed more than lateGrace late is skipped.
 func (s *Service) Loop(ctx context.Context, after func(time.Duration) <-chan time.Time) {
 	if after == nil {
 		after = time.After
 	}
-	var lastPlanned time.Time
+	var planned time.Time
 	for {
 		set, err := s.Settings()
 		if err != nil {
 			s.log.Warn("maintenance settings", "err", err)
 			set = DefaultSettings()
 		}
-		now := s.now()
-		// Plan past the last fired slot so a timer that fires a hair early
-		// cannot schedule the same slot twice.
-		planned := nextRun(maxTime(now, lastPlanned), set.Time)
+		if planned.IsZero() {
+			planned = nextRun(s.now(), set.Time)
+		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-s.wake:
-		case <-after(planned.Sub(now)):
-			lastPlanned = planned
-			if set.Enabled {
-				_, _ = s.run("scheduled")
-			}
+			planned = time.Time{}
+			continue
+		case <-after(pollInterval):
 		}
+		now := s.now()
+		if now.Before(planned) {
+			continue
+		}
+		if set.Enabled && now.Sub(planned) <= lateGrace {
+			_, _ = s.run("scheduled")
+		}
+		planned = nextRun(maxTime(now, planned), set.Time)
 	}
 }
 

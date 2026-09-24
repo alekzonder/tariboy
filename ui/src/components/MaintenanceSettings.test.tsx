@@ -46,6 +46,18 @@ describe("MaintenanceSettingsCard", () => {
     await waitFor(() => expect(setMaintenanceOn).toHaveBeenCalledWith(target, { ...defaults, retention_days: 120, compact: false }));
   });
 
+  it("shows a failed previous run on load", async () => {
+    vi.mocked(getMaintenanceOn).mockResolvedValue({ settings: defaults, last_run: { ...lastRun, error: "backup: disk full" } });
+    render(<MaintenanceSettingsCard target={null} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("backup: disk full");
+  });
+
+  it("runs only saved settings", async () => {
+    render(<MaintenanceSettingsCard target={null} />);
+    fireEvent.change(await screen.findByLabelText("Backups to keep"), { target: { value: "3" } });
+    expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+  });
+
   it("runs now and shows a run error in place", async () => {
     vi.mocked(runMaintenanceOn).mockResolvedValue({ ...lastRun, trigger: "manual", error: "backup: disk full" });
     render(<MaintenanceSettingsCard target={null} />);

@@ -1,11 +1,13 @@
 package maintenance
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -233,12 +235,13 @@ func TestCleanupAIRequestsMessagesAndEvents(t *testing.T) {
 	db := st.DB
 	exec(t, db, `INSERT INTO ai_requests(id,ts) VALUES ('old',?),('new',?)`, ts(100), ts(1))
 	exec(t, db, `INSERT INTO events(ts,kind) VALUES (?,'old'),(?,'new')`, ts(100), ts(1))
-	for _, m := range []struct{ id, ts string }{{"acked", ts(100)}, {"dlq", ts(100)}, {"pending", ts(100)}, {"fresh", ts(1)}} {
+	for _, m := range []struct{ id, ts string }{{"acked", ts(100)}, {"dlq", ts(100)}, {"pending", ts(100)}, {"fresh", ts(1)}, {"uningested", ts(100)}} {
 		exec(t, db, `INSERT INTO messages(id,channel,ts) VALUES (?,'c',?)`, m.id, m.ts)
 	}
 	exec(t, db, `INSERT INTO deliveries(subscription_id,message_id,acked_at,dlq) VALUES
 		('s','acked',?,0),('s','dlq',NULL,1),('s','pending',NULL,0),('s2','pending',?,0),('s','fresh',?,0)`, ts(99), ts(99), ts(1))
-	exec(t, db, `INSERT INTO task_workflow_message_sequence(message_id) VALUES ('acked')`)
+	exec(t, db, `INSERT INTO task_workflow_message_sequence(sequence,message_id) VALUES (1,'acked'),(2,'uningested')`)
+	exec(t, db, `UPDATE task_workflow_ingress_state SET last_message_sequence=1`)
 
 	res, err := svc.Run()
 	if err != nil || res.Error != "" {
@@ -261,8 +264,8 @@ func TestCleanupAIRequestsMessagesAndEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
-	if strings.Join(ids, ",") != "fresh,pending" {
-		t.Errorf("messages = %v, want fresh,pending", ids)
+	if strings.Join(ids, ",") != "fresh,pending,uningested" {
+		t.Errorf("messages = %v, want fresh,pending,uningested", ids)
 	}
 	if n := count(t, db, `SELECT COUNT(*) FROM deliveries`); n != 3 {
 		t.Errorf("deliveries = %d, want 3", n)
@@ -330,4 +333,119 @@ func TestRunIsExclusive(t *testing.T) {
 	if _, err := svc.Run(); !errors.Is(err, ErrBusy) {
 		t.Fatalf("err = %v, want ErrBusy", err)
 	}
+}
+
+func TestCleanupKeepsUsageForLongestRollingBudget(t *testing.T) {
+	svc, st, _ := open(t)
+	exec(t, st.DB, `INSERT INTO budgets(scope,limit_usd,period_s,mode) VALUES ('global',10,?,'block')`, 200*24*3600)
+	exec(t, st.DB, `INSERT INTO ai_requests(id,ts) VALUES ('in-window',?),('too-old',?)`, ts(150), ts(250))
+	if res, err := svc.Run(); err != nil || res.Error != "" {
+		t.Fatalf("run: %+v %v", res, err)
+	}
+	if n := count(t, st.DB, `SELECT COUNT(*) FROM ai_requests WHERE id='in-window'`); n != 1 {
+		t.Fatal("deleted a Usage row inside the rolling budget period")
+	}
+	if n := count(t, st.DB, `SELECT COUNT(*) FROM ai_requests WHERE id='too-old'`); n != 0 {
+		t.Fatal("kept a Usage row older than every window")
+	}
+}
+
+func TestRotationIgnoresForeignFiles(t *testing.T) {
+	svc, _, backups := open(t)
+	if err := svc.SetSettings(Settings{Enabled: true, Time: "03:00", KeepBackups: 1, RetentionDays: 90}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(backups, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"tariboyd-before-upgrade.db", "tariboyd-20260101T000000Z.db.partial"} {
+		if err := os.WriteFile(filepath.Join(backups, f), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := svc.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(backups)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if strings.Join(names, ",") != filepath.Base(res.Backup)+",tariboyd-before-upgrade.db" {
+		t.Fatalf("backups dir = %v", names)
+	}
+}
+
+// clock is a goroutine-safe fake wall clock.
+type clock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *clock) now() time.Time  { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *clock) set(t time.Time) { c.mu.Lock(); c.t = t; c.mu.Unlock() }
+
+func TestLoopFiresOnWallClockAndSkipsLateWakes(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	day := func(d, h, m int) time.Time { return time.Date(2026, time.September, d, h, m, 0, 0, time.UTC) }
+	clk := &clock{t: day(24, 2, 0)}
+	svc := New(st, filepath.Join(dir, "backups"), clk.now, nil)
+
+	tick := make(chan time.Time)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		svc.Loop(ctx, func(time.Duration) <-chan time.Time { return tick })
+		close(done)
+	}()
+	// A second tick is received only after the first one was fully handled.
+	step := func(at time.Time) {
+		clk.set(at)
+		tick <- at
+		tick <- at
+	}
+	started := func() string {
+		r, err := svc.LastResult()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r == nil {
+			return ""
+		}
+		return r.StartedAt
+	}
+
+	step(day(24, 2, 30))
+	if got := started(); got != "" {
+		t.Fatalf("ran before 03:00: %s", got)
+	}
+	step(day(24, 3, 1))
+	if got := started(); got != "2026-09-24T03:01:00Z" {
+		t.Fatalf("scheduled run = %q", got)
+	}
+	// Woken hours after the slot (a sleeping laptop): skipped, not caught up.
+	step(day(25, 9, 0))
+	if got := started(); got != "2026-09-24T03:01:00Z" {
+		t.Fatalf("late wake ran: %q", got)
+	}
+	step(day(26, 3, 0))
+	if got := started(); got != "2026-09-26T03:00:00Z" {
+		t.Fatalf("next night = %q", got)
+	}
+	// Disabled: the slot passes without a run.
+	if err := svc.SetSettings(Settings{Enabled: false, Time: "03:00", KeepBackups: 7, RetentionDays: 90}); err != nil {
+		t.Fatal(err)
+	}
+	step(day(27, 3, 0))
+	if got := started(); got != "2026-09-26T03:00:00Z" {
+		t.Fatalf("disabled run = %q", got)
+	}
+	cancel()
+	<-done
 }
