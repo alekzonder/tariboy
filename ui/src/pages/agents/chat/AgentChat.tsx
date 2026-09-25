@@ -61,8 +61,10 @@ function transcript(messages: ChatMessage[], agent: string): string {
  * There is no conversation list here: the conversation is whichever agent the
  * sidebar has selected, one agent to one thread.
  */
-export default function AgentChat({ hostId = "", leading }: {
+export default function AgentChat({ hostId = "", leading, personalOnly = false }: {
   hostId?: string;
+  /** Simple mode: the conversation only, without the chat tablist. */
+  personalOnly?: boolean;
   /** Rendered at the left of the toolbar by whoever owns the section switch,
    *  so the tab keeps one toolbar row instead of two. */
   leading?: ReactNode;
@@ -268,7 +270,7 @@ export default function AgentChat({ hostId = "", leading }: {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
         {leading}
-        <div role="tablist" aria-label="Agent chats" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
+        {!personalOnly && <div role="tablist" aria-label="Agent chats" className="flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5">
           {[...KINDS.map(([key, label]) => [key, label] as [string, string]),
             ...shared.map((chat) => [chat.id, chat.title || chat.id] as [string, string]),
           ].map(([key, label]) => (
@@ -294,7 +296,7 @@ export default function AgentChat({ hostId = "", leading }: {
           >
             <Plus className="size-3.5" aria-hidden />
           </button>
-        </div>
+        </div>}
         <label className="flex h-7 w-[232px] items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-muted-foreground">
           <Search className="size-3 shrink-0" aria-hidden />
           <input

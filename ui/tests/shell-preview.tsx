@@ -76,6 +76,9 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   return real(input, init);
 }) as typeof fetch;
 
+// The preview's default route is Console, an Expert tab.
+localStorage.setItem("app:ui-mode:v1", "expert");
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <MemoryRouter initialEntries={[new URLSearchParams(location.search).get("route") ?? "/agents/local/builder/console"]}>

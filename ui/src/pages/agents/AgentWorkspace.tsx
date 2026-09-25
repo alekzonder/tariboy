@@ -25,6 +25,7 @@ import { customerQuestionAttentionKey } from "@/components/customerQuestionNotif
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
 import { GoalHelp } from "@/components/GoalHelp";
 import { useChatUnread } from "./chat/useChatUnread";
+import { useUiMode } from "@/lib/uiMode";
 
 const TABS = [
   ["chat", "Chat"],
@@ -35,6 +36,8 @@ const TABS = [
   ["configuration", "Configuration"],
   ["advanced", "Advanced"],
 ] as const;
+// The tabs Simple mode keeps; the header, Start/Stop included, is the same in both.
+const SIMPLE_TABS: ReadonlySet<string> = new Set(["chat", "tasks", "configuration"]);
 
 export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unavailable = false }: {
   hostId: string;
@@ -43,6 +46,8 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   refresh: () => void;
   unavailable?: boolean;
 }) {
+  const simple = useUiMode() === "simple";
+  const tabs = simple ? TABS.filter(([key]) => SIMPLE_TABS.has(key)) : TABS;
   const { tab = "console" } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -106,8 +111,9 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     return () => window.clearInterval(timer);
   }, [connection, refreshStatus, unavailable]);
 
-  if (!TABS.some(([key]) => key === tab)) {
-    return <Navigate to={`/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/console`} replace />;
+  // An unknown or hidden tab opens the default one: Console, or Chat in Simple.
+  if (!tabs.some(([key]) => key === tab)) {
+    return <Navigate to={`/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/${simple ? "chat" : "console"}`} replace />;
   }
   if (connection === "unavailable") {
     return (
@@ -252,7 +258,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
               <p className="text-muted-foreground tabular-nums">Hour {status.budget.hour_spent_usd.toFixed(2)} / {status.budget.hour_usd || "Unlimited"} · Day {status.budget.day_spent_usd.toFixed(2)} / {status.budget.day_usd || "Unlimited"} · Week {status.budget.week_spent_usd.toFixed(2)} / {status.budget.week_usd || "Unlimited"} · Month {status.budget.month_spent_usd.toFixed(2)} / {status.budget.month_usd || "Unlimited"}</p>
             </div>}
             <nav aria-label="Agent workspace" className="flex items-center gap-0.5 border-b px-3">
-              {TABS.map(([key, label]) => (
+              {tabs.map(([key, label]) => (
                 <NavLink
                   key={key}
                   to={`${base}/${key}`}

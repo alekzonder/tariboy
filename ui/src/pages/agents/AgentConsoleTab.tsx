@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { SendFilesButton } from "@/components/SendFilesButton";
 import { TuiScreen } from "@/components/TuiScreen";
 import { useFileDropTarget } from "@/hooks/useFileDropTarget";
@@ -72,8 +71,8 @@ export default function AgentConsoleTab({ hostId, agent, refresh, execCount = 0 
         </div>
       ) : !alive ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground">
+          {/* Start/Stop live only in the agent header. */}
           <p>Agent is stopped.</p>
-          <Button size="sm" onClick={() => void start()}>Start</Button>
         </div>
       ) : (
         <TuiScreen controller={controller} fill daemon={target} onStart={start} />

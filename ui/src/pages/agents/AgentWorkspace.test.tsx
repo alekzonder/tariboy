@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import { addDaemon } from "@/lib/daemons";
 import AgentWorkspace from "./AgentWorkspace";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
 import { agentGetOn } from "@/lib/api";
 import * as desktop from "@/lib/desktop";
+import { UI_MODE_KEY } from "@/lib/uiMode";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -36,6 +37,8 @@ const agent = {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  // These cases cover the full workspace; Simple mode has its own block below.
+  localStorage.setItem(UI_MODE_KEY, "expert");
   vi.mocked(agentGetOn).mockResolvedValue({
     name: "worker",
     state: "running",
@@ -389,5 +392,46 @@ describe("AgentWorkspace", () => {
         "",
       ]),
     );
+  });
+});
+
+describe("AgentWorkspace in Simple mode", () => {
+  function Location() {
+    return <p data-testid="location">{useLocation().pathname}</p>;
+  }
+  function renderAt(path: string) {
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={<><AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} /><Location /></>}
+            />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+  }
+
+  beforeEach(() => localStorage.removeItem(UI_MODE_KEY));
+
+  it("shows only Chat, Tasks and Configuration with the full header", async () => {
+    renderAt("/agents/local/worker/tasks");
+
+    const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Chat",
+      "Tasks",
+      "Configuration",
+    ]);
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "IMPROVE-37" })).toBeInTheDocument();
+  });
+
+  it.each(["console", "autopilot", "activity", "advanced"])("sends a hidden %s tab to Chat", async (tab) => {
+    renderAt(`/agents/local/worker/${tab}`);
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/chat"));
   });
 });
