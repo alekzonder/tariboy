@@ -128,15 +128,6 @@
        is a token here so no markup has to spell out a color. */
     --raise: 0 1px 2px oklch(24% .03 255/.10); /* @kind shadow */
     --panel-radius: 14px; /* @kind radius */
-
-    /* terminal workspace (flexlayout) — the thematic half of what
-       terminalWorkspace.css used to declare on .flexlayout__layout */
-    --workspace-tabset: color-mix(in oklab, var(--muted) 72%, var(--background-base));
-    --workspace-drag-primary: color-mix(in oklab, var(--primary) 16%, transparent);
-    --workspace-drag-secondary: color-mix(in oklab, var(--primary) 12%, transparent);
-    --workspace-font-size: 12px; /* @kind font */
-    --workspace-splitter: 6px; /* @kind spacing */
-    --workspace-splitter-active: 10px; /* @kind spacing */
 }
 
 .dark {

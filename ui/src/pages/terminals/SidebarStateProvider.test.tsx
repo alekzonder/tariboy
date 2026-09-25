@@ -32,7 +32,7 @@ describe("SidebarStateProvider", () => {
     fireEvent.click(screen.getByRole("button", { name: "hide" }));
 
     expect(screen.getByText("268:true")).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 268, hidden: true } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ width: 268, hidden: true });
   });
 });

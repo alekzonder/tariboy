@@ -1,5 +1,5 @@
 import { expect, test, waitForMainWindow } from "./fixture";
-import type { W3CClient, W3CElement } from "./w3c";
+import type { W3CClient } from "./w3c";
 
 // A live tmux pane is required for the scrollback toolbar to render at all, so
 // the agent runs the stub harness with a long sleep: the iteration keeps its
@@ -74,51 +74,6 @@ async function clickButton(desktop: W3CClient, label: string): Promise<void> {
   `), { timeout: 60_000 }).toBe(true);
   const button = await desktop.findElement("xpath", `//button[normalize-space(.)='${label}']`);
   await desktop.elementClick(button);
-}
-
-/** Expand the agent sidebar if a previous spec left it collapsed.
- *
- * The sidebar is rendered conditionally on `sidebar.hidden`, and that flag is
- * persisted in the webview's localStorage — which outlives a spec boundary,
- * unlike the per-test daemon base dir. titlebar-drag runs right before this
- * file and toggles the control, so the sidebar can be gone before we start.
- * That spec already accepts either initial label; this one does the same
- * instead of depending on the visibility it inherits. */
-async function ensureSidebarShown(desktop: W3CClient): Promise<void> {
-  const toggleLabel = async () => desktop.execute<string>(`
-    const toggle = document.querySelector('header button[aria-label$="agents"]');
-    return toggle ? toggle.getAttribute("aria-label") : "no toggle";
-  `);
-  await expect.poll(toggleLabel, { timeout: 60_000 }).not.toBe("no toggle");
-  if (await toggleLabel() === "Show agents") {
-    const toggle = await desktop.findElement(
-      "css selector",
-      'header button[aria-label$="agents"]',
-    );
-    await desktop.elementClick(toggle);
-    await expect.poll(toggleLabel, { timeout: 60_000 }).toBe("Hide agents");
-  }
-}
-
-/** Wait for an agent's sidebar entry and hand back its element.
- *
- * The sidebar is fed by a 3s poll of the aggregate agents list, so an agent
- * created over HTTP mid-test appears there a tick later than it exists on the
- * daemon. The poll reports what it actually saw, so a timeout distinguishes
- * "the entry is merely late" from "there is no sidebar at all" or "the sidebar
- * lists other agents but not this one" without extra instrumentation. */
-async function awaitSidebarEntry(desktop: W3CClient, agent: string): Promise<W3CElement> {
-  const selector = `[aria-label="Open ${agent}"]`;
-  await ensureSidebarShown(desktop);
-  await expect.poll(async () => desktop.execute<string>(`
-    if (document.querySelector(${JSON.stringify(selector)})) return "ready";
-    if (!document.querySelector("aside")) return "no sidebar";
-    const listed = [...document.querySelectorAll('aside [aria-label^="Open "]')]
-      .map((entry) => entry.getAttribute("aria-label"))
-      .join(", ");
-    return "sidebar without the entry: " + (listed || "(no entries)");
-  `), { timeout: 60_000 }).toBe("ready");
-  return desktop.findElement("css selector", selector);
 }
 
 async function toolbarText(desktop: W3CClient): Promise<string> {
@@ -234,18 +189,6 @@ test("the shared terminal toolbar browses tmux scrollback on Console and Workspa
     `window.location.hash = ${JSON.stringify(`#/agents/local/${AGENT}/console`)}; return true;`,
   );
   await exerciseScrollback(desktop, "standalone");
-
-  // The same shared component embedded in a Workspace tile.
-  const workspaceLink = await desktop.findElement(
-    "css selector",
-    'header a[href$="/workspace"]',
-  );
-  await desktop.elementClick(workspaceLink);
-  await expect.poll(() => desktop.execute<string>("return window.location.hash;"))
-    .toBe("#/workspace");
-  const sidebarEntry = await awaitSidebarEntry(desktop, AGENT);
-  await desktop.elementClick(sidebarEntry);
-  await exerciseScrollback(desktop, "workspace");
 
   await desktop.execute(`
     fetch(window.__scrollbackBaseURL + "/api/agents/" + ${JSON.stringify(AGENT)} + "/stop", {

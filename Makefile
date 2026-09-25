@@ -612,6 +612,6 @@ full-check:
 	run_step "group-request-deadline-e2e" './scripts/group-request-deadline-e2e.sh'; \
 	run_step "full-smoke"                '$(SUBMAKE) full-smoke'; \
 	run_step "ui-tasks-browser"          'need_node_modules ui && cd ui && npm run test:tasks-browser'; \
-	run_step "ui-workspace-browser"      'need_node_modules ui && cd ui && npm run test:workspace-browser'; \
+	run_step "ui-images-browser"         'need_node_modules ui && cd ui && npm run test:images-browser'; \
 	run_step "$(DESKTOP_STEP_NAME)"      '$(DESKTOP_STEP_CMD)'; \
 	summarize full-check

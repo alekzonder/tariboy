@@ -31,8 +31,7 @@ test("the real Desktop titlebar requests native dragging and keeps its sidebar c
     const header = document.querySelector('[data-testid="app-titlebar"]');
     const links = header ? [...header.querySelectorAll("a")] : [];
     return links.length === 1
-      && links[0].textContent.trim() === "Workspace"
-      && links[0].getAttribute("href").endsWith("/workspace")
+      && links[0].getAttribute("aria-label") === "Application settings"
       && !links[0].hasAttribute("data-tauri-drag-region")
       && !["Agents", "Tasks", "Images", "Settings"].some(
         (label) => links.some((link) => link.textContent.trim() === label),

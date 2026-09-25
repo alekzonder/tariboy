@@ -1,6 +1,6 @@
 // Screenshot the console shell for a visual check against the design handoff.
 //
-//   npx vite --config vite.workspace-test.config.ts --port 4175 --strictPort &
+//   npx vite --config vite.fixtures.config.ts --port 4175 --strictPort &
 //   node tests/shell-preview-shot.mjs shell.png
 //
 // The fixture it loads (tests/shell-preview.tsx) mounts the real App with a

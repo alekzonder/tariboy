@@ -64,7 +64,6 @@ function MainApp() {
   const sidebar = useSharedSidebarState();
   const sidebarRoute =
     location.pathname === "/"
-    || location.pathname === "/workspace"
     || location.pathname.startsWith("/agents/")
     || location.pathname.startsWith("/servers/");
   return (
@@ -98,8 +97,8 @@ function MainApp() {
           )}
           {/* The view lives in the query, not the path: switching keeps the
               selected agent's route, survives a reload and is one Back away. */}
-          {/* Only where an agent is the subject: Workspace and server pages
-              are neither view. */}
+          {/* Only where an agent is the subject: server pages are neither
+              view. */}
           {(location.pathname === "/" || location.pathname.startsWith("/agents/")) && (
             <Segmented
               label="View"
@@ -141,7 +140,6 @@ function MainApp() {
       <main className="min-h-0 flex-1 overflow-hidden">
         <Routes>
           <Route path="/" element={<TerminalsPage />} />
-          <Route path="/workspace" element={<TerminalsPage />} />
           <Route path="/app-settings" element={<AppSettings />} />
           <Route path="/agents/new" element={<CanonicalCreateRedirect />} />
           <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />

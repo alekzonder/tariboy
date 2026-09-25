@@ -549,9 +549,7 @@ infer phases from title prefixes or assignee. Operator history remains
 available after completion. See
 [Configurable task workflows](/docs/task-workflows).
 
-The navigation hierarchy is **Server → Agent**. The existing Workspace canvas
-and `/workspace` route remain available for retained layouts and possible
-future use, but the titlebar entry and agent-list add/drag gesture are hidden.
+The navigation hierarchy is **Server → Agent**.
 A selected server owns Tasks, Images, Stores, and Settings, and its
 context row remains visible above the selected agent's Chat, Tasks, Console,
 Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
@@ -610,7 +608,7 @@ Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view
 answers the same question about the next agent. An unknown tab still falls back
 to Console (Chat in Simple mode), and a selected task in the Tasks query is dropped because it belongs
-to the agent being left. Selecting an agent from anywhere else — Workspace, a
+to the agent being left. Selecting an agent from anywhere else — a
 team, or a freshly created agent — still opens Console, or Chat in Simple mode.
 Start and Stop live only in the agent header; a stopped agent's Console says so
 without a Start button of its own.
@@ -624,18 +622,6 @@ agent rows are read-only until a successful refresh for the same host replaces
 the snapshot atomically. Cached data is never persisted or used as an API
 target, other server navigation remains available, and a missing host still
 fails closed rather than falling back to local authority.
-
-Workspace is one global tmux-like canvas whose split tree may contain
-several interactive agent terminals from different hosts. Existing tiles can
-be moved by their headers and resized with splitters. Tariboy owns this pointer
-gesture rather than relying on WebView HTML5 `DataTransfer`. Crossing the drag
-threshold reveals a half-pane left/right/top/bottom preview;
-edge distance is normalized to the current leaf dimensions so wide and tall
-panes dock consistently. Dropping relative to any leaf creates arbitrarily
-nested horizontal and vertical splits without center tab stacks. Pointer
-capture keeps the gesture alive outside its source; focus loss, capture loss,
-tab hiding, Escape, and unmount all cancel it without changing the layout.
-Adding the same `{hostId, agentName}` again focuses its existing tile.
 
 For a stopped agent, Configuration offers a working-directory editor backed by
 the selected host's directory autocomplete. Saving changes the CWD used by the
@@ -708,48 +694,26 @@ the sidebar icon is immediately after their reserved area in the global
 toolbar. The application-settings action and theme icon are the other titlebar
 controls. Empty toolbar space is draggable, while daemon status banners remain
 below the titlebar so they never cover the native controls. The shared
-persisted sidebar state drives both that control and the server/agent shell. Workspace
-xterm content is square and flush inside the single FlexLayout pane border; the
-standalone Agent Console keeps its rounded chrome.
-
-Each Workspace tile resolves its own explicit daemon target and owns an
-independent terminal WebSocket; it never relies on the globally active daemon.
-Closing or rearranging a tile detaches only that browser terminal client and
-never stops, kills, deletes, or otherwise mutates the agent or tmux session.
-Stopped tiles offer Start. Unavailable identities remain in the split tree with
-Retry, Replace, and Close, while non-interactive identities point to
-Configuration.
-
-The versioned WebView localStorage value `terminals:workspace:v1` persists the
-FlexLayout split tree, active terminal identity, and sidebar width/hidden state.
-Terminal nodes contain only `hostId` and `agentName`. The UI validates schema,
-size, weights, node shape, and duplicate identities before loading. It never
-persists terminal bytes or scrollback, prompts, transcripts, messages, output,
-environment values, tokens, secrets, cwd/workdir paths, or user files.
-Malformed state resets only the Workspace canvas.
+persisted sidebar state drives both that control and the server/agent shell. Its
+width and hidden state persist in the WebView localStorage record
+`terminals:sidebar:v1`; the first read after upgrading adopts the sidebar saved by
+the removed terminal canvas under `terminals:workspace:v1`.
 
 **Send files**, Attach, and terminal file drops all upload through the selected
 server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
 The browser sends each `File` as the raw request body instead of building a
 base64/JSON copy. Uploads have no agent destination: files live in the server's
 shared files directory and the returned absolute paths are inserted into the
-corresponding draft or reported when no terminal is available. Console and
-every Workspace tile retain their explicit host target.
-
-The terminal compose draft is also non-persistent in Workspace: typed text and
-uploaded server paths remain in the mounted tile's memory and are discarded
-when the tile or Workspace unmounts. This differs intentionally from the
-single-Agent Console's retained draft.
+corresponding draft or reported when no terminal is available. Console retains
+its explicit host target.
 
 The agent Console mounts xterm.js and opens
 `GET /api/agents/{name}/terminal`. Binary WebSocket frames carry PTY bytes;
 text frames carry resize messages. A host or agent route change tears down the
 old socket and dials the newly selected target without stopping the tmux
-session. Leaving Workspace similarly unmounts its terminal clients; returning
-reattaches to the live tmux sessions without restoring xterm scrollback.
+session.
 
-Console and Workspace share one terminal implementation, so the web-link gesture
-behaves identically in both. Explicit `http://` and `https://` text in terminal
+In the Console terminal, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`
 modifier); this is a Desktop capability and does nothing in a plain browser. An
 ordinary click never opens anything and keeps xterm's own focus, selection and
@@ -760,9 +724,8 @@ natively before anything is launched — the terminal matcher and the WebView ar
 not the authorization boundary. A link that cannot be opened reports a fixed
 message that never contains the terminal line.
 
-The shared terminal toolbar exposes **Scrollback** on both the Console and every
-Workspace tile. It sends tmux's own copy-mode entry sequence (prefix `C-b`, then
-`[`) over the existing byte socket, and the toolbar then shows a persistent
+The Console terminal toolbar exposes **Scrollback**. It sends tmux's own
+copy-mode entry sequence (prefix `C-b`, then `[`) over the existing byte socket, and the toolbar then shows a persistent
 **Viewing scrollback** status, **Page back** / **Page forward** controls, and an
 **Exit scrollback** button. Live keystrokes are paused while tmux is in
 copy-mode; press `q` in the focused terminal or use **Exit scrollback** to
