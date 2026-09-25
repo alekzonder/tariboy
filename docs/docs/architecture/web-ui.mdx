@@ -555,6 +555,36 @@ context row remains visible above the selected agent's Chat, Tasks, Console,
 Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
+### Host workspaces
+
+A workspace is a named group of registered hosts in one app window. The
+titlebar shows the current workspace right after the sidebar toggle; its menu
+lists every workspace with its host count and a check on the current one,
+followed by **New workspace…** and **Manage workspaces…**. Choosing a workspace
+narrows the agent sidebar, its Servers tab and its `N servers · M agents` footer
+to that workspace's hosts. When the open agent's host is not in it, its first
+agent opens in the same tab, or the island shows `<name> has no agents yet`
+with a **Manage workspaces** button when it has none. Polling continues for
+every host, so the manager can show each host as ready or offline, and agents
+on hosts outside the current workspace keep running: a workspace filters the
+window, it does not isolate hosts.
+
+**Default** is built in and cannot be renamed or deleted, and every host
+belongs to exactly one workspace. A host without an assignment, including a
+newly added one, is in Default. The manager dialog creates a workspace (Enter or
+**Create workspace**; blank names are ignored) and selects it, renames a custom
+workspace as its name is typed without ever saving a blank one, and moves a
+host with **Move to…** and a click on the target workspace. **Delete
+workspace** asks inline and returns the workspace's hosts to Default; deleting
+the current workspace switches to Default.
+
+The state is the WebView localStorage record `app:workspaces:v1`:
+`{version: 1, workspaces: [{id, name}], hostWorkspace: {hostId: workspaceId},
+active}`. It is local to one app installation and is not stored by any daemon,
+because hosts are the set of daemons rather than something one daemon owns.
+Malformed storage, unavailable storage, or an assignment to a missing workspace
+falls back to Default.
+
 ### All tasks
 
 The titlebar carries an `Agents | All tasks` segment next to the sidebar

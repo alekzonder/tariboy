@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
 import { fetchAllAgents, type HostAgents } from "@/lib/aggregate";
@@ -24,6 +25,9 @@ import { ImageLayout } from "@/components/ImageLayout";
 import SettingsPage from "@/pages/settings/SettingsPage";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { MessagesLiveRefresh } from "./MessagesLiveRefresh";
+import { TitlebarSlotContext } from "./titlebarSlotContext";
+import { WorkspaceManager, WorkspaceSwitcher, type WorkspaceHost } from "./HostWorkspaces";
+import { useWorkspaces, workspaceOf } from "@/lib/workspaces";
 
 type ServerDialogState = { mode: "add" } | { mode: "edit"; server: DaemonMeta };
 type CreateDialogState = {
@@ -75,6 +79,9 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const { daemons, appVersion, select: selectDaemon, refresh: refreshDaemons } = useDaemons();
   const { attention, refreshHost } = useCustomerQuestionNotifications();
   const sidebar = useSharedSidebarState();
+  const workspaces = useWorkspaces();
+  const titlebarSlot = useContext(TitlebarSlotContext);
+  const [workspaceManager, setWorkspaceManager] = useState<{ id: string; focusNew: boolean } | null>(null);
   const [hostError, setHostError] = useState("");
   const [serverOrder, setServerOrder] = useState<string[]>(() => {
     try {
@@ -122,6 +129,12 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
       };
     });
   }, [daemons, hosts]);
+
+  const workspaceHosts = useMemo<WorkspaceHost[]>(() => createHosts.map((host) => {
+    const aggregate = hosts.find((entry) => entry.host.id === host.id);
+    const state = daemons.find((entry) => entry.id === host.id)?.state ?? "ready";
+    return { id: host.id, label: host.label, ready: Boolean(aggregate && !aggregate.error) && state === "ready" };
+  }), [createHosts, daemons, hosts]);
 
   // Re-read after any registry mutation: refresh() runs one immediate
   // fetchAllAgents() tick, which resolves every daemon straight from storage,
@@ -197,13 +210,27 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const orderedSidebarHosts = useMemo(() => {
     const rank = new Map(serverOrder.map((id, index) => [id, index]));
     return sidebarHosts
+      .filter((entry) => workspaceOf(workspaces, entry.host.id) === workspaces.active)
       .map((entry, index) => ({ entry, index, rank: rank.get(entry.host.id) }))
       .sort((left, right) => (left.rank ?? serverOrder.length + left.index) - (right.rank ?? serverOrder.length + right.index))
       .map(({ entry }) => ({
         ...entry,
         sidebarOrder: sidebarOrderOverrides.get(entry.host.id) ?? entry.sidebarOrder,
       }));
-  }, [serverOrder, sidebarHosts, sidebarOrderOverrides]);
+  }, [serverOrder, sidebarHosts, sidebarOrderOverrides, workspaces]);
+  const activeWorkspaceName = workspaces.workspaces.find((w) => w.id === workspaces.active)?.name ?? "";
+  const workspaceEmpty = orderedSidebarHosts.every((entry) => entry.agents.length === 0);
+
+  // A route on a host outside the chosen workspace moves to that workspace's
+  // first agent, in the same tab, or to the empty console when it has none.
+  const followWorkspace = (id: string) => {
+    if (hostId === undefined || workspaceOf(workspaces, hostId) === id) return;
+    const first = sidebarHosts.find((entry) =>
+      workspaceOf(workspaces, entry.host.id) === id && entry.agents.length > 0);
+    navigate(first
+      ? `/agents/${hostToParam(first.host.id)}/${encodeURIComponent(first.agents[0].name)}/${agentName && agentTab ? agentTab : "console"}${allTasks ? "?view=all" : ""}`
+      : `/${allTasks ? "?view=all" : ""}`);
+  };
   const selectedAgent = useMemo(() => {
     if (!agentName) return undefined;
     return selectedHost?.agents.find((a) => a.name === agentName);
@@ -388,6 +415,13 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
             <p>Host or agent unavailable.</p>
             <p className="text-xs">The route was kept unchanged so it cannot silently target the local daemon.</p>
           </div>
+        ) : workspaceEmpty && workspaces.workspaces.length > 1 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+            <p>{activeWorkspaceName} has no agents yet</p>
+            <Button onClick={() => setWorkspaceManager({ id: workspaces.active, focusNew: false })}>
+              Manage workspaces
+            </Button>
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
             <p>Pick an agent on the left, or create one.</p>
@@ -411,6 +445,21 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           refresh();
           navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(name)}/console`);
         }}
+      />
+      {titlebarSlot && createPortal(
+        <WorkspaceSwitcher
+          hosts={workspaceHosts}
+          onSelect={followWorkspace}
+          onManage={(focusNew) => setWorkspaceManager({ id: workspaces.active, focusNew })}
+        />,
+        titlebarSlot,
+      )}
+      <WorkspaceManager
+        hosts={workspaceHosts}
+        open={workspaceManager !== null}
+        initialId={workspaceManager?.id ?? workspaces.active}
+        focusNew={workspaceManager?.focusNew ?? false}
+        onOpenChange={(open) => { if (!open) setWorkspaceManager(null); }}
       />
       <ServerDialog
         open={serverDialog !== null}
