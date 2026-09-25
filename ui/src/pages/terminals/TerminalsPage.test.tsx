@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import TerminalsPage from "./TerminalsPage";
@@ -127,7 +127,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function renderAt(path: string, attention: ReadonlySet<string> = new Set()) {
+function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map()) {
   return render(
     <DaemonProvider>
       <CustomerQuestionNotificationsContext.Provider value={{ attention, refreshHost: async () => {} }}>
@@ -278,6 +278,22 @@ describe("TerminalsPage", () => {
       .toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Open a1" }))
       .toHaveAttribute("aria-current", "page");
+  });
+
+  it("counts the agent's tasks with unread questions on the Tasks tab", async () => {
+    renderAt("/agents/local/a1/console", new Map([[JSON.stringify(["", "a1"]), 2]]));
+
+    const count = await screen.findByLabelText("2 tasks with unread agent questions");
+    expect(count).toHaveTextContent("2");
+    const nav = screen.getByRole("navigation", { name: "Agent workspace" });
+    expect(within(nav).getByRole("link", { name: /Tasks/ })).toContainElement(count);
+  });
+
+  it("shows no Tasks count without unread agent questions", async () => {
+    renderAt("/agents/local/a1/console");
+
+    expect(await screen.findByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/unread agent question/)).toBeNull();
   });
 
   it("opens a sidebar agent in Console instead of adding it to Workspace", async () => {
@@ -837,7 +853,7 @@ describe("TerminalsPage", () => {
       },
     ])
 
-    renderAt("/", new Set([JSON.stringify(["remote-1", "alice"])]))
+    renderAt("/", new Map([[JSON.stringify(["remote-1", "alice"]), 1]]))
 
     expect(await screen.findByLabelText("3 unread messages from alice")).toBeInTheDocument()
     expect(screen.queryByRole("img", { name: /customer question/ })).toBeNull()
@@ -1091,7 +1107,7 @@ describe("sidebar tabs", () => {
 
   it("puts a called-for agent above the rest, and a pinned one above that", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
-    renderAt("/", new Set([JSON.stringify(["prod", "gamma"])]));
+    renderAt("/", new Map([[JSON.stringify(["prod", "gamma"]), 1]]));
 
     const names = () => screen.getAllByTestId("sidebar-agent").map((row) => row.textContent);
     await waitFor(() => expect(names()).toHaveLength(3));

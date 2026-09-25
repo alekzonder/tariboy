@@ -43,14 +43,14 @@ describe("sidebar agent list", () => {
     const { pinned, rest } = rankAgents(
       rows,
       new Set([agentKey("prod", "delta")]),
-      new Set([agentKey("prod", "gamma")]),
+      new Map([[agentKey("prod", "gamma"), 1]]),
     );
     expect(pinned.map((row) => row.agent.name)).toEqual(["delta"]);
     expect(rest.map((row) => row.agent.name)).toEqual(["gamma", "beta", "alpha"]);
   });
 
   it("keeps the saved order inside a band", () => {
-    const { rest } = rankAgents(allAgents(hosts), new Set(), new Set());
+    const { rest } = rankAgents(allAgents(hosts), new Set(), new Map());
     expect(rest.map((row) => row.agent.name)).toEqual(["beta", "alpha", "gamma", "delta"]);
   });
 
@@ -61,7 +61,7 @@ describe("sidebar agent list", () => {
     ];
     const rows = allAgents(chatted);
     expect(rows.find((row) => row.agent.name === "gamma")?.chat?.unread).toBe(2);
-    const { rest } = rankAgents(rows, new Set(), new Set());
+    const { rest } = rankAgents(rows, new Set(), new Map());
     // gamma spoke last, alpha before it, and the two silent agents keep the
     // operator's own order behind them.
     expect(rest.map((row) => row.agent.name)).toEqual(["gamma", "alpha", "beta", "delta"]);
@@ -89,7 +89,7 @@ describe("sidebar agent list", () => {
       { ...hosts[0], chats: [chat("alpha", "2026-09-15T12:00:00Z")] },
       hosts[1],
     ];
-    const { rest } = rankAgents(allAgents(chatted), new Set(), new Set([agentKey("prod", "gamma")]));
+    const { rest } = rankAgents(allAgents(chatted), new Set(), new Map([[agentKey("prod", "gamma"), 1]]));
     expect(rest[0].agent.name).toBe("gamma");
     expect(rest[1].agent.name).toBe("alpha");
   });

@@ -137,7 +137,12 @@ function notification(overrides: Partial<TaskNotification> = {}): TaskNotificati
 
 function AttentionProbe() {
   const value = useCustomerQuestionNotifications()
-  return <output data-testid="attention">{JSON.stringify([...value.attention].sort())}</output>
+  return (
+    <>
+      <output data-testid="attention">{JSON.stringify([...value.attention.keys()].sort())}</output>
+      <output data-testid="attention-counts">{JSON.stringify([...value.attention].sort())}</output>
+    </>
+  )
 }
 
 function renderCoordinator() {
@@ -281,6 +286,23 @@ describe("CustomerQuestionNotifications", () => {
 
     await expectAttention('["remote-1","alice"]')
     expect(model.shown).toEqual([])
+  })
+
+  it("counts distinct tasks with unread questions per agent", async () => {
+    model.daemons = [{ id: "remote-1", label: "prod" }]
+    model.snapshots.set("remote-1", [
+      notification(),
+      notification({ id: "notification-2" }),
+      notification({ id: "notification-3", task_key: "ASK-2" }),
+      notification({ id: "notification-4", task_key: "ASK-3", read_at: "2026-08-18T12:01:00Z" }),
+    ])
+
+    renderCoordinator()
+
+    await waitFor(() => {
+      expect(screen.getByTestId("attention-counts"))
+        .toHaveTextContent(JSON.stringify([[JSON.stringify(["remote-1", "alice"]), 2]]))
+    })
   })
 
   it("adds a new authoritative question once and sends its host-scoped native notification", async () => {

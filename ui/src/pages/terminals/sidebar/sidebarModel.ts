@@ -84,7 +84,7 @@ export function allAgents(hosts: HostAgents[]): SidebarAgent[] {
 export function rankAgents(
   agents: SidebarAgent[],
   pinned: ReadonlySet<string>,
-  attention: ReadonlySet<string>,
+  attention: ReadonlyMap<string, number>,
 ): { pinned: SidebarAgent[]; rest: SidebarAgent[] } {
   const band = (row: SidebarAgent) => (attention.has(row.key) ? 0 : 1);
   const spokeAt = (row: SidebarAgent) => row.chat?.last_ts ?? "";
