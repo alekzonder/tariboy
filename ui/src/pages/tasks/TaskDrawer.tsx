@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import type { ApiTarget } from "@/lib/api"
 import { resolveDaemon } from "@/lib/daemons"
+import { targetFor } from "@/lib/terminalsHost"
 import {
   addTaskComment,
   addTaskRelation,
@@ -40,14 +41,29 @@ function errorMessage(error: unknown): string {
  * anything else that names a task key — can open it without navigating to
  * Tasks and without borrowing that workspace's tree state.
  */
+/** An assignee the drawer may offer. `hostId` is set when the agent lives on
+ *  another server: picking it moves the task there first. */
+export interface AssigneeChoice {
+  value: string
+  label: string
+  assignee: string
+  hostId?: string
+  hostLabel?: string
+}
+
 export default function TaskDrawer({
   taskKey,
   target,
   onClose,
+  assignees,
+  onMoved,
 }: {
   taskKey: string
   target?: ApiTarget
   onClose: () => void
+  assignees?: readonly AssigneeChoice[]
+  /** The task now lives on `hostId`; the owner reopens it there. */
+  onMoved?: (hostId: string) => void
 }) {
   const { detailWidth } = useTaskPanelWidths()
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -137,6 +153,7 @@ export default function TaskDrawer({
       width={detailWidth}
       resizeHandle={null}
       onClose={onClose}
+      assigneeOptions={assignees}
       onTransfer={async (hostID: string) => {
         const host = await resolveDaemon(hostID)
         if (!host) throw new Error("That server is no longer registered")
@@ -155,7 +172,22 @@ export default function TaskDrawer({
         manual_block_reason?: string
         priority: TaskPriority
       }) => {
+        const remote = assignees?.find((choice) => choice.hostId !== undefined && choice.value === input.assignee)
         try {
+          if (remote?.hostId !== undefined) {
+            // An agent on another server can only work a task that lives there:
+            // save the other edits here, move the tree, then assign it on arrival.
+            const key = detail.task.key
+            await updateTask(key, { ...input, assignee: detail.task.assignee }, target)
+            const destination = targetFor(remote.hostId)
+            const label = remote.hostLabel || remote.hostId || "local"
+            await transferTask(key, target, destination, label, idempotencyKey())
+            const arrived = await getTask(key, destination)
+            const assigned = await updateTask(key, { assignee: remote.assignee, revision: arrived.task.revision }, destination)
+            toast.success(`${key} moved to ${label}`)
+            onMoved?.(remote.hostId)
+            return assigned
+          }
           const updated = await updateTask(detail.task.key, input, target)
           setDetail((current) => current ? { ...current, task: updated } : current)
           toast.success("Task updated")

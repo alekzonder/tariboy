@@ -333,6 +333,26 @@ describe("TerminalsPage", () => {
     );
   });
 
+  it("shows All tasks in the island, narrowed to the selected agent, and keeps the view when another agent is picked", async () => {
+    renderAt("/agents/local/a1/console?view=all");
+    const workspace = await screen.findByTestId("all-tasks-workspace");
+    expect(within(workspace).getByRole("button", { name: "Clear agent filter" }).parentElement)
+      .toHaveTextContent("a1");
+    expect(screen.queryByTestId("tui-screen")).toBeNull();
+
+    fireEvent.click(within(workspace).getByRole("button", { name: "Clear agent filter" }));
+    await waitFor(() => expect(within(workspace).queryByRole("button", { name: "Clear agent filter" })).toBeNull());
+    // The agent stays selected in the sidebar; only the filter went.
+    expect(screen.getByTestId("location").textContent).toBe("/agents/local/a1/console?view=all");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("/agents/local/a2/console?view=all"),
+    );
+    expect(within(await screen.findByTestId("all-tasks-workspace"))
+      .getByRole("button", { name: "Clear agent filter" }).parentElement).toHaveTextContent("a2");
+  });
+
   it("drops the selected task when switching agents on the Tasks tab", async () => {
     renderAt("/agents/local/a1/tasks?task=DEV-1");
     await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());

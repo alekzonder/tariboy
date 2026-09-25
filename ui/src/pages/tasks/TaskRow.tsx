@@ -20,6 +20,7 @@ const priorityLabels = {
 export default function TaskRow({
   row,
   mode,
+  server,
   hasActiveQuestion,
   expanded,
   selected,
@@ -29,14 +30,19 @@ export default function TaskRow({
 }: {
   row: VisibleTaskRow
   mode: TaskRowMode
+  /** The server the task lives on; shown only in the `servers` table. */
+  server?: string
   hasActiveQuestion: boolean
   expanded: boolean
   selected: boolean
   onToggle: () => void
   onSelect: () => void
-  onAddChild: () => void
+  onAddChild?: () => void
 }) {
-  const disabled = row.task.access === "context" || row.task.access === "respond"
+  const readOnly = row.task.access === "context" || row.task.access === "respond"
+  // The every-server table has no drag and no add-child: neither can cross the
+  // server boundary the rows sit on.
+  const disabled = readOnly || mode === "servers"
   const drag = useDraggable({ id: row.task.key, disabled })
   const dropBefore = useDroppable({ id: `before:${row.task.key}`, disabled })
   const dropInside = useDroppable({ id: `inside:${row.task.key}`, disabled })
@@ -71,16 +77,18 @@ export default function TaskRow({
       />
       {/* The grip lives in the row's own left padding: the reference table has
           no column for it, and it is only there under the pointer anyway. */}
-      <button
-        type="button"
-        ref={drag.setActivatorNodeRef}
-        className="task-row-grip absolute top-1/2 left-0 z-2 grid h-6 w-4 -translate-y-1/2 cursor-grab place-items-center text-muted-foreground opacity-0 group-hover/row:opacity-60"
-        aria-label={`Move ${row.task.key}`}
-        {...drag.listeners}
-        {...drag.attributes}
-      >
-        <GripVertical aria-hidden="true" className="size-3" />
-      </button>
+      {mode !== "servers" && (
+        <button
+          type="button"
+          ref={drag.setActivatorNodeRef}
+          className="task-row-grip absolute top-1/2 left-0 z-2 grid h-6 w-4 -translate-y-1/2 cursor-grab place-items-center text-muted-foreground opacity-0 group-hover/row:opacity-60"
+          aria-label={`Move ${row.task.key}`}
+          {...drag.listeners}
+          {...drag.attributes}
+        >
+          <GripVertical aria-hidden="true" className="size-3" />
+        </button>
+      )}
       <span
         style={{ width: TASK_COLUMNS.key }}
         className="z-2 flex shrink-0 items-center gap-1.5 overflow-hidden"
@@ -129,13 +137,18 @@ export default function TaskRow({
           aria-label={`${row.task.priority} ${priorityLabels[row.task.priority]}`}
         />
       </span>
-      {mode === "all" && (
+      {mode !== "agent" && (
         <span style={{ width: TASK_COLUMNS.agent }} className="shrink-0">
           {row.task.assignee && (
             <span className="inline-flex h-[19px] max-w-full items-center truncate rounded-[6px] bg-muted px-[7px] text-[11.5px]">
               {row.task.assignee.replace(/^agent:/, "")}
             </span>
           )}
+        </span>
+      )}
+      {mode === "servers" && (
+        <span style={{ width: TASK_COLUMNS.server }} className="shrink-0 truncate font-mono text-[11.5px] text-muted-foreground">
+          {server}
         </span>
       )}
       <span style={{ width: TASK_COLUMNS.status }} className="shrink-0">
@@ -155,7 +168,7 @@ export default function TaskRow({
       >
         {formatTaskTime(row.task.updated_at)}
       </span>
-      <span style={{ width: TASK_COLUMNS.add }} className="shrink-0">
+      {mode !== "servers" && <span style={{ width: TASK_COLUMNS.add }} className="shrink-0">
         {!disabled && (
           <button
             type="button"
@@ -166,7 +179,7 @@ export default function TaskRow({
             <Plus aria-hidden="true" className="size-3.5" />
           </button>
         )}
-      </span>
+      </span>}
     </div>
   )
 }
@@ -185,15 +198,18 @@ export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; s
       <span style={{ width: TASK_COLUMNS.key }} className="shrink-0">Key</span>
       <span className="min-w-0 flex-1">Task</span>
       <span style={{ width: TASK_COLUMNS.priority }} className="shrink-0">Pri</span>
-      {mode === "all" && (
+      {mode !== "agent" && (
         <span style={{ width: TASK_COLUMNS.agent }} className="shrink-0">Agent</span>
+      )}
+      {mode === "servers" && (
+        <span style={{ width: TASK_COLUMNS.server }} className="shrink-0">Server</span>
       )}
       <span style={{ width: TASK_COLUMNS.status }} className="shrink-0">Status</span>
       {mode === "agent" && (
         <span style={{ width: TASK_COLUMNS.duration }} className="shrink-0 text-right">Duration</span>
       )}
       <span style={{ width: TASK_COLUMNS.updated }} className="shrink-0 text-right">Updated</span>
-      <span aria-hidden="true" style={{ width: TASK_COLUMNS.add }} className="shrink-0" />
+      {mode !== "servers" && <span aria-hidden="true" style={{ width: TASK_COLUMNS.add }} className="shrink-0" />}
     </div>
   )
 }
