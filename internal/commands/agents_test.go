@@ -144,6 +144,9 @@ func TestAgentRunDefaultsMessageQueueToOneHundred(t *testing.T) {
 	if fc.ran.MessagesBatch != 10 || fc.ran.MessagesMaxQueue != 100 {
 		t.Fatalf("message defaults = %d/%d, want 10/100", fc.ran.MessagesBatch, fc.ran.MessagesMaxQueue)
 	}
+	if fc.ran.AIStallTimeoutS != 1800 {
+		t.Fatalf("AI stall timeout default = %d, want 1800", fc.ran.AIStallTimeoutS)
+	}
 }
 
 // Catches the create handler dropping a clone field or lossy reparsing of
@@ -312,7 +315,7 @@ func TestAgentGoalSettingsInspectAndListProjection(t *testing.T) {
 		inspect.(map[string]any),
 		mustAgentRows(t, ps, err)[0],
 	} {
-		if got["goal_enabled"] != true || got["goal_wait_customer_timeout_s"] != 120 || got["current_goal_task_key"] != "TARI-43" || got["ai_stall_timeout_s"] != 300 {
+		if got["goal_enabled"] != true || got["goal_wait_customer_timeout_s"] != 120 || got["current_goal_task_key"] != "TARI-43" || got["ai_stall_timeout_s"] != 1800 {
 			t.Fatalf("Goal projection = %#v", got)
 		}
 	}

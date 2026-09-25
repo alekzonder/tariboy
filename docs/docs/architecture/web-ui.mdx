@@ -597,11 +597,11 @@ restart, takes effect the next time the agent starts, and leaves the timing of
 any restart under the operator's control.
 
 The Loop section also exposes the positive **AI inactivity timeout** in seconds,
-defaulting to 300 per agent. When a running iteration exceeds it without an
+defaulting to 1800 (30 minutes) per agent. When a running iteration exceeds it without an
 attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
 card shows the informational reason. The controls remain enabled because this
 signal does not stop the loop or iteration; the next request restores
-`state=running`. Ordinary creation starts at 300 seconds, while Clone preserves
+`state=running`. Ordinary creation starts at 1800 seconds, while Clone preserves
 the source agent's configured value.
 
 The **Messages & Channels** section uses that same draft contract for the

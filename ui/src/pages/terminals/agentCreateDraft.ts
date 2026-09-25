@@ -50,7 +50,7 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     onTimeout: "restart",
     onError: "restart",
     maxIdleIterations: "0",
-    aiStallTimeoutS: "300",
+    aiStallTimeoutS: "1800",
     userPrompt: "",
     envText: "{}",
     plugins: [],

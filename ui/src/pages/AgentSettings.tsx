@@ -182,7 +182,7 @@ const LOOP_FIELDS: readonly SectionField[] = [
     helper: "Seconds without an AI-proxy request before showing an informational error.",
     numeric: true,
     minimum: 1,
-    read: (v) => String(v.ai_stall_timeout_s ?? 300),
+    read: (v) => String(v.ai_stall_timeout_s ?? 1800),
     ...loopInt("ai-stall-timeout", 1),
   },
 ];
