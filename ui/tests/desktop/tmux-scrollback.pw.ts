@@ -140,7 +140,7 @@ async function exerciseScrollback(desktop: W3CClient, surface: string): Promise<
   ]);
 }
 
-test("the shared terminal toolbar browses tmux scrollback on Console and Workspace", async ({ desktop }) => {
+test("the shared terminal toolbar browses tmux scrollback on Console", async ({ desktop }) => {
   test.setTimeout(180_000);
   await waitForMainWindow(desktop);
   await recordSocketWrites(desktop);

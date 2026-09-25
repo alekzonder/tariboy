@@ -424,6 +424,25 @@ describe("TerminalsPage", () => {
       .toEqual({ version: 1, ids: ["d1", ""] });
   });
 
+  it("keeps the saved position of hosts in other workspaces when reordering servers", async () => {
+    serversTab();
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      { host: { id: "", label: "local" }, agents: [], groups: [] },
+      { host: { id: "d1", label: "prod" }, agents: [], groups: [] },
+      { host: { id: "d2", label: "lab" }, agents: [], groups: [] },
+    ]);
+    localStorage.setItem("terminals:server-order:v1", JSON.stringify({ version: 1, ids: ["", "d2", "d1"] }));
+    moveHost("d2", createWorkspace("Lab")!);
+    mockRowRects({ "Open server local": 0, "Open server prod": 30 });
+    renderAt("/");
+    await screen.findByRole("button", { name: "Open server local" });
+
+    await keyboardMove("Open server local", "ArrowDown");
+
+    expect(JSON.parse(localStorage.getItem("terminals:server-order:v1")!))
+      .toEqual({ version: 1, ids: ["d1", "d2", ""] });
+  });
+
   it("persists team order after a keyboard drag", async () => {
     serversTab();
     vi.mocked(fetchAllAgents).mockResolvedValue([{
@@ -994,7 +1013,7 @@ describe("host workspaces", () => {
     expect(screen.getByText("1 server · 1 agent")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /Production/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Production/ }));
 
     // The open agent is not in Production, so its first agent opens in the same tab.
     await waitFor(() =>
@@ -1010,7 +1029,7 @@ describe("host workspaces", () => {
     await screen.findByRole("button", { name: "Open a1" });
 
     await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /Lab/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Lab/ }));
 
     await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));
     expect(await screen.findByText("Lab has no agents yet")).toBeInTheDocument();

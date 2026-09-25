@@ -24,16 +24,18 @@ function sanitize(value: { width?: unknown; hidden?: unknown } | null | undefine
 }
 
 /** Best-effort: a missing, malformed or unavailable store means the default. */
-function readSidebarState(): SidebarState {
+function readJSON(key: string): unknown {
   try {
-    const legacy = JSON.parse(localStorage.getItem(LEGACY_WORKSPACE_STATE_KEY) ?? "null") as
-      { sidebar?: SidebarState } | null;
-    return sanitize(JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY) ?? "null"))
-      ?? sanitize(legacy?.sidebar)
-      ?? { width: DEFAULT_SIDEBAR_WIDTH, hidden: false };
+    return JSON.parse(localStorage.getItem(key) ?? "null");
   } catch {
-    return { width: DEFAULT_SIDEBAR_WIDTH, hidden: false };
+    return null;
   }
+}
+
+function readSidebarState(): SidebarState {
+  return sanitize(readJSON(SIDEBAR_STATE_KEY) as SidebarState | null)
+    ?? sanitize((readJSON(LEGACY_WORKSPACE_STATE_KEY) as { sidebar?: SidebarState } | null)?.sidebar)
+    ?? { width: DEFAULT_SIDEBAR_WIDTH, hidden: false };
 }
 
 function writeSidebarState(state: SidebarState) {

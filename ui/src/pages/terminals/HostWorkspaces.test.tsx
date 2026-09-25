@@ -56,8 +56,8 @@ describe("WorkspaceSwitcher", () => {
     await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
     const menu = await screen.findByRole("menu");
     expect(within(menu).getByText("Workspaces")).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: /Default\s*2 hosts/ })).toBeInTheDocument();
-    await userEvent.click(within(menu).getByRole("menuitem", { name: /Lab\s*1 host/ }));
+    expect(within(menu).getByRole("menuitemradio", { name: /Default\s*2 hosts/ })).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(within(menu).getByRole("menuitemradio", { name: /Lab\s*1 host/ }));
 
     expect(screen.getByTestId("active")).toHaveTextContent(lab);
     expect(onSelect).toHaveBeenCalledWith(lab);
