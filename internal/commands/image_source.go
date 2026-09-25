@@ -208,6 +208,9 @@ func imageSourceValidate() registry.Command {
 			if parsed.Version != 2 {
 				return map[string]any{"valid": false, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": imagefile.SchemaV1MigrationMessage}}}, nil
 			}
+			if len(parsed.V2.Extends) > 0 {
+				return map[string]any{"valid": false, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": imagefile.ExtendsUnassembledMessage}}}, nil
+			}
 			return map[string]any{"valid": true, "diagnostics": []any{}}, nil
 		},
 	}

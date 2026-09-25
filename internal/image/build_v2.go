@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,6 +33,9 @@ type preparedV2 struct {
 func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver plugincaps.ExternalResolver) (preparedV2, error) {
 	if src == nil || src.SchemaVersion != 2 {
 		return preparedV2{}, fmt.Errorf("schema-v2 source is required")
+	}
+	if len(src.Extends) > 0 {
+		return preparedV2{}, errors.New(imagefile.ExtendsUnassembledMessage)
 	}
 	plugins := make([]ManifestPlugin, 0, len(src.Plugins))
 	for _, plugin := range src.Plugins {

@@ -2608,6 +2608,34 @@ func TestBuildImageForAgentResolvesRelativePathFromWorkdir(t *testing.T) {
 	}
 }
 
+func TestBuildImageForAgentAssemblesExtends(t *testing.T) {
+	base := t.TempDir()
+	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
+	workdir := filepath.Join(base, "workdir")
+	for rel, body := range map[string]string{
+		"parent/Tariboyfile.yaml":     "schema_version: 2\nplugins: []\nskills: [{dir: ./skills/demo}]\nprompts: [{file: ./role.md}]\n",
+		"parent/role.md":              "parent role",
+		"parent/skills/demo/SKILL.md": "---\nname: demo\ndescription: demo\n---\nbody\n",
+		"child/Tariboyfile.yaml":      "schema_version: 2\nextends: [../parent]\nplugins: []\nprompts: [{file: ./role.md}]\n",
+		"child/role.md":               "child role",
+	} {
+		path := filepath.Join(workdir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := buildImageForAgent(imgStore, workdir, "child", "latest", "child"); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := imgStore.Inspect(image.Ref{Name: "child", Tag: "latest"})
+	if err != nil || len(manifest.Skills) != 1 {
+		t.Fatalf("manifest skills = %#v, %v", manifest.Skills, err)
+	}
+}
+
 func TestAgentImageBuildSourcePathResolution(t *testing.T) {
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "creator", Harness: "stub"})

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"gopkg.in/yaml.v3"
@@ -34,6 +35,7 @@ type SkillEntry struct {
 type V2 struct {
 	ImageVersion  string        `yaml:"image_version,omitempty" json:"image_version,omitempty"`
 	SchemaVersion int           `yaml:"schema_version" json:"schema_version"`
+	Extends       []string      `yaml:"extends,omitempty" json:"extends,omitempty"`
 	Plugins       []V2Plugin    `yaml:"plugins" json:"plugins"`
 	Skills        []SkillEntry  `yaml:"skills" json:"skills"`
 	Prompts       []PromptEntry `yaml:"prompts" json:"prompts"`
@@ -85,6 +87,11 @@ func ParseV2(path string) (*V2, error) {
 	}
 	if out.SchemaVersion != 2 {
 		return nil, fmt.Errorf("imagefile schema_version must be 2, got %d", out.SchemaVersion)
+	}
+	for i, parent := range out.Extends {
+		if !strings.HasPrefix(parent, "./") && !strings.HasPrefix(parent, "../") && !filepath.IsAbs(parent) {
+			return nil, fmt.Errorf("extends[%d]: path %q must use ./, ../, or an absolute path", i, parent)
+		}
 	}
 	seenPlugins := map[string]bool{}
 	for i, plugin := range out.Plugins {

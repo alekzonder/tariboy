@@ -22,6 +22,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/stores"
 	"github.com/alekzonder/tariboy/internal/version"
 )
 
@@ -56,7 +57,8 @@ func imageBuild() registry.Command {
 			name := str(p, "name")
 			path := str(p, "path")
 			selector := strings.TrimSpace(str(p, "source"))
-			var restoreLocks func() error
+			var restoreLocks, restoreStoreLock func() error
+			var installLock func(dir string) error
 			if selector != "" {
 				if strings.TrimSpace(path) != "" {
 					return nil, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
@@ -69,6 +71,8 @@ func imageBuild() registry.Command {
 				defer release()
 				path = prepared.Path
 				restoreLocks = func() error { return catalog.RestoreBuildLocks(requestCtx, prepared) }
+				restoreStoreLock = func() error { return catalog.RestoreStoreLock(requestCtx, prepared) }
+				installLock = func(dir string) error { return stores.RestoreLock(requestCtx, dir) }
 				if name == "" {
 					name = prepared.Name
 				}
@@ -122,12 +126,25 @@ func imageBuild() registry.Command {
 			}); err != nil {
 				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
 			}
-			if restoreLocks != nil {
+			buildDir := sourceCWD
+			if parsed.Version == 2 && len(parsed.V2.Extends) > 0 {
+				if restoreStoreLock != nil {
+					if err := restoreStoreLock(); err != nil {
+						return nil, storeError(err)
+					}
+				}
+				assembled, cleanup, err := imagefile.Assemble(sourceCWD, imageBuildRoot(c), imagefile.ResolveRoots{Plugins: paths.Paths{Base: c.BaseDir}.PluginsDir()}, installLock)
+				if err != nil {
+					return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
+				}
+				defer cleanup()
+				buildDir = assembled
+			} else if restoreLocks != nil {
 				if err := restoreLocks(); err != nil {
 					return nil, storeError(err)
 				}
 			}
-			parsed, err = imagefile.ParseAny(sourceCWD)
+			parsed, err = imagefile.ParseAny(buildDir)
 			if err != nil {
 				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
 			}
@@ -135,7 +152,7 @@ func imageBuild() registry.Command {
 			if parsed.Version == 2 {
 				skills = parsed.V2.Skills
 			}
-			frozen, err := snapshotStore.Freeze(sourceCWD, skills...)
+			frozen, err := snapshotStore.Freeze(buildDir, skills...)
 			if err != nil {
 				return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
 			}
@@ -249,6 +266,12 @@ func imageBuildRefs(name string, tags []string, parsed *imagefile.Parsed) ([]ima
 	}
 }
 
+// imageBuildRoot holds the temporary directories an extends chain is
+// assembled in.
+func imageBuildRoot(c *registry.Ctx) string {
+	return filepath.Join(c.BaseDir, "image-build")
+}
+
 func canonicalSourceDir(input string) (string, error) {
 	abs, err := filepath.Abs(input)
 	if err != nil {
@@ -296,6 +319,15 @@ func imageValidate() registry.Command {
 				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "name/tag", "message": diagnostic}}, "warnings": []any{}}, nil
 			}
 			parsed, err := imagefile.ParseAny(str(p, "path"))
+			if err == nil && parsed.Version == 2 && len(parsed.V2.Extends) > 0 {
+				var cleanup func()
+				var assembled string
+				assembled, cleanup, err = imagefile.Assemble(parsed.V2.Dir, imageBuildRoot(c), imagefile.ResolveRoots{Plugins: paths.Paths{Base: c.BaseDir}.PluginsDir()}, nil)
+				if err == nil {
+					defer cleanup()
+					parsed, err = imagefile.ParseAny(assembled)
+				}
+			}
 			if err != nil {
 				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": err.Error()}}, "warnings": []any{}}, nil
 			}

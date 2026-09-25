@@ -245,32 +245,45 @@ func (c *Catalog) PrepareBuild(selector string) (prepared PreparedBuild, release
 }
 
 func (c *Catalog) RestoreBuildLocks(ctx context.Context, prepared PreparedBuild) error {
-	for _, dir := range []string{filepath.Dir(filepath.Dir(prepared.Path)), prepared.Path} {
-		lock := filepath.Join(dir, "skills-lock.json")
-		if _, err := os.Lstat(lock); errors.Is(err, os.ErrNotExist) {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if err := regularFile(lock); err != nil {
-			return err
-		}
-		original, err := os.ReadFile(lock)
-		if err != nil {
-			return err
-		}
-		installErr := run(ctx, dir, "npx", "skills", "experimental_install")
-		// The installer rewrites the tracked lock; restoring it keeps the
-		// Store checkout clean so a later Refresh can fast-forward.
-		if err := os.Remove(lock); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return errors.Join(installErr, fmt.Errorf("restore Store skills lock: %w", err))
-		}
-		if err := os.WriteFile(lock, original, 0o644); err != nil {
-			return errors.Join(installErr, fmt.Errorf("restore Store skills lock: %w", err))
-		}
-		if installErr != nil {
-			return fmt.Errorf("install Store skills lock: %w", installErr)
-		}
+	if err := c.RestoreStoreLock(ctx, prepared); err != nil {
+		return err
+	}
+	return RestoreLock(ctx, prepared.Path)
+}
+
+// RestoreStoreLock restores only the Store root lock. An image that uses
+// extends restores each layer's lock while its layers are assembled.
+func (c *Catalog) RestoreStoreLock(ctx context.Context, prepared PreparedBuild) error {
+	return RestoreLock(ctx, filepath.Dir(filepath.Dir(prepared.Path)))
+}
+
+// RestoreLock runs the skills installer in dir when it holds skills-lock.json
+// and leaves the lock file as it was.
+func RestoreLock(ctx context.Context, dir string) error {
+	lock := filepath.Join(dir, "skills-lock.json")
+	if _, err := os.Lstat(lock); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := regularFile(lock); err != nil {
+		return err
+	}
+	original, err := os.ReadFile(lock)
+	if err != nil {
+		return err
+	}
+	installErr := run(ctx, dir, "npx", "skills", "experimental_install")
+	// The installer rewrites the tracked lock; restoring it keeps the
+	// Store checkout clean so a later Refresh can fast-forward.
+	if err := os.Remove(lock); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(installErr, fmt.Errorf("restore Store skills lock: %w", err))
+	}
+	if err := os.WriteFile(lock, original, 0o644); err != nil {
+		return errors.Join(installErr, fmt.Errorf("restore Store skills lock: %w", err))
+	}
+	if installErr != nil {
+		return fmt.Errorf("install Store skills lock: %w", installErr)
 	}
 	return nil
 }
