@@ -58,9 +58,14 @@ export function useAllServersTasks(
   const stableServers = useMemo(() => servers, [serversKey])
   const { text, statusView } = filters
 
-  const reload = useCallback((id: string) => {
+  // Servers with a read in flight; `true` means a live hint arrived meanwhile
+  // and one more read follows it.
+  const inflight = useRef(new Map<string, boolean>())
+
+  const reload = useCallback(function read(id: string) {
     const request = (requests.current.get(id) ?? 0) + 1
     requests.current.set(id, request)
+    inflight.current.set(id, false)
     const current = () => requests.current.get(id) === request
     listAllTasks({ text, status_view: statusView }, targetFor(id))
       .then(({ tasks, sequence }) => {
@@ -68,10 +73,25 @@ export function useAllServersTasks(
       })
       .catch((error: unknown) => {
         if (!current()) return
+        // The rows it had may belong to another filter; the error says why
+        // they are gone.
         const message = error instanceof Error ? error.message : String(error)
-        setState((all) => ({ ...all, [id]: { ...all[id], error: message || "unavailable" } }))
+        setState((all) => ({ ...all, [id]: { error: message || "unavailable" } }))
+      })
+      .finally(() => {
+        if (!current()) return
+        const again = inflight.current.get(id)
+        inflight.current.delete(id)
+        if (again) read(id)
       })
   }, [statusView, text])
+
+  // A live hint only says something changed; a busy server sends many, and
+  // each would otherwise re-read every page.
+  const refresh = useCallback((id: string) => {
+    if (inflight.current.has(id)) inflight.current.set(id, true)
+    else reload(id)
+  }, [reload])
 
   useEffect(() => {
     for (const server of stableServers) {
@@ -92,11 +112,11 @@ export function useAllServersTasks(
       if (error) errors[server.id] = error
       if (entry) answered = true
       if (!entry?.tasks) continue
-      // A failed refresh keeps the last list it had rather than blanking it.
-      if (entry.sequence !== undefined && !error) sequences[server.id] = entry.sequence
+      if (entry.sequence !== undefined) sequences[server.id] = entry.sequence
       for (const task of entry.tasks) tasks.push({ ...task, serverId: server.id, serverName: server.label })
     }
-    const loading = !answered && stableServers.some((server) => !server.error)
-    return { tasks, errors, sequences, loading, reload }
-  }, [reload, state, stableServers])
+    // Before the first sidebar poll there is no server to wait for yet.
+    const loading = !answered && (stableServers.length === 0 || stableServers.some((server) => !server.error))
+    return { tasks, errors, sequences, loading, reload, refresh }
+  }, [refresh, reload, state, stableServers])
 }

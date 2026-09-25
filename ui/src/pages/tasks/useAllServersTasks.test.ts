@@ -85,3 +85,41 @@ it("stays loading until the first server answers", async () => {
   await act(async () => release({ tasks: [], sequence: 0 }))
   expect(result.current.loading).toBe(false)
 })
+
+it("coalesces live hints into one follow-up read per server", async () => {
+  const pending: Array<(value: unknown) => void> = []
+  api.listTasks.mockImplementation(() => new Promise((resolve) => pending.push(resolve)))
+  const { result } = renderHook(() => useAllServersTasks(servers.slice(0, 1), filters))
+  await waitFor(() => expect(pending).toHaveLength(1))
+
+  act(() => {
+    result.current.refresh("")
+    result.current.refresh("")
+    result.current.refresh("")
+  })
+  expect(api.listTasks).toHaveBeenCalledTimes(1)
+  await act(async () => pending[0]({ tasks: [task("A-1")], sequence: 1 }))
+  await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(2))
+  await act(async () => pending[1]({ tasks: [task("A-1"), task("A-2")], sequence: 2 }))
+  expect(result.current.tasks).toHaveLength(2)
+  expect(api.listTasks).toHaveBeenCalledTimes(2)
+})
+
+it("drops a server's rows when its read fails, so an old filter's rows never linger", async () => {
+  let fail = false
+  api.listTasks.mockImplementation(async () => {
+    if (fail) throw new Error("gone")
+    return { tasks: [task("A-1")], sequence: 1 }
+  })
+  const { result } = renderHook(() => useAllServersTasks(servers.slice(0, 1), filters))
+  await waitFor(() => expect(result.current.tasks).toHaveLength(1))
+  fail = true
+  act(() => result.current.reload(""))
+  await waitFor(() => expect(result.current.errors).toEqual({ "": "gone" }))
+  expect(result.current.tasks).toEqual([])
+})
+
+it("is loading while no server is known yet", () => {
+  const { result } = renderHook(() => useAllServersTasks([], filters))
+  expect(result.current.loading).toBe(true)
+})

@@ -98,7 +98,9 @@ function MainApp() {
           )}
           {/* The view lives in the query, not the path: switching keeps the
               selected agent's route, survives a reload and is one Back away. */}
-          {sidebarRoute && (
+          {/* Only where an agent is the subject: Workspace and server pages
+              are neither view. */}
+          {(location.pathname === "/" || location.pathname.startsWith("/agents/")) && (
             <Segmented
               label="View"
               className="ml-2"

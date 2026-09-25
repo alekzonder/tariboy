@@ -8,13 +8,16 @@ import {
   addTaskComment,
   addTaskRelation,
   deleteTaskRelation,
+  exportTask,
   getTask,
   getTaskWorkflow,
+  importTask,
   listTaskEvents,
   listTaskPrincipals,
   listTasks,
   transferTask,
   updateTask,
+  type Task,
   type TaskDetail as Detail,
   type TaskEvent,
   type TaskPrincipals,
@@ -33,6 +36,17 @@ function idempotencyKey(): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+type TaskEdit = {
+  revision: number
+  title: string
+  description: string
+  pull_request: string
+  status?: TaskStatus
+  assignee?: string
+  manual_block_reason?: string
+  priority: TaskPriority
 }
 
 /** An assignee the drawer may offer. `hostId` is set when the agent lives on
@@ -138,6 +152,39 @@ export default function TaskDrawer({
     onReset: () => { void load() },
   })
 
+  // An agent on another server can only work a task that lives there. Other
+  // edits are saved here first; then the tree is exported and imported with
+  // its root unassigned, so no same-named agent over there takes it before
+  // the real assignment, which is an ordinary update and notifies the agent.
+  // Once the import succeeds the task lives there: a later failure is
+  // reported, and the sheet follows the task all the same.
+  const moveToAgent = async (task: Task, input: TaskEdit, remote: AssigneeChoice): Promise<Task> => {
+    const key = task.key
+    const edited = (["title", "description", "pull_request", "status", "priority", "manual_block_reason"] as const)
+      .some((field) => input[field] !== undefined && input[field] !== (task[field] ?? ""))
+    if (edited) await updateTask(key, { ...input, assignee: task.assignee }, target)
+    const hostId = remote.hostId!
+    const destination = targetFor(hostId)
+    const label = remote.hostLabel || hostId || "local"
+    const bundle = await exportTask(key, target)
+    const tasks = (bundle.tasks as Array<{ key: string; assignee: string }>)
+      .map((item) => item.key === bundle.root_key ? { ...item, assignee: "" } : item)
+    const imported = await importTask({ ...bundle, tasks }, destination)
+    let result = imported
+    try {
+      await addTaskComment(key, `Moved to ${label} as ${key}.`, target, idempotencyKey())
+      const left = await getTask(key, target)
+      await updateTask(key, { status: "cancelled", revision: left.task.revision }, target)
+      const arrived = await getTask(key, destination)
+      result = await updateTask(key, { assignee: remote.assignee, revision: arrived.task.revision }, destination)
+      toast.success(`${key} moved to ${label}`)
+    } catch (error) {
+      toast.error(`${key} moved to ${label}, but the move did not finish: ${errorMessage(error)}`)
+    }
+    onMoved?.(hostId)
+    return result
+  }
+
   if (detail?.task.key !== taskKey) {
     return <TaskDetailLoading taskKey={taskKey} width={detailWidth} resizeHandle={null} onClose={onClose} />
   }
@@ -162,31 +209,20 @@ export default function TaskDrawer({
         toast.success(`${detail.task.key} moved to ${label}`)
         await load()
       }}
-      onSave={async (input: {
-        revision: number
-        title: string
-        description: string
-        pull_request: string
-        status?: TaskStatus
-        assignee?: string
-        manual_block_reason?: string
-        priority: TaskPriority
-      }) => {
+      onSave={async (input: TaskEdit) => {
+        const task = detail.task
         const remote = assignees?.find((choice) => choice.hostId !== undefined && choice.value === input.assignee)
+        // A closed list can lose an entry between the pick and Save (its server
+        // stopped answering). Its value is not a real assignee, so never write it.
+        if (assignees && !remote && input.assignee && input.assignee !== task.assignee
+          && input.assignee !== principals?.customer && !assignees.some((choice) => choice.value === input.assignee)) {
+          const message = "That agent's server is unavailable; pick the assignee again"
+          toast.error(message)
+          throw new Error(message)
+        }
         try {
           if (remote?.hostId !== undefined) {
-            // An agent on another server can only work a task that lives there:
-            // save the other edits here, move the tree, then assign it on arrival.
-            const key = detail.task.key
-            await updateTask(key, { ...input, assignee: detail.task.assignee }, target)
-            const destination = targetFor(remote.hostId)
-            const label = remote.hostLabel || remote.hostId || "local"
-            await transferTask(key, target, destination, label, idempotencyKey())
-            const arrived = await getTask(key, destination)
-            const assigned = await updateTask(key, { assignee: remote.assignee, revision: arrived.task.revision }, destination)
-            toast.success(`${key} moved to ${label}`)
-            onMoved?.(remote.hostId)
-            return assigned
+            return await moveToAgent(task, input, remote)
           }
           const updated = await updateTask(detail.task.key, input, target)
           setDetail((current) => current ? { ...current, task: updated } : current)
