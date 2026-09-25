@@ -149,3 +149,22 @@ func TestChatReadMarkOnlyMovesForward(t *testing.T) {
 		t.Fatalf("an explicit mark-unread must move the mark back, got %q", got)
 	}
 }
+
+// A chat nobody has written in yet has no last message, so it has no sender
+// either rather than an invented "system".
+func TestChatListLeavesAnEmptyChatWithoutASender(t *testing.T) {
+	b, _ := chatFixture(t)
+	list, err := b.ChatList("user:customer", DefaultChatTypes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range list {
+		if s.ID == ChatIDTasks("worker") {
+			if s.LastTS != "" || s.LastFrom != "" {
+				t.Fatalf("empty chat summary = %#v, want no last message", s)
+			}
+			return
+		}
+	}
+	t.Fatalf("tasks chat missing from %#v", list)
+}

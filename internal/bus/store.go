@@ -305,6 +305,11 @@ func (b *Bus) publishTx(tx *sql.Tx, msg Message, now time.Time, guard func(*sql.
 		nullableStr(msg.IdempotencyKey)); err != nil {
 		return Message{}, nil, false, err
 	}
+	// The sender is resolved by fromSQL over the stored row, so a new message
+	// and a backfilled one (migration 0048) can never disagree.
+	if _, err := tx.Exec(`UPDATE messages SET sender = `+fromSQL+` WHERE id = ?`, msg.ID); err != nil {
+		return Message{}, nil, false, err
+	}
 	if _, err := tx.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES (?)`, msg.ID); err != nil {
 		return Message{}, nil, false, err
 	}

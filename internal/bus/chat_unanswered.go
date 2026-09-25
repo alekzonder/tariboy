@@ -1,20 +1,5 @@
 package bus
 
-import "strings"
-
-// fromSQLFor is fromSQL against an aliased messages row, so the sender
-// resolution is defined once and every view agrees on who said what.
-func fromSQLFor(alias string) string {
-	return strings.NewReplacer(
-		"json_extract(CASE WHEN json_valid(data)", "json_extract(CASE WHEN json_valid("+alias+".data)",
-		"THEN data END", "THEN "+alias+".data END",
-		"source GLOB", alias+".source GLOB",
-		"THEN source END", "THEN "+alias+".source END",
-		"produced_by_agent, '')", alias+".produced_by_agent, '')",
-		"|| produced_by_agent", "|| "+alias+".produced_by_agent",
-	).Replace(fromSQL)
-}
-
 // unansweredSQL is the answering obligation of one participant in one chat: a
 // message another participant sent, at or after this participant joined, with no
 // reply of this participant pointing at it.
@@ -31,12 +16,12 @@ var unansweredSQL = `
 	      JOIN chats c ON c.channel = m.channel
 	      JOIN chat_participants p ON p.chat_id = c.id AND p.principal = ?
 	      WHERE c.id = ?
-	        AND (` + fromSQLFor("m") + `) <> ?
+	        AND m.sender <> ?
 	        AND m.ts >= p.joined_at
 	        AND NOT EXISTS (
 	            SELECT 1 FROM messages r
 	            WHERE r.channel = m.channel AND r.in_reply_to = m.id
-	              AND (` + fromSQLFor("r") + `) = ?
+	              AND r.sender = ?
 	        ))
 	ORDER BY ts, id`
 
