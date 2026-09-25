@@ -103,6 +103,13 @@ describe("AgentConsoleTab non-interactive uploads", () => {
   });
 });
 
+it("leaves starting a stopped interactive agent to the header", () => {
+  renderTab(agent({ interactive: true, state: "stopped", enabled: false }));
+
+  expect(screen.getByText("Agent is stopped.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+});
+
 describe("AgentConsoleTab and header Exec", () => {
   it("no longer renders its own Exec composer", () => {
     renderTab(agent({ interactive: true, state: "running" }));

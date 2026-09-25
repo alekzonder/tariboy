@@ -74,6 +74,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("Interface mode", () => {
+  it("starts in Simple and switches to Expert immediately and persistently", async () => {
+    renderUpdates();
+    const mode = await screen.findByRole("radiogroup", { name: "Interface mode" });
+    const simple = screen.getByRole("radio", { name: "Simple" });
+    expect(mode).toContainElement(simple);
+    expect(simple).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Expert" }));
+
+    expect(screen.getByRole("radio", { name: "Expert" })).toHaveAttribute("aria-checked", "true");
+    expect(localStorage.getItem("app:ui-mode:v1")).toBe("expert");
+  });
+});
+
 describe("Desktop updates", () => {
   it("allows one manual check while automatic downloads are disabled", async () => {
     localStorage.setItem(AUTO_DOWNLOAD_KEY, "false");

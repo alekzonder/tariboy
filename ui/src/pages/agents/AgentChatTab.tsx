@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import ChannelsPage from "@/pages/ChannelsPage";
 import AgentChat from "./chat/AgentChat";
+import { useUiMode } from "@/lib/uiMode";
 
 // One section for both halves of an agent's messaging: the conversation the
 // customer holds with it, and the raw channels it is subscribed to. They share
@@ -17,6 +18,7 @@ function isView(value: string | null): value is View {
 
 export default function AgentChatTab({ hostId = "" }: { hostId?: string }) {
   const [params, setParams] = useSearchParams();
+  const simple = useUiMode() === "simple";
   const requested = params.get("view");
   const view: View = isView(requested) ? requested : "chat";
   const pick = (key: View) => {
@@ -43,6 +45,8 @@ export default function AgentChatTab({ hostId = "" }: { hostId?: string }) {
       ))}
     </div>
   );
+  // Simple is the personal chat alone: no Channels, no other chats.
+  if (simple) return <AgentChat hostId={hostId} personalOnly />;
   if (view === "chat") return <AgentChat hostId={hostId} leading={segment} />;
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

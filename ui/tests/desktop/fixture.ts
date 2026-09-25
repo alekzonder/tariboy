@@ -82,6 +82,8 @@ export async function waitForMainWindow(desktop: W3CClient): Promise<void> {
     `return typeof window.__TAURI_INTERNALS__ === "object"
       && document.body?.innerText.includes("New agent") === true`,
   )).toBe(true);
+  // These specs drive Console and the other Expert tabs; Simple is the default.
+  await desktop.execute(`localStorage.setItem("app:ui-mode:v1", "expert"); return true;`);
   await expect.poll(() => desktop.execute<boolean>(`
     if (window.__tariboyDaemonReady === true) return true;
     if (window.__tariboyDaemonProbePending !== true) {

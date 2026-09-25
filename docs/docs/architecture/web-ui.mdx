@@ -39,6 +39,19 @@ only in Rust process memory, so quitting Desktop discards it. When one is ready,
 the route-independent banner below the titlebar requires an explicit install
 action and reports installation failures for retry.
 
+Application settings also choose the **Interface mode**: **Simple**, the
+default, or **Expert**. The choice persists in WebView localStorage under
+`app:ui-mode:v1` and applies at once; any other stored value, or unavailable
+storage, means Simple. Simple changes only what the agent workspace shows: its
+tabs are **Chat**, **Tasks**, and **Configuration**, an agent opens on Chat, and
+a route to a hidden tab (Console, Autopilot, Activity, Advanced) is redirected
+to Chat. Its Chat tab is the personal conversation alone, with the toolbar
+starting at message search: there is no **Chat**/**Channels** switch, no chat
+tablist, and no **New chat**. The sidebar, the server row, and the agent
+header — Start/Stop and Exec included — are the same in both modes. Expert is
+the complete workspace described below. The mode hides interface only; it is
+not an access control, and the API and CLI are unchanged.
+
 The primary agent dialog has **Target**, **Identity**, **Runtime**,
 **Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
 documented defaults and submits one complete create request; the daemon writes
@@ -543,9 +556,11 @@ the explicit host id and fail closed rather than silently falling back to local.
 Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view
 answers the same question about the next agent. An unknown tab still falls back
-to Console, and a selected task in the Tasks query is dropped because it belongs
+to Console (Chat in Simple mode), and a selected task in the Tasks query is dropped because it belongs
 to the agent being left. Selecting an agent from anywhere else — Workspace, a
-team, or a freshly created agent — still opens Console.
+team, or a freshly created agent — still opens Console, or Chat in Simple mode.
+Start and Stop live only in the agent header; a stopped agent's Console says so
+without a Start button of its own.
 
 When a known explicit server route temporarily loses its tunnel or its
 authoritative aggregate refresh fails, the Desktop retains its last successful

@@ -3,6 +3,7 @@ import { act, render, screen, waitFor, fireEvent } from "@testing-library/react"
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { DaemonProvider } from "@/components/DaemonProvider";
 import TerminalsPage from "./TerminalsPage";
+import { UI_MODE_KEY } from "@/lib/uiMode";
 import { fetchAllAgents } from "@/lib/aggregate";
 import {
   agentGetOn,
@@ -86,6 +87,8 @@ const cloneProjection = {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  // Console navigation is Expert behaviour; Simple opens Chat (AgentWorkspace tests).
+  localStorage.setItem(UI_MODE_KEY, "expert");
   vi.mocked(apiOn).mockReset().mockResolvedValue(undefined);
   vi.mocked(fetchAllAgents).mockResolvedValue([
     {

@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Segmented } from "@/components/ui/segmented";
+import { useUiMode, writeUiMode, type UiMode } from "@/lib/uiMode";
 
 const AUTO_DOWNLOAD_KEY = "desktop:updates:auto-download:v1";
 const SIX_HOURS = 6 * 60 * 60 * 1000;
@@ -183,6 +185,7 @@ function DownloadStatus({ snapshot }: { snapshot: DesktopUpdateSnapshot }) {
 
 export function AppSettings() {
   const updates = useDesktopUpdates();
+  const mode = useUiMode();
   const canCheck = !updates.snapshot
     || ["idle", "up-to-date", "error"].includes(updates.snapshot.phase);
   const error = updates.snapshot?.phase === "ready"
@@ -193,6 +196,21 @@ export function AppSettings() {
       <div className="mx-auto max-w-2xl space-y-6">
         <Button asChild variant="ghost"><Link to="/">Back to workspace</Link></Button>
         <h1 className="text-2xl font-semibold">Application settings</h1>
+        <Card>
+          <CardHeader><CardTitle>Interface mode</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <Segmented<UiMode>
+              label="Interface mode"
+              className="w-fit"
+              value={mode}
+              onChange={writeUiMode}
+              options={[{ value: "simple", label: "Simple" }, { value: "expert", label: "Expert" }]}
+            />
+            <p className="text-muted-foreground">
+              Simple shows an agent&apos;s Chat, Tasks and Configuration. Expert shows every tab and chat.
+            </p>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader><CardTitle>Desktop updates</CardTitle></CardHeader>
           <CardContent className="space-y-5">

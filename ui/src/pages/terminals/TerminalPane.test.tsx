@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { TerminalPane } from "./TerminalPane";
 import { agentDeleteOn, agentPostOn } from "@/lib/api";
@@ -64,12 +64,10 @@ describe("TerminalPane compatibility wrapper", () => {
   // of the console pane and into the agent header, so they are reachable from
   // every tab rather than only this one.
 
-  it("starts a stopped interactive agent with start, not restart", async () => {
-    vi.mocked(agentPostOn).mockResolvedValue({});
+  it("leaves starting a stopped interactive agent to the agent header", () => {
     renderPane(agent({ state: "stopped" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "Start" })[0]);
-    await waitFor(() => expect(agentPostOn).toHaveBeenCalledWith(remoteTarget, "a1", "start"));
-    expect(agentPostOn).not.toHaveBeenCalledWith(remoteTarget, "a1", "restart");
+    expect(screen.getByText("Agent is stopped.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
   });
 
   it("keeps a live terminal attached for an idle interactive agent", () => {
