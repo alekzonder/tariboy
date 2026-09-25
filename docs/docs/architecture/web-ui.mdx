@@ -590,12 +590,19 @@ the task there assigned to that agent.
 
 Selecting a row opens the task in place in the same detail sheet, loaded from
 its own server. There the Assignee field lists every agent on every server as
-`agent · server`. Choosing an agent on another server saves the other edits,
-moves the task with [the server-to-server transfer](/docs/tasks#moving-a-task-to-another-server),
-and assigns it on arrival; the sheet then follows the task to its new server.
-The transfer's refusals — no queue with that prefix, a taken key, or a
-workflow-managed queue — leave the task where it was and are shown as an
-error.
+`agent · server`. Choosing an agent on another server saves any other edits
+on the source, then moves the tree with the export and import of
+[the server-to-server transfer](/docs/tasks#moving-a-task-to-another-server).
+The root is imported unassigned, so an agent of the same name on the target
+cannot take it first, and is then assigned by an ordinary update, which sends
+the agent its assignment notification; subtasks keep their assignees. The
+import's refusals — no queue with that prefix, a taken key, or a
+workflow-managed queue — leave the task on its server and are shown as an
+error. Once the import succeeds the task lives on the target: if cancelling the
+source copy or assigning the agent then fails, the error names the step and
+the sheet still follows the task to its new server. A choice whose server
+stopped answering between the pick and **Save** is refused rather than written
+as an assignee.
 
 Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view

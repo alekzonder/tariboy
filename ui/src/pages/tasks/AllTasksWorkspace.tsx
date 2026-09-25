@@ -85,7 +85,7 @@ export default function AllTasksWorkspace({
     [hosts],
   )
   const labelOf = (id: string) => servers.find((server) => server.id === id)?.label ?? (id || "local")
-  const { tasks, errors, sequences, loading, reload } = useAllServersTasks(servers, {
+  const { tasks, errors, sequences, loading, reload, refresh } = useAllServersTasks(servers, {
     text: view.query,
     statusView: view.statusView,
   })
@@ -152,7 +152,7 @@ export default function AllTasksWorkspace({
   return (
     <div className="tasks-workspace" data-testid="all-tasks-workspace">
       {Object.entries(sequences).map(([serverId, after]) => (
-        <ServerTasksLive key={serverId} serverId={serverId} after={after} onChange={() => reload(serverId)} />
+        <ServerTasksLive key={serverId} serverId={serverId} after={after} onChange={() => refresh(serverId)} />
       ))}
       <main className="tasks-center">
         <TaskFilterBar
@@ -288,7 +288,14 @@ function NewTaskForm({
         setQueues(page.queues ?? [])
         setQueue((current) => page.queues?.some((item) => item.prefix === current) ? current : page.queues?.[0]?.prefix ?? "")
       })
-      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : String(error)))
+      .catch((error: unknown) => {
+        // The previous agent's queues do not exist on this server.
+        if (alive) {
+          setQueues([])
+          setQueue("")
+        }
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
     return () => { alive = false }
   }, [hostId])
 

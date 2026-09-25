@@ -13,7 +13,9 @@ const api = vi.hoisted(() => ({
   listTaskPrincipals: vi.fn(),
   listTaskQueues: vi.fn(),
   listTasks: vi.fn(),
-  transferTask: vi.fn(),
+  addTaskComment: vi.fn(),
+  exportTask: vi.fn(),
+  importTask: vi.fn(),
   updateTask: vi.fn(),
 }))
 vi.mock("@/lib/tasks", async (importOriginal) => ({
@@ -25,7 +27,8 @@ vi.mock("@/lib/terminalsHost", async (importOriginal) => ({
   targetFor: (id: string) => (id === "" ? null : { id, label: id, baseURL: `https://${id}`, token: "t" }),
 }))
 vi.mock("@/hooks/useTasksSocket", () => ({ useTasksSocket: vi.fn(() => "open") }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }))
+vi.mock("sonner", () => ({ toast }))
 
 function task(key: string, extra: Partial<Task> = {}): Task {
   return {
@@ -54,7 +57,7 @@ const serverOf = (target: { id: string } | null | undefined) => target?.id ?? ""
 
 beforeEach(() => {
   sessionStorage.clear()
-  for (const fn of Object.values(api)) fn.mockReset()
+  for (const fn of [...Object.values(api), ...Object.values(toast)]) fn.mockReset()
   api.listTasks.mockImplementation(async (_query: unknown, target: { id: string } | null) =>
     ({ tasks: tasksByServer[serverOf(target)] ?? [], sequence: 1 }))
   api.getTask.mockImplementation(async (key: string, target: { id: string } | null) => ({
@@ -132,27 +135,70 @@ it("opens a task on its own server", async () => {
   expect(await screen.findByRole("button", { name: "Save task" })).toBeInTheDocument()
 })
 
-it("moves a task to the server of an agent picked from another server", async () => {
-  api.transferTask.mockResolvedValue(undefined)
+async function pickRemoteAssignee() {
   api.updateTask.mockImplementation(async (key: string, input: Partial<Task>) => ({ ...task(key), ...input }))
-  render(<AllTasksWorkspace hosts={hosts} />)
+  api.exportTask.mockResolvedValue({
+    root_key: "TASK-b2", queue: "TASK", relations: [],
+    tasks: [{ key: "TASK-b2", assignee: "agent:jack" }, { key: "TASK-child", assignee: "agent:jack" }],
+  })
+  api.importTask.mockResolvedValue(task("TASK-b2"))
+  api.addTaskComment.mockResolvedValue({})
   await userEvent.click(await screen.findByText("Title TASK-b2"))
-
   const assignee = await screen.findByRole("combobox", { name: "Assignee" })
   expect(within(assignee).getByRole("option", { name: "jack · local" })).toBeInTheDocument()
   await userEvent.selectOptions(assignee, within(assignee).getByRole("option", { name: "builder · hetzner-02" }))
-  api.getTask.mockResolvedValueOnce({ task: task("TASK-b2", { revision: 9 }), comments: [], waiting_for: [], relations: [] })
+}
+
+it("moves a task to the server of an agent picked from another server and assigns it there", async () => {
+  render(<AllTasksWorkspace hosts={hosts} />)
+  await pickRemoteAssignee()
+  api.getTask.mockImplementation(async (key: string, target: { id: string } | null) => ({
+    task: task(key, { revision: target ? 9 : 4 }), comments: [], waiting_for: [], relations: [],
+  }))
   await userEvent.click(screen.getByRole("button", { name: "Save task" }))
 
-  await waitFor(() => expect(api.transferTask).toHaveBeenCalledWith(
-    "TASK-b2", null, expect.objectContaining({ id: "h2" }), "hetzner-02", expect.any(String),
-  ))
-  await waitFor(() => expect(api.updateTask).toHaveBeenLastCalledWith(
+  await waitFor(() => expect(api.updateTask).toHaveBeenCalledWith(
     "TASK-b2", { assignee: "agent:builder", revision: 9 }, expect.objectContaining({ id: "h2" }),
   ))
-  // Everything but the assignee is saved on the source before the move.
-  expect(api.updateTask.mock.calls[0][2]).toBeNull()
-  expect(api.updateTask.mock.calls[0][1]).toMatchObject({ assignee: "" })
+  // The root arrives unassigned, so no same-named agent there can take it
+  // before the real assignment; the rest of the tree is untouched.
+  expect(api.importTask).toHaveBeenCalledWith(expect.objectContaining({
+    tasks: [{ key: "TASK-b2", assignee: "" }, { key: "TASK-child", assignee: "agent:jack" }],
+  }), expect.objectContaining({ id: "h2" }))
+  expect(api.addTaskComment).toHaveBeenCalledWith("TASK-b2", "Moved to hetzner-02 as TASK-b2.", null, expect.any(String))
+  expect(api.updateTask).toHaveBeenCalledWith("TASK-b2", { status: "cancelled", revision: 4 }, null)
+  // Nothing else was edited, so the source is not written before the move.
+  expect(api.updateTask).toHaveBeenCalledTimes(2)
+  // The sheet follows the task.
+  await waitFor(() => expect(api.getTask).toHaveBeenLastCalledWith("TASK-b2", expect.objectContaining({ id: "h2" })))
+})
+
+it("follows the task to its new server even when a step after the import fails", async () => {
+  render(<AllTasksWorkspace hosts={hosts} />)
+  await pickRemoteAssignee()
+  api.getTask.mockImplementation(async (key: string, target: { id: string } | null) => {
+    if (target) throw new Error("tunnel dropped")
+    return { task: task(key, { revision: 4 }), comments: [], waiting_for: [], relations: [] }
+  })
+  await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+    "TASK-b2 moved to hetzner-02, but the move did not finish: tunnel dropped",
+  ))
+  await waitFor(() => expect(api.getTask).toHaveBeenLastCalledWith("TASK-b2", expect.objectContaining({ id: "h2" })))
+})
+
+it("refuses an assignee whose server dropped out of the list before Save", async () => {
+  const { rerender } = render(<AllTasksWorkspace hosts={hosts} />)
+  await pickRemoteAssignee()
+  rerender(<AllTasksWorkspace hosts={[hosts[0], { ...hosts[1], error: "unreachable" }, hosts[2]]} />)
+  await userEvent.click(screen.getByRole("button", { name: "Save task" }))
+
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+    "That agent's server is unavailable; pick the assignee again",
+  ))
+  expect(api.updateTask).not.toHaveBeenCalled()
+  expect(api.importTask).not.toHaveBeenCalled()
 })
 
 it("creates a task for the chosen agent on that agent's server", async () => {
