@@ -17,7 +17,7 @@ import {
   listTaskEvents,
   listTaskPrincipals,
   listTaskQueues,
-  listTasks,
+  type listTasks,
   markTaskNotificationRead,
   moveTask,
   transferTask,
@@ -42,6 +42,7 @@ import { TaskFilterBar, type TaskPrincipalFilter } from "./TaskFilterBar"
 import TaskDetail, { TaskDetailLoading } from "./TaskDetail"
 import TaskForm from "./TaskForm"
 import TaskTree from "./TaskTree"
+import { listAllTasks } from "./useAllServersTasks"
 import {
   defaultTaskDetailWidth,
   MIN_TASK_DETAIL_WIDTH,
@@ -304,18 +305,7 @@ function TasksWorkspaceContent({
       }
       if (view === "mine") filters.assignee = scopeAgent ? actorAgent(scopeAgent) : principalFilter
       if (view === "waiting") filters.waiting_for = scopeAgent ? actorAgent(scopeAgent) : principalFilter
-      const loaded: Task[] = []
-      let after = ""
-      let latestSequence = 0
-      const seenCursors = new Set<string>()
-      do {
-        const page = await listTasks({ ...filters, limit: 500, after }, target)
-        loaded.push(...(page.tasks ?? []))
-        latestSequence = Math.max(latestSequence, page.sequence ?? 0)
-        after = page.next_cursor ?? ""
-        if (after && seenCursors.has(after)) throw new Error("task pagination cursor repeated")
-        if (after) seenCursors.add(after)
-      } while (after)
+      const { tasks: loaded, sequence: latestSequence } = await listAllTasks(filters, target)
       if (request !== treeRequestRef.current) return
       setTasks(loaded)
       setSequence((current) => Math.max(current, latestSequence))
