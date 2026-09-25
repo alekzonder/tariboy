@@ -129,7 +129,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   const outOfBudget = exhaustedPeriods.length > 0;
   const tone = agentTone(agent.state, outOfBudget);
   const alive = agent.enabled ?? agent.state !== "stopped";
-  const hasOpenQuestion = attention.has(customerQuestionAttentionKey(hostId, agent.name));
+  const questionTasks = attention.get(customerQuestionAttentionKey(hostId, agent.name)) ?? 0;
   const content =
     tab === "console" ? <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
     : tab === "autopilot" ? <AgentAutopilotTab />
@@ -270,13 +270,15 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                       className="ml-1.5 size-[5px] rounded-full bg-primary"
                     />
                   )}
-                  {key === "tasks" && hasOpenQuestion && (
+                  {key === "tasks" && questionTasks > 0 && (
                     <span
                       role="img"
-                      aria-label="Open question from an agent"
-                      title="Open question from an agent"
-                      className="ml-1.5 size-[5px] rounded-full bg-primary"
-                    />
+                      aria-label={`${questionTasks} task${questionTasks === 1 ? "" : "s"} with unread agent questions`}
+                      title={`${questionTasks} task${questionTasks === 1 ? "" : "s"} with unread agent questions`}
+                      className="ml-1.5 rounded-full bg-primary px-1.5 text-[11px] font-medium leading-4 text-primary-foreground"
+                    >
+                      {questionTasks}
+                    </span>
                   )}
                 </NavLink>
               ))}

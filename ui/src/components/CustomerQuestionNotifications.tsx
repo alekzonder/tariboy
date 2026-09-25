@@ -22,7 +22,7 @@ import {
 } from "./customerQuestionNotificationModel"
 
 type HostSnapshot = {
-  attention: ReadonlySet<string>
+  attention: ReadonlyMap<string, number>
 }
 
 type FreshQuestion = {
@@ -61,7 +61,7 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
     [daemons],
   )
 
-  const receiveSnapshot = useCallback((hostId: string, label: string, attention: ReadonlySet<string>, fresh: FreshQuestion[]) => {
+  const receiveSnapshot = useCallback((hostId: string, label: string, attention: ReadonlyMap<string, number>, fresh: FreshQuestion[]) => {
     setSnapshots((current) => {
       const next = new Map(current)
       next.set(hostId, { attention })
@@ -100,9 +100,9 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
   }, [])
 
   const attention = useMemo(() => {
-    const next = new Set<string>()
+    const next = new Map<string, number>()
     for (const snapshot of snapshots.values()) {
-      for (const key of snapshot.attention) next.add(key)
+      for (const [key, count] of snapshot.attention) next.set(key, count)
     }
     return next
   }, [snapshots])
@@ -160,7 +160,7 @@ function HostQuestionWatcher({
 }: {
   hostId: string
   label: string
-  onSnapshot: (hostId: string, label: string, attention: ReadonlySet<string>, fresh: FreshQuestion[]) => void
+  onSnapshot: (hostId: string, label: string, attention: ReadonlyMap<string, number>, fresh: FreshQuestion[]) => void
   onRemove: (hostId: string) => void
   registerRefresher: (hostId: string, refresh: (() => Promise<void>) | null) => void
 }) {
@@ -182,11 +182,14 @@ function HostQuestionWatcher({
   }, [label])
 
   const publish = useCallback((notifications: TaskNotification[], fresh: FreshQuestion[]) => {
-    const attention = new Set<string>()
+    const tasks = new Map<string, Set<string>>()
     for (const notification of notifications) {
       const agentName = requestingAgent(notification)
-      if (agentName) attention.add(customerQuestionAttentionKey(hostId, agentName))
+      if (!agentName) continue
+      const key = customerQuestionAttentionKey(hostId, agentName)
+      tasks.set(key, (tasks.get(key) ?? new Set()).add(notification.task_key))
     }
+    const attention = new Map([...tasks].map(([key, keys]) => [key, keys.size]))
     onSnapshot(hostId, labelRef.current, attention, fresh)
   }, [hostId, onSnapshot])
 

@@ -1,12 +1,13 @@
 import { createContext, useContext } from "react"
 
 export interface CustomerQuestionNotificationsValue {
-  attention: ReadonlySet<string>
+  // Attention key -> number of that agent's tasks with an unread question.
+  attention: ReadonlyMap<string, number>
   refreshHost: (hostId: string) => Promise<void>
 }
 
 const emptyValue: CustomerQuestionNotificationsValue = {
-  attention: new Set(),
+  attention: new Map(),
   refreshHost: async () => {},
 }
 

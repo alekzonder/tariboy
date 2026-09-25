@@ -487,14 +487,16 @@ indicator in the UI. `ttasks notifications` remains the operator command for
 reading and dismissing inbox rows. A route-independent coordinator still
 watches every configured host and derives the requesting agent from the
 notification's event actor projection, not from display text; that shared
-attention orders the agent list and marks the agent workspace's **Tasks** tab,
-and customer-authored questions contribute neither.
+attention orders the agent list and puts a count on the agent workspace's
+**Tasks** tab: the number of that agent's tasks with an unread question. The
+count drops only when such a task is opened; reading Chat leaves it unchanged.
+Customer-authored questions contribute to neither.
 
 Each host watcher treats typed HTTP task and notification responses as
 authoritative. The resumable task WebSocket supplies refresh hints and sequence
 progress only; a hint triggers an HTTP refetch and never mutates attention by
 itself. Initial host discovery and recovery both establish a silent baseline:
-current unread questions populate the in-app dots, but do not replay native
+current unread questions populate the in-app indicators, but do not replay native
 notifications. Observed notification IDs and per-host snapshots exist only in
 React memory for the current Desktop session. They are not written to Web
 Storage or persisted by the daemon, and current-session ID tracking deduplicates

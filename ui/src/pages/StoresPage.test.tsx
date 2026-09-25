@@ -38,7 +38,7 @@ function RouteButtons({ hostParam, otherHostParam }: { hostParam: string; otherH
 function renderPage(path: string, hostParam: string, otherHostParam?: string) {
   return render(
     <DaemonProvider>
-      <CustomerQuestionNotificationsContext.Provider value={{ attention: new Set(), refreshHost: async () => {} }}>
+      <CustomerQuestionNotificationsContext.Provider value={{ attention: new Map(), refreshHost: async () => {} }}>
         <SidebarStateProvider>
           <MemoryRouter initialEntries={[path]}>
             <RouteButtons hostParam={hostParam} otherHostParam={otherHostParam} />

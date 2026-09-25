@@ -55,7 +55,7 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
   daemonViews: DaemonMeta[];
   appVersion: string;
   onConnectHost: (hostId: string) => void;
-  attention: ReadonlySet<string>;
+  attention: ReadonlyMap<string, number>;
   width: number;
   onResize: (px: number) => void;
 }) {
