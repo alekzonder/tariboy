@@ -355,7 +355,7 @@ func (s *Store) Create(a Agent) error {
 		a.GoalDeliveryCooldownS = 60
 	}
 	if a.AIStallTimeoutS == 0 {
-		a.AIStallTimeoutS = 300
+		a.AIStallTimeoutS = 1800
 	}
 	if a.GoalDeliveryCooldownS < 1 {
 		return ErrInvalidGoalWaitCustomerTimeout

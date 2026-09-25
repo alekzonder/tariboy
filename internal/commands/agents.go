@@ -317,7 +317,7 @@ func agentRun() registry.Command {
 			{Name: "on_timeout", Type: registry.String, Help: "timeout policy: restart or stop"},
 			{Name: "on_error", Type: registry.String, Help: "error policy: restart or stop"},
 			{Name: "max_idle_iterations", Type: registry.Int, Help: "maximum consecutive idle iterations; 0 disables"},
-			{Name: "ai_stall_timeout_s", Type: registry.Int, Default: 300, Help: "AI-proxy inactivity error threshold in whole seconds (default 300)"},
+			{Name: "ai_stall_timeout_s", Type: registry.Int, Default: 1800, Help: "AI-proxy inactivity error threshold in whole seconds (default 1800)"},
 			{Name: "user_prompt", Type: registry.String, Help: "standing user prompt"},
 			{Name: "messages_batch", Type: registry.Int, Help: "maximum messages delivered per iteration"},
 			{Name: "messages_max_queue", Type: registry.Int, Help: "maximum queued messages"},
@@ -394,7 +394,7 @@ func agentRun() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			aiStallTimeoutS := 300
+			aiStallTimeoutS := 1800
 			if _, present := p["ai_stall_timeout_s"]; present {
 				aiStallTimeoutS, err = agentIntParam(p, "ai_stall_timeout_s", "bad_ai_stall_timeout", 1)
 				if err != nil {

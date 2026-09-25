@@ -133,7 +133,7 @@ const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
   on_timeout: "restart",
   on_error: "restart",
   max_idle_iterations: 0,
-  ai_stall_timeout_s: 300,
+  ai_stall_timeout_s: 1800,
   user_prompt: "",
   messages_batch: 10,
   messages_max_queue: 100,

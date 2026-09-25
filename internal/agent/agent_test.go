@@ -29,8 +29,8 @@ func TestAIStallSettingsAndActivityPersist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.AIStallTimeoutS != 300 {
-		t.Fatalf("default AI stall timeout = %d, want 300", a.AIStallTimeoutS)
+	if a.AIStallTimeoutS != 1800 {
+		t.Fatalf("default AI stall timeout = %d, want 1800", a.AIStallTimeoutS)
 	}
 
 	it := Iteration{ID: "worker-1", Agent: "worker", Status: "running", StartedAt: "2026-09-10T02:00:00Z"}
