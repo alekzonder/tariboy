@@ -35,12 +35,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/**
- * One task, opened where it was mentioned. It is the same panel the Tasks
- * workspace shows, but it owns its own load and its own writes, so a chat — or
- * anything else that names a task key — can open it without navigating to
- * Tasks and without borrowing that workspace's tree state.
- */
 /** An assignee the drawer may offer. `hostId` is set when the agent lives on
  *  another server: picking it moves the task there first. */
 export interface AssigneeChoice {
@@ -51,6 +45,12 @@ export interface AssigneeChoice {
   hostLabel?: string
 }
 
+/**
+ * One task, opened where it was mentioned. It is the same panel the Tasks
+ * workspace shows, but it owns its own load and its own writes, so a chat — or
+ * anything else that names a task key — can open it without navigating to
+ * Tasks and without borrowing that workspace's tree state.
+ */
 export default function TaskDrawer({
   taskKey,
   target,
