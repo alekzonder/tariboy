@@ -185,7 +185,7 @@ export default function TaskDetail({
     <Dialog open onOpenChange={(open) => { if (!open) close() }}>
     {/* Without the resize grip the panel would land in the column the grip
         owns, 9px wide, and the drawer would read as an empty sheet. */}
-    <DialogContent className={cn("task-detail-dialog bg-card ring-0", !resizeHandle && "task-detail-dialog-plain")}
+    <DialogContent className="task-detail-dialog bg-card ring-0"
       showCloseButton={false} aria-describedby={undefined}
       /* The sheet dims the whole window — topbar and sidebar included — with the
          theme's own foreground, so both read as one tone behind it. */
@@ -440,7 +440,7 @@ export function TaskDetailLoading({ taskKey, width, resizeHandle, onClose }: {
 }) {
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-    <DialogContent className={cn("task-detail-dialog bg-card ring-0", !resizeHandle && "task-detail-dialog-plain")}
+    <DialogContent className="task-detail-dialog bg-card ring-0"
       showCloseButton={false} aria-describedby={undefined}
       overlayClassName="bg-[color-mix(in_oklab,var(--foreground)_7%,transparent)] supports-backdrop-filter:backdrop-blur-none"
       style={{ "--tasks-detail-width": `${width}px` } as CSSProperties}
