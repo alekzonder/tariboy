@@ -125,17 +125,6 @@ any other support-bundle exclusion. See [AI proxy and
 audit](/docs/architecture/ai-proxy#pricing-catalog-and-request-costs) for its
 runtime lifecycle.
 
-Desktop's Terminal Workspace stores only a validated split layout, active
-`{hostId, agentName}` identity, and sidebar width/hidden state in WebView
-localStorage. It never stores terminal bytes or scrollback, prompts,
-transcripts, messages, model output, environment values, credentials, secrets,
-cwd/workdir paths, or user files. Closing a tile is UI detach only and cannot
-invoke agent Stop, Kill, or Delete. Workspace also disables the shared
-terminal's persistent compose draft, so typed operator text and uploaded server
-paths are discarded when their tile unmounts. Pointer coordinates, drop
-previews, and drag ghost labels are transient React state and are never written
-to localStorage.
-
 ## Alpha signing and Gatekeeper
 
 `0.70.0` is ad-hoc signed, not Developer ID signed or notarized. Verify

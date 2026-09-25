@@ -1,28 +1,51 @@
 import { useCallback, useState } from "react";
-import {
-  DEFAULT_SIDEBAR_WIDTH,
-  LEGACY_SIDEBAR_WIDTH_KEY,
-  MAX_SIDEBAR_WIDTH,
-  MIN_SIDEBAR_WIDTH,
-  clampSidebarWidth,
-  readWorkspaceState,
-  updateWorkspaceState,
-} from "./workspaceState";
 
-/** Legacy key read during migration when no versioned workspace exists. */
-export const SIDEBAR_WIDTH_KEY = LEGACY_SIDEBAR_WIDTH_KEY;
-export {
-  DEFAULT_SIDEBAR_WIDTH,
-  MIN_SIDEBAR_WIDTH,
-  MAX_SIDEBAR_WIDTH,
-  clampSidebarWidth,
-};
+export const SIDEBAR_STATE_KEY = "terminals:sidebar:v1";
+/** The removed terminal canvas kept the sidebar inside its own record; it is
+ *  read once so an existing width and hidden state survive the upgrade. */
+export const LEGACY_WORKSPACE_STATE_KEY = "terminals:workspace:v1";
 
-/** Read the persisted width. Falls back to the default for a missing key, a
- *  non-numeric value, or an unavailable localStorage (best-effort, same as the
- *  color cache). */
+export const DEFAULT_SIDEBAR_WIDTH = 268;
+export const MIN_SIDEBAR_WIDTH = 160;
+export const MAX_SIDEBAR_WIDTH = 640;
+
+interface SidebarState {
+  width: number;
+  hidden: boolean;
+}
+
+export function clampSidebarWidth(px: number): number {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(px)));
+}
+
+function sanitize(value: { width?: unknown; hidden?: unknown } | null | undefined): SidebarState | null {
+  if (typeof value?.width !== "number" || !Number.isFinite(value.width)) return null;
+  return { width: clampSidebarWidth(value.width), hidden: value.hidden === true };
+}
+
+/** Best-effort: a missing, malformed or unavailable store means the default. */
+function readSidebarState(): SidebarState {
+  try {
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_WORKSPACE_STATE_KEY) ?? "null") as
+      { sidebar?: SidebarState } | null;
+    return sanitize(JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY) ?? "null"))
+      ?? sanitize(legacy?.sidebar)
+      ?? { width: DEFAULT_SIDEBAR_WIDTH, hidden: false };
+  } catch {
+    return { width: DEFAULT_SIDEBAR_WIDTH, hidden: false };
+  }
+}
+
+function writeSidebarState(state: SidebarState) {
+  try {
+    localStorage.setItem(SIDEBAR_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Unavailable storage keeps the in-memory state for this session.
+  }
+}
+
 export function readSidebarWidth(): number {
-  return readWorkspaceState().sidebar.width;
+  return readSidebarState().width;
 }
 
 export function useSidebarState(): {
@@ -31,21 +54,20 @@ export function useSidebarState(): {
   setWidth: (px: number) => void;
   setHidden: (hidden: boolean) => void;
 } {
-  const [sidebar, setSidebar] = useState(() => readWorkspaceState().sidebar);
+  const [sidebar, setSidebar] = useState(readSidebarState);
   const setWidth = useCallback((px: number) => {
-    const next = clampSidebarWidth(px);
-    setSidebar((current) => ({ ...current, width: next }));
-    updateWorkspaceState((current) => ({
-      ...current,
-      sidebar: { ...current.sidebar, width: next },
-    }));
+    setSidebar((current) => {
+      const next = { ...current, width: clampSidebarWidth(px) };
+      writeSidebarState(next);
+      return next;
+    });
   }, []);
   const setHidden = useCallback((hidden: boolean) => {
-    setSidebar((current) => ({ ...current, hidden }));
-    updateWorkspaceState((current) => ({
-      ...current,
-      sidebar: { ...current.sidebar, hidden },
-    }));
+    setSidebar((current) => {
+      const next = { ...current, hidden };
+      writeSidebarState(next);
+      return next;
+    });
   }, []);
   return { ...sidebar, setWidth, setHidden };
 }

@@ -1,7 +1,7 @@
 // Console shell preview fixture: the real App over a stubbed daemon, for
 // eyeballing the style layer (and for tests/shell-preview-shot.mjs). Not part
 // of any test run — it is a development harness, served by
-// vite.workspace-test.config.ts like the other fixtures in this directory.
+// vite.fixtures.config.ts like the other fixtures in this directory.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";

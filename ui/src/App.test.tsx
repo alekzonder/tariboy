@@ -138,8 +138,8 @@ describe("product routing", () => {
     fireEvent.click(toggle);
 
     expect(screen.getByRole("button", { name: "Show agents" })).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { hidden: true } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ hidden: true });
   });
 
   it("keeps the macOS titlebar safe and draggable when the daemon banner is visible", async () => {

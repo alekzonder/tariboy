@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import {
-  useSidebarWidth, readSidebarWidth, clampSidebarWidth,
-  SIDEBAR_WIDTH_KEY, DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH,
+  useSidebarState, useSidebarWidth, readSidebarWidth, clampSidebarWidth,
+  SIDEBAR_STATE_KEY, LEGACY_WORKSPACE_STATE_KEY,
+  DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH,
 } from "./useSidebarWidth";
-import { WORKSPACE_STATE_KEY } from "./workspaceState";
 
 beforeEach(() => localStorage.clear());
 
@@ -13,12 +13,19 @@ describe("readSidebarWidth", () => {
     expect(readSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH);
   });
   it("defaults on garbage", () => {
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, "wide please");
+    localStorage.setItem(SIDEBAR_STATE_KEY, "wide please");
     expect(readSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH);
   });
   it("clamps a stored out-of-range value", () => {
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, "5000");
+    localStorage.setItem(SIDEBAR_STATE_KEY, JSON.stringify({ width: 5000, hidden: false }));
     expect(readSidebarWidth()).toBe(MAX_SIDEBAR_WIDTH);
+  });
+  it("keeps the sidebar recorded by the removed terminal canvas", () => {
+    localStorage.setItem(LEGACY_WORKSPACE_STATE_KEY, JSON.stringify({
+      schemaVersion: 1, layout: {}, activeTerminal: null, sidebar: { width: 333, hidden: true },
+    }));
+    const { result } = renderHook(() => useSidebarState());
+    expect(result.current).toMatchObject({ width: 333, hidden: true });
   });
 });
 
@@ -35,8 +42,8 @@ describe("useSidebarWidth", () => {
     const first = renderHook(() => useSidebarWidth());
     act(() => first.result.current[1](420));
     expect(first.result.current[0]).toBe(420);
-    expect(JSON.parse(localStorage.getItem(WORKSPACE_STATE_KEY)!))
-      .toMatchObject({ sidebar: { width: 420, hidden: false } });
+    expect(JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY)!))
+      .toEqual({ width: 420, hidden: false });
 
     // Fresh mount = a reload: the width comes back from storage.
     const second = renderHook(() => useSidebarWidth());
@@ -47,7 +54,7 @@ describe("useSidebarWidth", () => {
     const { result } = renderHook(() => useSidebarWidth());
     act(() => result.current[1](-100));
     expect(result.current[0]).toBe(MIN_SIDEBAR_WIDTH);
-    expect(JSON.parse(localStorage.getItem(WORKSPACE_STATE_KEY)!))
-      .toMatchObject({ sidebar: { width: MIN_SIDEBAR_WIDTH, hidden: false } });
+    expect(JSON.parse(localStorage.getItem(SIDEBAR_STATE_KEY)!))
+      .toEqual({ width: MIN_SIDEBAR_WIDTH, hidden: false });
   });
 });

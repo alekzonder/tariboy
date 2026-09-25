@@ -136,7 +136,6 @@ function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map
             <RoutedLocation />
             <Routes>
               <Route path="/" element={<TerminalsPage />} />
-              <Route path="/workspace" element={<TerminalsPage />} />
               <Route path="/terminals" element={<TerminalsPage />} />
               <Route path="/terminals/:hostId/:agent" element={<TerminalsPage />} />
               <Route path="/agents/:hostId/:agent/:tab" element={<TerminalsPage />} />
@@ -239,16 +238,6 @@ describe("TerminalsPage", () => {
     expect(screen.getByTestId("agent-workspace-content")).not.toHaveAttribute("inert");
   }, 10_000);
 
-  it("renders Workspace only at its global route", async () => {
-    renderAt("/workspace");
-
-    expect(await screen.findByTestId("terminal-workspace")).toBeInTheDocument();
-    expect(screen.getByText("Drag an interactive agent here")).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Agents view" })).toBeNull();
-    expect(screen.getByTestId("location")).toHaveTextContent("/workspace");
-    expect(screen.queryByRole("navigation", { name: "Server workspace" })).toBeNull();
-  });
-
   it("opens a server workspace from a selectable server heading", async () => {
     serversTab();
     renderAt("/");
@@ -296,8 +285,8 @@ describe("TerminalsPage", () => {
     expect(screen.queryByLabelText(/unread agent question/)).toBeNull();
   });
 
-  it("opens a sidebar agent in Console instead of adding it to Workspace", async () => {
-    renderAt("/workspace");
+  it("opens a sidebar agent in Console", async () => {
+    renderAt("/");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Open a1" }));
@@ -307,8 +296,8 @@ describe("TerminalsPage", () => {
     );
   });
 
-  it("opens a non-interactive sidebar agent in Console from Workspace", async () => {
-    renderAt("/workspace");
+  it("opens a non-interactive sidebar agent in Console", async () => {
+    renderAt("/");
     await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Open a2" }));
@@ -362,50 +351,6 @@ describe("TerminalsPage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("location").textContent).toBe("/agents/local/a2/tasks"),
     );
-  });
-
-  it("does not start the Workspace drag gesture from an agent row", async () => {
-    renderAt("/workspace");
-    await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
-    const root = screen.getByTestId("terminal-workspace");
-    vi.spyOn(root, "getBoundingClientRect").mockReturnValue({
-      left: 0,
-      top: 0,
-      width: 800,
-      height: 600,
-      right: 800,
-      bottom: 600,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-    Object.defineProperty(document, "elementsFromPoint", {
-      configurable: true,
-      value: vi.fn(() => [root]),
-    });
-    const interactive = screen.getByRole("button", { name: "Open a1" });
-
-    expect(interactive).not.toHaveAttribute("draggable");
-    expect(screen.queryByRole("button", { name: /Add a1 to Workspace/ })).toBeNull();
-    fireEvent.pointerDown(interactive, {
-      button: 0,
-      pointerId: 9,
-      clientX: 10,
-      clientY: 10,
-    });
-    fireEvent.pointerMove(window, { pointerId: 9, clientX: 200, clientY: 200 });
-    expect(screen.queryByTestId("workspace-drop-preview")).toBeNull();
-    fireEvent.pointerUp(window, { pointerId: 9, clientX: 200, clientY: 200 });
-    expect(screen.queryByRole("tab", { name: "a1" })).toBeNull();
-
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Open a2" }), {
-      button: 0,
-      pointerId: 10,
-      clientX: 10,
-      clientY: 10,
-    });
-    fireEvent.pointerMove(window, { pointerId: 10, clientX: 200, clientY: 200 });
-    expect(screen.queryByTestId("workspace-drop-preview")).toBeNull();
   });
 
   it("restores server, team, and agent order", async () => {
@@ -602,19 +547,10 @@ describe("TerminalsPage", () => {
   });
 
   it("honors a hidden sidebar from the shared persisted state", async () => {
-    localStorage.setItem("terminals:workspace:v1", JSON.stringify({
-      schemaVersion: 1,
-      layout: {
-        global: {},
-        borders: [],
-        layout: { type: "row", weight: 100, children: [] },
-      },
-      activeTerminal: null,
-      sidebar: { width: 268, hidden: true },
-    }));
-    renderAt("/workspace");
+    localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 268, hidden: true }));
+    renderAt("/");
 
-    await waitFor(() => expect(screen.getByTestId("terminal-workspace")).toBeInTheDocument());
+    expect(await screen.findByText("Pick an agent on the left, or create one.")).toBeInTheDocument();
     expect(screen.queryByText("Agents")).toBeNull();
     expect(screen.queryByRole("separator", { name: "resize sidebar" })).toBeNull();
   });
@@ -681,8 +617,8 @@ describe("TerminalsPage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/");
   });
 
-  it("does not navigate or start a Workspace drag for a context-menu gesture", async () => {
-    renderAt("/workspace");
+  it("does not navigate for a context-menu gesture", async () => {
+    renderAt("/");
     const row = await screen.findByRole("button", { name: "Open a1" });
 
     fireEvent.pointerDown(row, { button: 2, pointerId: 12, clientX: 10, clientY: 10 });
@@ -690,8 +626,7 @@ describe("TerminalsPage", () => {
     fireEvent.contextMenu(row);
 
     expect(await screen.findByRole("menuitem", { name: "Clone" })).toBeInTheDocument();
-    expect(screen.getByTestId("location")).toHaveTextContent("/workspace");
-    expect(screen.queryByTestId("workspace-drop-preview")).toBeNull();
+    expect(screen.getByTestId("location").textContent).toBe("/");
   });
 
   it("keeps the individual agents subsection visible when a host only has an empty team", async () => {
@@ -1027,7 +962,7 @@ describe("TerminalsPage", () => {
 
 describe("sidebar width", () => {
   it("starts at the persisted width", async () => {
-    localStorage.setItem("terminals:sidebarWidth", "380");
+    localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 380, hidden: false }));
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     expect(screen.getByTestId("agents-sidebar")).toHaveStyle({ width: "380px" });
@@ -1044,13 +979,13 @@ describe("sidebar width", () => {
     fireEvent.pointerUp(window);
 
     expect(screen.getByTestId("agents-sidebar")).toHaveStyle({ width: "400px" });
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ schemaVersion: 1, sidebar: { width: 400, hidden: false } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ width: 400, hidden: false });
 
     // Drag ended: further pointer moves must not keep resizing.
     fireEvent.pointerMove(window, { clientX: 200 });
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 400, hidden: false } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ width: 400, hidden: false });
   });
 
   it("clamps a drag past the maximum", async () => {
@@ -1059,30 +994,30 @@ describe("sidebar width", () => {
     fireEvent.pointerDown(screen.getByRole("separator", { name: "resize sidebar" }));
     fireEvent.pointerMove(window, { clientX: 5000 });
     fireEvent.pointerUp(window);
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 640, hidden: false } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ width: 640, hidden: false });
   });
 
   it("resets to the default on double-click", async () => {
-    localStorage.setItem("terminals:sidebarWidth", "500");
+    localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 500, hidden: false }));
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     fireEvent.doubleClick(screen.getByRole("separator", { name: "resize sidebar" }));
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 268, hidden: false } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ width: 268, hidden: false });
   });
 
   it("resizes with arrow keys", async () => {
-    localStorage.setItem("terminals:sidebarWidth", "300");
+    localStorage.setItem("terminals:sidebar:v1", JSON.stringify({ width: 300, hidden: false }));
     renderAt("/terminals");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
     const handle = screen.getByRole("separator", { name: "resize sidebar" });
     fireEvent.keyDown(handle, { key: "ArrowRight" });
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 308, hidden: false } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ width: 308, hidden: false });
     fireEvent.keyDown(handle, { key: "ArrowLeft", shiftKey: true });
-    expect(JSON.parse(localStorage.getItem("terminals:workspace:v1")!))
-      .toMatchObject({ sidebar: { width: 276, hidden: false } });
+    expect(JSON.parse(localStorage.getItem("terminals:sidebar:v1")!))
+      .toMatchObject({ width: 276, hidden: false });
   });
 });
 

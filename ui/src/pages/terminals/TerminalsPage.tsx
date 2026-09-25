@@ -13,11 +13,6 @@ import { apiOn } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { hostConnect, hostUpdate } from "@/lib/desktop";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
-import {
-  TerminalWorkspace,
-  type TerminalWorkspaceHandle,
-} from "./TerminalWorkspace";
-import type { TerminalIdentity } from "./workspaceState";
 import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
@@ -80,8 +75,6 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const { daemons, appVersion, select: selectDaemon, refresh: refreshDaemons } = useDaemons();
   const { attention, refreshHost } = useCustomerQuestionNotifications();
   const sidebar = useSharedSidebarState();
-  const workspaceMode = location.pathname === "/workspace";
-  const workspaceRef = useRef<TerminalWorkspaceHandle | null>(null);
   const [hostError, setHostError] = useState("");
   const [serverOrder, setServerOrder] = useState<string[]>(() => {
     try {
@@ -223,12 +216,6 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     ?? (hostId === "" ? "This daemon (local)" : hostId);
   const routeUnavailable = Boolean(liveSelectedHost?.error);
 
-  const openConfiguration = (identity: TerminalIdentity) => {
-    navigate(
-      `/agents/${hostToParam(identity.hostId)}/${encodeURIComponent(identity.agentName)}/configuration`,
-    );
-  };
-
   const reorderSidebar = async (kind: "servers" | "groups" | "agents", id: string, ids: string[]) => {
     setHostError("");
     if (kind === "servers") {
@@ -328,7 +315,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           one of the two allowed shadows. Everything the operator works with
           lives inside it. */}
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--panel-radius)] bg-card shadow-[var(--lift)]">
-        {!workspaceMode && !allTasks && hostId !== undefined && (
+        {!allTasks && hostId !== undefined && (
           <ServerContextBar hostId={hostId} label={selectedHostLabel ?? "Unknown server"} />
         )}
         <div className={`flex min-h-0 flex-1 flex-col${serverView || allTasks ? "" : " p-3"}`}>
@@ -343,13 +330,6 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
               ? { hostId, name: agentName }
               : undefined}
             onClearAgent={() => setAgentFilterClearedAt(location.key)}
-          />
-        ) : workspaceMode ? (
-          <TerminalWorkspace
-            ref={workspaceRef}
-            hosts={hosts}
-            refresh={refresh}
-            onOpenConfiguration={openConfiguration}
           />
         ) : serverView === "tasks" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
