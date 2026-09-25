@@ -159,8 +159,7 @@ func (b *Bus) chatChannelSummary(chat Chat, principal, readTS string, types []st
 	err := b.db.QueryRow(`
 		SELECT max(ts), type, text, sender,
 		       COALESCE(sum(CASE WHEN sender <> ? AND ts > ? THEN 1 ELSE 0 END), 0)
-		FROM (SELECT ts, type, text, `+fromSQL+` AS sender FROM messages
-		      WHERE channel = ? AND `+filter+`)`,
+		FROM messages WHERE channel = ? AND `+filter,
 		append([]any{principal, readTS, chat.Channel}, filterArgs...)...,
 	).Scan(&lastTS, &lastType, &lastText, &lastFrom, &summary.Unread)
 	if err != nil {

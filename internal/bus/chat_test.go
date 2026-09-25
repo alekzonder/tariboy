@@ -2,6 +2,7 @@ package bus
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,5 +120,56 @@ func TestChatSummariesRankByLastMessageAndCountUnread(t *testing.T) {
 	// neither counts nor moves the agent up the list.
 	if rows[1].Unread != 1 || rows[1].LastText != "alpha first" {
 		t.Fatalf("alpha summary = %#v", rows[1])
+	}
+}
+
+// The stored sender is the same principal MessageFrom resolves, so chat queries
+// can read an indexed column instead of parsing every row body.
+func TestPublishStoresTheResolvedSender(t *testing.T) {
+	b := chatBus(t)
+	for _, msg := range []Message{
+		{Channel: "user:customer", Source: "system:tasks", Type: "message", Data: map[string]any{"from": "agent:worker"}},
+		{Channel: "agent:worker:inbox", Source: "user:customer", Type: "message"},
+		{Channel: "user:customer", Source: "operator", Type: "message", ProducedByAgent: "worker"},
+		{Channel: "user:customer", Source: "operator", Type: "message"},
+	} {
+		out := publish(t, b, msg)
+		var sender string
+		if err := b.db.QueryRow(`SELECT sender FROM messages WHERE id = ?`, out.ID).Scan(&sender); err != nil {
+			t.Fatal(err)
+		}
+		if want := MessageFrom(out); sender != want {
+			t.Errorf("stored sender of %#v = %q, want %q", msg, sender, want)
+		}
+	}
+}
+
+// Opening one chat must seek the two channels it reads, not walk every agent
+// inbox on the host: that walk held the single database connection long enough
+// to queue every other request behind it.
+func TestChatMessagesSeeksOnlyItsTwoChannels(t *testing.T) {
+	b := chatBus(t)
+	query, args := chatMessagesQuery("user:customer", "worker", DefaultChatTypes, 50, "")
+	rows, err := b.db.Query(`EXPLAIN QUERY PLAN `+query, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(plan, "\n")
+	if strings.Contains(joined, "SCAN messages") || strings.Contains(joined, "channel>?") ||
+		strings.Count(joined, "(channel=? AND sender=?)") != 2 {
+		t.Fatalf("query plan does not seek both channels by sender:\n%s", joined)
 	}
 }

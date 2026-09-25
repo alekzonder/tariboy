@@ -118,6 +118,13 @@ chat carries `legacy_agent`, and its feed unions the chat channel with the old
 projection of `agent:<a>:inbox` and `user:<customer>` merged by time — and it is
 why a chat can be created, joined and left without risking history.
 
+`messages.sender` is the one derived column: the effective sender (`data.from`,
+else a principal-shaped `source`, else `produced_by_agent`, else `system`),
+stored in the same transaction that inserts the message and indexed with
+`channel` and `ts`. Migration `0048_message_sender.sql` backfilled it for
+existing rows with the same expression. It never changes after the insert, and
+chat reads filter on it instead of parsing `data`.
+
 ## Nightly backup and data retention
 
 Maintenance settings are one JSON value under `maintenance` in `daemon_config`;

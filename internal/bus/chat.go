@@ -30,8 +30,9 @@ func MessageFrom(m Message) string {
 	return "system"
 }
 
-// fromSQL is MessageFrom evaluated in SQLite, so a chat can be resolved and
-// aggregated by the database instead of scanning every message into Go.
+// fromSQL is MessageFrom evaluated in SQLite. It resolves messages.sender once,
+// when a message is written (and in the migration 0048 backfill); reads filter
+// on that indexed column instead of parsing every body.
 const fromSQL = `COALESCE(
 	NULLIF(json_extract(CASE WHEN json_valid(data) THEN data END, '$.from'), ''),
 	CASE WHEN source GLOB 'agent:*' OR source GLOB 'user:*' THEN source END,
@@ -42,27 +43,15 @@ const fromSQL = `COALESCE(
 // conversation between the customer and one agent, with the agent it belongs to
 // and the principal that sent it. GLOB (not LIKE) keeps the channel prefix
 // case-sensitive so the channel index is still usable.
-//
-// Known ceiling: resolving the sender needs each row's body, so a summary walks
-// every inbox message rather than only an index. That is cheap for one daemon's
-// tens of agents; if a host ever accumulates enough history to matter, the
-// sender belongs in its own indexed column rather than in data.
 const chatRowsSQL = `
-	SELECT agent, id, channel, ts, source, type, subject, text, data,
+	SELECT CASE WHEN channel = ? THEN substr(sender, 7)
+	            ELSE substr(channel, 7, length(channel) - 12) END AS agent,
+	       id, channel, ts, source, type, subject, text, data,
 	       produced_by_agent, produced_in_iteration, produced_by_plugin,
 	       kind, correlation_id, in_reply_to, reply_to, deadline, sender
-	FROM (
-		SELECT CASE WHEN channel = ? THEN substr(` + fromSQL + `, 7)
-		            ELSE substr(channel, 7, length(channel) - 12) END AS agent,
-		       id, channel, ts, source, type, subject, text, data,
-		       produced_by_agent, produced_in_iteration, produced_by_plugin,
-		       kind, correlation_id, in_reply_to, reply_to, deadline,
-		       ` + fromSQL + ` AS sender
-		FROM messages
-		WHERE channel = ? OR channel GLOB 'agent:*:inbox'
-	)
+	FROM messages
 	WHERE ((channel = ? AND sender GLOB 'agent:*')
-	    OR (channel <> ? AND sender = ?))`
+	    OR (channel GLOB 'agent:*:inbox' AND sender = ?))`
 
 // ChatSummary is one conversation in the chat list: when it last moved, what
 // was said, and how much of it the customer has not read yet.
@@ -110,7 +99,7 @@ func (b *Bus) ChatSummaries(customer string, types []string, reads map[string]st
 		return nil, err
 	}
 	filter, filterArgs := typeFilterSQL(types)
-	args := []any{customer, customer, customer, customer, customer}
+	args := []any{customer, customer, customer}
 	args = append(args, filterArgs...)
 	args = append(args, string(readJSON))
 	// The bare columns beside max(ts) are SQLite's documented "row that holds
@@ -149,27 +138,8 @@ func (b *Bus) ChatSummaries(customer string, types []string, reads map[string]st
 // pages backwards through older messages: ids embed their channel, so two
 // channels merged into one feed do not sort by id at all.
 func (b *Bus) ChatMessages(customer, agent string, types []string, limit int, before string) ([]Message, error) {
-	if limit <= 0 {
-		limit = 200
-	}
-	filter, filterArgs := typeFilterSQL(types)
-	args := []any{customer, customer, customer, customer, customer}
-	args = append(args, filterArgs...)
-	args = append(args, agent)
-	page := ""
-	if before != "" {
-		page = " AND ts < ?"
-		args = append(args, before)
-	}
-	// Newest page first so `before` can walk back, reversed to chronological
-	// order below.
-	rows, err := b.db.Query(`
-		SELECT id, channel, ts, source, type, subject, text, data,
-		       produced_by_agent, produced_in_iteration, produced_by_plugin,
-		       kind, correlation_id, in_reply_to, reply_to, deadline
-		FROM (`+chatRowsSQL+` AND `+filter+`)
-		WHERE agent = ?`+page+`
-		ORDER BY ts DESC, id DESC LIMIT ?`, append(args, limit)...)
+	query, args := chatMessagesQuery(customer, agent, types, limit, before)
+	rows, err := b.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -181,4 +151,26 @@ func (b *Bus) ChatMessages(customer, agent string, types []string, limit int, be
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
 	return msgs, nil
+}
+
+// chatMessagesQuery is chatRowsSQL narrowed to one agent before it reaches the
+// database: the agent's messages in the customer channel and the customer's in
+// the agent inbox, each an equality seek on (channel, sender). Newest page
+// first so before can walk back; ChatMessages reverses it.
+func chatMessagesQuery(customer, agent string, types []string, limit int, before string) (string, []any) {
+	if limit <= 0 {
+		limit = 200
+	}
+	filter, filterArgs := typeFilterSQL(types)
+	args := []any{customer, "agent:" + agent, "agent:" + agent + ":inbox", customer}
+	args = append(args, filterArgs...)
+	page := ""
+	if before != "" {
+		page = " AND ts < ?"
+		args = append(args, before)
+	}
+	return `SELECT ` + messageColumns + ` FROM messages
+		WHERE ((channel = ? AND sender = ?) OR (channel = ? AND sender = ?))
+		  AND ` + filter + page + `
+		ORDER BY ts DESC, id DESC LIMIT ?`, append(args, limit)
 }

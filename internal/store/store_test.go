@@ -866,3 +866,33 @@ func requireColumn(t *testing.T, db *sql.DB, table, column string) {
 	}
 	t.Fatalf("column %s.%s is missing", table, column)
 }
+
+func TestMessageSenderMigrationBackfillsExistingMessages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "message-sender.db")
+	db := createDatabaseBeforeMigration(t, path, "0048_message_sender.sql")
+	if _, err := db.Exec(`INSERT INTO messages(id, channel, ts, source, data, produced_by_agent) VALUES
+		('m1', 'user:customer', '1', 'system:tasks', '{"from":"agent:worker"}', NULL),
+		('m2', 'agent:worker:inbox', '2', 'user:customer', NULL, NULL),
+		('m3', 'user:customer', '3', 'operator', 'not json', 'worker'),
+		('m4', 'user:customer', '4', 'operator', '{"from":""}', NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	want := map[string]string{"m1": "agent:worker", "m2": "user:customer", "m3": "agent:worker", "m4": "system"}
+	for id, sender := range want {
+		var got string
+		if err := s.DB.QueryRow(`SELECT sender FROM messages WHERE id = ?`, id).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != sender {
+			t.Errorf("sender of %s = %q, want %q", id, got, sender)
+		}
+	}
+}
