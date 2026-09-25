@@ -328,7 +328,9 @@ one the workspace has. Arrow keys move it, Shift increases the step, Home and
 double-click restore its default, and the clamped width persists in the
 versioned WebView localStorage record `tasks:workspace:v1`. Route changes and
 app reloads restore that record; a record written before the task rail was
-removed still reads, its rail width ignored.
+removed still reads, its rail width ignored. A task opened from a chat uses
+the same sheet, separator, and stored width, clamped to the window instead of
+the workspace, so a resize in either place carries over to the other.
 
 One toolbar sits above the table in both places. It carries the search field,
 the `Active | Closed | All` segment, the queue control, the `My tasks` and

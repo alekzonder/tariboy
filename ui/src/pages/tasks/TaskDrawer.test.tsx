@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
@@ -61,6 +61,7 @@ const detail: Detail = { task, comments: [], waiting_for: [], relations: [] }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
   taskSocket.options = undefined
   api.getTask.mockResolvedValue(detail)
   api.getTaskWorkflow.mockRejectedValue(new ApiError(404, "workflow_not_found", "workflow not found"))
@@ -113,10 +114,32 @@ it("reloads the task when the tasks socket hints a change", async () => {
   await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
 })
 
-it("renders the task panel in the dialog's own column when it carries no resize handle", async () => {
+it("opens at the width the Tasks tab saved and resizes it with the same handle", async () => {
+  localStorage.setItem("tasks:workspace:v1", JSON.stringify({ schemaVersion: 1, detailWidth: 520 }))
   render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
   await screen.findByText("Ship the drawer")
-  expect(screen.getByRole("dialog")).toHaveClass("task-detail-dialog-plain")
+  expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("520px")
+
+  const handle = screen.getByRole("separator", { name: "Resize task details" })
+  fireEvent.keyDown(handle, { key: "ArrowLeft" })
+  expect(screen.getByRole("dialog").style.getPropertyValue("--tasks-detail-width")).toBe("528px")
+  expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
+    .toEqual({ schemaVersion: 1, detailWidth: 528 })
+})
+
+it("drags the drawer from the right edge of the window", async () => {
+  vi.stubGlobal("innerWidth", 1200)
+  render(<TaskDrawer taskKey="TEST-1" onClose={vi.fn()} />)
+  await screen.findByText("Ship the drawer")
+  const handle = screen.getByRole("separator", { name: "Resize task details" })
+  expect(handle).toHaveAttribute("aria-valuemax", "1120")
+
+  fireEvent.pointerDown(handle, { pointerId: 1, button: 0, isPrimary: true })
+  fireEvent.pointerMove(window, { pointerId: 1, clientX: 500 })
+  fireEvent.pointerUp(window, { pointerId: 1 })
+  expect(JSON.parse(localStorage.getItem("tasks:workspace:v1") ?? "{}"))
+    .toMatchObject({ detailWidth: 700 })
+  vi.unstubAllGlobals()
 })
 
 it("starts the tasks socket at the current sequence instead of replaying the whole log", async () => {

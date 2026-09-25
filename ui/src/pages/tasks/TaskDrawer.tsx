@@ -27,7 +27,8 @@ import {
   type WorkflowExecutionView,
 } from "@/lib/tasks"
 import TaskDetail, { TaskDetailLoading } from "./TaskDetail"
-import { useTaskPanelWidths } from "./useTaskPanelWidths"
+import TaskPanelResizeHandle from "./TaskPanelResizeHandle"
+import { clampTaskDetailWidth, useTaskPanelWidths } from "./useTaskPanelWidths"
 import "./tasks.css"
 
 function idempotencyKey(): string {
@@ -79,7 +80,14 @@ export default function TaskDrawer({
   /** The task now lives on `hostId`; the owner reopens it there. */
   onMoved?: (hostId: string) => void
 }) {
-  const { detailWidth } = useTaskPanelWidths()
+  // The same stored width and grip as the Tasks tab, so the panel is one size
+  // wherever it opens; the drawer spans the window rather than a workspace.
+  const { detailWidth, setDetailWidth } = useTaskPanelWidths()
+  const resizeHandle = <TaskPanelResizeHandle
+    width={detailWidth}
+    maximum={clampTaskDetailWidth(Infinity)}
+    onResize={setDetailWidth}
+  />
   const [detail, setDetail] = useState<Detail | null>(null)
   const [events, setEvents] = useState<TaskEvent[]>([])
   const [workflow, setWorkflow] = useState<WorkflowExecutionView | null>(null)
@@ -186,7 +194,7 @@ export default function TaskDrawer({
   }
 
   if (detail?.task.key !== taskKey) {
-    return <TaskDetailLoading taskKey={taskKey} width={detailWidth} resizeHandle={null} onClose={onClose} />
+    return <TaskDetailLoading taskKey={taskKey} width={detailWidth} resizeHandle={resizeHandle} onClose={onClose} />
   }
 
   return (
@@ -198,7 +206,7 @@ export default function TaskDrawer({
       events={events}
       workflow={workflow}
       width={detailWidth}
-      resizeHandle={null}
+      resizeHandle={resizeHandle}
       onClose={onClose}
       assigneeOptions={assignees}
       onTransfer={async (hostID: string) => {
