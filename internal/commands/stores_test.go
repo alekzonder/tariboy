@@ -327,3 +327,73 @@ func TestStoreErrorReportsRefreshFailureAsConflict(t *testing.T) {
 		t.Fatalf("storeError() = %#v", err)
 	}
 }
+
+func TestImageBuildStoreSelectorAssemblesExtendsLayerByLayer(t *testing.T) {
+	c := localCtx(t)
+	source := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		path := filepath.Join(source, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("skills-lock.json", "root")
+	write("images/parent/Tariboyfile.yaml", "schema_version: 2\nplugins: []\nskills: [{dir: ./.agents/skills/demo}]\nprompts: [{file: ./instructions.md}]\n")
+	write("images/parent/instructions.md", "parent instructions")
+	write("images/parent/skills-lock.json", "parent")
+	write("images/child/Tariboyfile.yaml", "schema_version: 2\nimage_version: 1.0.0\nextends: [../parent]\nplugins: []\nskills: [{dir: ./.agents/skills/demo}]\nprompts: [{file: ./instructions.md}]\n")
+	write("images/child/instructions.md", "child instructions")
+	write("images/child/skills-lock.json", "child")
+	write("images/plain/Tariboyfile.yaml", "schema_version: 2\nimage_version: 1.0.0\nextends: [../parent]\nplugins: []\nskills: []\nprompts: []\n")
+	if _, err := cmdHandler(t, "store.add")(c, registry.Params{"name": "team", "source": source}); err != nil {
+		t.Fatal(err)
+	}
+	tools := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "npx.log")
+	script := "#!/bin/sh\nlock=$(cat skills-lock.json)\nprintf '%s\\n' \"$lock\" >>\"$NPX_LOG\"\nif test \"$lock\" != root; then mkdir -p .agents/skills/demo && printf -- '---\\nname: demo\\ndescription: %s\\n---\\nbody\\n' \"$lock\" >.agents/skills/demo/SKILL.md; fi\n"
+	if err := os.WriteFile(filepath.Join(tools, "npx"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("NPX_LOG", logPath)
+
+	demoDescription := func(name string) string {
+		t.Helper()
+		if _, err := cmdHandler(t, "image.build")(c, registry.Params{"source": "team/" + name}); err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := imageStore(c).Inspect(image.Ref{Name: name, Tag: "1.0.0"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(manifest.Skills) != 1 || manifest.Skills[0].Name != "demo" {
+			t.Fatalf("%s skills = %#v", name, manifest.Skills)
+		}
+		return manifest.Skills[0].Description
+	}
+	if got := demoDescription("child"); got != "child" {
+		t.Fatalf("child demo skill = %q, want the child version", got)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "root\nparent\nchild\n"; string(raw) != want {
+		t.Fatalf("npx order = %q, want %q", raw, want)
+	}
+	if got := demoDescription("plain"); got != "parent" {
+		t.Fatalf("plain demo skill = %q, want the inherited parent version", got)
+	}
+	for _, dir := range []string{"images/parent", "images/child"} {
+		if _, err := os.Stat(filepath.Join(source, dir, ".agents")); !os.IsNotExist(err) {
+			t.Fatalf("assembly wrote into the Store tree %s: %v", dir, err)
+		}
+	}
+	if entries, _ := os.ReadDir(filepath.Join(c.BaseDir, "image-build")); len(entries) != 0 {
+		t.Fatalf("build directories survived: %v", entries)
+	}
+}

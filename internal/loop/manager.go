@@ -2631,6 +2631,16 @@ func buildImageForAgentLocked(imgStore *image.Store, workdir, name, tag, path st
 	baseDir := filepath.Dir(imgStore.Dir)
 	layout := paths.Paths{Base: baseDir}
 	pluginsDir := layout.PluginsDir()
+	if len(parsed.V2.Extends) > 0 {
+		assembled, cleanup, err := imagefile.Assemble(abs, filepath.Join(baseDir, "image-build"), imagefile.ResolveRoots{Plugins: pluginsDir}, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+		if parsed, err = imagefile.ParseAny(assembled); err != nil {
+			return nil, err
+		}
+	}
 	resolver := plugins.ResolveInstalledMetadata(pluginsDir)
 	if len(externalPlugins) > 0 && externalPlugins[0] != nil {
 		resolver = externalPlugins[0]

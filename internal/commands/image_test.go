@@ -1402,3 +1402,43 @@ func TestImageDetailRejectsChangedDigest(t *testing.T) {
 		})
 	}
 }
+
+func TestImageValidateAndBuildPathAssembleExtends(t *testing.T) {
+	c := localCtx(t)
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		"parent/Tariboyfile.yaml":     "schema_version: 2\nplugins: []\nskills: [{dir: ./skills/demo}]\nprompts: [{file: ./role.md}]\n",
+		"parent/role.md":              "parent role",
+		"parent/skills/demo/SKILL.md": "---\nname: demo\ndescription: demo\n---\nbody\n",
+		"child/Tariboyfile.yaml":      "schema_version: 2\nextends: [../parent]\nplugins: []\nprompts: [{file: ./role.md}]\n",
+		"child/role.md":               "child role",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	child := filepath.Join(root, "child")
+	got, err := cmdHandler(t, "image.validate")(c, registry.Params{"path": child, "name": "child"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := got.(map[string]any)
+	template, ok := result["template"].(image.PromptTemplate)
+	if result["valid"] != true || !ok || len(template.Entries) != 2 || template.Entries[0].Source != "./.tariboy-extends/0/role.md" || template.Entries[1].Source != "./.tariboy-extends/1/role.md" {
+		t.Fatalf("validate = %#v", result)
+	}
+	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"path": child, "name": "child"}); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := imageStore(c).Inspect(image.Ref{Name: "child", Tag: "latest"})
+	if err != nil || len(manifest.Skills) != 1 {
+		t.Fatalf("manifest skills = %#v, %v", manifest.Skills, err)
+	}
+	if entries, _ := os.ReadDir(imageBuildRoot(c)); len(entries) != 0 {
+		t.Fatalf("build directories survived: %v", entries)
+	}
+}

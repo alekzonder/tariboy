@@ -580,3 +580,10 @@ func TestValidateV2ReadsPromptFromDeclaredSiblingSkill(t *testing.T) {
 		t.Fatalf("prompt entry = %#v", entry)
 	}
 }
+
+func TestBuildV2RejectsUnassembledExtends(t *testing.T) {
+	src := &imagefile.V2{SchemaVersion: 2, Dir: t.TempDir(), Extends: []string{"../parent"}}
+	if _, err := BuildV2(src, imagefile.ResolveRoots{}, Ref{Name: "child", Tag: "latest"}, &Store{Dir: t.TempDir()}, time.Now, nil); err == nil || !strings.Contains(err.Error(), "extends") {
+		t.Fatalf("BuildV2 error = %v, want an extends error", err)
+	}
+}
