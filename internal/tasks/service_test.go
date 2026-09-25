@@ -760,3 +760,50 @@ func TestSubtreeAccessSurvivesAuthorshipNarrowingAndDetach(t *testing.T) {
 		t.Fatalf("completing the root once its tree is empty: %v", err)
 	}
 }
+
+func TestEnsureDefaultQueueCreatesTaskQueueOnce(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	customer := CustomerActor("customer")
+
+	for range 2 {
+		if err := svc.EnsureDefaultQueue(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	queue, err := svc.GetQueue(ctx, customer, "TASK")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queue.Name != "Tasks" || len(queue.Owners) != 0 || queue.ResponsibleAgent != "" {
+		t.Fatalf("default queue = %#v", queue)
+	}
+	events, err := svc.ListEvents(ctx, customer, "", 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Kind != "task.queue_created" || events[0].Actor != "system:tariboyd" {
+		t.Fatalf("events = %#v; want one task.queue_created by system:tariboyd", events)
+	}
+}
+
+func TestEnsureDefaultQueueKeepsExistingTaskQueue(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	customer := CustomerActor("customer")
+	if _, err := svc.CreateQueue(ctx, customer, CreateQueueInput{
+		Prefix: "TASK", Name: "Custom", Owners: []string{"alice"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.EnsureDefaultQueue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	queue, err := svc.GetQueue(ctx, customer, "TASK")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queue.Name != "Custom" || len(queue.Owners) != 1 || queue.Revision != 1 {
+		t.Fatalf("existing queue changed: %#v", queue)
+	}
+}
