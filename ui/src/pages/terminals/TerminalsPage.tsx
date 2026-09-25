@@ -207,17 +207,21 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     const snapshot = lastSuccessfulHostsById.get(entry.host.id);
     return snapshot ? { ...snapshot, error: entry.error } : entry;
   }), [hosts, lastSuccessfulHostsById]);
-  const orderedSidebarHosts = useMemo(() => {
+  // Every host in server order; the sidebar shows the current workspace's.
+  const rankedHosts = useMemo(() => {
     const rank = new Map(serverOrder.map((id, index) => [id, index]));
     return sidebarHosts
-      .filter((entry) => workspaceOf(workspaces, entry.host.id) === workspaces.active)
       .map((entry, index) => ({ entry, index, rank: rank.get(entry.host.id) }))
       .sort((left, right) => (left.rank ?? serverOrder.length + left.index) - (right.rank ?? serverOrder.length + right.index))
       .map(({ entry }) => ({
         ...entry,
         sidebarOrder: sidebarOrderOverrides.get(entry.host.id) ?? entry.sidebarOrder,
       }));
-  }, [serverOrder, sidebarHosts, sidebarOrderOverrides, workspaces]);
+  }, [serverOrder, sidebarHosts, sidebarOrderOverrides]);
+  const orderedSidebarHosts = useMemo(
+    () => rankedHosts.filter((entry) => workspaceOf(workspaces, entry.host.id) === workspaces.active),
+    [rankedHosts, workspaces],
+  );
   const activeWorkspaceName = workspaces.workspaces.find((w) => w.id === workspaces.active)?.name ?? "";
   const workspaceEmpty = orderedSidebarHosts.every((entry) => entry.agents.length === 0);
 
@@ -225,7 +229,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   // first agent, in the same tab, or to the empty console when it has none.
   const followWorkspace = (id: string) => {
     if (hostId === undefined || workspaceOf(workspaces, hostId) === id) return;
-    const first = sidebarHosts.find((entry) =>
+    const first = rankedHosts.find((entry) =>
       workspaceOf(workspaces, entry.host.id) === id && entry.agents.length > 0);
     navigate(first
       ? `/agents/${hostToParam(first.host.id)}/${encodeURIComponent(first.agents[0].name)}/${agentName && agentTab ? agentTab : "console"}${allTasks ? "?view=all" : ""}`
@@ -246,6 +250,12 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const reorderSidebar = async (kind: "servers" | "groups" | "agents", id: string, ids: string[]) => {
     setHostError("");
     if (kind === "servers") {
+      // The sidebar reorders only the visible workspace's hosts: they take
+      // back the slots they held, so hidden hosts keep their places.
+      const visible = new Set(ids);
+      let next = 0;
+      ids = rankedHosts.map((entry) => entry.host.id)
+        .map((id) => visible.has(id) ? ids[next++] : id);
       const previous = serverOrder;
       setServerOrder(ids);
       try {

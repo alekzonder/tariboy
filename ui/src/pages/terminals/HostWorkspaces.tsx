@@ -80,6 +80,8 @@ export function WorkspaceSwitcher({ hosts, onSelect, onManage }: {
         {state.workspaces.map((workspace) => (
           <DropdownMenuItem
             key={workspace.id}
+            role="menuitemradio"
+            aria-checked={workspace.id === state.active}
             className={itemClass}
             onSelect={() => {
               selectWorkspace(workspace.id);
@@ -155,7 +157,6 @@ function ManagerBody({ hosts, initialId, focusNew }: {
   return (
     <DialogContent
       className="flex h-[min(500px,calc(100vh-32px))] w-[min(720px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden rounded-[14px] p-0 shadow-[var(--lift)] ring-0 sm:max-w-none"
-      overlayClassName="bg-[oklch(24%_.03_255/.22)] supports-backdrop-filter:backdrop-blur-none"
       onOpenAutoFocus={(event) => {
         if (!focusNew) return;
         event.preventDefault();
