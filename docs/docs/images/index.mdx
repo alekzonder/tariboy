@@ -203,8 +203,8 @@ combine a Store selector with `--path`.
 
 Store Build advances every requested tag atomically after validation. Existing
 version tags and `latest` do not require a different target name or tag. The
-Store's **Target image name** and **Target image tag** fields remain optional:
-leave them blank for the defaults or use them to publish another ref. An
+Store page's **Build** always publishes the defaults; to publish another name or
+tag, use `tariboy image build <store>/<image> --name NAME --tag TAG`. An
 explicit tag publishes only that ref; other refs remain unchanged.
 
 Before freezing sources, the daemon runs `npx skills experimental_install` in

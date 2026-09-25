@@ -333,14 +333,14 @@ describe("Stores workspace", () => {
     expect(screen.getByRole("button", { name: "Open server New Store host" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("button", { name: "Build new-image" })).toBeEnabled();
 
-    fireEvent.change(screen.getByLabelText("Target image name"), { target: { value: "alternate" } });
-    fireEvent.change(screen.getByLabelText("Target image tag"), { target: { value: "candidate" } });
+    expect(screen.queryByLabelText("Target image name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Target image tag")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
     expect(screen.getByRole("button", { name: "Building new-image…" })).toBeDisabled();
     expect(calls).toContainEqual(expect.objectContaining({
       url: "https://new-build.example/api/images/build",
       method: "POST",
-      body: JSON.stringify({ source: "old/new-image", name: "alternate", tag: "candidate" }),
+      body: JSON.stringify({ source: "old/new-image" }),
     }));
 
     finishOld(envelope({ name: "old-image", tag: "1.0.0", digest: "sha256:old", layers: 1 }));
@@ -353,9 +353,8 @@ describe("Stores workspace", () => {
     expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
-    finishNewSuccess(envelope({ name: "alternate", tag: "candidate", digest: "sha256:new", layers: 1 }));
-    expect(await screen.findByText("Built alternate:candidate.")).toBeInTheDocument();
-    expect(screen.queryByText(/alternate:latest/)).not.toBeInTheDocument();
+    finishNewSuccess(envelope({ name: "new-image", tag: "2.0.0", digest: "sha256:new", layers: 1 }));
+    expect(await screen.findByText("Built new-image:2.0.0 and new-image:latest.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build new-image" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Build new-image" }));
     finishNewReload(envelope({ name: "old", source: "/srv/new", path: "/srv/new", images: [] }));
