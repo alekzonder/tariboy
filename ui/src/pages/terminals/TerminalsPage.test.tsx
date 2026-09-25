@@ -18,6 +18,9 @@ import * as desktop from "@/lib/desktop";
 import { SidebarStateProvider } from "./SidebarStateProvider";
 import { CustomerQuestionNotificationsContext } from "@/components/customerQuestionNotificationsContext";
 import { targetFor } from "@/lib/terminalsHost";
+import { TitlebarSlotContext } from "./titlebarSlotContext";
+import { createWorkspace, moveHost, resetWorkspacesForTest } from "@/lib/workspaces";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/aggregate", () => ({
   fetchAllAgents: vi.fn(),
@@ -87,6 +90,7 @@ const cloneProjection = {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  resetWorkspacesForTest();
   // Console navigation is Expert behaviour; Simple opens Chat (AgentWorkspace tests).
   localStorage.setItem(UI_MODE_KEY, "expert");
   vi.mocked(apiOn).mockReset().mockResolvedValue(undefined);
@@ -128,7 +132,10 @@ afterEach(() => {
 });
 
 function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map()) {
+  // Stands in for the App titlebar slot the workspace switcher portals into.
+  const slot = document.body.appendChild(document.createElement("div"));
   return render(
+    <TitlebarSlotContext.Provider value={slot}>
     <DaemonProvider>
       <CustomerQuestionNotificationsContext.Provider value={{ attention, refreshHost: async () => {} }}>
         <SidebarStateProvider>
@@ -145,7 +152,8 @@ function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map
           </MemoryRouter>
         </SidebarStateProvider>
       </CustomerQuestionNotificationsContext.Provider>
-    </DaemonProvider>,
+    </DaemonProvider>
+    </TitlebarSlotContext.Provider>,
   );
 }
 
@@ -957,6 +965,64 @@ describe("TerminalsPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "New agent" })).toBeInTheDocument(),
     );
+  });
+});
+
+describe("host workspaces", () => {
+  beforeEach(() => {
+    vi.mocked(fetchAllAgents).mockResolvedValue([
+      {
+        host: { id: "", label: "This daemon (local)" },
+        agents: [
+          { name: "a1", image: "img", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true },
+        ],
+      },
+      {
+        host: { id: "d1", label: "prod" },
+        agents: [
+          { name: "b1", image: "img", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true },
+        ],
+      },
+    ]);
+  });
+
+  it("filters the sidebar and its counts to the current workspace and follows the switch", async () => {
+    moveHost("d1", createWorkspace("Production")!);
+    renderAt("/agents/local/a1/activity");
+    expect(await screen.findByRole("button", { name: "Open a1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open b1" })).toBeNull();
+    expect(screen.getByText("1 server · 1 agent")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Production/ }));
+
+    // The open agent is not in Production, so its first agent opens in the same tab.
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe("/agents/d1/b1/activity"),
+    );
+    expect(await screen.findByRole("button", { name: "Open b1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open a1" })).toBeNull();
+  });
+
+  it("shows an empty workspace in the island with a way to manage it", async () => {
+    createWorkspace("Lab");
+    renderAt("/agents/local/a1/console");
+    await screen.findByRole("button", { name: "Open a1" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Workspace: Default" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Lab/ }));
+
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/"));
+    expect(await screen.findByText("Lab has no agents yet")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Manage workspaces" }));
+    const dialog = await screen.findByRole("dialog", { name: "Manage workspaces" });
+    expect(within(dialog).getByLabelText("Workspace name")).toHaveValue("Lab");
+
+    // Moving a host in updates the island without a reload.
+    await userEvent.click(within(dialog).getByRole("button", { name: /^Default/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Move prod to…" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Lab" }));
+    expect(await screen.findByRole("button", { name: "Open b1", hidden: true })).toBeInTheDocument();
   });
 });
 

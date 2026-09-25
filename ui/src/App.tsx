@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { Segmented } from "@/components/ui/segmented";
 import { Toaster } from "@/components/ui/sonner";
@@ -27,6 +28,7 @@ import ChannelsPage from "@/pages/ChannelsPage";
 import DaemonsPage from "@/pages/DaemonsPage";
 import { SidebarStateProvider } from "@/pages/terminals/SidebarStateProvider";
 import { useSharedSidebarState } from "@/pages/terminals/sidebarStateContext";
+import { TitlebarSlotContext } from "@/pages/terminals/titlebarSlotContext";
 import { hostToParam } from "@/lib/terminalsHost";
 import { CustomerQuestionNotifications } from "@/components/CustomerQuestionNotifications";
 import type { ApiTarget } from "@/lib/api";
@@ -62,12 +64,13 @@ function MainApp() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const sidebar = useSharedSidebarState();
+  const [titlebarSlot, setTitlebarSlot] = useState<HTMLElement | null>(null);
   const sidebarRoute =
     location.pathname === "/"
     || location.pathname.startsWith("/agents/")
     || location.pathname.startsWith("/servers/");
   return (
-    <>
+    <TitlebarSlotContext.Provider value={titlebarSlot}>
       {/* Topbar: 42px, no bottom border — the separation between chrome and the
           content island is made by the background, not by a line. */}
       <header
@@ -95,6 +98,8 @@ function MainApp() {
                 : <PanelLeftClose className="size-4" />}
             </Button>
           )}
+          {/* The workspace switcher of the console pages portals in here. */}
+          {sidebarRoute && <div ref={setTitlebarSlot} className="ml-1 flex min-w-0" />}
           {/* The view lives in the query, not the path: switching keeps the
               selected agent's route, survives a reload and is one Back away. */}
           {/* Only where an agent is the subject: server pages are neither
@@ -192,7 +197,7 @@ function MainApp() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-    </>
+    </TitlebarSlotContext.Provider>
   );
 }
 
