@@ -555,6 +555,48 @@ context row remains visible above the selected agent's Chat, Tasks, Console,
 Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
+### All tasks
+
+The titlebar carries an `Agents | All tasks` segment next to the sidebar
+toggle. The view is the `view=all` query on the current route, so it survives
+a reload, Back returns to the previous view, and the selected agent's path is
+untouched. Arrow keys move between the two options. In **All tasks** the
+agent sidebar stays and the island shows one task table for every server
+instead of the agent's header and tabs.
+
+The table reads `GET /api/tasks` from the local daemon and every registered
+server in parallel, each with its own token, following each server's cursor to
+the end; a server's live `/api/tasks/ws` hint re-reads only that server. A
+server that the sidebar cannot reach, or whose read fails, keeps the other
+servers' rows and adds a `<server> unavailable · Retry` line above the table.
+Rows are keyed by server and task key, because a transferred task keeps its key
+and leaves a cancelled copy behind. Trees are built within each server; roots
+are ordered newest-updated first. Six skeleton rows show until the first
+server answers.
+
+Columns are Key, Task, Pri, Agent, Server, Status and Updated. There is no drag
+reparenting or inline child creation, since neither crosses servers. The
+toolbar keeps search and `Active | Closed | All` (sent to every server), merges
+queues by prefix across servers with summed counts, and adds a `Server` menu
+in which an unavailable server is marked and cannot be picked. When an agent is
+selected in the sidebar the table is narrowed to tasks assigned to it on its
+server; the chip's × clears the narrowing for that history entry without
+deselecting the agent, and picking an agent again narrows again. Search,
+status, queue and server are kept per session in `tasks:all-view:v1` and the
+shared `tasks:queue-filter:v1`. An empty result says **No tasks** with
+**Clear filters**. **New task** asks for an agent (labelled with its server) —
+preselected from the chip — and a queue of that agent's server, and creates
+the task there assigned to that agent.
+
+Selecting a row opens the task in place in the same detail sheet, loaded from
+its own server. There the Assignee field lists every agent on every server as
+`agent · server`. Choosing an agent on another server saves the other edits,
+moves the task with [the server-to-server transfer](/docs/tasks#moving-a-task-to-another-server),
+and assigns it on arrival; the sheet then follows the task to its new server.
+The transfer's refusals — no queue with that prefix, a taken key, or a
+workflow-managed queue — leave the task where it was and are shown as an
+error.
+
 Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view
 answers the same question about the next agent. An unknown tab still falls back
