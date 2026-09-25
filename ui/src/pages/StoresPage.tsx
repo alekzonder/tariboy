@@ -60,8 +60,6 @@ export default function StoresPage({ target, name, basePath }: {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
-  const [targetName, setTargetName] = useState("");
-  const [targetTag, setTargetTag] = useState("");
   const [autoInterval, setAutoInterval] = useState("0");
   const [autoImages, setAutoImages] = useState<string[]>([]);
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -130,24 +128,16 @@ export default function StoresPage({ target, name, basePath }: {
   const build = async (imageName: string) => {
     if (!name) return;
     const requestedBuild = ++buildGeneration.current;
-    const requestedName = targetName.trim();
-    const requestedTag = targetTag.trim();
     const isCurrent = () => mounted.current && buildGeneration.current === requestedBuild;
     setBusy(`build:${imageName}`);
     setError("");
     setStatus("");
     try {
-      const built = await buildStoreImage(target, {
-        source: `${name}/${imageName}`,
-        ...(requestedName ? { name: requestedName } : {}),
-        ...(requestedTag ? { tag: requestedTag } : {}),
-      });
+      const built = await buildStoreImage(target, { source: `${name}/${imageName}` });
       if (isCurrent()) {
-        setStatus(requestedTag
-          ? `Built ${built.name}:${built.tag}.`
-          : built.tag === "latest"
-            ? `Built ${built.name}:latest.`
-            : `Built ${built.name}:${built.tag} and ${built.name}:latest.`);
+        setStatus(built.tag === "latest"
+          ? `Built ${built.name}:latest.`
+          : `Built ${built.name}:${built.tag} and ${built.name}:latest.`);
         setBusy("");
         window.dispatchEvent(new Event("tariboy:image-built"));
       }
@@ -263,11 +253,6 @@ export default function StoresPage({ target, name, basePath }: {
       {loading && <p role="status" className="text-sm text-muted-foreground">Loading Store…</p>}
       {detail && <section className="space-y-2">
         <h2 className="font-medium">Images</h2>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Input aria-label="Target image name" placeholder="Source image name" value={targetName} disabled={Boolean(busy)} onChange={(event) => setTargetName(event.target.value)} />
-          <Input aria-label="Target image tag" placeholder="image_version + latest" value={targetTag} disabled={Boolean(busy)} onChange={(event) => setTargetTag(event.target.value)} />
-        </div>
-        <p className="text-xs text-muted-foreground">Leave both blank to publish the source name with image_version and latest. A reserved target requires another name or tag.</p>
         <div className="grid gap-3 md:grid-cols-[14rem_auto]">
           <Input
             aria-label="Automatic build interval"
