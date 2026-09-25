@@ -73,6 +73,21 @@ describe("product routing", () => {
       .toBeInTheDocument();
   });
 
+  it("switches between Agents and All tasks through ?view=all on the current route", () => {
+    renderAt("/agents/local/builder/console?task=X-1");
+
+    const titlebar = screen.getByTestId("app-titlebar");
+    const view = within(titlebar).getByRole("radiogroup", { name: "View" });
+    expect(within(view).getByRole("radio", { name: "Agents" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(within(view).getByRole("radio", { name: "All tasks" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/builder/console?task=X-1&view=all");
+    expect(within(view).getByRole("radio", { name: "All tasks" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(within(view).getByRole("radio", { name: "Agents" }));
+    expect(screen.getByTestId("location").textContent).toBe("/agents/local/builder/console?task=X-1");
+  });
+
   it("opens daemon-independent application settings from the titlebar", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("daemon down")));
     renderAt("/");

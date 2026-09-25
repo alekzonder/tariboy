@@ -27,7 +27,7 @@ export function Segmented<T extends string>({
       data-slot="segmented"
       className={cn("flex shrink-0 gap-0.5 rounded-[9px] bg-muted p-0.5", className)}
     >
-      {options.map((option) => {
+      {options.map((option, index) => {
         const selected = option.value === value
         return (
           <button
@@ -36,6 +36,15 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={selected}
             onClick={() => onChange(option.value)}
+            onKeyDown={(event) => {
+              // A radio group moves with the arrows, wrapping at either end.
+              const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0
+              if (!step) return
+              event.preventDefault()
+              const next = (index + step + options.length) % options.length
+              ;(event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
+              onChange(options[next].value)
+            }}
             className={cn(
               "h-6 rounded-[7px] px-2.5 text-[12px]",
               selected

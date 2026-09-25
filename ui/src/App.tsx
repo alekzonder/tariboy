@@ -1,4 +1,5 @@
-import { Link, Navigate, Route, Routes, useLocation, useOutletContext, useParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { Segmented } from "@/components/ui/segmented";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DaemonBanner } from "@/components/DaemonBanner";
@@ -52,8 +53,14 @@ export default function App() {
   );
 }
 
+const VIEW_OPTIONS = [
+  { value: "agents", label: "Agents" },
+  { value: "all", label: "All tasks" },
+] as const;
+
 function MainApp() {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const sidebar = useSharedSidebarState();
   const sidebarRoute =
     location.pathname === "/"
@@ -88,6 +95,22 @@ function MainApp() {
                 ? <PanelLeftOpen className="size-4" />
                 : <PanelLeftClose className="size-4" />}
             </Button>
+          )}
+          {/* The view lives in the query, not the path: switching keeps the
+              selected agent's route, survives a reload and is one Back away. */}
+          {sidebarRoute && (
+            <Segmented
+              label="View"
+              className="ml-2"
+              options={VIEW_OPTIONS}
+              value={searchParams.get("view") === "all" ? "all" : "agents"}
+              onChange={(value) => setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                if (value === "all") next.set("view", "all");
+                else next.delete("view");
+                return next;
+              })}
+            />
           )}
         </div>
         <div
