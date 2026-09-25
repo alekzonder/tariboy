@@ -43,6 +43,7 @@ import TaskDetail, { TaskDetailLoading } from "./TaskDetail"
 import TaskForm from "./TaskForm"
 import TaskTree from "./TaskTree"
 import { listAllTasks } from "./useAllServersTasks"
+import { persistTaskQueueFilter, readTaskQueueFilter } from "./taskFilterStorage"
 import {
   defaultTaskDetailWidth,
   MIN_TASK_DETAIL_WIDTH,
@@ -60,28 +61,6 @@ function idempotencyKey(): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-// The queue filter has to survive the Agents <-> All tasks switch, which mounts
-// a different workspace, so it lives beside the session rather than in state
-// alone. It is per-session on purpose: a filter that outlived a restart would
-// greet the next launch with a list that looks empty for no visible reason.
-const TASK_QUEUE_FILTER_KEY = "tasks:queue-filter:v1"
-
-function readTaskQueueFilter(): string {
-  try {
-    return globalThis.sessionStorage?.getItem(TASK_QUEUE_FILTER_KEY) ?? ""
-  } catch {
-    return ""
-  }
-}
-
-function persistTaskQueueFilter(prefix: string): void {
-  try {
-    globalThis.sessionStorage?.setItem(TASK_QUEUE_FILTER_KEY, prefix)
-  } catch {
-    // Web Storage is a best-effort Desktop convenience.
-  }
 }
 
 type TasksWorkspaceProps = {

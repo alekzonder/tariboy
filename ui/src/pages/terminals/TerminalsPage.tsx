@@ -21,6 +21,7 @@ import type { TerminalIdentity } from "./workspaceState";
 import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
+import AllTasksWorkspace from "@/pages/tasks/AllTasksWorkspace";
 import ImagesPage from "@/pages/ImagesPage";
 import ImageTags from "@/pages/images/ImageTags";
 import StoresPage from "@/pages/StoresPage";
@@ -42,6 +43,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const allTasks = searchParams.get("view") === "all";
+  // The agent chip follows the route; × hides it for this history entry only,
+  // so picking an agent in the sidebar (a new entry) narrows the list again.
+  const [agentFilterClearedAt, setAgentFilterClearedAt] = useState("");
   const [lastSuccessfulHostsById, setLastSuccessfulHostsById] = useState<Map<string, HostAgents>>(
     () => new Map(),
   );
@@ -293,7 +298,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           // Switching agents keeps the tab the operator is reading, so the same
           // view answers the same question about the next agent. Any query
           // (a selected task) belongs to the agent being left, so it is dropped.
-          navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/${agentName && agentTab ? agentTab : "console"}`);
+          navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/${agentName && agentTab ? agentTab : "console"}${allTasks ? "?view=all" : ""}`);
         }}
         onSelectTeam={(h, team) => {
           navigate(`/agents/${hostToParam(h)}/teams/${encodeURIComponent(team)}`);
@@ -323,15 +328,23 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           one of the two allowed shadows. Everything the operator works with
           lives inside it. */}
       <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--panel-radius)] bg-card shadow-[var(--lift)]">
-        {!workspaceMode && hostId !== undefined && (
+        {!workspaceMode && !allTasks && hostId !== undefined && (
           <ServerContextBar hostId={hostId} label={selectedHostLabel ?? "Unknown server"} />
         )}
-        <div className={`flex min-h-0 flex-1 flex-col${serverView ? "" : " p-3"}`}>
+        <div className={`flex min-h-0 flex-1 flex-col${serverView || allTasks ? "" : " p-3"}`}>
         {hostError && (
           <p role="alert" className="mb-2 text-sm text-destructive">{hostError}</p>
         )}
         <section className="min-h-0 flex-1">
-        {workspaceMode ? (
+        {allTasks ? (
+          <AllTasksWorkspace
+            hosts={hosts}
+            agent={hostId !== undefined && agentName && agentFilterClearedAt !== location.key
+              ? { hostId, name: agentName }
+              : undefined}
+            onClearAgent={() => setAgentFilterClearedAt(location.key)}
+          />
+        ) : workspaceMode ? (
           <TerminalWorkspace
             ref={workspaceRef}
             hosts={hosts}

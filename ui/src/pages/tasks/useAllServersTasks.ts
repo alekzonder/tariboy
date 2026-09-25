@@ -86,12 +86,14 @@ export function useAllServersTasks(
     let answered = false
     for (const server of stableServers) {
       const entry = state[server.id]
-      const error = server.error ?? entry?.error
+      // A server the sidebar cannot reach is not asked, but a Retry that got an
+      // answer wins over that older verdict.
+      const error = entry?.error ?? (entry?.tasks ? undefined : server.error)
       if (error) errors[server.id] = error
       if (entry) answered = true
-      if (server.error || !entry?.tasks) continue
+      if (!entry?.tasks) continue
       // A failed refresh keeps the last list it had rather than blanking it.
-      if (entry.sequence !== undefined) sequences[server.id] = entry.sequence
+      if (entry.sequence !== undefined && !error) sequences[server.id] = entry.sequence
       for (const task of entry.tasks) tasks.push({ ...task, serverId: server.id, serverName: server.label })
     }
     const loading = !answered && stableServers.some((server) => !server.error)

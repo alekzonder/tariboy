@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Inbox, ListFilter, Plus, RefreshCw, Search, Settings, UserRound, X } from "lucide-react"
+import { Check, ChevronDown, Inbox, ListFilter, Plus, RefreshCw, Search, Server, Settings, UserRound, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -46,6 +46,9 @@ export function TaskFilterBar({
   onQueue,
   queueCounts,
   onManageQueues,
+  servers,
+  server = "",
+  onServer,
   scopeAgent,
   onClearScopeAgent,
   refreshing,
@@ -57,15 +60,22 @@ export function TaskFilterBar({
   onQuery: (value: string) => void
   statusView: TaskStatusView
   onStatusView: (value: TaskStatusView) => void
-  principalFilter: TaskPrincipalFilter
-  onPrincipalFilter: (value: TaskPrincipalFilter) => void
-  queues: TaskQueue[]
+  principalFilter?: TaskPrincipalFilter
+  onPrincipalFilter?: (value: TaskPrincipalFilter) => void
+  queues: ReadonlyArray<Pick<TaskQueue, "prefix">>
   /** Empty means every queue. */
   queue: string
   onQueue: (prefix: string) => void
   /** Listed tasks per queue prefix, for the menu's trailing counts. */
   queueCounts: ReadonlyMap<string, number>
-  onManageQueues: () => void
+  /** Queues belong to one server, so the every-server table cannot manage them. */
+  onManageQueues?: () => void
+  /** The every-server table's server menu; an unavailable server is listed but
+   *  cannot be picked. */
+  servers?: ReadonlyArray<{ id: string; label: string; count: number; unavailable: boolean }>
+  /** Empty means every server. */
+  server?: string
+  onServer?: (id: string) => void
   /** Set when the table is scoped to one agent; shown as a removable chip. */
   scopeAgent?: string
   onClearScopeAgent?: () => void
@@ -85,7 +95,7 @@ export function TaskFilterBar({
         <input
           type="search"
           aria-label="Search tasks"
-          placeholder={mode === "all" ? "Search all tasks" : "Search tasks"}
+          placeholder={mode === "agent" ? "Search tasks" : "Search all tasks"}
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
@@ -127,22 +137,62 @@ export function TaskFilterBar({
                 : <span aria-hidden="true" className="w-[11px]" />}
             </DropdownMenuItem>
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={onManageQueues}
-            className="h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]"
-          >
-            <Settings aria-hidden="true" className="size-3" />
-            Manage queues…
-          </DropdownMenuItem>
+          {onManageQueues && <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={onManageQueues}
+              className="h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]"
+            >
+              <Settings aria-hidden="true" className="size-3" />
+              Manage queues…
+            </DropdownMenuItem>
+          </>}
         </DropdownMenuContent>
       </DropdownMenu>
-      {PRINCIPAL_OPTIONS.map(({ value, label, icon: Icon }) => (
+      {servers && onServer && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Server: ${(server && servers.find((item) => item.id === server)?.label) || "all"}`}
+              className="flex h-7 shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-[12px] hover:bg-accent"
+            >
+              <Server aria-hidden="true" className="size-3 opacity-55" />
+              <span className="text-muted-foreground">Server:</span>
+              <span className="font-mono text-[11.5px] font-medium">
+                {(server && servers.find((item) => item.id === server)?.label) || "all"}
+              </span>
+              <ChevronDown aria-hidden="true" className="size-[9px] opacity-50" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[214px] rounded-[12px] p-[5px]">
+            {[{ id: "", label: "All servers", count: servers.reduce((sum, item) => sum + item.count, 0), unavailable: false }]
+              .concat(servers).map((item) => (
+                <DropdownMenuItem
+                  key={item.id || "__all__"}
+                  disabled={item.unavailable}
+                  onSelect={() => onServer(item.id)}
+                  className={cn("h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]", item.id === server && "bg-accent")}
+                >
+                  {item.unavailable && (
+                    <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-status-failed" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] font-medium">{item.label}</span>
+                  <span className="text-muted-foreground tabular-nums">{item.unavailable ? "unavailable" : item.count}</span>
+                  {item.id === server
+                    ? <Check aria-hidden="true" className="size-[11px] text-primary" />
+                    : <span aria-hidden="true" className="w-[11px]" />}
+                </DropdownMenuItem>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {mode !== "servers" && PRINCIPAL_OPTIONS.map(({ value, label, icon: Icon }) => (
         <button
           key={value}
           type="button"
           aria-pressed={principalFilter === value}
-          onClick={() => onPrincipalFilter(principalFilter === value ? "" : value)}
+          onClick={() => onPrincipalFilter?.(principalFilter === value ? "" : value)}
           className={cn(
             "flex h-7 shrink-0 items-center gap-[6px] rounded-[8px] px-[9px] text-[12px]",
             principalFilter === value

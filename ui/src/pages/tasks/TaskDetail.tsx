@@ -48,6 +48,7 @@ export default function TaskDetail({
   onAddRelation,
   onDeleteRelation,
   onTransfer,
+  assigneeOptions,
 }: {
   detail: Detail
   target?: ApiTarget
@@ -71,6 +72,9 @@ export default function TaskDetail({
   onAddRelation: (targetKey: string, type: TaskRelationType) => Promise<void>
   onDeleteRelation: (relationID: number) => Promise<void>
   onTransfer: (hostID: string) => Promise<void>
+  /** A closed list of assignees instead of the free-text field; the owner of
+   *  `onSave` gives each value its meaning. */
+  assigneeOptions?: ReadonlyArray<{ value: string; label: string }>
 }) {
   const task = detail.task
   const managed = Boolean(task.workflow_version_id)
@@ -316,7 +320,15 @@ export default function TaskDetail({
                 <option value="P2">P2 Normal</option>
                 <option value="P3">P3 Low</option>
               </SelectField>
-              {!managed && <label className="flex min-w-0 flex-col gap-[5px]">
+              {!managed && assigneeOptions && <SelectField label="Assignee" value={assignee} onChange={setAssignee} mono>
+                <option value="">Unassigned</option>
+                {[task.assignee, principals?.customer ?? ""]
+                  .filter((value, index, all) => value && all.indexOf(value) === index
+                    && !assigneeOptions.some((option) => option.value === value))
+                  .map((value) => <option key={value} value={value}>{value}</option>)}
+                {assigneeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </SelectField>}
+              {!managed && !assigneeOptions && <label className="flex min-w-0 flex-col gap-[5px]">
                 <span className={LABEL}>Assignee</span>
                 <Input aria-label="Assignee" list="task-assignees" className={cn(FIELD, FIELD_MONO)}
                   value={assignee} onChange={(event) => setAssignee(event.target.value)} />
