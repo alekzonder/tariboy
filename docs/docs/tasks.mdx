@@ -9,6 +9,12 @@ sidebar:
 Native Tasks are Tariboy's central work domain. They live in the existing
 host-local `tariboyd.db`.
 
+Every daemon starts with a default `TASK` queue named `Tasks`, with no owners
+and no responsible agent. At each start `tariboyd` creates it when it is
+absent and records a `task.queue_created` event by `system:tariboyd`; an
+existing `TASK` queue, whether created by hand or by compose, is left
+unchanged.
+
 Queues may optionally activate a [configurable task workflow](/docs/task-workflows).
 New tasks in such a queue automatically pin that published version; callers do
 not pass a workflow when creating the task. Existing tasks and unmanaged queues

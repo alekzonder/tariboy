@@ -135,6 +135,36 @@ func (s *Service) CreateQueue(ctx context.Context, actor Actor, in CreateQueueIn
 	return queue, nil
 }
 
+// EnsureDefaultQueue creates the TASK queue when it is absent, so every daemon
+// starts with one queue. An existing TASK queue is left untouched.
+func (s *Service) EnsureDefaultQueue(ctx context.Context) error {
+	now := s.now()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	queue := Queue{Prefix: "TASK", Name: "Tasks", Owners: []string{}, Revision: 1, CreatedAt: now, UpdatedAt: now}
+	result, err := tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO task_queues(prefix, name, description, responsible_agent, created_at, updated_at)
+		VALUES (?, ?, '', '', ?, ?)`, queue.Prefix, queue.Name, now, now)
+	if err != nil {
+		return err
+	}
+	if n, err := result.RowsAffected(); err != nil || n == 0 {
+		return err
+	}
+	if _, err := appendQueueEventTx(ctx, tx, queue, "task.queue_created",
+		Actor{Principal: "system:tariboyd"}, map[string]any{"name": queue.Name}, now); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.signal()
+	return nil
+}
+
 func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInput) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err

@@ -280,6 +280,9 @@ func Run(ctx context.Context, o Options) error {
 	goalStore := taskgoal.NewStore(st)
 	currentGoal := goalStore.Current
 	taskService.SetGoalSignal(goalReconciler.Signal)
+	if err := taskService.EnsureDefaultQueue(context.Background()); err != nil {
+		log.Error("seed default task queue", "err", err)
+	}
 	imgStore := &image.Store{Dir: p.ImagesDir()}
 	if err := image.WithPublicationGate(imgStore.Migrate); err != nil {
 		return fmt.Errorf("migrate image store: %w", err)
