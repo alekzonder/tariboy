@@ -64,8 +64,7 @@ function loadLearnedPresets(): LearnedRuntimePresets {
     const raw = storage()?.getItem(RUNTIME_PRESETS_STORAGE_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
 
     const learned: LearnedRuntimePresets = {};
     for (const [harness, value] of Object.entries(parsed)) {
@@ -73,8 +72,7 @@ function loadLearnedPresets(): LearnedRuntimePresets {
       const entry = value as Record<string, unknown>;
       const models = stringValues(entry.models);
       const efforts = stringValues(entry.efforts);
-      if (models.length || efforts.length)
-        learned[harness] = { models, efforts };
+      if (models.length || efforts.length) learned[harness] = { models, efforts };
     }
     return learned;
   } catch {
@@ -120,8 +118,7 @@ export function rememberRuntimePreset(
   rawValue: string,
 ): void {
   const value = rawValue.trim();
-  if (!harness || !value || builtInPresets(harness, field).includes(value))
-    return;
+  if (!harness || !value || builtInPresets(harness, field).includes(value)) return;
 
   const learned = loadLearnedPresets();
   const current = learned[harness]?.[field] ?? [];

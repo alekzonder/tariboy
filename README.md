@@ -34,8 +34,8 @@ role-specific image. Harness, model, and effort are configured on the agent.
 ### 2. Agent — give the image a place to work
 
 Create a named agent from an image. Choose its host, working directory,
-harness, model, and runtime settings. Use Claude Code, Codex, or OpenCode
-installed on that host, and keep each agent independently configured.
+harness, model, and runtime settings. Use Claude Code, Codex, OpenCode, or
+the Cursor CLI installed on that host, and keep each agent independently configured.
 
 [Create your first agent →](https://alekzonder.github.io/tariboy/quickstart#4-create-an-agent)
 

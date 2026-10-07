@@ -24,8 +24,9 @@ by the operator. The desktop does not implement a second SSH stack.
 
 Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
 The Python runtime executes the standard-library agent tool scripts. Preflight
-also reports `tmux`, Claude, Codex, and OpenCode so you can see which workflows
-are available. At least one chosen harness must be installed on the remote host.
+also reports `tmux`, Claude, Codex, OpenCode, and the Cursor CLI (its `agent`
+executable) so you can see which workflows are available; a missing harness is
+listed as an optional tool and does not block installation. At least one chosen harness must be installed on the remote host.
 
 ## Account PATH and harness launch
 
