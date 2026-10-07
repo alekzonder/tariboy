@@ -229,7 +229,7 @@ jobs:
 
   docs:
     name: Publish documentation
-    needs: publish
+    needs: [publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write

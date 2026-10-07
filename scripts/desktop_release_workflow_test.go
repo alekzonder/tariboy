@@ -76,16 +76,6 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 			} `yaml:"push"`
 		} `yaml:"on"`
 		Permissions map[string]string `yaml:"permissions"`
-		Jobs        map[string]struct {
-			RunsOn      string            `yaml:"runs-on"`
-			Permissions map[string]string `yaml:"permissions"`
-			Steps       []struct {
-				Uses string            `yaml:"uses"`
-				With map[string]any    `yaml:"with"`
-				Run  string            `yaml:"run"`
-				Env  map[string]string `yaml:"env"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(contents, &workflow); err != nil {
 		t.Fatalf("parse Desktop release workflow: %v", err)
@@ -97,37 +87,67 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		t.Fatalf("top-level release permissions = %v, want job-scoped permissions", workflow.Permissions)
 	}
 
-	job, ok := workflow.Jobs["release"]
-	if !ok {
-		t.Fatal("release workflow has no release job")
+	type workflowJob = struct {
+		RunsOn      string            `yaml:"runs-on"`
+		Needs       []string          `yaml:"needs"`
+		Permissions map[string]string `yaml:"permissions"`
+		Steps       []struct {
+			Uses string            `yaml:"uses"`
+			With map[string]any    `yaml:"with"`
+			Run  string            `yaml:"run"`
+			Env  map[string]string `yaml:"env"`
+		} `yaml:"steps"`
 	}
-	if job.RunsOn != "macos-15" {
-		t.Fatalf("release runner = %q, want macos-15", job.RunsOn)
+	var jobs struct {
+		Jobs map[string]workflowJob `yaml:"jobs"`
 	}
-	if len(job.Permissions) != 1 || job.Permissions["contents"] != "write" {
-		t.Fatalf("release job permissions = %v, want only contents: write", job.Permissions)
+	if err := yaml.Unmarshal(contents, &jobs); err != nil {
+		t.Fatalf("parse Desktop release workflow jobs: %v", err)
 	}
-	commands := make([]string, 0, len(job.Steps))
-	var publishEnv map[string]string
-	var buildEnv map[string]string
-	var cargoCache bool
-	for _, step := range job.Steps {
-		commands = append(commands, step.Run)
-		if step.Uses == "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6" && step.With["workspaces"] == "desktop/src-tauri -> target" {
-			cargoCache = true
+	// Every Secret stays on the one step that needs it; collect each job's
+	// commands and the env of the steps matching a marker.
+	inspect := func(name string, markers ...string) (string, map[string]map[string]string, workflowJob) {
+		job, ok := jobs.Jobs[name]
+		if !ok {
+			t.Fatalf("release workflow has no %s job", name)
 		}
-		if strings.HasPrefix(step.Uses, "actions/checkout@") && step.With["persist-credentials"] != false {
-			t.Fatalf("checkout persist-credentials = %v, want false", step.With["persist-credentials"])
+		var commands []string
+		envs := map[string]map[string]string{}
+		for _, step := range job.Steps {
+			commands = append(commands, step.Run)
+			if strings.HasPrefix(step.Uses, "actions/checkout@") && step.With["persist-credentials"] != false {
+				t.Fatalf("%s checkout persist-credentials = %v, want false", name, step.With["persist-credentials"])
+			}
+			for _, marker := range markers {
+				if strings.Contains(step.Run, marker) {
+					envs[marker] = step.Env
+				}
+			}
+			for key, value := range step.Env {
+				if strings.Contains(value, "secrets.") && !containsAny(step.Run, markers) {
+					t.Fatalf("%s step exposes %s outside its build or signing step", name, key)
+				}
+			}
 		}
-		if strings.Contains(step.Run, "gh release create") {
-			publishEnv = step.Env
-		}
-		if strings.Contains(step.Run, "make desktop-mac") {
-			buildEnv = step.Env
+		return strings.Join(commands, "\n"), envs, job
+	}
+	requireAll := func(name, commands string, required ...string) {
+		for _, want := range required {
+			if !strings.Contains(commands, want) {
+				t.Errorf("%s job is missing %q", name, want)
+			}
 		}
 	}
-	allCommands := strings.Join(commands, "\n")
-	for _, required := range []string{
+
+	// macOS builds and signs, then only hands the files over: it cannot write.
+	macCommands, macEnv, mac := inspect("release", "make desktop-mac")
+	if mac.RunsOn != "macos-15" {
+		t.Fatalf("release runner = %q, want macos-15", mac.RunsOn)
+	}
+	if len(mac.Permissions) != 1 || mac.Permissions["contents"] != "read" {
+		t.Fatalf("release job permissions = %v, want only contents: read", mac.Permissions)
+	}
+	requireAll("release", macCommands,
 		`GITHUB_REF_NAME#v`,
 		`internal/version/version.go`,
 		`scripts/release-version.txt`,
@@ -137,31 +157,86 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`desktop/src-tauri/tauri.conf.json`,
 		`*.app.tar.gz`,
 		`*.app.tar.gz.sig`,
+	)
+	if strings.Contains(macCommands, "gh release") {
+		t.Fatal("macOS build job must not publish")
+	}
+	buildEnv := macEnv["make desktop-mac"]
+	if buildEnv["TAURI_SIGNING_PRIVATE_KEY"] != "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ||
+		buildEnv["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] != "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" {
+		t.Fatalf("release signing environment = %v, want signing Secrets on build step", buildEnv)
+	}
+	cargoCache := false
+	for _, step := range mac.Steps {
+		if step.Uses == "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6" && step.With["workspaces"] == "desktop/src-tauri -> target" {
+			cargoCache = true
+		}
+	}
+	if !cargoCache {
+		t.Fatal("release workflow has no pinned Cargo cache for the desktop target")
+	}
+
+	// Android checks the same tag, fails closed without its signing Secrets, and
+	// ships only a verified signed APK.
+	androidCommands, androidEnv, android := inspect("android", "keystore.properties")
+	if android.RunsOn != "ubuntu-latest" {
+		t.Fatalf("android runner = %q, want ubuntu-latest", android.RunsOn)
+	}
+	if len(android.Permissions) != 1 || android.Permissions["contents"] != "read" {
+		t.Fatalf("android job permissions = %v, want only contents: read", android.Permissions)
+	}
+	requireAll("android", androidCommands,
+		`GITHUB_REF_NAME#v`,
+		`internal/version/version.go`,
+		`scripts/release-version.txt`,
+		`is required`,
+		`make desktop-android`,
+		`*-unsigned.apk) echo "release APK is unsigned"`,
+		`verify --print-certs`,
+		`Tariboy_${version}_android-arm64.apk`,
+		`sha256sum`,
+	)
+	for _, name := range []string{"ANDROID_KEYSTORE_BASE64", "ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD"} {
+		if androidEnv["keystore.properties"][name] != "${{ secrets."+name+" }}" {
+			t.Fatalf("android signing environment = %v, want %s on the keystore step", androidEnv["keystore.properties"], name)
+		}
+	}
+
+	// One job publishes, only after both builds, as a draft made public last.
+	publishCommands, publishEnv, publish := inspect("publish", "gh release create")
+	if len(publish.Needs) != 2 || publish.Needs[0] != "release" || publish.Needs[1] != "android" {
+		t.Fatalf("publish needs = %v, want [release android]", publish.Needs)
+	}
+	if len(publish.Permissions) != 1 || publish.Permissions["contents"] != "write" {
+		t.Fatalf("publish job permissions = %v, want only contents: write", publish.Permissions)
+	}
+	requireAll("publish", publishCommands,
 		`gh release create "$GITHUB_REF_NAME"`,
 		`--draft`,
 		`--generate-notes`,
 		`This build is not notarized by Apple.`,
 		`If macOS blocks the DMG: **System Settings → Privacy & Security → Open Anyway**`,
-		`gh release upload "$GITHUB_REF_NAME" "$release_dir"/*`,
+		`gh release upload "$GITHUB_REF_NAME" "$release_dir"/* dist/android/*`,
 		`gh release edit "$GITHUB_REF_NAME" --draft=false`,
-	} {
-		if !strings.Contains(allCommands, required) {
-			t.Errorf("release workflow is missing %q", required)
+	)
+	env := publishEnv["gh release create"]
+	if env["GH_TOKEN"] != "${{ github.token }}" {
+		t.Fatalf("release GH_TOKEN = %q, want github.token", env["GH_TOKEN"])
+	}
+	for key, value := range env {
+		if strings.Contains(value, "secrets.") {
+			t.Fatalf("publication step exposes %s", key)
 		}
 	}
-	if publishEnv["GH_TOKEN"] != "${{ github.token }}" {
-		t.Fatalf("release GH_TOKEN = %q, want github.token", publishEnv["GH_TOKEN"])
+}
+
+func containsAny(s string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(s, marker) {
+			return true
+		}
 	}
-	if buildEnv["TAURI_SIGNING_PRIVATE_KEY"] != "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ||
-		buildEnv["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] != "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" {
-		t.Fatalf("release signing environment = %v, want signing Secrets on build step", buildEnv)
-	}
-	if publishEnv["TAURI_SIGNING_PRIVATE_KEY"] != "" || publishEnv["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] != "" {
-		t.Fatal("release signing Secrets are exposed to publication step")
-	}
-	if !cargoCache {
-		t.Fatal("release workflow has no pinned Cargo cache for the desktop target")
-	}
+	return false
 }
 
 // A tag run restores only caches of its own tag or of main, so the release must
