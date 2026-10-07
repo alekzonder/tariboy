@@ -60,6 +60,10 @@ flowchart LR
 | Agent capability socket | Skill-local scripts plus the legacy `tasks` and `i-am-done` compatibility shims | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
 | AI proxy | Harness or plugin making an LLM request | Loopback listener plus a short-lived iteration- or plugin-scoped token. Upstream provider keys remain in the daemon. |
 
+The Android app has no daemon of its own. It reaches a daemon through a port
+the user forwards to the phone's loopback, or through an HTTPS server, and the
+loopback listener allows its origin `http://tauri.localhost`.
+
 Remote Desktop access is an SSH local-forward to the remote daemon's loopback
 listener. System OpenSSH retains host-key verification, agent forwarding,
 ProxyJump, and interactive authentication. See [Security and

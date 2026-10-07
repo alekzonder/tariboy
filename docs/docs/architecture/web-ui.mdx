@@ -17,6 +17,15 @@ The separate store UI builds from `ui/store` into committed
 `internal/storeui/dist` and is served only by
 [`tariboy-store`](/docs/binaries/store).
 
+`npm run build:android` builds the same SPA for the Android app with
+`VITE_TARIBOY_SHELL=android`. In that mode `isDesktop()` is false, so servers
+use the browser registry (`localStorage` metadata, `sessionStorage` tokens) and
+no native command is called. The implicit same-origin "This daemon (local)"
+host is absent, the router is `HashRouter`, the daemon banner is hidden, an
+empty start screen offers **Add server**, and the server dialog accepts
+`https://` or plain `http://` to a loopback port only. See
+[Remote hosts](/docs/remote-hosts#android-app).
+
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
 small W3C WebDriver client through `tauri-driver` to a real debug Tauri/WebKit
 executable. The harness uses fresh owner-only daemon and Desktop state, rejects
