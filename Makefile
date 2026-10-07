@@ -32,7 +32,7 @@ TAURI_BUNDLE_VERBOSITY = $(if $(filter 1,$(DESKTOP_BUNDLE_VERBOSE)),--verbose,)
 
 export CGO_ENABLED=0
 
-.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev store-ui docs clean up start down attach a desktop desktop-mac desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
+.PHONY: build install uninstall setup check backend-check frontend-check check-output-contract-fixture full-check test smoke-contract-test smoke-image-skills-contract fmt fmt-check vet e2e workflow-e2e iteration-timeout-e2e group-request-deadline-e2e tariboy-tasks-e2e smoke full-smoke ui ui-dev store-ui docs clean up start down attach a desktop desktop-mac desktop-android desktop-binaries desktop-version-check desktop-lock-check desktop-platform-check desktop-tools-check desktop-preflight desktop-smoke desktop-e2e-tools-check desktop-e2e-build desktop-e2e server-install
 
 build:
 	$(GO) build -trimpath -o $(BINDIR)/tariboyd ./cmd/tariboyd
@@ -402,6 +402,19 @@ else
 	@echo "PLATFORM=$(PLATFORM) is invalid; accepted values are darwin and linux on $(HOST_OS)-$(HOST_ARCH)" >&2
 	@exit 1
 endif
+
+# Build the Android APK (arm64-v8a): the SPA in Android mode inside a Tauri
+# WebView, with no daemon, SSH or Go binaries. Needs a JDK 17+, ANDROID_HOME
+# with a platform and build-tools, and NDK_HOME. A keystore.properties in
+# $(TAURI_DIR)/gen/android signs the release APK; without one it stays unsigned.
+desktop-android: desktop-tools-check desktop-version-check desktop-lock-check
+	@test -n "$$ANDROID_HOME" || { echo "ANDROID_HOME must point at the Android SDK" >&2; exit 1; }
+	@test -n "$$NDK_HOME" || { echo "NDK_HOME must point at the Android NDK" >&2; exit 1; }
+	@command -v java >/dev/null || { echo "java not found — install a JDK 17 or newer" >&2; exit 1; }
+	@if [ ! -d ui/node_modules ]; then cd ui && npm ci; fi
+	rustup target add aarch64-linux-android
+	cd $(TAURI_DIR) && TARIBOY_VERSION="$(VERSION)" cargo tauri android build --apk --target aarch64 --ci
+	@echo "apk: $$(ls $(TAURI_DIR)/gen/android/app/build/outputs/apk/universal/release/*.apk)"
 
 # Host binaries only the Desktop E2E run needs. ui/tests/desktop/fixture.ts
 # resolves them in worker scope — after the Go binaries, the SPA and the Tauri
