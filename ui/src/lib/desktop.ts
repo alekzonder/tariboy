@@ -124,9 +124,42 @@ export interface DesktopUpdateSnapshot {
   error: string;
 }
 
+/**
+ * The Android app (`npm run build:android`) is the browser-mode SPA inside a
+ * Tauri WebView. Its Rust host has no commands, so it must never be treated as
+ * the desktop shell, and its own origin serves no API.
+ */
+export function isAndroidShell(): boolean {
+  return import.meta.env.VITE_TARIBOY_SHELL === "android";
+}
+
 /** Tauri v2 injects __TAURI_INTERNALS__ into the webview before any app code runs. */
 export function isDesktop(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return !isAndroidShell() && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+/** Whether the implicit same-origin "This daemon (local)" host exists. */
+export function hasLocalDaemon(): boolean {
+  return !isAndroidShell();
+}
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Validates a server URL for the Android app, whose network security config
+ * permits cleartext only to loopback: "" when usable, otherwise the reason.
+ */
+export function androidBaseURLError(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "base URL must start with http";
+  }
+  if (url.protocol === "https:") return "";
+  if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname) && url.port !== "") return "";
+  if (url.protocol !== "http:") return "base URL must start with http";
+  return "Android allows plain http only to a local forwarded port (http://127.0.0.1:PORT); use https for other hosts";
 }
 
 export async function invokeDesktop<T>(

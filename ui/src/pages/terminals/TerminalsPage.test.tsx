@@ -576,6 +576,20 @@ describe("TerminalsPage", () => {
     expect(screen.queryByRole("separator", { name: "resize sidebar" })).toBeNull();
   });
 
+  it("asks for a server first in the Android app, which has no local daemon", async () => {
+    vi.stubEnv("VITE_TARIBOY_SHELL", "android");
+    try {
+      vi.mocked(fetchAllAgents).mockResolvedValue([]);
+      renderAt("/");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Add server" }));
+      expect(await screen.findByText("Add host")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "New agent" })).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("opens a sidebar agent in the product Console route", async () => {
     renderAt("/");
     fireEvent.click(await screen.findByText("a1"));

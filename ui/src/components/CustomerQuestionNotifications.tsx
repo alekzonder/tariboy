@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from "react-router-dom"
 import { useDaemons } from "@/components/DaemonProvider"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
-import { onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop"
+import { hasLocalDaemon, onTaskNotificationActivated, showTaskNotification } from "@/lib/desktop"
 import { resolveDaemon, type Daemon } from "@/lib/daemons"
 import {
   listTaskNotifications,
@@ -54,7 +54,7 @@ export function CustomerQuestionNotifications({ children }: { children: ReactNod
   const refreshers = useRef(new Map<string, () => Promise<void>>())
   const [snapshots, setSnapshots] = useState(new Map<string, HostSnapshot>())
   const hosts = useMemo(
-    () => [{ id: "", label: "This daemon (local)" }, ...daemons.map((host) => ({
+    () => [...(hasLocalDaemon() ? [{ id: "", label: "This daemon (local)" }] : []), ...daemons.map((host) => ({
       id: host.id,
       label: host.label,
     }))],

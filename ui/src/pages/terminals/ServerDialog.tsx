@@ -8,11 +8,13 @@ import {
   type DaemonMeta,
 } from "@/lib/daemons";
 import {
+  androidBaseURLError,
   hostConnect,
   hostPromptReply,
   hostProvision,
   hostSaveSsh,
   hostUpdate,
+  isAndroidShell,
   isDesktop,
   onHostProvisionOutput,
   onHostState,
@@ -355,7 +357,10 @@ export function ServerDialog({
     const cleanURL = baseURL.trim();
     const cleanToken = token.trim();
     if (!cleanLabel) return setFormError("label is required");
-    if (!cleanURL || !cleanURL.startsWith("http")) {
+    if (isAndroidShell()) {
+      const urlError = androidBaseURLError(cleanURL);
+      if (urlError) return setFormError(urlError);
+    } else if (!cleanURL || !cleanURL.startsWith("http")) {
       return setFormError("base URL must start with http");
     }
     try {
@@ -673,7 +678,7 @@ export function ServerDialog({
                   id="add-host-url"
                   value={baseURL}
                   onChange={(event) => setBaseURL(event.target.value)}
-                  placeholder="https://host:port"
+                  placeholder={isAndroidShell() ? "http://127.0.0.1:9990 or https://host:port" : "https://host:port"}
                   className="h-8"
                 />
               </div>

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "npm run build:desktop",
     "build:desktop": "tsc -b && vite build -c vite.desktop.config.ts",
+    "build:android": "tsc -b && VITE_TARIBOY_SHELL=android vite build -c vite.desktop.config.ts",
     "build:store": "tsc -b && vite build -c vite.store.config.ts",
     "branding:check": "node scripts/generate-desktop-branding.mjs --check",
     "lint": "oxlint .",

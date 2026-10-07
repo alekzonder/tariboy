@@ -12,7 +12,7 @@ import { useDaemons } from "@/components/DaemonProvider";
 import { listDaemons, removeDaemon, resolveDaemon, type DaemonMeta } from "@/lib/daemons";
 import { apiOn } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { hostConnect, hostUpdate } from "@/lib/desktop";
+import { hasLocalDaemon, hostConnect, hostUpdate } from "@/lib/desktop";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
@@ -107,7 +107,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     const aggregateById = new Map(hosts.map((entry) => [entry.host.id, entry]));
     const metadataById = new Map(daemons.map((entry) => [entry.id, entry]));
     const ids = new Set([
-      "",
+      ...(hasLocalDaemon() ? [""] : []),
       ...hosts.map((entry) => entry.host.id),
       ...daemons.map((entry) => entry.id),
     ]);
@@ -444,10 +444,15 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
               Manage workspaces
             </Button>
           </div>
+        ) : createHosts.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+            <p>Add a server to start.</p>
+            <Button onClick={() => setServerDialog({ mode: "add" })}>Add server</Button>
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
             <p>Pick an agent on the left, or create one.</p>
-            <Button onClick={() => setCreateFor({ hostId: "" })}>New agent</Button>
+            <Button onClick={() => setCreateFor({ hostId: createHosts[0].id })}>New agent</Button>
           </div>
         )}
         </section>
