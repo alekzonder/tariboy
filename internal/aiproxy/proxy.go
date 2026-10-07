@@ -156,6 +156,12 @@ func (p *Proxy) budget(next Handler) Handler {
 			if len(d.Exhausted) > 0 {
 				message += ": " + strings.Join(d.Exhausted, ", ")
 			}
+			if ex.Provider == "cursor" {
+				// The cursor agent CLI is a Connect client: 429 maps to
+				// resource_exhausted in the Connect error JSON.
+				ex.W.Write([]byte(`{"code":"resource_exhausted","message":"` + message + `"}`))
+				return nil
+			}
 			ex.W.Write([]byte(`{"type":"error","error":{"type":"rate_limit_error","message":"` + message + `"}}`))
 			return nil
 		}

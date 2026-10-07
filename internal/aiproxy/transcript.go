@@ -47,6 +47,16 @@ func AppendTranscript(agentsDir string, e TranscriptEntry) error {
 	return f.Sync()
 }
 
+// RecordUsage persists a row the proxy did not observe itself (cursor tokens
+// read from harness stdout): it appends a body-less transcript entry, so daemon
+// reindex can rebuild the row, then ingests it. Like persist, the row is
+// ingested even when the append fails; the append error is returned.
+func RecordUsage(agentsDir string, row AIRequest, ingest func(AIRequest)) error {
+	err := AppendTranscript(agentsDir, TranscriptEntry{Meta: row})
+	ingest(row)
+	return err
+}
+
 // GzipTranscript compresses the JSONL at iteration close and removes the plain
 // file. A missing transcript is not an error (no AI calls that iteration).
 func GzipTranscript(agentsDir, agent, iteration string) error {

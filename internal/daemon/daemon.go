@@ -602,7 +602,9 @@ func Run(ctx context.Context, o Options) error {
 				LatencyMs: usage.DurationMs, Status: "ok",
 				GroupID: groupID, GroupName: groupName,
 			}
-			ingester.Enqueue(row)
+			if err := aiproxy.RecordUsage(p.AgentsDir(), row, ingester.Enqueue); err != nil {
+				log.Warn("append proxy transcript", "agent", agentName, "iteration", iteration, "err", err)
+			}
 			hub.Emit(events.Event{Agent: agentName, Type: "proxy",
 				Time: time.Now().UTC().Format(time.RFC3339), Data: map[string]any{
 					"request_id": row.ID, "iteration_id": row.Iteration,

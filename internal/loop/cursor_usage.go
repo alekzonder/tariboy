@@ -11,6 +11,32 @@ type CursorResultUsage struct {
 	DurationMs       int
 }
 
+// cursorUsageObserver returns a harness-stdout hook that reports each result
+// event's tokens. The row names the configured model id; with no model or
+// "auto" it falls back to the display name from the system init event.
+func cursorUsageObserver(configuredModel string, report func(CursorResultUsage)) func(string) {
+	model := ""
+	if configuredModel != "auto" {
+		model = configuredModel
+	}
+	var displayName string
+	return func(line string) {
+		m, usage, ok := observeCursorStreamLine(line)
+		if !ok {
+			return
+		}
+		if usage == nil {
+			displayName = m
+			return
+		}
+		usage.Model = model
+		if usage.Model == "" {
+			usage.Model = displayName
+		}
+		report(*usage)
+	}
+}
+
 func observeCursorStreamLine(line string) (model string, usage *CursorResultUsage, ok bool) {
 	var ev struct {
 		Type       string `json:"type"`
