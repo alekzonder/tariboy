@@ -44,6 +44,7 @@ printf ',"python3":'; tool_json python3
 printf ',"claude":'; tool_json claude
 printf ',"codex":'; tool_json codex
 printf ',"opencode":'; tool_json opencode
+printf ',"cursor":'; tool_json agent
 printf '}\n'
 "#;
 
@@ -66,6 +67,8 @@ pub struct Result {
     pub claude: Tool,
     pub codex: Tool,
     pub opencode: Tool,
+    /// The Cursor CLI binary is named `agent`.
+    pub cursor: Tool,
     #[serde(default)]
     pub prerequisites: Vec<String>,
     #[serde(default)]
@@ -101,6 +104,7 @@ pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
         ("claude", &result.claude),
         ("codex", &result.codex),
         ("opencode", &result.opencode),
+        ("cursor agent", &result.cursor),
     ] {
         if !tool.available {
             prerequisites.push(name.to_string());
@@ -151,7 +155,8 @@ mod tests {
               "python3":{{"available":true,"version":"Python 3.12.3"}},
               "claude":{{"available":true,"version":"2.0"}},
               "codex":{{"available":false,"version":""}},
-              "opencode":{{"available":false,"version":""}}
+              "opencode":{{"available":false,"version":""}},
+              "cursor":{{"available":false,"version":""}}
             }}"#
         )
     }
@@ -160,7 +165,10 @@ mod tests {
     fn linux_x86_64_can_install_and_missing_tools_are_named() {
         let result = parse(&fixture("Linux", "x86_64", false)).unwrap();
         assert!(result.install_supported);
-        assert_eq!(result.prerequisites, vec!["tmux", "codex", "opencode"]);
+        assert_eq!(
+            result.prerequisites,
+            vec!["tmux", "codex", "opencode", "cursor agent"]
+        );
     }
 
     #[test]
@@ -246,6 +254,7 @@ mod tests {
     fn fixed_script_sanitizes_control_bytes_in_tool_versions() {
         let dir = tempfile::tempdir().unwrap();
         testbin::executable(dir.path(), "claude", "printf 'v1\\tbad\\r\\n'");
+        testbin::executable(dir.path(), "agent", "printf '2026.10.01\\n'");
         let path = format!("{}:/usr/bin:/bin", dir.path().display());
 
         let output = std::process::Command::new("/bin/sh")
@@ -260,5 +269,7 @@ mod tests {
         let parsed = parse(&String::from_utf8(output.stdout).unwrap()).unwrap();
         assert!(parsed.claude.available);
         assert_eq!(parsed.claude.version, "v1?bad?");
+        assert!(parsed.cursor.available);
+        assert_eq!(parsed.cursor.version, "2026.10.01");
     }
 }

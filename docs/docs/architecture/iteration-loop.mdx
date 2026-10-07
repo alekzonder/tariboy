@@ -160,6 +160,7 @@ The adapters attach the bridge additively:
 | Claude Code | `--plugin-dir <absolute bridge>` |
 | Codex CLI | At-most-8,000-character prompt catalog with absolute bridge `SKILL.md` paths |
 | OpenCode | `OPENCODE_CONFIG_DIR=<absolute bridge>` with an absolute `skills.paths` entry |
+| Cursor CLI | The same bounded prompt catalog as Codex, with absolute bridge `SKILL.md` paths |
 
 Claude Code requires version `2.1.227` or newer. OpenCode is capability-probed
 with `opencode debug config`; its effective configuration must report the
@@ -179,6 +180,14 @@ consume the same catalog-prefixed prompt; Codex image skills do not appear in
 native `/skills`, `$` completion, or plugin inventory. Claude
 similarly omits its print-mode flags. Model, effective environment, working
 directory, and AI-proxy routing still apply in both modes.
+
+The Cursor CLI runs its `agent` executable with the prompt as the last
+argument, `--force`, `--endpoint <AI proxy URL>`, and `--model` when the agent
+names one. Batch iterations add `-p --output-format stream-json --trust`, and
+the loop reads token usage from the `result` event on harness stdout (see
+[AI proxy](/docs/architecture/ai-proxy#cursor-harness)). Interactive iterations launch the
+Cursor TUI. Like Codex, a prompt too large for one argument fails the launch.
+The agent's `effort` setting has no Cursor equivalent and is ignored.
 
 While a timed iteration is running, Agent Overview shows its deadline and can
 extend it by one configured soft-timeout period. Each extension is persisted

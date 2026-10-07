@@ -28,8 +28,6 @@ trap cleanup EXIT
 
 cat >"$FIXTURE_SOURCE/Tariboyfile.yaml" <<'YAML'
 schema_version: 2
-plugins:
-  - name: loop
 skills:
   - dir: ./skills/inventory-proof
 prompts: []
@@ -71,8 +69,8 @@ cat >"$record.prompt"
 exit 0
 HARNESS
 chmod 0700 "$FAKE_HARNESS"
-for harness in claude codex opencode; do
-  cp "$FAKE_HARNESS" "$FAKE_BIN/$harness"
+for bin in claude codex opencode agent; do
+  cp "$FAKE_HARNESS" "$FAKE_BIN/$bin"
 done
 
 DAEMON_WRAPPER="$TARIBOY_RUNTIME_DIR/tariboyd-no-http.sh"
@@ -127,8 +125,10 @@ run_iteration() {
   wait_iteration "$agent"
 }
 
-for harness in claude codex opencode; do
+for harness in claude codex opencode cursor; do
   agent="image-skills-$harness"
+  bin="$harness"
+  [ "$harness" = "cursor" ] && bin="agent"
   tb agent run image-skills-smoke:latest --name "$agent" --harness "$harness" \
     --cwd "$FIXTURE_CWD" --loop false --interactive false \
     --env "PATH=$FAKE_BIN:$ORIGINAL_PATH,SMOKE_RECORD_DIR=$RECORD_DIR" >/dev/null
@@ -136,7 +136,7 @@ for harness in claude codex opencode; do
   manifest="$(bridge_manifest "$agent")"
   [ -n "$manifest" ]
   bridge_dir="$(dirname "$manifest")"
-  record_home="$(find "$RECORD_DIR" -name "$harness-*.home" -type f -print | sort | head -n 1)"
+  record_home="$(find "$RECORD_DIR" -name "$bin-*.home" -type f -print | sort | head -n 1)"
   [ -n "$record_home" ]
   record="${record_home%.home}"
   case "$harness" in
@@ -148,6 +148,10 @@ for harness in claude codex opencode; do
       test ! -e "$bridge_dir/marketplace"
       ;;
     opencode) grep -Fx -- "$bridge_dir" "$record.config-dir" >/dev/null ;;
+    cursor)
+      grep -F -- "## Image skills" "$record.args" >/dev/null
+      grep -F -- "$bridge_dir/skills/inventory-proof/SKILL.md" "$record.args" >/dev/null
+      ;;
   esac
   grep -Fx -- "$HOME" "$record.home" >/dev/null
   grep -Fx -- "$FIXTURE_CWD" "$record.cwd" >/dev/null
@@ -157,15 +161,17 @@ for harness in claude codex opencode; do
   [ "$before" = "$after" ]
 done
 
-for hidden in .claude .agents .codex .opencode; do
+for hidden in .claude .agents .codex .opencode .cursor; do
   test ! -e "$FIXTURE_CWD/$hidden"
 done
 
 claude_bridge="$(dirname "$(bridge_manifest image-skills-claude)")"
 codex_bridge="$(dirname "$(bridge_manifest image-skills-codex)")"
 opencode_bridge="$(dirname "$(bridge_manifest image-skills-opencode)")"
+cursor_bridge="$(dirname "$(bridge_manifest image-skills-cursor)")"
 [ "$claude_bridge" != "$codex_bridge" ]
 [ "$codex_bridge" != "$opencode_bridge" ]
+[ "$opencode_bridge" != "$cursor_bridge" ]
 case "$claude_bridge" in */2/claude) ;; *) echo "FAIL: contract version missing from $claude_bridge" >&2; exit 1 ;; esac
 
 tb image build --path "$FIXTURE_SOURCE" --name image-skills-smoke-next >/dev/null

@@ -17,6 +17,9 @@ through the daemon's **in-process AI proxy** (`internal/aiproxy`). The proxy:
   be replayed and inspected after the fact. `tariboy daemon reindex` rebuilds
   the `ai_requests` metadata from these transcripts.
 
+The [Cursor harness](#cursor-harness) is the exception to the last two points:
+its traffic is metered without bodies, prices, or cost budgets.
+
 The proxy drops the client's `Accept-Encoding` header when it forwards a
 request. The upstream response still travels compressed, but the proxy
 decompresses it, so the usage parser and transcripts see plain SSE or JSON and
@@ -128,6 +131,36 @@ Activity can copy that readable timeline as Markdown for one iteration or all
 retained iterations. Its explicit ZIP export contains `audit.md` for human
 review and lossless `audit.jsonl` records for downstream analysis. The JSONL
 records preserve the raw proxied request and response bodies.
+
+## Cursor harness
+
+The Cursor CLI speaks Connect RPC over HTTP/2, so the proxy listener also
+accepts cleartext HTTP/2 (h2c) on its loopback address. Requests whose path is
+`/auth…` or a method of an `agent.v1.*` or `aiserver.v1.*` service are routed to
+the `cursor` provider and streamed unchanged to `https://api2.cursor.sh`, or to
+`TARIBOY_UPSTREAM_CURSOR_BASE_URL` when the daemon environment sets it. The
+same path-safety guard as other providers applies. The proxy never injects a
+provider key: the client's own `Authorization` header is forwarded as sent.
+
+Cursor metering differs from the other providers:
+
+- Request and response bodies are binary Connect frames and are **not**
+  written to `proxy-transcript.jsonl`. Each proxied request still produces a
+  metadata row with the path, status, and latency, but zero tokens and no
+  model.
+- Batch iterations read token counts from the `result` event of the CLI's
+  `stream-json` stdout and record one extra `cursor` row per result. It names
+  the agent's configured model id, or the CLI's display name when the agent
+  uses `auto` or no model. That row is also appended to the iteration
+  transcript, so `tariboy daemon reindex` restores it. Interactive Cursor
+  iterations have no machine-readable stdout and record no token counts.
+- `tariboy usage` therefore counts the per-request traffic rows plus one usage
+  row per result, so its Cursor request count is higher than the number of
+  model calls.
+- Cursor reports no price, so `cost_usd` stays empty. Cursor traffic never adds
+  to any USD budget or calendar limit. A budget already exhausted by other
+  spend still blocks Cursor requests; the proxy then answers HTTP 429 with a
+  Connect `resource_exhausted` error instead of the Anthropic error envelope.
 
 ## Daemon restart continuity
 

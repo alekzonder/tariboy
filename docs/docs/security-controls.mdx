@@ -58,6 +58,9 @@ adoption revokes the remaining lease when its shim finishes.
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
+- Cursor CLI traffic has no price, so it never adds to USD budgets or limits.
+  Do not rely on a budget to cap a Cursor agent's spend; see
+  [AI proxy](/docs/architecture/ai-proxy#cursor-harness).
 - Usage and per-iteration audit make outcomes reviewable.
 
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
