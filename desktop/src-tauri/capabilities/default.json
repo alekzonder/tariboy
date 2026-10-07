@@ -3,6 +3,7 @@
   "identifier": "default",
   "description": "Core events plus dialogs for Install CLI and fatal startup errors.",
   "windows": ["main"],
+  "platforms": ["macOS", "linux"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
