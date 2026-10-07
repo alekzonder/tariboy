@@ -920,11 +920,19 @@ func isLoopbackOrigin(origin string) bool {
 // matching — so no other host can borrow it.
 const desktopOrigin = "tauri://localhost"
 
+// androidOrigin is the origin of the same SPA inside the Android Tauri app,
+// which reaches this listener through a port the user forwards to the phone.
+// Browsers resolve *.localhost to loopback, so a page with this origin is the
+// app's WebView or a loopback port-80 server, and http://localhost (port 80)
+// is already allowed. Matched literally, like desktopOrigin.
+const androidOrigin = "http://tauri.localhost"
+
 // isAllowedWebOrigin reports whether the unauthenticated loopback web listener
-// may echo an Origin back. Two callers are legitimate: another daemon's SPA on
-// some localhost port (the port-forward case) and the desktop app.
+// may echo an Origin back. Three callers are legitimate: another daemon's SPA
+// on some localhost port (the port-forward case), the desktop app, and the
+// Android app.
 func isAllowedWebOrigin(origin string) bool {
-	return origin == desktopOrigin || isLoopbackOrigin(origin)
+	return origin == desktopOrigin || origin == androidOrigin || isLoopbackOrigin(origin)
 }
 
 // webCORSMiddleware lets a browser SPA served by one daemon's web listener call

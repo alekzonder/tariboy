@@ -426,3 +426,55 @@ func TestWebCORSRejectsLookalikeDesktopOrigins(t *testing.T) {
 		})
 	}
 }
+
+// Tauri v2 on Android serves the bundled SPA from http://tauri.localhost. When
+// the user forwards a daemon's loopback listener to the phone, every request
+// the app makes is cross-origin with exactly that Origin.
+func TestWebCORSAllowsAndroidOrigin(t *testing.T) {
+	base := webServer(t)
+	const origin = "http://tauri.localhost"
+
+	req, _ := http.NewRequest(http.MethodOptions, base+"/api/tasks/TEST-1", nil)
+	req.Header.Set("Origin", origin)
+	req.Header.Set("Access-Control-Request-Method", http.MethodPatch)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("OPTIONS: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("preflight status = %d, want 204", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != origin {
+		t.Fatalf("preflight ACAO = %q, want %q", got, origin)
+	}
+
+	req, _ = http.NewRequest("GET", base+"/api/daemon/status", nil)
+	req.Header.Set("Origin", origin)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != origin {
+		t.Fatalf("ACAO = %q, want %q", got, origin)
+	}
+}
+
+// The websocket handlers share isAllowedWebOrigin, so the exact app origins
+// pass and look-alikes of the Android origin do not.
+func TestIsAllowedWebOriginAndroid(t *testing.T) {
+	for origin, want := range map[string]bool{
+		"http://tauri.localhost":          true,
+		"tauri://localhost":               true,
+		"http://tauri.localhost:8080":     false,
+		"https://tauri.localhost":         false,
+		"http://evil.tauri.localhost":     false,
+		"http://tauri.localhost.evil.com": false,
+		"http://tauri.localhost/":         false,
+	} {
+		if got := isAllowedWebOrigin(origin); got != want {
+			t.Errorf("isAllowedWebOrigin(%q) = %v, want %v", origin, got, want)
+		}
+	}
+}
