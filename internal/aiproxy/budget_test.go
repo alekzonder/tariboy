@@ -1,6 +1,7 @@
 package aiproxy
 
 import (
+	"encoding/json"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -260,6 +261,38 @@ func TestBudgetBlockMiddleware(t *testing.T) {
 	}
 	if forwarded {
 		t.Fatal("blocked request must not reach the upstream")
+	}
+}
+
+// A Connect client (the cursor agent CLI) reads errors as Connect JSON, not
+// as an Anthropic error envelope.
+func TestBudgetBlockCursorConnectError(t *testing.T) {
+	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	st := newStore(t)
+	st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute)))
+	st.SetBudget(Budget{Scope: "agent:alice", LimitUSD: 0.50, PeriodS: 3600, Mode: "block"})
+	cache := NewBudgetCache(st, func() time.Time { return now })
+	cache.Refresh()
+
+	p := testProxy(t)
+	p.cfg.Budget = cache
+	p.cfg.Store = st
+	p.rebuild()
+	forwarded := false
+	p.forward = func(ex *Exchange) error { forwarded = true; ex.W.WriteHeader(200); return nil }
+
+	tok, _ := p.Mint(Attribution{Agent: "alice", Iteration: "alice-9", ImageName: "basic", ImageTag: "latest"})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/_tariboy/"+tok+"/agent.v1.AgentService/Run", strings.NewReader("cursor-connect-body"))
+	req.Header.Set("Content-Type", "application/connect+proto")
+	p.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests || forwarded {
+		t.Fatalf("blocked cursor request code=%d forwarded=%v", rr.Code, forwarded)
+	}
+	var body struct{ Code, Message string }
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || body.Code != "resource_exhausted" || !strings.HasPrefix(body.Message, "budget exceeded") {
+		t.Fatalf("cursor budget error body = %s (err %v)", rr.Body.String(), err)
 	}
 }
 

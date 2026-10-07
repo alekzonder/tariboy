@@ -3,6 +3,7 @@ package loop
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -119,6 +120,19 @@ func TestTailerFinalDrainOnStop(t *testing.T) {
 	evs := rec.snapshot()
 	if len(evs) != 1 || evs[0].data["line"] != "trailing answer" {
 		t.Fatalf("final drain missed the trailing line: %+v", evs)
+	}
+}
+
+func TestTailerRecordsLongLineWhole(t *testing.T) {
+	dir := t.TempDir()
+	rec := &captureRecorder{}
+	tl := StartTailer(rec, "it-1", dir, 5*time.Millisecond, false)
+	long := `{"type":"tool_result","content":"` + strings.Repeat("x", 64<<10) + `"}`
+	appendLine(t, filepath.Join(dir, "harness.stdout.log"), long)
+	evs := waitFor(t, rec, 1)
+	tl.Stop()
+	if got := evs[0].data["line"].(string); got != long {
+		t.Fatalf("long line not recorded whole: got %d bytes, want %d", len(got), len(long))
 	}
 }
 

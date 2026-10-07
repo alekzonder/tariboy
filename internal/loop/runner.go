@@ -633,25 +633,12 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 		}
 	}
 	r.cfg.Logger.Info("harness spawned", "agent", ag.Name, "iteration", iterationID)
-	var cursorModel string
 	var onStdout func(string)
 	if ag.HarnessType == "cursor" && !ag.Interactive && r.cfg.RecordCursorUsage != nil {
-		onStdout = func(line string) {
-			model, usage, ok := observeCursorStreamLine(line)
-			if !ok {
-				return
-			}
-			if model != "" && usage == nil {
-				cursorModel = model
-				return
-			}
-			if usage == nil {
-				return
-			}
-			usage.Model = cursorModel
+		onStdout = cursorUsageObserver(ag.Model, func(usage CursorResultUsage) {
 			imageName, imageTag := imageNameTag(ag.ImageRef)
-			r.cfg.RecordCursorUsage(ag.Name, iterationID, imageName, imageTag, ag.ImageDigest, *usage)
-		}
+			r.cfg.RecordCursorUsage(ag.Name, iterationID, imageName, imageTag, ag.ImageDigest, usage)
+		})
 	}
 	if rec != nil {
 		rec.Record("harness_spawned", "system", iterationID, nil)

@@ -102,3 +102,22 @@ func TestTailerReportsCursorUsageAfterLongStdoutLine(t *testing.T) {
 		t.Fatal("timed out waiting for cursor usage past a long stdout line")
 	}
 }
+
+func TestCursorUsageObserverPrefersConfiguredModelID(t *testing.T) {
+	initLine := `{"type":"system","subtype":"init","model":"Grok 4.7 256K High"}`
+	resultLine := `{"type":"result","duration_ms":4708,"usage":{"inputTokens":4841,"outputTokens":31,"cacheReadTokens":5888,"cacheWriteTokens":0}}`
+	for configured, want := range map[string]string{
+		"grok-4.7-high": "grok-4.7-high",
+		"auto":          "Grok 4.7 256K High",
+		"":              "Grok 4.7 256K High",
+	} {
+		var got []CursorResultUsage
+		observe := cursorUsageObserver(configured, func(u CursorResultUsage) { got = append(got, u) })
+		observe(initLine)
+		observe(`{"type":"assistant","message":{"content":"ok"}}`)
+		observe(resultLine)
+		if len(got) != 1 || got[0].Model != want || got[0].InputTokens != 4841 || got[0].DurationMs != 4708 {
+			t.Fatalf("configured %q: usage = %+v, want model %q", configured, got, want)
+		}
+	}
+}
