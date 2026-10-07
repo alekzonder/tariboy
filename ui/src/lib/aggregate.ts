@@ -1,5 +1,6 @@
 import { apiOn, ApiError, chatListOn, type ChatSummary } from "@/lib/api";
 import { listDaemons, resolveDaemon } from "@/lib/daemons";
+import { hasLocalDaemon } from "@/lib/desktop";
 import type { AgentSummary } from "@/lib/types";
 
 export interface HostAgents {
@@ -19,7 +20,7 @@ export interface HostAgents {
 export async function fetchAllAgents(): Promise<HostAgents[]> {
   const registered = await listDaemons();
   const targets = [
-    { id: "", label: "This daemon (local)" },
+    ...(hasLocalDaemon() ? [{ id: "", label: "This daemon (local)" }] : []),
     ...registered.map((m) => ({ id: m.id, label: m.label })),
   ];
   return Promise.all(

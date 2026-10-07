@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  isDesktop, invokeDesktop, daemonState, daemonStart, daemonRestart,
+  isDesktop, isAndroidShell, hasLocalDaemon, androidBaseURLError, invokeDesktop, daemonState, daemonStart, daemonRestart,
   daemonLogTail, installCli, hostsList, hostSaveSsh, hostSaveHttps,
   hostSessionCredentials, hostHasToken, hostRemove, onDaemonState,
   hostProvision, hostConnect, hostUpdate, hostPromptReply,
@@ -153,5 +153,43 @@ describe("missingHTTPListener", () => {
 
   it("is false when down even with an empty base_url", () => {
     expect(missingHTTPListener(makeState({ state: "down", base_url: "" }))).toBe(false);
+  });
+});
+
+describe("android shell", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("is a browser-mode SPA without the implicit local daemon", () => {
+    vi.stubEnv("VITE_TARIBOY_SHELL", "android");
+    vi.stubGlobal("__TAURI_INTERNALS__", {});
+    expect(isAndroidShell()).toBe(true);
+    expect(isDesktop()).toBe(false);
+    expect(hasLocalDaemon()).toBe(false);
+  });
+
+  it("is off in the desktop and browser builds", () => {
+    expect(isAndroidShell()).toBe(false);
+    expect(hasLocalDaemon()).toBe(true);
+  });
+
+  it("accepts https anywhere and http only on a loopback port", () => {
+    for (const ok of [
+      "http://127.0.0.1:9990",
+      "http://localhost:9993",
+      "http://[::1]:9990",
+      "https://host",
+      "https://host:8765",
+    ]) {
+      expect(androidBaseURLError(ok), ok).toBe("");
+    }
+    for (const bad of [
+      "http://192.168.1.5:9990",
+      "http://host:9990",
+      "http://127.0.0.1",
+      "ftp://127.0.0.1:21",
+      "127.0.0.1:9990",
+    ]) {
+      expect(androidBaseURLError(bad), bad).not.toBe("");
+    }
   });
 });

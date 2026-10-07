@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { configureDesktopInputAssistance, desktopStartHash } from "./main";
+import { configureDesktopInputAssistance, desktopStartHash, usesHashRouter } from "./main";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -39,5 +39,18 @@ describe("configureDesktopInputAssistance", () => {
     expect(root).not.toHaveAttribute("spellcheck");
     expect(root).not.toHaveAttribute("autocorrect");
     expect(root).not.toHaveAttribute("autocapitalize");
+  });
+});
+
+describe("usesHashRouter", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("is on in both Tauri shells, whose asset protocol has no SPA fallback", () => {
+    expect(usesHashRouter()).toBe(false);
+    vi.stubEnv("VITE_TARIBOY_SHELL", "android");
+    expect(usesHashRouter()).toBe(true);
+    vi.unstubAllEnvs();
+    vi.stubGlobal("__TAURI_INTERNALS__", {});
+    expect(usesHashRouter()).toBe(true);
   });
 });

@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, HashRouter } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
-import { isDesktop, daemonState } from "@/lib/desktop";
+import { isAndroidShell, isDesktop, daemonState } from "@/lib/desktop";
 import { setLocalBaseURL } from "@/lib/api";
 import App from "./App";
 import "./index.css";
@@ -25,13 +25,20 @@ export function configureDesktopInputAssistance(root: HTMLElement): void {
   root.setAttribute("autocapitalize", "off");
 }
 
+/**
+ * HashRouter in both Tauri shells: their asset protocol serves files, not an
+ * SPA fallback, so a reload at a nested agent route would 404 before React
+ * loads. The hash is never sent to the protocol. In a browser the URLs stay
+ * clean.
+ */
+export function usesHashRouter(): boolean {
+  return isDesktop() || isAndroidShell();
+}
+
 async function boot() {
-  // HashRouter in the desktop app: Tauri's asset protocol serves files, not an
-  // SPA fallback, so a reload at a nested agent route would 404 before React loads. The
-  // hash is never sent to the protocol. In a browser the URLs stay clean.
   // Picked here rather than at module scope so the entry file exports no
   // component and stays fast-refresh clean.
-  const Router = isDesktop() ? HashRouter : BrowserRouter;
+  const Router = usesHashRouter() ? HashRouter : BrowserRouter;
 
   // Resolve the local daemon's origin BEFORE the first render so no component
   // fires a request against the wrong (or a relative, unreachable) URL. Outside

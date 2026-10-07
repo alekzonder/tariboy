@@ -64,3 +64,21 @@ describe("fetchAllAgents", () => {
     expect(seen["/api/agents"]).toBe("");
   });
 });
+
+describe("fetchAllAgents in the Android app", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("queries only registered servers: the app origin serves no API", async () => {
+    vi.stubEnv("VITE_TARIBOY_SHELL", "android");
+    await addDaemon({ label: "fwd", baseURL: "http://127.0.0.1:9990", token: "" });
+    const fetch = routedFetch(
+      { "http://127.0.0.1:9990/api/agents": { status: 200, body: { ok: true, result: { agents: [], count: 0 } } } },
+      {},
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    const out = await fetchAllAgents();
+    expect(out.map((h) => h.host.label)).toEqual(["fwd"]);
+    expect(fetch.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:9990/"))).toBe(true);
+  });
+});

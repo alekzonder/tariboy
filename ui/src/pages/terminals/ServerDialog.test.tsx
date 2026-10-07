@@ -24,6 +24,42 @@ function renderDialog(server?: DaemonMeta) {
   return { onSaved, onOpenChange };
 }
 
+describe("ServerDialog in the Android app", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("adds a forwarded loopback port without a token", async () => {
+    vi.stubEnv("VITE_TARIBOY_SHELL", "android");
+    const { onSaved } = renderDialog();
+    expect(screen.getByLabelText("base URL")).toHaveAttribute(
+      "placeholder",
+      "http://127.0.0.1:9990 or https://host:port",
+    );
+    fireEvent.change(screen.getByLabelText("label"), { target: { value: "fwd" } });
+    fireEvent.change(screen.getByLabelText("base URL"), { target: { value: "http://127.0.0.1:9990" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const [meta] = await listDaemons();
+    expect(meta.baseURL).toBe("http://127.0.0.1:9990");
+    expect(await getDaemonToken(meta.id)).toBe("");
+  });
+
+  it("rejects plain http to a non-loopback host before saving", async () => {
+    vi.stubEnv("VITE_TARIBOY_SHELL", "android");
+    renderDialog();
+    fireEvent.change(screen.getByLabelText("label"), { target: { value: "lan" } });
+    fireEvent.change(screen.getByLabelText("base URL"), { target: { value: "http://192.168.1.5:9990" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(
+      screen.getByText(
+        "Android allows plain http only to a local forwarded port (http://127.0.0.1:PORT); use https for other hosts",
+      ),
+    ).toBeInTheDocument();
+    expect(await listDaemons()).toHaveLength(0);
+  });
+});
+
 describe("ServerDialog", () => {
   it("adds a new server with the typed token", async () => {
     const { onSaved, onOpenChange } = renderDialog();

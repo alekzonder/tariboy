@@ -2,15 +2,17 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { usePolling } from "@/hooks/usePolling";
 import { getDaemonStatus, setLocalBaseURL } from "@/lib/api";
 import {
-  isDesktop, daemonState, daemonStart, daemonRestart, openDaemonLog,
+  hasLocalDaemon, isDesktop, daemonState, daemonStart, daemonRestart, openDaemonLog,
   onDaemonState, versionMismatch, missingHTTPListener,
   type DesktopDaemonState,
 } from "@/lib/desktop";
 
 // One banner, two sources of truth: in a browser the only signal is whether the
 // API answers; in the desktop app Rust owns the lifecycle and pushes every
-// transition, so the banner can say WHY and offer the fix.
+// transition, so the banner can say WHY and offer the fix. The Android app has
+// no same-origin daemon to report on: its servers show their own reachability.
 export function DaemonBanner() {
+  if (!hasLocalDaemon()) return null;
   return isDesktop() ? <DesktopBanner /> : <BrowserBanner />;
 }
 
