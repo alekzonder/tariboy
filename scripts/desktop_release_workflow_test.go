@@ -176,36 +176,16 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		t.Fatal("release workflow has no pinned Cargo cache for the desktop target")
 	}
 
-	// Android checks the same tag, fails closed without its signing Secrets, and
-	// ships only a verified signed APK.
-	androidCommands, androidEnv, android := inspect("android", "keystore.properties")
-	if android.RunsOn != "ubuntu-latest" {
-		t.Fatalf("android runner = %q, want ubuntu-latest", android.RunsOn)
-	}
-	if len(android.Permissions) != 1 || android.Permissions["contents"] != "read" {
-		t.Fatalf("android job permissions = %v, want only contents: read", android.Permissions)
-	}
-	requireAll("android", androidCommands,
-		`GITHUB_REF_NAME#v`,
-		`internal/version/version.go`,
-		`scripts/release-version.txt`,
-		`is required`,
-		`make desktop-android`,
-		`*-unsigned.apk) echo "release APK is unsigned"`,
-		`verify --print-certs`,
-		`Tariboy_${version}_android-arm64.apk`,
-		`sha256sum`,
-	)
-	for _, name := range []string{"ANDROID_KEYSTORE_BASE64", "ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD"} {
-		if androidEnv["keystore.properties"][name] != "${{ secrets."+name+" }}" {
-			t.Fatalf("android signing environment = %v, want %s on the keystore step", androidEnv["keystore.properties"], name)
-		}
+	// The Android job is paused until its signing Secrets are configured: no
+	// release may wait on it or upload an APK.
+	if _, ok := jobs.Jobs["android"]; ok {
+		t.Fatal("release workflow has an android job, want it paused")
 	}
 
-	// One job publishes, only after both builds, as a draft made public last.
+	// One job publishes, only after the build, as a draft made public last.
 	publishCommands, publishEnv, publish := inspect("publish", "gh release create")
-	if len(publish.Needs) != 2 || publish.Needs[0] != "release" || publish.Needs[1] != "android" {
-		t.Fatalf("publish needs = %v, want [release android]", publish.Needs)
+	if len(publish.Needs) != 1 || publish.Needs[0] != "release" {
+		t.Fatalf("publish needs = %v, want [release]", publish.Needs)
 	}
 	if len(publish.Permissions) != 1 || publish.Permissions["contents"] != "write" {
 		t.Fatalf("publish job permissions = %v, want only contents: write", publish.Permissions)
@@ -216,9 +196,12 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`--generate-notes`,
 		`This build is not notarized by Apple.`,
 		`If macOS blocks the DMG: **System Settings → Privacy & Security → Open Anyway**`,
-		`gh release upload "$GITHUB_REF_NAME" "$release_dir"/* dist/android/*`,
+		`gh release upload "$GITHUB_REF_NAME" "$release_dir"/*`,
 		`gh release edit "$GITHUB_REF_NAME" --draft=false`,
 	)
+	if strings.Contains(publishCommands, "dist/android") {
+		t.Fatal("publish job uploads Android files while the android job is paused")
+	}
 	env := publishEnv["gh release create"]
 	if env["GH_TOKEN"] != "${{ github.token }}" {
 		t.Fatalf("release GH_TOKEN = %q, want github.token", env["GH_TOKEN"])

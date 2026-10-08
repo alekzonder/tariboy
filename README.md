@@ -15,8 +15,9 @@ locally or on remote hosts, from one desktop app.
 > **Alpha:** Tariboy is under heavy development. APIs, workflows,
 > and configuration may change without notice. The alpha onboarding path is
 > macOS 12+ on Apple Silicon, with remote Linux x86_64 hosts over SSH. An
-> Android APK (arm64) ships with each release and connects to a daemon port you
-> forward to the phone; see [Remote hosts](https://alekzonder.github.io/tariboy/remote-hosts#android-app).
+> Android APK (arm64) built with `make desktop-android` connects to a daemon
+> port you forward to the phone; releases do not attach it yet. See
+> [Remote hosts](https://alekzonder.github.io/tariboy/remote-hosts#android-app).
 
 ## From one agent to a team
 
