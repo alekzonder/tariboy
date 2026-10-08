@@ -41,6 +41,8 @@ printf '{"platform":"%s","arch":"%s","home":"%s","free_disk_kb":%s,"writable_loc
 printf '"tmux":'; tool_json tmux
 printf ',"flock":'; tool_json flock
 printf ',"python3":'; tool_json python3
+printf ',"git":'; tool_json git
+printf ',"npx":'; tool_json npx
 printf ',"claude":'; tool_json claude
 printf ',"codex":'; tool_json codex
 printf ',"opencode":'; tool_json opencode
@@ -48,7 +50,7 @@ printf ',"cursor":'; tool_json agent
 printf '}\n'
 "#;
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Tool {
     pub available: bool,
     pub version: String,
@@ -64,6 +66,11 @@ pub struct Result {
     pub tmux: Tool,
     pub flock: Tool,
     pub python3: Tool,
+    /// Not install blockers: the running daemon reports them as missing tools.
+    #[serde(default)]
+    pub git: Tool,
+    #[serde(default)]
+    pub npx: Tool,
     pub claude: Tool,
     pub codex: Tool,
     pub opencode: Tool,
@@ -101,6 +108,8 @@ pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     }
     for (name, tool) in [
         ("tmux", &result.tmux),
+        ("git", &result.git),
+        ("npx", &result.npx),
         ("claude", &result.claude),
         ("codex", &result.codex),
         ("opencode", &result.opencode),
@@ -153,6 +162,8 @@ mod tests {
               "tmux":{{"available":{tmux},"version":"tmux 3.4"}},
               "flock":{{"available":true,"version":"flock 2.39"}},
               "python3":{{"available":true,"version":"Python 3.12.3"}},
+              "git":{{"available":true,"version":"git version 2.43.0"}},
+              "npx":{{"available":true,"version":"10.8.2"}},
               "claude":{{"available":true,"version":"2.0"}},
               "codex":{{"available":false,"version":""}},
               "opencode":{{"available":false,"version":""}},
@@ -169,6 +180,17 @@ mod tests {
             result.prerequisites,
             vec!["tmux", "codex", "opencode", "cursor agent"]
         );
+    }
+
+    #[test]
+    fn missing_git_and_npx_are_reported_without_blocking_install() {
+        let json = fixture("Linux", "x86_64", true)
+            .replace(r#""git":{"available":true"#, r#""git":{"available":false"#)
+            .replace(r#""npx":{"available":true"#, r#""npx":{"available":false"#);
+        let result = parse(&json).unwrap();
+        assert!(result.install_supported);
+        assert!(result.prerequisites.contains(&"git".to_string()));
+        assert!(result.prerequisites.contains(&"npx".to_string()));
     }
 
     #[test]

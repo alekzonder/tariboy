@@ -17,9 +17,10 @@ export function DaemonBanner() {
 }
 
 function BrowserBanner() {
-  const { error } = usePolling(getDaemonStatus, 2000);
-  if (!error) return null;
-  return <Bar tone="error">daemon unreachable — is tariboyd running?</Bar>;
+  const { data, error } = usePolling(getDaemonStatus, 2000);
+  if (error) return <Bar tone="error">daemon unreachable — is tariboyd running?</Bar>;
+  if (data?.state === "error") return <Bar tone="error">tariboyd: {data.message}</Bar>;
+  return null;
 }
 
 /** Status/liveness cadence, per the design spec's error-handling table. */
@@ -89,7 +90,7 @@ function DesktopBanner() {
     () => (probeable ? getDaemonStatus() : Promise.resolve(null)),
     [probeable],
   );
-  const { error: unreachable } = usePolling(reachable, DESKTOP_POLL_MS);
+  const { data: status, error: unreachable } = usePolling(reachable, DESKTOP_POLL_MS);
 
   // Rust still believes in a daemon that has stopped answering — the adopted
   // daemon someone stopped from the CLI. Reuse the `down` branch verbatim so the
@@ -118,6 +119,9 @@ function DesktopBanner() {
         <Action onClick={() => void openDaemonLog()}>Open log</Action>
       </Bar>
     );
+  }
+  if (probeable && status?.state === "error") {
+    return <Bar tone="error">tariboyd: {status.message}</Bar>;
   }
   if (missingHTTPListener(view)) {
     return (

@@ -37,7 +37,7 @@ export function HostStatus({
     <div className="space-y-1 text-xs">
       <div className="flex items-center gap-1">
         {showState && (
-          <Badge variant={state === "ready" ? "default" : "secondary"}>
+          <Badge variant={state === "ready" ? "default" : state === "error" ? "destructive" : "secondary"}>
             {state.replace("_", " ")}
           </Badge>
         )}

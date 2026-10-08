@@ -8,6 +8,9 @@ export interface DaemonStatus {
   base_dir: string;
   http_addr: string;
   schema_version: number;
+  /** "error" when the daemon host lacks tools that `message` names. */
+  state?: "ready" | "error";
+  message?: string;
 }
 
 export interface AgentSummary {

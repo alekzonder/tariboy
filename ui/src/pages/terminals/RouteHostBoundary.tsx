@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useDaemons } from "@/components/DaemonProvider";
 import { getActiveDaemon } from "@/lib/api";
+import { hostConnected } from "@/lib/desktop";
 import type { Daemon } from "@/lib/daemons";
 
 export function RouteHostBoundary({ hostId, unavailable = false, children }: {
@@ -17,7 +18,7 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
   const host = daemons.find((entry) => entry.id === hostId);
   const knownHost = hostId === "" || host !== undefined;
   const hostReady = hostId === "" || (
-    !!host?.baseURL && (host.kind !== "ssh" || host.state === "ready")
+    !!host?.baseURL && (host.kind !== "ssh" || hostConnected(host.state))
   );
   const renderChildren = () => typeof children === "function" ? children(getActiveDaemon()) : children;
 

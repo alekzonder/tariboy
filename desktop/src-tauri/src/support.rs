@@ -98,6 +98,7 @@ fn host_state(state: &HostState) -> &'static str {
         HostState::Connecting => "connecting",
         HostState::Provisioning => "provisioning",
         HostState::Ready => "ready",
+        HostState::Error => "error",
         HostState::Degraded => "degraded",
         HostState::NeedsAuth => "needs_auth",
         HostState::Failed => "failed",
@@ -185,7 +186,7 @@ fn safe_error_code(value: &str) -> Option<&str> {
 }
 
 fn safe_lifecycle(value: &str) -> Option<&str> {
-    const VALUES: [&str; 28] = [
+    const VALUES: [&str; 29] = [
         "adopted",
         "authenticate",
         "cancelled",
@@ -195,6 +196,7 @@ fn safe_lifecycle(value: &str) -> Option<&str> {
         "degraded",
         "disconnected",
         "down",
+        "error",
         "exited",
         "failed",
         "health",

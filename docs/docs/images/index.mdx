@@ -231,7 +231,9 @@ daemon restores each lock file's original content after it runs, including on
 failure; a build leaves the Store checkout's tracked lock files unchanged and
 does not block a later Refresh. An installation failure stops the build before
 publication. Git must be installed on the daemon host; lock restoration also
-requires Node.js/npm and access to the skill sources. Private repositories use
+requires Node.js/npm and access to the skill sources. Without `npx` on the
+daemon `PATH` the build stops with `building this image requires npx because it
+has skills-lock.json; install Node.js (npm ships npx) on the daemon host`. Private repositories use
 the server account's configured SSH or Git credential helpers. Configure access
 on that server before adding the Store; do not put credentials in its URL.
 

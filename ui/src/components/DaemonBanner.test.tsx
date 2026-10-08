@@ -123,6 +123,19 @@ describe("DaemonBanner in the desktop app", () => {
     expect(screen.getByRole("button", { name: /restart/i })).toBeInTheDocument();
   });
 
+  it("names the missing host tools the daemon reports", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true, status: 200,
+      text: async () => JSON.stringify({ ok: true, result: { state: "error", message: "missing required tools: tmux, npx" } }),
+    } as unknown as Response);
+    vi.useFakeTimers();
+    stubDesktop(base);
+    render(<DaemonBanner />);
+    await settle();
+    await settle(POLL_MS);
+    expect(screen.getByText(/missing required tools: tmux, npx/)).toBeInTheDocument();
+  });
+
   it("warns when the adopted daemon has no HTTP listener", async () => {
     stubDesktop({ ...base, base_url: "", adopted: true });
     render(<DaemonBanner />);

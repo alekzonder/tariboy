@@ -4,6 +4,7 @@
 
 import {
   hostHasToken, hostRemove, hostSaveHttps, hostSessionCredentials, hostsList, isDesktop,
+  hostConnected,
   type DesktopHostView,
 } from "./desktop";
 
@@ -339,7 +340,7 @@ export function cachedDaemon(id: string): Daemon | null {
 export function hostUpdateAvailable(host: DaemonMeta, appVersion: string): boolean {
   const remoteVersion = host.lastDaemonVersion ?? "";
   return host.kind === "ssh"
-    && host.state === "ready"
+    && hostConnected(host.state)
     && appVersion !== ""
     && remoteVersion !== ""
     && remoteVersion !== appVersion;

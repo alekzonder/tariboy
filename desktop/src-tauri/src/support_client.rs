@@ -1,5 +1,5 @@
 use crate::{
-    hosts::{HostKind, HostState, Registry, RuntimeHosts},
+    hosts::{HostKind, Registry, RuntimeHosts},
     keychain::TokenStore,
     state::{DaemonView, Phase},
     support::{self, SelectedHost, SelectedTransport},
@@ -57,7 +57,7 @@ pub(crate) fn resolve_target(
     let (transport, base_url, token) = match record.kind {
         HostKind::Ssh => (
             SelectedTransport::Ssh,
-            if view.state == HostState::Ready {
+            if view.state.connected() {
                 view.base_url.clone()
             } else {
                 String::new()

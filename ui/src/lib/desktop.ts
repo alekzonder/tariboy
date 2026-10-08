@@ -42,7 +42,7 @@ export interface DesktopHostView {
   remote_port: number;
   https_base_url: string;
   last_daemon_version: string;
-  state: "disconnected" | "connecting" | "provisioning" | "ready" | "degraded" | "needs_auth" | "failed";
+  state: "disconnected" | "connecting" | "provisioning" | "ready" | "error" | "degraded" | "needs_auth" | "failed";
   base_url: string;
   local_port: number;
   phase: string;
@@ -297,4 +297,9 @@ export function versionMismatch(s: DesktopDaemonState): boolean {
 /** Derived: adopted a daemon started with `--http-addr ""`, so the UI cannot reach it. */
 export function missingHTTPListener(s: DesktopDaemonState): boolean {
   return s.state === "ready" && s.base_url === "";
+}
+
+/** A remote host whose daemon answers: "error" only reports missing tools. */
+export function hostConnected(state: DesktopHostView["state"] | undefined): boolean {
+  return state === "ready" || state === "error";
 }
