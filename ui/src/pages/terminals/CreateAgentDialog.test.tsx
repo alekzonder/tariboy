@@ -5,6 +5,7 @@ import { CreateAgentDialog } from "./CreateAgentDialog";
 import {
   agentGetOn,
   createAgent,
+  getHarnessModelsOn,
   imageManifestGet,
   listImages,
   startAgent,
@@ -14,6 +15,8 @@ import type { AgentView } from "@/lib/types";
 import { targetFor } from "@/lib/terminalsHost";
 import { resolveDaemon } from "@/lib/daemons";
 import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
+import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
+import type { HarnessCatalog } from "@/lib/types";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -21,6 +24,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     agentGetOn: vi.fn(),
     createAgent: vi.fn(),
+    getHarnessModelsOn: vi.fn(),
     imageManifestGet: vi.fn(),
     listImages: vi.fn(),
     startAgent: vi.fn(),
@@ -179,9 +183,32 @@ async function selectHarness(value: string) {
   expect(control).toHaveValue(value);
 }
 
+const harnessCatalogs: Record<string, HarnessCatalog> = {
+  codex: {
+    harness: "codex",
+    models: [
+      { id: "gpt-6-astra", efforts: ["low", "ultra"] },
+      { id: "gpt-5.6-luna", efforts: ["low", "max"] },
+    ],
+    efforts: ["low", "max", "ultra"],
+    error: "",
+  },
+  claude: {
+    harness: "claude",
+    models: [{ id: "fable" }, { id: "opus" }, { id: "opus[1m]" }],
+    efforts: ["low", "medium", "high"],
+    error: "",
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  clearHarnessCatalogCache();
+  vi.mocked(getHarnessModelsOn).mockImplementation(
+    async (_target, harness) =>
+      harnessCatalogs[harness] ?? { harness, models: [], efforts: [], error: "" },
+  );
   vi.mocked(resolveDaemon).mockImplementation(async (id) => targetFor(id));
   vi.mocked(listImages).mockResolvedValue({
     images: [
@@ -613,8 +640,16 @@ it("shows image defaults as editable values and submits the complete defaults", 
   expect(screen.getByLabelText("model")).toHaveValue("o3");
   expect(screen.getByLabelText("effort")).toHaveValue("high");
   fireEvent.focus(screen.getByLabelText("model"));
-  expect(screen.getByRole("option", { name: "gpt-5" })).toBeVisible();
-  expect(screen.getByRole("option", { name: "o3" })).toBeVisible();
+  expect(
+    await screen.findByRole("option", { name: "gpt-6-astra" }),
+  ).toBeVisible();
+  expect(screen.getByRole("group", { name: "From harness" })).toContainElement(
+    screen.getByRole("option", { name: "gpt-5.6-luna" }),
+  );
+  expect(screen.getByRole("group", { name: "Saved" })).toContainElement(
+    screen.getByRole("option", { name: "o3" }),
+  );
+  expect(getHarnessModelsOn).toHaveBeenCalledWith(targetFor("d1"), "codex");
   fireEvent.blur(screen.getByLabelText("model"));
 
   expect(screen.getByLabelText("environment JSON")).toHaveValue("{}");
@@ -661,10 +696,29 @@ it("changes suggestions with harness without clearing a custom model", async () 
 
   expect(screen.getByLabelText("model")).toHaveValue("private-model");
   fireEvent.focus(screen.getByLabelText("model"));
-  expect(screen.getByRole("option", { name: "claude-opus-4-8" })).toBeVisible();
-  expect(screen.getByRole("option", { name: "private-model" })).toBeVisible();
+  expect(await screen.findByRole("option", { name: "opus[1m]" })).toBeVisible();
+  expect(screen.getByRole("group", { name: "Saved" })).toContainElement(
+    screen.getByRole("option", { name: "private-model" }),
+  );
   expect(
-    screen.queryByRole("option", { name: "gpt-5" }),
+    screen.queryByRole("option", { name: "gpt-6-astra" }),
+  ).not.toBeInTheDocument();
+});
+
+it("offers the efforts of the selected harness model", async () => {
+  renderDialog();
+  await screen.findByDisplayValue("o3");
+  fireEvent.change(screen.getByLabelText("model"), {
+    target: { value: "gpt-5.6-luna" },
+  });
+  fireEvent.blur(screen.getByLabelText("model"));
+
+  fireEvent.focus(screen.getByLabelText("effort"));
+
+  const harness = await screen.findByRole("group", { name: "From harness" });
+  expect(harness).toContainElement(screen.getByRole("option", { name: "max" }));
+  expect(
+    screen.queryByRole("option", { name: "ultra" }),
   ).not.toBeInTheDocument();
 });
 

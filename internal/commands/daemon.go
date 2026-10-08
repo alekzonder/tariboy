@@ -162,6 +162,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, transcriptCommand())
 	mustRegister(r, usageCommand())
 	mustRegister(r, agentUsage())
+	mustRegister(r, harnessModels())
 	mustRegister(r, budgetSet())
 	mustRegister(r, budgetLs())
 	mustRegister(r, budgetStatus())
@@ -259,6 +260,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "tasks.comments", "Manage native task comments")
 	mustGroup(r, "tasks.relations", "Manage native task relations")
 	mustGroup(r, "tasks.notifications", "Manage customer task notifications")
+	mustGroup(r, "harness", "Inspect the harnesses installed on the daemon host")
 	mustValidate(r)
 	return r
 }

@@ -252,3 +252,17 @@ export interface AgentEvent {
   time: string;
   data?: Record<string, unknown>;
 }
+
+export interface HarnessModel {
+  id: string;
+  label?: string;
+  efforts?: string[];
+}
+
+/** GET /api/harnesses/{type}/models: what the harness CLI on that host supports. */
+export interface HarnessCatalog {
+  harness: string;
+  models: HarnessModel[];
+  efforts: string[];
+  error: string;
+}

@@ -97,12 +97,19 @@ after creation.
 
 Harness is selected from the supported Tariboy harnesses. Model and effort are
 editable preset fields: they start from explicit runtime defaults for schema-v2
-images, accept arbitrary overrides, and include conservative built-in
-suggestions instead of querying harness or provider catalogs. Schema-v1 image
-defaults remain readable for compatibility. Successful custom overrides are
-remembered in the Desktop WebView by harness and offered on later creates.
-These local suggestions are an operator convenience, not a capability check
-for the selected host; failed creates do not add values.
+images and accept arbitrary values. Their suggestions come in two labeled
+groups. **From harness** holds the catalog the selected host returns from
+`GET /api/harnesses/{type}/models` (see
+[Harness model catalog](/docs/architecture#harness-model-catalog)); it shows a
+loading note, the host's error, or a note that an older daemon does not list
+models instead of failing. When the chosen model carries its own efforts
+(Codex), the effort field offers those, otherwise the harness-wide list.
+**Saved** holds the values the operator entered earlier for that harness, the
+current value, and the image default, minus anything already listed under the
+harness. Schema-v1 image defaults remain readable for compatibility. Successful
+creates and successful Configuration Runtime saves remember the model and effort
+in the Desktop WebView by harness; failed ones do not add values. Neither group
+validates a value: an unsupported model still fails at the harness.
 
 The agents sidebar has three tabs. **Agents** lists every host's agents in one
 flat list, ordered the way a chat list is: pinned agents first, then the agents
@@ -762,7 +769,8 @@ descriptor actually changes, or after a successful save.
 
 Configuration commits its remaining editable fields per section rather than per
 control. The Loop section's scheduling fields and the Runtime section's model
-and effort save as one batch each, while the working directory, secrets,
+and effort save as one batch each (model and effort use the same grouped
+suggestions as agent creation, for the agent's host and harness), while the working directory, secrets,
 retention, the Loop enable and disable actions, the harness, and Interactive
 keep their own separate immediate operations. A section is dirty when a
 normalized draft differs from the value it last loaded or saved, and only a
