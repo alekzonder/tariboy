@@ -94,12 +94,14 @@ function loadLearnedPresets(): LearnedRuntimePresets {
   }
 }
 
-function uniqueTrimmed(groups: readonly (readonly string[])[]): string[] {
+function uniqueTrimmed(
+  groups: readonly (readonly (string | undefined)[])[],
+): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const group of groups) {
     for (const raw of group) {
-      const value = raw.trim();
+      const value = raw?.trim();
       if (!value || seen.has(value)) continue;
       seen.add(value);
       result.push(value);
@@ -111,7 +113,7 @@ function uniqueTrimmed(groups: readonly (readonly string[])[]): string[] {
 export function runtimePresetOptions(
   harness: string,
   field: RuntimePresetField,
-  extras: readonly string[] = [],
+  extras: readonly (string | undefined)[] = [],
 ): string[] {
   const learned = loadLearnedPresets()[harness]?.[field] ?? [];
   return uniqueTrimmed([learned, extras]);
@@ -166,7 +168,7 @@ export function runtimePresetGroups({
   field: RuntimePresetField;
   catalog: HarnessCatalogState;
   model?: string;
-  extras?: readonly string[];
+  extras?: readonly (string | undefined)[];
 }): PresetGroup[] {
   const reported = catalog.catalog
     ? uniqueTrimmed([catalogValues(catalog.catalog, field, model)])
