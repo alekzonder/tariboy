@@ -1,3 +1,35 @@
+## [0.76.0] - 2026-10-08
+
+### Added
+
+- An Android app (arm64 APK, `make desktop-android`). It has no local daemon:
+  it connects to a daemon port you forward to the phone (plain `http://` to
+  loopback only) or to an `https://` server, keeps servers in the browser
+  registry, and starts on an **Add server** screen. The loopback web listener
+  accepts the app's `http://tauri.localhost` origin. Releases do not attach
+  the APK yet: the release workflow's Android job is paused until its signing
+  Secrets are configured.
+- `cursor` harness: agents can run the Cursor CLI `agent` beside Claude Code,
+  Codex and OpenCode (`tariboy agent harness NAME cursor`, compose
+  `harness.type: cursor`, create-agent presets with Cursor model ids).
+  Headless runs use `-p`, stream-json, `--force` and `--trust`. Cursor
+  traffic goes through the AI proxy via `--endpoint`, and its Connect-RPC and
+  `/auth` paths are forwarded to `api2.cursor.sh`. Token counts are recorded
+  from the harness's stream-json `result` usage and persisted in the
+  transcript so reindex rebuilds them. Cost stays unpriced, so USD budgets do
+  not cap Cursor; a budget block returns a Connect `resource_exhausted`
+  error. Desktop preflight lists the Cursor CLI as an optional tool.
+- `ttasks queue source ls` (and `GET /api/task-queues/{queue}/sources`)
+  returns each source's newest 20 runs in `runs`. `queue source log` can read
+  a run that is still going. The queue settings show the bound workflow's
+  **Sources** with their runs, an on-demand **Log** and **Refresh**.
+
+### Fixed
+
+- Iteration audit tailing no longer cuts `harness_output` lines at 8 KiB.
+
+[0.76.0]: https://github.com/alekzonder/tariboy/compare/v0.75.0...v0.76.0
+
 ## [0.75.0] - 2026-10-06
 
 ### Added
