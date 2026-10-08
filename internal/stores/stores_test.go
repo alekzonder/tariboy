@@ -419,3 +419,15 @@ func TestRestoreBuildLocksKeepsStoreLockFilesUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestRestoreLockExplainsMissingNpx(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "skills-lock.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	err := RestoreLock(context.Background(), dir)
+	if err == nil || !strings.Contains(err.Error(), "requires npx") || !strings.Contains(err.Error(), "install Node.js") {
+		t.Fatalf("RestoreLock() = %v, want npx install hint", err)
+	}
+}

@@ -54,7 +54,7 @@ tariboy has three command surfaces:
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
-| `tariboy daemon status` | Show daemon version, uptime and base directory |
+| `tariboy daemon status` | Show daemon version, uptime, base directory and missing host tools |
 | `tariboy group assign` | Assign an agent to a group (empty group leaves) |
 | `tariboy group create` | Create (or update) a group with an optional lead |
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |

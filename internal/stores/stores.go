@@ -270,6 +270,9 @@ func RestoreLock(ctx context.Context, dir string) error {
 	if err := regularFile(lock); err != nil {
 		return err
 	}
+	if _, err := exec.LookPath("npx"); err != nil {
+		return errors.New("building this image requires npx because it has skills-lock.json; install Node.js (npm ships npx) on the daemon host")
+	}
 	original, err := os.ReadFile(lock)
 	if err != nil {
 		return err
