@@ -108,6 +108,17 @@ describe("runtime preset groups", () => {
     ]);
   });
 
+  it("skips extras a partial agent view leaves undefined", () => {
+    const groups = runtimePresetGroups({
+      harness: "codex",
+      field: "models",
+      catalog: ready,
+      extras: [undefined, "image-default"],
+    });
+
+    expect(groups[1]).toEqual({ label: "Saved", options: ["image-default"] });
+  });
+
   it("offers the selected model efforts, else the harness efforts", () => {
     const efforts = (model: string) =>
       runtimePresetGroups({ harness: "codex", field: "efforts", catalog: ready, model })[0]
