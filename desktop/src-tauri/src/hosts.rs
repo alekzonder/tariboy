@@ -67,9 +67,18 @@ pub enum HostState {
     Connecting,
     Provisioning,
     Ready,
+    /// Connected, but the daemon reports missing host tools.
+    Error,
     Degraded,
     NeedsAuth,
     Failed,
+}
+
+impl HostState {
+    /// Ready and Error both have a live daemon behind the tunnel.
+    pub fn connected(&self) -> bool {
+        matches!(self, Self::Ready | Self::Error)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -177,7 +186,7 @@ impl RuntimeHosts {
             .lock()
             .unwrap()
             .get(id)
-            .filter(|runtime| runtime.state == HostState::Ready && runtime.local_port != 0)
+            .filter(|runtime| runtime.state.connected() && runtime.local_port != 0)
             .map(|runtime| (runtime.local_port, runtime.daemon_version.clone()))
     }
 
@@ -263,6 +272,10 @@ impl RuntimeHosts {
         };
         if let Some(status) = &event.status {
             runtime.daemon_version.clone_from(&status.version);
+            if runtime.state == HostState::Ready && status.state == "error" {
+                runtime.state = HostState::Error;
+                runtime.message.clone_from(&status.message);
+            }
         }
     }
 
@@ -778,6 +791,7 @@ mod tests {
                 pid: 42,
                 base_dir: "/home/u/.tariboy".into(),
                 http_addr: "127.0.0.1:9990".into(),
+                ..Default::default()
             }),
             message: String::new(),
         });
@@ -785,6 +799,27 @@ mod tests {
         assert_eq!(ready.state, HostState::Ready);
         assert_eq!(ready.base_url, "http://127.0.0.1:18444");
         assert_eq!(ready.local_port, 18444);
+        assert_eq!(
+            runtime.healthy_tunnel(&record.id),
+            Some((18444, "0.9.0-dev".into()))
+        );
+
+        runtime.set_tunnel(&crate::tunnel::Event {
+            host_id: record.id.clone(),
+            state: crate::tunnel::State::Ready,
+            local_port: 18444,
+            status: Some(crate::daemon::Status {
+                version: "0.9.0-dev".into(),
+                state: "error".into(),
+                message: "missing required tools: tmux, npx".into(),
+                ..Default::default()
+            }),
+            message: String::new(),
+        });
+        let missing = runtime.view(record.clone());
+        assert_eq!(missing.state, HostState::Error);
+        assert_eq!(missing.message, "missing required tools: tmux, npx");
+        assert_eq!(missing.base_url, "http://127.0.0.1:18444");
         assert_eq!(
             runtime.healthy_tunnel(&record.id),
             Some((18444, "0.9.0-dev".into()))

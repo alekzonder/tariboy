@@ -338,6 +338,7 @@ mod tests {
             pid: 9,
             base_dir: "/base".into(),
             http_addr: "127.0.0.1:9993".into(),
+            ..Default::default()
         };
         let v = DaemonView::ready(&st, true, "1.0.0");
         assert_eq!(v.base_url, "http://127.0.0.1:9993");

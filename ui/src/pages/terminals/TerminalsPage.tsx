@@ -12,7 +12,7 @@ import { useDaemons } from "@/components/DaemonProvider";
 import { listDaemons, removeDaemon, resolveDaemon, type DaemonMeta } from "@/lib/daemons";
 import { apiOn } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { hasLocalDaemon, hostConnect, hostUpdate } from "@/lib/desktop";
+import { hasLocalDaemon, hostConnect, hostConnected, hostUpdate } from "@/lib/desktop";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
@@ -132,7 +132,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   const workspaceHosts = useMemo<WorkspaceHost[]>(() => createHosts.map((host) => {
     const aggregate = hosts.find((entry) => entry.host.id === host.id);
     const state = daemons.find((entry) => entry.id === host.id)?.state ?? "ready";
-    return { id: host.id, label: host.label, ready: Boolean(aggregate && !aggregate.error) && state === "ready" };
+    return { id: host.id, label: host.label, ready: Boolean(aggregate && !aggregate.error) && hostConnected(state) };
   }), [createHosts, daemons, hosts]);
 
   // Re-read after any registry mutation: refresh() runs one immediate

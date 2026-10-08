@@ -1,5 +1,5 @@
 import type { Daemon } from "@/lib/daemons";
-import { hasLocalDaemon } from "@/lib/desktop";
+import { hasLocalDaemon, hostConnected } from "@/lib/desktop";
 
 export interface ImageTransferTarget {
   id: string;
@@ -17,7 +17,7 @@ export function eligibleImageTransferTargets(source: Daemon | null, daemons: Dae
   return [
     ...(source === null || !hasLocalDaemon() ? [] : [localTarget]),
     ...daemons
-      .filter((host) => host.id !== "" && host.state === "ready" && (source === null || host.id !== source.id))
+      .filter((host) => host.id !== "" && hostConnected(host.state) && (source === null || host.id !== source.id))
       .map((host) => ({ id: host.id, label: host.label, target: host })),
   ];
 }

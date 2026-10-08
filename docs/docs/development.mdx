@@ -45,6 +45,10 @@ Install only the toolchains needed for the area you are changing:
 - **Agent smoke suites:** `tmux` is checked by both `make smoke` and
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
+- **Daemon host:** `tmux`, `bash`, `python3`, `git`, `npx` (Node.js), the
+  `tariboy` and `ttasks` links in `~/.local/bin`, and at least one harness.
+  `GET /api/daemon/status` reports `state: error` with the missing tools; see
+  [Daemon host tools](/docs/remote-hosts#daemon-host-tools).
 
 Coding agents must run all shell commands through a Bash login shell
 (`bash -lc 'COMMAND'`) so the account's login profile and exported environment

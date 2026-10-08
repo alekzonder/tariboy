@@ -23,6 +23,11 @@ pub struct Status {
     /// Empty when the daemon was started with `--http-addr ""` (socket only).
     #[serde(default)]
     pub http_addr: String,
+    /// "error" when the daemon cannot find tools it needs; `message` names them.
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

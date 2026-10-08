@@ -95,6 +95,8 @@ reachable through your existing SSH configuration.
 
 The control plane requires Go 1.26; agent skill scripts require Python 3.
 Desktop builds also need Node.js/npm, Rust, and native Tauri prerequisites.
+A daemon host needs `tmux`, `bash`, `python3`, `git`, `npx` and one agent
+harness; the daemon status reports `error` with the missing tools.
 See the [development guide](https://alekzonder.github.io/tariboy/development#prerequisites) for setup.
 
 ```bash

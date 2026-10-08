@@ -613,6 +613,7 @@ mod tests {
                 pid: 42,
                 base_dir: "/srv/sa".into(),
                 http_addr: "127.0.0.1:9990".into(),
+                ..Default::default()
             })
         }
     }

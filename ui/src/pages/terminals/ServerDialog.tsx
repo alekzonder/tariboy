@@ -13,6 +13,7 @@ import {
   hostPromptReply,
   hostProvision,
   hostSaveSsh,
+  hostConnected,
   hostUpdate,
   isAndroidShell,
   isDesktop,
@@ -131,7 +132,7 @@ export function ServerDialog({
   const [operationId, setOperationId] = useState("");
   const operationIdRef = useRef("");
   const initialOperation = idleOperation(
-    server?.kind === "ssh" && server.state === "ready" ? "update" : "provision",
+    server?.kind === "ssh" && hostConnected(server.state) ? "update" : "provision",
   );
   const [operation, setOperation] = useState<HostOperation>(initialOperation);
   const operationRef = useRef<HostOperation>(initialOperation);
@@ -175,7 +176,7 @@ export function ServerDialog({
         setOperationId("");
         operationIdRef.current = "";
         const nextOperation = idleOperation(
-          server?.kind === "ssh" && server.state === "ready"
+          server?.kind === "ssh" && hostConnected(server.state)
             ? "update"
             : "provision",
         );
@@ -230,7 +231,7 @@ export function ServerDialog({
             : formatHostOperationError(next.message),
         }));
       } else if (
-        next.state === "ready"
+        hostConnected(next.state)
         && (
           operationRef.current.status === "running"
           || (operationRef.current.kind === "connect" && operationRef.current.status === "failed")
@@ -742,7 +743,7 @@ export function ServerDialog({
                 <Button type="button" onClick={() => void submitSsh()}>
                   Add and connect
                 </Button>
-              ) : dirtySsh || server?.state !== "ready" ? (
+              ) : dirtySsh || !hostConnected(server?.state) ? (
                 <Button type="button" onClick={() => void submitSsh()}>
                   Save and reconnect
                 </Button>

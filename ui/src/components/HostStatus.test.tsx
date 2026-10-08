@@ -26,6 +26,20 @@ describe("HostStatus", () => {
     expect(connect).toHaveBeenCalledOnce();
   });
 
+  it("shows a connected host with missing tools as an error without a connect action", () => {
+    render(
+      <HostStatus
+        host={host({ state: "error", baseURL: "http://127.0.0.1:18444", message: "missing required tools: npx" })}
+        appVersion="0.11.5"
+        onConnect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("error")).toHaveAttribute("data-variant", "destructive");
+    expect(screen.getByText("missing required tools: npx")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect gpu" })).toBeNull();
+  });
+
   it("names every missing harness and tmux prerequisite exactly", () => {
     render(
       <HostStatus
