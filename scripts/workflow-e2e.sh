@@ -193,13 +193,13 @@ make_test_image_fixture "$SANDBOX/image"
 sa image build --name wf-e2e-agent --tag latest --path "$SANDBOX/image" >/dev/null || fail "build the agent image"
 # builder runs its loop so dispatch may pick it; its own E2E_TOKEN must lose
 # to the queue secret of the same name.
-sa agent run wf-e2e-agent:latest --name builder --harness stub --loop true --plugins tasks \
+sa agent run wf-e2e-agent:latest --name builder --harness stub --interactive false --loop true --plugins tasks \
   --cwd "$SANDBOX/builder-work" --env 'STUB_SLEEP=600,STUB_CALL_DONE=0,AGENT_MARK=from-builder' >/dev/null \
   || fail "create builder"
 sa secret set builder E2E_TOKEN --value "$AGENT_TOKEN" >/dev/null || fail "set the agent secret"
 sa secret set builder E2E_AGENT_SECRET --value "$AGENT_SECRET" >/dev/null || fail "set the agent-only secret"
 sa agent start builder >/dev/null || fail "start builder"
-sa agent run wf-e2e-agent:latest --name outsider --harness stub --loop false --plugins tasks \
+sa agent run wf-e2e-agent:latest --name outsider --harness stub --interactive false --loop false --plugins tasks \
   --env 'STUB_SLEEP=600,STUB_CALL_DONE=0' >/dev/null || fail "create outsider"
 sa agent exec outsider >/dev/null || fail "start an outsider iteration"
 wait_for 20 "the builder tools socket" test -S "$RUNTIME/builder.sock"
@@ -525,7 +525,7 @@ sleep 2  # absence check: the dispatcher had its chance to hand the task back
 step "release with a second pool member replaces the holder"
 # The released task would go to the new member as soon as it joins the pool.
 op cancel "$KEY_P" >/dev/null || fail "cancel of $KEY_P failed"
-sa agent run wf-e2e-agent:latest --name second --harness stub --loop true --plugins tasks \
+sa agent run wf-e2e-agent:latest --name second --harness stub --interactive false --loop true --plugins tasks \
   --cwd "$SANDBOX/builder-work" --env 'STUB_SLEEP=600,STUB_CALL_DONE=0' >/dev/null || fail "create second"
 sa agent start second >/dev/null || fail "start second"
 wait_for 20 "the second tools socket" test -S "$RUNTIME/second.sock"

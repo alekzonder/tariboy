@@ -123,7 +123,7 @@ const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
   harness: "codex",
   model: "o3",
   effort: "high",
-  interactive: false,
+  interactive: true,
   loop: true,
   env: {},
   plugins: [],
@@ -435,7 +435,7 @@ it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", a
   );
 });
 
-it("resets Interactive to the schema-v2 default after a bare image was selected", async () => {
+it("keeps Interactive on for a schema-v2 image after a bare image was selected", async () => {
   vi.mocked(listImages).mockResolvedValue({
     images: [
       { name: "bare", tag: "latest", bare: true },
@@ -462,7 +462,7 @@ it("resets Interactive to the schema-v2 default after a bare image was selected"
   await waitFor(() =>
     expect(screen.queryByText("Terminal only")).not.toBeInTheDocument(),
   );
-  expect(screen.getByRole("switch", { name: "Interactive" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
 });
 
 it("rejects invalid environment JSON before creation", async () => {
@@ -618,6 +618,8 @@ it("shows image defaults as editable values and submits the complete defaults", 
   fireEvent.blur(screen.getByLabelText("model"));
 
   expect(screen.getByLabelText("environment JSON")).toHaveValue("{}");
+  // The manifest says interactive: false, but new agents default to interactive.
+  expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
 
   fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(createAgent).toHaveBeenCalled());

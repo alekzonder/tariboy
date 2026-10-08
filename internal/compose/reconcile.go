@@ -80,7 +80,8 @@ func (r *Runner) Up(f File) error {
 			if a.Loop != nil && a.Loop.Enabled != nil {
 				enabled = *a.Loop.Enabled
 			}
-			body := map[string]any{"image": a.Image, "name": name, "loop": enabled}
+			// Always explicit: the create endpoint defaults interactive to true.
+			body := map[string]any{"image": a.Image, "name": name, "loop": enabled, "interactive": a.Harness != nil && a.Harness.Interactive}
 			if a.Group != "" {
 				body["group"] = a.Group
 			}
@@ -93,9 +94,6 @@ func (r *Runner) Up(f File) error {
 				}
 				if a.Harness.Effort != "" {
 					body["effort"] = a.Harness.Effort
-				}
-				if a.Harness.Interactive {
-					body["interactive"] = true
 				}
 			}
 			if len(a.Env) > 0 {
