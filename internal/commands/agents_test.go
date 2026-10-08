@@ -208,6 +208,29 @@ func TestAgentGoalSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+// Catches agent.run creating a non-interactive agent when interactive is
+// omitted: new agents default to interactive unless explicitly disabled.
+func TestAgentRunInteractiveDefaultsTrue(t *testing.T) {
+	c, _, fc := ctxWithStore(t)
+	if _, err := h(t, "agent.run")(c, registry.Params{"image": "basic:latest", "name": "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	if !fc.ran.Interactive {
+		t.Fatal("omitted interactive created a non-interactive agent")
+	}
+	if _, err := h(t, "agent.run")(c, registry.Params{"image": "basic:latest", "name": "worker2", "interactive": false}); err != nil {
+		t.Fatal(err)
+	}
+	if fc.ran.Interactive {
+		t.Fatal("explicit interactive=false was ignored")
+	}
+	_, err := h(t, "agent.run")(c, registry.Params{"image": "basic:latest", "name": "worker3", "interactive": "yes"})
+	var ue api.UserError
+	if !errors.As(err, &ue) || ue.Code != "bad_interactive" {
+		t.Fatalf("non-boolean interactive err = %v", err)
+	}
+}
+
 func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
 	c, _, _ := ctxWithStore(t)
 	a := agent.Agent{Name: "worker", AIStallTimeoutS: 300}

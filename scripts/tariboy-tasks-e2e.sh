@@ -83,7 +83,7 @@ ttasks show "$OPS_KEY" --json | grep -q '"title":"operator updated"' || fail "op
 ttasks show "$AGT_KEY" --json | grep -q '"title":"agent updated"' || fail "operator did not update AGT"
 
 echo "--- agent mode is identity-bound to its real tools socket"
-"$BIN/tariboy" --socket "$SOCK" agent run tasks-test:latest --name worker --harness stub --loop false \
+"$BIN/tariboy" --socket "$SOCK" agent run tasks-test:latest --name worker --harness stub --interactive false --loop false \
   --env "STUB_SLEEP=300,STUB_CALL_DONE=0,STUB_TASKS_MINE=$RUNTIME/agent-tasks.json" >/dev/null
 ttasks assign "$AGT_KEY" worker >/dev/null
 "$BIN/tariboy" --socket "$SOCK" agent exec worker >/dev/null

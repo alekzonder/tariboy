@@ -33,7 +33,7 @@ tariboy has three command surfaces:
 | `tariboy agent pull` | Read a base64 file from an agent's cwd (used by 'cp') |
 | `tariboy agent restart` | Restart an agent and run one iteration now |
 | `tariboy agent rm` | Remove an agent (stop it first, or --force) |
-| `tariboy agent run` | Create and start an agent from an image (image:tag) |
+| `tariboy agent run` | Create and start an agent from an image (image:tag); interactive by default, `--interactive=false` for headless |
 | `tariboy agent screen` | Capture the interactive screen (tmux capture-pane) |
 | `tariboy agent send-keys` | Send keys into the interactive session (tmux send-keys) |
 | `tariboy agent start` | Start (enable) an agent's loop |

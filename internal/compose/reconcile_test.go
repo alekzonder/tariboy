@@ -451,6 +451,25 @@ agents:
 	}
 }
 
+// Catches compose relying on the create endpoint's interactive default:
+// agents without harness.interactive: true stay non-interactive.
+func TestUpSendsExplicitNonInteractive(t *testing.T) {
+	const y = `
+version: 1
+agents:
+  a:
+    image: img:latest
+`
+	fc := newFake()
+	r := NewRunner(fc, "", "", io.Discard)
+	f, _ := Parse([]byte(y))
+	upNoBuild(t, r, f)
+	body, ok := bodyFor(fc, "POST /api/agents").(map[string]any)
+	if !ok || body["interactive"] != false {
+		t.Fatalf("interactive not explicitly false: %#v", bodyFor(fc, "POST /api/agents"))
+	}
+}
+
 func TestUpCreatesAndConvergesGoalSettings(t *testing.T) {
 	off := false
 	f := File{Version: 1, Agents: map[string]AgentSpec{

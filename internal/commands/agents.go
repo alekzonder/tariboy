@@ -299,7 +299,7 @@ func agentRun() registry.Command {
 			{Name: "harness", Flag: "harness", Short: "a", Type: registry.String, Help: "harness: claude|codex|opencode|cursor|stub"},
 			{Name: "model", Flag: "model", Short: "m", Type: registry.String, Help: "model"},
 			{Name: "effort", Flag: "effort", Short: "e", Type: registry.String, Help: "effort"},
-			{Name: "interactive", Flag: "interactive", Short: "i", Type: registry.Bool, Help: "interactive (tmux) mode"},
+			{Name: "interactive", Flag: "interactive", Short: "i", Type: registry.Bool, Default: true, Help: "interactive (tmux) mode (default true)"},
 			{Name: "env", Flag: "env", Type: registry.String, Help: "comma-separated K=V env pairs", Schema: map[string]any{"oneOf": []any{
 				map[string]any{"type": "string"},
 				map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
@@ -334,7 +334,14 @@ func agentRun() registry.Command {
 			if v, ok := p["loop"].(bool); ok {
 				loop = v
 			}
-			interactive, _ := p["interactive"].(bool)
+			interactive := true
+			if value, present := p["interactive"]; present {
+				var ok bool
+				interactive, ok = value.(bool)
+				if !ok {
+					return nil, api.UserError{Code: "bad_interactive", Msg: "interactive must be a boolean"}
+				}
+			}
 			goalEnabled := true
 			if value, present := p["goal_enabled"]; present {
 				var ok bool

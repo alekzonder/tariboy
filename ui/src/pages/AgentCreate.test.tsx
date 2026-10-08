@@ -84,7 +84,7 @@ it("gates submit on image and serializes env/plugins in the POST payload", async
     env: "KEY=val",
     plugins: "myplugin",
     loop: true,
-    interactive: false,
+    interactive: true,
   });
 });
 

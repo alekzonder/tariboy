@@ -94,10 +94,13 @@ custom model or effort locally for that harness; the list is not a live check
 of models installed on the host.
 Interactive and Autopilot are independent:
 
-- enable **Interactive** to use Console;
+- **Interactive** is on by default and enables Console; turn it off for a
+  headless agent;
 - enable **Autopilot** to allow timer/message-triggered iterations.
 
-For the first walkthrough, enable both on a non-bare image.
+For the first walkthrough, keep Interactive on and enable Autopilot on a
+non-bare image. From the CLI, `tariboy agent run IMAGE:TAG` creates an
+interactive agent too; pass `--interactive=false` for a headless one.
 
 ## 5. Use Console
 

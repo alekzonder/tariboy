@@ -46,7 +46,7 @@ describe("newAgentDraft", () => {
       harness: "",
       model: "",
       effort: "",
-      interactive: false,
+      interactive: true,
       loop: true,
       startNow: true,
       intervalS: "0",

@@ -35,7 +35,7 @@ export default function AgentCreate() {
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState("");
   const [loop, setLoop] = useState(true);
-  const [interactive, setInteractive] = useState(false);
+  const [interactive, setInteractive] = useState(true);
   const [envRows, setEnvRows] = useState<EnvRow[]>([]);
   const [plugins, setPlugins] = useState<string[]>([]);
   const [pluginDraft, setPluginDraft] = useState("");

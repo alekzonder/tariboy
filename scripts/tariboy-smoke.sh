@@ -535,7 +535,7 @@ sys.exit(0 if any(i.get("id")==os.environ["ID"] for i in items) else 1)'
 #   4. seed the seven leaked side-table rows, compose down --volumes -> full wipe:
 #      durable tree gone, row gone, every leaked row purged.
 #
-# The agent is CREATED out of band via `sa agent run --harness stub` (compose's
+# The agent is CREATED out of band via `sa agent run --harness stub --interactive false` (compose's
 # file validator rejects the stub harness, wanting claude|codex|opencode), and the
 # compose files below carry no harness block so they validate. Compose then drives
 # the actual down/up/down --volumes converge against that existing agent — which is
@@ -581,7 +581,7 @@ YAML
 
   # (1) create the stub agent on v1 (out of band), then one manual iteration so it
   # has real history + audit.
-  sa agent run smoke-compose-v1:latest --name "$agent" --harness stub --loop false \
+  sa agent run smoke-compose-v1:latest --name "$agent" --harness stub --interactive false --loop false \
     | grep -q "name: ${agent}" || { echo "FAIL: agent run ${agent}" >&2; exit 1; }
   sa agent exec "$agent" "stub run" >/dev/null \
     || { echo "FAIL: agent exec ${agent}" >&2; exit 1; }

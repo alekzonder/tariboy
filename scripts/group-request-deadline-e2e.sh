@@ -44,10 +44,10 @@ sa group create dev-team --lead manager | grep -q "dev-team" \
   || { echo "FAIL: group create"; exit 1; }
 
 echo "--- run lead + member into the group (stub harness)"
-sa agent run basic-example:latest --name manager --harness stub --group dev-team \
+sa agent run basic-example:latest --name manager --harness stub --interactive false --group dev-team \
   --env "STUB_GROUP_REQUEST=worker|what is blocking you?|3s,STUB_CALL_DONE=1" \
   | grep -q "name: manager" || { echo "FAIL: run manager"; exit 1; }
-sa agent run basic-example:latest --name worker --harness stub --group dev-team \
+sa agent run basic-example:latest --name worker --harness stub --interactive false --group dev-team \
   --env "STUB_CALL_DONE=1" | grep -q "name: worker" || { echo "FAIL: run worker"; exit 1; }
 
 echo "--- lead iteration sends the group request"

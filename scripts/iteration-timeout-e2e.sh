@@ -48,7 +48,7 @@ start_daemon
 
 echo "--- build isolated test image and start a deliberately long stub iteration"
 sa image build --name timeout-e2e --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q 'digest:' || fail "image build"
-sa agent run timeout-e2e:latest --name timer --harness stub --loop false \
+sa agent run timeout-e2e:latest --name timer --harness stub --interactive false --loop false \
   --env 'STUB_SLEEP=75,STUB_CALL_DONE=0' | grep -q 'name: timer' || fail "agent run"
 # Startup does real prompt/tool preparation, so leave enough room to make the
 # first API call even on a cold CI machine. Three extensions still keep this a

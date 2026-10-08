@@ -90,7 +90,7 @@ sa image build --name demo --tag latest --path "$TEST_IMAGE_SOURCE" | grep -q "d
   || { echo "FAIL: demo image build"; exit 1; }
 
 echo "--- run agent with the stub harness"
-sa agent run basic-example:latest --name smoke --harness stub | grep -q "name: smoke" \
+sa agent run basic-example:latest --name smoke --harness stub --interactive false | grep -q "name: smoke" \
   || { echo "FAIL: agent run"; exit 1; }
 
 echo "--- agent ps shows the agent"
@@ -113,7 +113,7 @@ sa --json iteration inspect smoke "$ITER_ID" | grep -q '"done":true' \
   || { echo "FAIL: iteration inspect done flag"; exit 1; }
 
 echo "--- bus: create agent B subscribed to a shared channel"
-sa agent run basic-example:latest --name bob --harness stub --loop true \
+sa agent run basic-example:latest --name bob --harness stub --interactive false --loop true \
   --env "STUB_SUBSCRIBE=chat:team,STUB_CALL_DONE=1" | grep -q "name: bob" \
   || { echo "FAIL: run bob"; exit 1; }
 sa loop enable bob >/dev/null || { echo "FAIL: enable bob loop"; exit 1; }
@@ -128,7 +128,7 @@ done
 [ "$SUBBED" = 1 ] || { echo "FAIL: bob subscribe iteration"; exit 1; }
 
 echo "--- bus: agent A publishes to chat:team"
-sa agent run basic-example:latest --name alice --harness stub \
+sa agent run basic-example:latest --name alice --harness stub --interactive false \
   --env "STUB_SEND=chat:team|hello-from-alice,STUB_CALL_DONE=1" | grep -q "name: alice" \
   || { echo "FAIL: run alice"; exit 1; }
 BOB_BEFORE="$(sa --json iteration ls bob | grep -o '"id"' | wc -l)"
@@ -167,7 +167,7 @@ sa agent rm bob --force --purge >/dev/null || { echo "FAIL: rm bob"; exit 1; }
 # the participant subscription provisioned with that chat carries the delivery.
 if [ -n "${E2E_SLOW:-}" ]; then
   echo "--- schedule: agent arms a one-shot that wakes it (E2E_SLOW)"
-  sa agent run basic-example:latest --name sched --harness stub --loop true \
+  sa agent run basic-example:latest --name sched --harness stub --interactive false --loop true \
     --plugins context,status,schedule \
     --env "STUB_SUBSCRIBE=agent:sched:inbox,STUB_SCHEDULE=2,STUB_CALL_DONE=1" | grep -q "name: sched" \
     || { echo "FAIL: run sched"; exit 1; }
@@ -197,7 +197,7 @@ if [ -n "${E2E_SLOW:-}" ]; then
 fi
 
 echo "--- ai proxy: an iteration drives agent -> proxy -> fake upstream"
-sa agent run basic-example:latest --name usagebot --harness stub \
+sa agent run basic-example:latest --name usagebot --harness stub --interactive false \
   --env "STUB_AI=1,STUB_CALL_DONE=1" | grep -q "name: usagebot" \
   || { echo "FAIL: run usagebot"; exit 1; }
 sa agent exec usagebot >/dev/null || { echo "FAIL: exec usagebot"; exit 1; }
@@ -246,7 +246,7 @@ if command -v python3 >/dev/null; then
 fi
 
 echo "--- retention: run an agent through two iterations under keep-1"
-sa agent run basic-example:latest --name retbot --harness stub | grep -q "name: retbot" \
+sa agent run basic-example:latest --name retbot --harness stub --interactive false | grep -q "name: retbot" \
   || { echo "FAIL: run retbot"; exit 1; }
 sa agent exec retbot >/dev/null || { echo "FAIL: exec retbot 1"; exit 1; }
 for _ in $(seq 1 100); do sa --json iteration ls retbot | grep -q '"status":"done"' && break; sleep 0.1; done
