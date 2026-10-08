@@ -11,6 +11,16 @@ persisted <code>otlp_endpoint</code> daemon setting.</p>
 <li>System OpenSSH owns host-key verification, agent use, ProxyJump, and 2FA.</li>
 <li>Tariboy never disables strict host-key checking.</li>
 <li>Non-loopback daemon TCP requires a bearer token file.</li>
+<li>The tokenless loopback web listener echoes CORS only for loopback <code>http</code>
+origins, the macOS app origin <code>tauri://localhost</code>, and the Android app origin
+<code>http://tauri.localhost</code>, each matched exactly. Browsers resolve
+<code>*.localhost</code> to loopback, so the Android origin is that app’s WebView or a
+loopback port-80 page, which <code>http://localhost</code> already covered. The Host
+check is unchanged.</li>
+<li>The Android app permits cleartext only to <code>127.0.0.1</code>, <code>localhost</code>, and
+<code>::1</code> through its network security config, and its WebView has no Tauri IPC
+permissions. It keeps server tokens in WebView session storage, not a
+keystore.</li>
 </ul>
 <h2 id="credentials"><a class="blume-heading-anchor" href="#credentials">Credentials</a></h2>
 <p>SSH private keys remain with OpenSSH and are never copied. Interactive prompt
@@ -37,6 +47,9 @@ adoption revokes the remaining lease when its shim finishes.</p>
 <li>Budgets constrain spend.</li>
 <li>Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
 zero is unlimited, and an exhausted request is rejected before upstream access.</li>
+<li>Cursor CLI traffic has no price, so it never adds to USD budgets or limits.
+Do not rely on a budget to cap a Cursor agent’s spend; see
+<a href="/tariboy/docs/architecture/ai-proxy#cursor-harness">AI proxy</a>.</li>
 <li>Usage and per-iteration audit make outcomes reviewable.</li>
 </ul>
 <p>Removing a host is local cleanup, not remote deletion. Quitting the app leaves
@@ -168,7 +181,7 @@ any other support-bundle exclusion. See <a href="/tariboy/docs/architecture/ai-p
 audit</a> for its
 runtime lifecycle.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.75.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.76.1</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;
@@ -193,7 +206,9 @@ again from zero. Archive memory use is proportional to the update size.</p>
 macOS runner. The workflow rejects a tag that differs from either canonical
 version declaration, builds and verifies the release through <code>make desktop-mac</code>, and publishes the DMG, signed updater archive and catalog,
 <code>SHA256SUMS</code>, and <code>release.json</code> with the job-scoped <code>contents: write</code>
-permission. Before staging, the workflow rejects malformed signing packets or a
+permission. The Linux job that signs the Android APK with the key from the
+<code>ANDROID_KEY*</code> Secrets and verifies it with <code>apksigner</code> is paused until those
+Secrets exist, so releases attach no APK. Before staging, the workflow rejects malformed signing packets or a
 signature key identifier that differs from the pinned updater public key. This
 catches an accidental wrong signing Secret; cryptographic archive verification
 remains the official updater’s responsibility. GitHub publication does not change

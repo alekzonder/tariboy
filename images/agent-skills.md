@@ -1,6 +1,6 @@
 ---
 title: Agent Skills in images
-description: Package validated Agent Skills in schema-v2 images and expose them through Claude Code, Codex, or OpenCode.
+description: Package validated Agent Skills in schema-v2 images and expose them through Claude Code, Codex, OpenCode, or the Cursor CLI.
 sidebar:
   label: Agent Skills
   icon: package-check
@@ -10,7 +10,8 @@ Schema-v2 images can carry Agent Skills as packaged, portable directories.
 Tariboy validates each declared directory at build time, records its metadata
 and content hash in the image, and exposes it through a harness-specific bridge
 when an iteration starts. Claude Code and OpenCode use native discovery;
-Codex uses progressive disclosure from a compact prompt catalog.
+Codex and the Cursor CLI use progressive disclosure from a compact prompt
+catalog.
 
 ## Scope
 
@@ -336,6 +337,7 @@ restart rather than rewritten.
 | Claude Code | Generated local plugin passed with `--plugin-dir` | Version `2.1.227` or newer |
 | Codex | Bounded prompt catalog containing each name, description, and absolute bridge `SKILL.md` path | No skill-specific version probe |
 | OpenCode | Isolated config overlay whose `skills.paths` names the bridge | `opencode debug config` must expose that path |
+| Cursor CLI | The Codex prompt catalog, prepended to the prompt argument | No skill-specific version probe |
 
 The generated integration is additive. It does not disable normal global or
 CWD skill discovery, and it does not change the agent's effective CWD.
@@ -389,7 +391,7 @@ running iteration is never interrupted to activate a pending image.
 ## Security boundaries
 
 Schema-v2 skill delivery does not copy generated `.claude`, `.agents`,
-`.codex`, or `.opencode` trees into the configured CWD. The bridge is confined
+`.codex`, `.opencode`, or `.cursor` trees into the configured CWD. The bridge is confined
 to the managed agent tree, rejects linked or unexpected members, and validates
 every published file against its manifest.
 

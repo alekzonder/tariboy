@@ -62,7 +62,7 @@ Create an agent from an image, then choose **where it runs and which harness
 it uses**. Configure its model, effort, working directory, and environment
 independently of other agents.
 
-Use Claude Code, Codex, or OpenCode installed on the selected host. Start
+Use Claude Code, Codex, OpenCode, or the Cursor CLI installed on the selected host. Start
 locally or connect a remote Linux host through your existing SSH configuration.
 
 [Create your first agent →](/quickstart#4-create-an-agent) ·
@@ -243,6 +243,10 @@ flowchart LR
 | Operator API | Desktop, CLI, automation | Unix socket by default; a TCP listener requires the configured bearer-token policy. The optional HTTP/WebSocket listener accepts loopback addresses only. |
 | Agent capability socket | Skill-local scripts plus the legacy `tasks` and `i-am-done` compatibility shims | One Unix socket per agent. The daemon derives the agent and current iteration, so request JSON cannot impersonate another caller. |
 | AI proxy | Harness or plugin making an LLM request | Loopback listener plus a short-lived iteration- or plugin-scoped token. Upstream provider keys remain in the daemon. |
+
+The Android app has no daemon of its own. It reaches a daemon through a port
+the user forwards to the phone's loopback, or through an HTTPS server, and the
+loopback listener allows its origin `http://tauri.localhost`.
 
 Remote Desktop access is an SSH local-forward to the remote daemon's loopback
 listener. System OpenSSH retains host-key verification, agent forwarding,
@@ -543,6 +547,9 @@ through the daemon's **in-process AI proxy** (`internal/aiproxy`). The proxy:
   be replayed and inspected after the fact. `tariboy daemon reindex` rebuilds
   the `ai_requests` metadata from these transcripts.
 
+The [Cursor harness](#cursor-harness) is the exception to the last two points:
+its traffic is metered without bodies, prices, or cost budgets.
+
 The proxy drops the client's `Accept-Encoding` header when it forwards a
 request. The upstream response still travels compressed, but the proxy
 decompresses it, so the usage parser and transcripts see plain SSE or JSON and
@@ -654,6 +661,36 @@ Activity can copy that readable timeline as Markdown for one iteration or all
 retained iterations. Its explicit ZIP export contains `audit.md` for human
 review and lossless `audit.jsonl` records for downstream analysis. The JSONL
 records preserve the raw proxied request and response bodies.
+
+## Cursor harness
+
+The Cursor CLI speaks Connect RPC over HTTP/2, so the proxy listener also
+accepts cleartext HTTP/2 (h2c) on its loopback address. Requests whose path is
+`/auth…` or a method of an `agent.v1.*` or `aiserver.v1.*` service are routed to
+the `cursor` provider and streamed unchanged to `https://api2.cursor.sh`, or to
+`TARIBOY_UPSTREAM_CURSOR_BASE_URL` when the daemon environment sets it. The
+same path-safety guard as other providers applies. The proxy never injects a
+provider key: the client's own `Authorization` header is forwarded as sent.
+
+Cursor metering differs from the other providers:
+
+- Request and response bodies are binary Connect frames and are **not**
+  written to `proxy-transcript.jsonl`. Each proxied request still produces a
+  metadata row with the path, status, and latency, but zero tokens and no
+  model.
+- Batch iterations read token counts from the `result` event of the CLI's
+  `stream-json` stdout and record one extra `cursor` row per result. It names
+  the agent's configured model id, or the CLI's display name when the agent
+  uses `auto` or no model. That row is also appended to the iteration
+  transcript, so `tariboy daemon reindex` restores it. Interactive Cursor
+  iterations have no machine-readable stdout and record no token counts.
+- `tariboy usage` therefore counts the per-request traffic rows plus one usage
+  row per result, so its Cursor request count is higher than the number of
+  model calls.
+- Cursor reports no price, so `cost_usd` stays empty. Cursor traffic never adds
+  to any USD budget or calendar limit. A budget already exhausted by other
+  spend still blocks Cursor requests; the proxy then answers HTTP 429 with a
+  Connect `resource_exhausted` error instead of the Anthropic error envelope.
 
 ## Daemon restart continuity
 
@@ -834,6 +871,7 @@ The adapters attach the bridge additively:
 | Claude Code | `--plugin-dir <absolute bridge>` |
 | Codex CLI | At-most-8,000-character prompt catalog with absolute bridge `SKILL.md` paths |
 | OpenCode | `OPENCODE_CONFIG_DIR=<absolute bridge>` with an absolute `skills.paths` entry |
+| Cursor CLI | The same bounded prompt catalog as Codex, with absolute bridge `SKILL.md` paths |
 
 Claude Code requires version `2.1.227` or newer. OpenCode is capability-probed
 with `opencode debug config`; its effective configuration must report the
@@ -853,6 +891,14 @@ consume the same catalog-prefixed prompt; Codex image skills do not appear in
 native `/skills`, `$` completion, or plugin inventory. Claude
 similarly omits its print-mode flags. Model, effective environment, working
 directory, and AI-proxy routing still apply in both modes.
+
+The Cursor CLI runs its `agent` executable with the prompt as the last
+argument, `--force`, `--endpoint <AI proxy URL>`, and `--model` when the agent
+names one. Batch iterations add `-p --output-format stream-json --trust`, and
+the loop reads token usage from the `result` event on harness stdout (see
+[AI proxy](/docs/architecture/ai-proxy#cursor-harness)). Interactive iterations launch the
+Cursor TUI. Like Codex, a prompt too large for one argument fails the launch.
+The agent's `effort` setting has no Cursor equivalent and is ignored.
 
 While a timed iteration is running, Agent Overview shows its deadline and can
 extend it by one configured soft-timeout period. Each extension is persisted
@@ -1732,6 +1778,15 @@ The separate store UI builds from `ui/store` into committed
 `internal/storeui/dist` and is served only by
 [`tariboy-store`](/docs/binaries/store).
 
+`npm run build:android` builds the same SPA for the Android app with
+`VITE_TARIBOY_SHELL=android`. In that mode `isDesktop()` is false, so servers
+use the browser registry (`localStorage` metadata, `sessionStorage` tokens) and
+no native command is called. The implicit same-origin "This daemon (local)"
+host is absent, the router is `HashRouter`, the daemon banner is hidden, an
+empty start screen offers **Add server**, and the server dialog accepts
+`https://` or plain `http://` to a loopback port only. See
+[Remote hosts](/docs/remote-hosts#android-app).
+
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
 small W3C WebDriver client through `tauri-driver` to a real debug Tauri/WebKit
 executable. The harness uses fresh owner-only daemon and Desktop state, rejects
@@ -2104,7 +2159,12 @@ change. In queue settings, `QueueWorkflowSettings` (`getQueueWorkflow`,
 binding and renders the pools editor, which reports each saved pool so a
 **Pools needed** list shrinks as pools gain members, and `QueueSecrets` (`listQueueSecrets`,
 `setQueueSecret`, `removeQueueSecret`) lists keys only: the value lives in a
-password input until it is sent and is never read back. A flexible task renders
+password input until it is sent and is never read back. For a bound queue,
+`QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
+the workflow with their schedule, failures in a row, and newest 20 runs; it
+loads once and on **Reload**, without polling. Its run rows and the task's
+`WorkflowRuns` share `RunRow`, which reads a log only on **Log**, renders it as
+text, and offers **Refresh** while the run is going. A flexible task renders
 exactly as before. The browser suite covers the path against an isolated daemon.
 
 One toolbar sits above the table in both places. It carries the search field,
@@ -3613,9 +3673,11 @@ stages them with the checked DMG, `SHA256SUMS`, `release.json`, and `latest.json
 Before staging, the manifest gate rejects malformed packets or a signature key
 identifier that differs from the public key in `tauri.conf.json`. This identifies
 an accidental wrong signing Secret; cryptographic archive verification remains
-the installed updater's responsibility. The workflow creates a draft GitHub
-Release, uploads the complete set, and only then makes the release public, so the
-latest catalog cannot reference missing assets. The first updater-enabled version
+the installed updater's responsibility. A separate `publish` job waits for this
+macOS job, creates a draft GitHub Release, uploads the complete set, and only
+then makes the release public, so the latest catalog cannot reference missing
+assets. The Android job is paused (see [Android app](#android-app)), so
+releases attach no APK. The first updater-enabled version
 must still be installed from the DMG; only later, higher signed versions can be
 installed by the updater.
 
@@ -3637,6 +3699,52 @@ links already target the same app path. Its filesystem and lifecycle work must
 stay off the UI thread. Changes to
 this flow require Rust installer tests plus the daemon restart-handoff tests;
 never exercise it against the user's live daemon.
+
+### Android app
+
+The Android app is the same SPA in a Tauri WebView, built in Android mode
+(`npm run build:android`, `VITE_TARIBOY_SHELL=android`). Its Rust side is the
+mobile entry point in `desktop/src-tauri/src/lib.rs`: no commands, plugins,
+daemon, SSH, tunnels, or bundled Go binaries. `tauri.android.conf.json` swaps
+in that SPA build and drops the bundled resources. The Gradle project under
+`desktop/src-tauri/gen/android` is generated by `cargo tauri android init` and
+committed; it adds `res/xml/network_security_config.xml` (plain http only to
+`127.0.0.1`, `localhost`, and `::1`), Android launcher icons generated from
+`desktop/branding`, and release signing from an ignored `keystore.properties`.
+
+Building needs a JDK 17 or newer, the Android SDK with a platform and
+build-tools in `ANDROID_HOME`, and an NDK in `NDK_HOME`:
+
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+export NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
+make desktop-android
+```
+
+The target builds an `arm64-v8a` release APK under
+`desktop/src-tauri/gen/android/app/build/outputs/apk/universal/release/`. With
+`desktop/src-tauri/gen/android/keystore.properties` (`storeFile`,
+`storePassword`, `keyAlias`, `keyPassword`) the APK is signed; without it the
+output is `*-unsigned.apk` for local checks.
+
+The release workflow's `android` job is paused: it is commented out in
+`.github/workflows/desktop-release.yml`, `publish` needs only the macOS job, and
+releases attach no APK. Build the APK locally with `make desktop-android`. To
+restore the job, uncomment it, make `publish` need `[release, android]` again,
+restore its Android download, note and upload, restore the Android assertions in
+`scripts/desktop_release_workflow_test.go`, and add four repository Secrets:
+`ANDROID_KEYSTORE_BASE64` (the base64-encoded keystore),
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
+The job then builds the APK on `ubuntu-latest` in parallel with the macOS job.
+Create the key once and keep it backed up:
+
+```bash
+keytool -genkeypair -v -keystore tariboy-release.jks -keyalg RSA \
+  -keysize 4096 -validity 10000 -alias tariboy
+```
+
+Android refuses to update an installed APK signed by a different key, so a lost
+or replaced key forces users to uninstall and reinstall.
 
 ### Documentation
 
@@ -4487,7 +4595,8 @@ Schema-v2 images can carry Agent Skills as packaged, portable directories.
 Tariboy validates each declared directory at build time, records its metadata
 and content hash in the image, and exposes it through a harness-specific bridge
 when an iteration starts. Claude Code and OpenCode use native discovery;
-Codex uses progressive disclosure from a compact prompt catalog.
+Codex and the Cursor CLI use progressive disclosure from a compact prompt
+catalog.
 
 ## Scope
 
@@ -4813,6 +4922,7 @@ restart rather than rewritten.
 | Claude Code | Generated local plugin passed with `--plugin-dir` | Version `2.1.227` or newer |
 | Codex | Bounded prompt catalog containing each name, description, and absolute bridge `SKILL.md` path | No skill-specific version probe |
 | OpenCode | Isolated config overlay whose `skills.paths` names the bridge | `opencode debug config` must expose that path |
+| Cursor CLI | The Codex prompt catalog, prepended to the prompt argument | No skill-specific version probe |
 
 The generated integration is additive. It does not disable normal global or
 CWD skill discovery, and it does not change the agent's effective CWD.
@@ -4866,7 +4976,7 @@ running iteration is never interrupted to activate a pending image.
 ## Security boundaries
 
 Schema-v2 skill delivery does not copy generated `.claude`, `.agents`,
-`.codex`, or `.opencode` trees into the configured CWD. The bridge is confined
+`.codex`, `.opencode`, or `.cursor` trees into the configured CWD. The bridge is confined
 to the managed agent tree, rejects linked or unexpected members, and validates
 every published file against its manifest.
 
@@ -6091,13 +6201,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.75.0` alpha on an Apple Silicon Mac.
+This path is for the `0.76.1` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.75.0_aarch64.dmg`;
+- a verified `Tariboy_0.76.1_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -7095,11 +7205,13 @@ by the operator. The desktop does not implement a second SSH stack.
 | Remote CLI links | `~/.local/bin` |
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
+| Android app | arm64 APK built with `make desktop-android`; forwarded loopback port or HTTPS server, no SSH hosts |
 
 Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
 The Python runtime executes the standard-library agent tool scripts. Preflight
-also reports `tmux`, Claude, Codex, and OpenCode so you can see which workflows
-are available. At least one chosen harness must be installed on the remote host.
+also reports `tmux`, Claude, Codex, OpenCode, and the Cursor CLI (its `agent`
+executable) so you can see which workflows are available; a missing harness is
+listed as an optional tool and does not block installation. At least one chosen harness must be installed on the remote host.
 
 ## Account PATH and harness launch
 
@@ -7305,6 +7417,32 @@ Deleting `~/.tariboy` removes remote agents, images, audit, and database
 state. Back it up first and perform that separate destructive step only when
 data removal is intended.
 
+## Android app
+
+The Android APK runs the same UI without a local daemon, SSH hosts, tunnels, or
+host provisioning. Releases do not attach the APK yet; build it with
+`make desktop-android` (see the
+[contributor guide](/development#android-app)). It connects to two kinds of
+servers:
+
+- **A forwarded loopback port.** You forward a daemon's listener to the phone
+  yourself, for example `ssh -L 9990:127.0.0.1:9990 host` in Termux or
+  `adb reverse tcp:9990 tcp:9990` from a computer. Then **Add host** with base
+  URL `http://127.0.0.1:9990` and an empty token. Forward a token listener
+  instead if you prefer, and enter its token.
+- **An HTTPS server** with a bearer token, as in the browser.
+
+Plain `http://` is accepted only for `127.0.0.1`, `localhost`, or `[::1]` with
+a port; Android blocks cleartext to every other host. The app does not start or
+restart the forward: while it is down the server shows as unreachable.
+
+The daemon must be this release or newer, because only it allows the Android
+app's origin `http://tauri.localhost` on its loopback listener. An older daemon
+answers, but the WebView blocks its responses; forward its token listener
+instead. Any app on the phone can reach a forwarded tokenless port while the
+forward is up. A token lives in WebView session storage and must be entered
+again after Android stops the app; the server list is kept.
+
 ---
 
 # Security and controls
@@ -7322,6 +7460,16 @@ persisted `otlp_endpoint` daemon setting.
 - System OpenSSH owns host-key verification, agent use, ProxyJump, and 2FA.
 - Tariboy never disables strict host-key checking.
 - Non-loopback daemon TCP requires a bearer token file.
+- The tokenless loopback web listener echoes CORS only for loopback `http`
+  origins, the macOS app origin `tauri://localhost`, and the Android app origin
+  `http://tauri.localhost`, each matched exactly. Browsers resolve
+  `*.localhost` to loopback, so the Android origin is that app's WebView or a
+  loopback port-80 page, which `http://localhost` already covered. The Host
+  check is unchanged.
+- The Android app permits cleartext only to `127.0.0.1`, `localhost`, and
+  `::1` through its network security config, and its WebView has no Tauri IPC
+  permissions. It keeps server tokens in WebView session storage, not a
+  keystore.
 
 ## Credentials
 
@@ -7352,6 +7500,9 @@ adoption revokes the remaining lease when its shim finishes.
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
+- Cursor CLI traffic has no price, so it never adds to USD budgets or limits.
+  Do not rely on a budget to cap a Cursor agent's spend; see
+  [AI proxy](/docs/architecture/ai-proxy#cursor-harness).
 - Usage and per-iteration audit make outcomes reviewable.
 
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
@@ -7497,7 +7648,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.75.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.76.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -7527,7 +7678,9 @@ macOS runner. The workflow rejects a tag that differs from either canonical
 version declaration, builds and verifies the release through `make
 desktop-mac`, and publishes the DMG, signed updater archive and catalog,
 `SHA256SUMS`, and `release.json` with the job-scoped `contents: write`
-permission. Before staging, the workflow rejects malformed signing packets or a
+permission. The Linux job that signs the Android APK with the key from the
+`ANDROID_KEY*` Secrets and verifies it with `apksigner` is paused until those
+Secrets exist, so releases attach no APK. Before staging, the workflow rejects malformed signing packets or a
 signature key identifier that differs from the pinned updater public key. This
 catches an accidental wrong signing Secret; cryptographic archive verification
 remains the official updater's responsibility. GitHub publication does not change
@@ -7594,7 +7747,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.75.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.76.1`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -8563,10 +8716,15 @@ ttasks queue source log DEV 12 --max-bytes 4096
 ```
 
 `queue source ls` shows each source of the bound image: script, `every`, when it
-runs next, the failures in a row, and the last run with its verdict (`items`,
-`quiet`, or `failure`), message, and the number of tasks it created. Only the
-newest 20 quiet runs of a source are kept, with their files. `queue source log`
-prints the redacted log tail like `workflow log`. Both are operator-only.
+runs next, the failures in a row, the last run with its verdict (`items`,
+`quiet`, or `failure`), message, and the number of tasks it created, and the
+newest 20 runs, newest first, in `runs`; their ids are what `queue source log`
+takes. Only the newest 20 quiet runs of a source are kept, with their files.
+`queue source log` prints the redacted log tail like `workflow log`, also for a
+run still going: the worker records the log path when the script starts. Both
+are operator-only. In the app, the Workflow section of the queue settings shows
+the same list under **Sources**, with a **Log** button on each run and
+**Refresh** on the open log of a running run.
 
 Sources poll; for events pushed by a plugin, use a
 [queue trigger](#queue-triggers).
@@ -8921,7 +9079,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks queue secret set QUEUE KEY [--value V]` | operator | Set a secret; stdin when `--value` is absent. |
 | `ttasks queue secret ls QUEUE` | operator | List secret keys. |
 | `ttasks queue secret rm QUEUE KEY` | operator | Remove a secret. |
-| `ttasks queue source ls QUEUE` | operator | List the sources of the bound image and their last runs. |
+| `ttasks queue source ls QUEUE` | operator | List the sources of the bound image and their newest runs. |
 | `ttasks queue source log QUEUE RUN [--max-bytes N]` | operator | Read a source run log. |
 | `ttasks workflow get KEY` | agent, operator | The task view. |
 | `ttasks artifacts set KEY NAME [VALUE \| --file PATH]` | holder, operator | Set an artifact; stdin when no value. |
@@ -8950,7 +9108,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `PUT` | `/api/task-queues/{queue}/secrets/{key}` | set a secret (`value`, body at most 512 KiB); returns `queue`, `key`, and the stored `updated_at` | operator |
 | `GET` | `/api/task-queues/{queue}/secrets` | list `secrets` (`key`, `updated_at`) | operator |
 | `DELETE` | `/api/task-queues/{queue}/secrets/{key}` | remove a secret | operator |
-| `GET` | `/api/task-queues/{queue}/sources` | list `sources` with `next_run_at`, `failures`, and `last_run` | operator |
+| `GET` | `/api/task-queues/{queue}/sources` | list `sources` with `next_run_at`, `failures`, `last_run`, and `runs` (the newest 20, newest first) | operator |
 | `GET` | `/api/task-queues/{queue}/source-runs/{id}/log` | the redacted log tail of a source run (`max_bytes`); returns `run_id`, `text`, `truncated` | operator |
 | `POST` | `/api/tasks/{key}/advance` | declare an outcome (`outcome`, `message`, `from`); returns the request | agent, operator |
 | `GET` | `/api/tasks/{key}/workflow/requests/{id}` | one transition request | agent, operator |
@@ -9074,7 +9232,7 @@ pending request.
 | A task is `wait_customer` with `waiting_on: pause` | The daemon paused it; `ttasks workflow get KEY` shows `paused:` and the comment names the reason. Fix the cause, then `ttasks workflow resume KEY --decision continue` or `--decision release`. |
 | A script status never moves | Read `ttasks workflow runs KEY`. A run of `quiet` verdicts means the condition has not happened; `failure` verdicts mean a broken script: read its log. The operator can always `ttasks workflow move` the task. |
 | `workflow log` returns `forbidden` | The caller is neither the customer nor a holder of the task, or the run is a `run_as: agent` check of another holder. |
-| A source creates no task | Read `ttasks queue source ls QUEUE`. No `last_run` and no `next_run_at` in the past means the worker has not reached it yet; `quiet` means the script found nothing; `failure` means read the run with `ttasks queue source log QUEUE RUN`. An item whose key was reported before never creates a second task. |
+| A source creates no task | Read `ttasks queue source ls QUEUE`. No `last_run` and no `next_run_at` in the past means the worker has not reached it yet; `quiet` means the script found nothing; `failure` means read the run with `ttasks queue source log QUEUE RUN`, or with **Log** under **Sources** in the queue settings. An item whose key was reported before never creates a second task. |
 | A secret value shows in a log | It was rotated or removed after the run, or it was printed encoded. Rotate the secret and fix the script. |
 
 ## Official workflows

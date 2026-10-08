@@ -18,7 +18,7 @@
 ## Images
 
 - [Images](https://alekzonder.github.io/tariboy/images): Build plugin, Agent Skill, and ordered prompt artifacts, inspect them, and assign them to agents.
-- [Agent Skills in images](https://alekzonder.github.io/tariboy/images/agent-skills): Package validated Agent Skills in schema-v2 images and expose them through Claude Code, Codex, or OpenCode.
+- [Agent Skills in images](https://alekzonder.github.io/tariboy/images/agent-skills): Package validated Agent Skills in schema-v2 images and expose them through Claude Code, Codex, OpenCode, or the Cursor CLI.
 
 ## Architecture
 

@@ -17,6 +17,15 @@ The separate store UI builds from `ui/store` into committed
 `internal/storeui/dist` and is served only by
 [`tariboy-store`](/docs/binaries/store).
 
+`npm run build:android` builds the same SPA for the Android app with
+`VITE_TARIBOY_SHELL=android`. In that mode `isDesktop()` is false, so servers
+use the browser registry (`localStorage` metadata, `sessionStorage` tokens) and
+no native command is called. The implicit same-origin "This daemon (local)"
+host is absent, the router is `HashRouter`, the daemon banner is hidden, an
+empty start screen offers **Add server**, and the server dialog accepts
+`https://` or plain `http://` to a loopback port only. See
+[Remote hosts](/docs/remote-hosts#android-app).
+
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
 small W3C WebDriver client through `tauri-driver` to a real debug Tauri/WebKit
 executable. The harness uses fresh owner-only daemon and Desktop state, rejects
@@ -389,7 +398,12 @@ change. In queue settings, `QueueWorkflowSettings` (`getQueueWorkflow`,
 binding and renders the pools editor, which reports each saved pool so a
 **Pools needed** list shrinks as pools gain members, and `QueueSecrets` (`listQueueSecrets`,
 `setQueueSecret`, `removeQueueSecret`) lists keys only: the value lives in a
-password input until it is sent and is never read back. A flexible task renders
+password input until it is sent and is never read back. For a bound queue,
+`QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
+the workflow with their schedule, failures in a row, and newest 20 runs; it
+loads once and on **Reload**, without polling. Its run rows and the task's
+`WorkflowRuns` share `RunRow`, which reads a log only on **Log**, renders it as
+text, and offers **Refresh** while the run is going. A flexible task renders
 exactly as before. The browser suite covers the path against an isolated daemon.
 
 One toolbar sits above the table in both places. It carries the search field,

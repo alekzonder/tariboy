@@ -20,11 +20,13 @@ by the operator. The desktop does not implement a second SSH stack.
 | Remote CLI links | `~/.local/bin` |
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
+| Android app | arm64 APK built with `make desktop-android`; forwarded loopback port or HTTPS server, no SSH hosts |
 
 Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
 The Python runtime executes the standard-library agent tool scripts. Preflight
-also reports `tmux`, Claude, Codex, and OpenCode so you can see which workflows
-are available. At least one chosen harness must be installed on the remote host.
+also reports `tmux`, Claude, Codex, OpenCode, and the Cursor CLI (its `agent`
+executable) so you can see which workflows are available; a missing harness is
+listed as an optional tool and does not block installation. At least one chosen harness must be installed on the remote host.
 
 ## Account PATH and harness launch
 
@@ -229,3 +231,29 @@ rm -rf -- "$HOME/.local/lib/tariboy"'
 Deleting `~/.tariboy` removes remote agents, images, audit, and database
 state. Back it up first and perform that separate destructive step only when
 data removal is intended.
+
+## Android app
+
+The Android APK runs the same UI without a local daemon, SSH hosts, tunnels, or
+host provisioning. Releases do not attach the APK yet; build it with
+`make desktop-android` (see the
+[contributor guide](/development#android-app)). It connects to two kinds of
+servers:
+
+- **A forwarded loopback port.** You forward a daemon's listener to the phone
+  yourself, for example `ssh -L 9990:127.0.0.1:9990 host` in Termux or
+  `adb reverse tcp:9990 tcp:9990` from a computer. Then **Add host** with base
+  URL `http://127.0.0.1:9990` and an empty token. Forward a token listener
+  instead if you prefer, and enter its token.
+- **An HTTPS server** with a bearer token, as in the browser.
+
+Plain `http://` is accepted only for `127.0.0.1`, `localhost`, or `[::1]` with
+a port; Android blocks cleartext to every other host. The app does not start or
+restart the forward: while it is down the server shows as unreachable.
+
+The daemon must be this release or newer, because only it allows the Android
+app's origin `http://tauri.localhost` on its loopback listener. An older daemon
+answers, but the WebView blocks its responses; forward its token listener
+instead. Any app on the phone can reach a forwarded tokenless port while the
+forward is up. A token lives in WebView session storage and must be entered
+again after Android stops the app; the server list is kept.

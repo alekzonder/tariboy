@@ -9,6 +9,14 @@ always rebuilds it before Tauri packaging, so this output must never be staged.
 The separate store UI builds from <code>ui/store</code> into committed
 <code>internal/storeui/dist</code> and is served only by
 <a href="/tariboy/docs/binaries/store"><code>tariboy-store</code></a>.</p>
+<p><code>npm run build:android</code> builds the same SPA for the Android app with
+<code>VITE_TARIBOY_SHELL=android</code>. In that mode <code>isDesktop()</code> is false, so servers
+use the browser registry (<code>localStorage</code> metadata, <code>sessionStorage</code> tokens) and
+no native command is called. The implicit same-origin “This daemon (local)”
+host is absent, the router is <code>HashRouter</code>, the daemon banner is hidden, an
+empty start screen offers <strong>Add server</strong>, and the server dialog accepts
+<code>https://</code> or plain <code>http://</code> to a loopback port only. See
+<a href="/tariboy/docs/remote-hosts#android-app">Remote hosts</a>.</p>
 <p>Linux native UI verification uses <code>make desktop-e2e</code>: Playwright specs speak a
 small W3C WebDriver client through <code>tauri-driver</code> to a real debug Tauri/WebKit
 executable. The harness uses fresh owner-only daemon and Desktop state, rejects
@@ -352,7 +360,12 @@ change. In queue settings, <code>QueueWorkflowSettings</code> (<code>getQueueWor
 binding and renders the pools editor, which reports each saved pool so a
 <strong>Pools needed</strong> list shrinks as pools gain members, and <code>QueueSecrets</code> (<code>listQueueSecrets</code>,
 <code>setQueueSecret</code>, <code>removeQueueSecret</code>) lists keys only: the value lives in a
-password input until it is sent and is never read back. A flexible task renders
+password input until it is sent and is never read back. For a bound queue,
+<code>QueueSources</code> (<code>listQueueSources</code>, <code>getQueueSourceRunLog</code>) lists the sources of
+the workflow with their schedule, failures in a row, and newest 20 runs; it
+loads once and on <strong>Reload</strong>, without polling. Its run rows and the task’s
+<code>WorkflowRuns</code> share <code>RunRow</code>, which reads a log only on <strong>Log</strong>, renders it as
+text, and offers <strong>Refresh</strong> while the run is going. A flexible task renders
 exactly as before. The browser suite covers the path against an isolated daemon.</p>
 <p>One toolbar sits above the table in both places. It carries the search field,
 the <code>Active | Closed | All</code> segment, the queue control, the <code>My tasks</code> and

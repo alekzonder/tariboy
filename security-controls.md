@@ -18,6 +18,16 @@ persisted `otlp_endpoint` daemon setting.
 - System OpenSSH owns host-key verification, agent use, ProxyJump, and 2FA.
 - Tariboy never disables strict host-key checking.
 - Non-loopback daemon TCP requires a bearer token file.
+- The tokenless loopback web listener echoes CORS only for loopback `http`
+  origins, the macOS app origin `tauri://localhost`, and the Android app origin
+  `http://tauri.localhost`, each matched exactly. Browsers resolve
+  `*.localhost` to loopback, so the Android origin is that app's WebView or a
+  loopback port-80 page, which `http://localhost` already covered. The Host
+  check is unchanged.
+- The Android app permits cleartext only to `127.0.0.1`, `localhost`, and
+  `::1` through its network security config, and its WebView has no Tauri IPC
+  permissions. It keeps server tokens in WebView session storage, not a
+  keystore.
 
 ## Credentials
 
@@ -48,6 +58,9 @@ adoption revokes the remaining lease when its shim finishes.
 - Budgets constrain spend.
 - Agent USD budgets have independent calendar hour/day/ISO-week/month limits;
   zero is unlimited, and an exhausted request is rejected before upstream access.
+- Cursor CLI traffic has no price, so it never adds to USD budgets or limits.
+  Do not rely on a budget to cap a Cursor agent's spend; see
+  [AI proxy](/docs/architecture/ai-proxy#cursor-harness).
 - Usage and per-iteration audit make outcomes reviewable.
 
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
@@ -193,7 +206,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.75.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.76.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -223,7 +236,9 @@ macOS runner. The workflow rejects a tag that differs from either canonical
 version declaration, builds and verifies the release through `make
 desktop-mac`, and publishes the DMG, signed updater archive and catalog,
 `SHA256SUMS`, and `release.json` with the job-scoped `contents: write`
-permission. Before staging, the workflow rejects malformed signing packets or a
+permission. The Linux job that signs the Android APK with the key from the
+`ANDROID_KEY*` Secrets and verifies it with `apksigner` is paused until those
+Secrets exist, so releases attach no APK. Before staging, the workflow rejects malformed signing packets or a
 signature key identifier that differs from the pinned updater public key. This
 catches an accidental wrong signing Secret; cryptographic archive verification
 remains the official updater's responsibility. GitHub publication does not change

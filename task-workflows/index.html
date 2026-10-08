@@ -1137,10 +1137,15 @@ automatic pause; <code>queue source ls</code> counts the failures in a row.</li>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ttasks</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> queue</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> source</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> log</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> DEV</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 12</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ttasks</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> queue</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> source</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> log</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> DEV</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 12</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --max-bytes</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> 4096</span></span></code></pre>
 <p><code>queue source ls</code> shows each source of the bound image: script, <code>every</code>, when it
-runs next, the failures in a row, and the last run with its verdict (<code>items</code>,
-<code>quiet</code>, or <code>failure</code>), message, and the number of tasks it created. Only the
-newest 20 quiet runs of a source are kept, with their files. <code>queue source log</code>
-prints the redacted log tail like <code>workflow log</code>. Both are operator-only.</p>
+runs next, the failures in a row, the last run with its verdict (<code>items</code>,
+<code>quiet</code>, or <code>failure</code>), message, and the number of tasks it created, and the
+newest 20 runs, newest first, in <code>runs</code>; their ids are what <code>queue source log</code>
+takes. Only the newest 20 quiet runs of a source are kept, with their files.
+<code>queue source log</code> prints the redacted log tail like <code>workflow log</code>, also for a
+run still going: the worker records the log path when the script starts. Both
+are operator-only. In the app, the Workflow section of the queue settings shows
+the same list under <strong>Sources</strong>, with a <strong>Log</strong> button on each run and
+<strong>Refresh</strong> on the open log of a running run.</p>
 <p>Sources poll; for events pushed by a plugin, use a
 <a href="#queue-triggers">queue trigger</a>.</p>
 <h2 id="operator-move-and-cancel"><a class="blume-heading-anchor" href="#operator-move-and-cancel">Operator move and cancel</a></h2>
@@ -1596,7 +1601,7 @@ and what it may do next. Agents and the operator can read it.</p>
 <tr>
 <td><code>ttasks queue source ls QUEUE</code></td>
 <td>operator</td>
-<td>List the sources of the bound image and their last runs.</td>
+<td>List the sources of the bound image and their newest runs.</td>
 </tr>
 <tr>
 <td><code>ttasks queue source log QUEUE RUN [--max-bytes N]</code></td>
@@ -1709,7 +1714,7 @@ generated OpenAPI document is the authority for request and response schemas.</p
 <tr>
 <td><code>GET</code></td>
 <td><code>/api/task-queues/{queue}/sources</code></td>
-<td>list <code>sources</code> with <code>next_run_at</code>, <code>failures</code>, and <code>last_run</code></td>
+<td>list <code>sources</code> with <code>next_run_at</code>, <code>failures</code>, <code>last_run</code>, and <code>runs</code> (the newest 20, newest first)</td>
 <td>operator</td>
 </tr>
 <tr>
@@ -2106,7 +2111,7 @@ pending request.</p>
 </tr>
 <tr>
 <td>A source creates no task</td>
-<td>Read <code>ttasks queue source ls QUEUE</code>. No <code>last_run</code> and no <code>next_run_at</code> in the past means the worker has not reached it yet; <code>quiet</code> means the script found nothing; <code>failure</code> means read the run with <code>ttasks queue source log QUEUE RUN</code>. An item whose key was reported before never creates a second task.</td>
+<td>Read <code>ttasks queue source ls QUEUE</code>. No <code>last_run</code> and no <code>next_run_at</code> in the past means the worker has not reached it yet; <code>quiet</code> means the script found nothing; <code>failure</code> means read the run with <code>ttasks queue source log QUEUE RUN</code>, or with <strong>Log</strong> under <strong>Sources</strong> in the queue settings. An item whose key was reported before never creates a second task.</td>
 </tr>
 <tr>
 <td>A secret value shows in a log</td>

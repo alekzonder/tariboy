@@ -68,6 +68,9 @@ supervised integrations. None of them owns a second copy of product state.</p>
 </tr>
 </tbody>
 </table></div>
+<p>The Android app has no daemon of its own. It reaches a daemon through a port
+the user forwards to the phone’s loopback, or through an HTTPS server, and the
+loopback listener allows its origin <code>http://tauri.localhost</code>.</p>
 <p>Remote Desktop access is an SSH local-forward to the remote daemon’s loopback
 listener. System OpenSSH retains host-key verification, agent forwarding,
 ProxyJump, and interactive authentication. See <a href="/tariboy/docs/security-controls">Security and

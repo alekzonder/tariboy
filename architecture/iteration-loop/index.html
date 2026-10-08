@@ -152,6 +152,10 @@ loop.</p>
 <td>OpenCode</td>
 <td><code>OPENCODE_CONFIG_DIR=&lt;absolute bridge&gt;</code> with an absolute <code>skills.paths</code> entry</td>
 </tr>
+<tr>
+<td>Cursor CLI</td>
+<td>The same bounded prompt catalog as Codex, with absolute bridge <code>SKILL.md</code> paths</td>
+</tr>
 </tbody>
 </table></div>
 <p>Claude Code requires version <code>2.1.227</code> or newer. OpenCode is capability-probed
@@ -171,6 +175,13 @@ consume the same catalog-prefixed prompt; Codex image skills do not appear in
 native <code>/skills</code>, <code>$</code> completion, or plugin inventory. Claude
 similarly omits its print-mode flags. Model, effective environment, working
 directory, and AI-proxy routing still apply in both modes.</p>
+<p>The Cursor CLI runs its <code>agent</code> executable with the prompt as the last
+argument, <code>--force</code>, <code>--endpoint &lt;AI proxy URL&gt;</code>, and <code>--model</code> when the agent
+names one. Batch iterations add <code>-p --output-format stream-json --trust</code>, and
+the loop reads token usage from the <code>result</code> event on harness stdout (see
+<a href="/tariboy/docs/architecture/ai-proxy#cursor-harness">AI proxy</a>). Interactive iterations launch the
+Cursor TUI. Like Codex, a prompt too large for one argument fails the launch.
+The agent’s <code>effort</code> setting has no Cursor equivalent and is ignored.</p>
 <p>While a timed iteration is running, Agent Overview shows its deadline and can
 extend it by one configured soft-timeout period. Each extension is persisted
 before the watchdog is updated, so a daemon restart can adopt the running

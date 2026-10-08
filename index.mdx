@@ -63,7 +63,7 @@ Create an agent from an image, then choose **where it runs and which harness
 it uses**. Configure its model, effort, working directory, and environment
 independently of other agents.
 
-Use Claude Code, Codex, or OpenCode installed on the selected host. Start
+Use Claude Code, Codex, OpenCode, or the Cursor CLI installed on the selected host. Start
 locally or connect a remote Linux host through your existing SSH configuration.
 
 [Create your first agent →](/quickstart#4-create-an-agent) ·
