@@ -5,12 +5,18 @@
 fn main() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os == "macos" {
+        // Cargo passes a build script's rustc-link-lib only to the package's
+        // [lib] target (tariboy_mobile), never to the desktop binary. The
+        // binary links the archive and framework through #[link] attributes in
+        // notifications.rs; the search path below reaches every target.
         cc::Build::new()
             .file("src/task_notifications.m")
             .flag("-fobjc-arc")
             .flag("-fblocks")
+            .cargo_metadata(false)
             .compile("task_notifications");
-        println!("cargo:rustc-link-lib=framework=UserNotifications");
+        let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR");
+        println!("cargo:rustc-link-search=native={out_dir}");
         println!("cargo:rerun-if-changed=src/task_notifications.m");
     }
 
