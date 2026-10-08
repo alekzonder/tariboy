@@ -1,3 +1,15 @@
+## [0.76.1] - 2026-10-08
+
+### Fixed
+
+- The macOS desktop app builds again: the `tariboy-desktop` binary links the
+  task notification bridge and the `UserNotifications` framework, which the
+  Android library target had cut off. 0.76.0 failed to build for macOS and
+  was never published, so 0.76.1 is the first release that ships the 0.76.0
+  changes below.
+
+[0.76.1]: https://github.com/alekzonder/tariboy/compare/v0.76.0...v0.76.1
+
 ## [0.76.0] - 2026-10-08
 
 ### Added
