@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -210,6 +211,9 @@ func Run(ctx context.Context, o Options) error {
 		resolveUserPath = userpath.Resolve
 	}
 	applyUserPath(ctx, log, resolveUserPath)
+	if home, err := os.UserHomeDir(); err == nil {
+		ensureLocalBin(home)
+	}
 
 	p := paths.New(o.BaseDir)
 	if o.BaseDir == "" {
@@ -1069,6 +1073,20 @@ func installTasksAlias(exeDir, runtimeDir string) (string, error) {
 		return "", err
 	}
 	return binDir, nil
+}
+
+// ensureLocalBin appends ~/.local/bin, where the managed tariboy and ttasks
+// links live, so agents find them even when the account PATH lacks it.
+func ensureLocalBin(home string) {
+	dir := filepath.Join(home, ".local", "bin")
+	path := os.Getenv("PATH")
+	if slices.Contains(filepath.SplitList(path), dir) {
+		return
+	}
+	if path != "" {
+		dir = path + string(os.PathListSeparator) + dir
+	}
+	_ = os.Setenv("PATH", dir)
 }
 
 func applyUserPath(ctx context.Context, log *slog.Logger, resolve UserPathResolver) {

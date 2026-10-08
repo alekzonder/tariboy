@@ -10,6 +10,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/toolcheck"
 )
 
 func ctx(t *testing.T) *registry.Ctx {
@@ -144,4 +145,19 @@ func TestUsageGroupFilterHelpDescribesFunctionalFilter(t *testing.T) {
 		return
 	}
 	t.Fatal("usage command has no group argument")
+}
+
+func TestDaemonStatusReportsMissingTools(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	out, err := daemonStatus().Handler(&registry.Ctx{StartedAt: time.Now()}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := out.(map[string]any)
+	if status["state"] != "error" || status["message"] == "" {
+		t.Fatalf("status = %+v, want error state with message", status)
+	}
+	if missing, _ := status["missing_tools"].([]toolcheck.Tool); len(missing) == 0 || missing[0].Name != "tmux" {
+		t.Fatalf("missing_tools = %#v, want tmux first", status["missing_tools"])
+	}
 }

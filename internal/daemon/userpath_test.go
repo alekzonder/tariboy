@@ -174,8 +174,10 @@ func TestRunAppliesUserPathBeforeEarlyStartupFailure(t *testing.T) {
 	if called != 1 {
 		t.Fatalf("resolver calls = %d, want 1", called)
 	}
-	if got := os.Getenv("PATH"); got != "/resolved/user/path" {
-		t.Fatalf("PATH after Run() = %q, want resolved value", got)
+	home, _ := os.UserHomeDir()
+	want := "/resolved/user/path" + string(os.PathListSeparator) + filepath.Join(home, ".local", "bin")
+	if got := os.Getenv("PATH"); got != want {
+		t.Fatalf("PATH after Run() = %q, want resolved value plus ~/.local/bin", got)
 	}
 }
 
@@ -204,4 +206,18 @@ func restoreEnv(t *testing.T, key string) {
 			t.Errorf("restore %s: %v", key, err)
 		}
 	})
+}
+
+func TestEnsureLocalBinAppendsAccountCommandDirOnce(t *testing.T) {
+	restoreEnv(t, "PATH")
+	home := t.TempDir()
+	localBin := filepath.Join(home, ".local", "bin")
+	t.Setenv("PATH", "/usr/bin")
+
+	ensureLocalBin(home)
+	ensureLocalBin(home)
+
+	if got, want := os.Getenv("PATH"), "/usr/bin"+string(os.PathListSeparator)+localBin; got != want {
+		t.Fatalf("PATH = %q, want %q", got, want)
+	}
 }

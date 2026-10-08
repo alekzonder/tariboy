@@ -9,6 +9,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/toolcheck"
 )
 
 func BuildRegistry() *registry.Registry {
@@ -286,7 +287,7 @@ func mustValidate(r *registry.Registry) {
 func daemonStatus() registry.Command {
 	return registry.Command{
 		Path:      "daemon.status",
-		Summary:   "Show daemon version, uptime and base directory",
+		Summary:   "Show daemon version, uptime, base directory and missing host tools",
 		CLIHidden: true,
 		HTTP:      &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -294,7 +295,11 @@ func daemonStatus() registry.Command {
 			if c.Store != nil {
 				schema, _ = c.Store.SchemaVersion()
 			}
+			tools := toolcheck.Check()
 			return map[string]any{
+				"state":          tools.State,
+				"missing_tools":  tools.MissingTools,
+				"message":        tools.Message,
 				"version":        c.Version,
 				"pid":            os.Getpid(),
 				"started_at":     c.StartedAt.UTC().Format(time.RFC3339),
