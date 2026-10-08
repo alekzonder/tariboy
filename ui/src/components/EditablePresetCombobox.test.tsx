@@ -66,6 +66,36 @@ describe("EditablePresetCombobox", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  it("labels groups, shows their notes, and filters across them", () => {
+    const onChange = vi.fn();
+    render(
+      <EditablePresetCombobox
+        ariaLabel="model"
+        value=""
+        groups={[
+          { label: "From harness", options: ["gpt-6-astra", "gpt-5.6-luna"] },
+          { label: "Saved", options: ["private-model"] },
+          { label: "Other", options: [], note: "codex not found on PATH" },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByRole("combobox", { name: "model" });
+    fireEvent.focus(input);
+
+    const harness = screen.getByRole("group", { name: "From harness" });
+    expect(harness).toContainElement(screen.getByRole("option", { name: "gpt-6-astra" }));
+    expect(screen.getByRole("group", { name: "Saved" })).toContainElement(
+      screen.getByRole("option", { name: "private-model" }),
+    );
+    expect(screen.getByText("codex not found on PATH")).toBeVisible();
+
+    fireEvent.change(input, { target: { value: "luna" } });
+    expect(screen.getByRole("option", { name: "gpt-5.6-luna" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "gpt-6-astra" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Saved" })).not.toBeInTheDocument();
+  });
+
   it("renders an empty state and respects disabled", () => {
     render(
       <EditablePresetCombobox

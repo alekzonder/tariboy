@@ -15,6 +15,7 @@ import type { AgentView } from "@/lib/types";
 import { resolveDaemon, unresolvedDaemon, type Daemon } from "@/lib/daemons";
 import { HARNESSES, ImageCombobox } from "@/components/AgentFormFields";
 import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
+import { useHarnessCatalog } from "@/hooks/useHarnessCatalog";
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ import {
 } from "@/components/ui/select";
 import {
   rememberRuntimePreset,
-  runtimePresetOptions,
+  runtimePresetGroups,
 } from "@/lib/runtimePresets";
 import {
   cloneAgentDraft,
@@ -181,14 +182,25 @@ function CreateAgentDialogForm({
     currentManifest?.schema_version === 1
       ? (currentManifest.harness?.effort ?? "")
       : "";
-  const modelPresets = runtimePresetOptions(draft.harness, "models", [
-    defaultModel,
-    draft.model,
-  ]);
-  const effortPresets = runtimePresetOptions(draft.harness, "efforts", [
-    defaultEffort,
-    draft.effort,
-  ]);
+  // An unresolved host asks nothing: a null target would address the local
+  // daemon instead of the selected one.
+  const harnessCatalog = useHarnessCatalog(
+    target,
+    targetIsCurrent && targetIsUsable ? draft.harness : "",
+  );
+  const modelPresets = runtimePresetGroups({
+    harness: draft.harness,
+    field: "models",
+    catalog: harnessCatalog,
+    extras: [defaultModel, draft.model],
+  });
+  const effortPresets = runtimePresetGroups({
+    harness: draft.harness,
+    field: "efforts",
+    catalog: harnessCatalog,
+    model: draft.model,
+    extras: [defaultEffort, draft.effort],
+  });
   const displayedPlugins = schemaV2
     ? (currentManifest?.plugins?.map((plugin) => plugin.name) ?? [])
     : draft.plugins;
@@ -690,7 +702,7 @@ function CreateAgentDialogForm({
                   id="create-agent-effort"
                   ariaLabel="effort"
                   value={draft.effort}
-                  options={effortPresets}
+                  groups={effortPresets}
                   onChange={(value) => updateDraft("effort", value)}
                   placeholder="image default"
                   disabled={formDisabled || loadingManifest}
@@ -702,7 +714,7 @@ function CreateAgentDialogForm({
                     id="create-agent-model"
                     ariaLabel="model"
                     value={draft.model}
-                    options={modelPresets}
+                    groups={modelPresets}
                     onChange={(value) => updateDraft("model", value)}
                     placeholder="image default"
                     disabled={formDisabled || loadingManifest}

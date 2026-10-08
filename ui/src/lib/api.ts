@@ -11,6 +11,7 @@ import type {
   AgentEvent,
   StatusHistoryEvent,
   AgentLifecycleResult,
+  HarnessCatalog,
 } from "./types";
 import type { Daemon } from "./daemons";
 
@@ -917,6 +918,15 @@ export const imageManifestGetOn = (target: ApiTarget, ref: string, expectedDiges
   );
 export const imageManifestGet = (ref: string, target?: ApiTarget, expectedDigest?: string) =>
   imageManifestGetOn(target, ref, expectedDigest);
+
+// The models and efforts the harness CLI on that host supports. CLI failures
+// arrive in the error field of a 200 response.
+export const getHarnessModelsOn = (target: ApiTarget, harness: string) =>
+  apiOn<HarnessCatalog>(
+    resolveTarget(target),
+    "GET",
+    `/api/harnesses/${encodeURIComponent(harness)}/models`,
+  );
 
 export const imagePromptGetOn = (target: ApiTarget, ref: string, expectedDigest?: string) =>
   apiOn<{ prompt: string }>(

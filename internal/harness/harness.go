@@ -257,6 +257,9 @@ func (codex) Command(cwd, promptPath string, cfg Config) ([]string, []string, er
 	if cfg.Model != "" {
 		argv = append(argv, "--model", cfg.Model)
 	}
+	if cfg.Effort != "" {
+		argv = append(argv, "-c", "model_reasoning_effort="+strconv.Quote(cfg.Effort))
+	}
 	return argv, nil, nil
 }
 
@@ -273,12 +276,16 @@ func (opencode) Command(cwd, promptPath string, cfg Config) ([]string, []string,
 	// `opencode run` reads the whole prompt from stdin whenever stdin is not a
 	// tty, and concatenates it after any positional message — so the prompt is
 	// passed by redirection only, never in argv.
-	return []string{
+	argv := []string{
 		"/bin/sh", "-c",
 		promptOnStdinCommand,
 		"tariboy-harness", "opencode", promptPath,
 		"run",
-	}, nil, nil
+	}
+	if cfg.Model != "" {
+		argv = append(argv, "--model", cfg.Model)
+	}
+	return argv, nil, nil
 }
 
 func (opencode) SkillBridge(request SkillBridgeRequest) (SkillBridge, error) {

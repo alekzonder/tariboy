@@ -27,6 +27,13 @@ import { Switch } from "@/components/ui/switch";
 import { SecretsPanel } from "@/components/SecretsPanel";
 import { RetentionPanel } from "@/components/RetentionPanel";
 import { ShellScriptEditor } from "@/components/ShellScriptEditor";
+import { EditablePresetCombobox } from "@/components/EditablePresetCombobox";
+import { useHarnessCatalog } from "@/hooks/useHarnessCatalog";
+import {
+  rememberRuntimePreset,
+  runtimePresetGroups,
+  type PresetGroup,
+} from "@/lib/runtimePresets";
 
 // Operator-selectable harnesses. This is intentionally a SUBSET of the backend
 // allowlist (internal/harness.Get() = claude | codex | opencode | cursor | stub): 'stub'
@@ -327,6 +334,7 @@ function useSectionDraft(
   fields: readonly SectionField[],
   reload: () => Promise<AgentView | null>,
   savedMessage: string,
+  onAcknowledged?: (key: string, value: string) => void,
 ): SectionDraft {
   const baseline = useMemo(() => readSection(fields, view), [fields, view]);
   const [drafts, setDrafts] = useState<Values>({});
@@ -388,6 +396,7 @@ function useSectionDraft(
       try {
         await f.submit(target, name, f.normalize(drafts[f.key]));
         acknowledged.push(f.key);
+        onAcknowledged?.(f.key, f.normalize(drafts[f.key]));
       } catch (cause) {
         // Stop here: every field after this one stays an unsent dirty draft.
         failedKey = f.key;
@@ -433,9 +442,11 @@ function useSectionDraft(
 function DraftField({
   field,
   section,
+  presets,
 }: {
   field: SectionField;
   section: SectionDraft;
+  presets?: readonly PresetGroup[];
 }) {
   const value = section.draft[field.key] ?? "";
   const fieldError = section.fieldErrors[field.key] ?? "";
@@ -443,7 +454,18 @@ function DraftField({
   return (
     <div className="space-y-1.5">
       <Label htmlFor={field.key}>{field.label}</Label>
-      {field.options ? (
+      {presets ? (
+        <EditablePresetCombobox
+          id={field.key}
+          ariaLabel={field.label}
+          value={value}
+          groups={presets}
+          describedBy={describedBy}
+          invalid={Boolean(fieldError)}
+          onChange={(next) => section.setField(field.key, next)}
+          placeholder="image default"
+        />
+      ) : field.options ? (
         <select
           id={field.key}
           value={value}
@@ -711,8 +733,28 @@ function RuntimeConfigEditor({
     RUNTIME_FIELDS,
     reload,
     "Runtime settings saved",
+    (key, value) =>
+      rememberRuntimePreset(
+        view.harness,
+        key === "model" ? "models" : "efforts",
+        value,
+      ),
   );
   const [model, effort] = RUNTIME_FIELDS;
+  const catalog = useHarnessCatalog(target, view.harness);
+  const modelPresets = runtimePresetGroups({
+    harness: view.harness,
+    field: "models",
+    catalog,
+    extras: [view.model],
+  });
+  const effortPresets = runtimePresetGroups({
+    harness: view.harness,
+    field: "efforts",
+    catalog,
+    model: section.draft.model,
+    extras: [view.effort],
+  });
 
   // Options the dropdown renders: the operator subset, plus the agent's current
   // harness if it falls outside that subset (e.g. a test agent already on
@@ -744,8 +786,8 @@ function RuntimeConfigEditor({
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <DraftField field={model} section={section} />
-          <DraftField field={effort} section={section} />
+          <DraftField field={model} section={section} presets={modelPresets} />
+          <DraftField field={effort} section={section} presets={effortPresets} />
         </div>
 
         <DraftFooter section={section} saveLabel="Save runtime settings" />

@@ -122,7 +122,7 @@ func TestCodexAdapter(t *testing.T) {
 		t.Fatalf("type = %q", a.Type())
 	}
 	prompt := writePrompt(t, "DO THE WORK")
-	argv, _, err := a.Command("/w", prompt, Config{Model: "gpt-5"})
+	argv, _, err := a.Command("/w", prompt, Config{Model: "gpt-5", Effort: "high"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestCodexAdapter(t *testing.T) {
 		"/bin/sh", "-c", promptOnStdinCommand,
 		"tariboy-harness", "codex", prompt,
 		"exec", "-c", "allow_login_shell=false", "--json", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "--cd", "/w",
-		"--model", "gpt-5",
+		"--model", "gpt-5", "-c", `model_reasoning_effort="high"`,
 	}
 	if len(argv) != len(want) {
 		t.Fatalf("argv = %v, want %v", argv, want)
@@ -142,6 +142,22 @@ func TestCodexAdapter(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(argv, " "), "DO THE WORK") {
 		t.Fatalf("prompt body must be passed via file, not argv: %v", argv)
+	}
+}
+
+func TestOpenCodeAdapterPassesModel(t *testing.T) {
+	prompt := writePrompt(t, "DO THE WORK")
+	argv, _, err := opencode{}.Command("/w", prompt, Config{Model: "openai/gpt-5", Effort: "high"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"/bin/sh", "-c", promptOnStdinCommand,
+		"tariboy-harness", "opencode", prompt,
+		"run", "--model", "openai/gpt-5",
+	}
+	if !reflect.DeepEqual(argv, want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
 	}
 }
 

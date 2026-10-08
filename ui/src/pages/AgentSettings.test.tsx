@@ -9,6 +9,8 @@ import {
 import { toast } from "sonner";
 import { AgentNameContext } from "@/lib/agent";
 import type { Daemon } from "@/lib/daemons";
+import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
+import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import AgentSettings from "./AgentSettings";
 
 vi.mock("sonner", () => ({
@@ -18,6 +20,8 @@ vi.mock("sonner", () => ({
 afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  clearHarnessCatalogCache();
+  localStorage.clear();
 });
 
 const view = {
@@ -135,6 +139,13 @@ function stubFetch(
       let result: unknown = server;
       if (path.endsWith("/shell-script")) result = init?.method === "POST" ? { saved: true } : { script: shellScript };
       else if (path.endsWith("/secrets")) result = { keys: [], count: 0 };
+      else if (path.includes("/api/harnesses/"))
+        result = {
+          harness: "claude",
+          models: [{ id: "fable" }, { id: "opus[1m]" }],
+          efforts: ["low", "max"],
+          error: "",
+        };
       else if (path.endsWith("/retention"))
         result = {
           keep_iterations: 0,
@@ -683,6 +694,33 @@ it("saves only the changed runtime field and leaves loop alone", async () => {
   expect(
     (calls.find((c) => c.method === "POST")?.body as { value?: string })?.value,
   ).toBe("high");
+});
+
+it("suggests harness and saved runtime values and remembers saved ones", async () => {
+  const calls: Call[] = [];
+  stubFetch(calls);
+  renderPage();
+
+  const model = await screen.findByLabelText("Model");
+  fireEvent.focus(model);
+  expect(await screen.findByRole("option", { name: "opus[1m]" })).toBeVisible();
+  expect(screen.getByRole("group", { name: "From harness" })).toContainElement(
+    screen.getByRole("option", { name: "fable" }),
+  );
+  expect(calls.map((c) => c.path)).toContain("/api/harnesses/claude/models");
+
+  fireEvent.change(model, { target: { value: "my-model" } });
+  fireEvent.blur(model);
+  fireEvent.click(screen.getByText("Save runtime settings"));
+  expect(await screen.findByText("Runtime settings saved")).toBeInTheDocument();
+  expect(
+    JSON.parse(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY) ?? "{}"),
+  ).toEqual({ claude: { models: ["my-model"] } });
+
+  fireEvent.focus(screen.getByLabelText("Effort"));
+  expect(screen.getByRole("group", { name: "From harness" })).toContainElement(
+    screen.getByRole("option", { name: "max" }),
+  );
 });
 
 it("gives the eight batched fields and Secrets the next-iteration timing helper", async () => {

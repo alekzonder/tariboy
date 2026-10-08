@@ -88,10 +88,11 @@ An image is a reusable template. It is not an agent and does not start work.
 
 Open **Agents → New agent**, select the host and image, and name the workspace.
 Harness, model, and effort are shown directly in the Runtime section. Model and
-effort suggestions come from Desktop presets and remain editable. They are
-runtime settings, not schema-v2 image content. A successful create remembers a
-custom model or effort locally for that harness; the list is not a live check
-of models installed on the host.
+effort stay editable and suggest values in two groups: **From harness** lists
+what the harness CLI on the selected host reports, and **Saved** lists values
+entered earlier for that harness. They are runtime settings, not schema-v2
+image content. A successful create remembers the model and effort locally for
+that harness.
 Interactive and Autopilot are independent:
 
 - **Interactive** is on by default and enables Console; turn it off for a

@@ -1,4 +1,18 @@
+import type { HarnessCatalog } from "./types";
+
 export type RuntimePresetField = "models" | "efforts";
+
+export interface PresetGroup {
+  label: string;
+  options: string[];
+  note?: string;
+}
+
+export interface HarnessCatalogState {
+  loading: boolean;
+  catalog: HarnessCatalog | null;
+  error: string;
+}
 
 export const RUNTIME_PRESETS_STORAGE_KEY = "tariboy:runtime-presets:v1";
 export const EFFORT_PRESETS = [
@@ -80,15 +94,6 @@ function loadLearnedPresets(): LearnedRuntimePresets {
   }
 }
 
-function builtInPresets(
-  harness: string,
-  field: RuntimePresetField,
-): readonly string[] {
-  return field === "models"
-    ? (MODEL_PRESETS_BY_HARNESS[harness] ?? [])
-    : EFFORT_PRESETS;
-}
-
 function uniqueTrimmed(groups: readonly (readonly string[])[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -109,7 +114,7 @@ export function runtimePresetOptions(
   extras: readonly string[] = [],
 ): string[] {
   const learned = loadLearnedPresets()[harness]?.[field] ?? [];
-  return uniqueTrimmed([builtInPresets(harness, field), learned, extras]);
+  return uniqueTrimmed([learned, extras]);
 }
 
 export function rememberRuntimePreset(
@@ -118,7 +123,7 @@ export function rememberRuntimePreset(
   rawValue: string,
 ): void {
   const value = rawValue.trim();
-  if (!harness || !value || builtInPresets(harness, field).includes(value)) return;
+  if (!harness || !value) return;
 
   const learned = loadLearnedPresets();
   const current = learned[harness]?.[field] ?? [];
@@ -135,4 +140,45 @@ export function rememberRuntimePreset(
   } catch {
     // Presets are a convenience. Storage failures must not block creation.
   }
+}
+
+function catalogValues(
+  catalog: HarnessCatalog,
+  field: RuntimePresetField,
+  model: string,
+): string[] {
+  if (field === "models") return catalog.models.map((entry) => entry.id);
+  const selected = catalog.models.find((entry) => entry.id === model.trim());
+  return selected?.efforts?.length ? selected.efforts : catalog.efforts;
+}
+
+// Suggestions for the model and effort fields, split into what the harness CLI
+// on the selected host reports and what the operator saved earlier. Saved
+// values the harness already reports are listed once, under the harness.
+export function runtimePresetGroups({
+  harness,
+  field,
+  catalog,
+  model = "",
+  extras = [],
+}: {
+  harness: string;
+  field: RuntimePresetField;
+  catalog: HarnessCatalogState;
+  model?: string;
+  extras?: readonly string[];
+}): PresetGroup[] {
+  const reported = catalog.catalog
+    ? uniqueTrimmed([catalogValues(catalog.catalog, field, model)])
+    : [];
+  const fromHarness: PresetGroup = { label: "From harness", options: reported };
+  if (!harness) fromHarness.note = "Choose a harness to list its values";
+  else if (catalog.loading) fromHarness.note = "Loading…";
+  else if (catalog.error) fromHarness.note = catalog.error;
+  else if (reported.length === 0) fromHarness.note = "The harness reports no values";
+
+  const saved = runtimePresetOptions(harness, field, extras).filter(
+    (value) => !reported.includes(value),
+  );
+  return [fromHarness, { label: "Saved", options: saved }];
 }
