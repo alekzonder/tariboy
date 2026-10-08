@@ -289,6 +289,9 @@ mod macos {
     type ActivationCallback = unsafe extern "C" fn(*const c_char);
     type ShowCompletion = unsafe extern "C" fn(c_int, *mut c_void);
 
+    // build.rs compiles task_notifications.m; see the link note there.
+    #[link(name = "task_notifications", kind = "static")]
+    #[link(name = "UserNotifications", kind = "framework")]
     extern "C" {
         fn tariboy_notifications_init(callback: Option<ActivationCallback>);
         fn tariboy_notification_show(
