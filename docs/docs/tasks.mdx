@@ -70,7 +70,10 @@ Flexible tasks use `open`, `in_progress`, `wait_customer`, `done`, or
 `cancelled` status. When the assigned agent asks the task customer a question,
 the same comment transaction moves a non-terminal task to `wait_customer`.
 The last customer answer returns it to `in_progress`, unless an operator made an
-intervening status change. Questions for another principal do not change status.
+intervening status change. A customer comment that mentions the assigned agent
+(`@agent:NAME`) also returns a `wait_customer` task to `in_progress` once no
+question to the customer stays open. Questions for another principal do not
+change status.
 
 A task that follows a workflow reports the workflow status (`plan`, `review`, ...)
 as `status` and one of those five values as `category`, which the daemon derives

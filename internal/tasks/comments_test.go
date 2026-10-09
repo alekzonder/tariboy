@@ -296,6 +296,43 @@ func TestUnrelatedCommentDoesNotResumeManualWaitCustomer(t *testing.T) {
 	}
 }
 
+func TestCustomerMentionOfAssigneeResumesWaitCustomer(t *testing.T) {
+	svc, task := assignedTask(t, "worker", StatusWaitCustomer)
+	ctx := context.Background()
+	before, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, CustomerActor("customer"), task.Key, AddCommentInput{
+		Body: "@agent:worker continue",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertTaskStatus(t, svc, task.Key, StatusInProgress)
+	after, err := svc.ListEvents(ctx, CustomerActor("customer"), task.Key, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before)+2 || after[len(after)-2].Kind != "task.updated" || after[len(after)-1].Kind != "task.comment_added" {
+		t.Fatalf("event tail after summon = %#v", after[len(before):])
+	}
+}
+
+func TestCustomerMentionOfHolderKeepsWorkflowCustomerStatus(t *testing.T) {
+	svc, actor, task := requestFixture(t)
+	ctx := context.Background()
+	if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "approval", "decide now"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddComment(ctx, actor, task.Key, AddCommentInput{Body: "@agent:dev-1 continue"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := taskByKey(svc.db, task.Key)
+	if got.WorkflowStatus != "approval" || got.Category != StatusWaitCustomer || got.WaitingOn != WaitingOnCustomer {
+		t.Fatalf("after the summon = %#v", got)
+	}
+}
+
 func TestCustomerWaitStatusNonTransitions(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -310,6 +347,7 @@ func TestCustomerWaitStatusNonTransitions(t *testing.T) {
 		{name: "wait for another principal", actor: AgentActor("worker"), mention: "@agent:reviewer", start: StatusInProgress, want: StatusInProgress},
 		{name: "done task", actor: AgentActor("worker"), mention: "@user:customer", start: StatusDone, want: StatusDone},
 		{name: "cancelled task", actor: AgentActor("worker"), mention: "@user:customer", start: StatusCancelled, want: StatusCancelled},
+		{name: "customer mentions another agent", actor: CustomerActor("customer"), mention: "@agent:reviewer", start: StatusWaitCustomer, want: StatusWaitCustomer},
 		{name: "manual status before answer", actor: CustomerActor("customer"), start: StatusInProgress, manualBeforeAnswer: true, want: StatusOpen},
 	}
 	for _, tt := range tests {
