@@ -4,7 +4,11 @@ import { RetentionPanel } from "./RetentionPanel";
 
 afterEach(() => vi.restoreAllMocks());
 
-const POLICY = { keep_iterations: 5, keep_days: 7, max_bytes: 1024, archive: true };
+const POLICY = {
+  keep_iterations: 5, keep_days: 7, max_bytes: 1024,
+  override: { keep_iterations: 5, keep_days: 0, max_bytes: 0 },
+  default: { keep_iterations: 10, keep_days: 7, max_bytes: 1024 },
+};
 
 type Call = { path: string; method?: string; body: unknown };
 
@@ -38,14 +42,17 @@ it("labels the section, its limits and its timings, and leaves the metadata read
 
   expect(await screen.findByText("Retention and cleanup")).toBeInTheDocument();
   expect(screen.getByText("Keep the history you need, then review cleanup safely.")).toBeInTheDocument();
+  // The fields edit the agent's own override; 0 inherits the server default.
   await waitFor(() => expect(screen.getByLabelText("Keep iterations")).toHaveValue("5"));
-  expect(screen.getByLabelText("Keep days")).toHaveValue("7");
-  // Keep iterations, keep days, the non-destructive actions and prune: four
-  // immediate helpers, and no editable control without one.
-  expect(screen.getAllByText("Takes effect immediately.")).toHaveLength(4);
-  // Archive and max-bytes are displayed policy metadata, not editable fields.
+  expect(screen.getByLabelText("Keep days")).toHaveValue("0");
+  expect(screen.getByText("0 = server default (10). Takes effect immediately.")).toBeInTheDocument();
+  expect(screen.getByText("0 = server default (7). Takes effect immediately.")).toBeInTheDocument();
+  // The non-destructive actions and prune: two plain immediate helpers.
+  expect(screen.getAllByText("Takes effect immediately.")).toHaveLength(2);
+  // The effective policy is displayed metadata, not an editable field.
   const meta = screen.getByText(/max_bytes/);
-  expect(meta.textContent).toContain("archive: on");
+  expect(meta.textContent).toContain("effective: 5 iterations · 7 days · max_bytes 1024");
+  expect(meta.textContent).toContain("archived with their database rows");
   expect(meta.textContent).not.toContain("Takes effect");
 });
 

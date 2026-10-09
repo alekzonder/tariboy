@@ -1,13 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MaintenanceSettingsCard } from "./MaintenanceSettings";
-import { getMaintenanceOn, runMaintenanceOn, setMaintenanceOn, type MaintenanceSettings } from "@/lib/api";
+import {
+  getIterationRetentionDefaultOn, getMaintenanceOn, runMaintenanceOn, setIterationRetentionDefaultOn,
+  setMaintenanceOn, type MaintenanceSettings,
+} from "@/lib/api";
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/api")>(),
   getMaintenanceOn: vi.fn(),
   setMaintenanceOn: vi.fn(),
   runMaintenanceOn: vi.fn(),
+  getIterationRetentionDefaultOn: vi.fn(),
+  setIterationRetentionDefaultOn: vi.fn(),
 }));
 
 const defaults: MaintenanceSettings = {
@@ -23,6 +28,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getMaintenanceOn).mockResolvedValue({ settings: defaults, last_run: lastRun });
   vi.mocked(setMaintenanceOn).mockImplementation(async (_t, s) => s);
+  vi.mocked(getIterationRetentionDefaultOn).mockResolvedValue({ keep_iterations: 50, keep_days: 0, max_bytes: 0 });
+  vi.mocked(setIterationRetentionDefaultOn).mockImplementation(async (_t, p) => p);
 });
 
 describe("MaintenanceSettingsCard", () => {
@@ -44,6 +51,17 @@ describe("MaintenanceSettingsCard", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Compact after cleanup" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(setMaintenanceOn).toHaveBeenCalledWith(target, { ...defaults, retention_days: 120, compact: false }));
+  });
+
+  it("edits the server-wide iteration retention defaults", async () => {
+    const target = { id: "r", label: "R", baseURL: "https://r.test", token: "t" };
+    render(<MaintenanceSettingsCard target={target} />);
+    expect(await screen.findByLabelText("Keep iterations per agent")).toHaveValue("50");
+    fireEvent.change(screen.getByLabelText("Keep iterations for (days)"), { target: { value: "30" } });
+    expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(setIterationRetentionDefaultOn).toHaveBeenCalledWith(target, { keep_iterations: 50, keep_days: 30, max_bytes: 0 }));
+    expect(getIterationRetentionDefaultOn).toHaveBeenCalledWith(target);
   });
 
   it("shows a failed previous run on load", async () => {

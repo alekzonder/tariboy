@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"database/sql"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,6 +17,13 @@ import (
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/store"
 )
+
+// RetentionAPI bundles the policy store and the pruner for the command layer
+// (set on registry.Ctx).
+type RetentionAPI struct {
+	Policies *Store
+	Pruner   *Pruner
+}
 
 type Report struct {
 	Agent      string   `json:"agent"`
@@ -92,14 +100,12 @@ func (p *Pruner) PruneAgent(name string, dryRun bool) (Report, error) {
 			rep.FreedBytes += size
 			continue
 		}
-		if pol.Archive {
-			arch := filepath.Join(p.agentsDir, name, "archive", id+".tar.gz")
-			if err := p.archiveDir(dir, arch); err != nil {
-				p.log.Warn("archive iteration", "agent", name, "id", id, "err", err)
-				continue // skip: leave dir + rows intact
-			}
-			rep.Archived = append(rep.Archived, id)
+		arch := filepath.Join(p.agentsDir, name, "archive", id+".tar.gz")
+		if err := p.archive(id, dir, arch); err != nil {
+			p.log.Warn("archive iteration", "agent", name, "id", id, "err", err)
+			continue // no backup, no deletion: leave dir + rows intact
 		}
+		rep.Archived = append(rep.Archived, id)
 		if err := p.deleteRows(id); err != nil {
 			p.log.Warn("delete iteration rows", "agent", name, "id", id, "err", err)
 			continue
@@ -213,13 +219,72 @@ func (p *Pruner) deleteRows(id string) error {
 	return tx.Commit()
 }
 
-// archiveDir writes a deterministic tar.gz of dir to dest (0600).
-func (p *Pruner) archiveDir(dir, dest string) error {
+// dbRows returns the rows pruning deletes for iteration id, keyed by table,
+// as column -> value maps.
+func (p *Pruner) dbRows(id string) (map[string][]map[string]any, error) {
+	out := map[string][]map[string]any{}
+	for table, q := range map[string]string{
+		"iterations":  `SELECT * FROM iterations WHERE id=?`,
+		"ai_requests": `SELECT * FROM ai_requests WHERE iteration=?`,
+	} {
+		rows, err := p.db.Query(q, id)
+		if err != nil {
+			return nil, err
+		}
+		cols, err := rows.Columns()
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[table] = []map[string]any{}
+		for rows.Next() {
+			vals := make([]any, len(cols))
+			ptrs := make([]any, len(cols))
+			for i := range vals {
+				ptrs[i] = &vals[i]
+			}
+			if err := rows.Scan(ptrs...); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			row := map[string]any{}
+			for i, c := range cols {
+				if b, ok := vals[i].([]byte); ok {
+					vals[i] = string(b)
+				}
+				row[c] = vals[i]
+			}
+			out[table] = append(out[table], row)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// archive writes a deterministic tar.gz (0600) of the iteration dir plus
+// db-rows.json holding the iteration's DB rows. A missing dir archives the
+// rows alone.
+func (p *Pruner) archive(id, dir, dest string) error {
+	rows, err := p.dbRows(id)
+	if err != nil {
+		return err
+	}
+	rowsJSON, err := json.MarshalIndent(rows, "", "  ")
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
 		return err
 	}
 	var files []string
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if path == dir && os.IsNotExist(err) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -240,6 +305,14 @@ func (p *Pruner) archiveDir(dir, dest string) error {
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 	mod := p.clock().UTC()
+	add := func(name string, data []byte) error {
+		hdr := &tar.Header{Name: name, Mode: 0o600, Size: int64(len(data)), ModTime: mod, Format: tar.FormatPAX}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		_, err := tw.Write(data)
+		return err
+	}
 	for _, path := range files {
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
@@ -249,18 +322,24 @@ func (p *Pruner) archiveDir(dir, dest string) error {
 		if err != nil {
 			return err
 		}
-		hdr := &tar.Header{Name: filepath.ToSlash(rel), Mode: 0o600, Size: int64(len(data)), ModTime: mod, Format: tar.FormatPAX}
-		if err := tw.WriteHeader(hdr); err != nil {
+		if err := add(filepath.ToSlash(rel), data); err != nil {
 			return err
 		}
-		if _, err := tw.Write(data); err != nil {
-			return err
-		}
+	}
+	if err := add("db-rows.json", rowsJSON); err != nil {
+		return err
 	}
 	if err := tw.Close(); err != nil {
 		return err
 	}
-	return gz.Close()
+	if err := gz.Close(); err != nil {
+		return err
+	}
+	// The archive is the only copy once the iteration is deleted.
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 func dirSize(dir string) int64 {

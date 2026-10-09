@@ -344,6 +344,23 @@ export const setMaintenanceOn = (target: ApiTarget, settings: MaintenanceSetting
     compact: settings.compact,
     "compact-threshold-pct": settings.compact_threshold_pct,
   });
+// Server-wide iteration retention: 0 is unlimited; an agent's non-zero field
+// overrides it.
+export interface IterationRetention {
+  keep_iterations: number;
+  keep_days: number;
+  max_bytes: number;
+}
+export const getIterationRetentionDefaultOn = (target: ApiTarget) =>
+  agentGetOn<IterationRetention>(target, "default", "retention");
+export const setIterationRetentionDefaultOn = async (target: ApiTarget, p: IterationRetention): Promise<IterationRetention> => {
+  const r = await agentPostOn<IterationRetention>(target, "default", "retention", {
+    "keep-iterations": p.keep_iterations,
+    "keep-days": p.keep_days,
+    "max-bytes": p.max_bytes,
+  });
+  return { keep_iterations: r.keep_iterations, keep_days: r.keep_days, max_bytes: r.max_bytes };
+};
 export const runMaintenanceOn = (target: ApiTarget) =>
   apiOn<MaintenanceRun>(resolveTarget(target), "POST", "/api/maintenance/run");
 export const getAgentShellScriptOn = (target: ApiTarget, name: string) =>

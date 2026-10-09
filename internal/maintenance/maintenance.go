@@ -1,6 +1,7 @@
 // Package maintenance runs the daemon's nightly database upkeep: a consistent
-// backup of the whole tariboyd.db, then deletion of data older than the
-// retention period, then an optional VACUUM that returns the freed space.
+// backup of the whole tariboyd.db, then archiving and pruning of agent
+// iterations past their retention policies, then deletion of data older than
+// the retention period, then an optional VACUUM that returns the freed space.
 // Cleanup never runs without a fresh backup.
 package maintenance
 
@@ -89,6 +90,10 @@ type Service struct {
 	// key; the files of a purged task are removed after the purge commits.
 	// Empty leaves task files alone.
 	TasksDir string
+	// PruneIterations archives and prunes agent iterations per their
+	// retention policies after the backup and returns how many it pruned.
+	// Nil skips the step.
+	PruneIterations func() (int64, error)
 
 	st        *store.Store
 	backupDir string
@@ -178,6 +183,13 @@ func (s *Service) runLocked(res *Result) error {
 		return fmt.Errorf("backup: %w", err)
 	}
 	var errs []error
+	if s.PruneIterations != nil {
+		n, err := s.PruneIterations()
+		res.Deleted["iterations"] = n
+		if err != nil {
+			errs = append(errs, fmt.Errorf("iterations: %w", err))
+		}
+	}
 	if set.RetentionDays > 0 {
 		cutoff := s.now().UTC().AddDate(0, 0, -set.RetentionDays).Format(time.RFC3339Nano)
 		errs = append(errs, s.cleanup(cutoff, res.Deleted))

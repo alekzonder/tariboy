@@ -314,7 +314,10 @@ cannot overlap. Edits made during a save remain an unsaved draft.
 
 **Settings → General** also carries **Backup & data retention** for the same
 explicit host: the nightly switch and time, retention days, backups to keep,
-compaction switch and threshold, **Save**, and **Run now**. The card shows the
+compaction switch and threshold, the server-wide iteration retention defaults
+(keep iterations per agent, keep days, max bytes; `0` is unlimited), **Save**,
+and **Run now**. **Save** stores the maintenance settings and the iteration
+defaults. The card shows the
 last run's time, deleted counts, and size change; a failed save or run is
 reported in place. See
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
@@ -903,6 +906,11 @@ only after success; on failure it keeps the dialog open, restores its controls,
 and reports the error so the operator can retry. **Kill session** remains a
 separate action with its existing browser confirmation and does not delete the
 agent or its durable data.
+
+An agent's **Retention and cleanup** card edits that agent's override of the
+server-wide iteration defaults: each field shows `0 = server default (N)`, and
+the card lists the effective limits and that pruned iterations are archived
+with their database rows first.
 
 The in-app retention prune is guarded by a confirmation dialog that names
 the operation as permanently destructive and bounds it to the current

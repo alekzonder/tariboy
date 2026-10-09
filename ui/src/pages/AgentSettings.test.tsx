@@ -151,7 +151,8 @@ function stubFetch(
           keep_iterations: 0,
           keep_days: 0,
           max_bytes: 0,
-          archive: false,
+          override: { keep_iterations: 0, keep_days: 0, max_bytes: 0 },
+          default: { keep_iterations: 0, keep_days: 0, max_bytes: 0 },
         };
       else if (path.endsWith("/prompt"))
         result = {

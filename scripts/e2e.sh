@@ -260,7 +260,7 @@ done
 OLD_ITER="$(sa --json iteration ls retbot | grep -o 'retbot-[0-9]*-[0-9]*' | head -n1)"
 
 echo "--- retention: set keep 1 and prune"
-sa retention set retbot --keep-iterations 1 --archive true >/dev/null || { echo "FAIL: retention set"; exit 1; }
+sa retention set retbot --keep-iterations 1 >/dev/null || { echo "FAIL: retention set"; exit 1; }
 sa --json retention get retbot | grep -q '"keep_iterations":1' || { echo "FAIL: retention get"; exit 1; }
 sa --json prune retbot | grep -q "\"pruned\"" || { echo "FAIL: prune"; exit 1; }
 REMAIN="$(sa --json iteration ls retbot | grep -o '"id"' | wc -l | tr -d ' ')"

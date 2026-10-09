@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  getMaintenanceOn, runMaintenanceOn, setMaintenanceOn,
-  type ApiTarget, type MaintenanceRun, type MaintenanceSettings,
+  getIterationRetentionDefaultOn, getMaintenanceOn, runMaintenanceOn, setIterationRetentionDefaultOn, setMaintenanceOn,
+  type ApiTarget, type IterationRetention, type MaintenanceRun, type MaintenanceSettings,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +28,8 @@ function describeRun(run: MaintenanceRun) {
 export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
   const [form, setForm] = useState<MaintenanceSettings | null>(null);
   const [saved, setSaved] = useState<MaintenanceSettings | null>(null);
+  const [ret, setRet] = useState<IterationRetention | null>(null);
+  const [savedRet, setSavedRet] = useState<IterationRetention | null>(null);
   const [lastRun, setLastRun] = useState<MaintenanceRun | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -41,6 +43,14 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
         setSaved(r.settings);
         setLastRun(r.last_run);
         setError(r.last_run?.error ?? "");
+      })
+      .catch((e) => { if (current) setError(reason(e)); });
+    getIterationRetentionDefaultOn(target)
+      .then((r) => {
+        if (!current) return;
+        const p = { keep_iterations: r.keep_iterations, keep_days: r.keep_days, max_bytes: r.max_bytes };
+        setRet(p);
+        setSavedRet(p);
       })
       .catch((e) => { if (current) setError(reason(e)); });
     return () => { current = false; };
@@ -57,6 +67,10 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
     const next = await setMaintenanceOn(target, form);
     setForm(next);
     setSaved(next);
+    if (!ret) return;
+    const nextRet = await setIterationRetentionDefaultOn(target, ret);
+    setRet(nextRet);
+    setSavedRet(nextRet);
   });
   const run = () => act(async () => {
     const r = await runMaintenanceOn(target);
@@ -64,16 +78,18 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
     if (r.error) setError(r.error);
   });
   const patch = (p: Partial<MaintenanceSettings>) => setForm((f) => (f ? { ...f, ...p } : f));
+  const patchRet = (p: Partial<IterationRetention>) => setRet((r) => (r ? { ...r, ...p } : r));
   const num = (v: string) => Number.parseInt(v, 10) || 0;
-  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved) || JSON.stringify(ret) !== JSON.stringify(savedRet);
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Backup & data retention</CardTitle>
         <CardDescription>
-          Every night the whole database is backed up; after a successful backup, finished tasks,
-          AI proxy usage, delivered messages, and events older than the retention period are deleted
+          Every night the whole database is backed up; after a successful backup, agent iterations
+          beyond the iteration limits are archived with their database rows and deleted, finished tasks,
+          AI proxy usage, delivered messages, and events older than the retention period are deleted,
           and the database is compacted.
         </CardDescription>
       </CardHeader>
@@ -107,6 +123,28 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
                   onChange={(e) => patch({ compact_threshold_pct: num(e.target.value) })} />
               </div>
             </div>
+            {ret && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ret-keep-it">Keep iterations per agent</Label>
+                  <Input id="ret-keep-it" inputMode="numeric" className="h-9" value={String(ret.keep_iterations)}
+                    aria-describedby="ret-help" onChange={(e) => patchRet({ keep_iterations: num(e.target.value) })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ret-keep-days">Keep iterations for (days)</Label>
+                  <Input id="ret-keep-days" inputMode="numeric" className="h-9" value={String(ret.keep_days)}
+                    aria-describedby="ret-help" onChange={(e) => patchRet({ keep_days: num(e.target.value) })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ret-max-bytes">Max iteration bytes per agent</Label>
+                  <Input id="ret-max-bytes" inputMode="numeric" className="h-9" value={String(ret.max_bytes)}
+                    aria-describedby="ret-help" onChange={(e) => patchRet({ max_bytes: num(e.target.value) })} />
+                </div>
+                <p id="ret-help" className="text-xs text-muted-foreground sm:col-span-3">
+                  0 is unlimited. A non-zero value in an agent&apos;s retention settings overrides these.
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <Switch id="maint-compact" checked={form.compact} onCheckedChange={(v) => patch({ compact: v })} />
               <Label htmlFor="maint-compact">Compact after cleanup</Label>

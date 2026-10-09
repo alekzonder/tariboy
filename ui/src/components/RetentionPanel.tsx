@@ -10,9 +10,14 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-interface Policy { keep_iterations: number; keep_days: number; max_bytes: number; archive: boolean }
+interface Limits { keep_iterations: number; keep_days: number; max_bytes: number }
+// The effective limits, the agent's own override (0 inherits) and the server default.
+interface Policy extends Limits { override: Limits; default: Limits }
 
 const IMMEDIATE = "Takes effect immediately.";
+
+const inherits = (def: number | undefined) =>
+  def === undefined ? IMMEDIATE : `0 = server default (${def}). ${IMMEDIATE}`;
 
 const reason = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
 
@@ -33,7 +38,7 @@ export function RetentionPanel({ name }: { name: string }) {
   const [pruneError, setPruneError] = useState("");
 
   const load = () =>
-    agentGet<Policy>(name, "retention").then((p) => { setPol(p); setKeepIt(String(p.keep_iterations)); setKeepDays(String(p.keep_days)); }).catch(() => setPol(null));
+    agentGet<Policy>(name, "retention").then((p) => { setPol(p); setKeepIt(String(p.override.keep_iterations)); setKeepDays(String(p.override.keep_days)); }).catch(() => setPol(null));
   useEffect(() => { if (name) void load(); }, [name]);
 
   const prune = async () => {
@@ -62,13 +67,13 @@ export function RetentionPanel({ name }: { name: string }) {
             <Label htmlFor="keep-it">Keep iterations</Label>
             <Input id="keep-it" value={keepIt} onChange={(e) => setKeepIt(e.target.value)}
               className="h-9" aria-describedby="keep-it-help" />
-            <p id="keep-it-help" className="text-xs text-muted-foreground">{IMMEDIATE}</p>
+            <p id="keep-it-help" className="text-xs text-muted-foreground">{inherits(pol?.default.keep_iterations)}</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="keep-days">Keep days</Label>
             <Input id="keep-days" value={keepDays} onChange={(e) => setKeepDays(e.target.value)}
               className="h-9" aria-describedby="keep-days-help" />
-            <p id="keep-days-help" className="text-xs text-muted-foreground">{IMMEDIATE}</p>
+            <p id="keep-days-help" className="text-xs text-muted-foreground">{inherits(pol?.default.keep_days)}</p>
           </div>
         </div>
 
@@ -83,7 +88,12 @@ export function RetentionPanel({ name }: { name: string }) {
         </div>
 
         {/* Read-only policy metadata: not editable, so no timing string. */}
-        {pol && <div className="text-xs text-muted-foreground">archive: {pol.archive ? "on" : "off"} · max_bytes: {pol.max_bytes}</div>}
+        {pol && (
+          <div className="text-xs text-muted-foreground">
+            effective: {pol.keep_iterations} iterations · {pol.keep_days} days · max_bytes {pol.max_bytes} (0 = unlimited).
+            Pruned iterations are archived with their database rows first.
+          </div>
+        )}
 
         <section aria-labelledby="delete-retained" className="space-y-1.5 rounded-lg border border-destructive/50 p-3">
           <h3 id="delete-retained" className="text-sm font-medium">Delete retained data</h3>

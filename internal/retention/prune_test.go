@@ -3,6 +3,7 @@ package retention
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -47,7 +48,7 @@ func TestPruneKeepsNewestByCount(t *testing.T) {
 	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00Z")
 
 	ps := NewStore(s)
-	ps.Set("bot", Policy{KeepIterations: 1, Archive: true})
+	ps.Set("bot", Policy{KeepIterations: 1})
 	clk := func() time.Time { return time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC) }
 	pr := NewPruner(s, as, ps, agentsDir, clk, discardLog())
 
@@ -98,7 +99,7 @@ func TestPruneNeverRemovesRunning(t *testing.T) {
 	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00Z")
 
 	ps := NewStore(s)
-	ps.Set("bot", Policy{KeepIterations: 1, Archive: false})
+	ps.Set("bot", Policy{KeepIterations: 1})
 	pr := NewPruner(s, as, ps, agentsDir, func() time.Time { return time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC) }, discardLog())
 	rep, err := pr.PruneAgent("bot", false)
 	if err != nil {
@@ -163,7 +164,7 @@ func TestArchiveRoundTrips(t *testing.T) {
 	}
 
 	ps := NewStore(s)
-	ps.Set("bot", Policy{KeepIterations: 1, Archive: true})
+	ps.Set("bot", Policy{KeepIterations: 1})
 	clk := func() time.Time { return time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC) }
 	pr := NewPruner(s, as, ps, agentsDir, clk, discardLog())
 	if _, err := pr.PruneAgent("bot", false); err != nil {
@@ -176,6 +177,113 @@ func TestArchiveRoundTrips(t *testing.T) {
 	}
 	if got["logs/harness.stdout.log"] != "hello-log" {
 		t.Fatalf("nested log content = %q, entries=%v", got["logs/harness.stdout.log"], got)
+	}
+}
+
+// TestArchiveCarriesDBRows: the archive holds the iteration's database rows,
+// which pruning deletes, as db-rows.json.
+func TestArchiveCarriesDBRows(t *testing.T) {
+	dir := t.TempDir()
+	s, err := store.Open(filepath.Join(dir, "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	as := agent.NewStore(s)
+	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
+	agentsDir := filepath.Join(dir, "agents")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
+	if _, err := s.DB.Exec(`INSERT INTO ai_requests(id, ts, agent, iteration, model) VALUES('r1','2026-07-01T10:00:00Z','bot','bot-1-1','m')`); err != nil {
+		t.Fatal(err)
+	}
+	ps := NewStore(s)
+	ps.Set("bot", Policy{KeepIterations: 1})
+	pr := NewPruner(s, as, ps, agentsDir, nil, discardLog())
+	if _, err := pr.PruneAgent("bot", false); err != nil {
+		t.Fatal(err)
+	}
+	got := untarGz(t, filepath.Join(agentsDir, "bot", "archive", "bot-1-1.tar.gz"))
+	var rows struct {
+		Iterations []map[string]any `json:"iterations"`
+		AIRequests []map[string]any `json:"ai_requests"`
+	}
+	if err := json.Unmarshal([]byte(got["db-rows.json"]), &rows); err != nil {
+		t.Fatalf("db-rows.json = %q: %v", got["db-rows.json"], err)
+	}
+	if len(rows.Iterations) != 1 || rows.Iterations[0]["id"] != "bot-1-1" || rows.Iterations[0]["started_at"] != "2026-07-01T10:00:00Z" {
+		t.Fatalf("iterations rows = %+v", rows.Iterations)
+	}
+	if len(rows.AIRequests) != 1 || rows.AIRequests[0]["id"] != "r1" || rows.AIRequests[0]["model"] != "m" {
+		t.Fatalf("ai_requests rows = %+v", rows.AIRequests)
+	}
+}
+
+// TestPruneKeepsIterationWhenArchiveFails: no backup, no deletion.
+func TestPruneKeepsIterationWhenArchiveFails(t *testing.T) {
+	dir := t.TempDir()
+	s, err := store.Open(filepath.Join(dir, "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	as := agent.NewStore(s)
+	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
+	agentsDir := filepath.Join(dir, "agents")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
+	// A regular file where the archive directory should be fails the archive.
+	if err := os.WriteFile(filepath.Join(agentsDir, "bot", "archive"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ps := NewStore(s)
+	ps.Set("bot", Policy{KeepIterations: 1})
+	pr := NewPruner(s, as, ps, agentsDir, nil, discardLog())
+	rep, err := pr.PruneAgent("bot", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Pruned) != 0 {
+		t.Fatalf("report = %+v", rep)
+	}
+	if its, _ := as.ListIterations("bot"); len(its) != 2 {
+		t.Fatalf("rows deleted without a backup: %+v", its)
+	}
+	if _, err := os.Stat(agentdir.New(agentsDir, "bot").IterationDir("bot-1-1")); err != nil {
+		t.Fatalf("dir deleted without a backup: %v", err)
+	}
+}
+
+// TestPruneArchivesIterationWithoutDir: an iteration whose directory is gone
+// still has its rows backed up and pruned.
+func TestPruneArchivesIterationWithoutDir(t *testing.T) {
+	dir := t.TempDir()
+	s, err := store.Open(filepath.Join(dir, "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	as := agent.NewStore(s)
+	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
+	agentsDir := filepath.Join(dir, "agents")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
+	if err := os.RemoveAll(agentdir.New(agentsDir, "bot").IterationDir("bot-1-1")); err != nil {
+		t.Fatal(err)
+	}
+	ps := NewStore(s)
+	ps.Set("bot", Policy{KeepIterations: 1})
+	pr := NewPruner(s, as, ps, agentsDir, nil, discardLog())
+	rep, err := pr.PruneAgent("bot", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Pruned) != 1 {
+		t.Fatalf("report = %+v", rep)
+	}
+	got := untarGz(t, filepath.Join(agentsDir, "bot", "archive", "bot-1-1.tar.gz"))
+	if got["db-rows.json"] == "" {
+		t.Fatalf("archive entries = %v", got)
 	}
 }
 
@@ -202,7 +310,7 @@ func TestPruneDeletesAIRequestRowsConsistently(t *testing.T) {
 	}
 
 	ps := NewStore(s)
-	ps.Set("bot", Policy{KeepIterations: 1, Archive: false})
+	ps.Set("bot", Policy{KeepIterations: 1})
 	pr := NewPruner(s, as, ps, agentsDir, func() time.Time { return time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC) }, discardLog())
 	if _, err := pr.PruneAgent("bot", false); err != nil {
 		t.Fatal(err)
@@ -240,7 +348,7 @@ func TestPruneKeepDays(t *testing.T) {
 	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-05T10:00:00Z") // newest
 
 	ps := NewStore(s)
-	ps.Set("bot", Policy{KeepDays: 7, Archive: false})
+	ps.Set("bot", Policy{KeepDays: 7})
 	clk := func() time.Time { return time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC) }
 	pr := NewPruner(s, as, ps, agentsDir, clk, discardLog())
 	rep, err := pr.PruneAgent("bot", false)
@@ -273,7 +381,7 @@ func TestPruneMaxBytes(t *testing.T) {
 	// Budget 10 bytes over prunable (non-protected) iterations: the newest is
 	// always kept and not counted; bot-1-2 (15) and bot-1-1 (cum 30) both
 	// exceed 10, so both are victims.
-	ps.Set("bot", Policy{MaxBytes: 10, Archive: false})
+	ps.Set("bot", Policy{MaxBytes: 10})
 	clk := func() time.Time { return time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC) }
 	pr := NewPruner(s, as, ps, agentsDir, clk, discardLog())
 	rep, err := pr.PruneAgent("bot", false)
