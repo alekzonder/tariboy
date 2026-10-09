@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -115,6 +116,9 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 		containsPrincipal(created, task.Customer) && task.Status != StatusDone && task.Status != StatusCancelled
 	lastCustomerWaitResolved := task.Status == StatusWaitCustomer &&
 		containsPrincipal(resolved, task.Customer) && len(customerWaits) == 0
+	// The customer mentioning the assignee hands the task back to it.
+	customerSummonedAssignee := actor.IsCustomer && task.Status == StatusWaitCustomer &&
+		task.Assignee != "" && slices.Contains(mentions, task.Assignee) && len(customerWaits) == 0
 	// A workflow task waiting on its customer status, a script, or a pause keeps
 	// its category; only its holder's question in a pool status moves it.
 	workflowWaiting := task.WorkflowDigest != "" && task.WaitingOn != ""
@@ -131,7 +135,7 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 	case workflowWaiting:
 	case assignedAgentQuestion:
 		task.Status = StatusWaitCustomer
-	case lastCustomerWaitResolved:
+	case lastCustomerWaitResolved, customerSummonedAssignee:
 		task.Status = StatusInProgress
 	}
 	task.Revision++
