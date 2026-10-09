@@ -10,14 +10,13 @@ import {
 } from "../useSidebarWidth";
 import { identityFor, rowCollision, sameScope, sidebarAnnouncements, type ReorderKind } from "./sidebarDnd";
 import { AgentsTab } from "./AgentsTab";
-import { GroupsTab } from "./GroupsTab";
 import { ServersTab } from "./ServersTab";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarSearch } from "./SidebarSearch";
 import { SidebarTabs } from "./SidebarTabs";
 import type { AgentRowActions } from "./SidebarAgentRow";
 import {
-  allAgents, filterHosts, groupSections, hostAgents, ordered, rankAgents,
+  allAgents, filterHosts, hostAgents, ordered, rankAgents,
 } from "./sidebarModel";
 import {
   readPinnedAgents, readSidebarTab, writePinnedAgents, writeSidebarTab, type SidebarTab,
@@ -33,7 +32,7 @@ function move(ids: string[], active: string, over: string): string[] {
 }
 
 /**
- * The left column of the operator console: search, the three tabs, and the
+ * The left column of the operator console: search, the two tabs, and the
  * foot. It is chrome, not a panel — it sits straight on `--background` with no
  * border and no surface of its own, and only the list between the tabs and the
  * foot scrolls.
@@ -176,14 +175,6 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
         <div className="min-h-0 flex-1 overflow-y-auto px-1.5">
           <TabsContent value="agents">
             <AgentsTab pinned={ranked.pinned} rest={ranked.rest} actions={rowActions} />
-          </TabsContent>
-          <TabsContent value="groups">
-            <GroupsTab
-              sections={groupSections(visibleHosts, agents)}
-              actions={rowActions}
-              onOpenGroup={onSelectTeam}
-              onCreate={onCreate}
-            />
           </TabsContent>
           <TabsContent value="servers">
             <ServersTab

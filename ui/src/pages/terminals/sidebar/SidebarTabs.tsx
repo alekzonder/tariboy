@@ -5,13 +5,12 @@ import { cn } from "@/lib/utils";
 import type { SidebarTab } from "./sidebarPrefs";
 
 const TABS: ReadonlyArray<{ value: SidebarTab; label: string }> = [
-  { value: "agents", label: "Agents" },
-  { value: "groups", label: "Groups" },
   { value: "servers", label: "Servers" },
+  { value: "agents", label: "Agents" },
 ];
 
 /**
- * The three sidebar tabs as 24px pills: the active one takes the `--accent`
+ * The two sidebar tabs as 24px pills: the active one takes the `--accent`
  * fill, the rest are bare muted text. The trailing `+` creates an agent on the
  * server the operator is looking at.
  */

@@ -205,6 +205,11 @@ function serversTab() {
   localStorage.setItem("terminals:sidebar-tab:v1", "servers");
 }
 
+/** Open the Agents tab before mounting — the flat list across servers. */
+function agentsTab() {
+  localStorage.setItem("terminals:sidebar-tab:v1", "agents");
+}
+
 /** Radix activates a tab on mousedown, which fireEvent.click does not send. */
 function pickSidebarTab(name: string) {
   fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
@@ -1141,7 +1146,18 @@ describe("sidebar tabs", () => {
     },
   ];
 
-  it("opens on Agents and lists every server's agents without server sections", async () => {
+  it("opens on Servers, the first of two tabs, with Groups hidden", async () => {
+    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
+    renderAt("/");
+
+    expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Servers", "Agents"]);
+    expect(screen.getByRole("tab", { name: "Servers" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: "Groups" })).toBeNull();
+  });
+
+  it("lists every server's agents without server sections on Agents", async () => {
+    agentsTab();
     vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
     renderAt("/");
 
@@ -1153,16 +1169,18 @@ describe("sidebar tabs", () => {
   it("remembers the chosen tab across mounts", async () => {
     vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
     const first = renderAt("/");
-    await screen.findByRole("tab", { name: "Servers" });
-    pickSidebarTab("Servers");
     expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
+    pickSidebarTab("Agents");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull());
     first.unmount();
 
     renderAt("/");
-    expect(await screen.findByRole("button", { name: "Open server prod" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Open gamma" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open server prod" })).toBeNull();
   });
 
   it("puts a called-for agent above the rest, and a pinned one above that", async () => {
+    agentsTab();
     vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
     renderAt("/", new Map([[JSON.stringify(["prod", "gamma"]), 1]]));
 
@@ -1176,19 +1194,5 @@ describe("sidebar tabs", () => {
     expect(names()[1]).toMatch(/gamma/);
     expect(JSON.parse(localStorage.getItem("terminals:sidebar-pinned:v1")!))
       .toEqual({ version: 1, keys: [JSON.stringify(["", "beta"])] });
-  });
-
-  it("groups agents from every server under one group heading", async () => {
-    vi.mocked(fetchAllAgents).mockResolvedValue(twoHosts);
-    renderAt("/");
-    await screen.findByRole("tab", { name: "Groups" });
-    pickSidebarTab("Groups");
-
-    const release = await screen.findByRole("button", { name: "Open team release" });
-    expect(release).toBeInTheDocument();
-    const section = release.closest("section")!;
-    expect(section.textContent).toMatch(/alpha/);
-    expect(section.textContent).toMatch(/gamma/);
-    expect(section.textContent).not.toMatch(/beta/);
   });
 });
