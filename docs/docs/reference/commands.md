@@ -97,8 +97,8 @@ tariboy has three command surfaces:
 | `tariboy plugin rm` | Stop and remove a plugin |
 | `tariboy prune` | Prune old iterations for an agent now (or 'all'); --dry-run lists victims |
 | `tariboy restore` | Restore an agent from a backup tar.gz (optionally under a new name) |
-| `tariboy retention get` | Show the effective retention policy for an agent (or 'default') |
-| `tariboy retention set` | Set the retention policy for an agent (or 'default') |
+| `tariboy retention get` | Show the effective retention policy for an agent, with its own override and the default (or 'default') |
+| `tariboy retention set` | Set the retention policy for an agent (0 = use the default) or 'default' (0 = unlimited) |
 | `tariboy schedule ls` | List an agent's schedules (read-only) |
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |

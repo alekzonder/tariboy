@@ -19,7 +19,7 @@ func TestRetentionCommands(t *testing.T) {
 
 	// set per-agent policy
 	if _, err := h(t, "retention.set")(c, registry.Params{
-		"agent": "bot", "keep-iterations": 3, "keep-days": 7, "archive": true,
+		"agent": "bot", "keep-iterations": 3, "keep-days": 7,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -32,12 +32,28 @@ func TestRetentionCommands(t *testing.T) {
 		t.Fatalf("get = %+v", m)
 	}
 	// set the daemon default
-	if _, err := h(t, "retention.set")(c, registry.Params{"agent": "default", "keep-iterations": 10}); err != nil {
+	if _, err := h(t, "retention.set")(c, registry.Params{"agent": "default", "keep-iterations": 10, "max-bytes": 500}); err != nil {
 		t.Fatal(err)
 	}
 	def, _ := pol.Default()
 	if def.KeepIterations != 10 {
 		t.Fatalf("default = %+v", def)
+	}
+	// The agent's non-zero fields override the default; its zero max_bytes
+	// inherits. The agent's own record and the default are reported too.
+	got, _ = h(t, "retention.get")(c, registry.Params{"agent": "bot"})
+	m = got.(map[string]any)
+	if m["keep_iterations"].(int) != 3 || m["max_bytes"].(int64) != 500 {
+		t.Fatalf("effective = %+v", m)
+	}
+	if o := m["override"].(map[string]any); o["keep_iterations"].(int) != 3 || o["max_bytes"].(int64) != 0 {
+		t.Fatalf("override = %+v", o)
+	}
+	if d := m["default"].(map[string]any); d["keep_iterations"].(int) != 10 {
+		t.Fatalf("default = %+v", d)
+	}
+	if _, ok := m["archive"]; ok {
+		t.Fatalf("archive flag still reported: %+v", m)
 	}
 	// prune (empty agent tree -> zero victims, no error)
 	pr, err := h(t, "prune")(c, registry.Params{"agent": "bot", "dry-run": true})

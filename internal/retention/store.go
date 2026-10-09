@@ -1,6 +1,7 @@
-// Package retention enforces per-agent data retention (spec §12): a background
-// daemon task prunes iteration dirs (and their DB rows) beyond a policy of
-// keep-N-iterations / keep-N-days / max-bytes, archiving to tar.gz by default.
+// Package retention enforces per-agent data retention (spec §12): the nightly
+// maintenance run prunes iteration dirs (and their DB rows) beyond a policy of
+// keep-N-iterations / keep-N-days / max-bytes, archiving each pruned
+// iteration with its DB rows to tar.gz first.
 package retention
 
 import (
@@ -10,13 +11,12 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
-// Policy is a retention rule. Zero fields mean "unlimited / inherit"; Archive
-// controls whether a pruned iteration dir is tar.gz'd before deletion.
+// Policy is a retention rule. A zero field means "unlimited" in the daemon
+// default and "inherit the default" in a per-agent policy.
 type Policy struct {
 	KeepIterations int   `json:"keep_iterations"`
 	KeepDays       int   `json:"keep_days"`
 	MaxBytes       int64 `json:"max_bytes"`
-	Archive        bool  `json:"archive"`
 }
 
 const defaultConfigKey = "retention_default"
@@ -36,15 +36,11 @@ func (s *Store) SetDefault(p Policy) error {
 	return s.cfg.ConfigSet(defaultConfigKey, string(b))
 }
 
-// Default returns the daemon-wide policy. Unset -> zero policy with Archive
-// true (unlimited retention, archive-on).
+// Default returns the daemon-wide policy. Unset -> zero policy (unlimited).
 func (s *Store) Default() (Policy, error) {
 	v, ok, err := s.cfg.ConfigGet(defaultConfigKey)
-	if err != nil {
+	if err != nil || !ok {
 		return Policy{}, err
-	}
-	if !ok {
-		return Policy{Archive: true}, nil
 	}
 	var p Policy
 	if err := json.Unmarshal([]byte(v), &p); err != nil {
@@ -55,27 +51,25 @@ func (s *Store) Default() (Policy, error) {
 
 func (s *Store) Set(agent string, p Policy) error {
 	_, err := s.db.Exec(`INSERT INTO retention_policies
-		(agent, keep_iterations, keep_days, max_bytes, archive) VALUES (?,?,?,?,?)
+		(agent, keep_iterations, keep_days, max_bytes) VALUES (?,?,?,?)
 		ON CONFLICT(agent) DO UPDATE SET
 			keep_iterations=excluded.keep_iterations, keep_days=excluded.keep_days,
-			max_bytes=excluded.max_bytes, archive=excluded.archive`,
-		agent, p.KeepIterations, p.KeepDays, p.MaxBytes, b2i(p.Archive))
+			max_bytes=excluded.max_bytes`,
+		agent, p.KeepIterations, p.KeepDays, p.MaxBytes)
 	return err
 }
 
 func (s *Store) Get(agent string) (Policy, bool, error) {
 	var p Policy
-	var arch int
-	err := s.db.QueryRow(`SELECT keep_iterations, keep_days, max_bytes, archive
+	err := s.db.QueryRow(`SELECT keep_iterations, keep_days, max_bytes
 		FROM retention_policies WHERE agent=?`, agent).
-		Scan(&p.KeepIterations, &p.KeepDays, &p.MaxBytes, &arch)
+		Scan(&p.KeepIterations, &p.KeepDays, &p.MaxBytes)
 	if err == sql.ErrNoRows {
 		return Policy{}, false, nil
 	}
 	if err != nil {
 		return Policy{}, false, err
 	}
-	p.Archive = arch != 0
 	return p, true, nil
 }
 
@@ -84,21 +78,25 @@ func (s *Store) Delete(agent string) error {
 	return err
 }
 
-// Effective returns the per-agent policy if set, else the daemon default.
+// Effective returns the daemon default with each non-zero per-agent field
+// overriding it.
 func (s *Store) Effective(agent string) (Policy, error) {
-	p, ok, err := s.Get(agent)
+	p, err := s.Default()
 	if err != nil {
 		return Policy{}, err
 	}
-	if ok {
-		return p, nil
+	own, _, err := s.Get(agent)
+	if err != nil {
+		return Policy{}, err
 	}
-	return s.Default()
-}
-
-func b2i(b bool) int {
-	if b {
-		return 1
+	if own.KeepIterations != 0 {
+		p.KeepIterations = own.KeepIterations
 	}
-	return 0
+	if own.KeepDays != 0 {
+		p.KeepDays = own.KeepDays
+	}
+	if own.MaxBytes != 0 {
+		p.MaxBytes = own.MaxBytes
+	}
+	return p, nil
 }

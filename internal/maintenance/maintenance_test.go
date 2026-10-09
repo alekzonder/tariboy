@@ -531,3 +531,35 @@ func TestLoopFiresOnWallClockAndSkipsLateWakes(t *testing.T) {
 	cancel()
 	<-done
 }
+
+func TestRunPrunesIterationsAfterBackup(t *testing.T) {
+	svc, _, backups := open(t)
+	sawBackup := false
+	svc.PruneIterations = func() (int64, error) {
+		matches, _ := filepath.Glob(filepath.Join(backups, "tariboyd-*.db"))
+		sawBackup = len(matches) == 1
+		return 3, nil
+	}
+	res, err := svc.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawBackup || res.Deleted["iterations"] != 3 {
+		t.Fatalf("sawBackup=%v deleted=%v", sawBackup, res.Deleted)
+	}
+}
+
+func TestFailedBackupSkipsIterationPrune(t *testing.T) {
+	svc, _, backups := open(t)
+	if err := os.MkdirAll(filepath.Dir(backups), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backups, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	svc.PruneIterations = func() (int64, error) { called = true; return 0, nil }
+	if _, err := svc.Run(); err == nil || called {
+		t.Fatalf("err=%v called=%v", err, called)
+	}
+}

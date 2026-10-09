@@ -578,16 +578,22 @@ func Run(ctx context.Context, o Options) error {
 		},
 	)
 
-	// Retention (spec §12): a background goroutine periodically prunes every
-	// agent's iterations per its policy. Drained before st.Close (see the wg
-	// block below) since the pruner touches the store.
+	// Retention (spec §12): the nightly maintenance run archives and prunes
+	// every agent's iterations per its policy after the database backup.
 	retPolicies := retention.NewStore(st)
 	retPruner := retention.NewPruner(st, as, retPolicies, p.AgentsDir(), time.Now, log)
-	retRunner := retention.NewRunner(retPruner, time.Hour, time.After, log)
-	// Nightly database backup, then cleanup and compaction. Drained before
-	// st.Close like the retention runner.
+	// Nightly database backup, then iteration pruning, cleanup and
+	// compaction. Drained before st.Close (see the wg block below).
 	maint := maintenance.New(st, filepath.Join(p.Base, "backups", "db"), time.Now, log)
 	maint.TasksDir = filepath.Join(p.Base, "tasks")
+	maint.PruneIterations = func() (int64, error) {
+		reps, err := retPruner.PruneAll(false)
+		var n int64
+		for _, r := range reps {
+			n += int64(len(r.Pruned))
+		}
+		return n, err
+	}
 
 	manager := loop.NewManager(loop.ManagerConfig{
 		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), ShimBin: shimBin,
@@ -775,7 +781,7 @@ func Run(ctx context.Context, o Options) error {
 	// their final flush/refresh before the store closes.
 	gctx, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(13)
+	wg.Add(12)
 	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
 	go func() {
 		defer wg.Done()
@@ -828,13 +834,9 @@ func Run(ctx context.Context, o Options) error {
 			}
 		}
 	}()
-	// The retention runner also touches the store (PruneAll deletes iteration/
-	// ai_requests rows). It uses gctx like the goroutines above so an in-flight
-	// prune finishes before st.Close() on the way out.
-	go func() {
-		defer wg.Done()
-		retRunner.Run(gctx)
-	}()
+	// Maintenance touches the store (backup, iteration pruning, cleanup). It
+	// uses gctx like the goroutines above so an in-flight run finishes before
+	// st.Close() on the way out.
 	go func() {
 		defer wg.Done()
 		maint.Loop(gctx, time.After)

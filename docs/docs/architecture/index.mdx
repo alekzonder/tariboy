@@ -165,8 +165,8 @@ logged for its agent without preventing unrelated agents from starting.
 In steady state it runs the schedule publisher, the task notification outbox
 publisher, the per-agent goal reconciler, the queue-trigger ingress reconciler,
 the workflow script worker, AI ingestion, the daily pricing
-catalog worker, budget cache refresh, retention pruner, nightly database
-maintenance (backup, cleanup, compaction; see
+catalog worker, budget cache refresh, nightly database
+maintenance (backup, iteration pruning, cleanup, compaction; see
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention)),
 loop engines, and plugin supervisors.
 

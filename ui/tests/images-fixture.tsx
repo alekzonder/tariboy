@@ -165,7 +165,7 @@ window.fetch = async (input, init) => {
     return envelope({ name: "worker", current, pending: { ref: activated ? "" : pendingRef, digest: activated ? "" : "built-digest", error: "" } });
   }
   if (path === "/api/agents/worker/secrets") return envelope({ keys: [] });
-  if (path === "/api/agents/worker/retention") return envelope({ keep_iterations: 20, keep_days: 30, max_bytes: 0, archive: false });
+  if (path === "/api/agents/worker/retention") return envelope({ keep_iterations: 20, keep_days: 30, max_bytes: 0, override: { keep_iterations: 20, keep_days: 30, max_bytes: 0 }, default: { keep_iterations: 0, keep_days: 0, max_bytes: 0 } });
   if (path === "/api/agents/worker" || path.startsWith("/api/agents/worker/")) {
     return envelope(activated ? { ...agentView, image: "browser-built:latest", digest: "built-digest" } : agentView);
   }

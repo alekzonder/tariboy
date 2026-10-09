@@ -44,14 +44,14 @@ func checkAgentOrKeyword(name string, extra ...string) error {
 func policyToMap(p retention.Policy) map[string]any {
 	return map[string]any{
 		"keep_iterations": p.KeepIterations, "keep_days": p.KeepDays,
-		"max_bytes": p.MaxBytes, "archive": p.Archive,
+		"max_bytes": p.MaxBytes,
 	}
 }
 
 func retentionGet() registry.Command {
 	return registry.Command{
 		Path:    "retention.get",
-		Summary: "Show the effective retention policy for an agent (or 'default')",
+		Summary: "Show the effective retention policy for an agent, with its own override and the default (or 'default')",
 		Args:    []registry.Arg{{Name: "agent", Type: registry.String, Required: true, Help: "agent name, or 'default'"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{agent}/retention"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -74,7 +74,18 @@ func retentionGet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			return policyToMap(pol), nil
+			own, _, err := r.Policies.Get(name)
+			if err != nil {
+				return nil, err
+			}
+			def, err := r.Policies.Default()
+			if err != nil {
+				return nil, err
+			}
+			out := policyToMap(pol)
+			out["override"] = policyToMap(own)
+			out["default"] = policyToMap(def)
+			return out, nil
 		},
 	}
 }
@@ -82,13 +93,12 @@ func retentionGet() registry.Command {
 func retentionSet() registry.Command {
 	return registry.Command{
 		Path:    "retention.set",
-		Summary: "Set the retention policy for an agent (or 'default')",
+		Summary: "Set the retention policy for an agent (0 = use the default) or 'default' (0 = unlimited)",
 		Args: []registry.Arg{
 			{Name: "agent", Type: registry.String, Required: true, Help: "agent name, or 'default'"},
-			{Name: "keep-iterations", Flag: "keep-iterations", Short: "i", Type: registry.Int, Help: "keep newest N iterations (0=unlimited)"},
-			{Name: "keep-days", Flag: "keep-days", Short: "d", Type: registry.Int, Help: "keep iterations newer than N days (0=unlimited)"},
-			{Name: "max-bytes", Flag: "max-bytes", Short: "b", Type: registry.Int, Help: "cap total iteration bytes (0=unlimited)"},
-			{Name: "archive", Flag: "archive", Short: "a", Type: registry.Bool, Help: "archive pruned iterations to tar.gz (default true)"},
+			{Name: "keep-iterations", Flag: "keep-iterations", Short: "i", Type: registry.Int, Help: "keep newest N iterations (0: agent inherits the default; default is unlimited)"},
+			{Name: "keep-days", Flag: "keep-days", Short: "d", Type: registry.Int, Help: "keep iterations newer than N days (0: agent inherits the default; default is unlimited)"},
+			{Name: "max-bytes", Flag: "max-bytes", Short: "b", Type: registry.Int, Help: "cap total iteration bytes (0: agent inherits the default; default is unlimited)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{agent}/retention"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
@@ -104,12 +114,8 @@ func retentionSet() registry.Command {
 			var cur retention.Policy
 			if name == "default" {
 				cur, err = r.Policies.Default()
-			} else if got, ok, gerr := r.Policies.Get(name); gerr == nil && ok {
-				cur = got
-			} else if gerr != nil {
-				err = gerr
 			} else {
-				cur = retention.Policy{Archive: true}
+				cur, _, err = r.Policies.Get(name)
 			}
 			if err != nil {
 				return nil, err
@@ -128,9 +134,6 @@ func retentionSet() registry.Command {
 			// Reject it with a clean bad_value error instead.
 			if cur.KeepIterations < 0 || cur.KeepDays < 0 || cur.MaxBytes < 0 {
 				return nil, api.UserError{Code: "bad_value", Msg: "keep_iterations, keep_days and max_bytes must be >= 0"}
-			}
-			if v, ok := p["archive"].(bool); ok {
-				cur.Archive = v
 			}
 			if name == "default" {
 				if err := r.Policies.SetDefault(cur); err != nil {
