@@ -11,15 +11,20 @@ import {
 beforeEach(() => localStorage.clear());
 
 describe("sidebar tab preference", () => {
-  it("defaults to agents and survives a round trip", () => {
+  it("defaults to servers and survives a round trip", () => {
+    expect(readSidebarTab()).toBe("servers");
+    writeSidebarTab("agents");
     expect(readSidebarTab()).toBe("agents");
-    writeSidebarTab("servers");
+  });
+
+  it("falls back to servers for a value that is not a tab", () => {
+    localStorage.setItem(SIDEBAR_TAB_KEY, "__gone__");
     expect(readSidebarTab()).toBe("servers");
   });
 
-  it("falls back to agents for a value that is not a tab", () => {
-    localStorage.setItem(SIDEBAR_TAB_KEY, "__gone__");
-    expect(readSidebarTab()).toBe("agents");
+  it("falls back to servers for the hidden groups tab", () => {
+    localStorage.setItem(SIDEBAR_TAB_KEY, "groups");
+    expect(readSidebarTab()).toBe("servers");
   });
 });
 

@@ -6,19 +6,19 @@
  * taking the sidebar down with it.
  */
 
-export type SidebarTab = "agents" | "groups" | "servers";
+export type SidebarTab = "servers" | "agents";
 
 export const SIDEBAR_TAB_KEY = "terminals:sidebar-tab:v1";
 export const SIDEBAR_PINNED_KEY = "terminals:sidebar-pinned:v1";
 
-const TABS: readonly SidebarTab[] = ["agents", "groups", "servers"];
+const TABS: readonly SidebarTab[] = ["servers", "agents"];
 
 export function readSidebarTab(): SidebarTab {
   try {
     const raw = localStorage.getItem(SIDEBAR_TAB_KEY);
-    return TABS.find((tab) => tab === raw) ?? "agents";
+    return TABS.find((tab) => tab === raw) ?? "servers";
   } catch {
-    return "agents";
+    return "servers";
   }
 }
 

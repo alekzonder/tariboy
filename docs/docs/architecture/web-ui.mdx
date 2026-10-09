@@ -112,7 +112,8 @@ creates and successful Configuration Runtime saves remember the model and effort
 in the Desktop WebView by harness; failed ones do not add values. Neither group
 validates a value: an unsupported model still fails at the harness.
 
-The agents sidebar has three tabs. **Agents** lists every host's agents in one
+The agents sidebar has two tabs, **Servers** first and **Agents** second.
+**Agents** lists every host's agents in one
 flat list, ordered the way a chat list is: pinned agents first, then the agents
 with an unread customer question, then the rest by their most recent
 conversation, and only then in the operator's own order. The whole sort happens
@@ -123,12 +124,12 @@ one badge a row carries is the count of unread messages from that agent. The
 question itself is readable in that agent's **Chat**, and its task is marked in
 **Tasks**. A
 row's context menu pins and unpins it, and the Desktop WebView remembers the
-pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
-its members gathered across hosts, including a declared group with no members.
+pinned set in `terminals:sidebar-pinned:v1`. The **Groups** tab is hidden for
+now; groups stay available inside **Servers** and on their own page.
 **Servers** keeps the per-host list and is the only tab whose rows are drag
 sources, because it is the only one with a persisted order. The selected tab is
-remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
-**Agents**. Each server heading states its own reachability and carries the
+remembered in `terminals:sidebar-tab:v1`; with no saved choice, an unknown
+value, or the former `groups` value, the sidebar opens on **Servers**. Each server heading states its own reachability and carries the
 **Update** action for a host running an older daemon, with **Update all (N)**
 above the list when more than one host is behind. **Update all** confirms the
 named hosts first, then runs the same host update on each of them in turn; a
