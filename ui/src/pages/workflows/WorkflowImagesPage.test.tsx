@@ -55,3 +55,14 @@ it("shows a list failure with Retry", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Retry" }))
   expect(await screen.findByRole("table")).toBeInTheDocument()
 })
+
+it("keeps the table and skips loads while the host reconnects", async () => {
+  const view = renderPage()
+  await screen.findByRole("table")
+  const offline = { ...remote, baseURL: "" }
+  view.rerender(<MemoryRouter><WorkflowImagesPage target={offline} basePath="/servers/remote/workflows" /></MemoryRouter>)
+  await waitFor(() => expect(screen.getByRole("table")).toBeInTheDocument())
+  expect(screen.queryByRole("alert")).toBeNull()
+  expect(api.listWorkflowImages).not.toHaveBeenCalledWith(offline)
+  expect(api.listTaskQueues).not.toHaveBeenCalledWith(offline)
+})

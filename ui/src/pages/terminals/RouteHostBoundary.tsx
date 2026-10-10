@@ -46,17 +46,23 @@ export function RouteHostBoundary({ hostId, unavailable = false, children }: {
       </div>
     );
   }
-  if (!hostReady || unavailable) {
-    return (
-      <>
+  // One tree shape for ready and reconnecting: switching wrappers would
+  // remount the page and drop its loaded data and unsent drafts.
+  const reconnecting = !hostReady || unavailable;
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {reconnecting && (
         <p role="status" className="mb-2 text-sm text-muted-foreground">
           This host is reconnecting; actions are temporarily unavailable.
         </p>
-        <div inert={true} aria-disabled="true" className="opacity-60">
-          {renderChildren()}
-        </div>
-      </>
-    );
-  }
-  return renderChildren();
+      )}
+      <div
+        inert={reconnecting}
+        aria-disabled={reconnecting || undefined}
+        className={reconnecting ? "min-h-0 flex-1 opacity-60" : "min-h-0 flex-1"}
+      >
+        {renderChildren()}
+      </div>
+    </div>
+  );
 }

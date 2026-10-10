@@ -7,6 +7,7 @@ import {
   getAgentShellScriptOn,
   getActiveDaemon,
   setAgentShellScriptOn,
+  targetReady,
   type ApiTarget,
 } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
@@ -856,13 +857,14 @@ export default function AgentSettings({
   // reload resolves with the reloaded view so a section can reconcile its
   // baseline against the canonical values it just wrote.
   const reload = useCallback(async (): Promise<AgentView | null> => {
-    if (!name) return null;
+    if (!name || !targetReady(target)) return null;
     try {
       const next = await agentGetOn<AgentView>(target, name, "");
       setView(next);
       return next;
     } catch {
-      setView(null);
+      // Keep the last loaded view: clearing it unmounts every section and
+      // throws away their unsaved drafts.
       return null;
     }
   }, [name, target]);

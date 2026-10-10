@@ -4,8 +4,16 @@ import userEvent from "@testing-library/user-event";
 import AgentChat from "./AgentChat";
 import { AgentNameContext } from "@/lib/agent";
 import { DEFAULT_CHAT_TYPES } from "./chatTypes";
+import type { Daemon } from "@/lib/daemons";
+
+const host = vi.hoisted(() => ({ target: undefined as Daemon | undefined }));
+vi.mock("@/lib/terminalsHost", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/terminalsHost")>();
+  return { ...actual, targetFor: (id: string) => host.target ?? actual.targetFor(id) };
+});
 
 afterEach(() => {
+  host.target = undefined;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
@@ -62,6 +70,7 @@ function stubChat(messages = feed, readTS = "") {
       body: init?.body ? JSON.parse(init.body as string) : undefined,
     });
     let result: unknown = { ok: true };
+    path = path.replace(/^https?:\/\/[^/]+/, "");
     if (path.startsWith(`/api/chats/${encodeURIComponent("dm:worker")}`)) {
       result = {
         customer: "user:customer", agent: "worker", chat: "dm:worker", kind: "direct",
@@ -245,4 +254,26 @@ it("refetches only the chat a live hint names", async () => {
   await waitFor(() => {
     expect(calls.filter((call) => call.path.startsWith(`${DM}?`)).length).toBeGreaterThan(before);
   });
+});
+
+it("re-reads the conversation from the new endpoint after the host reconnects", async () => {
+  stubChat();
+  const remote = (baseURL: string): Daemon => ({ id: "remote", label: "Remote", baseURL, token: "t" });
+  const tree = () => (
+    <AgentNameContext.Provider value="worker">
+      <AgentChat hostId="remote" />
+    </AgentNameContext.Provider>
+  );
+  host.target = remote("http://127.0.0.1:41001");
+  const view = render(tree());
+  expect(await screen.findByText("please look at this")).toBeInTheDocument();
+
+  host.target = remote("");
+  view.rerender(tree());
+  host.target = remote("http://127.0.0.1:41002");
+  view.rerender(tree());
+
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([path]) =>
+    String(path).startsWith(`http://127.0.0.1:41002${DM}`))).toBe(true));
+  expect(screen.getByText("please look at this")).toBeInTheDocument();
 });

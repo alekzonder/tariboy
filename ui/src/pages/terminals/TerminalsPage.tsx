@@ -385,7 +385,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         ) : serverView === "workflows" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
             {(target) => <WorkflowImagesPage
-              key={`${hostId}\u0000${target?.baseURL ?? "local"}`}
+              key={hostId}
               target={target}
               basePath={`${serverBasePath}/workflows`}
             />}
@@ -393,7 +393,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         ) : serverView === "workflow-detail" && hostId !== undefined && storeName && routeTag ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
             {(target) => <WorkflowImageDetail
-              key={`${hostId}\u0000${storeName}\u0000${routeTag}\u0000${target?.baseURL ?? "local"}`}
+              key={`${hostId}\u0000${storeName}\u0000${routeTag}`}
               target={target}
               name={storeName}
               tag={routeTag}
@@ -403,7 +403,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
         ) : (serverView === "stores" || serverView === "store-detail") && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
             {(target) => <StoresPage
-              key={`${hostId}\u0000${storeName ?? ""}\u0000${target?.baseURL ?? "local"}`}
+              key={`${hostId}\u0000${storeName ?? ""}`}
               target={target}
               name={storeName}
               basePath={`${serverBasePath}/stores`}

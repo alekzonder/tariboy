@@ -291,6 +291,16 @@ export async function setActiveId(id: string): Promise<void> {
   else localStorage.removeItem(ACTIVE_KEY);
 }
 
+// Pages key effects on the host object, and the sidebar re-resolves every
+// host each poll: hand back the cached object while nothing changed so a poll
+// does not restart every load on the page.
+function remember(daemon: Daemon): Daemon {
+  const cached = sessionCache.get(daemon.id);
+  if (cached && JSON.stringify(cached) === JSON.stringify(daemon)) return cached;
+  sessionCache.set(daemon.id, daemon);
+  return daemon;
+}
+
 export async function resolveDaemon(id: string): Promise<Daemon | null> {
   if (!id) return null;
   if (!isDesktop()) {
@@ -300,16 +310,14 @@ export async function resolveDaemon(id: string): Promise<Daemon | null> {
       ...meta,
       token: sessionStorage.getItem(TOKEN_PREFIX + id) ?? "",
     };
-    sessionCache.set(id, daemon);
-    return daemon;
+    return remember(daemon);
   }
   await ensureDesktopMigration();
   const meta = (await listDaemons()).find((item) => item.id === id);
   if (!meta) return null;
   if (meta.kind === "ssh") {
     const daemon = { ...meta, token: "" };
-    sessionCache.set(id, daemon);
-    return daemon;
+    return remember(daemon);
   }
   const credentials = requireNative(
     await hostSessionCredentials(id),
@@ -320,8 +328,7 @@ export async function resolveDaemon(id: string): Promise<Daemon | null> {
     baseURL: normBaseURL(credentials.base_url),
     token: credentials.token,
   };
-  sessionCache.set(id, daemon);
-  return daemon;
+  return remember(daemon);
 }
 
 export async function resolveActive(): Promise<Daemon | null> {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   addDaemon, listDaemons, removeDaemon, setDaemonToken, getDaemonToken,
-  getActiveId, setActiveId, resolveDaemon, resolveActive,
+  getActiveId, setActiveId, resolveDaemon, resolveActive, updateDaemon,
 } from "./daemons";
 
 beforeEach(() => {
@@ -28,6 +28,16 @@ describe("daemon registry", () => {
     expect(r).toEqual({ id: d.id, label: "a", baseURL: "https://a:1", token: "ta" });
     expect(await resolveDaemon("")).toBeNull();
     expect(await resolveDaemon("nope")).toBeNull();
+  });
+
+  it("resolveDaemon keeps the same object until the host changes", async () => {
+    const d = await addDaemon({ label: "a", baseURL: "https://a:1", token: "ta" });
+    const first = await resolveDaemon(d.id);
+    expect(await resolveDaemon(d.id)).toBe(first);
+    await updateDaemon(d.id, { label: "a", baseURL: "https://a:2" });
+    const moved = await resolveDaemon(d.id);
+    expect(moved).not.toBe(first);
+    expect(moved?.baseURL).toBe("https://a:2");
   });
 
   it("active id round-trips and resolveActive follows it; default is same-origin (null)", async () => {

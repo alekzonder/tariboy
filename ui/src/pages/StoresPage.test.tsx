@@ -8,6 +8,7 @@ import TerminalsPage from "@/pages/terminals/TerminalsPage";
 import { fetchAllAgents } from "@/lib/aggregate";
 import { setActiveDaemon } from "@/lib/api";
 import { addDaemon } from "@/lib/daemons";
+import StoresPage from "@/pages/StoresPage";
 
 vi.mock("@/lib/aggregate", () => ({ fetchAllAgents: vi.fn() }));
 
@@ -568,5 +569,33 @@ describe("Store workflow images", () => {
     fireEvent.mouseDown(await screen.findByRole("tab", { name: "Workflow images" }));
     expect(await screen.findByText("Comparison unavailable")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build development" })).toBeEnabled();
+  });
+});
+
+describe("Store reconnect", () => {
+  it("keeps the edited policy while the host reconnects on a new endpoint", async () => {
+    const calls: Call[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init: RequestInit = {}) => {
+      calls.push({ url: String(input), method: init.method ?? "GET" });
+      return Promise.resolve(envelope(String(input).includes("/api/stores/old")
+        ? { name: "old", source: "/srv/old", path: "/srv/old", images: [], auto: { interval_minutes: 15, images: [] } }
+        : []));
+    }));
+    const page = (baseURL: string) => (
+      <MemoryRouter>
+        <StoresPage target={{ id: "remote", label: "Remote", baseURL, token: "t" }} name="old" basePath="/servers/remote/stores" />
+      </MemoryRouter>
+    );
+    const view = render(page("http://127.0.0.1:41001"));
+    const interval = await screen.findByLabelText("Automatic build interval");
+    await waitFor(() => expect(interval).toHaveValue(15));
+    fireEvent.change(interval, { target: { value: "45" } });
+
+    view.rerender(page(""));
+    view.rerender(page("http://127.0.0.1:41002"));
+    await waitFor(() => expect(calls.some((call) => call.url.startsWith("http://127.0.0.1:41002/api/stores/old"))).toBe(true));
+
+    expect(screen.getByLabelText("Automatic build interval")).toHaveValue(45);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

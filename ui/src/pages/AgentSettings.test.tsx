@@ -309,6 +309,24 @@ it("discards a Goal timeout edit back to the loaded value", async () => {
   expect(posts(calls)).toEqual([]);
 });
 
+it("keeps the sections and their drafts when a reload cannot reach the host", async () => {
+  const host = (baseURL: string): Daemon => ({ id: "remote", label: "Remote", baseURL, token: "t" });
+  stubFetch([]);
+  const page = renderPage(host("http://127.0.0.1:41001"));
+  const timeout = await screen.findByLabelText("Wait customer timeout seconds");
+  fireEvent.change(timeout, { target: { value: "120" } });
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+  page.rerender(
+    <AgentNameContext.Provider value="alpha">
+      <AgentSettings target={host("http://127.0.0.1:41002")} />
+    </AgentNameContext.Provider>,
+  );
+  await waitFor(() => expect(fetch).toHaveBeenCalled());
+
+  expect(screen.getByLabelText("Wait customer timeout seconds")).toHaveValue(120);
+});
+
 it("keeps only the failed Goal field dirty after the second save fails", async () => {
   const calls: Call[] = [];
   stubFetch(calls, {

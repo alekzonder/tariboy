@@ -1,4 +1,4 @@
-import { cachedDaemon, type Daemon } from "@/lib/daemons";
+import { cachedDaemon, unresolvedDaemon, type Daemon } from "@/lib/daemons";
 
 // URL param mapping for /terminals/:hostId/:agent. The same-origin local
 // daemon has registry id "" which cannot appear in a path segment, so it is
@@ -12,12 +12,12 @@ export const serverPath = (hostId: string, section: ServerSection): string =>
 
 // targetFor resolves a host id to an explicit api target: null = same-origin
 // local (NOT the active daemon), a Daemon = that registered host.
+// The placeholder is reused so a re-render does not hand the page a new target.
+const unresolved = new Map<string, Daemon>();
 export function targetFor(hostId: string): Daemon | null {
   if (hostId === "") return null;
-  return cachedDaemon(hostId) ?? {
-    id: hostId,
-    label: hostId,
-    baseURL: "",
-    token: "",
-  };
+  const cached = cachedDaemon(hostId);
+  if (cached) return cached;
+  if (!unresolved.has(hostId)) unresolved.set(hostId, unresolvedDaemon(hostId));
+  return unresolved.get(hostId)!;
 }

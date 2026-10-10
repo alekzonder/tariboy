@@ -8,7 +8,7 @@ import { StatusDot, StatusPill } from "@/components/ui/status";
 import { AgentControls } from "@/components/AgentControls";
 import { agentTone } from "@/lib/statusTone";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
-import { agentGetOn } from "@/lib/api";
+import { agentGetOn, isConnectionError } from "@/lib/api";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
@@ -94,8 +94,9 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     const requestTarget = targetFor(hostId);
     try {
       setStatus(await agentGetOn<AgentStatus>(requestTarget, agent.name, "status"));
-    } catch {
-      setStatus(null);
+    } catch (error) {
+      // An unreachable host keeps the last status in the header.
+      if (!isConnectionError(error)) setStatus(null);
     }
     try {
       setView({ key: agentKey, view: await agentGetOn<AgentView>(requestTarget, agent.name, "") });
