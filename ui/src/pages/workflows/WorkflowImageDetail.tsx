@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ApiError } from "@/lib/api"
+import { ApiError, targetReady } from "@/lib/api"
 import type { Daemon } from "@/lib/daemons"
 import { getWorkflowImage, removeWorkflowImage, type WorkflowManifest } from "@/lib/tasks"
 import { Button } from "@/components/ui/button"
@@ -39,15 +39,16 @@ export default function WorkflowImageDetail({ target, name, tag, basePath }: {
   const mounted = useMounted()
 
   useEffect(() => {
+    if (!targetReady(target)) return
     let alive = true
     getWorkflowImage(name, tag, target).then(
-      (result) => { if (alive) setManifest(result) },
+      (result) => { if (alive) { setManifest(result); setError("") } },
       (err) => { if (alive) setError(errorText(err)) },
     )
     return () => { alive = false }
   }, [name, tag, target])
 
-  if (error) return <p role="alert" className="p-3 text-sm text-destructive">{error}</p>
+  if (error && !manifest) return <p role="alert" className="p-3 text-sm text-destructive">{error}</p>
   if (!manifest) return <p className="p-3 text-sm text-muted-foreground">Loading workflow image…</p>
 
   const ref = `${name}:${tag}`
@@ -92,6 +93,7 @@ export default function WorkflowImageDetail({ target, name, tag, basePath }: {
         <Button size="sm" variant="outline" disabled={!transferDaemons.ready} onClick={() => setTransfer(true)}>Upload to servers</Button>
         {!byDigest && <Button size="sm" variant="destructive" disabled={busy} onClick={remove}>Remove tag</Button>}
       </div>
+      {error && <p role="alert" className="text-destructive">{error}</p>}
       {removeError && <p role="alert" className="text-destructive">{removeError}</p>}
     </header>
 

@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
+import { ApiError } from "@/lib/api"
 import type { Task } from "@/lib/tasks"
 import { useAllServersTasks } from "./useAllServersTasks"
 
@@ -122,4 +123,23 @@ it("drops a server's rows when its read fails, so an old filter's rows never lin
 it("is loading while no server is known yet", () => {
   const { result } = renderHook(() => useAllServersTasks([], filters))
   expect(result.current.loading).toBe(true)
+})
+
+it("keeps a server's rows for the same filter while it cannot be reached", async () => {
+  let fail = false
+  api.listTasks.mockImplementation(async () => {
+    if (fail) throw new ApiError(0, "network_error", "network error: Failed to fetch")
+    return { tasks: [task("A-1")], sequence: 1 }
+  })
+  const { result, rerender } = renderHook(({ text }) => useAllServersTasks(servers.slice(0, 1), { ...filters, text }), {
+    initialProps: { text: "fix" },
+  })
+  await waitFor(() => expect(result.current.tasks).toHaveLength(1))
+  fail = true
+  act(() => result.current.reload(""))
+  await waitFor(() => expect(result.current.errors).toEqual({ "": "network error: Failed to fetch" }))
+  expect(result.current.tasks.map((item) => item.key)).toEqual(["A-1"])
+
+  rerender({ text: "other" })
+  await waitFor(() => expect(result.current.tasks).toEqual([]))
 })

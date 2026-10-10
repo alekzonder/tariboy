@@ -5,7 +5,7 @@ import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/com
 import { PathAutocomplete } from "@/components/PathAutocomplete";
 import { RunStateActions } from "@/components/AgentControls";
 import AgentSettings from "@/pages/AgentSettings";
-import { agentGetOn, agentImageCancelOn,agentImageSetOn,agentImageStatusGetOn,agentPost,agentPostOn,listImagesOn,setAgentCwdOn,type AgentImageStatus,type ImageRow } from "@/lib/api";
+import { agentGetOn, agentImageCancelOn,isConnectionError,targetReady,agentImageSetOn,agentImageStatusGetOn,agentPost,agentPostOn,listImagesOn,setAgentCwdOn,type AgentImageStatus,type ImageRow } from "@/lib/api";
 import { guard } from "@/lib/toast-guard";
 import { useAgentName, useAgentStatus } from "@/lib/agent";
 import type { Daemon } from "@/lib/daemons";
@@ -56,9 +56,11 @@ export default function AgentConfigurationTab({
     },
     [targetBaseURL, targetId, targetLabel, targetToken],
   );
-  const requests = useRef({ name, target: requestTarget, active: false, agent: 0, image: 0 });
+  // A scope is one agent on one host. A reconnect moves the endpoint but keeps
+  // the scope, so the loaded agent and the drafts survive it.
+  const requests = useRef({ name, targetId, active: false, agent: 0, image: 0, cwdLoaded: false });
   useEffect(() => {
-    const scope = { name, target: requestTarget, active: true, agent: 0, image: 0 };
+    const scope = { name, targetId, active: true, agent: 0, image: 0, cwdLoaded: false };
     requests.current = scope;
     void Promise.resolve().then(() => {
       if (!scope.active) return;
@@ -71,22 +73,24 @@ export default function AgentConfigurationTab({
       setInventoryLoading(true);
     });
     return () => { scope.active = false; };
-  }, [name, requestTarget]);
+  }, [name, targetId]);
 
   const load = useCallback(async () => {
     const scope = requests.current;
-    if (!scope.active || scope.name !== name || scope.target !== requestTarget) return;
+    if (!scope.active || scope.name !== name || scope.targetId !== targetId) return;
+    if (!targetReady(requestTarget)) return;
     const request = ++scope.agent;
     try {
       const next = await agentGetOn<AgentView>(requestTarget, name, "");
       if (!scope.active || request !== scope.agent) return;
       setAgent(next);
 		setBudget(next.budget ?? null);
-      setCwd(next.cwd);
+      if (!scope.cwdLoaded) setCwd(next.cwd);
+      scope.cwdLoaded = true;
     } catch {
-      if (scope.active && request === scope.agent) setAgent(null);
+      // Keep the last loaded agent: a failed read is not an empty agent.
     }
-  }, [name, requestTarget]);
+  }, [name, requestTarget, targetId]);
 
   useEffect(() => {
     void Promise.resolve().then(load);
@@ -94,7 +98,8 @@ export default function AgentConfigurationTab({
 
   const loadImages = useCallback(async () => {
     const scope = requests.current;
-    if (!scope.active || scope.name !== name || scope.target !== requestTarget) return;
+    if (!scope.active || scope.name !== name || scope.targetId !== targetId) return;
+    if (!targetReady(requestTarget)) return;
     const request = ++scope.image;
     setInventoryLoading(true);
     void listImagesOn(requestTarget).then((listing) => {
@@ -103,7 +108,8 @@ export default function AgentConfigurationTab({
       setInventoryError("");
     }).catch((cause) => {
       if (!scope.active || request !== scope.image) return;
-      setImages([]);
+      // An unreachable host keeps the last inventory; the error still shows.
+      if (!isConnectionError(cause)) setImages([]);
       setInventoryError(cause instanceof Error ? cause.message : String(cause));
     }).finally(() => {
       if (scope.active && request === scope.image) setInventoryLoading(false);
@@ -117,10 +123,10 @@ export default function AgentConfigurationTab({
       setSelectedImage((selected) => selected || selectedRef);
     } catch (cause) {
       if (!scope.active || request !== scope.image) return;
-      setImageStatus(null);
+      if (!isConnectionError(cause)) setImageStatus(null);
       setImageError(cause instanceof Error ? cause.message : String(cause));
     }
-  }, [name, requestTarget]);
+  }, [name, requestTarget, targetId]);
   useEffect(() => {
     const scope = requests.current;
     void Promise.resolve().then(loadImages);
@@ -167,6 +173,7 @@ export default function AgentConfigurationTab({
     setError("");
     try {
       await setAgentCwdOn(requestTarget, name, cwd.trim());
+      requests.current.cwdLoaded = false;
       await load();
       refresh();
     } catch (cause) {

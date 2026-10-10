@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useOptionalDaemons } from "@/components/DaemonProvider"
-import type { ApiTarget } from "@/lib/api"
+import { targetReady, type ApiTarget } from "@/lib/api"
 import { resolveDaemon, type Daemon } from "@/lib/daemons"
 import {
   getQueueWorkflow, listTaskQueues,
@@ -42,6 +42,7 @@ export function useQueueBindings(target: ApiTarget): QueueBindings {
     { loaded: false, byDigest: new Map(), unknown: [], failed: "" })
   const [revision, setRevision] = useState(0)
   useEffect(() => {
+    if (!targetReady(target)) return
     let alive = true
     void (async () => {
       let queues: string[]

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
-import type { ApiTarget } from "@/lib/api"
+import { isConnectionError, targetReady, type ApiTarget } from "@/lib/api"
 import { resolveDaemon } from "@/lib/daemons"
 import { targetFor } from "@/lib/terminalsHost"
 import {
@@ -95,17 +95,27 @@ export default function TaskDrawer({
     return () => { mountedRef.current = false }
   }, [])
 
+  // Once a task is on screen a failed re-read keeps it there, with its
+  // drafts; only a task that never opened closes on an error.
+  const loadedRef = useRef("")
   const load = useCallback(async () => {
+    const loaded = loadedRef.current === taskKey
+    if (loaded && !targetReady(target)) return
     try {
       const [next, history] = await Promise.all([
         getTask(taskKey, target),
         listTaskEvents(taskKey, 0, 200, target),
       ])
       if (!mountedRef.current) return
+      loadedRef.current = taskKey
       setDetail(next)
       setEvents(history.events ?? [])
     } catch (error) {
       if (!mountedRef.current) return
+      if (loaded) {
+        if (!isConnectionError(error)) toast.error(errorMessage(error))
+        return
+      }
       toast.error(errorMessage(error))
       onClose()
     }

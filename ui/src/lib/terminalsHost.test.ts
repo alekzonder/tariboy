@@ -23,5 +23,6 @@ describe("terminals host param mapping", () => {
       baseURL: "",
       token: "",
     })
+    expect(targetFor("missing-host")).toBe(targetFor("missing-host"))
   })
 })

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { ApiTarget } from "@/lib/api"
+import { isConnectionError, type ApiTarget } from "@/lib/api"
 import { listTasks, type Task, type TaskFilters, type TaskStatusView } from "@/lib/tasks"
 import { targetFor } from "@/lib/terminalsHost"
 
@@ -37,7 +37,7 @@ export interface TaskServer {
  *  row is `serverId` + `key`. */
 export type ServerTask = Task & { serverId: string; serverName: string }
 
-type ServerState = { tasks?: Task[]; sequence?: number; error?: string }
+type ServerState = { tasks?: Task[]; sequence?: number; error?: string; filter?: string }
 
 /**
  * Every server's tasks at once: each reachable server is read in parallel with
@@ -67,16 +67,20 @@ export function useAllServersTasks(
     requests.current.set(id, request)
     inflight.current.set(id, false)
     const current = () => requests.current.get(id) === request
+    const filter = `${text}\u0001${statusView}`
     listAllTasks({ text, status_view: statusView }, targetFor(id))
       .then(({ tasks, sequence }) => {
-        if (current()) setState((all) => ({ ...all, [id]: { tasks, sequence } }))
+        if (current()) setState((all) => ({ ...all, [id]: { tasks, sequence, filter } }))
       })
       .catch((error: unknown) => {
         if (!current()) return
-        // The rows it had may belong to another filter; the error says why
-        // they are gone.
+        // An unreachable server keeps the rows of this same filter next to its
+        // error; rows of another filter, or a refused read, are dropped.
         const message = error instanceof Error ? error.message : String(error)
-        setState((all) => ({ ...all, [id]: { error: message || "unavailable" } }))
+        setState((all) => {
+          const kept = isConnectionError(error) && all[id]?.filter === filter ? all[id] : {}
+          return { ...all, [id]: { ...kept, error: message || "unavailable" } }
+        })
       })
       .finally(() => {
         if (!current()) return

@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { DaemonProvider, useDaemons } from "@/components/DaemonProvider";
 import { addDaemon, updateDaemon } from "@/lib/daemons";
@@ -65,5 +66,44 @@ describe("RouteHostBoundary", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(/actions are temporarily unavailable/i);
     expect(screen.queryByText(/Host registry:/)).toBeNull();
     expect(screen.getByTestId("host-content").parentElement).toHaveAttribute("inert", "");
+  });
+
+  it("keeps children mounted with their drafts through a reconnect", async () => {
+    const remote = await addDaemon({
+      label: "Production",
+      baseURL: "http://127.0.0.1:19992",
+      token: "test-token",
+    });
+    let mounts = 0;
+    const probe = { refresh: async () => {} };
+    function Draft() {
+      useEffect(() => { mounts++; }, []);
+      return <input aria-label="draft" />;
+    }
+    function RefreshProbe() {
+      const { refresh } = useDaemons();
+      useEffect(() => { probe.refresh = refresh; }, [refresh]);
+      return null;
+    }
+
+    render(
+      <DaemonProvider>
+        <RefreshProbe />
+        <RouteHostBoundary hostId={remote.id}>
+          <Draft />
+        </RouteHostBoundary>
+      </DaemonProvider>,
+    );
+    fireEvent.change(await screen.findByLabelText("draft"), { target: { value: "unsent" } });
+
+    await updateDaemon(remote.id, { label: remote.label, baseURL: "" });
+    await act(() => probe.refresh());
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    await updateDaemon(remote.id, { label: remote.label, baseURL: "http://127.0.0.1:19993" });
+    await act(() => probe.refresh());
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByLabelText("draft")).toHaveValue("unsent");
+    expect(mounts).toBe(1);
   });
 });

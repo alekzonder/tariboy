@@ -72,6 +72,21 @@ export function resolveTarget(t: ApiTarget): Daemon | null {
   return t === undefined ? activeDaemon : t;
 }
 
+// targetReady is false while a registered host has no endpoint (an SSH
+// tunnel reconnecting). Background loads skip that window instead of failing.
+export function targetReady(t: ApiTarget): boolean {
+  const daemon = resolveTarget(t);
+  return !daemon || !!daemon.baseURL;
+}
+
+// isConnectionError marks a failure to reach the host at all. The sidebar
+// already reports an unreachable host, so background loads keep their last
+// data quietly instead of toasting it every refresh.
+export function isConnectionError(error: unknown): boolean {
+  return error instanceof ApiError
+    && (error.code === "host_not_ready" || error.code === "network_error");
+}
+
 // resolveUrl prepends a daemon's baseURL (absolute cross-origin) or, for the
 // local daemon, the configured local origin — which is "" in a browser, leaving
 // the path relative exactly as before.

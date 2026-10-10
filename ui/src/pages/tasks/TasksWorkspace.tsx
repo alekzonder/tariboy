@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useOptionalDaemons } from "@/components/DaemonProvider"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
-import { ApiError, type ApiTarget } from "@/lib/api"
+import { ApiError, isConnectionError, targetReady, type ApiTarget } from "@/lib/api"
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree"
 import { resolveDaemon } from "@/lib/daemons"
 import {
@@ -128,6 +128,7 @@ function TasksWorkspaceContent({
   const principalMetadataError = !scopeAgent && view !== "" ? metadataError : ""
 
   const loadMetadata = useCallback(async () => {
+    if (!targetReady(target)) return
     const request = ++metadataRequestRef.current
     try {
       const [queuePage, people, inbox] = await Promise.all([
@@ -143,6 +144,7 @@ function TasksWorkspaceContent({
       setMetadataError("")
     } catch (error) {
       if (!mountedRef.current || request !== metadataRequestRef.current) return
+      if (isConnectionError(error)) return
       const message = error instanceof Error ? error.message : String(error)
       setMetadataError(message)
       toast.error(message)
@@ -150,6 +152,7 @@ function TasksWorkspaceContent({
   }, [target])
 
   const loadTree = useCallback(async () => {
+    if (!targetReady(target)) return
     const request = ++treeRequestRef.current
     if (!scopeAgent && view !== "" && !principalFilter) {
       setLoading(!principalMetadataError)
@@ -174,7 +177,7 @@ function TasksWorkspaceContent({
       hasLoadedTreeRef.current = true
       setSocketEnabled(true)
     } catch (error) {
-      if (mountedRef.current && request === treeRequestRef.current) {
+      if (mountedRef.current && request === treeRequestRef.current && !isConnectionError(error)) {
         toast.error(error instanceof Error ? error.message : String(error))
       }
     } finally {
@@ -187,6 +190,7 @@ function TasksWorkspaceContent({
 
   const loadDetail = useCallback(async (key: string) => {
     const refreshingSelection = selectedKeyRef.current === key
+    if (refreshingSelection && !targetReady(target)) return
     selectedKeyRef.current = key
     const request = ++detailRequestRef.current
     if (!refreshingSelection) setLoadingKey(key)
@@ -217,7 +221,7 @@ function TasksWorkspaceContent({
       if (!mountedRef.current || request !== detailRequestRef.current) return
       setLoadingKey("")
       if (refreshingSelection) {
-        toast.error(errorMessage(error))
+        if (!isConnectionError(error)) toast.error(errorMessage(error))
         return
       }
       selectedKeyRef.current = ""
@@ -303,6 +307,11 @@ function TasksWorkspaceContent({
   useEffect(() => {
     void Promise.resolve().then(loadTree)
   }, [loadTree])
+  // A new endpoint (the host reconnected) re-reads the open task in place.
+  useEffect(() => {
+    const key = selectedKeyRef.current
+    if (key) void Promise.resolve().then(() => loadDetail(key))
+  }, [loadDetail])
   // Open each deep-link key once: loadDetail changes identity whenever the
   // host Daemon object is re-created, and the key stays in the URL after close.
   const openedInitialKeyRef = useRef("")
@@ -639,6 +648,7 @@ export default function TasksWorkspace(props: TasksWorkspaceProps) {
     ? `active:${activeId || "local"}`
     : props.target === null
       ? "explicit:local"
-      : `explicit:${props.target.id}:${props.target.baseURL}:${props.target.token}`
+      // Not the endpoint: a reconnect moves it and must keep the open state.
+      : `explicit:${props.target.id}`
   return <TasksWorkspaceContent key={`${targetKey}:${props.scopeAgent ?? ""}`} {...props} />
 }

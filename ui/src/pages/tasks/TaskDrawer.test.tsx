@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
+import { ApiError } from "@/lib/api"
 import type { Task, TaskDetail as Detail } from "@/lib/tasks"
 import TaskDrawer from "./TaskDrawer"
 import { customerView, workflowTask } from "./workflowFixtures"
@@ -112,6 +113,20 @@ it("reloads the task when the tasks socket hints a change", async () => {
   expect(api.getTask).toHaveBeenCalledTimes(1)
   taskSocket.options?.onHint?.({ sequence: 7 })
   await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
+})
+
+it("stays open with the loaded task when a reload cannot reach the host", async () => {
+  const onClose = vi.fn()
+  render(<TaskDrawer taskKey="TEST-1" onClose={onClose} />)
+  await screen.findByText("Ship the drawer")
+  api.getTask.mockRejectedValue(new ApiError(0, "network_error", "network error: Failed to fetch"))
+  taskSocket.options?.onHint?.({ sequence: 7 })
+  await waitFor(() => expect(api.getTask).toHaveBeenCalledTimes(2))
+  await act(async () => {})
+
+  expect(onClose).not.toHaveBeenCalled()
+  expect(screen.getByText("Ship the drawer")).toBeInTheDocument()
+  expect(toast.error).not.toHaveBeenCalled()
 })
 
 it("refetches a workflow task's panel on a hint for this task, and not for another", async () => {

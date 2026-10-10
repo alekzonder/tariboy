@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { ArrowDown, Check, Download, Mail, MessageSquare, MoreHorizontal, Plus, Search } from "lucide-react";
 import { useAgentName } from "@/lib/agent";
 import {
-  ApiError, chatListOn, chatMessagesOn, chatReadOn, messageSendOn,
+  ApiError, chatListOn, chatMessagesOn, chatReadOn, messageSendOn, targetReady,
   type ChatMessage, type ChatSummary,
 } from "@/lib/api";
 import { useMessagesSocket } from "@/hooks/useMessagesSocket";
@@ -113,7 +113,7 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
   );
 
   const load = useCallback(async () => {
-    if (!name) return;
+    if (!name || !targetReady(target)) return;
     try {
       const page = await chatMessagesOn(target, chatId, { types });
       if (anchorRef.current === null) {
@@ -134,10 +134,11 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
     } catch {
       // Keep the last conversation on a transient failure.
     }
-    // target is derived from hostId and typesKey stands for the type list; both
-    // change identity on every render otherwise.
+    // typesKey stands for the type list, which changes identity every render.
+    // target keeps its identity until the host's endpoint moves, and a moved
+    // endpoint (a reconnect) must re-read the conversation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, hostId, typesKey, selected]);
+  }, [name, target, typesKey, selected]);
 
   // A different agent is a different conversation: its own anchor, its own
   // unread rule, its own draft.
@@ -152,15 +153,14 @@ export default function AgentChat({ hostId = "", leading, personalOnly = false }
   // The shared chats are read from the same list the sidebar reads, so a chat
   // created in another window appears here without its own endpoint.
   const loadShared = useCallback(async () => {
-    if (!name) return;
+    if (!name || !targetReady(target)) return;
     try {
       const page = await chatListOn(target);
       setShared(sharedChats(page.chats ?? [], name));
     } catch {
       // A transient failure keeps the tabs that are already shown.
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, hostId]);
+  }, [name, target]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadShared(); }, [loadShared]);

@@ -762,6 +762,27 @@ the snapshot atomically. Cached data is never persisted or used as an API
 target, other server navigation remains available, and a missing host still
 fails closed rather than falling back to local authority.
 
+A reconnect never remounts a server page. An SSH host loses its endpoint while
+its tunnel reconnects and comes back on a new local port. Neither change is
+part of a page's identity: Tasks, Workflows, Stores, Settings and Configuration
+keep their loaded data, the open task, filters, scroll position and every
+unsaved draft. The route boundary keeps one tree shape and only dims the page
+and makes it inert under a single status line. A host object keeps its
+identity until one of its fields changes, so the 3-second sidebar poll does not
+restart page loads.
+
+While the host has no endpoint, background loads are skipped rather than
+failed. When the new endpoint arrives, each page re-reads once in place:
+the task list, the open task, the agent header, Configuration and Chat. A
+background read that cannot reach the host (`host_not_ready`,
+`network_error`) keeps the last data and shows no toast, because the host
+header in the left panel already reports the host as offline with its error.
+All tasks keeps an unreachable server's rows for the same filter beside that
+server's error. An explicit action such as **Save**, **Create** or **Send**
+still reports its failure. Its draft stays in the form, ready to send again
+once the host is back. Drafts live in tab memory only and are not queued for
+later delivery.
+
 For a stopped agent, Configuration offers a working-directory editor backed by
 the selected host's directory autocomplete. Saving changes the CWD used by the
 next launch; it does not move files or start, stop, or restart the agent. Active

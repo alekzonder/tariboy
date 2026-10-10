@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+import { targetReady } from "@/lib/api"
 import type { Daemon } from "@/lib/daemons"
 import { listWorkflowImages, type WorkflowImage } from "@/lib/tasks"
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,7 @@ export default function WorkflowImagesPage({ target, basePath }: { target: Daemo
   const reloadBindings = bindings.reload
 
   useEffect(() => {
+    if (!targetReady(target)) return
     let alive = true
     listWorkflowImages(target).then(
       (result) => { if (alive) { setImages(result); setError("") } },
@@ -33,10 +35,11 @@ export default function WorkflowImagesPage({ target, basePath }: { target: Daemo
 
   return <div className="h-full space-y-3 overflow-auto p-3">
     <WorkflowBuildFromDirectory target={target} onBuilt={reload} />
-    {error ? <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
+    {error && <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
       <span>{error}</span>
       <Button size="sm" variant="secondary" onClick={() => { setError(""); reload() }}>Retry</Button>
-    </div> : images === null ? <p className="text-sm text-muted-foreground">Loading workflow images…</p>
+    </div>}
+    {images === null ? !error && <p className="text-sm text-muted-foreground">Loading workflow images…</p>
       : images.length === 0 ? <p className="text-sm text-muted-foreground">No workflow images</p>
         : <div className="overflow-x-auto rounded border">
           <table className="w-full text-sm">

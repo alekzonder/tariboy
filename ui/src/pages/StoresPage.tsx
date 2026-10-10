@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError } from "@/lib/api";
+import { ApiError, targetReady } from "@/lib/api";
 import type { Daemon } from "@/lib/daemons";
 import {
   addStore,
@@ -79,6 +79,9 @@ export default function StoresPage({ target, name, basePath }: {
   const [removeError, setRemoveError] = useState("");
   const [workflowImages, setWorkflowImages] = useState<WorkflowImage[] | null>(null);
   const buildGeneration = useRef(0);
+  // The Store whose policy seeded the form: a re-read after a reconnect must
+  // not overwrite an unsaved edit.
+  const policyLoaded = useRef("");
 
   useEffect(() => {
     mounted.current = true;
@@ -86,6 +89,7 @@ export default function StoresPage({ target, name, basePath }: {
   }, []);
 
   useEffect(() => {
+    if (!targetReady(target)) return;
     let current = true;
     const request = name ? getStore(target, name) : listStores(target);
     void request.then((result) => {
@@ -93,8 +97,11 @@ export default function StoresPage({ target, name, basePath }: {
       if (name) {
         const loaded = result as StoreDetail;
         setDetail(loaded);
-        setAutoInterval(String(loaded.auto?.interval_minutes ?? 0));
-        setAutoImages(loaded.auto?.images ?? []);
+        if (policyLoaded.current !== name) {
+          policyLoaded.current = name;
+          setAutoInterval(String(loaded.auto?.interval_minutes ?? 0));
+          setAutoImages(loaded.auto?.images ?? []);
+        }
       } else setStores(result as Store[]);
     }).catch((cause) => {
       if (current) setError(message(cause));

@@ -534,6 +534,30 @@ it("keeps an unsaved CWD draft when its route host is re-rendered", async () => 
   expect(input).toHaveValue("/srv/new");
 });
 
+it("keeps the loaded agent and the CWD draft through a reconnect that fails", async () => {
+  vi.stubGlobal("fetch", vi.fn((url: string) => url.includes("/api/fs/list")
+    ? response({ path: "/srv", parent: "/", entries: [] })
+    : response(stopped)));
+  const { rerender } = renderConfiguration();
+  const input = await screen.findByLabelText("Working directory");
+  fireEvent.change(input, { target: { value: "/srv/new" } });
+  const tree = (baseURL: string) => (
+    <AgentNameContext.Provider value="worker">
+      <AgentConfigurationTab target={{ ...remote, baseURL }} refresh={vi.fn()} />
+    </AgentNameContext.Provider>
+  );
+
+  rerender(tree(""));
+  const unreachable = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+  vi.stubGlobal("fetch", unreachable);
+  rerender(tree("https://moved.example"));
+  await waitFor(() => expect(unreachable).toHaveBeenCalled());
+  await act(async () => {});
+
+  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/new");
+  expect(screen.getByText("worker:v1")).toBeInTheDocument();
+});
+
 it("keeps CWD read-only while the agent is active", async () => {
   vi.stubGlobal(
     "fetch",

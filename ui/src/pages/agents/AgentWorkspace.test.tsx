@@ -6,7 +6,7 @@ import { DaemonProvider } from "@/components/DaemonProvider";
 import { addDaemon } from "@/lib/daemons";
 import AgentWorkspace from "./AgentWorkspace";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
-import { agentGetOn } from "@/lib/api";
+import { agentGetOn, ApiError } from "@/lib/api";
 import * as desktop from "@/lib/desktop";
 import { UI_MODE_KEY } from "@/lib/uiMode";
 
@@ -183,6 +183,34 @@ describe("AgentWorkspace", () => {
       "halted: image activation failed: prepare claude image skill bridge: skills missing",
     );
     expect(screen.getByTestId("agent-halt-reason")).toHaveClass("text-destructive");
+  });
+
+  it("keeps the last status in the header while a status poll cannot reach the host", async () => {
+    vi.useFakeTimers();
+    let reachable = true;
+    vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
+      if (!reachable) throw new ApiError(0, "network_error", "network error: Failed to fetch");
+      return action === "status"
+        ? { name: "worker", state: "error", loop_enabled: false, iterations: 0, last_iteration: null,
+          last_iteration_id: null, status_message: "", status_updated: "", halt_kind: "error", halt_reason: "halted: boom" }
+        : agent;
+    });
+
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Routes>
+            <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByTestId("agent-halt-reason")).toHaveTextContent("halted: boom");
+
+    reachable = false;
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(screen.getByTestId("agent-halt-reason")).toHaveTextContent("halted: boom");
   });
 
   it("renders configured budget rows when an older daemon omits exhausted periods", async () => {

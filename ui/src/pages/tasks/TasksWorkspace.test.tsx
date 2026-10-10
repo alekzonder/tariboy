@@ -508,6 +508,31 @@ describe("TasksWorkspace", () => {
     expect(screen.queryByRole("heading", { name: "ASK-7" })).not.toBeInTheDocument()
   })
 
+  it("keeps the list, the open task and its drafts while the host reconnects", async () => {
+    const remote = (baseURL: string) => ({ id: "remote", label: "Remote", baseURL, token: "test" })
+    const view = render(<TasksWorkspace target={remote("http://127.0.0.1:41001")} />)
+    await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))
+    await screen.findByRole("heading", { name: root.key })
+    const comments = screen.getByText("Comments").closest("section")!
+    await userEvent.click(within(comments).getByRole("button", { name: "Markdown" }))
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "Unsent comment" } })
+    const loads = api.listTasks.mock.calls.length
+
+    const offline = remote("")
+    view.rerender(<TasksWorkspace target={offline} />)
+    await act(async () => {})
+    expect(api.listTasks.mock.calls.filter(([, target]) => target === offline)).toHaveLength(0)
+    const back = remote("http://127.0.0.1:41002")
+    view.rerender(<TasksWorkspace target={back} />)
+    await waitFor(() => expect(api.listTasks).toHaveBeenLastCalledWith(expect.anything(), back))
+
+    expect(api.listTasks.mock.calls.length).toBe(loads + 1)
+    expect(screen.getByTestId(`task-row-${root.key}`)).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: root.key })).toBeInTheDocument()
+    expect(screen.getByLabelText("Comment")).toHaveValue("Unsent comment")
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it("updates the selected task when the deep-link key changes", async () => {
     const first = { ...root, key: "ASK-7", title: "First question", description: "First answer needed" }
     const second = { ...root, key: "ASK-8", title: "Second question", description: "Second answer needed" }
