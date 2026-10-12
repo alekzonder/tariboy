@@ -30,7 +30,7 @@ import { useUiMode } from "@/lib/uiMode";
 const TABS = [
   ["chat", "Chat"],
   ["tasks", "Tasks"],
-  ["console", "Console"],
+  ["console", "Terminal"],
   ["autopilot", "Autopilot"],
   ["activity", "Activity"],
   ["configuration", "Configuration"],
@@ -112,7 +112,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     return () => window.clearInterval(timer);
   }, [connection, refreshStatus, unavailable]);
 
-  // An unknown or hidden tab opens the default one: Console, or Chat in Simple.
+  // An unknown or hidden tab opens the default one: Terminal, or Chat in Simple.
   if (!tabs.some(([key]) => key === tab)) {
     return <Navigate to={`/agents/${hostToParam(hostId)}/${encodeURIComponent(agent.name)}/${simple ? "chat" : "console"}`} replace />;
   }

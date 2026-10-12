@@ -306,7 +306,7 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
   };
 
   return (
-    // Console body: the chrome shows through as an 8px gutter around the
+    // Terminal body: the chrome shows through as an 8px gutter around the
     // content island, so neither the sidebar nor the island needs a border.
     <div className="flex h-full px-2 pb-2">
       {/* Chat order is live: a published message refreshes the authoritative

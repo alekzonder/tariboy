@@ -836,7 +836,7 @@ describe("TuiScreen", () => {
       expect(liveRegion().textContent).toBe("")
     })
 
-    it("scrollback case 7: the same controls come from the shared component on Console and Workspace", () => {
+    it("scrollback case 7: the same controls come from the shared component on Terminal and Workspace", () => {
       const console_ = render(<TuiScreen controller={ctrl()} />)
       enterScrollback()
       const onConsole = screen

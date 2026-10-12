@@ -91,7 +91,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   resetWorkspacesForTest();
-  // Console navigation is Expert behaviour; Simple opens Chat.
+  // Terminal navigation is Expert behaviour; Simple opens Chat.
   localStorage.setItem(UI_MODE_KEY, "expert");
   vi.mocked(apiOn).mockReset().mockResolvedValue(undefined);
   vi.mocked(fetchAllAgents).mockResolvedValue([
@@ -298,7 +298,7 @@ describe("TerminalsPage", () => {
     expect(screen.queryByLabelText(/unread agent question/)).toBeNull();
   });
 
-  it("opens a sidebar agent in Console", async () => {
+  it("opens a sidebar agent in Terminal", async () => {
     renderAt("/");
     await waitFor(() => expect(screen.getByText("a1")).toBeInTheDocument());
 
@@ -309,7 +309,7 @@ describe("TerminalsPage", () => {
     );
   });
 
-  it("opens a non-interactive sidebar agent in Console", async () => {
+  it("opens a non-interactive sidebar agent in Terminal", async () => {
     renderAt("/");
     await waitFor(() => expect(screen.getByText("a2")).toBeInTheDocument());
 
@@ -595,7 +595,7 @@ describe("TerminalsPage", () => {
     }
   });
 
-  it("opens a sidebar agent in the product Console route", async () => {
+  it("opens a sidebar agent in the product Terminal route", async () => {
     renderAt("/");
     fireEvent.click(await screen.findByText("a1"));
     await waitFor(() =>

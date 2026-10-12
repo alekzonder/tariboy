@@ -179,7 +179,7 @@ describe("product routing", () => {
     expect(screen.getByRole("complementary", { name: "Agents" })).toBeInTheDocument();
   });
 
-  it("redirects a legacy terminal route to the Console tab", async () => {
+  it("redirects a legacy terminal route to the Terminal tab", async () => {
     localStorage.setItem(UI_MODE_KEY, "expert");
     renderAt("/terminals/local/worker");
     await waitFor(() =>

@@ -23,7 +23,7 @@ next prompt. Normal completion acknowledges them; harness errors, timeouts, and
 kills preserve them for bounded redelivery.
 
 Disabling Autopilot prevents new scheduled and message-triggered iterations. It
-does not delete pending messages and does not terminate an interactive Console.
+does not delete pending messages and does not terminate an interactive Terminal.
 
 ## Configure conservatively
 

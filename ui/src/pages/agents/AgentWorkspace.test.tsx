@@ -339,7 +339,7 @@ describe("AgentWorkspace", () => {
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Chat",
       "Tasks",
-      "Console",
+      "Terminal",
       "Autopilot",
       "Activity",
       "Configuration",
@@ -362,7 +362,7 @@ describe("AgentWorkspace", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument());
-    expect(screen.getByRole("link", { name: "Console" })).toHaveAttribute("href", "/agents/local/worker/console");
+    expect(screen.getByRole("link", { name: "Terminal" })).toHaveAttribute("href", "/agents/local/worker/console");
     expect(screen.getByRole("link", { name: "Autopilot" })).toHaveAttribute("href", "/agents/local/worker/autopilot");
     expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute("href", "/agents/local/worker/activity");
     expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/agents/local/worker/tasks");
@@ -444,25 +444,25 @@ describe("AgentWorkspace in Simple mode", () => {
 
   beforeEach(() => localStorage.removeItem(UI_MODE_KEY));
 
-  it("shows only Chat, Tasks, Console and Configuration with the full header", async () => {
+  it("shows only Chat, Tasks, Terminal and Configuration with the full header", async () => {
     renderAt("/agents/local/worker/tasks");
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Chat",
       "Tasks",
-      "Console",
+      "Terminal",
       "Configuration",
     ]);
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "IMPROVE-37" })).toBeInTheDocument();
   });
 
-  it("keeps the Console tab open", async () => {
+  it("keeps the Terminal tab open", async () => {
     renderAt("/agents/local/worker/console");
 
     const nav = await screen.findByRole("navigation", { name: "Agent workspace" });
-    expect(within(nav).getByRole("link", { name: "Console" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Terminal" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
   });
 
