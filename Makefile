@@ -228,6 +228,7 @@ TAURI_DIR   := $(DESKTOP)/src-tauri
 DESKTOP_BIN := $(TAURI_DIR)/resources/bin
 override DESKTOP_DARWIN_BIN := desktop/src-tauri/resources/bin/darwin-arm64
 override DESKTOP_LINUX_BIN := desktop/src-tauri/resources/bin/linux-x86_64
+override DESKTOP_LINUX_ARM64_BIN := desktop/src-tauri/resources/bin/linux-aarch64
 # The single source of truth for the version, read straight out of the Go const.
 VERSION     := $(shell sed -n 's/^const Version = "\(.*\)"$$/\1/p' internal/version/version.go)
 RELEASE_VERSION := $(shell cat scripts/release-version.txt 2>/dev/null)
@@ -328,10 +329,12 @@ desktop-lock-check:
 		echo "cargo lock ok (crates fetched)"; \
 	fi
 
-# Build both binary sets without packaging, useful for tests and remote smoke.
+# Build every binary set without packaging, useful for tests and remote smoke.
+# The darwin set runs the local daemon; both linux sets are uploaded to SSH
+# servers, picked by the server's `uname -m`.
 desktop-binaries: desktop-version-check
-	rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64
-	mkdir -p $(DESKTOP_DARWIN_BIN) $(DESKTOP_LINUX_BIN)
+	rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64 desktop/src-tauri/resources/bin/linux-aarch64
+	mkdir -p $(DESKTOP_DARWIN_BIN) $(DESKTOP_LINUX_BIN) $(DESKTOP_LINUX_ARM64_BIN)
 	@for b in $(DESKTOP_BINARIES); do \
 		echo "build darwin/arm64 $$b"; \
 		CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build -trimpath -o $(DESKTOP_DARWIN_BIN)/$$b ./cmd/$$b || exit 1; \
@@ -340,11 +343,17 @@ desktop-binaries: desktop-version-check
 		echo "build linux/amd64 $$b"; \
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -o $(DESKTOP_LINUX_BIN)/$$b ./cmd/$$b || exit 1; \
 	done
+	@for b in $(DESKTOP_BINARIES); do \
+		echo "build linux/arm64 $$b"; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build -trimpath -o $(DESKTOP_LINUX_ARM64_BIN)/$$b ./cmd/$$b || exit 1; \
+	done
 	@printf '%s\n' "$(VERSION)" > $(DESKTOP_DARWIN_BIN)/VERSION
-	@printf '%s\n' "$(VERSION)" > $(DESKTOP_LINUX_BIN)/VERSION
-	cp $(TAURI_DIR)/src/remote-install.sh $(DESKTOP_LINUX_BIN)/remote-install.sh
-	chmod 0755 $(DESKTOP_LINUX_BIN)/remote-install.sh
-	@cd $(DESKTOP_LINUX_BIN) && shasum -a 256 $(DESKTOP_BINARIES) > SHA256SUMS
+	@for dir in $(DESKTOP_LINUX_BIN) $(DESKTOP_LINUX_ARM64_BIN); do \
+		printf '%s\n' "$(VERSION)" > $$dir/VERSION || exit 1; \
+		cp $(TAURI_DIR)/src/remote-install.sh $$dir/remote-install.sh || exit 1; \
+		chmod 0755 $$dir/remote-install.sh || exit 1; \
+		(cd $$dir && shasum -a 256 $(DESKTOP_BINARIES) > SHA256SUMS) || exit 1; \
+	done
 	@case "$$(uname -s)-$$(uname -m)" in \
 		Darwin-arm64) native_dir=$(DESKTOP_DARWIN_BIN) ;; \
 		Linux-x86_64) native_dir=$(DESKTOP_LINUX_BIN) ;; \
@@ -356,10 +365,11 @@ desktop-binaries: desktop-version-check
 			echo "bundled $$native_dir/$$b reports $$bundled, expected $(VERSION)" >&2; exit 1; \
 		fi; \
 	done
-	@for platform in darwin-arm64 linux-x86_64; do \
+	@for platform in darwin-arm64 linux-x86_64 linux-aarch64; do \
 		case "$$platform" in \
 			darwin-arm64) expected_format='Mach-O 64-bit.*arm64' ;; \
 			linux-x86_64) expected_format='ELF 64-bit.*x86-64' ;; \
+			linux-aarch64) expected_format='ELF 64-bit.*ARM aarch64' ;; \
 		esac; \
 		for b in $(DESKTOP_BINARIES); do \
 			path=$(DESKTOP_BIN)/$$platform/$$b; \

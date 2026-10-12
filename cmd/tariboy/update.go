@@ -78,7 +78,7 @@ Arguments:
 Flags:
   --force      reinstall even when that version is already active
 
-Only installer-managed linux-x86_64 installations can be updated. The download
-root can be overridden with TARIBOY_UPDATE_BASE_URL.
+Only installer-managed linux-x86_64 and linux-aarch64 installations can be
+updated. The download root can be overridden with TARIBOY_UPDATE_BASE_URL.
 `)
 }

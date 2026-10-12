@@ -3,6 +3,8 @@ import {
   addDaemon,
   clearDaemonToken,
   hasDaemonToken,
+  hostInstallBlocked,
+  INSTALL_REQUIREMENTS,
   setDaemonToken,
   updateDaemon,
   type DaemonMeta,
@@ -66,14 +68,6 @@ function idleOperation(kind: HostOperationKind): HostOperation {
     error: null,
   };
 }
-
-const INSTALL_REQUIREMENTS = new Set([
-  "Linux",
-  "x86_64",
-  "writable ~/.local",
-  "flock",
-  "python3",
-]);
 
 function hostMeta(view: DesktopHostView): DaemonMeta {
   return {
@@ -317,10 +311,10 @@ export function ServerDialog({
   const optionalTools = prerequisites.filter((item) =>
     !INSTALL_REQUIREMENTS.has(item)
   );
-  const unsupported = (
-    (!!displayHost?.platform && displayHost.platform !== "Linux")
-    || (!!displayHost?.arch && displayHost.arch !== "x86_64")
-    || installRequirements.length > 0
+  const unsupported = hostInstallBlocked(
+    displayHost?.platform,
+    displayHost?.arch,
+    prerequisites,
   );
 
   const beginOperation = (kind: HostOperationKind) => {

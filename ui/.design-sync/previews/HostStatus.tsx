@@ -45,7 +45,7 @@ export const InstallBlocked = () => (
       state: "failed",
       platform: "Darwin",
       arch: "arm64",
-      prerequisites: ["Linux", "x86_64", "python3"],
+      prerequisites: ["Linux", "x86_64 or aarch64", "python3"],
     }}
     appVersion="0.58.1"
     onConnect={() => {}}

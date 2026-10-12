@@ -74,6 +74,35 @@ describe("HostStatus", () => {
     expect(screen.getByText("Install blocked")).toBeInTheDocument();
   });
 
+  it("accepts a Linux aarch64 server", () => {
+    render(
+      <HostStatus
+        host={host({ state: "disconnected", platform: "Linux", arch: "aarch64" })}
+        appVersion="0.11.5"
+        onConnect={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Install blocked")).toBeNull();
+    expect(screen.getByRole("button", { name: "Connect gpu" })).toBeInTheDocument();
+  });
+
+  it("blocks install on a 32-bit ARM server", () => {
+    render(
+      <HostStatus
+        host={host({
+          state: "failed",
+          platform: "Linux",
+          arch: "armv7l",
+          prerequisites: ["x86_64 or aarch64"],
+        })}
+        appVersion="0.11.5"
+      />,
+    );
+
+    expect(screen.getByText("Install blocked")).toBeInTheDocument();
+  });
+
   it("blocks install when python3 is missing", () => {
     render(
       <HostStatus

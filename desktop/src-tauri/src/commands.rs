@@ -1100,10 +1100,7 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
         .host_runtime
         .healthy_tunnel(&id)
         .ok_or_else(|| "host must have a healthy tunnel before update".to_string())?;
-    let linux_bundle = state
-        .bundle
-        .platform(bundle::Platform::LinuxX86_64)
-        .map_err(|error| format!("remote bundle is not ready: {error}"))?;
+    let bundle = state.bundle.clone();
     let operation = state.ssh_operations.begin(&id)?;
     let operation_id = operation.id.clone();
     let operations = state.ssh_operations.clone();
@@ -1125,6 +1122,7 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
                     message: "remote host no longer satisfies install prerequisites".into(),
                 });
             }
+            let linux_bundle = remote_bundle(&bundle, &preflight.arch)?;
             let staged = provision::stage(
                 &ssh::Transport::system(),
                 &operation,
@@ -1330,12 +1328,23 @@ fn establish_host_preflight(
     Ok((result, master))
 }
 
+/// remote_bundle picks the packaged Linux set matching the server's `uname -m`.
+fn remote_bundle(
+    bundle: &bundle::Bundle,
+    arch: &str,
+) -> Result<bundle::PlatformBundle, ssh::SshError> {
+    bundle.remote(arch).map_err(|error| ssh::SshError {
+        code: "bundle_missing".into(),
+        message: format!("remote bundle is not ready: {error}"),
+    })
+}
+
 fn run_host_install(
     transport: &ssh::Transport,
     operation: &ssh::Operation,
     host: &hosts::HostRecord,
     control_dir: &std::path::Path,
-    bundle: &bundle::PlatformBundle,
+    bundle: &bundle::Bundle,
     sink: ssh::OutputSink,
 ) -> Result<(preflight::Result, provision::Result), ssh::SshError> {
     let (preflight, master) =
@@ -1344,17 +1353,18 @@ fn run_host_install(
         return Err(ssh::SshError {
             code: "unsupported_host".into(),
             message: format!(
-                "remote installation requires Linux x86_64, writable ~/.local, flock, and python3 (found {}/{})",
+                "remote installation requires Linux x86_64 or aarch64, writable ~/.local, flock, and python3 (found {}/{})",
                 preflight.platform, preflight.arch
             ),
         });
     }
+    let linux_bundle = remote_bundle(bundle, &preflight.arch)?;
     let installed = provision::run(
         transport,
         operation,
         &host.ssh_alias,
         master.socket(),
-        bundle,
+        &linux_bundle,
         host.remote_port,
         sink,
     )?;
@@ -1368,10 +1378,7 @@ pub fn host_provision(app: AppHandle, id: String) -> Result<OperationResult, Str
     if host.kind != hosts::HostKind::Ssh {
         return Err("only SSH hosts can be provisioned".into());
     }
-    let linux_bundle = state
-        .bundle
-        .platform(bundle::Platform::LinuxX86_64)
-        .map_err(|error| format!("remote bundle is not ready: {error}"))?;
+    let bundle = state.bundle.clone();
     let operation = state.ssh_operations.begin(&id)?;
     let operation_id = operation.id.clone();
     let operations = state.ssh_operations.clone();
@@ -1384,7 +1391,7 @@ pub fn host_provision(app: AppHandle, id: String) -> Result<OperationResult, Str
             &operation,
             &host,
             &control_dir,
-            &linux_bundle,
+            &bundle,
             sink,
         ) {
             Ok((preflight, installed)) => {

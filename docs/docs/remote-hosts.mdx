@@ -14,7 +14,7 @@ by the operator. The desktop does not implement a second SSH stack.
 | Component | Alpha support |
 | --- | --- |
 | Desktop | macOS 12+, Apple Silicon |
-| Automatic remote install | Linux x86_64 |
+| Automatic remote install | Linux x86_64 and aarch64 |
 | SSH | system `ssh` and `scp` |
 | Remote install root | `~/.local/lib/tariboy` |
 | Remote CLI links | `~/.local/bin` |
@@ -23,6 +23,11 @@ by the operator. The desktop does not implement a second SSH stack.
 | Android app | arm64 APK built with `make desktop-android`; forwarded loopback port or HTTPS server, no SSH hosts |
 
 Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
+The desktop app carries one server build per architecture and uploads the one
+matching the host's `uname -m`: `x86_64` gets `linux-x86_64`, and `aarch64`
+(or `arm64`) gets `linux-aarch64`. Install and update re-read the architecture
+in preflight every time. Any other architecture, such as 32-bit `armv7l`, is
+reported as unsupported and nothing changes on the host.
 The Python runtime executes the standard-library agent tool scripts. Preflight
 also reports `tmux`, `git`, `npx`, Claude, Codex, OpenCode, and the Cursor CLI
 (its `agent` executable) so you can see which workflows are available; a missing harness is
@@ -154,8 +159,9 @@ ssh build-box 'tariboy update 0.64.0'
 ```
 
 `latest` resolves the newest published GitHub release; an explicit version
-installs exactly that release. The command downloads
-`tariboy_<version>_linux-x86_64.tar.gz` and the release `SHA256SUMS`, verifies
+installs exactly that release. The command downloads the archive for its own
+architecture, `tariboy_<version>_linux-x86_64.tar.gz` or
+`tariboy_<version>_linux-aarch64.tar.gz`, and the release `SHA256SUMS`, verifies
 the archive checksum before unpacking, stages it under
 `~/.local/lib/tariboy/.stage-<token>`, and then runs the same fixed installer
 the desktop app uploads — so checksum validation, `flock` serialization,
@@ -163,9 +169,9 @@ atomic symlink switching, and rollback are identical. A running daemon is
 restarted onto the new release and must report the installed version; a stopped
 daemon is left stopped.
 
-The command updates only an installer-managed `linux-x86_64` installation,
-where `~/.local/bin/tariboy` is a symlink into `~/.local/lib/tariboy/<version>/`.
-It refuses anything else — a hand-placed binary or a macOS installation
+The command updates only an installer-managed `linux-x86_64` or
+`linux-aarch64` installation, where `~/.local/bin/tariboy` is a symlink into
+`~/.local/lib/tariboy/<version>/`. It refuses anything else — a hand-placed binary or a macOS installation
 belonging to the app bundle — and changes nothing. `--force` reinstalls a
 version that is already active. `TARIBOY_UPDATE_BASE_URL` overrides the GitHub
 releases root for a mirror.

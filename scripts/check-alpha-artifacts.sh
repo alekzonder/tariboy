@@ -15,7 +15,12 @@ EXPECTED_VERSION="$(cat "$RELEASE_VERSION_FILE")"
 EXPECTED_NUMERIC_VERSION="${EXPECTED_VERSION%%-*}"
 RELEASE_DIR="${1:-}"
 EXPECTED_DMG="Tariboy_${VERSION}_aarch64.dmg"
-EXPECTED_SERVER_ARCHIVE="tariboy_${VERSION}_linux-x86_64.tar.gz"
+SERVER_ARCHES="x86_64 aarch64"
+EXPECTED_SERVER_ARCHIVES=""
+for arch in $SERVER_ARCHES; do
+  archive="tariboy_${VERSION}_linux-${arch}.tar.gz"
+  EXPECTED_SERVER_ARCHIVES="$EXPECTED_SERVER_ARCHIVES $archive"
+done
 SERVER_PAYLOAD="tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram"
 MOUNT=""
 STRING_DUMP=""
@@ -33,6 +38,16 @@ cleanup() {
   [ -z "$STRING_DUMP" ] || [ ! -f "$STRING_DUMP" ] || rm -f "$STRING_DUMP"
 }
 trap cleanup EXIT
+
+# elf_format names the `file` description every binary of a bundled set matches.
+elf_format() {
+  case "$1" in
+    darwin-arm64) echo "Mach-O 64-bit.*arm64" ;;
+    linux-x86_64) echo "ELF 64-bit.*x86-64" ;;
+    linux-aarch64) echo "ELF 64-bit.*ARM aarch64" ;;
+    *) echo "FAIL: unknown bundled platform: $1" >&2; exit 1 ;;
+  esac
+}
 
 binary_contains() {
   strings "$1" > "$STRING_DUMP"
@@ -93,13 +108,13 @@ for command in codesign file hdiutil lipo mount python3 rg shasum strings; do
 done
 
 ACTUAL_FILES="$(find "$RELEASE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)"
-EXPECTED_FILES="$(printf '%s\n' "$EXPECTED_DMG" "$EXPECTED_SERVER_ARCHIVE" SHA256SUMS release.json | LC_ALL=C sort)"
+EXPECTED_FILES="$(printf '%s\n' "$EXPECTED_DMG" $EXPECTED_SERVER_ARCHIVES SHA256SUMS release.json | LC_ALL=C sort)"
 [ "$ACTUAL_FILES" = "$EXPECTED_FILES" ] || {
   echo "FAIL: unexpected release files; found:" >&2
   printf '%s\n' "$ACTUAL_FILES" >&2
   exit 1
 }
-for artifact in "$EXPECTED_DMG" "$EXPECTED_SERVER_ARCHIVE" SHA256SUMS release.json; do
+for artifact in "$EXPECTED_DMG" $EXPECTED_SERVER_ARCHIVES SHA256SUMS release.json; do
   [ -f "$RELEASE_DIR/$artifact" ] && [ ! -L "$RELEASE_DIR/$artifact" ] || {
     echo "FAIL: release entry is not a regular file: $artifact" >&2
     exit 1
@@ -190,12 +205,8 @@ APP_EXE="$APP/Contents/MacOS/$EXE_NAME"
 binary_contains "$APP_EXE" "$VERSION" || {
   echo "FAIL: desktop executable does not embed $VERSION" >&2; exit 1; }
 
-for platform in darwin-arm64 linux-x86_64; do
-  if [ "$platform" = "darwin-arm64" ]; then
-    expected_format="Mach-O 64-bit.*arm64"
-  else
-    expected_format="ELF 64-bit.*x86-64"
-  fi
+for platform in darwin-arm64 linux-x86_64 linux-aarch64; do
+  expected_format="$(elf_format "$platform")"
   for binary in tariboyd tariboy tariboy-tasks tariboy-shim tariboy-plugin-telegram; do
     path="$APP/Contents/Resources/bin/$platform/$binary"
     [ -x "$path" ] || { echo "FAIL: missing bundled binary: $path" >&2; exit 1; }
@@ -217,33 +228,39 @@ for platform in darwin-arm64 linux-x86_64; do
     echo "FAIL: $platform/VERSION does not equal $VERSION" >&2; exit 1; }
 done
 
-# The server archive is the payload `tariboy update` installs, so it must carry
-# the complete install layout the fixed installer requires.
+# The server archives are the payloads `tariboy update` installs, so each must
+# carry the complete install layout the fixed installer requires.
 ARCHIVE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tariboy-alpha-archive.XXXXXX")"
-tar -xzf "$RELEASE_DIR/$EXPECTED_SERVER_ARCHIVE" -C "$ARCHIVE_DIR"
-ACTUAL_ARCHIVE_FILES="$(find "$ARCHIVE_DIR" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)"
 EXPECTED_ARCHIVE_FILES="$(printf '%s\n' $SERVER_PAYLOAD VERSION SHA256SUMS remote-install.sh | LC_ALL=C sort)"
-[ "$ACTUAL_ARCHIVE_FILES" = "$EXPECTED_ARCHIVE_FILES" ] || {
-  echo "FAIL: unexpected server archive entries; found:" >&2
-  printf '%s\n' "$ACTUAL_ARCHIVE_FILES" >&2
-  exit 1
-}
-[ "$(tr -d '\r\n' < "$ARCHIVE_DIR/VERSION")" = "$VERSION" ] || {
-  echo "FAIL: server archive VERSION does not equal $VERSION" >&2
-  exit 1
-}
-(cd "$ARCHIVE_DIR" && shasum -a 256 -c SHA256SUMS)
-cmp -s "$ARCHIVE_DIR/remote-install.sh" "$ROOT/desktop/src-tauri/src/remote-install.sh" || {
-  echo "FAIL: server archive installer differs from the repository installer" >&2
-  exit 1
-}
-for binary in $SERVER_PAYLOAD; do
-  path="$ARCHIVE_DIR/$binary"
-  [ -x "$path" ] || { echo "FAIL: server archive binary is not executable: $binary" >&2; exit 1; }
-  grep "ELF 64-bit.*x86-64" <<<"$(file "$path")" >/dev/null || {
-    echo "FAIL: server archive binary has the wrong architecture: $binary" >&2; exit 1; }
-  binary_contains "$path" "$VERSION" || {
-    echo "FAIL: server archive binary does not embed $VERSION: $binary" >&2; exit 1; }
+for arch in $SERVER_ARCHES; do
+  archive="tariboy_${VERSION}_linux-${arch}.tar.gz"
+  unpacked="$ARCHIVE_DIR/$arch"
+  expected_format="$(elf_format "linux-$arch")"
+  mkdir "$unpacked"
+  tar -xzf "$RELEASE_DIR/$archive" -C "$unpacked"
+  actual_archive_files="$(find "$unpacked" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)"
+  [ "$actual_archive_files" = "$EXPECTED_ARCHIVE_FILES" ] || {
+    echo "FAIL: unexpected $archive entries; found:" >&2
+    printf '%s\n' "$actual_archive_files" >&2
+    exit 1
+  }
+  [ "$(tr -d '\r\n' < "$unpacked/VERSION")" = "$VERSION" ] || {
+    echo "FAIL: $archive VERSION does not equal $VERSION" >&2
+    exit 1
+  }
+  (cd "$unpacked" && shasum -a 256 -c SHA256SUMS)
+  cmp -s "$unpacked/remote-install.sh" "$ROOT/desktop/src-tauri/src/remote-install.sh" || {
+    echo "FAIL: $archive installer differs from the repository installer" >&2
+    exit 1
+  }
+  for binary in $SERVER_PAYLOAD; do
+    path="$unpacked/$binary"
+    [ -x "$path" ] || { echo "FAIL: $archive binary is not executable: $binary" >&2; exit 1; }
+    grep "$expected_format" <<<"$(file "$path")" >/dev/null || {
+      echo "FAIL: $archive binary has the wrong architecture: $binary" >&2; exit 1; }
+    binary_contains "$path" "$VERSION" || {
+      echo "FAIL: $archive binary does not embed $VERSION: $binary" >&2; exit 1; }
+  done
 done
 
 credential_names="$(find "$MOUNT" \( -name '*.pem' -o -name '*.key' -o -name 'id_rsa*' \

@@ -52,6 +52,7 @@ const INSTALLER_FILE: &str = "remote-install.sh";
 pub enum Platform {
     DarwinArm64,
     LinuxX86_64,
+    LinuxAarch64,
 }
 
 impl Platform {
@@ -68,10 +69,24 @@ impl Platform {
         Self::DarwinArm64
     }
 
+    /// remote maps an SSH server's `uname -m` to the Linux set uploaded to it.
+    pub fn remote(arch: &str) -> Option<Self> {
+        match arch {
+            "x86_64" => Some(Self::LinuxX86_64),
+            "aarch64" | "arm64" => Some(Self::LinuxAarch64),
+            _ => None,
+        }
+    }
+
+    fn is_remote(self) -> bool {
+        matches!(self, Self::LinuxX86_64 | Self::LinuxAarch64)
+    }
+
     fn directory(self) -> &'static str {
         match self {
             Self::DarwinArm64 => "darwin-arm64",
             Self::LinuxX86_64 => "linux-x86_64",
+            Self::LinuxAarch64 => "linux-aarch64",
         }
     }
 }
@@ -111,6 +126,14 @@ impl Bundle {
 
     pub fn platform(&self, platform: Platform) -> Result<PlatformBundle, String> {
         validate_platform_bundle(&self.bin_dir.join(platform.directory()), platform, VERSION)
+    }
+
+    /// remote returns the validated set for a server whose `uname -m` is `arch`.
+    pub fn remote(&self, arch: &str) -> Result<PlatformBundle, String> {
+        let platform = Platform::remote(arch)
+            .ok_or_else(|| format!("no bundled server build for architecture {arch:?}"))?;
+        self.platform(platform)
+            .map_err(|error| format!("{} bundle: {error}", platform.directory()))
     }
 
     fn local_dir(&self) -> PathBuf {
@@ -153,7 +176,7 @@ fn validate_platform_bundle(
             return Err(format!("bundled binary is missing: {}", path.display()));
         }
     }
-    if platform == Platform::LinuxX86_64 {
+    if platform.is_remote() {
         let checksums = dir.join(CHECKSUM_FILE);
         if !checksums.is_file() {
             return Err(format!(
@@ -290,7 +313,7 @@ mod tests {
             std::fs::write(dir.join(binary), format!("#!/bin/sh\necho {version}\n")).unwrap();
         }
         std::fs::write(dir.join(VERSION_FILE), format!("{version}\n")).unwrap();
-        if platform == Platform::LinuxX86_64 {
+        if platform.is_remote() {
             std::fs::write(
                 dir.join(CHECKSUM_FILE),
                 BINARIES
@@ -365,5 +388,38 @@ mod tests {
             .platform(Platform::LinuxX86_64)
             .unwrap_err()
             .contains("version mismatch"));
+    }
+
+    #[test]
+    fn remote_platform_follows_the_server_machine_name() {
+        assert_eq!(Platform::remote("x86_64"), Some(Platform::LinuxX86_64));
+        assert_eq!(Platform::remote("aarch64"), Some(Platform::LinuxAarch64));
+        assert_eq!(Platform::remote("arm64"), Some(Platform::LinuxAarch64));
+        assert_eq!(Platform::remote("armv7l"), None);
+        assert_eq!(Platform::remote(""), None);
+    }
+
+    #[test]
+    fn remote_bundle_is_picked_by_server_arch() {
+        let root = tempfile::tempdir().unwrap();
+        write_bundle(root.path(), Platform::LinuxX86_64, VERSION);
+        let arm = write_bundle(root.path(), Platform::LinuxAarch64, VERSION);
+        let bundle = Bundle::new(root.path().to_path_buf());
+
+        assert_eq!(
+            bundle.remote("x86_64").unwrap().dir,
+            root.path().join("linux-x86_64")
+        );
+        assert_eq!(bundle.remote("aarch64").unwrap().dir, arm);
+        assert_eq!(
+            bundle.remote("aarch64").unwrap().files_for_upload().len(),
+            7
+        );
+        assert!(bundle.remote("armv7l").unwrap_err().contains("armv7l"));
+
+        std::fs::remove_file(arm.join(INSTALLER_FILE)).unwrap();
+        let error = bundle.remote("aarch64").unwrap_err();
+        assert!(error.contains("linux-aarch64"), "{error}");
+        assert!(error.contains(INSTALLER_FILE), "{error}");
     }
 }

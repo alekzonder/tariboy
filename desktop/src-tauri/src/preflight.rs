@@ -82,11 +82,15 @@ pub struct Result {
     pub install_supported: bool,
 }
 
+/// Prerequisite named when the server's `uname -m` has no bundled build.
+pub const ARCH_REQUIREMENT: &str = "x86_64 or aarch64";
+
 pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     let mut result: Result =
         serde_json::from_str(stdout).map_err(|error| format!("invalid preflight JSON: {error}"))?;
+    let arch_supported = crate::bundle::Platform::remote(&result.arch).is_some();
     result.install_supported = result.platform == "Linux"
-        && result.arch == "x86_64"
+        && arch_supported
         && result.writable_local
         && result.flock.available
         && result.python3.available;
@@ -94,8 +98,8 @@ pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     if result.platform != "Linux" {
         prerequisites.push("Linux".to_string());
     }
-    if result.arch != "x86_64" {
-        prerequisites.push("x86_64".to_string());
+    if !arch_supported {
+        prerequisites.push(ARCH_REQUIREMENT.to_string());
     }
     if !result.writable_local {
         prerequisites.push("writable ~/.local".to_string());
@@ -194,11 +198,23 @@ mod tests {
     }
 
     #[test]
+    fn linux_aarch64_can_install() {
+        let result = parse(&fixture("Linux", "aarch64", true)).unwrap();
+        assert!(result.install_supported);
+        assert!(!result.prerequisites.contains(&ARCH_REQUIREMENT.to_string()));
+    }
+
+    #[test]
     fn unsupported_platform_and_arch_block_install() {
         let result = parse(&fixture("Darwin", "arm64", true)).unwrap();
         assert!(!result.install_supported);
         assert!(result.prerequisites.contains(&"Linux".to_string()));
-        assert!(result.prerequisites.contains(&"x86_64".to_string()));
+
+        let result = parse(&fixture("Linux", "armv7l", true)).unwrap();
+        assert!(!result.install_supported);
+        assert!(result
+            .prerequisites
+            .contains(&"x86_64 or aarch64".to_string()));
     }
 
     #[test]
