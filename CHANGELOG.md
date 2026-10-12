@@ -1,3 +1,22 @@
+## [0.78.0] - 2026-10-12
+
+### Added
+
+- Desktop installs and updates Linux aarch64 (`arm64`) servers. The app
+  bundles a `linux-aarch64` server build next to `linux-x86_64`, and install
+  and update pick the build by the server's `uname -m` during preflight.
+  Preflight and the server dialog accept aarch64. 32-bit ARM and other
+  architectures are still blocked, and nothing changes on those hosts.
+- Releases publish `tariboy_<version>_linux-aarch64.tar.gz` beside the x86_64
+  archive. `tariboy update` downloads the archive that matches its own
+  architecture, so installer-managed aarch64 hosts can update themselves.
+
+### Changed
+
+- The agent's live session tab is now called **Terminal** instead of
+  **Console** in the UI and documentation. The `/console` route key stays,
+  so saved links keep working.
+
 ## [0.77.0] - 2026-10-12
 
 ### Added
@@ -44,6 +63,7 @@
   server pages or drops unsaved drafts, and the chat follows the host's new
   port.
 
+[0.78.0]: https://github.com/alekzonder/tariboy/compare/v0.77.0...v0.78.0
 [0.77.0]: https://github.com/alekzonder/tariboy/compare/v0.76.1...v0.77.0
 
 ## [0.76.1] - 2026-10-08
