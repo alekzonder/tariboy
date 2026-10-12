@@ -1,3 +1,51 @@
+## [0.77.0] - 2026-10-12
+
+### Added
+
+- `tariboy harness models TYPE` (`GET /api/harnesses/{type}/models`) lists
+  the models and efforts the harness CLI on the daemon host offers: `codex
+  debug models`, `agent models` for Cursor, `opencode models`, and a fixed
+  alias and effort list for Claude Code. Successful catalogs are cached for
+  five minutes; CLI failures come back as an `error` field. Agent creation
+  and Configuration Runtime suggest these values under **From harness** and
+  previously used values under **Saved**, and still accept free-form input.
+- The daemon status reports host tools missing from the daemon PATH (tmux,
+  bash, python3, git, npx, `tariboy`, `ttasks` and at least one agent
+  harness) with `state`, `missing_tools` and `message`. Desktop preflight and
+  the UI show them as an error with install hints.
+
+### Changed
+
+- New agents are interactive by default: `agent.run` (CLI and
+  `POST /api/agents`) treats an omitted `interactive` as true and rejects a
+  non-boolean value with `bad_interactive`. Pass `--interactive false` for a
+  non-interactive agent. Compose files keep their declared mode.
+- Pruning always archives an iteration, with its `iterations` and
+  `ai_requests` rows in `db-rows.json`, before deleting it, and keeps an
+  iteration whose archive fails. The retention `archive` flag is removed from
+  the policy, CLI, API and UI.
+- Iteration pruning runs in nightly maintenance after the database backup
+  instead of hourly, and is reported as `iterations` in the deleted counts.
+- The default retention policy merges per field: each non-zero agent field
+  overrides it and 0 inherits. `retention get` also returns the agent's
+  `override` and the `default`. Settings → General edits the default.
+- Codex receives the effort as `model_reasoning_effort` and `opencode run`
+  receives the model, so the selected values take effect.
+- The sidebar shows Servers first and opens on Servers; the Groups tab is
+  hidden.
+
+### Fixed
+
+- A customer comment that mentions the assigned agent on a flexible task in
+  `wait_customer` resumes the task again once no customer question is open.
+- Configuration Runtime no longer crashes when an agent view omits model or
+  effort.
+- A reconnecting SSH host no longer blanks Tasks, Configuration and the other
+  server pages or drops unsaved drafts, and the chat follows the host's new
+  port.
+
+[0.77.0]: https://github.com/alekzonder/tariboy/compare/v0.76.1...v0.77.0
+
 ## [0.76.1] - 2026-10-08
 
 ### Fixed
