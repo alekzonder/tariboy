@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -50,9 +51,36 @@ func TestValidateVersionRejectsUnsafeValues(t *testing.T) {
 }
 
 func TestRunRejectsUnsupportedPlatform(t *testing.T) {
-	err := Run(context.Background(), testOptions(t, t.TempDir(), "", testVersion, "darwin", "arm64"))
-	if err == nil || !strings.Contains(err.Error(), "linux-x86_64") {
-		t.Fatalf("expected an unsupported-platform error, got %v", err)
+	for _, platform := range [][2]string{{"darwin", "arm64"}, {"linux", "arm"}} {
+		err := Run(context.Background(), testOptions(t, t.TempDir(), "", testVersion, platform[0], platform[1]))
+		if err == nil || !strings.Contains(err.Error(), "linux-x86_64 and linux-aarch64") {
+			t.Fatalf("%s-%s: expected an unsupported-platform error, got %v", platform[0], platform[1], err)
+		}
+	}
+}
+
+func TestRunDownloadsTheArchiveForTheHostArch(t *testing.T) {
+	for goarch, archive := range map[string]string{
+		"amd64": "tariboy_" + testVersion + "_linux-x86_64.tar.gz",
+		"arm64": "tariboy_" + testVersion + "_linux-aarch64.tar.gz",
+	} {
+		var requested []string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requested = append(requested, path.Base(r.URL.Path))
+			if path.Base(r.URL.Path) == sumsName {
+				fmt.Fprintf(w, "%s  %s\n", strings.Repeat("0", 64), archive)
+				return
+			}
+			_, _ = w.Write([]byte("not the archive"))
+		}))
+		err := Run(context.Background(), testOptions(t, managedHome(t, "0.0.1"), server.URL+"/releases", testVersion, "linux", goarch))
+		server.Close()
+		if err == nil || !strings.Contains(err.Error(), "checksum") {
+			t.Fatalf("%s: expected a checksum error for %s, got %v", goarch, archive, err)
+		}
+		if requested[len(requested)-1] != archive {
+			t.Fatalf("%s: downloaded %v, want %s", goarch, requested, archive)
+		}
 	}
 }
 
@@ -276,7 +304,7 @@ func buildArchive(t *testing.T, version string) []byte {
 // base URL.
 func releaseServer(t *testing.T, version string, archive []byte, digest string) string {
 	t.Helper()
-	name := fmt.Sprintf(archiveFormat, version)
+	name := archiveName(version, "amd64")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/latest":

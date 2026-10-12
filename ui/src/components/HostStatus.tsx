@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { hostUpdateAvailable, type DaemonMeta } from "@/lib/daemons";
+import { hostInstallBlocked, hostUpdateAvailable, type DaemonMeta } from "@/lib/daemons";
 
 export function HostStatus({
   host,
@@ -23,12 +23,7 @@ export function HostStatus({
 }) {
   if (host.kind !== "ssh") return null;
   const state = host.state ?? "disconnected";
-  const unsupported =
-    (!!host.platform && host.platform !== "Linux")
-    || (!!host.arch && host.arch !== "x86_64")
-    || (host.prerequisites ?? []).some((item) =>
-      ["Linux", "x86_64", "writable ~/.local", "flock", "python3"].includes(item),
-    );
+  const unsupported = hostInstallBlocked(host.platform, host.arch, host.prerequisites);
   const keyMismatch = host.message?.includes("host_key_mismatch");
   const canConnect = ["disconnected", "degraded", "failed"].includes(state);
   const updateAvailable = showUpdate && hostUpdateAvailable(host, appVersion);

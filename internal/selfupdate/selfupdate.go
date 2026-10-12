@@ -29,12 +29,22 @@ import (
 const DefaultBaseURL = "https://github.com/alekzonder/tariboy/releases"
 
 const (
-	archiveFormat = "tariboy_%s_linux-x86_64.tar.gz"
+	archiveFormat = "tariboy_%s_linux-%s.tar.gz"
 	sumsName      = "SHA256SUMS"
 	installerName = "remote-install.sh"
 	// maxArchiveBytes bounds an untrusted download; the real archive is far smaller.
 	maxArchiveBytes = 512 << 20
 )
+
+// archiveArches maps a supported GOARCH to the `uname -m` name in its archive.
+var archiveArches = map[string]string{
+	"amd64": "x86_64",
+	"arm64": "aarch64",
+}
+
+func archiveName(target, goarch string) string {
+	return fmt.Sprintf(archiveFormat, target, archiveArches[goarch])
+}
 
 // payloadBinaries are the executables every published release contains. The
 // installer refuses to switch links without them.
@@ -83,8 +93,8 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.BaseURL == "" {
 		opts.BaseURL = DefaultBaseURL
 	}
-	if opts.GOOS != "linux" || opts.GOARCH != "amd64" {
-		return fmt.Errorf("tariboy update publishes only linux-x86_64 releases; this host is %s-%s", opts.GOOS, opts.GOARCH)
+	if _, ok := archiveArches[opts.GOARCH]; opts.GOOS != "linux" || !ok {
+		return fmt.Errorf("tariboy update publishes only linux-x86_64 and linux-aarch64 releases; this host is %s-%s", opts.GOOS, opts.GOARCH)
 	}
 	if opts.Home == "" {
 		return errors.New("HOME is required")
@@ -212,7 +222,7 @@ func validateVersion(candidate string) error {
 // download fetches the release archive into a temporary file and verifies it
 // against the release SHA256SUMS before anything is unpacked.
 func download(ctx context.Context, opts Options, target string) (string, error) {
-	name := fmt.Sprintf(archiveFormat, target)
+	name := archiveName(target, opts.GOARCH)
 	base := fmt.Sprintf("%s/download/v%s/", opts.BaseURL, target)
 
 	sums, err := fetch(ctx, opts, base+sumsName)

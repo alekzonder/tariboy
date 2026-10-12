@@ -479,8 +479,8 @@ describe("ServerDialog desktop SSH flow", () => {
     vi.spyOn(desktop, "hostSaveSsh").mockResolvedValue(nativeHost());
     vi.spyOn(desktop, "hostProvision").mockResolvedValue({ operation_id: "op-unsupported" });
     renderDialog();
-    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "mac" } });
-    fireEvent.change(screen.getByLabelText("SSH alias"), { target: { value: "mac-builder" } });
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "pi" } });
+    fireEvent.change(screen.getByLabelText("SSH alias"), { target: { value: "pi-builder" } });
     fireEvent.click(screen.getByRole("button", { name: "Add and connect" }));
     await waitFor(() => expect(desktop.hostProvision).toHaveBeenCalled());
 
@@ -489,23 +489,46 @@ describe("ServerDialog desktop SSH flow", () => {
       host_id: "ssh-1",
       stream: "stdout",
       text: JSON.stringify({
-        platform: "Darwin",
-        arch: "arm64",
-        prerequisites: ["Linux", "x86_64", "tmux", "codex"],
+        platform: "Linux",
+        arch: "armv7l",
+        prerequisites: ["x86_64 or aarch64", "tmux", "codex"],
       }),
       prompt: null,
     });
     await events.state(nativeHost({
       state: "failed",
-      message: "unsupported_host: remote installation requires Linux x86_64",
+      message: "unsupported_host: remote installation requires Linux x86_64 or aarch64",
     }));
 
-    expect(screen.getByText("Unsupported host: Darwin/arm64")).toBeInTheDocument();
+    expect(screen.getByText("Unsupported host: Linux/armv7l")).toBeInTheDocument();
     expect(screen.getByText("Install blocked")).toBeInTheDocument();
-    expect(screen.getByText("Missing install requirements: Linux, x86_64")).toBeInTheDocument();
+    expect(screen.getByText("Missing install requirements: x86_64 or aarch64")).toBeInTheDocument();
     expect(screen.getByText("Optional agent tools not found: tmux, codex")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "remote installation requires Linux x86_64",
+      "remote installation requires Linux x86_64 or aarch64",
     );
+  });
+
+  it("installs on a Linux aarch64 server without blocking", async () => {
+    const events = mockNativeEvents();
+    vi.spyOn(desktop, "hostSaveSsh").mockResolvedValue(nativeHost());
+    vi.spyOn(desktop, "hostProvision").mockResolvedValue({ operation_id: "op-arm" });
+    renderDialog();
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "graviton" } });
+    fireEvent.change(screen.getByLabelText("SSH alias"), { target: { value: "graviton" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add and connect" }));
+    await waitFor(() => expect(desktop.hostProvision).toHaveBeenCalled());
+
+    await events.output({
+      operation_id: "op-arm",
+      host_id: "ssh-1",
+      stream: "stdout",
+      text: JSON.stringify({ platform: "Linux", arch: "aarch64", prerequisites: ["codex"] }),
+      prompt: null,
+    });
+
+    expect(screen.queryByText(/Unsupported host/)).toBeNull();
+    expect(screen.queryByText("Install blocked")).toBeNull();
+    expect(screen.getByText("Optional agent tools not found: codex")).toBeInTheDocument();
   });
 });

@@ -23,7 +23,7 @@ organization-specific artifact host or upload protocol.
 - Apple Silicon Mac with macOS/Xcode tools, Go 1.26, Rust, Tauri CLI, Node, and
   `rg`;
 - system `codesign`, `hdiutil`, `lipo`, `shasum`;
-- Linux x86_64 payloads are checked for presence, ELF format, embedded version,
+- Linux x86_64 and aarch64 payloads are checked for presence, ELF format, embedded version,
   and `VERSION` metadata; the macOS release gate does not execute them;
 - no production credentials in build environment or repository.
 - confirmed secure ownership and backup of the permanent updater private key;
@@ -71,16 +71,18 @@ keeps updater artifacts disabled and does not require the release key.
 dist/releases/0.77.0/
   Tariboy_0.77.0_aarch64.dmg
   tariboy_0.77.0_linux-x86_64.tar.gz
+  tariboy_0.77.0_linux-aarch64.tar.gz
   SHA256SUMS
   release.json
 ```
 
-`tariboy_<version>_linux-x86_64.tar.gz` is the server payload a Linux host
-installs with `tariboy update`. It is the same install layout the desktop app
-uploads over SSH: the five server binaries, `VERSION`, their `SHA256SUMS`, and
-the fixed `remote-install.sh`. The artifact gate extracts it, checks those
-entries, its `VERSION`, its internal checksums, and that its installer matches
-the repository copy.
+`tariboy_<version>_linux-x86_64.tar.gz` and
+`tariboy_<version>_linux-aarch64.tar.gz` are the server payloads a Linux host
+of that architecture installs with `tariboy update`. Each is the same install
+layout the desktop app uploads over SSH: the five server binaries, `VERSION`,
+their `SHA256SUMS`, and the fixed `remote-install.sh`. The artifact gate
+extracts each one, checks those entries, their ELF architecture, `VERSION`,
+internal checksums, and that the installer matches the repository copy.
 
 DMG creation intentionally uses Tauri's headless-safe mode. It skips Finder
 AppleScript layout automation, so release packaging does not require an
@@ -135,7 +137,8 @@ The release owner and backup reviewer each verify:
 - [ ] commit SHA in `release.json` is the reviewed `main` commit;
 - [ ] artifact gate exits zero on Apple Silicon;
 - [ ] `shasum -a 256 -c SHA256SUMS` exits zero;
-- [ ] the release lists `tariboy_<version>_linux-x86_64.tar.gz` for `tariboy update`;
+- [ ] the release lists `tariboy_<version>_linux-x86_64.tar.gz` and
+  `tariboy_<version>_linux-aarch64.tar.gz` for `tariboy update`;
 - [ ] release notes and known constraints match the artifact;
 - [ ] support/rollback contacts and process are understood;
 - [ ] a disposable-host product acceptance run is attached;

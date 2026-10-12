@@ -342,6 +342,30 @@ export function cachedDaemon(id: string): Daemon | null {
   return id ? sessionCache.get(id) ?? null : null;
 }
 
+/** Server prerequisites that block installation, as named by the Desktop
+ *  host preflight. Every other prerequisite is an optional agent tool. */
+export const INSTALL_REQUIREMENTS = new Set([
+  "Linux",
+  "x86_64 or aarch64",
+  "writable ~/.local",
+  "flock",
+  "python3",
+]);
+
+/** `uname -m` values the Desktop app ships a server build for. */
+const SERVER_ARCHES = new Set(["x86_64", "aarch64", "arm64"]);
+
+/** True when the Desktop app cannot install its server build on this host. */
+export function hostInstallBlocked(
+  platform: string | undefined,
+  arch: string | undefined,
+  prerequisites: string[] | undefined,
+): boolean {
+  return (!!platform && platform !== "Linux")
+    || (!!arch && !SERVER_ARCHES.has(arch))
+    || (prerequisites ?? []).some((item) => INSTALL_REQUIREMENTS.has(item));
+}
+
 /** A connected SSH host running a daemon older than this app. Both the host
  *  status block and the sidebar's server header ask this question. */
 export function hostUpdateAvailable(host: DaemonMeta, appVersion: string): boolean {

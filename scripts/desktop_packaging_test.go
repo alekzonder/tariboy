@@ -208,6 +208,7 @@ func TestDesktopBinariesCleanManagedPayloadDirectoriesBeforeBuilding(t *testing.
 	cmd := exec.Command(
 		"make", "-n", "-o", "desktop-version-check",
 		"DESKTOP_DARWIN_BIN=/", "DESKTOP_LINUX_BIN=/tmp/untrusted-desktop-bin",
+		"DESKTOP_LINUX_ARM64_BIN=/tmp/untrusted-desktop-bin",
 		"desktop-binaries",
 	)
 	cmd.Dir = root
@@ -217,10 +218,13 @@ func TestDesktopBinariesCleanManagedPayloadDirectoriesBeforeBuilding(t *testing.
 	}
 
 	text := string(output)
-	clean := findLine(text, "rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64")
+	clean := findLine(text, "rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64 desktop/src-tauri/resources/bin/linux-aarch64")
 	firstBuild := findLine(text, "build darwin/arm64")
 	if clean == "" || firstBuild == "" || strings.Index(text, clean) > strings.Index(text, firstBuild) {
 		t.Fatalf("managed payload directories are not cleaned before compilation:\n%s", output)
+	}
+	if findLine(text, "GOOS=linux GOARCH=arm64") == "" || findLine(text, "ARM aarch64") == "" {
+		t.Fatalf("desktop-binaries does not build and verify the linux-aarch64 set:\n%s", output)
 	}
 }
 
