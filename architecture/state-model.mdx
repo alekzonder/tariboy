@@ -139,9 +139,9 @@ A run, scheduled or manual, is serialized and always starts with a backup:
 `VACUUM INTO` writes a consistent copy while the daemon keeps serving, to
 `<base-dir>/backups/db/tariboyd-<UTC time>.db`, and only the newest configured
 number of those exact names are kept; other files in the directory are never
-rotated. **If the backup fails, nothing is deleted.** Cleanup then
-removes data older than the retention period, each category in its own
-transaction:
+rotated. **If the backup fails, nothing is deleted.** The run then prunes agent
+iterations (see [Iteration retention](#iteration-retention)) and removes data
+older than the retention period, each category in its own transaction:
 
 - **Native Tasks** — only whole trees whose every task is `done` or
   `cancelled` with `completed_at` before the cutoff, with their comments,
@@ -172,7 +172,28 @@ daemon was down or the machine asleep — is skipped, not caught up.
 To restore, stop the daemon, replace `tariboyd.db` with a backup file (and
 remove any `tariboyd.db-wal` and `tariboyd.db-shm`), then start it again.
 
-The per-agent iteration pruner (`tariboy retention`) is separate and unchanged.
+### Iteration retention
+
+The nightly run prunes every agent's iterations after the backup and records
+the count as `iterations` in the run's deleted counts; `tariboy prune
+<agent|all>` and **Prune now** in an agent's settings run the same pruning on
+demand. The limits are `keep_iterations`, `keep_days` and `max_bytes`. The
+server-wide default is one JSON value under `retention_default` in
+`daemon_config`, where `0` means unlimited. A row in `retention_policies`
+overrides it per agent field by field: each non-zero field replaces the
+default's, and `0` inherits it, so an agent cannot be unlimited where the
+default sets a limit. Operators set the default with **Settings → General →
+Backup & data retention** or `tariboy retention set default`, and an agent's
+override in its settings or with `tariboy retention set <agent>`. The newest
+iteration and any running one are never pruned.
+
+Every pruned iteration is backed up first to
+`<agents-dir>/<agent>/archive/<iteration>.tar.gz` (mode `0600`): the iteration
+directory plus `db-rows.json`, which holds its `iterations` row and its
+`ai_requests` rows as column-to-value objects. Only after the archive is
+written and synced are those rows and the directory deleted; an iteration
+whose archive fails stays untouched. Archives are not rotated. The legacy
+`archive` column of `retention_policies` is ignored.
 
 ## Customer identity and read marks
 

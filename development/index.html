@@ -35,6 +35,10 @@ prerequisites, and platform build tools.</li>
 <li><strong>Agent smoke suites:</strong> <code>tmux</code> is checked by both <code>make smoke</code> and
 <code>make full-smoke</code>; the latter adds the interactive terminal cases.</li>
 <li><strong>Documentation:</strong> Node.js and npm.</li>
+<li><strong>Daemon host:</strong> <code>tmux</code>, <code>bash</code>, <code>python3</code>, <code>git</code>, <code>npx</code> (Node.js), the
+<code>tariboy</code> and <code>ttasks</code> links in <code>~/.local/bin</code>, and at least one harness.
+<code>GET /api/daemon/status</code> reports <code>state: error</code> with the missing tools; see
+<a href="/tariboy/docs/remote-hosts#daemon-host-tools">Daemon host tools</a>.</li>
 </ul>
 <p>Coding agents must run all shell commands through a Bash login shell
 (<code>bash -lc &#39;COMMAND&#39;</code>) so the account’s login profile and exported environment

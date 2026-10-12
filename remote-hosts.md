@@ -24,8 +24,8 @@ by the operator. The desktop does not implement a second SSH stack.
 
 Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
 The Python runtime executes the standard-library agent tool scripts. Preflight
-also reports `tmux`, Claude, Codex, OpenCode, and the Cursor CLI (its `agent`
-executable) so you can see which workflows are available; a missing harness is
+also reports `tmux`, `git`, `npx`, Claude, Codex, OpenCode, and the Cursor CLI
+(its `agent` executable) so you can see which workflows are available; a missing harness is
 listed as an optional tool and does not block installation. At least one chosen harness must be installed on the remote host.
 
 ## Account PATH and harness launch
@@ -50,6 +50,38 @@ same environment and passes that absolute interpreter to skill launchers. An
 agent's explicit `PATH` overrides the daemon baseline and therefore must retain
 both prerequisites; non-bare images then prepend their agent bin directory,
 while bare images do not.
+
+After resolving `PATH`, the daemon appends `~/.local/bin` when it is missing,
+so agents find the managed `tariboy` and `ttasks` links.
+
+## Daemon host tools
+
+Every `GET /api/daemon/status` checks the daemon `PATH`, the one iterations
+start from, for the commands the daemon and its agents need:
+
+| Tool | Needed for | Install |
+| --- | --- | --- |
+| `tmux` | agent terminal sessions | system package manager |
+| `bash` | running iterations | system package manager |
+| `python3` | agent tool scripts | system package manager |
+| `git` | adding and refreshing Stores | system package manager |
+| `npx` | building images that carry `skills-lock.json` | Node.js (npm ships `npx`) |
+| `tariboy`, `ttasks` | Tariboy commands inside agents | Tariboy CLI links in `~/.local/bin` |
+| `claude`, `codex`, `opencode` or `agent` | at least one agent harness | the harness vendor's installer |
+
+The response carries `state` (`ready` or `error`), `missing_tools` (name,
+purpose and install hint for each missing tool) and `message`, for example
+`missing required tools: tmux, npx; install them on the daemon host`. The
+check only looks for an executable on `PATH`; it does not install anything,
+because install commands differ between systems. The `error` state blocks
+nothing: the API, tunnel and running agents keep working, and the state
+returns to `ready` on the next status read after you install the tool, without
+a daemon restart.
+
+Desktop shows a connected SSH host whose daemon reports missing tools as
+**error** with the message, and the local daemon banner names the missing tools
+in the desktop app and in a browser. A host's state is read when its tunnel
+connects, so reconnect it after installing the tools.
 
 ## Add a host
 
@@ -177,8 +209,8 @@ alias in a new editor window. Local agents open as ordinary local folders in a
 new editor window. HTTPS hosts do not show the
 action because they have no SSH identity.
 
-Missing harnesses and `tmux` are reported separately as agent workflow
-prerequisites. They do not make an otherwise successful Tariboy update
+Missing harnesses, `tmux`, `git` and `npx` are reported separately as agent
+workflow prerequisites. They do not make an otherwise successful Tariboy update
 appear failed. Platform, architecture, writable install root, and `flock`
 plus `python3` remain installation requirements.
 

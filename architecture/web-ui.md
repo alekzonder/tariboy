@@ -67,9 +67,10 @@ The primary agent dialog has **Target**, **Identity**, **Runtime**,
 documented defaults and submits one complete create request; the daemon writes
 one complete stopped agent row. Environment is a string-valued JSON object,
 schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
-read-only. Bare images force Interactive on and Autopilot off. Selecting an
-image outside clone mode resets Interactive to that image's default: the
-manifest's `harness.interactive` for schema-v1, off for schema-v2.
+read-only. Bare images force Interactive on and Autopilot off. Interactive
+starts on for every new agent and selecting an image does not change it; the
+manifest's `harness.interactive` is not applied. Clone mode copies the source
+agent's value.
 
 Ordinary creation defaults the soft iteration timeout to 7,200 seconds (2
 hours) and the hard timeout to 10,800 seconds (3 hours). Clone mode continues
@@ -97,14 +98,22 @@ after creation.
 
 Harness is selected from the supported Tariboy harnesses. Model and effort are
 editable preset fields: they start from explicit runtime defaults for schema-v2
-images, accept arbitrary overrides, and include conservative built-in
-suggestions instead of querying harness or provider catalogs. Schema-v1 image
-defaults remain readable for compatibility. Successful custom overrides are
-remembered in the Desktop WebView by harness and offered on later creates.
-These local suggestions are an operator convenience, not a capability check
-for the selected host; failed creates do not add values.
+images and accept arbitrary values. Their suggestions come in two labeled
+groups. **From harness** holds the catalog the selected host returns from
+`GET /api/harnesses/{type}/models` (see
+[Harness model catalog](/docs/architecture#harness-model-catalog)); it shows a
+loading note, the host's error, or a note that an older daemon does not list
+models instead of failing. When the chosen model carries its own efforts
+(Codex), the effort field offers those, otherwise the harness-wide list.
+**Saved** holds the values the operator entered earlier for that harness, the
+current value, and the image default, minus anything already listed under the
+harness. Schema-v1 image defaults remain readable for compatibility. Successful
+creates and successful Configuration Runtime saves remember the model and effort
+in the Desktop WebView by harness; failed ones do not add values. Neither group
+validates a value: an unsupported model still fails at the harness.
 
-The agents sidebar has three tabs. **Agents** lists every host's agents in one
+The agents sidebar has two tabs, **Servers** first and **Agents** second.
+**Agents** lists every host's agents in one
 flat list, ordered the way a chat list is: pinned agents first, then the agents
 with an unread customer question, then the rest by their most recent
 conversation, and only then in the operator's own order. The whole sort happens
@@ -115,12 +124,12 @@ one badge a row carries is the count of unread messages from that agent. The
 question itself is readable in that agent's **Chat**, and its task is marked in
 **Tasks**. A
 row's context menu pins and unpins it, and the Desktop WebView remembers the
-pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
-its members gathered across hosts, including a declared group with no members.
+pinned set in `terminals:sidebar-pinned:v1`. The **Groups** tab is hidden for
+now; groups stay available inside **Servers** and on their own page.
 **Servers** keeps the per-host list and is the only tab whose rows are drag
 sources, because it is the only one with a persisted order. The selected tab is
-remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
-**Agents**. Each server heading states its own reachability and carries the
+remembered in `terminals:sidebar-tab:v1`; with no saved choice, an unknown
+value, or the former `groups` value, the sidebar opens on **Servers**. Each server heading states its own reachability and carries the
 **Update** action for a host running an older daemon, with **Update all (N)**
 above the list when more than one host is behind. **Update all** confirms the
 named hosts first, then runs the same host update on each of them in turn; a
@@ -305,7 +314,10 @@ cannot overlap. Edits made during a save remain an unsaved draft.
 
 **Settings → General** also carries **Backup & data retention** for the same
 explicit host: the nightly switch and time, retention days, backups to keep,
-compaction switch and threshold, **Save**, and **Run now**. The card shows the
+compaction switch and threshold, the server-wide iteration retention defaults
+(keep iterations per agent, keep days, max bytes; `0` is unlimited), **Save**,
+and **Run now**. **Save** stores the maintenance settings and the iteration
+defaults. The card shows the
 last run's time, deleted counts, and size change; a failed save or run is
 reported in place. See
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
@@ -750,6 +762,27 @@ the snapshot atomically. Cached data is never persisted or used as an API
 target, other server navigation remains available, and a missing host still
 fails closed rather than falling back to local authority.
 
+A reconnect never remounts a server page. An SSH host loses its endpoint while
+its tunnel reconnects and comes back on a new local port. Neither change is
+part of a page's identity: Tasks, Workflows, Stores, Settings and Configuration
+keep their loaded data, the open task, filters, scroll position and every
+unsaved draft. The route boundary keeps one tree shape and only dims the page
+and makes it inert under a single status line. A host object keeps its
+identity until one of its fields changes, so the 3-second sidebar poll does not
+restart page loads.
+
+While the host has no endpoint, background loads are skipped rather than
+failed. When the new endpoint arrives, each page re-reads once in place:
+the task list, the open task, the agent header, Configuration and Chat. A
+background read that cannot reach the host (`host_not_ready`,
+`network_error`) keeps the last data and shows no toast, because the host
+header in the left panel already reports the host as offline with its error.
+All tasks keeps an unreachable server's rows for the same filter beside that
+server's error. An explicit action such as **Save**, **Create** or **Send**
+still reports its failure. Its draft stays in the form, ready to send again
+once the host is back. Drafts live in tab memory only and are not queued for
+later delivery.
+
 For a stopped agent, Configuration offers a working-directory editor backed by
 the selected host's directory autocomplete. Saving changes the CWD used by the
 next launch; it does not move files or start, stop, or restart the agent. Active
@@ -762,7 +795,8 @@ descriptor actually changes, or after a successful save.
 
 Configuration commits its remaining editable fields per section rather than per
 control. The Loop section's scheduling fields and the Runtime section's model
-and effort save as one batch each, while the working directory, secrets,
+and effort save as one batch each (model and effort use the same grouped
+suggestions as agent creation, for the agent's host and harness), while the working directory, secrets,
 retention, the Loop enable and disable actions, the harness, and Interactive
 keep their own separate immediate operations. A section is dirty when a
 normalized draft differs from the value it last loaded or saved, and only a
@@ -893,6 +927,11 @@ only after success; on failure it keeps the dialog open, restores its controls,
 and reports the error so the operator can retry. **Kill session** remains a
 separate action with its existing browser confirmation and does not delete the
 agent or its durable data.
+
+An agent's **Retention and cleanup** card edits that agent's override of the
+server-wide iteration defaults: each field shows `0 = server default (N)`, and
+the card lists the effective limits and that pruned iterations are archived
+with their database rows first.
 
 The in-app retention prune is guarded by a confirmation dialog that names
 the operation as permanently destructive and bounds it to the current

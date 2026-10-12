@@ -879,6 +879,11 @@ Agents still use `ttasks ask` and `ttasks comment`.
   outcome does. Leaving the status by any route resolves that wait.
 - **In a script status** a comment does not change the category.
 
+A customer comment that mentions the agent (`@agent:NAME`) notifies it but
+does not return a task in a customer or script status to work. Choose an
+outcome instead, for example `changes_requested` with the requested changes
+as its message.
+
 ## The Goal block
 
 An agent works on its selected Goal task. For a task that follows a workflow the

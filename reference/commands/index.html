@@ -54,7 +54,7 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy agent run</code></td>
-<td>Create and start an agent from an image (image:tag)</td>
+<td>Create and start an agent from an image (image:tag); interactive by default, <code>--interactive=false</code> for headless</td>
 </tr>
 <tr>
 <td><code>tariboy agent screen</code></td>
@@ -138,7 +138,7 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy daemon status</code></td>
-<td>Show daemon version, uptime and base directory</td>
+<td>Show daemon version, uptime, base directory and missing host tools</td>
 </tr>
 <tr>
 <td><code>tariboy group assign</code></td>
@@ -159,6 +159,10 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 <tr>
 <td><code>tariboy group rm</code></td>
 <td>Remove a group (detach members, delete channels; –volumes drops the shared dir)</td>
+</tr>
+<tr>
+<td><code>tariboy harness models TYPE [--refresh]</code></td>
+<td>List the models and efforts the harness CLI on the daemon host supports; CLI failures are reported in <code>error</code></td>
 </tr>
 <tr>
 <td><code>tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]</code></td>
@@ -306,11 +310,11 @@ its build and <code>ttasks --json …</code> requests JSON output.</li>
 </tr>
 <tr>
 <td><code>tariboy retention get</code></td>
-<td>Show the effective retention policy for an agent (or ‘default’)</td>
+<td>Show the effective retention policy for an agent, with its own override and the default (or ‘default’)</td>
 </tr>
 <tr>
 <td><code>tariboy retention set</code></td>
-<td>Set the retention policy for an agent (or ‘default’)</td>
+<td>Set the retention policy for an agent (0 = use the default) or ‘default’ (0 = unlimited)</td>
 </tr>
 <tr>
 <td><code>tariboy schedule ls</code></td>

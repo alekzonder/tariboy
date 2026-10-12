@@ -174,7 +174,9 @@ top-level Codex TUI with the assembled prompt and an open terminal. Both modes
 consume the same catalog-prefixed prompt; Codex image skills do not appear in
 native <code>/skills</code>, <code>$</code> completion, or plugin inventory. Claude
 similarly omits its print-mode flags. Model, effective environment, working
-directory, and AI-proxy routing still apply in both modes.</p>
+directory, and AI-proxy routing still apply in both modes. Codex receives the
+agent’s effort as <code>-c model_reasoning_effort=&quot;&lt;effort&gt;&quot;</code>, and <code>opencode run</code>
+receives the agent’s model as <code>--model</code>; OpenCode has no effort setting.</p>
 <p>The Cursor CLI runs its <code>agent</code> executable with the prompt as the last
 argument, <code>--force</code>, <code>--endpoint &lt;AI proxy URL&gt;</code>, and <code>--model</code> when the agent
 names one. Batch iterations add <code>-p --output-format stream-json --trust</code>, and

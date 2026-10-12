@@ -1183,6 +1183,10 @@ second wait, and a comment does not answer the workflow’s question: only an
 outcome does. Leaving the status by any route resolves that wait.</li>
 <li><strong>In a script status</strong> a comment does not change the category.</li>
 </ul>
+<p>A customer comment that mentions the agent (<code>@agent:NAME</code>) notifies it but
+does not return a task in a customer or script status to work. Choose an
+outcome instead, for example <code>changes_requested</code> with the requested changes
+as its message.</p>
 <h2 id="the-goal-block"><a class="blume-heading-anchor" href="#the-goal-block">The Goal block</a></h2>
 <p>An agent works on its selected Goal task. For a task that follows a workflow the
 daemon replaces the flexible-task guidance with a block that states the current

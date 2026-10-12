@@ -54,7 +54,10 @@ so a tree that keeps growing instead of closing is visible without walking it.</
 <code>cancelled</code> status. When the assigned agent asks the task customer a question,
 the same comment transaction moves a non-terminal task to <code>wait_customer</code>.
 The last customer answer returns it to <code>in_progress</code>, unless an operator made an
-intervening status change. Questions for another principal do not change status.</p>
+intervening status change. A customer comment that mentions the assigned agent
+(<code>@agent:NAME</code>) also returns a <code>wait_customer</code> task to <code>in_progress</code> once no
+question to the customer stays open. Questions for another principal do not
+change status.</p>
 <p>A task that follows a workflow reports the workflow status (<code>plan</code>, <code>review</code>, …)
 as <code>status</code> and one of those five values as <code>category</code>, which the daemon derives
 from the status owner; <code>waiting_on</code> says whether a <code>wait_customer</code> task waits on

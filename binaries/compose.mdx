@@ -24,7 +24,9 @@ Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
 purge path.
 
 Compose owns agent runtime choices: harness, model, effort, interactive and loop
-settings, CWD, and environment. Schema-v2 image manifests supply none of those
+settings, CWD, and environment. An agent is interactive only when its
+`harness.interactive` is `true`; compose always sends the value explicitly, so
+the create endpoint's interactive default does not apply. Schema-v2 image manifests supply none of those
 defaults; they contain only plugins and the ordered prompt template. Compose
 may build an image from an original relative context, but portable runnable
 image artifacts do not replace that source directory for later rebuilds.

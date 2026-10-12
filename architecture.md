@@ -165,8 +165,8 @@ logged for its agent without preventing unrelated agents from starting.
 In steady state it runs the schedule publisher, the task notification outbox
 publisher, the per-agent goal reconciler, the queue-trigger ingress reconciler,
 the workflow script worker, AI ingestion, the daily pricing
-catalog worker, budget cache refresh, retention pruner, nightly database
-maintenance (backup, cleanup, compaction; see
+catalog worker, budget cache refresh, nightly database
+maintenance (backup, iteration pruning, cleanup, compaction; see
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention)),
 loop engines, and plugin supervisors.
 
@@ -185,6 +185,30 @@ Shutdown stops the proxy first, then cancels and awaits the pricing worker and
 the other workers before loops/plugins and SQLite stop. That ordering prevents
 a catalog publication, final outbox, or usage write from racing a closed
 database.
+
+## Harness model catalog
+
+`GET /api/harnesses/{type}/models` (CLI: `tariboy harness models TYPE`) returns
+`{harness, models: [{id, label, efforts}], efforts, error}` for one harness as
+installed on the daemon host, so Desktop asks the host the agent will run on,
+including a remote one behind its SSH tunnel. The daemon runs the harness CLI
+in its own environment:
+
+| Harness | Source |
+| --- | --- |
+| Claude Code | Fixed list: `fable`, `opus`, `opus[1m]`, `sonnet`, `haiku`; efforts `low`, `medium`, `high`, `xhigh`, `max` (the CLI has no model list command) |
+| Codex CLI | `codex debug models`: models with `visibility: list`, each with its `supported_reasoning_levels` efforts |
+| Cursor CLI | `agent models`: `id - Name` lines; no separate effort list |
+| OpenCode | `opencode models`: one `provider/model` per line; no effort list |
+
+Each run is bounded to 20 seconds and 4 MiB of output. A successful catalog is
+cached in daemon memory for five minutes per harness; `refresh=true` (CLI
+`--refresh`) asks the CLI again. A missing, failing, or unparseable CLI still
+answers HTTP 200 with empty lists and an `error` text; only an unknown harness
+is a `bad_harness` request error. The catalog reflects the daemon environment,
+not an agent's own environment overrides such as a different `CODEX_HOME`, and
+`codex debug models` may refresh its catalog over the network with the
+account's login.
 
 ## Managed model-price lifecycle
 

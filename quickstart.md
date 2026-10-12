@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.76.1` alpha on an Apple Silicon Mac.
+This path is for the `0.77.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.76.1_aarch64.dmg`;
+- a verified `Tariboy_0.77.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -88,16 +88,20 @@ An image is a reusable template. It is not an agent and does not start work.
 
 Open **Agents → New agent**, select the host and image, and name the workspace.
 Harness, model, and effort are shown directly in the Runtime section. Model and
-effort suggestions come from Desktop presets and remain editable. They are
-runtime settings, not schema-v2 image content. A successful create remembers a
-custom model or effort locally for that harness; the list is not a live check
-of models installed on the host.
+effort stay editable and suggest values in two groups: **From harness** lists
+what the harness CLI on the selected host reports, and **Saved** lists values
+entered earlier for that harness. They are runtime settings, not schema-v2
+image content. A successful create remembers the model and effort locally for
+that harness.
 Interactive and Autopilot are independent:
 
-- enable **Interactive** to use Console;
+- **Interactive** is on by default and enables Console; turn it off for a
+  headless agent;
 - enable **Autopilot** to allow timer/message-triggered iterations.
 
-For the first walkthrough, enable both on a non-bare image.
+For the first walkthrough, keep Interactive on and enable Autopilot on a
+non-bare image. From the CLI, `tariboy agent run IMAGE:TAG` creates an
+interactive agent too; pass `--interactive=false` for a headless one.
 
 ## 5. Use Console
 

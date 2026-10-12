@@ -33,7 +33,7 @@ tariboy has three command surfaces:
 | `tariboy agent pull` | Read a base64 file from an agent's cwd (used by 'cp') |
 | `tariboy agent restart` | Restart an agent and run one iteration now |
 | `tariboy agent rm` | Remove an agent (stop it first, or --force) |
-| `tariboy agent run` | Create and start an agent from an image (image:tag) |
+| `tariboy agent run` | Create and start an agent from an image (image:tag); interactive by default, `--interactive=false` for headless |
 | `tariboy agent screen` | Capture the interactive screen (tmux capture-pane) |
 | `tariboy agent send-keys` | Send keys into the interactive session (tmux send-keys) |
 | `tariboy agent start` | Start (enable) an agent's loop |
@@ -54,12 +54,13 @@ tariboy has three command surfaces:
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
-| `tariboy daemon status` | Show daemon version, uptime and base directory |
+| `tariboy daemon status` | Show daemon version, uptime, base directory and missing host tools |
 | `tariboy group assign` | Assign an agent to a group (empty group leaves) |
 | `tariboy group create` | Create (or update) a group with an optional lead |
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
+| `tariboy harness models TYPE [--refresh]` | List the models and efforts the harness CLI on the daemon host supports; CLI failures are reported in `error` |
 | `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired |
 | `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest`; prints the result and exits 1 when it is invalid |
@@ -96,8 +97,8 @@ tariboy has three command surfaces:
 | `tariboy plugin rm` | Stop and remove a plugin |
 | `tariboy prune` | Prune old iterations for an agent now (or 'all'); --dry-run lists victims |
 | `tariboy restore` | Restore an agent from a backup tar.gz (optionally under a new name) |
-| `tariboy retention get` | Show the effective retention policy for an agent (or 'default') |
-| `tariboy retention set` | Set the retention policy for an agent (or 'default') |
+| `tariboy retention get` | Show the effective retention policy for an agent, with its own override and the default (or 'default') |
+| `tariboy retention set` | Set the retention policy for an agent (0 = use the default) or 'default' (0 = unlimited) |
 | `tariboy schedule ls` | List an agent's schedules (read-only) |
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |

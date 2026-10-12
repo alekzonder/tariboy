@@ -349,8 +349,8 @@ logged for its agent without preventing unrelated agents from starting.
 In steady state it runs the schedule publisher, the task notification outbox
 publisher, the per-agent goal reconciler, the queue-trigger ingress reconciler,
 the workflow script worker, AI ingestion, the daily pricing
-catalog worker, budget cache refresh, retention pruner, nightly database
-maintenance (backup, cleanup, compaction; see
+catalog worker, budget cache refresh, nightly database
+maintenance (backup, iteration pruning, cleanup, compaction; see
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention)),
 loop engines, and plugin supervisors.
 
@@ -369,6 +369,30 @@ Shutdown stops the proxy first, then cancels and awaits the pricing worker and
 the other workers before loops/plugins and SQLite stop. That ordering prevents
 a catalog publication, final outbox, or usage write from racing a closed
 database.
+
+## Harness model catalog
+
+`GET /api/harnesses/{type}/models` (CLI: `tariboy harness models TYPE`) returns
+`{harness, models: [{id, label, efforts}], efforts, error}` for one harness as
+installed on the daemon host, so Desktop asks the host the agent will run on,
+including a remote one behind its SSH tunnel. The daemon runs the harness CLI
+in its own environment:
+
+| Harness | Source |
+| --- | --- |
+| Claude Code | Fixed list: `fable`, `opus`, `opus[1m]`, `sonnet`, `haiku`; efforts `low`, `medium`, `high`, `xhigh`, `max` (the CLI has no model list command) |
+| Codex CLI | `codex debug models`: models with `visibility: list`, each with its `supported_reasoning_levels` efforts |
+| Cursor CLI | `agent models`: `id - Name` lines; no separate effort list |
+| OpenCode | `opencode models`: one `provider/model` per line; no effort list |
+
+Each run is bounded to 20 seconds and 4 MiB of output. A successful catalog is
+cached in daemon memory for five minutes per harness; `refresh=true` (CLI
+`--refresh`) asks the CLI again. A missing, failing, or unparseable CLI still
+answers HTTP 200 with empty lists and an `error` text; only an unknown harness
+is a `bad_harness` request error. The catalog reflects the daemon environment,
+not an agent's own environment overrides such as a different `CODEX_HOME`, and
+`codex debug models` may refresh its catalog over the network with the
+account's login.
 
 ## Managed model-price lifecycle
 
@@ -890,7 +914,9 @@ top-level Codex TUI with the assembled prompt and an open terminal. Both modes
 consume the same catalog-prefixed prompt; Codex image skills do not appear in
 native `/skills`, `$` completion, or plugin inventory. Claude
 similarly omits its print-mode flags. Model, effective environment, working
-directory, and AI-proxy routing still apply in both modes.
+directory, and AI-proxy routing still apply in both modes. Codex receives the
+agent's effort as `-c model_reasoning_effort="<effort>"`, and `opencode run`
+receives the agent's model as `--model`; OpenCode has no effort setting.
 
 The Cursor CLI runs its `agent` executable with the prompt as the last
 argument, `--force`, `--endpoint <AI proxy URL>`, and `--model` when the agent
@@ -1455,9 +1481,9 @@ A run, scheduled or manual, is serialized and always starts with a backup:
 `VACUUM INTO` writes a consistent copy while the daemon keeps serving, to
 `<base-dir>/backups/db/tariboyd-<UTC time>.db`, and only the newest configured
 number of those exact names are kept; other files in the directory are never
-rotated. **If the backup fails, nothing is deleted.** Cleanup then
-removes data older than the retention period, each category in its own
-transaction:
+rotated. **If the backup fails, nothing is deleted.** The run then prunes agent
+iterations (see [Iteration retention](#iteration-retention)) and removes data
+older than the retention period, each category in its own transaction:
 
 - **Native Tasks** — only whole trees whose every task is `done` or
   `cancelled` with `completed_at` before the cutoff, with their comments,
@@ -1488,7 +1514,28 @@ daemon was down or the machine asleep — is skipped, not caught up.
 To restore, stop the daemon, replace `tariboyd.db` with a backup file (and
 remove any `tariboyd.db-wal` and `tariboyd.db-shm`), then start it again.
 
-The per-agent iteration pruner (`tariboy retention`) is separate and unchanged.
+### Iteration retention
+
+The nightly run prunes every agent's iterations after the backup and records
+the count as `iterations` in the run's deleted counts; `tariboy prune
+<agent|all>` and **Prune now** in an agent's settings run the same pruning on
+demand. The limits are `keep_iterations`, `keep_days` and `max_bytes`. The
+server-wide default is one JSON value under `retention_default` in
+`daemon_config`, where `0` means unlimited. A row in `retention_policies`
+overrides it per agent field by field: each non-zero field replaces the
+default's, and `0` inherits it, so an agent cannot be unlimited where the
+default sets a limit. Operators set the default with **Settings → General →
+Backup & data retention** or `tariboy retention set default`, and an agent's
+override in its settings or with `tariboy retention set <agent>`. The newest
+iteration and any running one are never pruned.
+
+Every pruned iteration is backed up first to
+`<agents-dir>/<agent>/archive/<iteration>.tar.gz` (mode `0600`): the iteration
+directory plus `db-rows.json`, which holds its `iterations` row and its
+`ai_requests` rows as column-to-value objects. Only after the archive is
+written and synced are those rows and the directory deleted; an iteration
+whose archive fails stays untouched. Archives are not rotated. The legacy
+`archive` column of `retention_policies` is ignored.
 
 ## Customer identity and read marks
 
@@ -1828,9 +1875,10 @@ The primary agent dialog has **Target**, **Identity**, **Runtime**,
 documented defaults and submits one complete create request; the daemon writes
 one complete stopped agent row. Environment is a string-valued JSON object,
 schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
-read-only. Bare images force Interactive on and Autopilot off. Selecting an
-image outside clone mode resets Interactive to that image's default: the
-manifest's `harness.interactive` for schema-v1, off for schema-v2.
+read-only. Bare images force Interactive on and Autopilot off. Interactive
+starts on for every new agent and selecting an image does not change it; the
+manifest's `harness.interactive` is not applied. Clone mode copies the source
+agent's value.
 
 Ordinary creation defaults the soft iteration timeout to 7,200 seconds (2
 hours) and the hard timeout to 10,800 seconds (3 hours). Clone mode continues
@@ -1858,14 +1906,22 @@ after creation.
 
 Harness is selected from the supported Tariboy harnesses. Model and effort are
 editable preset fields: they start from explicit runtime defaults for schema-v2
-images, accept arbitrary overrides, and include conservative built-in
-suggestions instead of querying harness or provider catalogs. Schema-v1 image
-defaults remain readable for compatibility. Successful custom overrides are
-remembered in the Desktop WebView by harness and offered on later creates.
-These local suggestions are an operator convenience, not a capability check
-for the selected host; failed creates do not add values.
+images and accept arbitrary values. Their suggestions come in two labeled
+groups. **From harness** holds the catalog the selected host returns from
+`GET /api/harnesses/{type}/models` (see
+[Harness model catalog](/docs/architecture#harness-model-catalog)); it shows a
+loading note, the host's error, or a note that an older daemon does not list
+models instead of failing. When the chosen model carries its own efforts
+(Codex), the effort field offers those, otherwise the harness-wide list.
+**Saved** holds the values the operator entered earlier for that harness, the
+current value, and the image default, minus anything already listed under the
+harness. Schema-v1 image defaults remain readable for compatibility. Successful
+creates and successful Configuration Runtime saves remember the model and effort
+in the Desktop WebView by harness; failed ones do not add values. Neither group
+validates a value: an unsupported model still fails at the harness.
 
-The agents sidebar has three tabs. **Agents** lists every host's agents in one
+The agents sidebar has two tabs, **Servers** first and **Agents** second.
+**Agents** lists every host's agents in one
 flat list, ordered the way a chat list is: pinned agents first, then the agents
 with an unread customer question, then the rest by their most recent
 conversation, and only then in the operator's own order. The whole sort happens
@@ -1876,12 +1932,12 @@ one badge a row carries is the count of unread messages from that agent. The
 question itself is readable in that agent's **Chat**, and its task is marked in
 **Tasks**. A
 row's context menu pins and unpins it, and the Desktop WebView remembers the
-pinned set in `terminals:sidebar-pinned:v1`. **Groups** lists each group with
-its members gathered across hosts, including a declared group with no members.
+pinned set in `terminals:sidebar-pinned:v1`. The **Groups** tab is hidden for
+now; groups stay available inside **Servers** and on their own page.
 **Servers** keeps the per-host list and is the only tab whose rows are drag
 sources, because it is the only one with a persisted order. The selected tab is
-remembered in `terminals:sidebar-tab:v1`; an unknown value falls back to
-**Agents**. Each server heading states its own reachability and carries the
+remembered in `terminals:sidebar-tab:v1`; with no saved choice, an unknown
+value, or the former `groups` value, the sidebar opens on **Servers**. Each server heading states its own reachability and carries the
 **Update** action for a host running an older daemon, with **Update all (N)**
 above the list when more than one host is behind. **Update all** confirms the
 named hosts first, then runs the same host update on each of them in turn; a
@@ -2066,7 +2122,10 @@ cannot overlap. Edits made during a save remain an unsaved draft.
 
 **Settings → General** also carries **Backup & data retention** for the same
 explicit host: the nightly switch and time, retention days, backups to keep,
-compaction switch and threshold, **Save**, and **Run now**. The card shows the
+compaction switch and threshold, the server-wide iteration retention defaults
+(keep iterations per agent, keep days, max bytes; `0` is unlimited), **Save**,
+and **Run now**. **Save** stores the maintenance settings and the iteration
+defaults. The card shows the
 last run's time, deleted counts, and size change; a failed save or run is
 reported in place. See
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
@@ -2511,6 +2570,27 @@ the snapshot atomically. Cached data is never persisted or used as an API
 target, other server navigation remains available, and a missing host still
 fails closed rather than falling back to local authority.
 
+A reconnect never remounts a server page. An SSH host loses its endpoint while
+its tunnel reconnects and comes back on a new local port. Neither change is
+part of a page's identity: Tasks, Workflows, Stores, Settings and Configuration
+keep their loaded data, the open task, filters, scroll position and every
+unsaved draft. The route boundary keeps one tree shape and only dims the page
+and makes it inert under a single status line. A host object keeps its
+identity until one of its fields changes, so the 3-second sidebar poll does not
+restart page loads.
+
+While the host has no endpoint, background loads are skipped rather than
+failed. When the new endpoint arrives, each page re-reads once in place:
+the task list, the open task, the agent header, Configuration and Chat. A
+background read that cannot reach the host (`host_not_ready`,
+`network_error`) keeps the last data and shows no toast, because the host
+header in the left panel already reports the host as offline with its error.
+All tasks keeps an unreachable server's rows for the same filter beside that
+server's error. An explicit action such as **Save**, **Create** or **Send**
+still reports its failure. Its draft stays in the form, ready to send again
+once the host is back. Drafts live in tab memory only and are not queued for
+later delivery.
+
 For a stopped agent, Configuration offers a working-directory editor backed by
 the selected host's directory autocomplete. Saving changes the CWD used by the
 next launch; it does not move files or start, stop, or restart the agent. Active
@@ -2523,7 +2603,8 @@ descriptor actually changes, or after a successful save.
 
 Configuration commits its remaining editable fields per section rather than per
 control. The Loop section's scheduling fields and the Runtime section's model
-and effort save as one batch each, while the working directory, secrets,
+and effort save as one batch each (model and effort use the same grouped
+suggestions as agent creation, for the agent's host and harness), while the working directory, secrets,
 retention, the Loop enable and disable actions, the harness, and Interactive
 keep their own separate immediate operations. A section is dirty when a
 normalized draft differs from the value it last loaded or saved, and only a
@@ -2654,6 +2735,11 @@ only after success; on failure it keeps the dialog open, restores its controls,
 and reports the error so the operator can retry. **Kill session** remains a
 separate action with its existing browser confirmation and does not delete the
 agent or its durable data.
+
+An agent's **Retention and cleanup** card edits that agent's override of the
+server-wide iteration defaults: each field shows `0 = server default (N)`, and
+the card lists the effective limits and that pruned iterations are archived
+with their database rows first.
 
 The in-app retention prune is guarded by a confirmation dialog that names
 the operation as permanently destructive and bounds it to the current
@@ -2971,7 +3057,9 @@ Verbs: `up`, `down`, `build`, `ps`, `status`, `start`/`stop`/`restart`/`kill`,
 purge path.
 
 Compose owns agent runtime choices: harness, model, effort, interactive and loop
-settings, CWD, and environment. Schema-v2 image manifests supply none of those
+settings, CWD, and environment. An agent is interactive only when its
+`harness.interactive` is `true`; compose always sends the value explicitly, so
+the create endpoint's interactive default does not apply. Schema-v2 image manifests supply none of those
 defaults; they contain only plugins and the ordered prompt template. Compose
 may build an image from an original relative context, but portable runnable
 image artifacts do not replace that source directory for later rebuilds.
@@ -3215,6 +3303,10 @@ Install only the toolchains needed for the area you are changing:
 - **Agent smoke suites:** `tmux` is checked by both `make smoke` and
   `make full-smoke`; the latter adds the interactive terminal cases.
 - **Documentation:** Node.js and npm.
+- **Daemon host:** `tmux`, `bash`, `python3`, `git`, `npx` (Node.js), the
+  `tariboy` and `ttasks` links in `~/.local/bin`, and at least one harness.
+  `GET /api/daemon/status` reports `state: error` with the missing tools; see
+  [Daemon host tools](/docs/remote-hosts#daemon-host-tools).
 
 Coding agents must run all shell commands through a Bash login shell
 (`bash -lc 'COMMAND'`) so the account's login profile and exported environment
@@ -4163,7 +4255,9 @@ daemon restores each lock file's original content after it runs, including on
 failure; a build leaves the Store checkout's tracked lock files unchanged and
 does not block a later Refresh. An installation failure stops the build before
 publication. Git must be installed on the daemon host; lock restoration also
-requires Node.js/npm and access to the skill sources. Private repositories use
+requires Node.js/npm and access to the skill sources. Without `npx` on the
+daemon `PATH` the build stops with `building this image requires npx because it
+has skills-lock.json; install Node.js (npm ships npx) on the daemon host`. Private repositories use
 the server account's configured SSH or Git credential helpers. Configure access
 on that server before adding the Store; do not put credentials in its URL.
 
@@ -6201,13 +6295,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.76.1` alpha on an Apple Silicon Mac.
+This path is for the `0.77.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.76.1_aarch64.dmg`;
+- a verified `Tariboy_0.77.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -6283,16 +6377,20 @@ An image is a reusable template. It is not an agent and does not start work.
 
 Open **Agents → New agent**, select the host and image, and name the workspace.
 Harness, model, and effort are shown directly in the Runtime section. Model and
-effort suggestions come from Desktop presets and remain editable. They are
-runtime settings, not schema-v2 image content. A successful create remembers a
-custom model or effort locally for that harness; the list is not a live check
-of models installed on the host.
+effort stay editable and suggest values in two groups: **From harness** lists
+what the harness CLI on the selected host reports, and **Saved** lists values
+entered earlier for that harness. They are runtime settings, not schema-v2
+image content. A successful create remembers the model and effort locally for
+that harness.
 Interactive and Autopilot are independent:
 
-- enable **Interactive** to use Console;
+- **Interactive** is on by default and enables Console; turn it off for a
+  headless agent;
 - enable **Autopilot** to allow timer/message-triggered iterations.
 
-For the first walkthrough, enable both on a non-bare image.
+For the first walkthrough, keep Interactive on and enable Autopilot on a
+non-bare image. From the CLI, `tariboy agent run IMAGE:TAG` creates an
+interactive agent too; pass `--interactive=false` for a headless one.
 
 ## 5. Use Console
 
@@ -6946,7 +7044,7 @@ tariboy has three command surfaces:
 | `tariboy agent pull` | Read a base64 file from an agent's cwd (used by 'cp') |
 | `tariboy agent restart` | Restart an agent and run one iteration now |
 | `tariboy agent rm` | Remove an agent (stop it first, or --force) |
-| `tariboy agent run` | Create and start an agent from an image (image:tag) |
+| `tariboy agent run` | Create and start an agent from an image (image:tag); interactive by default, `--interactive=false` for headless |
 | `tariboy agent screen` | Capture the interactive screen (tmux capture-pane) |
 | `tariboy agent send-keys` | Send keys into the interactive session (tmux send-keys) |
 | `tariboy agent start` | Start (enable) an agent's loop |
@@ -6967,12 +7065,13 @@ tariboy has three command surfaces:
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
 | `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
-| `tariboy daemon status` | Show daemon version, uptime and base directory |
+| `tariboy daemon status` | Show daemon version, uptime, base directory and missing host tools |
 | `tariboy group assign` | Assign an agent to a group (empty group leaves) |
 | `tariboy group create` | Create (or update) a group with an optional lead |
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
+| `tariboy harness models TYPE [--refresh]` | List the models and efforts the harness CLI on the daemon host supports; CLI failures are reported in `error` |
 | `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired |
 | `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
 | `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest`; prints the result and exits 1 when it is invalid |
@@ -7009,8 +7108,8 @@ tariboy has three command surfaces:
 | `tariboy plugin rm` | Stop and remove a plugin |
 | `tariboy prune` | Prune old iterations for an agent now (or 'all'); --dry-run lists victims |
 | `tariboy restore` | Restore an agent from a backup tar.gz (optionally under a new name) |
-| `tariboy retention get` | Show the effective retention policy for an agent (or 'default') |
-| `tariboy retention set` | Set the retention policy for an agent (or 'default') |
+| `tariboy retention get` | Show the effective retention policy for an agent, with its own override and the default (or 'default') |
+| `tariboy retention set` | Set the retention policy for an agent (0 = use the default) or 'default' (0 = unlimited) |
 | `tariboy schedule ls` | List an agent's schedules (read-only) |
 | `tariboy secret ls` | List secret keys (values are never shown) |
 | `tariboy secret rm` | Remove a secret |
@@ -7209,8 +7308,8 @@ by the operator. The desktop does not implement a second SSH stack.
 
 Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
 The Python runtime executes the standard-library agent tool scripts. Preflight
-also reports `tmux`, Claude, Codex, OpenCode, and the Cursor CLI (its `agent`
-executable) so you can see which workflows are available; a missing harness is
+also reports `tmux`, `git`, `npx`, Claude, Codex, OpenCode, and the Cursor CLI
+(its `agent` executable) so you can see which workflows are available; a missing harness is
 listed as an optional tool and does not block installation. At least one chosen harness must be installed on the remote host.
 
 ## Account PATH and harness launch
@@ -7235,6 +7334,38 @@ same environment and passes that absolute interpreter to skill launchers. An
 agent's explicit `PATH` overrides the daemon baseline and therefore must retain
 both prerequisites; non-bare images then prepend their agent bin directory,
 while bare images do not.
+
+After resolving `PATH`, the daemon appends `~/.local/bin` when it is missing,
+so agents find the managed `tariboy` and `ttasks` links.
+
+## Daemon host tools
+
+Every `GET /api/daemon/status` checks the daemon `PATH`, the one iterations
+start from, for the commands the daemon and its agents need:
+
+| Tool | Needed for | Install |
+| --- | --- | --- |
+| `tmux` | agent terminal sessions | system package manager |
+| `bash` | running iterations | system package manager |
+| `python3` | agent tool scripts | system package manager |
+| `git` | adding and refreshing Stores | system package manager |
+| `npx` | building images that carry `skills-lock.json` | Node.js (npm ships `npx`) |
+| `tariboy`, `ttasks` | Tariboy commands inside agents | Tariboy CLI links in `~/.local/bin` |
+| `claude`, `codex`, `opencode` or `agent` | at least one agent harness | the harness vendor's installer |
+
+The response carries `state` (`ready` or `error`), `missing_tools` (name,
+purpose and install hint for each missing tool) and `message`, for example
+`missing required tools: tmux, npx; install them on the daemon host`. The
+check only looks for an executable on `PATH`; it does not install anything,
+because install commands differ between systems. The `error` state blocks
+nothing: the API, tunnel and running agents keep working, and the state
+returns to `ready` on the next status read after you install the tool, without
+a daemon restart.
+
+Desktop shows a connected SSH host whose daemon reports missing tools as
+**error** with the message, and the local daemon banner names the missing tools
+in the desktop app and in a browser. A host's state is read when its tunnel
+connects, so reconnect it after installing the tools.
 
 ## Add a host
 
@@ -7362,8 +7493,8 @@ alias in a new editor window. Local agents open as ordinary local folders in a
 new editor window. HTTPS hosts do not show the
 action because they have no SSH identity.
 
-Missing harnesses and `tmux` are reported separately as agent workflow
-prerequisites. They do not make an otherwise successful Tariboy update
+Missing harnesses, `tmux`, `git` and `npx` are reported separately as agent
+workflow prerequisites. They do not make an otherwise successful Tariboy update
 appear failed. Platform, architecture, writable install root, and `flock`
 plus `python3` remain installation requirements.
 
@@ -7648,7 +7779,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.76.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.77.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -7747,7 +7878,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.76.1`. Resolve a local mismatch with
+The app and bundled daemons must report `0.77.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -8772,6 +8903,11 @@ Agents still use `ttasks ask` and `ttasks comment`.
   outcome does. Leaving the status by any route resolves that wait.
 - **In a script status** a comment does not change the category.
 
+A customer comment that mentions the agent (`@agent:NAME`) notifies it but
+does not return a task in a customer or script status to work. Choose an
+outcome instead, for example `changes_requested` with the requested changes
+as its message.
+
 ## The Goal block
 
 An agent works on its selected Goal task. For a task that follows a workflow the
@@ -9493,7 +9629,10 @@ Flexible tasks use `open`, `in_progress`, `wait_customer`, `done`, or
 `cancelled` status. When the assigned agent asks the task customer a question,
 the same comment transaction moves a non-terminal task to `wait_customer`.
 The last customer answer returns it to `in_progress`, unless an operator made an
-intervening status change. Questions for another principal do not change status.
+intervening status change. A customer comment that mentions the assigned agent
+(`@agent:NAME`) also returns a `wait_customer` task to `in_progress` once no
+question to the customer stays open. Questions for another principal do not
+change status.
 
 A task that follows a workflow reports the workflow status (`plan`, `review`, ...)
 as `status` and one of those five values as `category`, which the daemon derives
