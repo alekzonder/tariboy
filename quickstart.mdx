@@ -6,14 +6,14 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.77.0` alpha on an Apple Silicon Mac.
+This path is for the `0.78.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.77.0_aarch64.dmg`;
-- for remote use, an SSH config alias resolving to Linux x86_64;
+- a verified `Tariboy_0.78.0_aarch64.dmg`;
+- for remote use, an SSH config alias resolving to Linux x86_64 or aarch64;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
 
@@ -61,7 +61,7 @@ terminal.
 
 Run preflight. Review the detected platform, architecture, disk, `flock`,
 `python3`, `tmux`, and harnesses. Choose **Install** when the host reports Linux
-x86_64 and the required install prerequisites are green. Provisioning ends by
+x86_64 or aarch64 and the required install prerequisites are green. Provisioning ends by
 opening a loopback-forwarding tunnel and checking daemon health.
 
 For local-only use, keep the default Local host and continue.
@@ -95,7 +95,7 @@ image content. A successful create remembers the model and effort locally for
 that harness.
 Interactive and Autopilot are independent:
 
-- **Interactive** is on by default and enables Console; turn it off for a
+- **Interactive** is on by default and enables Terminal; turn it off for a
   headless agent;
 - enable **Autopilot** to allow timer/message-triggered iterations.
 
@@ -103,11 +103,11 @@ For the first walkthrough, keep Interactive on and enable Autopilot on a
 non-bare image. From the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
 
-## 5. Use Console
+## 5. Use Terminal
 
-Open the agent's **Console** tab and start the session. This is a real terminal
+Open the agent's **Terminal** tab and start the session. This is a real terminal
 to the selected harness. Startup can take a few seconds while the shim socket
-appears; Console retries during that bounded window. Leaving the tab does not
+appears; Terminal retries during that bounded window. Leaving the tab does not
 hide or stop the session, and returning attaches a new terminal client to the
 same tmux session.
 

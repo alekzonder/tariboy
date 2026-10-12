@@ -135,7 +135,8 @@ daemon is down.
 | `tariboy daemon start\|stop\|restart\|status\|logs` | Control and inspect the local daemon process |
 | `tariboy update [VERSION\|latest] [--force]` | Install a published release over this installer-managed installation and restart a running daemon |
 
-`tariboy update` updates only an installer-managed `linux-x86_64` installation
+`tariboy update` updates only an installer-managed `linux-x86_64` or
+`linux-aarch64` installation
 and is described in [Remote hosts](/docs/remote-hosts#update-a-host-from-its-own-shell).
 
 ### Iteration tags

@@ -15,7 +15,7 @@ sidebar:
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.77.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.78.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -153,7 +153,7 @@ separately.
 ## Known alpha constraints
 
 - Apple Silicon macOS desktop only.
-- Automatic SSH installation supports Linux x86_64 only.
+- Automatic SSH installation supports 64-bit Linux only: x86_64 and aarch64.
 - Ad-hoc signing requires a one-app Gatekeeper confirmation.
 - Desktop updates require a writable installed app; Developer ID signing and
   notarization are not yet available.

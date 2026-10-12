@@ -52,7 +52,7 @@ Application settings also choose the **Interface mode**: **Simple**, the
 default, or **Expert**. The choice persists in WebView localStorage under
 `app:ui-mode:v1` and applies at once; any other stored value, or unavailable
 storage, means Simple. Simple changes only what the agent workspace shows: its
-tabs are **Chat**, **Tasks**, **Console**, and **Configuration**, an agent
+tabs are **Chat**, **Tasks**, **Terminal**, and **Configuration**, an agent
 opens on Chat, and a route to a hidden tab (Autopilot, Activity, Advanced) is
 redirected to Chat. Its Chat tab is the personal conversation alone, with the toolbar
 starting at message search: there is no **Chat**/**Channels**/**Queue** switch,
@@ -661,7 +661,7 @@ REST API, and the UI does not infer phases from title prefixes or assignee. Oper
 
 The navigation hierarchy is **Server → Agent**.
 A selected server owns Tasks, Images, Workflow images, Stores, and Settings, and its
-context row remains visible above the selected agent's Chat, Tasks, Console,
+context row remains visible above the selected agent's Chat, Tasks, Terminal,
 Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
@@ -746,10 +746,10 @@ as an assignee.
 Selecting another agent in the sidebar while an agent workspace is open keeps
 the tab that is currently open and shows the new agent in it, so the same view
 answers the same question about the next agent. An unknown tab still falls back
-to Console (Chat in Simple mode), and a selected task in the Tasks query is dropped because it belongs
+to Terminal (Chat in Simple mode), and a selected task in the Tasks query is dropped because it belongs
 to the agent being left. Selecting an agent from anywhere else — a
-team, or a freshly created agent — still opens Console, or Chat in Simple mode.
-Start and Stop live only in the agent header; a stopped agent's Console says so
+team, or a freshly created agent — still opens Terminal, or Chat in Simple mode.
+Start and Stop live only in the agent header; a stopped agent's Terminal tab says so
 without a Start button of its own.
 
 When a known explicit server route temporarily loses its tunnel or its
@@ -865,16 +865,16 @@ server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
 The browser sends each `File` as the raw request body instead of building a
 base64/JSON copy. Uploads have no agent destination: files live in the server's
 shared files directory and the returned absolute paths are inserted into the
-corresponding draft or reported when no terminal is available. Console retains
+corresponding draft or reported when no terminal is available. Terminal retains
 its explicit host target.
 
-The agent Console mounts xterm.js and opens
+The agent Terminal tab mounts xterm.js and opens
 `GET /api/agents/{name}/terminal`. Binary WebSocket frames carry PTY bytes;
 text frames carry resize messages. A host or agent route change tears down the
 old socket and dials the newly selected target without stopping the tmux
 session.
 
-In the Console terminal, explicit `http://` and `https://` text in terminal
+In the Terminal tab, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`
 modifier); this is a Desktop capability and does nothing in a plain browser. An
 ordinary click never opens anything and keeps xterm's own focus, selection and
@@ -885,7 +885,7 @@ natively before anything is launched — the terminal matcher and the WebView ar
 not the authorization boundary. A link that cannot be opened reports a fixed
 message that never contains the terminal line.
 
-The Console terminal toolbar exposes **Scrollback**. It sends tmux's own
+The Terminal tab toolbar exposes **Scrollback**. It sends tmux's own
 copy-mode entry sequence (prefix `C-b`, then `[`) over the existing byte socket, and the toolbar then shows a persistent
 **Viewing scrollback** status, **Page back** / **Page forward** controls, and an
 **Exit scrollback** button. Live keystrokes are paused while tmux is in
@@ -916,13 +916,13 @@ agent is enabled and not `bare:latest`, for interactive and non-interactive
 agents alike. It opens a dialog whose optional, memory-only one-shot text is
 sent to the route-selected host and affects only the newly requested iteration.
 Exec does not enable Autopilot or persist the draft. A successful request closes
-the dialog and, when the Console shows an interactive terminal, reconnects its
+the dialog and, when the Terminal tab shows an interactive terminal, reconnects its
 startup handling; a rejected request keeps the dialog and the draft for retry.
 
 Permanent agent deletion requires confirmation in an in-app dialog that names
 the agent and warns that its durable data is also removed. Confirm sends the
 existing `force=true` and `purge=true` request. While that request is pending,
-the dialog cannot be dismissed or submitted again. The Console returns home
+the dialog cannot be dismissed or submitted again. The Terminal tab returns home
 only after success; on failure it keeps the dialog open, restores its controls,
 and reports the error so the operator can retry. **Kill session** remains a
 separate action with its existing browser confirmation and does not delete the
