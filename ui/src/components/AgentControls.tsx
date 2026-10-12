@@ -51,7 +51,7 @@ export function RunStateActions({ name, refresh }: { name: string; refresh?: () 
  * The action cluster on the right of the agent header: the run-state toggle,
  * Kill, and an overflow menu for everything that is not a per-second decision.
  * It rides in the header rather than in a tab, so the lifecycle of the agent is
- * reachable from every tab — which is why the Console tab no longer carries a
+ * reachable from every tab — which is why the Terminal tab no longer carries a
  * second copy of these buttons.
  *
  * Exec (a one-shot iteration with an optional prompt) sits in front of the

@@ -39,7 +39,7 @@ export default function AgentAutopilotTab() {
       <Card>
         <CardHeader>
           <CardTitle>Autopilot</CardTitle>
-          <CardDescription>Scheduled iterations are independent from the interactive Console session.</CardDescription>
+          <CardDescription>Scheduled iterations are independent from the interactive Terminal session.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">

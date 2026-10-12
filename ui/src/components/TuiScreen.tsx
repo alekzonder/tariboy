@@ -135,7 +135,7 @@ export function TuiScreen({
   /** Retain compose text in localStorage. Workspace tiles disable this so
    * operator text and uploaded paths never enter persisted workspace state. */
   persistDraft?: boolean
-  /** Standalone Console chrome or a flush surface embedded in a Workspace pane. */
+  /** Standalone Terminal tab chrome or a flush surface embedded in a Workspace pane. */
   surface?: "standalone" | "workspace"
 }) {
   const { absent, name, send, status } = controller
