@@ -143,7 +143,31 @@ test("Tasks production workspace opens, closes, resizes, and restores the detail
   await expect(page.getByText("Are you sure you want to close this task? Unsaved changes will be discarded.")).toBeVisible();
 });
 
-test("Tasks production workspace lists the agent pools of a queue", async ({ page, request }) => {
+test("Tasks detail keeps its header reachable under a long description", async ({ page, request }) => {
+  const description = Array.from({ length: 80 }, (_, index) => `- line ${index + 1}`).join("\n");
+  let response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "SCROLL", name: "Scroll browser" } });
+  expect(response.ok()).toBe(true);
+  response = await request.post(`${daemonURL}/api/tasks`, { data: {
+    queue: "SCROLL", title: "Long description scroll", description, idempotency_key: "tasks-browser-long-description",
+  } });
+  expect(response.ok()).toBe(true);
+  const key = (await response.json()).result.key as string;
+  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await page.getByTestId(`task-row-${key}`).locator(".task-row-main").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("line 80")).toBeVisible();
+
+  // Only the panel scrolls. A dialog that overflows its own overflow:hidden box
+  // can be scrolled by focus or scrollIntoView, but never back by the wheel.
+  const overflow = await dialog.evaluate((element) => element.scrollHeight - element.clientHeight);
+  expect(overflow).toBeLessThanOrEqual(0);
+  await dialog.getByText("Comment order").evaluate((element) => element.scrollIntoView());
+  expect(await dialog.evaluate((element) => element.scrollTop)).toBe(0);
+  const dialogTop = (await dialog.boundingBox())!.y;
+  expect((await dialog.locator("header").first().boundingBox())!.y).toBeGreaterThanOrEqual(dialogTop);
+});
+
+test("Tasks production workspace lists the agent pools of a queue",async ({ page, request }) => {
   const response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "FLOW", name: "Pool browser" } })
   expect(response.ok()).toBe(true)
 
