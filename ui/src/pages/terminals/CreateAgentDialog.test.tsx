@@ -207,7 +207,12 @@ beforeEach(() => {
   clearHarnessCatalogCache();
   vi.mocked(getHarnessModelsOn).mockImplementation(
     async (_target, harness) =>
-      harnessCatalogs[harness] ?? { harness, models: [], efforts: [], error: "" },
+      harnessCatalogs[harness] ?? {
+        harness,
+        models: [],
+        efforts: [],
+        error: "",
+      },
   );
   vi.mocked(resolveDaemon).mockImplementation(async (id) => targetFor(id));
   vi.mocked(listImages).mockResolvedValue({
@@ -912,4 +917,65 @@ it("keeps the created stopped agent and retries only start after a start failure
   await waitFor(() => expect(startAgent).toHaveBeenCalledTimes(2));
   expect(createAgent).toHaveBeenCalledOnce();
   expect(onOpenChange).toHaveBeenCalledWith(false);
+});
+
+describe("Create agent blocker", () => {
+  const clone = {
+    imageRef: undefined,
+    cloneSource: { hostId: "d1", agentName: "source", hostLabel: "prod" },
+  };
+
+  it("names a pending image manifest next to the disabled button", async () => {
+    vi.mocked(imageManifestGet).mockReturnValue(new Promise(() => {}));
+    renderDialog(clone);
+
+    expect(
+      await screen.findByText("Loading image worker:v1 on prod…"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
+  });
+
+  it("keeps a manifest failure visible across an image reload and retries it", async () => {
+    vi.mocked(imageManifestGet).mockRejectedValue(new Error("tunnel closed"));
+    const props: ComponentProps<typeof CreateAgentDialog> = {
+      open: true,
+      hostId: "d1",
+      hosts: [{ id: "d1", label: "prod", revision: "r1" }],
+      onOpenChange: vi.fn(),
+      onCreated: vi.fn(),
+      ...clone,
+    };
+    const view = render(<CreateAgentDialog {...props} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Could not load image worker:v1: .*tunnel closed/,
+    );
+    view.rerender(
+      <CreateAgentDialog
+        {...props}
+        hosts={[{ id: "d1", label: "prod", revision: "r2" }]}
+      />,
+    );
+    await waitFor(() => expect(imageManifestGet).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Could not load image worker:v1: .*tunnel closed/,
+    );
+    expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
+
+    vi.mocked(imageManifestGet).mockResolvedValue(manifest());
+    fireEvent.click(screen.getByRole("button", { name: "Retry image" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create agent" }),
+      ).toBeEnabled(),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("asks for an image when none is selected", async () => {
+    renderDialog({ imageRef: "" });
+
+    expect(await screen.findByText("Choose an image")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
+  });
 });

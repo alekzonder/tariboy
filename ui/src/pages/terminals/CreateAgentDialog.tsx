@@ -71,6 +71,50 @@ function errorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : String(error);
 }
 
+interface CreateBlocker {
+  message: string;
+  error: boolean;
+  retryImage?: boolean;
+}
+
+// createBlocker names the first unmet precondition of creation, so the
+// disabled Create agent button always carries its reason.
+function createBlocker(state: {
+  sourceState: "idle" | "loading" | "ready" | "error";
+  hostLabel: string;
+  targetIsCurrent: boolean;
+  imagesError: string;
+  image: string;
+  imageAvailable: boolean;
+  manifestError: string;
+  manifestIsCurrent: boolean;
+}): CreateBlocker | null {
+  if (state.sourceState === "loading")
+    return { message: "Loading source configuration…", error: false };
+  if (state.sourceState === "error")
+    return { message: "Source configuration did not load", error: false };
+  if (!state.targetIsCurrent)
+    return {
+      message: `Loading built images on ${state.hostLabel}…`,
+      error: false,
+    };
+  if (state.imagesError) return { message: state.imagesError, error: true };
+  if (!state.image) return { message: "Choose an image", error: false };
+  if (!state.imageAvailable)
+    return {
+      message: `Image ${state.image} is not built on ${state.hostLabel}`,
+      error: true,
+    };
+  if (state.manifestError)
+    return { message: state.manifestError, error: true, retryImage: true };
+  if (!state.manifestIsCurrent)
+    return {
+      message: `Loading image ${state.image} on ${state.hostLabel}…`,
+      error: false,
+    };
+  return null;
+}
+
 function integerField(raw: string, label: string, minimum: number): number {
   const value = Number(raw.trim());
   if (!Number.isSafeInteger(value) || value < minimum) {
@@ -130,6 +174,8 @@ function CreateAgentDialogForm({
   const [images, setImages] = useState<ImageRow[]>([]);
   const [manifest, setManifest] = useState<ImageManifest | null>(null);
   const [manifestKey, setManifestKey] = useState("");
+  const [manifestError, setManifestError] = useState("");
+  const [manifestAttempt, setManifestAttempt] = useState(0);
   const [pluginDraft, setPluginDraft] = useState("");
   const runtimeInitializedForTarget = useRef("");
   const [busy, setBusy] = useState(false);
@@ -137,7 +183,8 @@ function CreateAgentDialogForm({
     "idle" | "loading" | "ready" | "error"
   >(cloneSource ? "loading" : "idle");
   const [sourceError, setSourceError] = useState("");
-  const [formError, setFormError] = useState("");
+  const [imagesError, setImagesError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [startError, setStartError] = useState("");
   const [created, setCreated] = useState<{ host: string; name: string } | null>(
     null,
@@ -164,13 +211,6 @@ function CreateAgentDialogForm({
     targetIsUsable &&
     targetImageAvailable &&
     manifestKey !== expectedManifestKey;
-  const targetImageError =
-    draft.image !== "" &&
-    targetIsCurrent &&
-    targetIsUsable &&
-    !targetImageAvailable
-      ? `Image ${draft.image} is not built on the selected host`
-      : "";
   const currentManifest = manifestIsCurrent ? manifest : null;
   const bare = currentManifest?.bare === true;
   const schemaV2 = currentManifest?.schema_version === 2;
@@ -204,9 +244,18 @@ function CreateAgentDialogForm({
   const displayedPlugins = schemaV2
     ? (currentManifest?.plugins?.map((plugin) => plugin.name) ?? [])
     : draft.plugins;
-  const sourceReady = !cloneSource || sourceState === "ready";
   const formDisabled = busy || created !== null || sourceState === "loading";
-  const visibleFormError = formError || targetImageError;
+  const hostEntry = hosts.find((entry) => entry.id === host);
+  const blocker = createBlocker({
+    sourceState,
+    hostLabel: hostEntry?.label || host || "local",
+    targetIsCurrent,
+    imagesError,
+    image: draft.image,
+    imageAvailable: targetImageAvailable,
+    manifestError: manifestKey === expectedManifestKey ? manifestError : "",
+    manifestIsCurrent,
+  });
 
   const updateDraft = <K extends keyof AgentCreateDraft>(
     key: K,
@@ -278,13 +327,13 @@ function CreateAgentDialogForm({
         setTarget(nextTarget);
         setResolvedRevision(selectedHostRevision);
         setImages(result.images ?? []);
-        setFormError("");
+        setImagesError("");
       } catch (error) {
         if (!alive) return;
         setTarget(null);
         setResolvedRevision(selectedHostRevision);
         setImages([]);
-        setFormError(`Could not load images: ${errorMessage(error)}`);
+        setImagesError(`Could not load images: ${errorMessage(error)}`);
       }
     })();
     return () => {
@@ -302,7 +351,7 @@ function CreateAgentDialogForm({
         if (!alive) return;
         setManifest(next);
         setManifestKey(expectedManifestKey);
-        setFormError("");
+        setManifestError("");
         if (
           !cloneSource &&
           runtimeInitializedForTarget.current !== runtimeTargetKey
@@ -329,7 +378,9 @@ function CreateAgentDialogForm({
         if (!alive) return;
         setManifest(null);
         setManifestKey(expectedManifestKey);
-        setFormError(`Could not load ${draft.image}: ${errorMessage(error)}`);
+        setManifestError(
+          `Could not load image ${draft.image}: ${errorMessage(error)}`,
+        );
       });
     return () => {
       alive = false;
@@ -339,6 +390,7 @@ function CreateAgentDialogForm({
     draft.image,
     expectedManifestKey,
     loadingImages,
+    manifestAttempt,
     runtimeTargetKey,
     target,
     targetImageAvailable,
@@ -355,7 +407,9 @@ function CreateAgentDialogForm({
     setImages([]);
     setManifest(null);
     setManifestKey("");
-    setFormError("");
+    setManifestError("");
+    setImagesError("");
+    setSubmitError("");
     if (!cloneSource) updateDraft("image", "");
   };
 
@@ -363,7 +417,14 @@ function CreateAgentDialogForm({
     updateDraft("image", image);
     setManifest(null);
     setManifestKey("");
-    setFormError("");
+    setManifestError("");
+    setSubmitError("");
+  };
+
+  const retryImage = () => {
+    setManifestKey("");
+    setManifestError("");
+    setManifestAttempt((attempt) => attempt + 1);
   };
 
   const addPlugin = () => {
@@ -375,16 +436,8 @@ function CreateAgentDialogForm({
   };
 
   const submit = async () => {
-    if (
-      !sourceReady ||
-      !draft.image ||
-      !targetIsCurrent ||
-      !targetIsUsable ||
-      !manifestIsCurrent
-    ) {
-      setFormError(
-        "Wait for the source, selected host, and image to finish loading",
-      );
+    if (blocker || !targetIsUsable) {
+      setSubmitError(blocker?.message ?? "The selected host is not ready");
       return;
     }
     let env: Record<string, string>;
@@ -437,7 +490,7 @@ function CreateAgentDialogForm({
         1,
       );
     } catch (error) {
-      setFormError(errorMessage(error));
+      setSubmitError(errorMessage(error));
       return;
     }
 
@@ -472,7 +525,7 @@ function CreateAgentDialogForm({
     if (!schemaV2) spec.plugins = [...draft.plugins];
 
     setBusy(true);
-    setFormError("");
+    setSubmitError("");
     setStartError("");
     try {
       const result = await createAgent(spec, target);
@@ -499,7 +552,7 @@ function CreateAgentDialogForm({
       }
     } catch (error) {
       const message = errorMessage(error);
-      setFormError(message);
+      setSubmitError(message);
       toast.error(`create failed: ${message}`);
     } finally {
       setBusy(false);
@@ -535,11 +588,6 @@ function CreateAgentDialogForm({
         </DialogHeader>
 
         <div className="space-y-4">
-          {sourceState === "loading" && (
-            <p className="text-xs text-muted-foreground">
-              Loading source configuration…
-            </p>
-          )}
           {sourceState === "error" && (
             <div
               role="alert"
@@ -959,9 +1007,9 @@ function CreateAgentDialogForm({
             />
           </section>
 
-          {visibleFormError && (
+          {submitError && !blocker && (
             <p role="alert" className="text-sm text-destructive">
-              {visibleFormError}
+              {submitError}
             </p>
           )}
           {startError && (
@@ -981,19 +1029,31 @@ function CreateAgentDialogForm({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="items-center">
+          {!created && blocker && (
+            <div className="mr-auto flex items-center gap-2">
+              <p
+                id="create-agent-blocker"
+                role={blocker.error ? "alert" : "status"}
+                className={
+                  blocker.error
+                    ? "text-sm text-destructive"
+                    : "text-sm text-muted-foreground"
+                }
+              >
+                {blocker.message}
+              </p>
+              {blocker.retryImage && (
+                <Button size="sm" variant="outline" onClick={retryImage}>
+                  Retry image
+                </Button>
+              )}
+            </div>
+          )}
           {!created && (
             <Button
-              disabled={
-                busy ||
-                !sourceReady ||
-                loadingImages ||
-                loadingManifest ||
-                !targetIsCurrent ||
-                !targetIsUsable ||
-                !draft.image ||
-                !manifestIsCurrent
-              }
+              disabled={busy || blocker !== null || !targetIsUsable}
+              aria-describedby={blocker ? "create-agent-blocker" : undefined}
               onClick={() => void submit()}
             >
               {busy ? "Creating…" : "Create agent"}
