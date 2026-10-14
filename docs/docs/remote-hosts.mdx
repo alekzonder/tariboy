@@ -1,6 +1,6 @@
 ---
 title: Remote hosts
-description: Connect, provision, update, and remove Linux hosts through system OpenSSH.
+description: Connect, provision, update, and remove Linux and macOS hosts through system OpenSSH.
 sidebar:
   label: Remote hosts
   icon: server
@@ -14,7 +14,7 @@ by the operator. The desktop does not implement a second SSH stack.
 | Component | Alpha support |
 | --- | --- |
 | Desktop | macOS 12+, Apple Silicon |
-| Automatic remote install | Linux x86_64 and aarch64 |
+| Automatic remote install | Linux x86_64 and aarch64, macOS arm64 (Apple Silicon) |
 | SSH | system `ssh` and `scp` |
 | Remote install root | `~/.local/lib/tariboy` |
 | Remote CLI links | `~/.local/bin` |
@@ -22,12 +22,23 @@ by the operator. The desktop does not implement a second SSH stack.
 | Tunnel | local loopback forwarding over SSH |
 | Android app | arm64 APK built with `make desktop-android`; forwarded loopback port or HTTPS server, no SSH hosts |
 
-Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
-The desktop app carries one server build per architecture and uploads the one
-matching the host's `uname -m`: `x86_64` gets `linux-x86_64`, and `aarch64`
-(or `arm64`) gets `linux-aarch64`. Install and update re-read the architecture
-in preflight every time. Any other architecture, such as 32-bit `armv7l`, is
-reported as unsupported and nothing changes on the host.
+Automatic installation requires a writable `~/.local` and `python3`; Linux
+hosts also need `flock`. The desktop app carries one server build per platform
+and uploads the one matching the host's `uname -s` and `uname -m`: Linux
+`x86_64` gets `linux-x86_64`, Linux `aarch64` (or `arm64`) gets
+`linux-aarch64`, and macOS (`Darwin`) `arm64` gets `darwin-arm64`. Install and
+update re-read the platform and architecture in preflight every time. Any other
+combination, such as 32-bit `armv7l` or an Intel Mac (`Darwin/x86_64`,
+including a shell running under Rosetta), is reported as unsupported and
+nothing changes on the host.
+
+macOS ships neither `flock` nor `sha256sum`, so on a Mac the installer takes
+its lock through `python3` and verifies checksums with `shasum -a 256`. On
+macOS, `/usr/bin/python3` works only once the Command Line Tools are installed
+(`xcode-select --install`). Homebrew installs `tmux` and harnesses under
+`/opt/homebrew/bin`; that directory must be on the login shell's `PATH` or the
+daemon reports them as missing tools. A daemon started over SSH does not start
+again after the Mac reboots; connect from Desktop to start it.
 The Python runtime executes the standard-library agent tool scripts. Preflight
 also reports `tmux`, `git`, `npx`, Claude, Codex, OpenCode, and the Cursor CLI
 (its `agent` executable) so you can see which workflows are available; a missing harness is
@@ -121,7 +132,8 @@ Desktop uploads five bundled binaries including the Tasks client and Telegram pl
 fixed installer script to a staging directory. The remote installer:
 
 - validates checksums;
-- serializes installs with `flock`;
+- serializes installs with `flock`, or with a `python3` file lock where `flock`
+  is absent (macOS);
 - publishes a versioned release directory;
 - atomically switches managed CLI symlinks;
 - verifies the daemon reports the requested version;
@@ -172,7 +184,8 @@ daemon is left stopped.
 The command updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation, where `~/.local/bin/tariboy` is a symlink into
 `~/.local/lib/tariboy/<version>/`. It refuses anything else — a hand-placed binary or a macOS installation
-belonging to the app bundle — and changes nothing. `--force` reinstalls a
+belonging to the app bundle — and changes nothing. A Desktop-managed macOS
+server is updated with the Desktop update button instead. `--force` reinstalls a
 version that is already active. `TARIBOY_UPDATE_BASE_URL` overrides the GitHub
 releases root for a mirror.
 
@@ -217,8 +230,8 @@ action because they have no SSH identity.
 
 Missing harnesses, `tmux`, `git` and `npx` are reported separately as agent
 workflow prerequisites. They do not make an otherwise successful Tariboy update
-appear failed. Platform, architecture, writable install root, and `flock`
-plus `python3` remain installation requirements.
+appear failed. Platform, architecture, writable install root, `python3`, and,
+on Linux, `flock` remain installation requirements.
 
 ## Connection lifecycle
 

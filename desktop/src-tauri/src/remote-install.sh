@@ -37,6 +37,14 @@ release_created=false
 committed=false
 sources="tariboyd tariboy tariboy-shim tariboy-plugin-telegram"
 managed_links="tariboyd:tariboyd tariboy:tariboy tariboy-tasks:tariboy-tasks ttasks:tariboy-tasks tariboy-shim:tariboy-shim tariboy-plugin-telegram:tariboy-plugin-telegram"
+# macOS ships `shasum` instead of coreutils `sha256sum`; both read SHA256SUMS.
+verify_checksums() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$1" && sha256sum -c SHA256SUMS >&2)
+  else
+    (cd "$1" && shasum -a 256 -c SHA256SUMS >&2)
+  fi
+}
 binary_source=$stage
 test "$mode" != activate || binary_source=$release
 if test "$mode" != activate || test -e "$binary_source/tariboy-tasks" || test -L "$binary_source/tariboy-tasks"; then
@@ -52,7 +60,7 @@ fi
 if test "$mode" != activate; then
   test -d "$stage"
   test "$(cat "$stage/VERSION")" = "$version"
-  (cd "$stage" && sha256sum -c SHA256SUMS >&2)
+  verify_checksums "$stage"
 
   for source in $sources; do
     test -f "$stage/$source"
@@ -86,15 +94,37 @@ rollback() {
 trap rollback EXIT
 trap 'exit 1' HUP INT TERM
 
-command -v flock >/dev/null 2>&1 || {
-  echo "flock is required for safe installation" >&2
-  exit 69
-}
+# Tests shorten the lock wait; Desktop and `tariboy update` never set it.
+lock_wait=${TARIBOY_INSTALL_LOCK_WAIT:-60}
+case "$lock_wait" in ""|*[!0-9]*) lock_wait=60 ;; esac
 exec 9>"$root/.install.lock"
-flock -w 60 9 || {
-  echo "another tariboy install holds $root/.install.lock" >&2
-  exit 75
-}
+if command -v flock >/dev/null 2>&1; then
+  flock -w "$lock_wait" 9 || {
+    echo "another tariboy install holds $root/.install.lock" >&2
+    exit 75
+  }
+elif command -v python3 >/dev/null 2>&1; then
+  # macOS has no flock(1). The lock belongs to the open file description that
+  # fd 9 shares with this shell, so it outlives python3 just like flock 9.
+  python3 -c '
+import fcntl, sys, time
+deadline = time.monotonic() + int(sys.argv[1])
+while True:
+    try:
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        break
+    except BlockingIOError:
+        if time.monotonic() >= deadline:
+            sys.exit(75)
+        time.sleep(0.1)
+' "$lock_wait" || {
+    echo "another tariboy install holds $root/.install.lock" >&2
+    exit 75
+  }
+else
+  echo "flock or python3 is required for safe installation" >&2
+  exit 69
+fi
 
 mkdir -p "$bindir"
 umask 022
@@ -140,11 +170,11 @@ done
 if test "$mode" = activate; then
   test -d "$release"
   test "$(cat "$release/VERSION")" = "$version"
-  (cd "$release" && sha256sum -c SHA256SUMS >&2)
+  verify_checksums "$release"
 elif test -e "$release" || test -L "$release"; then
   test -d "$release"
   test "$(cat "$release/VERSION")" = "$version"
-  (cd "$release" && sha256sum -c SHA256SUMS >&2)
+  verify_checksums "$release"
   rm -rf "$stage"
 else
   mv "$stage" "$release"

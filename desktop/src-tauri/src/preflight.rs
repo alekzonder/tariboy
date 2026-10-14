@@ -82,29 +82,28 @@ pub struct Result {
     pub install_supported: bool,
 }
 
-/// Prerequisite named when the server's `uname -m` has no bundled build.
-pub const ARCH_REQUIREMENT: &str = "x86_64 or aarch64";
+/// Prerequisite named when the server's `uname -s`/`uname -m` has no bundled build.
+pub const PLATFORM_REQUIREMENT: &str = "Linux x86_64/aarch64 or macOS arm64";
 
 pub fn parse(stdout: &str) -> std::result::Result<Result, String> {
     let mut result: Result =
         serde_json::from_str(stdout).map_err(|error| format!("invalid preflight JSON: {error}"))?;
-    let arch_supported = crate::bundle::Platform::remote(&result.arch).is_some();
-    result.install_supported = result.platform == "Linux"
-        && arch_supported
+    let platform_supported =
+        crate::bundle::Platform::remote(&result.platform, &result.arch).is_some();
+    // macOS ships no flock; the installer locks through python3 there.
+    let flock_required = result.platform == "Linux";
+    result.install_supported = platform_supported
         && result.writable_local
-        && result.flock.available
+        && (result.flock.available || !flock_required)
         && result.python3.available;
     let mut prerequisites = Vec::new();
-    if result.platform != "Linux" {
-        prerequisites.push("Linux".to_string());
-    }
-    if !arch_supported {
-        prerequisites.push(ARCH_REQUIREMENT.to_string());
+    if !platform_supported {
+        prerequisites.push(PLATFORM_REQUIREMENT.to_string());
     }
     if !result.writable_local {
         prerequisites.push("writable ~/.local".to_string());
     }
-    if !result.flock.available {
+    if flock_required && !result.flock.available {
         prerequisites.push("flock".to_string());
     }
     if !result.python3.available {
@@ -201,20 +200,42 @@ mod tests {
     fn linux_aarch64_can_install() {
         let result = parse(&fixture("Linux", "aarch64", true)).unwrap();
         assert!(result.install_supported);
-        assert!(!result.prerequisites.contains(&ARCH_REQUIREMENT.to_string()));
+        assert!(!result
+            .prerequisites
+            .contains(&PLATFORM_REQUIREMENT.to_string()));
+    }
+
+    #[test]
+    fn macos_arm64_can_install_without_flock() {
+        let json = fixture("Darwin", "arm64", true).replace(
+            r#""flock":{"available":true"#,
+            r#""flock":{"available":false"#,
+        );
+        let result = parse(&json).unwrap();
+        assert!(result.install_supported);
+        assert!(!result.prerequisites.contains(&"flock".to_string()));
+        assert!(!result
+            .prerequisites
+            .contains(&PLATFORM_REQUIREMENT.to_string()));
     }
 
     #[test]
     fn unsupported_platform_and_arch_block_install() {
-        let result = parse(&fixture("Darwin", "arm64", true)).unwrap();
-        assert!(!result.install_supported);
-        assert!(result.prerequisites.contains(&"Linux".to_string()));
-
-        let result = parse(&fixture("Linux", "armv7l", true)).unwrap();
-        assert!(!result.install_supported);
-        assert!(result
-            .prerequisites
-            .contains(&"x86_64 or aarch64".to_string()));
+        for (platform, arch) in [
+            ("Darwin", "x86_64"),
+            ("Linux", "armv7l"),
+            ("FreeBSD", "amd64"),
+        ] {
+            let result = parse(&fixture(platform, arch, true)).unwrap();
+            assert!(!result.install_supported, "{platform}/{arch}");
+            assert!(
+                result
+                    .prerequisites
+                    .contains(&"Linux x86_64/aarch64 or macOS arm64".to_string()),
+                "{platform}/{arch}: {:?}",
+                result.prerequisites
+            );
+        }
     }
 
     #[test]

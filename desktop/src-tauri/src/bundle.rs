@@ -69,15 +69,19 @@ impl Platform {
         Self::DarwinArm64
     }
 
-    /// remote maps an SSH server's `uname -m` to the Linux set uploaded to it.
-    pub fn remote(arch: &str) -> Option<Self> {
-        match arch {
-            "x86_64" => Some(Self::LinuxX86_64),
-            "aarch64" | "arm64" => Some(Self::LinuxAarch64),
+    /// remote maps an SSH server's `uname -s`/`uname -m` to the set uploaded
+    /// to it. Only pairs with a packaged build are supported.
+    pub fn remote(platform: &str, arch: &str) -> Option<Self> {
+        match (platform, arch) {
+            ("Linux", "x86_64") => Some(Self::LinuxX86_64),
+            ("Linux", "aarch64" | "arm64") => Some(Self::LinuxAarch64),
+            ("Darwin", "arm64") => Some(Self::DarwinArm64),
             _ => None,
         }
     }
 
+    /// is_remote reports a set used only on servers, so every validation of it
+    /// requires the upload files.
     fn is_remote(self) -> bool {
         matches!(self, Self::LinuxX86_64 | Self::LinuxAarch64)
     }
@@ -125,15 +129,20 @@ impl Bundle {
     }
 
     pub fn platform(&self, platform: Platform) -> Result<PlatformBundle, String> {
-        validate_platform_bundle(&self.bin_dir.join(platform.directory()), platform, VERSION)
+        validate_platform_bundle(
+            &self.bin_dir.join(platform.directory()),
+            platform.is_remote(),
+            VERSION,
+        )
     }
 
-    /// remote returns the validated set for a server whose `uname -m` is `arch`.
-    pub fn remote(&self, arch: &str) -> Result<PlatformBundle, String> {
-        let platform = Platform::remote(arch)
-            .ok_or_else(|| format!("no bundled server build for architecture {arch:?}"))?;
-        self.platform(platform)
-            .map_err(|error| format!("{} bundle: {error}", platform.directory()))
+    /// remote returns the validated upload set for a server reporting
+    /// `uname -s` = `platform` and `uname -m` = `arch`.
+    pub fn remote(&self, platform: &str, arch: &str) -> Result<PlatformBundle, String> {
+        let target = Platform::remote(platform, arch)
+            .ok_or_else(|| format!("no bundled server build for {platform}/{arch}"))?;
+        validate_platform_bundle(&self.bin_dir.join(target.directory()), true, VERSION)
+            .map_err(|error| format!("{} bundle: {error}", target.directory()))
     }
 
     fn local_dir(&self) -> PathBuf {
@@ -167,7 +176,7 @@ impl Bundle {
 
 fn validate_platform_bundle(
     dir: &Path,
-    platform: Platform,
+    uploadable: bool,
     expected_version: &str,
 ) -> Result<PlatformBundle, String> {
     for name in BINARIES {
@@ -176,7 +185,7 @@ fn validate_platform_bundle(
             return Err(format!("bundled binary is missing: {}", path.display()));
         }
     }
-    if platform.is_remote() {
+    if uploadable {
         let checksums = dir.join(CHECKSUM_FILE);
         if !checksums.is_file() {
             return Err(format!(
@@ -391,12 +400,48 @@ mod tests {
     }
 
     #[test]
-    fn remote_platform_follows_the_server_machine_name() {
-        assert_eq!(Platform::remote("x86_64"), Some(Platform::LinuxX86_64));
-        assert_eq!(Platform::remote("aarch64"), Some(Platform::LinuxAarch64));
-        assert_eq!(Platform::remote("arm64"), Some(Platform::LinuxAarch64));
-        assert_eq!(Platform::remote("armv7l"), None);
-        assert_eq!(Platform::remote(""), None);
+    fn remote_platform_follows_the_server_platform_and_machine_name() {
+        assert_eq!(
+            Platform::remote("Linux", "x86_64"),
+            Some(Platform::LinuxX86_64)
+        );
+        assert_eq!(
+            Platform::remote("Linux", "aarch64"),
+            Some(Platform::LinuxAarch64)
+        );
+        assert_eq!(
+            Platform::remote("Linux", "arm64"),
+            Some(Platform::LinuxAarch64)
+        );
+        assert_eq!(
+            Platform::remote("Darwin", "arm64"),
+            Some(Platform::DarwinArm64)
+        );
+        assert_eq!(Platform::remote("Darwin", "x86_64"), None);
+        assert_eq!(Platform::remote("Linux", "armv7l"), None);
+        assert_eq!(Platform::remote("FreeBSD", "x86_64"), None);
+        assert_eq!(Platform::remote("", ""), None);
+    }
+
+    #[test]
+    fn remote_darwin_bundle_requires_upload_files_but_local_does_not() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = write_bundle(root.path(), Platform::DarwinArm64, VERSION);
+        let bundle = Bundle::new(root.path().to_path_buf());
+        assert!(bundle.platform(Platform::DarwinArm64).is_ok());
+        let error = bundle.remote("Darwin", "arm64").unwrap_err();
+        assert!(error.contains("darwin-arm64"), "{error}");
+        assert!(error.contains(CHECKSUM_FILE), "{error}");
+
+        std::fs::write(dir.join(CHECKSUM_FILE), b"00  tariboyd\n").unwrap();
+        std::fs::write(dir.join(INSTALLER_FILE), b"#!/bin/sh\n").unwrap();
+        let remote = bundle.remote("Darwin", "arm64").unwrap();
+        assert_eq!(remote.dir, dir);
+        assert_eq!(remote.files_for_upload().len(), 7);
+        assert!(bundle
+            .remote("Darwin", "x86_64")
+            .unwrap_err()
+            .contains("Darwin/x86_64"));
     }
 
     #[test]
@@ -407,18 +452,25 @@ mod tests {
         let bundle = Bundle::new(root.path().to_path_buf());
 
         assert_eq!(
-            bundle.remote("x86_64").unwrap().dir,
+            bundle.remote("Linux", "x86_64").unwrap().dir,
             root.path().join("linux-x86_64")
         );
-        assert_eq!(bundle.remote("aarch64").unwrap().dir, arm);
+        assert_eq!(bundle.remote("Linux", "aarch64").unwrap().dir, arm);
         assert_eq!(
-            bundle.remote("aarch64").unwrap().files_for_upload().len(),
+            bundle
+                .remote("Linux", "aarch64")
+                .unwrap()
+                .files_for_upload()
+                .len(),
             7
         );
-        assert!(bundle.remote("armv7l").unwrap_err().contains("armv7l"));
+        assert!(bundle
+            .remote("Linux", "armv7l")
+            .unwrap_err()
+            .contains("armv7l"));
 
         std::fs::remove_file(arm.join(INSTALLER_FILE)).unwrap();
-        let error = bundle.remote("aarch64").unwrap_err();
+        let error = bundle.remote("Linux", "aarch64").unwrap_err();
         assert!(error.contains("linux-aarch64"), "{error}");
         assert!(error.contains(INSTALLER_FILE), "{error}");
     }

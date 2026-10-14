@@ -226,6 +226,16 @@ func TestDesktopBinariesCleanManagedPayloadDirectoriesBeforeBuilding(t *testing.
 	if findLine(text, "GOOS=linux GOARCH=arm64") == "" || findLine(text, "ARM aarch64") == "" {
 		t.Fatalf("desktop-binaries does not build and verify the linux-aarch64 set:\n%s", output)
 	}
+	// macOS arm64 SSH servers receive the darwin set, so it needs the same
+	// installer and checksums as the Linux sets.
+	start := strings.Index(text, "for dir in desktop/src-tauri/resources/bin/darwin-arm64 ")
+	if start < 0 {
+		t.Fatalf("desktop-binaries does not ship the darwin-arm64 set as an upload set:\n%s", output)
+	}
+	uploadLoop, _, _ := strings.Cut(text[start:], "\ndone")
+	if !strings.Contains(uploadLoop, "remote-install.sh") || !strings.Contains(uploadLoop, "SHA256SUMS") {
+		t.Fatalf("desktop-binaries does not ship the darwin-arm64 set as an upload set:\n%s", output)
+	}
 }
 
 func TestDesktopPlatformValidationPrecedesToolInstallation(t *testing.T) {

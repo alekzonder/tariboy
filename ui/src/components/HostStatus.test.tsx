@@ -62,15 +62,15 @@ describe("HostStatus", () => {
         host={host({
           state: "failed",
           platform: "Darwin",
-          arch: "arm64",
-          prerequisites: ["Linux", "x86_64"],
+          arch: "x86_64",
+          prerequisites: ["Linux x86_64/aarch64 or macOS arm64"],
           message: "unsupported_host",
         })}
         appVersion="0.11.5"
       />,
     );
 
-    expect(screen.getByText("Unsupported host: Darwin/arm64")).toBeInTheDocument();
+    expect(screen.getByText("Unsupported host: Darwin/x86_64")).toBeInTheDocument();
     expect(screen.getByText("Install blocked")).toBeInTheDocument();
   });
 
@@ -87,6 +87,19 @@ describe("HostStatus", () => {
     expect(screen.getByRole("button", { name: "Connect gpu" })).toBeInTheDocument();
   });
 
+  it("accepts a macOS arm64 server", () => {
+    render(
+      <HostStatus
+        host={host({ state: "disconnected", platform: "Darwin", arch: "arm64" })}
+        appVersion="0.11.5"
+        onConnect={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Install blocked")).toBeNull();
+    expect(screen.getByRole("button", { name: "Connect gpu" })).toBeInTheDocument();
+  });
+
   it("blocks install on a 32-bit ARM server", () => {
     render(
       <HostStatus
@@ -94,7 +107,7 @@ describe("HostStatus", () => {
           state: "failed",
           platform: "Linux",
           arch: "armv7l",
-          prerequisites: ["x86_64 or aarch64"],
+          prerequisites: ["Linux x86_64/aarch64 or macOS arm64"],
         })}
         appVersion="0.11.5"
       />,

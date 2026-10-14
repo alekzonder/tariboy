@@ -226,6 +226,11 @@ for platform in darwin-arm64 linux-x86_64 linux-aarch64; do
     echo "FAIL: ttasks must be an installed alias, not a bundled payload" >&2; exit 1; }
   [ "$(tr -d '\r\n' < "$APP/Contents/Resources/bin/$platform/VERSION")" = "$VERSION" ] || {
     echo "FAIL: $platform/VERSION does not equal $VERSION" >&2; exit 1; }
+  # Every set is uploadable to an SSH server of its platform.
+  (cd "$APP/Contents/Resources/bin/$platform" && shasum -a 256 -c SHA256SUMS) || {
+    echo "FAIL: $platform/SHA256SUMS does not verify" >&2; exit 1; }
+  cmp -s "$APP/Contents/Resources/bin/$platform/remote-install.sh" "$ROOT/desktop/src-tauri/src/remote-install.sh" || {
+    echo "FAIL: $platform/remote-install.sh is not the source installer" >&2; exit 1; }
 done
 
 # The server archives are the payloads `tariboy update` installs, so each must

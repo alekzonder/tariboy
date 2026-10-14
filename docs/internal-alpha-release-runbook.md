@@ -25,6 +25,8 @@ organization-specific artifact host or upload protocol.
 - system `codesign`, `hdiutil`, `lipo`, `shasum`;
 - Linux x86_64 and aarch64 payloads are checked for presence, ELF format, embedded version,
   and `VERSION` metadata; the macOS release gate does not execute them;
+- every bundled set, including `darwin-arm64` for macOS SSH servers, carries a
+  verifying `SHA256SUMS` and the source `remote-install.sh`;
 - no production credentials in build environment or repository.
 - confirmed secure ownership and backup of the permanent updater private key;
 - GitHub Actions Secrets `TAURI_SIGNING_PRIVATE_KEY` and

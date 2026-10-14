@@ -345,15 +345,17 @@ export function cachedDaemon(id: string): Daemon | null {
 /** Server prerequisites that block installation, as named by the Desktop
  *  host preflight. Every other prerequisite is an optional agent tool. */
 export const INSTALL_REQUIREMENTS = new Set([
-  "Linux",
-  "x86_64 or aarch64",
+  "Linux x86_64/aarch64 or macOS arm64",
   "writable ~/.local",
   "flock",
   "python3",
 ]);
 
-/** `uname -m` values the Desktop app ships a server build for. */
-const SERVER_ARCHES = new Set(["x86_64", "aarch64", "arm64"]);
+/** `uname -m` values the Desktop app ships a server build for, per `uname -s`. */
+const SERVER_ARCHES = new Map([
+  ["Linux", new Set(["x86_64", "aarch64", "arm64"])],
+  ["Darwin", new Set(["arm64"])],
+]);
 
 /** True when the Desktop app cannot install its server build on this host. */
 export function hostInstallBlocked(
@@ -361,8 +363,10 @@ export function hostInstallBlocked(
   arch: string | undefined,
   prerequisites: string[] | undefined,
 ): boolean {
-  return (!!platform && platform !== "Linux")
-    || (!!arch && !SERVER_ARCHES.has(arch))
+  const arches = platform ? SERVER_ARCHES.get(platform) : undefined;
+  const known = arches ?? new Set([...SERVER_ARCHES.values()].flatMap((set) => [...set]));
+  return (!!platform && !arches)
+    || (!!arch && !known.has(arch))
     || (prerequisites ?? []).some((item) => INSTALL_REQUIREMENTS.has(item));
 }
 

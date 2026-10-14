@@ -1105,9 +1105,7 @@ mod tests {
     #[test]
     fn installer_switches_optional_store_binary_with_the_release() {
         let home = tempfile::tempdir().unwrap();
-        let stage = home
-            .path()
-            .join(".local/lib/tariboy/.stage-with-store");
+        let stage = home.path().join(".local/lib/tariboy/.stage-with-store");
         write_release(&stage, "new", true);
         fs::write(stage.join("tariboy-store"), b"tariboy-store\n").unwrap();
         let output = Command::new("sha256sum")
@@ -1132,8 +1130,7 @@ mod tests {
         assert!(status.success());
         assert_eq!(
             fs::read_link(home.path().join(".local/bin/tariboy-store")).unwrap(),
-            home.path()
-                .join(".local/lib/tariboy/new/tariboy-store")
+            home.path().join(".local/lib/tariboy/new/tariboy-store")
         );
     }
 
@@ -1446,6 +1443,111 @@ exec /bin/mv "$@""#,
             assert_eq!(target, release.join(name));
         }
         assert!(root.join(".install.lock").is_file());
+    }
+
+    /// macos_like_path exposes every system tool except the two macOS lacks:
+    /// util-linux `flock` and coreutils `sha256sum`.
+    fn macos_like_path(dir: &Path) -> String {
+        for system in ["/usr/bin", "/bin"] {
+            for entry in fs::read_dir(system).unwrap().flatten() {
+                let name = entry.file_name();
+                if name == "flock" || name == "sha256sum" {
+                    continue;
+                }
+                let link = dir.join(&name);
+                if !link.exists() {
+                    let _ = std::os::unix::fs::symlink(entry.path(), link);
+                }
+            }
+        }
+        dir.display().to_string()
+    }
+
+    #[test]
+    fn installer_works_without_flock_and_sha256sum() {
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path().join(".local/lib/tariboy");
+        write_release(&root.join(".stage-bad"), "bad", false);
+        write_release(&root.join(".stage-one"), "one", true);
+        write_release(&root.join(".stage-two"), "two", true);
+        let tools = tempfile::tempdir().unwrap();
+        crate::testbin::executable(
+            tools.path(),
+            "mv",
+            r#"sleep 0.02
+exec /bin/mv "$@""#,
+        );
+        let path = macos_like_path(tools.path());
+        let script = concat!(env!("CARGO_MANIFEST_DIR"), "/src/remote-install.sh");
+        let run = |version: &str, stage: &str| {
+            Command::new("/bin/sh")
+                .arg(script)
+                .args([version, stage])
+                .env("HOME", home.path())
+                .env("PATH", &path)
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .unwrap()
+        };
+
+        assert!(!run("bad", ".stage-bad").wait().unwrap().success());
+        assert!(!root.join("bad").exists());
+
+        let mut first = run("one", ".stage-one");
+        let mut second = run("two", ".stage-two");
+        assert!(first.wait().unwrap().success());
+        assert!(second.wait().unwrap().success());
+        let bin = home.path().join(".local/bin");
+        let targets = BINARIES
+            .iter()
+            .map(|name| fs::read_link(bin.join(name)).unwrap())
+            .collect::<Vec<_>>();
+        let release = targets[0].parent().unwrap().to_path_buf();
+        assert!(release == root.join("one") || release == root.join("two"));
+        for (name, target) in BINARIES.iter().zip(targets) {
+            assert_eq!(target, release.join(name));
+        }
+    }
+
+    #[test]
+    fn python_lock_fallback_reports_a_held_lock() {
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path().join(".local/lib/tariboy");
+        fs::create_dir_all(&root).unwrap();
+        write_release(&root.join(".stage-next"), "next", true);
+        let lock = root.join(".install.lock");
+        let ready = home.path().join("lock-ready");
+        let mut owner = Command::new("sh")
+            .args([
+                "-c",
+                "exec 9>\"$1\"; flock 9; : >\"$2\"; exec sleep 30",
+                "lock-owner",
+            ])
+            .arg(&lock)
+            .arg(&ready)
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !ready.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(ready.exists(), "lock owner never became ready");
+        let tools = tempfile::tempdir().unwrap();
+        let status = Command::new("/bin/sh")
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/src/remote-install.sh"
+            ))
+            .args(["next", ".stage-next"])
+            .env("HOME", home.path())
+            .env("PATH", macos_like_path(tools.path()))
+            .env("TARIBOY_INSTALL_LOCK_WAIT", "1")
+            .status()
+            .unwrap();
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+        assert_eq!(status.code(), Some(75));
+        assert!(!root.join("next").exists());
     }
 
     #[test]
