@@ -164,6 +164,8 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, usageCommand())
 	mustRegister(r, agentUsage())
 	mustRegister(r, harnessModels())
+	mustRegister(r, harnessCodexApprovalGet())
+	mustRegister(r, harnessCodexApprovalSet())
 	mustRegister(r, budgetSet())
 	mustRegister(r, budgetLs())
 	mustRegister(r, budgetStatus())
@@ -262,6 +264,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "tasks.relations", "Manage native task relations")
 	mustGroup(r, "tasks.notifications", "Manage customer task notifications")
 	mustGroup(r, "harness", "Inspect the harnesses installed on the daemon host")
+	mustGroup(r, "harness.codex-approval", "Read or set how this daemon starts codex (--yolo or --approve-for-me)")
 	mustValidate(r)
 	return r
 }

@@ -830,6 +830,31 @@ func TestShimRunnerTerminatesSpawnThatRacesStoppedIteration(t *testing.T) {
 	}
 }
 
+func TestRunPassesDaemonCodexApprovalModeToHarness(t *testing.T) {
+	binDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	for _, tc := range []struct{ stored, flag string }{
+		{"", "--yolo"},
+		{harness.CodexApprovalApproveForMe, "--approve-for-me"},
+	} {
+		r, ag, _, _ := newRunnerForProxyTest(t, &fakeBinder{base: "http://127.0.0.1:5555"})
+		ag.HarnessType = "codex"
+		if tc.stored != "" {
+			r.cfg.CodexApproval = func() string { return tc.stored }
+		}
+		if _, err := r.Run(context.Background(), ag, "manual", "alice-1", ""); err != nil {
+			t.Fatal(err)
+		}
+		if argv := r.cfg.Spawner.(*fakeProxySpawner).argv; !slices.Contains(argv, tc.flag) {
+			t.Fatalf("stored %q: argv %v lacks %s", tc.stored, argv, tc.flag)
+		}
+	}
+}
+
 func TestRunRedactsCodexProxyAndInheritedOpenAIKeyFromLaunchRecords(t *testing.T) {
 	const providerKey = "real-provider-key-for-test"
 	t.Setenv("OPENAI_API_KEY", providerKey)

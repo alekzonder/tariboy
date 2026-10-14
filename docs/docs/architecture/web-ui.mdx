@@ -322,6 +322,13 @@ last run's time, deleted counts, and size change; a failed save or run is
 reported in place. See
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
 
+**Settings → General** also carries a **Codex** card for the same explicit host:
+a choice between **Yolo** (`--yolo`) and **Approve for me**
+(`--approve-for-me`). Selecting a mode saves it to that host at once; a failed
+load or save is reported in place and the previous mode stays selected. The
+new mode applies from the host's next Codex iteration. See
+[Iteration loop](/docs/architecture/iteration-loop).
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that

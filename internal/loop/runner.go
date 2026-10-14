@@ -401,6 +401,9 @@ type RunnerConfig struct {
 	// RecordCursorUsage persists token counts from a non-interactive cursor
 	// stream-json result line. Nil leaves those counts unrecorded.
 	RecordCursorUsage func(agent, iteration, imageName, imageTag, imageDigest string, usage CursorResultUsage)
+	// CodexApproval returns the daemon's codex approval mode, read at every
+	// iteration start (harness.Config.CodexApproval). Nil means the default.
+	CodexApproval func() string
 }
 
 const defaultDoneGrace = 2 * time.Second
@@ -948,8 +951,12 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 		proxyToken = tok
 	}
 
+	codexApproval := ""
+	if r.cfg.CodexApproval != nil {
+		codexApproval = r.cfg.CodexApproval()
+	}
 	hargv, henv, err := adapter.Command(cwd, l.PromptPath(iterationID),
-		harness.Config{Model: ag.Model, Effort: ag.Effort, Interactive: ag.Interactive, SessionID: iterationID, ProxyURL: proxyURL, Bare: bare})
+		harness.Config{Model: ag.Model, Effort: ag.Effort, Interactive: ag.Interactive, SessionID: iterationID, ProxyURL: proxyURL, Bare: bare, CodexApproval: codexApproval})
 	if err != nil {
 		if proxyToken != "" {
 			r.cfg.Proxy.RevokeToken(proxyToken)

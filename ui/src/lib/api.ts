@@ -329,6 +329,11 @@ export const getGlobalAgentShellScriptOn = (target: ApiTarget) =>
   apiOn<AgentShellScript>(resolveTarget(target), "GET", "/api/daemon/agent-shell-script");
 export const setGlobalAgentShellScriptOn = (target: ApiTarget, script: string) =>
   apiOn<{ saved: true }>(resolveTarget(target), "POST", "/api/daemon/agent-shell-script", { script });
+export type CodexApprovalMode = "yolo" | "approve-for-me";
+export const getCodexApprovalOn = (target: ApiTarget) =>
+  apiOn<{ mode: CodexApprovalMode }>(resolveTarget(target), "GET", "/api/harnesses/codex/approval-mode");
+export const setCodexApprovalOn = (target: ApiTarget, mode: CodexApprovalMode) =>
+  apiOn<{ mode: CodexApprovalMode }>(resolveTarget(target), "POST", "/api/harnesses/codex/approval-mode", { mode });
 export interface MaintenanceSettings {
   enabled: boolean;
   time: string;

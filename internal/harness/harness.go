@@ -74,7 +74,23 @@ type Config struct {
 	// Bare launches the harness with no initial prompt and no tariboy
 	// tooling flags (instructions-free session; image manifest bare=true).
 	Bare bool
+	// CodexApproval selects how codex handles approvals: CodexApprovalYolo
+	// (also the empty default) or CodexApprovalApproveForMe.
+	CodexApproval string
 }
+
+// Codex approval modes, stored per daemon under CodexApprovalConfigKey.
+const (
+	CodexApprovalConfigKey = "codex_approval_mode"
+	// CodexApprovalYolo runs codex with --yolo: no sandbox, no approvals.
+	CodexApprovalYolo = "yolo"
+	// CodexApprovalApproveForMe runs codex with --approve-for-me: the
+	// workspace-write sandbox, with approval requests reviewed automatically.
+	CodexApprovalApproveForMe = "approve-for-me"
+)
+
+// CodexApprovalModes lists the accepted CodexApproval values.
+var CodexApprovalModes = []string{CodexApprovalYolo, CodexApprovalApproveForMe}
 
 type Adapter interface {
 	Type() string
@@ -221,9 +237,13 @@ func (codex) Command(cwd, promptPath string, cfg Config) ([]string, []string, er
 	// keeps the prompt off argv. It must not also be passed positionally: codex
 	// would then append stdin as a separate <stdin> block.
 	shellCommand := promptOnStdinCommand
+	approval := "--yolo"
+	if cfg.CodexApproval == CodexApprovalApproveForMe {
+		approval = "--approve-for-me"
+	}
 	codexArgs := []string{
 		"exec", "-c", "allow_login_shell=false", "--json",
-		"--dangerously-bypass-approvals-and-sandbox",
+		approval,
 		"--skip-git-repo-check", "--cd", cwd,
 	}
 	if cfg.Interactive {
@@ -237,7 +257,7 @@ func (codex) Command(cwd, promptPath string, cfg Config) ([]string, []string, er
 		shellCommand = `prompt=$(cat "$2") || exit; cmd=$1; shift 2; exec "$cmd" "$@" "$prompt"`
 		codexArgs = []string{
 			"-c", "allow_login_shell=false",
-			"--dangerously-bypass-approvals-and-sandbox", "--cd", cwd,
+			approval, "--cd", cwd,
 		}
 	}
 	argv := []string{

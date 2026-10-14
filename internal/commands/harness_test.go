@@ -49,3 +49,49 @@ func TestHarnessModelsReturnsCatalogAndCLIErrors(t *testing.T) {
 		t.Fatalf("unknown harness err = %v", err)
 	}
 }
+
+func TestHarnessCodexApprovalGetSet(t *testing.T) {
+	c, _, _ := ctxWithStore(t)
+	get, set := h(t, "harness.codex-approval.get"), h(t, "harness.codex-approval.set")
+
+	res, err := get(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.(map[string]any)["mode"]; got != harness.CodexApprovalYolo {
+		t.Fatalf("default mode = %v", got)
+	}
+
+	for _, mode := range []string{harness.CodexApprovalApproveForMe, harness.CodexApprovalYolo} {
+		if _, err := set(c, registry.Params{"mode": mode}); err != nil {
+			t.Fatal(err)
+		}
+		if v, _, _ := c.Store.ConfigGet(harness.CodexApprovalConfigKey); v != mode {
+			t.Fatalf("stored = %q, want %q", v, mode)
+		}
+		res, err := get(c, registry.Params{})
+		if err != nil || res.(map[string]any)["mode"] != mode {
+			t.Fatalf("get after set %q = %v, %v", mode, res, err)
+		}
+	}
+
+	if _, err := set(c, registry.Params{"mode": "never"}); !isUserErr(err, "bad_value") {
+		t.Fatalf("bad mode err = %v", err)
+	}
+}
+
+func TestHarnessCodexApprovalRoutes(t *testing.T) {
+	r := BuildRegistry()
+	for path, want := range map[string]string{
+		"harness.codex-approval.get": "GET",
+		"harness.codex-approval.set": "POST",
+	} {
+		cmd, ok := r.Get(path)
+		if !ok {
+			t.Fatalf("%s not registered", path)
+		}
+		if cmd.HTTP == nil || cmd.HTTP.Method != want || cmd.HTTP.Path != "/api/harnesses/codex/approval-mode" {
+			t.Fatalf("%s route = %+v", path, cmd.HTTP)
+		}
+	}
+}

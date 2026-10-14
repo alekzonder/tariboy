@@ -26,6 +26,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/groups"
+	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/maintenance"
@@ -600,6 +601,13 @@ func Run(ctx context.Context, o Options) error {
 		ImgStore: imgStore, Store: as, Log: log, Clock: time.Now, Bus: channelBus,
 		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: hub.Emit, Proxy: proxy,
 		Groups: groupProv,
+		CodexApproval: func() string {
+			v, _, err := st.ConfigGet(harness.CodexApprovalConfigKey)
+			if err != nil {
+				log.Warn("read codex approval mode", "err", err)
+			}
+			return v
+		},
 		RecordCursorUsage: func(agentName, iteration, imageName, imageTag, imageDigest string, usage loop.CursorResultUsage) {
 			groupID, groupName, _ := aiStore.CurrentGroup(agentName)
 			row := aiproxy.AIRequest{
