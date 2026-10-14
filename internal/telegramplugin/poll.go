@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -77,20 +78,84 @@ type Update struct {
 }
 
 type TelegramMessage struct {
-	MessageID       int64         `json:"message_id"`
-	MessageThreadID int64         `json:"message_thread_id,omitempty"`
-	From            *TelegramUser `json:"from,omitempty"`
-	Chat            TelegramChat  `json:"chat"`
-	Text            string        `json:"text,omitempty"`
+	MessageID       int64          `json:"message_id"`
+	MessageThreadID int64          `json:"message_thread_id,omitempty"`
+	From            *TelegramUser  `json:"from,omitempty"`
+	Chat            TelegramChat   `json:"chat"`
+	Text            string         `json:"text,omitempty"`
+	Caption         string         `json:"caption,omitempty"`
+	ForwardOrigin   *MessageOrigin `json:"forward_origin,omitempty"`
 }
 
 type TelegramUser struct {
-	ID int64 `json:"id"`
+	ID        int64  `json:"id"`
+	FirstName string `json:"first_name,omitempty"`
+	LastName  string `json:"last_name,omitempty"`
+	Username  string `json:"username,omitempty"`
 }
 
 type TelegramChat struct {
-	ID   int64  `json:"id"`
-	Type string `json:"type"`
+	ID       int64  `json:"id"`
+	Type     string `json:"type"`
+	Title    string `json:"title,omitempty"`
+	Username string `json:"username,omitempty"`
+}
+
+// MessageOrigin is the Bot API forward_origin of a forwarded message.
+type MessageOrigin struct {
+	Type            string        `json:"type"`
+	Date            int64         `json:"date"`
+	SenderUser      *TelegramUser `json:"sender_user,omitempty"`
+	SenderUserName  string        `json:"sender_user_name,omitempty"`
+	SenderChat      *TelegramChat `json:"sender_chat,omitempty"`
+	Chat            *TelegramChat `json:"chat,omitempty"`
+	MessageID       int64         `json:"message_id,omitempty"`
+	AuthorSignature string        `json:"author_signature,omitempty"`
+}
+
+// describe returns the header line shown to the agent and the
+// telegram_forward data describing where a forwarded message came from.
+func (o *MessageOrigin) describe() (string, map[string]any) {
+	data := map[string]any{"type": o.Type, "date": o.Date}
+	name, username, label := "", "", strings.ReplaceAll(o.Type, "_", " ")
+	switch {
+	case o.SenderUser != nil:
+		name = strings.TrimSpace(o.SenderUser.FirstName + " " + o.SenderUser.LastName)
+		username = o.SenderUser.Username
+		data["user_id"] = o.SenderUser.ID
+	case o.SenderUserName != "":
+		name = o.SenderUserName
+	default:
+		chat := o.SenderChat
+		if chat == nil {
+			chat = o.Chat
+		}
+		if chat != nil {
+			name, username = chat.Title, chat.Username
+			data["chat_id"] = chat.ID
+		}
+	}
+	header := "Forwarded from " + label
+	if name != "" {
+		data["name"] = name
+		header += " " + strconv.Quote(name)
+	}
+	if username != "" {
+		data["username"] = username
+		header += " (@" + username + ")"
+	}
+	if o.MessageID != 0 {
+		data["message_id"] = o.MessageID
+		if o.Type == "channel" && username != "" {
+			link := "https://t.me/" + username + "/" + strconv.FormatInt(o.MessageID, 10)
+			data["link"] = link
+			header += " " + link
+		}
+	}
+	if o.AuthorSignature != "" {
+		data["author_signature"] = o.AuthorSignature
+	}
+	return header + ":", data
 }
 
 func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
@@ -108,6 +173,9 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 		return discard()
 	}
 	if message.MessageThreadID == state.ManagementTopicID {
+		if message.ForwardOrigin != nil {
+			return discard()
+		}
 		handled, err := s.handleCommand(ctx, message, "", update.UpdateID)
 		if err != nil {
 			return err
@@ -124,7 +192,11 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 			break
 		}
 	}
-	if agent == "" || message.Text == "" || s.daemon == nil {
+	text := message.Text
+	if text == "" {
+		text = message.Caption
+	}
+	if agent == "" || text == "" || s.daemon == nil {
 		return discard()
 	}
 	agents, err := s.daemon.ListAgents(ctx)
@@ -141,13 +213,19 @@ func (s *Server) ProcessUpdate(ctx context.Context, update Update) error {
 	if !live {
 		return discard()
 	}
-	if handled, err := s.handleCommand(ctx, message, agent, update.UpdateID); err != nil {
+	var forward map[string]any
+	if message.ForwardOrigin != nil {
+		// Forwarded text was written by someone else and never runs as a command.
+		var header string
+		header, forward = message.ForwardOrigin.describe()
+		text = header + "\n" + text
+	} else if handled, err := s.handleCommand(ctx, message, agent, update.UpdateID); err != nil {
 		return err
 	} else if handled {
 		return discard()
 	}
 	if err := s.daemon.Publish(ctx, PublishedMessage{
-		Channel: "chat:telegram:" + agent, Agent: agent, Text: message.Text,
+		Channel: "chat:telegram:" + agent, Agent: agent, Text: text, Forward: forward,
 		UpdateID: update.UpdateID, ExternalID: "telegram:" + strconv.FormatInt(update.UpdateID, 10),
 	}); err != nil {
 		return err

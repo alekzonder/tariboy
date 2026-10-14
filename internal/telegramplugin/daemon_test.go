@@ -2,6 +2,7 @@ package telegramplugin
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -29,6 +30,15 @@ func TestDaemonClientUsesOperatorAndPluginAPIs(t *testing.T) {
 			if r.Header.Get("Authorization") != "Bearer life-token" {
 				t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 			}
+			var body struct {
+				Data map[string]any `json:"data"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if forward, ok := body.Data["telegram_forward"].(map[string]any); !ok || forward["name"] != "News" || body.Data["telegram_update_id"] != float64(9) {
+				t.Fatalf("publish data = %#v", body.Data)
+			}
 			published = true
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"id": "m1", "delivered_agents": []string{"worker"}}})
 		default:
@@ -46,7 +56,7 @@ func TestDaemonClientUsesOperatorAndPluginAPIs(t *testing.T) {
 	if err := client.Subscribe(context.Background(), "worker", "chat:telegram:worker"); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.Publish(context.Background(), PublishedMessage{Channel: "chat:telegram:worker", Agent: "worker", Text: "hello", UpdateID: 9}); err != nil {
+	if err := client.Publish(context.Background(), PublishedMessage{Channel: "chat:telegram:worker", Agent: "worker", Text: "hello", UpdateID: 9, Forward: map[string]any{"type": "channel", "name": "News"}}); err != nil {
 		t.Fatal(err)
 	}
 	if !published {

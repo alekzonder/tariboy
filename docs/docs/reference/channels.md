@@ -73,8 +73,10 @@ Unknown shapes default to `chat` kind in low-level classification, but operator
 subscription validates channel names before creating them.
 
 The Telegram plugin subscribes the mapped agent and its sink to the concrete
-`chat:telegram:<agent>` channel. Authorized topic text is published as a normal
-plugin-produced message; an agent-produced reply is delivered back to that
+`chat:telegram:<agent>` channel. Authorized topic text, or a caption when the
+message has no text, is published as a normal plugin-produced message. A
+forwarded message gets a `Forwarded from ...` first line and a
+`telegram_forward` object in its `data`; an agent-produced reply is delivered back to that
 topic only after it passes through the same durable bus. The plugin suppresses
 its inbound echo and acknowledges the sink delivery only after Telegram accepts
 the reply.
