@@ -23,6 +23,7 @@ type PublishedMessage struct {
 	Text       string
 	UpdateID   int64
 	ExternalID string
+	Forward    map[string]any
 }
 
 type DaemonAPI interface {
@@ -64,11 +65,15 @@ func (c *DaemonClient) Subscribe(ctx context.Context, agent, channel string) err
 }
 
 func (c *DaemonClient) Publish(ctx context.Context, message PublishedMessage) error {
+	data := map[string]any{"telegram_update_id": message.UpdateID}
+	if len(message.Forward) > 0 {
+		data["telegram_forward"] = message.Forward
+	}
 	body := map[string]any{
 		"channel": message.Channel, "type": "chat.message", "text": message.Text,
 		"idempotency_key":        message.ExternalID,
 		"require_delivery_agent": message.Agent,
-		"data":                   map[string]any{"telegram_update_id": message.UpdateID},
+		"data":                   data,
 	}
 	var result struct {
 		DeliveredAgents []string `json:"delivered_agents"`

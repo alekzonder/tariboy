@@ -194,9 +194,23 @@ alias, image, harness, model, effort, working directory, interactive mode, and
 Autopilot settings; it cannot set environment variables or secrets. Ordinary
 text in a live agent topic travels through `chat:telegram:<agent>` and the
 existing channel/message delivery and acknowledgement path; its Telegram update
-is marked read only after the mapped agent has a non-DLQ delivery. Private chats,
-other groups, the general topic, anonymous posts, unknown topics, media,
-reactions, edits, and webhooks are not supported.
+is marked read only after the mapped agent has a non-DLQ delivery. A message
+without text uses its caption; one with neither, such as a sticker or an
+uncaptioned photo, is dropped. Media files themselves are not delivered.
+
+A message an authorized user forwards into an agent topic, from a channel, a
+user, a hidden user, or a chat, reaches the agent with a first line naming its
+source, for example
+`Forwarded from channel "News" (@news) https://t.me/news/123:`, followed by the
+original text. The post link is present only for public channels. The message
+`data` also carries `telegram_forward` with `type`, `date`, and, when Telegram
+provides them, `name`, `username`, `user_id` or `chat_id`, `message_id`,
+`link`, and `author_signature`. Forwarded text never runs as a command, even
+when it starts with `/`, and forwarded messages in the management topic are
+ignored.
+
+Private chats, other groups, the general topic, anonymous posts, unknown
+topics, reactions, edits, and webhooks are not supported.
 
 ## Related reference
 
