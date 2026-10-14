@@ -1122,13 +1122,13 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
                     message: "remote host no longer satisfies install prerequisites".into(),
                 });
             }
-            let linux_bundle = remote_bundle(&bundle, &preflight.arch)?;
+            let server_bundle = remote_bundle(&bundle, &preflight)?;
             let staged = provision::stage(
                 &ssh::Transport::system(),
                 &operation,
                 &host.ssh_alias,
                 master.socket(),
-                &linux_bundle,
+                &server_bundle,
                 sink.clone(),
             )?;
             remote_restart_handoff_preflight(&running_version, &staged.previous, || {
@@ -1145,7 +1145,7 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
                 &host.ssh_alias,
                 master.socket(),
                 provision::VersionSwitch {
-                    next: &linux_bundle.version,
+                    next: &server_bundle.version,
                     previous: &staged.previous,
                 },
                 host.remote_port,
@@ -1328,12 +1328,14 @@ fn establish_host_preflight(
     Ok((result, master))
 }
 
-/// remote_bundle picks the packaged Linux set matching the server's `uname -m`.
+/// remote_bundle picks the packaged set matching the server's `uname -s`/`uname -m`.
 fn remote_bundle(
     bundle: &bundle::Bundle,
-    arch: &str,
+    preflight: &preflight::Result,
 ) -> Result<bundle::PlatformBundle, ssh::SshError> {
-    bundle.remote(arch).map_err(|error| ssh::SshError {
+    bundle
+        .remote(&preflight.platform, &preflight.arch)
+        .map_err(|error| ssh::SshError {
         code: "bundle_missing".into(),
         message: format!("remote bundle is not ready: {error}"),
     })
@@ -1353,18 +1355,18 @@ fn run_host_install(
         return Err(ssh::SshError {
             code: "unsupported_host".into(),
             message: format!(
-                "remote installation requires Linux x86_64 or aarch64, writable ~/.local, flock, and python3 (found {}/{})",
+                "remote installation requires Linux x86_64/aarch64 or macOS arm64, writable ~/.local, python3 and, on Linux, flock (found {}/{})",
                 preflight.platform, preflight.arch
             ),
         });
     }
-    let linux_bundle = remote_bundle(bundle, &preflight.arch)?;
+    let server_bundle = remote_bundle(bundle, &preflight)?;
     let installed = provision::run(
         transport,
         operation,
         &host.ssh_alias,
         master.socket(),
-        &linux_bundle,
+        &server_bundle,
         host.remote_port,
         sink,
     )?;

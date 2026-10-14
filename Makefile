@@ -330,8 +330,8 @@ desktop-lock-check:
 	fi
 
 # Build every binary set without packaging, useful for tests and remote smoke.
-# The darwin set runs the local daemon; both linux sets are uploaded to SSH
-# servers, picked by the server's `uname -m`.
+# The darwin set runs the local daemon; every set is uploaded to SSH servers,
+# picked by the server's `uname -s` and `uname -m`.
 desktop-binaries: desktop-version-check
 	rm -rf desktop/src-tauri/resources/bin/darwin-arm64 desktop/src-tauri/resources/bin/linux-x86_64 desktop/src-tauri/resources/bin/linux-aarch64
 	mkdir -p $(DESKTOP_DARWIN_BIN) $(DESKTOP_LINUX_BIN) $(DESKTOP_LINUX_ARM64_BIN)
@@ -347,8 +347,7 @@ desktop-binaries: desktop-version-check
 		echo "build linux/arm64 $$b"; \
 		CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build -trimpath -o $(DESKTOP_LINUX_ARM64_BIN)/$$b ./cmd/$$b || exit 1; \
 	done
-	@printf '%s\n' "$(VERSION)" > $(DESKTOP_DARWIN_BIN)/VERSION
-	@for dir in $(DESKTOP_LINUX_BIN) $(DESKTOP_LINUX_ARM64_BIN); do \
+	@for dir in $(DESKTOP_DARWIN_BIN) $(DESKTOP_LINUX_BIN) $(DESKTOP_LINUX_ARM64_BIN); do \
 		printf '%s\n' "$(VERSION)" > $$dir/VERSION || exit 1; \
 		cp $(TAURI_DIR)/src/remote-install.sh $$dir/remote-install.sh || exit 1; \
 		chmod 0755 $$dir/remote-install.sh || exit 1; \
