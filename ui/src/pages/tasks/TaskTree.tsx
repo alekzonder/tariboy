@@ -9,7 +9,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core"
 import { buildTaskForest, canDropTaskInside, canReorderTaskBeside, flattenVisible } from "@/lib/taskTree"
-import type { Task } from "@/lib/tasks"
+import type { Task, TaskPriority } from "@/lib/tasks"
 import type { TaskRowMode } from "./taskColumns"
 import TaskRow, { TaskTableHeader } from "./TaskRow"
 
@@ -45,6 +45,7 @@ export default function TaskTree({
   onSelect,
   onAddChild,
   onMove,
+  onPriorityChange,
 }: {
   tasks: Task[]
   mode: TaskRowMode
@@ -55,6 +56,7 @@ export default function TaskTree({
   onSelect: (key: string) => void
   onAddChild: (key: string) => void
   onMove: (key: string, parentKey: string, beforeKey: string) => void
+  onPriorityChange: (key: string, priority: TaskPriority) => Promise<void>
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -111,6 +113,7 @@ export default function TaskTree({
             onToggle={() => onToggle(row.task.key)}
             onSelect={() => onSelect(row.task.key)}
             onAddChild={() => onAddChild(row.task.key)}
+            onPriorityChange={(priority) => onPriorityChange(row.task.key, priority)}
           />
         ))}
         {visible.length === 0 && <div className="tasks-empty">No tasks match this view.</div>}

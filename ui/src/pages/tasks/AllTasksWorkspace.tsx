@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { useTasksSocket } from "@/hooks/useTasksSocket"
 import type { HostAgents } from "@/lib/aggregate"
 import { buildTaskForest, flattenVisible, type VisibleTaskRow } from "@/lib/taskTree"
-import { createTask, listTaskQueues, type TaskQueue, type TaskStatusView } from "@/lib/tasks"
+import { createTask, listTaskQueues, updateTask, type TaskPriority, type TaskQueue, type TaskStatusView } from "@/lib/tasks"
 import { hostToParam, targetFor } from "@/lib/terminalsHost"
 import { TaskFilterBar } from "./TaskFilterBar"
 import TaskDrawer, { type AssigneeChoice } from "./TaskDrawer"
@@ -125,6 +125,15 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
     }))
   }, [hosts, open])
 
+  const changePriority = async (task: ServerTask, priority: TaskPriority) => {
+    try {
+      await updateTask(task.key, { priority, revision: task.revision }, targetFor(task.serverId))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+    reload(task.serverId)
+  }
+
   const filtersActive = Boolean(view.query || view.statusView !== "active" || view.server || queue)
   const clearFilters = () => {
     setView(DEFAULT_VIEW)
@@ -198,6 +207,7 @@ export default function AllTasksWorkspace({ hosts }: { hosts: readonly HostAgent
                     return next
                   })}
                   onSelect={() => setOpen({ serverId: row.task.serverId, key: row.task.key })}
+                  onPriorityChange={(priority) => changePriority(row.task, priority)}
                 />
               )
             })}

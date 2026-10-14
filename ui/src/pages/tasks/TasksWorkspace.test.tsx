@@ -1456,3 +1456,32 @@ describe("TasksWorkspace", () => {
     expect(screen.queryByText("Ship native tasks")).toBeNull()
   })
 })
+
+describe("priority in the list", () => {
+  it("saves a priority picked on the row with its revision and shows the saved value", async () => {
+    const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
+    api.updateTask.mockResolvedValue({ ...root, priority: "P2", revision: 3 })
+    render(<TasksWorkspace target={target} />)
+    const row = await screen.findByTestId(`task-row-${root.key}`)
+
+    await userEvent.click(within(row).getByRole("button", { name: "P0 Critical" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: /P2/ }))
+
+    expect(api.updateTask).toHaveBeenCalledWith(root.key, { priority: "P2", revision: 2 }, target)
+    await waitFor(() => expect(within(screen.getByTestId(`task-row-${root.key}`)).getByRole("button", { name: "P2 Normal" })).toBeInTheDocument())
+    expect(api.getTask).not.toHaveBeenCalled()
+  })
+
+  it("reloads the tree and reports a revision conflict", async () => {
+    render(<TasksWorkspace />)
+    const row = await screen.findByTestId(`task-row-${root.key}`)
+    const listed = api.listTasks.mock.calls.length
+    api.updateTask.mockRejectedValueOnce(new ApiError(409, "conflict", "revision conflict"))
+
+    await userEvent.click(within(row).getByRole("button", { name: "P0 Critical" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: /P3/ }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("revision conflict"))
+    expect(api.listTasks.mock.calls.length).toBeGreaterThan(listed)
+  })
+})

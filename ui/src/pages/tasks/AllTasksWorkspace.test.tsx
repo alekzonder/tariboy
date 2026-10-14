@@ -208,3 +208,28 @@ it("creates a task for the chosen agent on that agent's server", async () => {
     { queue: "IMPROVE", title: "Ship it", assignee: "agent:builder" }, expect.objectContaining({ id: "h2" }),
   ))
 })
+
+it("saves a priority on the row server and reloads only that server", async () => {
+  render(<AllTasksWorkspace hosts={hosts} />)
+  const row = await screen.findByTestId("task-row-IMPROVE-c3")
+  api.updateTask.mockResolvedValue(task("IMPROVE-c3", { priority: "P0", revision: 2 }))
+  api.listTasks.mockClear()
+
+  await userEvent.click(within(row).getByRole("button", { name: "P2 Normal" }))
+  await userEvent.click(await screen.findByRole("menuitem", { name: /P0/ }))
+
+  expect(api.updateTask).toHaveBeenCalledWith("IMPROVE-c3", { priority: "P0", revision: 1 }, expect.objectContaining({ id: "h2" }))
+  await waitFor(() => expect(api.listTasks).toHaveBeenCalledTimes(1))
+  expect(api.listTasks).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "h2" }))
+})
+
+it("reports a failed priority change", async () => {
+  render(<AllTasksWorkspace hosts={hosts} />)
+  const row = await screen.findByTestId("task-row-TASK-b2")
+  api.updateTask.mockRejectedValue(new Error("forbidden"))
+
+  await userEvent.click(within(row).getByRole("button", { name: "P2 Normal" }))
+  await userEvent.click(await screen.findByRole("menuitem", { name: /P1/ }))
+
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith("forbidden"))
+})

@@ -416,6 +416,19 @@ function TasksWorkspaceContent({
     }
   }
 
+  const changePriority = async (key: string, priority: TaskPriority) => {
+    const changing = tasks.find((task) => task.key === key)
+    if (!changing) return
+    try {
+      const updated = await updateTask(key, { priority, revision: changing.revision }, target)
+      setTasks((current) => current.map((task) => task.key === key ? updated : task))
+      setDetail((current) => current?.task.key === key ? { ...current, task: updated } : current)
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) await loadTree()
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   const transferDetail = async (hostID: string) => {
     if (!detail) throw new Error("Task is no longer selected")
     const key = detail.task.key
@@ -578,6 +591,7 @@ function TasksWorkspaceContent({
             onSelect={(key) => void loadDetail(key)}
             onAddChild={setCreatingParent}
             onMove={(key, parentKey, beforeKey) => void performMove(key, parentKey, beforeKey)}
+            onPriorityChange={changePriority}
           />
         )}
         {creatingParent && (
