@@ -96,6 +96,12 @@ explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
 after creation.
 
+While **Create agent** is disabled, the dialog footer names the first unmet
+condition next to it: the source configuration, the target host's image list,
+an unselected or unbuilt image, or the image manifest still loading. A failed
+manifest load stays visible until the host or image changes, and **Retry image**
+loads it again.
+
 Harness is selected from the supported Tariboy harnesses. Model and effort are
 editable preset fields: they start from explicit runtime defaults for schema-v2
 images and accept arbitrary values. Their suggestions come in two labeled
