@@ -3,6 +3,7 @@ import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage, { GeneralSettings } from "./SettingsPage";
 import {
+  getCodexApprovalOn,
   getGlobalAgentShellScriptOn,
   getIterationRetentionDefaultOn,
   getMaintenanceOn,
@@ -12,6 +13,7 @@ import {
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/api")>(),
+  getCodexApprovalOn: vi.fn(),
   getGlobalAgentShellScriptOn: vi.fn(),
   getIterationRetentionDefaultOn: vi.fn(),
   getMaintenanceOn: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(getCodexApprovalOn).mockResolvedValue({ mode: "yolo" });
   vi.mocked(getGlobalAgentShellScriptOn).mockResolvedValue({ script: "export OK=1" });
   vi.mocked(getPluginContributionsOn).mockResolvedValue({ plugins: [], count: 0 });
   vi.mocked(getIterationRetentionDefaultOn).mockResolvedValue({ keep_iterations: 0, keep_days: 0, max_bytes: 0 });

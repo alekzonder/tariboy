@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -129,7 +130,7 @@ func TestCodexAdapter(t *testing.T) {
 	want := []string{
 		"/bin/sh", "-c", promptOnStdinCommand,
 		"tariboy-harness", "codex", prompt,
-		"exec", "-c", "allow_login_shell=false", "--json", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "--cd", "/w",
+		"exec", "-c", "allow_login_shell=false", "--json", "--yolo", "--skip-git-repo-check", "--cd", "/w",
 		"--model", "gpt-5", "-c", `model_reasoning_effort="high"`,
 	}
 	if len(argv) != len(want) {
@@ -142,6 +143,32 @@ func TestCodexAdapter(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(argv, " "), "DO THE WORK") {
 		t.Fatalf("prompt body must be passed via file, not argv: %v", argv)
+	}
+}
+
+func TestCodexAdapterApprovalMode(t *testing.T) {
+	prompt := writePrompt(t, "DO THE WORK")
+	for _, interactive := range []bool{false, true} {
+		for mode, flag := range map[string]string{
+			"":                        "--yolo",
+			CodexApprovalYolo:         "--yolo",
+			CodexApprovalApproveForMe: "--approve-for-me",
+		} {
+			argv, _, err := codex{}.Command("/w", prompt, Config{Interactive: interactive, CodexApproval: mode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Contains(argv, flag) {
+				t.Fatalf("interactive=%v mode=%q: argv %v lacks %s", interactive, mode, argv, flag)
+			}
+			other := "--approve-for-me"
+			if flag == other {
+				other = "--yolo"
+			}
+			if slices.Contains(argv, other) || slices.Contains(argv, "--dangerously-bypass-approvals-and-sandbox") {
+				t.Fatalf("interactive=%v mode=%q: argv %v carries another approval flag", interactive, mode, argv)
+			}
+		}
 	}
 }
 
@@ -181,7 +208,7 @@ func TestCodexAdapterInteractiveUsesTUI(t *testing.T) {
 		"/bin/sh", "-c", `prompt=$(cat "$2") || exit; cmd=$1; shift 2; exec "$cmd" "$@" "$prompt"`,
 		"tariboy-harness", "codex", prompt,
 		"-c", "allow_login_shell=false",
-		"--dangerously-bypass-approvals-and-sandbox", "--cd", "/w",
+		"--yolo", "--cd", "/w",
 		"-c", `model_provider="tariboy"`,
 		"-c", `model_providers.tariboy.name="Tariboy"`,
 		"-c", `model_providers.tariboy.base_url="http://127.0.0.1:5555/_tariboy/sk-tariboy-token"`,

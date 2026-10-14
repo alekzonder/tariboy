@@ -183,6 +183,17 @@ directory, and AI-proxy routing still apply in both modes. Codex receives the
 agent's effort as `-c model_reasoning_effort="<effort>"`, and `opencode run`
 receives the agent's model as `--model`; OpenCode has no effort setting.
 
+Both Codex modes take their approval flag from the daemon's codex approval mode
+(`codex_approval_mode` in `daemon_config`), read when each iteration starts:
+`yolo`, the default, passes `--yolo` (no sandbox, no approval prompts), and
+`approve-for-me` passes `--approve-for-me` (the workspace-write sandbox, with
+approval requests reviewed automatically by Codex). Change it with
+`tariboy harness codex-approval set MODE` or **Settings → General → Codex**; a
+running iteration keeps the flag it started with. `--approve-for-me` needs a
+Codex CLI that has the flag; an older one fails the launch with an unknown
+argument error. See
+[Security controls](/docs/security-controls#codex-approval-mode).
+
 The Cursor CLI runs its `agent` executable with the prompt as the last
 argument, `--force`, `--endpoint <AI proxy URL>`, and `--model` when the agent
 names one. Batch iterations add `-p --output-format stream-json --trust`, and

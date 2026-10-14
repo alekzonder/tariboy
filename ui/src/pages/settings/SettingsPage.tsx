@@ -4,6 +4,7 @@ import { getGlobalAgentShellScriptOn, getPluginContributionsOn, setGlobalAgentSh
 import { cn } from "@/lib/utils";
 import { ShellScriptEditor } from "@/components/ShellScriptEditor";
 import { SupportBundle } from "@/components/SupportBundle";
+import { CodexApprovalCard } from "@/components/CodexApprovalSettings";
 import { MaintenanceSettingsCard } from "@/components/MaintenanceSettings";
 
 const SECTIONS = [
@@ -123,6 +124,7 @@ export function GeneralSettings() {
         load={load}
         save={save}
       />
+      <CodexApprovalCard key={target?.id ?? "active"} target={target} />
       <MaintenanceSettingsCard key={target?.id ?? "active"} target={target} />
       <SupportBundle />
     </div>
