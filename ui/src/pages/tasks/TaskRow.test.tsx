@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import type { Task } from "@/lib/tasks"
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns"
@@ -59,7 +60,19 @@ describe("task table columns", () => {
     const header = screen.getByTestId("task-table-header")
     const row = screen.getByTestId(`task-row-${task.key}`)
     expect(widths(row)).toEqual(widths(header))
-    expect(widths(header)[0]).toBe(`${TASK_COLUMNS.key}px`)
+    expect(widths(header)[0]).toBe(`${TASK_COLUMNS.priority}px`)
+    expect(widths(header)[1]).toBe(`${TASK_COLUMNS.key}px`)
+  })
+
+  it.each(["agent", "all", "servers"] as const)("puts priority first, before the key, in the %s table", (mode) => {
+    renderRow(mode)
+
+    const header = screen.getByTestId("task-table-header")
+    expect(header.textContent).toMatch(/^PriKey/)
+    const row = screen.getByTestId(`task-row-${task.key}`)
+    const priority = within(row).getByLabelText("P1 High")
+    const key = within(row).getByText(task.key)
+    expect(priority.compareDocumentPosition(key) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it("keeps the key on one line inside a fixed 168px column", () => {
@@ -190,6 +203,55 @@ describe("task row status", () => {
   it("keeps the drag handle for a workflow task, which only reparents", () => {
     renderTask(workflowTask)
     expect(screen.getByRole("button", { name: `Move ${task.key}` })).toBeInTheDocument()
+  })
+})
+
+function renderPriority(next: Task, onPriorityChange = vi.fn(), onSelect = vi.fn()) {
+  render(
+    <TaskRow
+      row={{ task: next, depth: 0, hasChildren: false, orphaned: false }}
+      mode="agent"
+      hasActiveQuestion={false}
+      expanded={false}
+      selected={false}
+      onToggle={vi.fn()}
+      onSelect={onSelect}
+      onAddChild={vi.fn()}
+      onPriorityChange={onPriorityChange}
+    />,
+  )
+  return { onPriorityChange, onSelect }
+}
+
+describe("task row priority", () => {
+  it("changes priority from a menu on the value without opening the task", async () => {
+    const { onPriorityChange, onSelect } = renderPriority(task)
+
+    const trigger = screen.getByRole("button", { name: "P1 High" })
+    expect(trigger.className).toContain("task-priority")
+    await userEvent.click(trigger)
+    const items = await screen.findAllByRole("menuitem")
+    expect(items.map((item) => item.textContent)).toEqual(["P0Critical", "P1High", "P2Normal", "P3Low"])
+    await userEvent.click(screen.getByRole("menuitem", { name: /P3/ }))
+
+    expect(onPriorityChange).toHaveBeenCalledWith("P3")
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it("does nothing when the current priority is picked again", async () => {
+    const { onPriorityChange } = renderPriority(task)
+
+    await userEvent.click(screen.getByRole("button", { name: "P1 High" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: /P1/ }))
+
+    expect(onPriorityChange).not.toHaveBeenCalled()
+  })
+
+  it.each(["context", "respond"] as const)("keeps a plain tag for a %s task", (access) => {
+    renderPriority({ ...task, access })
+
+    expect(screen.queryByRole("button", { name: "P1 High" })).toBeNull()
+    expect(screen.getByLabelText("P1 High")).toHaveClass("task-priority")
   })
 })
 

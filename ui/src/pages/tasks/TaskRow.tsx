@@ -1,9 +1,16 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core"
 import { ChevronRight, GripVertical, Plus } from "lucide-react"
+import { useState } from "react"
+import {
+  DropdownMenu,
+  DropdownMenuCheckItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { PriorityTag, StatusPill } from "@/components/ui/status"
 import { cn } from "@/lib/utils"
 import { taskTone } from "@/lib/statusTone"
-import { isWorkflowTask, taskStatusLabel } from "@/lib/tasks"
+import { isWorkflowTask, taskStatusLabel, type TaskPriority } from "@/lib/tasks"
 import type { VisibleTaskRow } from "@/lib/taskTree"
 import { INDENT_PX, MAX_INDENT_DEPTH, TASK_COLUMNS, type TaskRowMode } from "./taskColumns"
 import { formatTaskDuration, formatTaskTime } from "./taskTime"
@@ -28,6 +35,7 @@ export default function TaskRow({
   onToggle,
   onSelect,
   onAddChild,
+  onPriorityChange,
 }: {
   row: VisibleTaskRow
   mode: TaskRowMode
@@ -39,6 +47,9 @@ export default function TaskRow({
   onToggle: () => void
   onSelect: () => void
   onAddChild?: () => void
+  /** Saves a priority picked in the row's menu; without it the value is a
+   *  plain tag. The menu stays disabled until the returned promise settles. */
+  onPriorityChange?: (priority: TaskPriority) => Promise<void> | void
 }) {
   const readOnly = row.task.access === "context" || row.task.access === "respond"
   // The every-server table has no drag and no add-child: neither can cross the
@@ -91,6 +102,14 @@ export default function TaskRow({
           <GripVertical aria-hidden="true" className="size-3" />
         </button>
       )}
+      {/* Priority leads every mode, unlike the reference, which drops it from
+          the all-tasks table: in this app priority is what orders the tree, so
+          a table without it cannot be read. */}
+      <span style={{ width: TASK_COLUMNS.priority }} className="z-2 shrink-0">
+        {readOnly || !onPriorityChange
+          ? <PriorityTag className="task-priority" priority={row.task.priority} aria-label={priorityName(row.task.priority)} />
+          : <PriorityMenu priority={row.task.priority} onChange={onPriorityChange} />}
+      </span>
       <span
         style={{ width: TASK_COLUMNS.key }}
         className="z-2 flex shrink-0 items-center gap-1.5 overflow-hidden"
@@ -129,16 +148,6 @@ export default function TaskRow({
         )}
         {row.task.blocked && <StatusPill tone="danger" size="sm">blocked</StatusPill>}
       </button>
-      {/* Priority stays in both modes, unlike the reference, which drops it from
-          the all-tasks table: in this app priority is what orders the tree, so
-          a table without it cannot be read. */}
-      <span style={{ width: TASK_COLUMNS.priority }} className="shrink-0">
-        <PriorityTag
-          className="task-priority"
-          priority={row.task.priority}
-          aria-label={`${row.task.priority} ${priorityLabels[row.task.priority]}`}
-        />
-      </span>
       {mode !== "agent" && (
         <span style={{ width: TASK_COLUMNS.agent }} className="shrink-0">
           {row.task.assignee && (
@@ -201,6 +210,41 @@ export default function TaskRow({
   )
 }
 
+const priorityName = (priority: TaskPriority) => `${priority} ${priorityLabels[priority]}`
+
+function PriorityMenu({ priority, onChange }: {
+  priority: TaskPriority
+  onChange: (priority: TaskPriority) => Promise<void> | void
+}) {
+  const [saving, setSaving] = useState(false)
+  const pick = async (next: TaskPriority) => {
+    if (next === priority) return
+    setSaving(true)
+    try {
+      await onChange(next)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={saving}>
+        <button type="button" className="task-priority flex rounded-[6px] disabled:opacity-50" aria-label={priorityName(priority)}>
+          <PriorityTag priority={priority} aria-hidden="true" className="cursor-pointer" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {(Object.keys(priorityLabels) as TaskPriority[]).map((value) => (
+          <DropdownMenuCheckItem key={value} checked={value === priority} onSelect={() => void pick(value)}>
+            <span className="font-mono">{value}</span>
+            <span className="text-muted-foreground">{priorityLabels[value]}</span>
+          </DropdownMenuCheckItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /** The table header. Same widths, same order, same gaps as the rows under it,
  *  read from `TASK_COLUMNS` rather than repeated. */
 export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; sticky?: boolean }) {
@@ -212,9 +256,9 @@ export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; s
         sticky && "sticky top-0 z-2 bg-card",
       )}
     >
+      <span style={{ width: TASK_COLUMNS.priority }} className="shrink-0">Pri</span>
       <span style={{ width: TASK_COLUMNS.key }} className="shrink-0">Key</span>
       <span className="min-w-0 flex-1">Task</span>
-      <span style={{ width: TASK_COLUMNS.priority }} className="shrink-0">Pri</span>
       {mode !== "agent" && (
         <span style={{ width: TASK_COLUMNS.agent }} className="shrink-0">Agent</span>
       )}
