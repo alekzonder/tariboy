@@ -180,9 +180,21 @@ alias, image, harness, model, effort, working directory, interactive mode, and
 Autopilot settings; it cannot set environment variables or secrets. Ordinary
 text in a live agent topic travels through <code>chat:telegram:&lt;agent&gt;</code> and the
 existing channel/message delivery and acknowledgement path; its Telegram update
-is marked read only after the mapped agent has a non-DLQ delivery. Private chats,
-other groups, the general topic, anonymous posts, unknown topics, media,
-reactions, edits, and webhooks are not supported.</p>
+is marked read only after the mapped agent has a non-DLQ delivery. A message
+without text uses its caption; one with neither, such as a sticker or an
+uncaptioned photo, is dropped. Media files themselves are not delivered.</p>
+<p>A message an authorized user forwards into an agent topic, from a channel, a
+user, a hidden user, or a chat, reaches the agent with a first line naming its
+source, for example
+<code>Forwarded from channel &quot;News&quot; (@news) https://t.me/news/123:</code>, followed by the
+original text. The post link is present only for public channels. The message
+<code>data</code> also carries <code>telegram_forward</code> with <code>type</code>, <code>date</code>, and, when Telegram
+provides them, <code>name</code>, <code>username</code>, <code>user_id</code> or <code>chat_id</code>, <code>message_id</code>,
+<code>link</code>, and <code>author_signature</code>. Forwarded text never runs as a command, even
+when it starts with <code>/</code>, and forwarded messages in the management topic are
+ignored.</p>
+<p>Private chats, other groups, the general topic, anonymous posts, unknown
+topics, reactions, edits, and webhooks are not supported.</p>
 <h2 id="related-reference"><a class="blume-heading-anchor" href="#related-reference">Related reference</a></h2>
 <ul>
 <li><a href="/tariboy/docs/plugins/built-in">Built-in plugins</a> lists every daemon-owned

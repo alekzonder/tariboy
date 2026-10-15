@@ -11,11 +11,11 @@ sidebar:
 1. Open **Settings → General** and note app/daemon version and local status.
 2. For a remote problem, inspect the host phase and last structured error.
 3. Confirm the SSH alias still works in Terminal.
-4. Check free disk, writable `~/.local`, `flock`, `python3`, `tmux`, and the
+4. Check free disk, writable `~/.local`, `python3`, `flock` (Linux), `tmux`, and the
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.78.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.79.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -153,7 +153,8 @@ separately.
 ## Known alpha constraints
 
 - Apple Silicon macOS desktop only.
-- Automatic SSH installation supports 64-bit Linux only: x86_64 and aarch64.
+- Automatic SSH installation supports 64-bit Linux (x86_64 and aarch64) and
+  Apple Silicon macOS (arm64). Intel Macs are not supported.
 - Ad-hoc signing requires a one-app Gatekeeper confirmation.
 - Desktop updates require a writable installed app; Developer ID signing and
   notarization are not yet available.

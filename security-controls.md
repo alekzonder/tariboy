@@ -66,6 +66,21 @@ adoption revokes the remaining lease when its shim finishes.
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
 daemons running. Treat both behaviors as continuity features, not stop controls.
 
+### Codex approval mode
+
+Each daemon chooses how its Codex agents run commands:
+
+- `yolo` (default) starts Codex with `--yolo`: no sandbox and no approval
+  prompts. Commands run with the daemon user's full file and network access.
+- `approve-for-me` starts Codex with `--approve-for-me`: commands run in the
+  workspace-write sandbox, and Codex reviews approval requests automatically.
+  Writes outside the agent's working directory and network access from
+  commands can be refused, so Tariboy tools, `git push`, or dependency
+  downloads inside an iteration may fail in this mode.
+
+The mode is per daemon, applies to every Codex agent on it, and takes effect
+from the next iteration. Other harnesses are unaffected.
+
 ## Local and remote files
 
 Local data defaults to `~/.tariboy`; runtime files default to
@@ -206,7 +221,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.78.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.79.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

@@ -5,11 +5,11 @@ blume-panel-tabs pre.astro-code{background:0 0!important;border:0!important;bord
 <li>Open <strong>Settings → General</strong> and note app/daemon version and local status.</li>
 <li>For a remote problem, inspect the host phase and last structured error.</li>
 <li>Confirm the SSH alias still works in Terminal.</li>
-<li>Check free disk, writable <code>~/.local</code>, <code>flock</code>, <code>python3</code>, <code>tmux</code>, and the
+<li>Check free disk, writable <code>~/.local</code>, <code>python3</code>, <code>flock</code> (Linux), <code>tmux</code>, and the
 selected harness on the remote host.</li>
 <li>For a daemon older than <code>0.10.1</code>, finish active work before updating it.</li>
 </ol>
-<p>The app and bundled daemons must report <code>0.78.0</code>. Resolve a local mismatch with
+<p>The app and bundled daemons must report <code>0.79.0</code>. Resolve a local mismatch with
 the menu-bar <strong>Install/Update CLI</strong> action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.</p>
 <p>The first local update from a daemon older than <code>0.10.1</code> is intentionally
@@ -126,7 +126,8 @@ separately.</p>
 <h2 id="known-alpha-constraints"><a class="blume-heading-anchor" href="#known-alpha-constraints">Known alpha constraints</a></h2>
 <ul>
 <li>Apple Silicon macOS desktop only.</li>
-<li>Automatic SSH installation supports 64-bit Linux only: x86_64 and aarch64.</li>
+<li>Automatic SSH installation supports 64-bit Linux (x86_64 and aarch64) and
+Apple Silicon macOS (arm64). Intel Macs are not supported.</li>
 <li>Ad-hoc signing requires a one-app Gatekeeper confirmation.</li>
 <li>Desktop updates require a writable installed app; Developer ID signing and
 notarization are not yet available.</li>

@@ -177,6 +177,16 @@ similarly omits its print-mode flags. Model, effective environment, working
 directory, and AI-proxy routing still apply in both modes. Codex receives the
 agent’s effort as <code>-c model_reasoning_effort=&quot;&lt;effort&gt;&quot;</code>, and <code>opencode run</code>
 receives the agent’s model as <code>--model</code>; OpenCode has no effort setting.</p>
+<p>Both Codex modes take their approval flag from the daemon’s codex approval mode
+(<code>codex_approval_mode</code> in <code>daemon_config</code>), read when each iteration starts:
+<code>yolo</code>, the default, passes <code>--yolo</code> (no sandbox, no approval prompts), and
+<code>approve-for-me</code> passes <code>--approve-for-me</code> (the workspace-write sandbox, with
+approval requests reviewed automatically by Codex). Change it with
+<code>tariboy harness codex-approval set MODE</code> or <strong>Settings → General → Codex</strong>; a
+running iteration keeps the flag it started with. <code>--approve-for-me</code> needs a
+Codex CLI that has the flag; an older one fails the launch with an unknown
+argument error. See
+<a href="/tariboy/docs/security-controls#codex-approval-mode">Security controls</a>.</p>
 <p>The Cursor CLI runs its <code>agent</code> executable with the prompt as the last
 argument, <code>--force</code>, <code>--endpoint &lt;AI proxy URL&gt;</code>, and <code>--model</code> when the agent
 names one. Batch iterations add <code>-p --output-format stream-json --trust</code>, and

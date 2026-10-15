@@ -60,6 +60,8 @@ tariboy has three command surfaces:
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
+| `tariboy harness codex-approval get` | Show how this daemon starts codex: `yolo` (default, `--yolo`) or `approve-for-me` (`--approve-for-me`) |
+| `tariboy harness codex-approval set MODE` | Set the codex approval mode (`yolo` or `approve-for-me`) for this daemon's next codex iterations |
 | `tariboy harness models TYPE [--refresh]` | List the models and efforts the harness CLI on the daemon host supports; CLI failures are reported in `error` |
 | `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired |
 | `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |

@@ -17,7 +17,7 @@ Source: https://alekzonder.github.io/tariboy
     </div>
     <a className="secondary-action" href="#explore">Explore the docs <span aria-hidden="true">↓</span></a>
   </div>
-  <p className="alpha-note"><strong>Alpha</strong> · macOS 12+ on Apple Silicon · Remote Linux x86_64/aarch64 over SSH</p>
+  <p className="alpha-note"><strong>Alpha</strong> · macOS 12+ on Apple Silicon · Remote Linux x86_64/aarch64 or Apple Silicon macOS over SSH</p>
 </section>
 
 <nav className="progression" aria-label="From image to team">
@@ -917,6 +917,17 @@ similarly omits its print-mode flags. Model, effective environment, working
 directory, and AI-proxy routing still apply in both modes. Codex receives the
 agent's effort as `-c model_reasoning_effort="<effort>"`, and `opencode run`
 receives the agent's model as `--model`; OpenCode has no effort setting.
+
+Both Codex modes take their approval flag from the daemon's codex approval mode
+(`codex_approval_mode` in `daemon_config`), read when each iteration starts:
+`yolo`, the default, passes `--yolo` (no sandbox, no approval prompts), and
+`approve-for-me` passes `--approve-for-me` (the workspace-write sandbox, with
+approval requests reviewed automatically by Codex). Change it with
+`tariboy harness codex-approval set MODE` or **Settings → General → Codex**; a
+running iteration keeps the flag it started with. `--approve-for-me` needs a
+Codex CLI that has the flag; an older one fails the launch with an unknown
+argument error. See
+[Security controls](/docs/security-controls#codex-approval-mode).
 
 The Cursor CLI runs its `agent` executable with the prompt as the last
 argument, `--force`, `--endpoint <AI proxy URL>`, and `--model` when the agent
@@ -1904,6 +1915,12 @@ explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
 after creation.
 
+While **Create agent** is disabled, the dialog footer names the first unmet
+condition next to it: the source configuration, the target host's image list,
+an unselected or unbuilt image, or the image manifest still loading. A failed
+manifest load stays visible until the host or image changes, and **Retry image**
+loads it again.
+
 Harness is selected from the supported Tariboy harnesses. Model and effort are
 editable preset fields: they start from explicit runtime defaults for schema-v2
 images and accept arbitrary values. Their suggestions come in two labeled
@@ -2130,6 +2147,13 @@ last run's time, deleted counts, and size change; a failed save or run is
 reported in place. See
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
 
+**Settings → General** also carries a **Codex** card for the same explicit host:
+a choice between **Yolo** (`--yolo`) and **Approve for me**
+(`--approve-for-me`). Selecting a mode saves it to that host at once; a failed
+load or save is reported in place and the previous mode stays selected. The
+new mode applies from the host's next Codex iteration. See
+[Iteration loop](/docs/architecture/iteration-loop).
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -2151,7 +2175,10 @@ depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
 inside a task reparents it without changing priority. Compact priority markers
-appear in the tree. Selecting a task opens its detail in a right-side sheet over
+appear in the tree; on a task the viewer can edit, clicking the marker opens a
+P0-P3 menu that saves only the new priority with the row's revision, without
+opening the task. A revision conflict reloads the tree and shows the error.
+Read-only (`context` or `respond`) tasks keep a plain marker. Selecting a task opens its detail in a right-side sheet over
 the still-mounted tree, with priority, other task fields, comments, mentions,
 and answer waits. The sheet starts at half the viewport width. Its keyboard- and
 pointer-accessible left separator resizes it, and the pixel width persists in
@@ -2241,9 +2268,9 @@ already performs; `scope_agent`, `status_view`, the text search, `assignee` and
 or in the first queue when `All queues` is selected.
 
 The table header and its rows read one set of column widths, so a column cannot
-drift from its heading. `Key` is a fixed 168px holding the tree indents, the
-chevron and the key, which truncates rather than wrapping; `Task` takes the
-rest. The agent table adds `Pri` and `Duration` — the task's first move to
+drift from its heading. `Pri` comes first in every table, then `Key`, a fixed
+168px holding the tree indents, the chevron and the key, which truncates rather
+than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
 `in_progress` (`started_at`) to completion, or to now while the task is open,
 and `—` for a task never started — and the server table adds `Agent`. There is no
 `Queue` column: the key prefix already names the queue. In the server table the
@@ -2524,8 +2551,9 @@ and leaves a cancelled copy behind. Trees are built within each server; roots
 are ordered newest-updated first. Six skeleton rows show until the first
 server answers.
 
-Columns are Key, Task, Pri, Agent, Server, Status and Updated. There is no drag
-reparenting or inline child creation, since neither crosses servers. The
+Columns are Pri, Key, Task, Agent, Server, Status and Updated. There is no drag
+reparenting or inline child creation, since neither crosses servers. A priority
+picked on a row is saved on that row's server, which is then reloaded. The
 toolbar keeps search and `Active | Closed | All` (sent to every server), merges
 queues by prefix across servers with summed counts, and adds a `Server` menu
 in which an unavailable server is marked and cannot be picked. The agent in
@@ -5293,9 +5321,23 @@ alias, image, harness, model, effort, working directory, interactive mode, and
 Autopilot settings; it cannot set environment variables or secrets. Ordinary
 text in a live agent topic travels through `chat:telegram:<agent>` and the
 existing channel/message delivery and acknowledgement path; its Telegram update
-is marked read only after the mapped agent has a non-DLQ delivery. Private chats,
-other groups, the general topic, anonymous posts, unknown topics, media,
-reactions, edits, and webhooks are not supported.
+is marked read only after the mapped agent has a non-DLQ delivery. A message
+without text uses its caption; one with neither, such as a sticker or an
+uncaptioned photo, is dropped. Media files themselves are not delivered.
+
+A message an authorized user forwards into an agent topic, from a channel, a
+user, a hidden user, or a chat, reaches the agent with a first line naming its
+source, for example
+`Forwarded from channel "News" (@news) https://t.me/news/123:`, followed by the
+original text. The post link is present only for public channels. The message
+`data` also carries `telegram_forward` with `type`, `date`, and, when Telegram
+provides them, `name`, `username`, `user_id` or `chat_id`, `message_id`,
+`link`, and `author_signature`. Forwarded text never runs as a command, even
+when it starts with `/`, and forwarded messages in the management topic are
+ignored.
+
+Private chats, other groups, the general topic, anonymous posts, unknown
+topics, reactions, edits, and webhooks are not supported.
 
 ## Related reference
 
@@ -6295,14 +6337,14 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.78.0` alpha on an Apple Silicon Mac.
+This path is for the `0.79.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.78.0_aarch64.dmg`;
-- for remote use, an SSH config alias resolving to Linux x86_64 or aarch64;
+- a verified `Tariboy_0.79.0_aarch64.dmg`;
+- for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
 
@@ -6350,7 +6392,7 @@ terminal.
 
 Run preflight. Review the detected platform, architecture, disk, `flock`,
 `python3`, `tmux`, and harnesses. Choose **Install** when the host reports Linux
-x86_64 or aarch64 and the required install prerequisites are green. Provisioning ends by
+x86_64/aarch64 or macOS arm64 and the required install prerequisites are green. Provisioning ends by
 opening a loopback-forwarding tunnel and checking daemon health.
 
 For local-only use, keep the default Local host and continue.
@@ -6501,8 +6543,10 @@ Unknown shapes default to `chat` kind in low-level classification, but operator
 subscription validates channel names before creating them.
 
 The Telegram plugin subscribes the mapped agent and its sink to the concrete
-`chat:telegram:<agent>` channel. Authorized topic text is published as a normal
-plugin-produced message; an agent-produced reply is delivered back to that
+`chat:telegram:<agent>` channel. Authorized topic text, or a caption when the
+message has no text, is published as a normal plugin-produced message. A
+forwarded message gets a `Forwarded from ...` first line and a
+`telegram_forward` object in its `data`; an agent-produced reply is delivered back to that
 topic only after it passes through the same durable bus. The plugin suppresses
 its inbound echo and acknowledges the sink delivery only after Telegram accepts
 the reply.
@@ -7071,6 +7115,8 @@ tariboy has three command surfaces:
 | `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
 | `tariboy group ls` | List groups (name/lead/member count) |
 | `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
+| `tariboy harness codex-approval get` | Show how this daemon starts codex: `yolo` (default, `--yolo`) or `approve-for-me` (`--approve-for-me`) |
+| `tariboy harness codex-approval set MODE` | Set the codex approval mode (`yolo` or `approve-for-me`) for this daemon's next codex iterations |
 | `tariboy harness models TYPE [--refresh]` | List the models and efforts the harness CLI on the daemon host supports; CLI failures are reported in `error` |
 | `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired |
 | `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
@@ -7299,7 +7345,7 @@ by the operator. The desktop does not implement a second SSH stack.
 | Component | Alpha support |
 | --- | --- |
 | Desktop | macOS 12+, Apple Silicon |
-| Automatic remote install | Linux x86_64 and aarch64 |
+| Automatic remote install | Linux x86_64 and aarch64, macOS arm64 (Apple Silicon) |
 | SSH | system `ssh` and `scp` |
 | Remote install root | `~/.local/lib/tariboy` |
 | Remote CLI links | `~/.local/bin` |
@@ -7307,12 +7353,23 @@ by the operator. The desktop does not implement a second SSH stack.
 | Tunnel | local loopback forwarding over SSH |
 | Android app | arm64 APK built with `make desktop-android`; forwarded loopback port or HTTPS server, no SSH hosts |
 
-Automatic installation requires a writable `~/.local`, `flock`, and `python3`.
-The desktop app carries one server build per architecture and uploads the one
-matching the host's `uname -m`: `x86_64` gets `linux-x86_64`, and `aarch64`
-(or `arm64`) gets `linux-aarch64`. Install and update re-read the architecture
-in preflight every time. Any other architecture, such as 32-bit `armv7l`, is
-reported as unsupported and nothing changes on the host.
+Automatic installation requires a writable `~/.local` and `python3`; Linux
+hosts also need `flock`. The desktop app carries one server build per platform
+and uploads the one matching the host's `uname -s` and `uname -m`: Linux
+`x86_64` gets `linux-x86_64`, Linux `aarch64` (or `arm64`) gets
+`linux-aarch64`, and macOS (`Darwin`) `arm64` gets `darwin-arm64`. Install and
+update re-read the platform and architecture in preflight every time. Any other
+combination, such as 32-bit `armv7l` or an Intel Mac (`Darwin/x86_64`,
+including a shell running under Rosetta), is reported as unsupported and
+nothing changes on the host.
+
+macOS ships neither `flock` nor `sha256sum`, so on a Mac the installer takes
+its lock through `python3` and verifies checksums with `shasum -a 256`. On
+macOS, `/usr/bin/python3` works only once the Command Line Tools are installed
+(`xcode-select --install`). Homebrew installs `tmux` and harnesses under
+`/opt/homebrew/bin`; that directory must be on the login shell's `PATH` or the
+daemon reports them as missing tools. A daemon started over SSH does not start
+again after the Mac reboots; connect from Desktop to start it.
 The Python runtime executes the standard-library agent tool scripts. Preflight
 also reports `tmux`, `git`, `npx`, Claude, Codex, OpenCode, and the Cursor CLI
 (its `agent` executable) so you can see which workflows are available; a missing harness is
@@ -7406,7 +7463,8 @@ Desktop uploads five bundled binaries including the Tasks client and Telegram pl
 fixed installer script to a staging directory. The remote installer:
 
 - validates checksums;
-- serializes installs with `flock`;
+- serializes installs with `flock`, or with a `python3` file lock where `flock`
+  is absent (macOS);
 - publishes a versioned release directory;
 - atomically switches managed CLI symlinks;
 - verifies the daemon reports the requested version;
@@ -7457,7 +7515,8 @@ daemon is left stopped.
 The command updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation, where `~/.local/bin/tariboy` is a symlink into
 `~/.local/lib/tariboy/<version>/`. It refuses anything else — a hand-placed binary or a macOS installation
-belonging to the app bundle — and changes nothing. `--force` reinstalls a
+belonging to the app bundle — and changes nothing. A Desktop-managed macOS
+server is updated with the Desktop update button instead. `--force` reinstalls a
 version that is already active. `TARIBOY_UPDATE_BASE_URL` overrides the GitHub
 releases root for a mirror.
 
@@ -7502,8 +7561,8 @@ action because they have no SSH identity.
 
 Missing harnesses, `tmux`, `git` and `npx` are reported separately as agent
 workflow prerequisites. They do not make an otherwise successful Tariboy update
-appear failed. Platform, architecture, writable install root, and `flock`
-plus `python3` remain installation requirements.
+appear failed. Platform, architecture, writable install root, `python3`, and,
+on Linux, `flock` remain installation requirements.
 
 ## Connection lifecycle
 
@@ -7646,6 +7705,21 @@ adoption revokes the remaining lease when its shim finishes.
 Removing a host is local cleanup, not remote deletion. Quitting the app leaves
 daemons running. Treat both behaviors as continuity features, not stop controls.
 
+### Codex approval mode
+
+Each daemon chooses how its Codex agents run commands:
+
+- `yolo` (default) starts Codex with `--yolo`: no sandbox and no approval
+  prompts. Commands run with the daemon user's full file and network access.
+- `approve-for-me` starts Codex with `--approve-for-me`: commands run in the
+  workspace-write sandbox, and Codex reviews approval requests automatically.
+  Writes outside the agent's working directory and network access from
+  commands can be refused, so Tariboy tools, `git push`, or dependency
+  downloads inside an iteration may fail in this mode.
+
+The mode is per daemon, applies to every Codex agent on it, and takes effect
+from the next iteration. Other harnesses are unaffected.
+
 ## Local and remote files
 
 Local data defaults to `~/.tariboy`; runtime files default to
@@ -7786,7 +7860,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.78.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.79.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -7881,11 +7955,11 @@ Source: https://alekzonder.github.io/tariboy/support
 1. Open **Settings → General** and note app/daemon version and local status.
 2. For a remote problem, inspect the host phase and last structured error.
 3. Confirm the SSH alias still works in Terminal.
-4. Check free disk, writable `~/.local`, `flock`, `python3`, `tmux`, and the
+4. Check free disk, writable `~/.local`, `python3`, `flock` (Linux), `tmux`, and the
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.78.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.79.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -8023,7 +8097,8 @@ separately.
 ## Known alpha constraints
 
 - Apple Silicon macOS desktop only.
-- Automatic SSH installation supports 64-bit Linux only: x86_64 and aarch64.
+- Automatic SSH installation supports 64-bit Linux (x86_64 and aarch64) and
+  Apple Silicon macOS (arm64). Intel Macs are not supported.
 - Ad-hoc signing requires a one-app Gatekeeper confirmation.
 - Desktop updates require a writable installed app; Developer ID signing and
   notarization are not yet available.

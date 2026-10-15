@@ -96,6 +96,12 @@ explicit target. Older daemons that do not expose the complete clone projection
 must be updated. **Start now** remains a separate retryable lifecycle request
 after creation.
 
+While **Create agent** is disabled, the dialog footer names the first unmet
+condition next to it: the source configuration, the target host's image list,
+an unselected or unbuilt image, or the image manifest still loading. A failed
+manifest load stays visible until the host or image changes, and **Retry image**
+loads it again.
+
 Harness is selected from the supported Tariboy harnesses. Model and effort are
 editable preset fields: they start from explicit runtime defaults for schema-v2
 images and accept arbitrary values. Their suggestions come in two labeled
@@ -322,6 +328,13 @@ last run's time, deleted counts, and size change; a failed save or run is
 reported in place. See
 [State model](/docs/architecture/state-model#nightly-backup-and-data-retention).
 
+**Settings → General** also carries a **Codex** card for the same explicit host:
+a choice between **Yolo** (`--yolo`) and **Approve for me**
+(`--approve-for-me`). Selecting a mode saves it to that host at once; a failed
+load or save is reported in place and the previous mode stays selected. The
+new mode applies from the host's next Codex iteration. See
+[Iteration loop](/docs/architecture/iteration-loop).
+
 Activity loads a terminal iteration's proxy transcript once when that iteration
 is selected. Running iterations may refresh from the timer or daemon events,
 but share one in-flight request; changing the agent or iteration aborts that
@@ -343,7 +356,10 @@ depth by priority, manual position, and
 task key, with inline creation and same-queue drag reparenting. Before/after
 drag reordering stays within the task's P0-P3 priority bucket, while dropping
 inside a task reparents it without changing priority. Compact priority markers
-appear in the tree. Selecting a task opens its detail in a right-side sheet over
+appear in the tree; on a task the viewer can edit, clicking the marker opens a
+P0-P3 menu that saves only the new priority with the row's revision, without
+opening the task. A revision conflict reloads the tree and shows the error.
+Read-only (`context` or `respond`) tasks keep a plain marker. Selecting a task opens its detail in a right-side sheet over
 the still-mounted tree, with priority, other task fields, comments, mentions,
 and answer waits. The sheet starts at half the viewport width. Its keyboard- and
 pointer-accessible left separator resizes it, and the pixel width persists in
@@ -433,9 +449,9 @@ already performs; `scope_agent`, `status_view`, the text search, `assignee` and
 or in the first queue when `All queues` is selected.
 
 The table header and its rows read one set of column widths, so a column cannot
-drift from its heading. `Key` is a fixed 168px holding the tree indents, the
-chevron and the key, which truncates rather than wrapping; `Task` takes the
-rest. The agent table adds `Pri` and `Duration` — the task's first move to
+drift from its heading. `Pri` comes first in every table, then `Key`, a fixed
+168px holding the tree indents, the chevron and the key, which truncates rather
+than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
 `in_progress` (`started_at`) to completion, or to now while the task is open,
 and `—` for a task never started — and the server table adds `Agent`. There is no
 `Queue` column: the key prefix already names the queue. In the server table the
@@ -716,8 +732,9 @@ and leaves a cancelled copy behind. Trees are built within each server; roots
 are ordered newest-updated first. Six skeleton rows show until the first
 server answers.
 
-Columns are Key, Task, Pri, Agent, Server, Status and Updated. There is no drag
-reparenting or inline child creation, since neither crosses servers. The
+Columns are Pri, Key, Task, Agent, Server, Status and Updated. There is no drag
+reparenting or inline child creation, since neither crosses servers. A priority
+picked on a row is saved on that row's server, which is then reloaded. The
 toolbar keeps search and `Active | Closed | All` (sent to every server), merges
 queues by prefix across servers with summed counts, and adds a `Server` menu
 in which an unavailable server is marked and cannot be picked. The agent in

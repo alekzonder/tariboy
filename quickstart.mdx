@@ -6,14 +6,14 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.78.0` alpha on an Apple Silicon Mac.
+This path is for the `0.79.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.78.0_aarch64.dmg`;
-- for remote use, an SSH config alias resolving to Linux x86_64 or aarch64;
+- a verified `Tariboy_0.79.0_aarch64.dmg`;
+- for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
 
@@ -61,7 +61,7 @@ terminal.
 
 Run preflight. Review the detected platform, architecture, disk, `flock`,
 `python3`, `tmux`, and harnesses. Choose **Install** when the host reports Linux
-x86_64 or aarch64 and the required install prerequisites are green. Provisioning ends by
+x86_64/aarch64 or macOS arm64 and the required install prerequisites are green. Provisioning ends by
 opening a loopback-forwarding tunnel and checking daemon health.
 
 For local-only use, keep the default Local host and continue.

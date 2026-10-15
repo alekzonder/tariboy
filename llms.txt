@@ -6,7 +6,7 @@
 
 - [Tariboy](https://alekzonder.github.io/tariboy): Define reusable images, run coding agents interactively, and grow into autonomous teams.
 - [Ten-minute quickstart](https://alekzonder.github.io/tariboy/quickstart): Install Tariboy, connect a host, build an image, and run one agent interactively and on Autopilot.
-- [Remote hosts](https://alekzonder.github.io/tariboy/remote-hosts): Connect, provision, update, and remove Linux hosts through system OpenSSH.
+- [Remote hosts](https://alekzonder.github.io/tariboy/remote-hosts): Connect, provision, update, and remove Linux and macOS hosts through system OpenSSH.
 - [Autopilot](https://alekzonder.github.io/tariboy/autopilot): Run bounded, observable iterations on timers and durable message triggers.
 - [Task workflows](https://alekzonder.github.io/tariboy/task-workflows): Bind a workflow image to a queue so its tasks move through statuses with one owner each, gated by check scripts and driven by watch scripts; queue secrets, run modes, commands, routes, and troubleshooting.
 - [Workflow images](https://alekzonder.github.io/tariboy/workflow-images): Build, validate, store, and inspect versioned, immutable workflow images from a Workflowfile.yaml source directory.
