@@ -25,6 +25,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/events"
+	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/paths"
@@ -1972,7 +1973,14 @@ func (m *Manager) startScript(ctx context.Context, ag agent.Agent, r script.Run)
 	if m.cfg.ScriptTimeout > 0 {
 		runContext, cancelRunContext = context.WithTimeout(ctx, m.cfg.ScriptTimeout)
 	}
-	cmd := exec.CommandContext(runContext, "sh", "-c", definition.Command)
+	bash, err := harness.FindExecutable("bash", env, cwdOf(ag, l))
+	if err != nil {
+		cancelRunContext()
+		m.finishScript(key, r, -1, errors.New("bash is required for agent shell scripts"), logPath)
+		return
+	}
+	argv := agentShellCommand(bash, filepath.Dir(m.cfg.AgentsDir), l, []string{"sh", "-c", definition.Command})
+	cmd := exec.CommandContext(runContext, argv[0], argv[1:]...)
 	cmd.Dir, cmd.Env = cwdOf(ag, l), env
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 2 * time.Second
@@ -2082,7 +2090,39 @@ func (m *Manager) ScriptRuntime(agentName string) (cwd string, env []string, err
 		return "", nil, fmt.Errorf("load secrets of agent %q: %w", agentName, err)
 	}
 	l := agentdir.New(m.cfg.AgentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
-	return cwdOf(ag, l), agentScriptEnv(ag, l, secrets, ""), nil
+	cwd = cwdOf(ag, l)
+	env, err = agentShellEnv(filepath.Dir(m.cfg.AgentsDir), l, cwd, agentScriptEnv(ag, l, secrets, ""))
+	if err != nil {
+		return "", nil, fmt.Errorf("agent shell scripts of agent %q: %w", agentName, err)
+	}
+	return cwd, env, nil
+}
+
+// agentShellEnv returns env as the global and agent shell scripts leave it
+// after they are sourced the way a harness launch sources them.
+func agentShellEnv(baseDir string, l agentdir.Layout, cwd string, env []string) ([]string, error) {
+	_, globalErr := os.Stat(filepath.Join(baseDir, "global-agent-shell.sh"))
+	_, agentErr := os.Stat(l.ShellScriptPath())
+	if globalErr != nil && agentErr != nil {
+		return env, nil
+	}
+	bash, err := harness.FindExecutable("bash", env, cwd)
+	if err != nil {
+		return nil, errors.New("bash is required for agent shell scripts")
+	}
+	dump := []string{bash, "-c", `for n in $(compgen -e); do printf '%s=%s\0' "$n" "${!n}"; done`}
+	argv := agentShellCommand(bash, baseDir, l, dump)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir, cmd.Env = cwd, env
+	out, err := cmd.Output()
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && len(exit.Stderr) > 0 {
+			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exit.Stderr)))
+		}
+		return nil, err
+	}
+	return strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00"), nil
 }
 
 func (m *Manager) finishScript(key string, r script.Run, code int, runErr error, logPath string) {
