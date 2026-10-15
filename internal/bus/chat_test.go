@@ -150,6 +150,28 @@ func TestPublishStoresTheResolvedSender(t *testing.T) {
 func TestChatMessagesSeeksOnlyItsTwoChannels(t *testing.T) {
 	b := chatBus(t)
 	query, args := chatMessagesQuery("user:customer", "worker", DefaultChatTypes, 50, "")
+	joined := queryPlan(t, b, query, args)
+	if strings.Contains(joined, "SCAN messages") || strings.Contains(joined, "channel>?") ||
+		strings.Count(joined, "(channel=? AND sender=?)") != 2 {
+		t.Fatalf("query plan does not seek both channels by sender:\n%s", joined)
+	}
+}
+
+// The chat list polls every few seconds, so its legacy summaries must seek the
+// inboxes of the agents it lists, not walk every agent inbox on the host: on a
+// host with busy worker agents that walk was most of each /api/chats call.
+func TestChatSummariesSeeksOnlyTheListedInboxes(t *testing.T) {
+	b := chatBus(t)
+	query, args := chatSummariesQuery("user:customer", DefaultChatTypes, map[string]string{"alpha": "", "beta": ""})
+	joined := queryPlan(t, b, query, args)
+	if strings.Contains(joined, "SCAN messages") || strings.Contains(joined, "channel>?") ||
+		!strings.Contains(joined, "(channel=? AND sender=?)") {
+		t.Fatalf("query plan walks the inbox range instead of seeking the listed inboxes:\n%s", joined)
+	}
+}
+
+func queryPlan(t *testing.T, b *Bus, query string, args []any) string {
+	t.Helper()
 	rows, err := b.db.Query(`EXPLAIN QUERY PLAN `+query, args...)
 	if err != nil {
 		t.Fatal(err)
@@ -167,9 +189,5 @@ func TestChatMessagesSeeksOnlyItsTwoChannels(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(plan, "\n")
-	if strings.Contains(joined, "SCAN messages") || strings.Contains(joined, "channel>?") ||
-		strings.Count(joined, "(channel=? AND sender=?)") != 2 {
-		t.Fatalf("query plan does not seek both channels by sender:\n%s", joined)
-	}
+	return strings.Join(plan, "\n")
 }
