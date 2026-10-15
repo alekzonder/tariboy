@@ -131,6 +131,7 @@ type TaskControl interface {
 	GetArtifact(context.Context, tasks.Actor, string, string) (tasks.Artifact, []tasks.Artifact, error)
 	GetWorkflow(context.Context, tasks.Actor, string) (tasks.WorkflowView, error)
 	GetTransitionRequest(context.Context, tasks.Actor, string, int64) (tasks.TransitionRequest, error)
+	RetryTransitionRequest(context.Context, tasks.Actor, string, int64) (tasks.TransitionRequest, error)
 	ListScriptRuns(context.Context, tasks.Actor, string) ([]tasks.ScriptRun, error)
 	GetScriptRun(context.Context, tasks.Actor, string, int64) (tasks.ScriptRun, error)
 	ScriptRunLog(context.Context, tasks.Actor, string, int64, int) (string, bool, error)

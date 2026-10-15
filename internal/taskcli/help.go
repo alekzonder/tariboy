@@ -60,6 +60,9 @@ var sharedHelp = map[string]commandHelp{
 	"workflow_resume": {"Resolve the pause of a workflow task (operator-only)", "workflow resume KEY --decision continue|release",
 		"A paused task waits for the customer's decision; a plain comment does not resume it. --decision continue resumes the task in its current status with the status counters reset; in a status owned by an agent pool the holder stays. --decision release, only in a status owned by an agent pool, takes the task from its holder and dispatches it to another member; with no other eligible member the task waits unassigned. To stop the task instead, run ttasks cancel KEY. Operator-only: uses the host daemon as the customer actor.",
 		"KEY  Task key (required)", "ttasks workflow resume DEV-12 --decision continue\nttasks workflow resume DEV-12 --decision release"},
+	"workflow_retry": {"Run the checks of a failed transition request again (operator-only)", "workflow retry KEY [REQUEST]",
+		"Repeats a transition request whose check could not run (a script error or an expired token, for example) as a new request with the same outcome, message and requester, and waits for its checks like advance. Without REQUEST it retries the task's latest request. Only the latest request of the current status can be retried, and only when it failed: a rejection is the holder's to fix, and a paused task must be resumed first. Operator-only: uses the host daemon as the customer actor.",
+		"KEY  Task key (required)\nREQUEST  Transition request id, as shown by workflow get (default: the latest)", "ttasks workflow retry DEV-12\nttasks workflow retry DEV-12 41"},
 	"cancel": {"Cancel a workflow task (operator-only)", "cancel KEY",
 		"Cancels a task that follows a workflow. Operator-only: uses the host daemon as the customer actor.", "KEY  Task key (required)", "ttasks cancel DEV-12"},
 }

@@ -28,7 +28,7 @@ func taskCommandFlags() map[string]map[string]bool {
 		"move": set("parent,before,to-root,revision"), "block": set("by,revision,idempotency-key"), "relate": set("revision,idempotency-key"), "done": set("revision,complete-anyway"),
 		"advance": set("outcome,from,message,no-wait"), "artifact_set": set("file"), "artifact_ls": {}, "artifact_show": {},
 		"workflow_get": {}, "workflow_runs": {}, "workflow_run_log": set("max-bytes"),
-		"workflow_move": set("to,reason"), "workflow_resume": set("decision"), "cancel": {},
+		"workflow_move": set("to,reason"), "workflow_resume": set("decision"), "workflow_retry": {}, "cancel": {},
 	}
 }
 
@@ -36,11 +36,11 @@ func taskCommandFlags() map[string]map[string]bool {
 // agent tools-socket action where one exists.
 var commandWords = map[string]map[string]string{
 	"artifacts": {"set": "artifact_set", "ls": "artifact_ls", "show": "artifact_show"},
-	"workflow":  {"get": "workflow_get", "runs": "workflow_runs", "log": "workflow_run_log", "move": "workflow_move", "resume": "workflow_resume"},
+	"workflow":  {"get": "workflow_get", "runs": "workflow_runs", "log": "workflow_run_log", "move": "workflow_move", "resume": "workflow_resume", "retry": "workflow_retry"},
 }
 
 // operatorOnlyActions are served only by the host daemon as the customer.
-var operatorOnlyActions = map[string]bool{"workflow_move": true, "workflow_resume": true, "cancel": true}
+var operatorOnlyActions = map[string]bool{"workflow_move": true, "workflow_resume": true, "workflow_retry": true, "cancel": true}
 
 // maxArtifactInput is one byte more than the daemon accepts, so an oversize
 // value reaches the server and is refused there instead of being cut short.
@@ -321,6 +321,19 @@ func parse(argv []string) (request, error) {
 			return request{}, usageError{"tasks workflow resume: --decision must be continue or release"}
 		}
 		p["key"], p["decision"] = v, decision
+	case "workflow_retry":
+		v, e := require(0, "task key")
+		if e != nil {
+			return request{}, e
+		}
+		p["key"] = v
+		if len(pos) > 1 {
+			id, convErr := strconv.ParseInt(strings.TrimSpace(pos[1]), 10, 64)
+			if convErr != nil || id <= 0 {
+				return request{}, usageError{fmt.Sprintf("tasks workflow retry: request id must be a positive number, got %q", pos[1])}
+			}
+			p["id"] = id
+		}
 	}
 	if err := noExtra(action, pos); err != nil {
 		return request{}, err
@@ -385,7 +398,7 @@ func commandName(action string) string {
 
 func noExtra(action string, pos []string) error {
 	limits := map[string]int{"mine": 0, "ready": 0, "show": 1, "create": 0, "update": 1, "assign": 2, "comment": -1, "ask": -1, "move": 1, "block": 1, "relate": 2, "done": 1,
-		"advance": 1, "artifact_set": 3, "artifact_ls": 1, "artifact_show": 2, "workflow_get": 1, "workflow_runs": 1, "workflow_run_log": 2, "workflow_move": 1, "workflow_resume": 1, "cancel": 1}
+		"advance": 1, "artifact_set": 3, "artifact_ls": 1, "artifact_show": 2, "workflow_get": 1, "workflow_runs": 1, "workflow_run_log": 2, "workflow_move": 1, "workflow_resume": 1, "workflow_retry": 2, "cancel": 1}
 	if limit, ok := limits[action]; ok && limit >= 0 && len(pos) > limit {
 		return usageError{fmt.Sprintf("tasks %s: unexpected argument: %s", commandName(action), pos[limit])}
 	}

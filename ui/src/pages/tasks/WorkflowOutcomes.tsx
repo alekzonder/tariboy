@@ -3,7 +3,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ApiError, type ApiTarget } from "@/lib/api"
-import { advanceTask, getTransitionRequest, type TransitionRequest, type WorkflowView } from "@/lib/tasks"
+import { advanceTask, getTransitionRequest, retryTransitionRequest, type TransitionRequest, type WorkflowView } from "@/lib/tasks"
 import { cn } from "@/lib/utils"
 import { DANGER_FILL, EMPTY, LABEL, MONO } from "./panelStyles"
 import { errorText, useMounted } from "./workflowShared"
@@ -42,11 +42,12 @@ export default function WorkflowOutcomes({ taskKey, view, target, onChanged, onR
   const setNotice = (next: Notice | null, status = view.status) => setHeld(next && { status, notice: next })
   const mountedRef = useMounted()
 
-  const advance = async (outcome: string) => {
+  /** Sends a request, then follows it until it applies, fails or the wait runs out. */
+  const submit = async (send: () => Promise<TransitionRequest>) => {
     setChecking(true)
     setNotice(null)
     try {
-      let request = await advanceTask(taskKey, outcome, message, view.status, target)
+      let request = await send()
       // Poll once a second for as long as the checks may take.
       let polls = Math.ceil(request.wait_seconds ?? DEFAULT_WAIT_SECONDS)
       while (request.state === "pending") {
@@ -84,6 +85,11 @@ export default function WorkflowOutcomes({ taskKey, view, target, onChanged, onR
       if (mountedRef.current) setChecking(false)
     }
   }
+
+  const advance = (outcome: string) => submit(() => advanceTask(taskKey, outcome, message, view.status, target))
+  // A failed request is a check that could not run; once its cause is fixed
+  // the customer may run it again, whoever owns the status.
+  const retry = (id: number) => submit(() => retryTransitionRequest(taskKey, id, target))
 
   const last = view.last_request
   // A timeout says the result of that request is still to come; once the view
@@ -132,7 +138,9 @@ export default function WorkflowOutcomes({ taskKey, view, target, onChanged, onR
         <span role="status" className={EMPTY}>checking…</span>
         {pendingElsewhere && <Button type="button" variant="ghost" className="h-6 px-2 text-[12px]" onClick={onRefresh}>Refresh</Button>}
       </div>}
-      {shown && <OutcomeNotice notice={shown} onRefresh={onRefresh} />}
+      {shown && <OutcomeNotice notice={shown} onRefresh={onRefresh}
+        onRetry={shown.kind === "result" && shown.request.state === "failed" && shown.request.id === last?.id && !disabled
+          ? () => void retry(shown.request.id) : undefined} />}
     </section>
   )
 }
@@ -148,7 +156,7 @@ function inCurrentVisit(view: WorkflowView, request: TransitionRequest): boolean
   return Date.parse(request.created_at) >= Date.parse(open.entered_at)
 }
 
-function OutcomeNotice({ notice, onRefresh }: { notice: Notice; onRefresh: () => void }) {
+function OutcomeNotice({ notice, onRefresh, onRetry }: { notice: Notice; onRefresh: () => void; onRetry?: () => void }) {
   if (notice.kind === "timeout") {
     return <div role="status" className="flex items-center gap-2 text-[12px] text-muted-foreground">
       Still checking — the result appears here when the checks finish.
@@ -158,7 +166,10 @@ function OutcomeNotice({ notice, onRefresh }: { notice: Notice; onRefresh: () =>
   const text = notice.kind === "error" ? notice.message : notice.request.result_message
   const label = notice.kind === "error" ? notice.label : RESULT_LABEL[notice.request.state] ?? notice.request.state
   return <div role="alert" className={cn("flex min-w-0 flex-col gap-1 rounded-[8px] px-2.5 py-2 text-[12px]", DANGER_FILL)}>
-    <span className="font-medium">{label}{notice.kind === "result" ? ` · ${notice.request.outcome}` : ""}</span>
+    <div className="flex items-center justify-between gap-2">
+      <span className="font-medium">{label}{notice.kind === "result" ? ` · ${notice.request.outcome}` : ""}</span>
+      {onRetry && <Button type="button" variant="ghost" className="h-6 px-2 text-[12px]" onClick={onRetry}>Retry</Button>}
+    </div>
     {text && <pre className="min-w-0 font-mono text-[11.5px] whitespace-pre-wrap break-words">{text}</pre>}
   </div>
 }
