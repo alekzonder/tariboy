@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.80.0` alpha on an Apple Silicon Mac.
+This path is for the `0.81.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.80.0_aarch64.dmg`;
+- a verified `Tariboy_0.81.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.

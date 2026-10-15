@@ -1,3 +1,27 @@
+## [0.81.0] - 2026-10-15
+
+### Added
+
+- Queue workflow scripts that run as the queue now start from the global env:
+  the daemon environment after `global-agent-shell.sh`. A secret that the bound
+  image lists in `requires_secrets` can come from that env with a non-empty
+  value, so binding the workflow or removing the queue secret no longer
+  requires a queue secret. A queue secret with the same name still overrides
+  the global value. `ttasks queue secret ls` and its route report those names
+  in `global_env`, and Desktop queue settings show `NAME present in global env`.
+
+### Fixed
+
+- Reading the global env no longer blocks the database. The daemon reads it
+  before the bind or secret-removal transaction opens, stops sourcing shell
+  scripts after 30 seconds, and hides the daemon access variables from the
+  global script.
+- The Desktop chat list no longer scans every agent inbox on each poll. That
+  scan stalled `/api/tasks` and other requests on hosts with busy worker
+  agents.
+
+[0.81.0]: https://github.com/alekzonder/tariboy/compare/v0.80.0...v0.81.0
+
 ## [0.80.0] - 2026-10-15
 
 ### Added
