@@ -158,8 +158,9 @@ you trust that far.
 - A `run_as: queue` script runs in the task's owner-only state directory with
   the daemon's environment, the image's `env`, and the queue secrets; when none
   of these sets `PATH`, it gets `PATH=/usr/bin:/bin`. A `run_as: agent` check
-  also receives the holder's environment and agent secrets and runs in the
-  holder's working directory.
+  also receives the holder's environment and agent secrets, plus the exports of
+  the global and agent shell scripts, and runs in the holder's working
+  directory.
 - The files of a task under `<base-dir>/tasks/<KEY>/` are owner-only:
   directories `0700`, files `0600`. The run log on disk is not redacted. The
   nightly database cleanup removes the directory of every task it deletes.
@@ -221,7 +222,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.79.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.80.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

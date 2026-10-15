@@ -368,7 +368,8 @@ select it renders <code>WorkflowPanel</code>, which loads the view with <code>ge
 the last socket hint about the task through <code>liveSequence</code>, and after each change; a request counter drops
 a response older than the newest) and composes
 <code>WorkflowPauseBanner</code> (<code>resumeTaskWorkflow</code>, <code>cancelWorkflowTask</code>),
-<code>WorkflowOutcomes</code> (<code>advanceTask</code>, then <code>getTransitionRequest</code> once a second
+<code>WorkflowOutcomes</code> (<code>advanceTask</code>, or <code>retryTransitionRequest</code> from the
+<strong>Retry</strong> of a failed last request, then <code>getTransitionRequest</code> once a second
 until the request settles or <code>wait_seconds</code> passes), <code>WorkflowArtifacts</code>
 (<code>setTaskArtifact</code>, <code>getTaskArtifactHistory</code>; every entry of the view’s
 <code>declared_artifacts</code>), <code>WorkflowRuns</code> (<code>getTaskScriptRunLog</code>), the visit list,

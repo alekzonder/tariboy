@@ -408,7 +408,8 @@ select it renders `WorkflowPanel`, which loads the view with `getTaskWorkflow`
 the last socket hint about the task through `liveSequence`, and after each change; a request counter drops
 a response older than the newest) and composes
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
-`WorkflowOutcomes` (`advanceTask`, then `getTransitionRequest` once a second
+`WorkflowOutcomes` (`advanceTask`, or `retryTransitionRequest` from the
+**Retry** of a failed last request, then `getTransitionRequest` once a second
 until the request settles or `wait_seconds` passes), `WorkflowArtifacts`
 (`setTaskArtifact`, `getTaskArtifactHistory`; every entry of the view's
 `declared_artifacts`), `WorkflowRuns` (`getTaskScriptRunLog`), the visit list,

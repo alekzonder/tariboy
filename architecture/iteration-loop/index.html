@@ -110,6 +110,11 @@ executable disappears before process launch.</p>
 exports and filesystem effects from either script are available to that
 iteration. A source-time failure prevents the harness from starting and follows
 the existing <code>harness_error</code> lifecycle.</p>
+<p>The same scripts, in the same order, are sourced before every command the
+daemon runs as the agent outside an iteration: each durable script run, where
+a source-time failure fails that run, and each <code>run_as: agent</code> workflow check,
+which starts with the environment the scripts export and fails without running
+when they fail.</p>
 <p>Every <code>harness_error</code> iteration writes an <code>iteration_finished</code> audit event whose
 <code>error</code> field states the cause, which the audit timeline shows next to the
 status. A failure before or during launch, such as a configured agent CWD that

@@ -865,6 +865,12 @@ exports and filesystem effects from either script are available to that
 iteration. A source-time failure prevents the harness from starting and follows
 the existing `harness_error` lifecycle.
 
+The same scripts, in the same order, are sourced before every command the
+daemon runs as the agent outside an iteration: each durable script run, where
+a source-time failure fails that run, and each `run_as: agent` workflow check,
+which starts with the environment the scripts export and fails without running
+when they fail.
+
 Every `harness_error` iteration writes an `iteration_finished` audit event whose
 `error` field states the cause, which the audit timeline shows next to the
 status. A failure before or during launch, such as a configured agent CWD that
@@ -2227,7 +2233,8 @@ select it renders `WorkflowPanel`, which loads the view with `getTaskWorkflow`
 the last socket hint about the task through `liveSequence`, and after each change; a request counter drops
 a response older than the newest) and composes
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
-`WorkflowOutcomes` (`advanceTask`, then `getTransitionRequest` once a second
+`WorkflowOutcomes` (`advanceTask`, or `retryTransitionRequest` from the
+**Retry** of a failed last request, then `getTransitionRequest` once a second
 until the request settles or `wait_seconds` passes), `WorkflowArtifacts`
 (`setTaskArtifact`, `getTaskArtifactHistory`; every entry of the view's
 `declared_artifacts`), `WorkflowRuns` (`getTaskScriptRunLog`), the visit list,
@@ -3034,7 +3041,9 @@ always read as a flag, and the token after it as its value. Use the
 ## Durable scripts
 
 Scripts run shell commands in the agent's workdir without blocking its current
-iteration. Queue one run, or create a fixed-delay recurring definition:
+iteration. Like an iteration, each run first sources the global and agent shell
+scripts, so their exports, such as tokens, reach the command. Queue one run, or
+create a fixed-delay recurring definition:
 
 ```bash
 scripts/scripts.sh run health --description "Check service health" -- curl -fsS http://localhost:8080/health
@@ -6337,13 +6346,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.79.0` alpha on an Apple Silicon Mac.
+This path is for the `0.80.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.79.0_aarch64.dmg`;
+- a verified `Tariboy_0.80.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -7797,8 +7806,9 @@ you trust that far.
 - A `run_as: queue` script runs in the task's owner-only state directory with
   the daemon's environment, the image's `env`, and the queue secrets; when none
   of these sets `PATH`, it gets `PATH=/usr/bin:/bin`. A `run_as: agent` check
-  also receives the holder's environment and agent secrets and runs in the
-  holder's working directory.
+  also receives the holder's environment and agent secrets, plus the exports of
+  the global and agent shell scripts, and runs in the holder's working
+  directory.
 - The files of a task under `<base-dir>/tasks/<KEY>/` are owner-only:
   directories `0700`, files `0600`. The run log on disk is not redacted. The
   nightly database cleanup removes the directory of every task it deletes.
@@ -7860,7 +7870,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.79.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.80.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -7959,7 +7969,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.79.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.80.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -8733,7 +8743,7 @@ and report the outcome again.
 | `run_as` | Working directory | Environment, later entries winning |
 | --- | --- | --- |
 | `queue` (default) | `TARIBOY_TASK_DIR` | the daemon's own environment, then the image's `env`, then the queue secrets; `PATH=/usr/bin:/bin` when none of them sets `PATH` |
-| `agent` | the holder's effective working directory | the daemon's own environment, the holder's environment and agent secrets (as its own background scripts get them), then the image's `env`, then the queue secrets |
+| `agent` | the holder's effective working directory | the daemon's own environment, the holder's environment and agent secrets, and the exports of the global and agent shell scripts (as its own background scripts get them), then the image's `env`, then the queue secrets |
 
 Watch scripts always run as `queue`, so they do not depend on which agent held
 the task. `run_as: agent` is for checks that inspect a worktree or a local
@@ -8942,17 +8952,32 @@ the same list under **Sources**, with a **Log** button on each run and
 Sources poll; for events pushed by a plugin, use a
 [queue trigger](#queue-triggers).
 
-## Operator move and cancel
+## Operator move, retry, and cancel
 
-The operator (acting as the customer) can override a workflow. Both commands
-are operator-only. An agent that tries `ttasks workflow move` or `ttasks cancel`
-gets the CLI's "unknown command", because no agent action exists for them; a
-caller of the REST route that is not the customer receives `forbidden` (403).
+The operator (acting as the customer) can override a workflow. These commands
+are operator-only. An agent that tries `ttasks workflow move`,
+`ttasks workflow retry`, or `ttasks cancel` gets the CLI's "unknown command",
+because no agent action exists for them; a caller of the REST route that is not
+the customer receives `forbidden` (403).
 
 ```bash
 ttasks workflow move DEV-ab12 --to implement --reason 'review found a regression'
+ttasks workflow retry DEV-ab12
 ttasks cancel DEV-ab12
 ```
+
+`workflow retry KEY [REQUEST]` runs the checks of a `failed` transition request
+again, for example after fixing an expired queue secret that made a check exit
+with `GitHub answered HTTP 401`. It records a new request with the same
+outcome, message, and requester, in any status owner's name, and the CLI waits
+for it as `advance` does; once its checks pass the transition applies and the
+task goes on through its workflow. Without `REQUEST` it retries the task's
+latest request. Only the task's latest request, made in the current visit, can
+be retried (`request_superseded` otherwise), and only when it `failed`
+(`request_not_failed`): a rejection is for the holder to fix. A paused task is
+refused with `workflow_paused`; resume it first. The new request's
+`workflow.transition_requested` event carries `retry_of` and `retried_by`. The
+holder itself needs no retry: it repeats its `advance`.
 
 `workflow move` moves the task to any status of its pinned image regardless of
 outcomes, requirements, and checks. It needs `--to` and a non-empty `--reason`
@@ -9245,7 +9270,7 @@ ttasks cancel DEV-ab12
 | --- | --- |
 | `continue` | Resolves the pause wait, zeroes the visit's counters, clears the reason, and records `workflow.resumed` with the decision. In a pool status the same holder continues and the category returns to `in_progress` (a task blocked by another task stays `open` until unblocked; a holder that has left the pool is replaced by normal dispatch). In a script status the watch runs again at once. In a customer status the customer is asked again with a fresh wait. |
 | `release` | Pool statuses only; any other status answers `invalid_decision`. Marks the holder's row `released`, so that agent is neither sticky nor eligible for this task in this pool, resolves the pause, zeroes the counters, and dispatches the task as on entering the status. Another eligible member receives it and its holder row replaces the released one. With no other eligible member the task is `open` and unassigned, and later dispatch passes do not hand it back to the released agent. The released agent keeps read access until the task is moved. |
-| `ttasks cancel` | Closes the task as `cancelled`; see [Operator move and cancel](#operator-move-and-cancel). It records no `workflow.resumed` event. |
+| `ttasks cancel` | Closes the task as `cancelled`; see [Operator move, retry, and cancel](#operator-move-retry-and-cancel). It records no `workflow.resumed` event. |
 
 An operator `workflow move` also ends a pause: it resolves the wait, records
 `workflow.resumed` with the decision `move`, deletes the task's released holder
@@ -9308,6 +9333,7 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks workflow log KEY RUN [--max-bytes N]` | holder, operator | Read a run log. |
 | `ttasks workflow move KEY --to STATUS --reason TEXT` | operator | Move without checks. |
 | `ttasks workflow resume KEY --decision continue\|release` | operator | Resolve a pause. |
+| `ttasks workflow retry KEY [REQUEST]` | operator | Run a failed request's checks again and wait for them. |
 | `ttasks cancel KEY` | operator | Cancel the task. |
 
 "agent" means any agent that can read the task; "holder" means the agent that
@@ -9330,6 +9356,7 @@ generated OpenAPI document is the authority for request and response schemas.
 | `GET` | `/api/task-queues/{queue}/source-runs/{id}/log` | the redacted log tail of a source run (`max_bytes`); returns `run_id`, `text`, `truncated` | operator |
 | `POST` | `/api/tasks/{key}/advance` | declare an outcome (`outcome`, `message`, `from`); returns the request | agent, operator |
 | `GET` | `/api/tasks/{key}/workflow/requests/{id}` | one transition request | agent, operator |
+| `POST` | `/api/tasks/{key}/workflow/requests/{id}/retry` | run a failed request's checks again; returns the new request | operator |
 | `PUT` | `/api/tasks/{key}/artifacts/{name}` | set an artifact (`value`) | agent, operator |
 | `GET` | `/api/tasks/{key}/artifacts` | list current artifacts | agent, operator |
 | `GET` | `/api/tasks/{key}/artifacts/{name}` | read an artifact and its history | agent, operator |
@@ -9403,6 +9430,8 @@ the key, and the run id. A failed source run records the queue event
 | `workflow_closed` | 409 | The task is `done` or `cancelled`. |
 | `workflow_paused` | 409 | The task is paused: `advance` and `artifacts set` are refused until the customer decides. |
 | `workflow_not_paused` | 409 | `workflow resume` on a task that is not paused. |
+| `request_not_failed` | 409 | `workflow retry` of a request that did not fail. |
+| `request_superseded` | 409 | `workflow retry` of a request that is not the task's latest one in its current status. |
 | `invalid_decision` | 400 | A resume decision that is not `continue` or `release`, or `release` outside a pool status. |
 | `workflow_in_use` | 409 | A queue binds the image or a task, open or closed, pins it. |
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
@@ -9444,7 +9473,7 @@ pending request.
 | `queue workflow set` fails with `workflow_secret_missing` | Set every key in `details.secrets` with `ttasks queue secret set`, then bind again. |
 | A new task stays in category `open` | No pool member is eligible: enable the agent, its loop, and Goal, clear a halt, or finish its other assigned task. The daemon retries every minute. |
 | `advance` prints `rejected:` | A check says the condition does not hold. Fix what its message says, then repeat the advance. |
-| `advance` prints `failed:` | A check could not run or broke the protocol. Read the log it names with `ttasks workflow log KEY RUN`. A check that failed with `the daemon restarted during check ...` was interrupted; repeat the advance. |
+| `advance` prints `failed:` | A check could not run or broke the protocol. Read the log it names with `ttasks workflow log KEY RUN`. A check that failed with `the daemon restarted during check ...` was interrupted; repeat the advance. Once the cause is fixed, the operator can run the checks again with `ttasks workflow retry KEY` or **Retry** in Desktop. |
 | `advance` says the request is still pending | The checks run longer than `wait_seconds` allows the CLI to wait. They keep running; follow them with `ttasks workflow get KEY`. |
 | `advance` fails with `script_running` | A watch or check of the previous status is still being killed. Retry in a few seconds. |
 | A task is `wait_customer` with `waiting_on: pause` | The daemon paused it; `ttasks workflow get KEY` shows `paused:` and the comment names the reason. Fix the cause, then `ttasks workflow resume KEY --decision continue` or `--decision release`. |
@@ -9589,9 +9618,12 @@ these sections:
   while a request made elsewhere is still pending (with **Refresh**), while the
   task is paused, and while a required artifact has no value. A rejected or
   failed last request is shown only when it was made in the current visit of an
-  open task, and a "still checking" notice goes once the request settles. In a
-  pool or script status the outcomes are listed for reference, because the
-  agent or the watch script decides.
+  open task, and a "still checking" notice goes once the request settles. A
+  failed last request has **Retry**, in any status, unless the task is paused or
+  a request is checking: it sends
+  `POST /api/tasks/{key}/workflow/requests/{id}/retry` and follows the new
+  request like an outcome button. In a pool or script status the outcomes are
+  listed for reference, because the agent or the watch script decides.
 - **Artifacts.** Every artifact the image declares: the current value,
   rendered as Markdown with a **Markdown** / **Text** switch for plain text,
   collapsed to six lines or 600 characters when long and shown in full once

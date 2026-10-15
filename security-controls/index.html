@@ -137,8 +137,9 @@ image’s <code>env</code>, or a secret.</li>
 <li>A <code>run_as: queue</code> script runs in the task’s owner-only state directory with
 the daemon’s environment, the image’s <code>env</code>, and the queue secrets; when none
 of these sets <code>PATH</code>, it gets <code>PATH=/usr/bin:/bin</code>. A <code>run_as: agent</code> check
-also receives the holder’s environment and agent secrets and runs in the
-holder’s working directory.</li>
+also receives the holder’s environment and agent secrets, plus the exports of
+the global and agent shell scripts, and runs in the holder’s working
+directory.</li>
 <li>The files of a task under <code>&lt;base-dir&gt;/tasks/&lt;KEY&gt;/</code> are owner-only:
 directories <code>0700</code>, files <code>0600</code>. The run log on disk is not redacted. The
 nightly database cleanup removes the directory of every task it deletes.</li>
@@ -194,7 +195,7 @@ any other support-bundle exclusion. See <a href="/tariboy/docs/architecture/ai-p
 audit</a> for its
 runtime lifecycle.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.79.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.80.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;
