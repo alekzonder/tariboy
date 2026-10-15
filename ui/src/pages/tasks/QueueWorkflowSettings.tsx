@@ -151,8 +151,8 @@ export default function QueueWorkflowSettings({ queue, target, pools }: {
         </div>
       )}
       {pools(poolSaved)}
-      <QueueSecrets key={binding?.digest ?? ""} queue={queue} target={target} missing={missingSecrets?.names} missingMessage={missingSecrets?.message} />
-      {binding && <QueueSources key={binding.digest} queue={queue} target={target} />}
+      <QueueSecrets key={`secrets:${binding?.digest ?? ""}`} queue={queue} target={target} missing={missingSecrets?.names} missingMessage={missingSecrets?.message} />
+      {binding && <QueueSources key={`sources:${binding.digest}`} queue={queue} target={target} />}
       {dialog}
     </section>
   )
