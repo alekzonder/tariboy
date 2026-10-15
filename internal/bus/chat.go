@@ -41,8 +41,10 @@ const fromSQL = `COALESCE(
 
 // chatRowsSQL is the chat projection: every message that belongs to a
 // conversation between the customer and one agent, with the agent it belongs to
-// and the principal that sent it. GLOB (not LIKE) keeps the channel prefix
-// case-sensitive so the channel index is still usable.
+// and the principal that sent it. The inboxes it reads are only those of the
+// agents named by a JSON object's keys, each an equality seek on
+// (channel, sender): a GLOB over every agent inbox walked the inboxes of busy
+// worker agents the customer never talks to on every chat-list poll.
 const chatRowsSQL = `
 	SELECT CASE WHEN channel = ? THEN substr(sender, 7)
 	            ELSE substr(channel, 7, length(channel) - 12) END AS agent,
@@ -51,7 +53,7 @@ const chatRowsSQL = `
 	       kind, correlation_id, in_reply_to, reply_to, deadline, sender
 	FROM messages
 	WHERE ((channel = ? AND sender GLOB 'agent:*')
-	    OR (channel GLOB 'agent:*:inbox' AND sender = ?))`
+	    OR (channel IN (SELECT 'agent:' || key || ':inbox' FROM json_each(?)) AND sender = ?))`
 
 // ChatSummary is one conversation in the chat list: when it last moved, what
 // was said, and how much of it the customer has not read yet.
@@ -91,28 +93,12 @@ func typeFilterSQL(types []string) (string, []any) {
 
 // ChatSummaries returns one row per agent the customer has a conversation with,
 // newest conversation first. reads maps an agent name to the timestamp of the
-// newest message the customer has seen in that chat; an agent missing from it
-// has read nothing. Only messages the agent sent can be unread.
+// newest message the customer has seen in that chat, and names the agents whose
+// inbox is read: an agent missing from it has read nothing and counts only the
+// messages it sent the customer. Only messages the agent sent can be unread.
 func (b *Bus) ChatSummaries(customer string, types []string, reads map[string]string) ([]ChatSummary, error) {
-	readJSON, err := json.Marshal(reads)
-	if err != nil {
-		return nil, err
-	}
-	filter, filterArgs := typeFilterSQL(types)
-	args := []any{customer, customer, customer}
-	args = append(args, filterArgs...)
-	args = append(args, string(readJSON))
-	// The bare columns beside max(ts) are SQLite's documented "row that holds
-	// the maximum" behaviour, so the last message comes back with its timestamp
-	// in one pass.
-	rows, err := b.db.Query(`
-		SELECT chat.agent, max(chat.ts) AS last_ts, chat.type, chat.text, chat.sender,
-		       sum(CASE WHEN chat.sender GLOB 'agent:*'
-		                 AND chat.ts > COALESCE(read.value, '') THEN 1 ELSE 0 END) AS unread
-		FROM (`+chatRowsSQL+` AND `+filter+`) AS chat
-		LEFT JOIN json_each(?) AS read ON read.key = chat.agent
-		GROUP BY chat.agent
-		ORDER BY last_ts DESC`, args...)
+	query, args := chatSummariesQuery(customer, types, reads)
+	rows, err := b.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +116,26 @@ func (b *Bus) ChatSummaries(customer string, types []string, reads map[string]st
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+// chatSummariesQuery is the ChatSummaries query and its arguments.
+func chatSummariesQuery(customer string, types []string, reads map[string]string) (string, []any) {
+	readJSON, _ := json.Marshal(reads) // a map of strings always marshals
+	filter, filterArgs := typeFilterSQL(types)
+	args := []any{customer, customer, string(readJSON), customer}
+	args = append(args, filterArgs...)
+	args = append(args, string(readJSON))
+	// The bare columns beside max(ts) are SQLite's documented "row that holds
+	// the maximum" behaviour, so the last message comes back with its timestamp
+	// in one pass.
+	return `
+		SELECT chat.agent, max(chat.ts) AS last_ts, chat.type, chat.text, chat.sender,
+		       sum(CASE WHEN chat.sender GLOB 'agent:*'
+		                 AND chat.ts > COALESCE(read.value, '') THEN 1 ELSE 0 END) AS unread
+		FROM (` + chatRowsSQL + ` AND ` + filter + `) AS chat
+		LEFT JOIN json_each(?) AS read ON read.key = chat.agent
+		GROUP BY chat.agent
+		ORDER BY last_ts DESC`, args
 }
 
 // ChatMessages returns the conversation with one agent, oldest first: the
