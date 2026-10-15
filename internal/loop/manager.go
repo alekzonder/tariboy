@@ -2101,12 +2101,21 @@ func (m *Manager) ScriptRuntime(agentName string) (cwd string, env []string, err
 // GlobalShellEnv returns the daemon environment as global-agent-shell.sh under
 // baseDir leaves it: the environment of workflow scripts that run as the queue.
 func GlobalShellEnv(baseDir string) ([]string, error) {
-	env, err := agentShellEnv(baseDir, "", baseDir, os.Environ())
+	// The script sees none of the variables that reach the daemon API.
+	base := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(script.DaemonAccessEnv, name)
+	})
+	env, err := agentShellEnv(baseDir, "", baseDir, base)
 	if err != nil {
 		return nil, fmt.Errorf("global agent shell script: %w", err)
 	}
 	return env, nil
 }
+
+// shellEnvTimeout bounds sourcing the shell scripts for a script environment:
+// a bind, a secret list, and every workflow run wait for it.
+var shellEnvTimeout = 30 * time.Second
 
 // agentShellEnv returns env as the global and agent shell scripts leave it
 // after they are sourced the way a harness launch sources them. An empty
@@ -2123,9 +2132,19 @@ func agentShellEnv(baseDir, agentScript, cwd string, env []string) ([]string, er
 	}
 	argv := []string{bash, "-c", agentShellPrelude, "tariboy-agent-shell", filepath.Join(baseDir, "global-agent-shell.sh"), agentScript,
 		bash, "-c", `for n in $(compgen -e); do printf '%s=%s\0' "$n" "${!n}"; done`}
-	cmd := exec.Command(argv[0], argv[1:]...)
+	ctx, cancel := context.WithTimeout(context.Background(), shellEnvTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir, cmd.Env = cwd, env
+	// A timeout kills the scripts' children too, and stops waiting for a pipe
+	// one of them still holds.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("shell scripts did not finish within %v", shellEnvTimeout)
+	}
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && len(exit.Stderr) > 0 {

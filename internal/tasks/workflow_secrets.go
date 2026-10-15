@@ -49,32 +49,34 @@ func queueSecretsMissingError(keys []string) error {
 // queue secret.
 func (s *Service) SetGlobalEnv(env func() ([]string, error)) { s.globalEnv = env }
 
-// globalEnvNames returns the sorted names among names that the global
-// environment holds with a non-empty value. It never returns a value.
-func (s *Service) globalEnvNames(names []string) ([]string, error) {
-	found := []string{}
-	if s.globalEnv == nil || len(names) == 0 {
-		return found, nil
+// globalEnvNames returns the names the global environment holds with a
+// non-empty value, never a value. It runs a shell script, so a caller reads it
+// before it opens a transaction: the store has a single connection.
+func (s *Service) globalEnvNames() (map[string]bool, error) {
+	names := map[string]bool{}
+	if s.globalEnv == nil {
+		return names, nil
 	}
 	env, err := s.globalEnv()
 	if err != nil {
 		return nil, err
 	}
 	for _, kv := range env {
-		name, value, _ := strings.Cut(kv, "=")
-		if value != "" && slices.Contains(names, name) && !slices.Contains(found, name) {
-			found = append(found, name)
+		if name, value, _ := strings.Cut(kv, "="); value != "" {
+			names[name] = true
 		}
 	}
-	sort.Strings(found)
-	return found, nil
+	return names, nil
 }
 
 // missingQueueSecrets returns the sorted names among names that neither the
-// queue nor the global environment has a value for.
-func (s *Service) missingQueueSecrets(ctx context.Context, q queryer, queue string, names []string) ([]string, error) {
+// queue nor the global environment (its names in global) has a value for.
+func missingQueueSecrets(ctx context.Context, q queryer, queue string, names []string, global map[string]bool) ([]string, error) {
 	missing := []string{}
 	for _, name := range names {
+		if global[name] {
+			continue
+		}
 		var exists int
 		err := q.QueryRowContext(ctx, `
 			SELECT 1 FROM task_queue_secrets WHERE queue_prefix = ? AND key = ?`, queue, name).Scan(&exists)
@@ -86,11 +88,6 @@ func (s *Service) missingQueueSecrets(ctx context.Context, q queryer, queue stri
 		}
 		missing = append(missing, name)
 	}
-	global, err := s.globalEnvNames(missing)
-	if err != nil {
-		return nil, err
-	}
-	missing = slices.DeleteFunc(missing, func(name string) bool { return slices.Contains(global, name) })
 	sort.Strings(missing)
 	return missing, nil
 }
@@ -217,7 +214,18 @@ func (s *Service) QueueSecretsInGlobalEnv(ctx context.Context, actor Actor, queu
 	if err != nil {
 		return nil, err
 	}
-	return s.globalEnvNames(manifest.Definition.RequiresSecrets)
+	global, err := s.globalEnvNames()
+	if err != nil {
+		return nil, err
+	}
+	names := []string{}
+	for _, name := range manifest.Definition.RequiresSecrets {
+		if global[name] && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // RemoveQueueSecret deletes a queue secret. It is refused while the workflow
@@ -229,6 +237,10 @@ func (s *Service) RemoveQueueSecret(ctx context.Context, actor Actor, queue, key
 		return err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
+	global, err := s.globalEnvNames()
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -247,12 +259,8 @@ func (s *Service) RemoveQueueSecret(ctx context.Context, actor Actor, queue, key
 		if err != nil {
 			return err
 		}
-		if slices.Contains(manifest.Definition.RequiresSecrets, key) {
-			if global, err := s.globalEnvNames([]string{key}); err != nil {
-				return err
-			} else if len(global) == 0 {
-				return queueSecretsMissingError([]string{key})
-			}
+		if slices.Contains(manifest.Definition.RequiresSecrets, key) && !global[key] {
+			return queueSecretsMissingError([]string{key})
 		}
 	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM task_queue_secrets WHERE queue_prefix = ? AND key = ?`, queue, key)

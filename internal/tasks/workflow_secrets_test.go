@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -228,8 +229,22 @@ func TestQueueWorkflowSecretsMayComeFromTheGlobalEnv(t *testing.T) {
 	digest := seedBindingImage(t, svc, "flow", "1", "developers")
 	requireSecrets(t, svc, digest, "GH_TOKEN", "ZED_TOKEN", "EMPTY")
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1"}, 0)
+	// The global env runs a shell script, so no transaction may hold the
+	// database while it runs: the store has a single connection.
+	var inTx error
 	svc.SetGlobalEnv(func() ([]string, error) {
+		probe, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		var one int
+		if err := svc.db.QueryRowContext(probe, `SELECT 1`).Scan(&one); err != nil {
+			inTx = err
+		}
 		return []string{"GH_TOKEN=global", "EMPTY=", "UNRELATED=x"}, nil
+	})
+	t.Cleanup(func() {
+		if inTx != nil {
+			t.Errorf("the global env ran while the database was held: %v", inTx)
+		}
 	})
 	// Neither the queue nor the global env holds ZED_TOKEN; an empty value is no value.
 	_, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow:1", 0)

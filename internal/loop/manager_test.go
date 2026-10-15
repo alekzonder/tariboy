@@ -3529,3 +3529,35 @@ func TestGlobalShellEnvSourcesOnlyTheGlobalScript(t *testing.T) {
 		t.Fatal("a failing global shell script did not fail")
 	}
 }
+
+func TestGlobalShellEnvStopsAHangingScript(t *testing.T) {
+	base := t.TempDir()
+	old := shellEnvTimeout
+	shellEnvTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { shellEnvTimeout = old })
+	if err := os.WriteFile(filepath.Join(base, "global-agent-shell.sh"), []byte("sleep 30\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if _, err := GlobalShellEnv(base); err == nil {
+		t.Fatal("a hanging global shell script did not fail")
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("GlobalShellEnv took %v; want it stopped near the timeout", elapsed)
+	}
+}
+
+func TestGlobalShellEnvHidesDaemonAccessFromTheScript(t *testing.T) {
+	base := t.TempDir()
+	for _, name := range script.DaemonAccessEnv {
+		t.Setenv(name, "/daemon/"+name)
+	}
+	if err := os.WriteFile(filepath.Join(base, "global-agent-shell.sh"),
+		[]byte("export SEEN=\"${TARIBOY_DAEMON_SOCKET:-none}\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env, err := GlobalShellEnv(base)
+	if err != nil || !slices.Contains(env, "SEEN=none") {
+		t.Fatalf("env = %v, err = %v; the script saw the daemon socket", env, err)
+	}
+}

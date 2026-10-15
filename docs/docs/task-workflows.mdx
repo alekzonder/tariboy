@@ -1364,7 +1364,7 @@ pending request.
 | Symptom | Cause and fix |
 | --- | --- |
 | `queue workflow set` fails with `workflow_secret_missing` | Set every key in `details.secrets` with `ttasks queue secret set`, or export it from `global-agent-shell.sh`, then bind again. |
-| A `run_as: queue` script fails with `cannot prepare the environment` | `global-agent-shell.sh` exited with an error. Fix the script; the message carries its stderr. |
+| A `run_as: queue` script fails with `cannot prepare the environment` | `global-agent-shell.sh` exited with an error or ran longer than 30 seconds. Fix the script; the message carries its stderr. A bind, a secret removal, and `secret ls` fail the same way. |
 | A new task stays in category `open` | No pool member is eligible: enable the agent, its loop, and Goal, clear a halt, or finish its other assigned task. The daemon retries every minute. |
 | `advance` prints `rejected:` | A check says the condition does not hold. Fix what its message says, then repeat the advance. |
 | `advance` prints `failed:` | A check could not run or broke the protocol. Read the log it names with `ttasks workflow log KEY RUN`. A check that failed with `the daemon restarted during check ...` was interrupted; repeat the advance. Once the cause is fixed, the operator can run the checks again with `ttasks workflow retry KEY` or **Retry** in Desktop. |
