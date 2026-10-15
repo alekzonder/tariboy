@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3443,5 +3444,61 @@ func TestAgentScheduleWithoutChannelWakesTheServiceChat(t *testing.T) {
 	want := bus.ChatChannelFor(bus.ChatIDService(name))
 	if !strings.Contains(recorder.Body.String(), want) {
 		t.Fatalf("schedule channel is not the service chat %q: %s", want, recorder.Body.String())
+	}
+}
+
+func writeAgentShellScripts(t *testing.T, agentsDir, name, global, own string) {
+	t.Helper()
+	layout := agentdir.New(agentsDir, name)
+	if err := os.MkdirAll(layout.Root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(agentsDir), "global-agent-shell.sh"), []byte(global), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(layout.ShellScriptPath(), []byte(own), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestStartScriptSourcesAgentShellScripts(t *testing.T) {
+	m, as, agentsDir, raw := newManager(t, &fakeRunner{})
+	st := script.NewStore(raw, time.Now)
+	m.cfg.Scripts = st
+	workdir := t.TempDir()
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: workdir}); err != nil {
+		t.Fatal(err)
+	}
+	writeAgentShellScripts(t, agentsDir, "worker", "export FROM_GLOBAL=g SHARED=global\n", "export SHARED=agent\n")
+	out := filepath.Join(workdir, "out")
+	_, r, err := st.CreateOnce("worker", script.CreateOnce{Name: "env", Description: "test", Command: `printf '%s %s' "$FROM_GLOBAL" "$SHARED" > ` + out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.startScript(context.Background(), agent.Agent{Name: "worker", Cwd: workdir}, r)
+	m.wg.Wait()
+	got, err := os.ReadFile(out)
+	if err != nil || string(got) != "g agent" {
+		t.Fatalf("script saw %q (err %v), want %q", got, err, "g agent")
+	}
+}
+
+func TestScriptRuntimeSourcesAgentShellScripts(t *testing.T) {
+	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	writeAgentShellScripts(t, agentsDir, "worker", "export FROM_GLOBAL=g SHARED=global\n", "export SHARED=agent\n")
+	_, env, err := m.ScriptRuntime("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(env, "FROM_GLOBAL=g") || !slices.Contains(env, "SHARED=agent") {
+		t.Fatalf("env misses the agent shell script exports: %v", env)
+	}
+
+	writeAgentShellScripts(t, agentsDir, "worker", "", "exit 3\n")
+	if _, _, err := m.ScriptRuntime("worker"); err == nil {
+		t.Fatal("a failing agent shell script did not fail the runtime")
 	}
 }

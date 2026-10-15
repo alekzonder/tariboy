@@ -627,7 +627,7 @@ and report the outcome again.
 | `run_as` | Working directory | Environment, later entries winning |
 | --- | --- | --- |
 | `queue` (default) | `TARIBOY_TASK_DIR` | the daemon's own environment, then the image's `env`, then the queue secrets; `PATH=/usr/bin:/bin` when none of them sets `PATH` |
-| `agent` | the holder's effective working directory | the daemon's own environment, the holder's environment and agent secrets (as its own background scripts get them), then the image's `env`, then the queue secrets |
+| `agent` | the holder's effective working directory | the daemon's own environment, the holder's environment and agent secrets, and the exports of the global and agent shell scripts (as its own background scripts get them), then the image's `env`, then the queue secrets |
 
 Watch scripts always run as `queue`, so they do not depend on which agent held
 the task. `run_as: agent` is for checks that inspect a worktree or a local

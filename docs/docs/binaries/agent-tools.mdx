@@ -91,7 +91,9 @@ always read as a flag, and the token after it as its value. Use the
 ## Durable scripts
 
 Scripts run shell commands in the agent's workdir without blocking its current
-iteration. Queue one run, or create a fixed-delay recurring definition:
+iteration. Like an iteration, each run first sources the global and agent shell
+scripts, so their exports, such as tokens, reach the command. Queue one run, or
+create a fixed-delay recurring definition:
 
 ```bash
 scripts/scripts.sh run health --description "Check service health" -- curl -fsS http://localhost:8080/health
