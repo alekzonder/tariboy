@@ -37,6 +37,15 @@ func TestMaintenanceCommands(t *testing.T) {
 	if _, err := h(t, "maintenance.set")(c, registry.Params{"retention-days": 7}); err == nil {
 		t.Fatal("retention-days 7 accepted")
 	}
+	if _, err := h(t, "maintenance.set")(c, registry.Params{"chat-retention-days": 3}); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := c.Maintenance.Settings(); s.ChatRetentionDays != 3 || s.RetentionDays != 120 {
+		t.Fatalf("settings = %+v, want chat retention 3", s)
+	}
+	if _, err := h(t, "maintenance.set")(c, registry.Params{"chat-retention-days": -1}); err == nil {
+		t.Fatal("chat-retention-days -1 accepted")
+	}
 
 	run, err := h(t, "maintenance.run")(c, registry.Params{})
 	if err != nil {
