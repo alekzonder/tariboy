@@ -3502,3 +3502,30 @@ func TestScriptRuntimeSourcesAgentShellScripts(t *testing.T) {
 		t.Fatal("a failing agent shell script did not fail the runtime")
 	}
 }
+
+func TestGlobalShellEnvSourcesOnlyTheGlobalScript(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("GLOBAL_SHELL_BASELINE", "base")
+	env, err := GlobalShellEnv(base)
+	if err != nil || !slices.Contains(env, "GLOBAL_SHELL_BASELINE=base") {
+		t.Fatalf("without a global script env = %v, err = %v; want the daemon environment", env, err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "global-agent-shell.sh"), []byte("export FROM_GLOBAL=g\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// An agent-shell.sh in the working directory is not an agent script here.
+	t.Chdir(base)
+	if err := os.WriteFile(filepath.Join(base, "agent-shell.sh"), []byte("exit 3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env, err = GlobalShellEnv(base)
+	if err != nil || !slices.Contains(env, "FROM_GLOBAL=g") || !slices.Contains(env, "GLOBAL_SHELL_BASELINE=base") {
+		t.Fatalf("env = %v, err = %v; want the global script exports over the daemon environment", env, err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "global-agent-shell.sh"), []byte("exit 3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GlobalShellEnv(base); err == nil {
+		t.Fatal("a failing global shell script did not fail")
+	}
+}

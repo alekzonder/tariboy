@@ -2091,27 +2091,38 @@ func (m *Manager) ScriptRuntime(agentName string) (cwd string, env []string, err
 	}
 	l := agentdir.New(m.cfg.AgentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
 	cwd = cwdOf(ag, l)
-	env, err = agentShellEnv(filepath.Dir(m.cfg.AgentsDir), l, cwd, agentScriptEnv(ag, l, secrets, ""))
+	env, err = agentShellEnv(filepath.Dir(m.cfg.AgentsDir), l.ShellScriptPath(), cwd, agentScriptEnv(ag, l, secrets, ""))
 	if err != nil {
 		return "", nil, fmt.Errorf("agent shell scripts of agent %q: %w", agentName, err)
 	}
 	return cwd, env, nil
 }
 
+// GlobalShellEnv returns the daemon environment as global-agent-shell.sh under
+// baseDir leaves it: the environment of workflow scripts that run as the queue.
+func GlobalShellEnv(baseDir string) ([]string, error) {
+	env, err := agentShellEnv(baseDir, "", baseDir, os.Environ())
+	if err != nil {
+		return nil, fmt.Errorf("global agent shell script: %w", err)
+	}
+	return env, nil
+}
+
 // agentShellEnv returns env as the global and agent shell scripts leave it
-// after they are sourced the way a harness launch sources them.
-func agentShellEnv(baseDir string, l agentdir.Layout, cwd string, env []string) ([]string, error) {
+// after they are sourced the way a harness launch sources them. An empty
+// agentScript sources the global script only.
+func agentShellEnv(baseDir, agentScript, cwd string, env []string) ([]string, error) {
 	_, globalErr := os.Stat(filepath.Join(baseDir, "global-agent-shell.sh"))
-	_, agentErr := os.Stat(l.ShellScriptPath())
-	if globalErr != nil && agentErr != nil {
+	_, agentErr := os.Stat(agentScript)
+	if globalErr != nil && (agentScript == "" || agentErr != nil) {
 		return env, nil
 	}
 	bash, err := harness.FindExecutable("bash", env, cwd)
 	if err != nil {
 		return nil, errors.New("bash is required for agent shell scripts")
 	}
-	dump := []string{bash, "-c", `for n in $(compgen -e); do printf '%s=%s\0' "$n" "${!n}"; done`}
-	argv := agentShellCommand(bash, baseDir, l, dump)
+	argv := []string{bash, "-c", agentShellPrelude, "tariboy-agent-shell", filepath.Join(baseDir, "global-agent-shell.sh"), agentScript,
+		bash, "-c", `for n in $(compgen -e); do printf '%s=%s\0' "$n" "${!n}"; done`}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir, cmd.Env = cwd, env
 	out, err := cmd.Output()

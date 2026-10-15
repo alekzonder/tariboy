@@ -309,6 +309,8 @@ func Run(ctx context.Context, o Options) error {
 	taskHub := tasks.NewHub(taskService)
 	taskService.SetHub(taskHub)
 	taskService.SetRunBaseDir(p.Base)
+	globalEnv := func() ([]string, error) { return loop.GlobalShellEnv(p.Base) }
+	taskService.SetGlobalEnv(globalEnv)
 	taskService.SetLogger(log)
 	taskPublisher := tasknotify.New(st.DB, channelBus, time.Now, log)
 	goalReconciler := taskgoal.NewReconciler(taskgoal.ReconcilerConfig{
@@ -873,7 +875,7 @@ func Run(ctx context.Context, o Options) error {
 	workflowRunWake, stopWorkflowRunWake := taskHub.Subscribe()
 	workflowRunner := &workflowrun.Supervisor{
 		Jobs: taskService, Sources: taskService, Images: workflowImages.Store, BaseDir: p.Base,
-		BaseEnv: os.Environ, AgentRuntime: manager.ScriptRuntime,
+		BaseEnv: globalEnv, AgentRuntime: manager.ScriptRuntime,
 		Clock: time.Now, Wake: workflowRunWake, Log: log,
 	}
 	go func() {

@@ -66,7 +66,7 @@ type Supervisor struct {
 	Sources      SourceJobs // optional; nil runs no workflow sources
 	Images       *workflowimage.Store
 	BaseDir      string
-	BaseEnv      func() []string // daemon baseline
+	BaseEnv      func() ([]string, error) // daemon baseline after global-agent-shell.sh
 	AgentRuntime func(agent string) (cwd string, env []string, err error)
 	Clock        func() time.Time
 	Wake         <-chan struct{} // optional nudge
@@ -512,7 +512,9 @@ func (w *worker) prepare(job tasks.RunJob) (Spec, string) {
 	} else {
 		cwd = stateDir
 		if w.s.BaseEnv != nil {
-			baseline = w.s.BaseEnv()
+			if baseline, err = w.s.BaseEnv(); err != nil {
+				return Spec{}, fmt.Sprintf("cannot prepare the environment of check %s: %v", run.Script, err)
+			}
 		}
 	}
 

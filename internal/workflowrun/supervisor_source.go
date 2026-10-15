@@ -225,7 +225,9 @@ func (w *worker) prepareSource(job tasks.SourceJob, id int64) (Spec, string) {
 	runDir := tasks.SourceRunDir(base, job.Queue, job.Source, id)
 	var baseline []string
 	if w.s.BaseEnv != nil {
-		baseline = w.s.BaseEnv()
+		if baseline, err = w.s.BaseEnv(); err != nil {
+			return Spec{}, fmt.Sprintf("cannot prepare the environment of source %s: %v", job.Source, err)
+		}
 	}
 	reserved := append(slices.Clone(protocolNames), sourceNames...)
 	env := mergeEnv(

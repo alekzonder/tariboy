@@ -30,7 +30,7 @@ const renderIt = () => render(<MemoryRouter initialEntries={["/servers/h1/tasks"
 beforeEach(() => {
   vi.resetAllMocks()
   api.listWorkflowImages.mockResolvedValue(images)
-  api.listQueueSecrets.mockResolvedValue([])
+  api.listQueueSecrets.mockResolvedValue({ secrets: [], global_env: [] })
   api.listQueueSources.mockResolvedValue([])
 })
 
@@ -76,6 +76,8 @@ it("binds NAME:TAG with revision 0 when unbound", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Bind" }))
   await waitFor(() => expect(api.setQueueWorkflow).toHaveBeenCalledWith("REL", "release:latest", 0, remoteTarget))
   expect(await screen.findByText(digest.slice(0, 12))).toBeInTheDocument()
+  // The new workflow requires other secrets, so the global env names are read again.
+  await waitFor(() => expect(api.listQueueSecrets).toHaveBeenCalledTimes(2))
 })
 
 it("sends the current revision and reloads on a revision conflict", async () => {

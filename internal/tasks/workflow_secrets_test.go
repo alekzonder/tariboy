@@ -222,6 +222,65 @@ func TestSetQueueWorkflowRequiresItsSecrets(t *testing.T) {
 	}
 }
 
+func TestQueueWorkflowSecretsMayComeFromTheGlobalEnv(t *testing.T) {
+	ctx := context.Background()
+	svc, actor := workflowFixture(t)
+	digest := seedBindingImage(t, svc, "flow", "1", "developers")
+	requireSecrets(t, svc, digest, "GH_TOKEN", "ZED_TOKEN", "EMPTY")
+	mustRebindPool(t, svc, actor, "developers", []string{"dev-1"}, 0)
+	svc.SetGlobalEnv(func() ([]string, error) {
+		return []string{"GH_TOKEN=global", "EMPTY=", "UNRELATED=x"}, nil
+	})
+	// Neither the queue nor the global env holds ZED_TOKEN; an empty value is no value.
+	_, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow:1", 0)
+	var domain *Error
+	if !errors.As(err, &domain) || domain.Code != "workflow_secret_missing" ||
+		!reflect.DeepEqual(domain.Data["secrets"], []string{"EMPTY", "ZED_TOKEN"}) {
+		t.Fatalf("missing secrets error = %#v", err)
+	}
+	for _, key := range []string{"ZED_TOKEN", "EMPTY", "GH_TOKEN"} {
+		if err := svc.SetQueueSecret(ctx, actor, "DEV", key, "v"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := svc.RemoveQueueSecret(ctx, actor, "DEV", "GH_TOKEN"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow:1", 0); err != nil {
+		t.Fatalf("bind with GH_TOKEN in the global env: %v", err)
+	}
+	names, err := svc.QueueSecretsInGlobalEnv(ctx, actor, "DEV")
+	if err != nil || !reflect.DeepEqual(names, []string{"GH_TOKEN"}) {
+		t.Fatalf("global env names = %v, %v", names, err)
+	}
+	// A queue value may override the global one and go again while it is bound.
+	if err := svc.SetQueueSecret(ctx, actor, "DEV", "GH_TOKEN", "queue"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RemoveQueueSecret(ctx, actor, "DEV", "GH_TOKEN"); err != nil {
+		t.Fatalf("remove of a required secret the global env holds: %v", err)
+	}
+	if err := svc.RemoveQueueSecret(ctx, actor, "DEV", "ZED_TOKEN"); ErrorCode(err) != "workflow_secret_missing" {
+		t.Fatalf("remove of a required secret only the queue holds = %v", err)
+	}
+	svc.SetGlobalEnv(func() ([]string, error) { return nil, errors.New("global agent shell script: exit status 3") })
+	if _, err := svc.QueueSecretsInGlobalEnv(ctx, actor, "DEV"); err == nil || !strings.Contains(err.Error(), "exit status 3") {
+		t.Fatalf("a failing global env = %v", err)
+	}
+	if _, err := svc.QueueSecretsInGlobalEnv(ctx, AgentActor("dev-1"), "DEV"); ErrorCode(err) != "forbidden" {
+		t.Fatal("an agent read the global env names")
+	}
+}
+
+func TestQueueSecretsInGlobalEnvOfAnUnboundQueueIsEmpty(t *testing.T) {
+	svc, actor := workflowFixture(t)
+	svc.SetGlobalEnv(func() ([]string, error) { return []string{"GH_TOKEN=global"}, nil })
+	names, err := svc.QueueSecretsInGlobalEnv(context.Background(), actor, "DEV")
+	if err != nil || len(names) != 0 {
+		t.Fatalf("names = %v, %v", names, err)
+	}
+}
+
 func TestSetQueueWorkflowReportsPoolsBeforeSecrets(t *testing.T) {
 	ctx := context.Background()
 	svc, actor := workflowFixture(t)

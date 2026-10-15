@@ -152,8 +152,8 @@ describe("workflow task client", () => {
   })
 
   it("lists, sets, and removes queue secrets without reading values", async () => {
-    apiOn.mockResolvedValue({ secrets: [{ key: "TOKEN", updated_at: "t" }], count: 1 })
-    expect(await listQueueSecrets("DEV", remote)).toEqual([{ key: "TOKEN", updated_at: "t" }])
+    apiOn.mockResolvedValue({ secrets: [{ key: "TOKEN", updated_at: "t" }], count: 1, global_env: ["GH_TOKEN"] })
+    expect(await listQueueSecrets("DEV", remote)).toEqual({ secrets: [{ key: "TOKEN", updated_at: "t" }], global_env: ["GH_TOKEN"] })
     expect(lastCall()).toEqual([remote, "GET", "/api/task-queues/DEV/secrets", undefined])
     apiOn.mockResolvedValue({ queue: "DEV", key: "A B", updated_at: "t" })
     expect(await setQueueSecret("DEV", "A B", "s3cret", remote)).toEqual({ queue: "DEV", key: "A B", updated_at: "t" })
