@@ -1,3 +1,31 @@
+## [0.79.0] - 2026-10-15
+
+### Added
+
+- Each server stores a Codex approval mode. `yolo` (default) runs Codex with
+  `--yolo`; `approve-for-me` runs it with `--approve-for-me` (workspace-write
+  sandbox with automatic approval review). Read and change it with
+  `tariboy harness codex-approval get|set`
+  (`GET`/`POST /api/harnesses/codex/approval-mode`) or the per-host Codex card
+  in Settings → General. Batch and interactive Codex both use it.
+- Desktop installs and updates Apple Silicon macOS (Darwin arm64) servers over
+  SSH. Install picks the bundled build by `uname -s` and `uname -m`; Intel Macs
+  and other platforms stay blocked with nothing changed on the host.
+- The task list priority is a P0–P3 menu on editable tasks that saves only the
+  priority, and the Pri column now comes first in every task table.
+
+### Fixed
+
+- Forwarded Telegram messages reach agents: media captions are used as text,
+  the forward source is named (with a post link for public channels), the
+  message carries `data.telegram_forward`, and forwarded text never runs as a
+  command.
+- The agent dialog says why **Create agent** is disabled, keeps image manifest
+  errors visible until the host or image changes, and retries the manifest.
+- The task detail header stays reachable when the description is long.
+
+[0.79.0]: https://github.com/alekzonder/tariboy/compare/v0.78.0...v0.79.0
+
 ## [0.78.0] - 2026-10-12
 
 ### Added
