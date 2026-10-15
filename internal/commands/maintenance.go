@@ -51,6 +51,7 @@ func maintenanceSet() registry.Command {
 			{Name: "time", Flag: "time", Type: registry.String, Help: "nightly run time HH:MM, daemon host local time"},
 			{Name: "keep-backups", Flag: "keep-backups", Type: registry.Int, Help: "number of database backups to keep (>= 1)"},
 			{Name: "retention-days", Flag: "retention-days", Type: registry.Int, Help: "delete data older than N days (0 = keep everything, else >= 31)"},
+			{Name: "chat-retention-days", Flag: "chat-retention-days", Type: registry.Int, Help: "delete chat history (all bus messages) older than N days (0 = follow retention-days)"},
 			{Name: "compact", Flag: "compact", Type: registry.Bool, Help: "VACUUM the database after cleanup"},
 			{Name: "compact-threshold-pct", Flag: "compact-threshold-pct", Type: registry.Int, Help: "VACUUM only when at least this percent of pages is free"},
 		},
@@ -75,6 +76,7 @@ func maintenanceSet() registry.Command {
 			}
 			set.KeepBackups = intOf(p, "keep-backups", set.KeepBackups)
 			set.RetentionDays = intOf(p, "retention-days", set.RetentionDays)
+			set.ChatRetentionDays = intOf(p, "chat-retention-days", set.ChatRetentionDays)
 			set.CompactThresholdPct = intOf(p, "compact-threshold-pct", set.CompactThresholdPct)
 			if err := set.Validate(); err != nil {
 				return nil, api.UserError{Code: "bad_value", Msg: err.Error()}

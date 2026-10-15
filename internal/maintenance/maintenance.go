@@ -1,7 +1,8 @@
 // Package maintenance runs the daemon's nightly database upkeep: a consistent
 // backup of the whole tariboyd.db, then archiving and pruning of agent
 // iterations past their retention policies, then deletion of data older than
-// the retention period, then an optional VACUUM that returns the freed space.
+// the retention period and of chat history older than the chat retention
+// period, then an optional VACUUM that returns the freed space.
 // Cleanup never runs without a fresh backup.
 package maintenance
 
@@ -25,12 +26,15 @@ import (
 
 // Settings is the operator policy, persisted as JSON in daemon_config.
 type Settings struct {
-	Enabled             bool   `json:"enabled"`
-	Time                string `json:"time"` // HH:MM, daemon host local time
-	KeepBackups         int    `json:"keep_backups"`
-	RetentionDays       int    `json:"retention_days"` // 0 = never delete
-	Compact             bool   `json:"compact"`
-	CompactThresholdPct int    `json:"compact_threshold_pct"`
+	Enabled       bool   `json:"enabled"`
+	Time          string `json:"time"` // HH:MM, daemon host local time
+	KeepBackups   int    `json:"keep_backups"`
+	RetentionDays int    `json:"retention_days"` // 0 = never delete
+	// ChatRetentionDays expires bus messages (all chat history) sooner than
+	// RetentionDays; 0 leaves them to RetentionDays.
+	ChatRetentionDays   int  `json:"chat_retention_days"`
+	Compact             bool `json:"compact"`
+	CompactThresholdPct int  `json:"compact_threshold_pct"`
 }
 
 // MinRetentionDays keeps every Usage row the calendar-month budget window
@@ -38,7 +42,7 @@ type Settings struct {
 const MinRetentionDays = 31
 
 func DefaultSettings() Settings {
-	return Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 90, Compact: true, CompactThresholdPct: 10}
+	return Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 90, ChatRetentionDays: 7, Compact: true, CompactThresholdPct: 10}
 }
 
 func (s Settings) Validate() error {
@@ -50,6 +54,9 @@ func (s Settings) Validate() error {
 	}
 	if s.RetentionDays < 0 || (s.RetentionDays > 0 && s.RetentionDays < MinRetentionDays) {
 		return fmt.Errorf("retention_days must be 0 (keep everything) or >= %d", MinRetentionDays)
+	}
+	if s.ChatRetentionDays < 0 {
+		return errors.New("chat_retention_days must be >= 0")
 	}
 	if s.CompactThresholdPct < 0 || s.CompactThresholdPct > 100 {
 		return errors.New("compact_threshold_pct must be between 0 and 100")
@@ -190,9 +197,18 @@ func (s *Service) runLocked(res *Result) error {
 			errs = append(errs, fmt.Errorf("iterations: %w", err))
 		}
 	}
+	// Messages expire at the more recent of the two cutoffs.
+	now := s.now().UTC()
+	var cutoff, msgCutoff time.Time
 	if set.RetentionDays > 0 {
-		cutoff := s.now().UTC().AddDate(0, 0, -set.RetentionDays).Format(time.RFC3339Nano)
-		errs = append(errs, s.cleanup(cutoff, res.Deleted))
+		cutoff = now.AddDate(0, 0, -set.RetentionDays)
+		msgCutoff = cutoff
+	}
+	if c := now.AddDate(0, 0, -set.ChatRetentionDays); set.ChatRetentionDays > 0 && c.After(msgCutoff) {
+		msgCutoff = c
+	}
+	if !msgCutoff.IsZero() {
+		errs = append(errs, s.cleanup(cutoff, msgCutoff, res.Deleted))
 	}
 	if set.Compact {
 		res.Compacted, err = s.compact(set.CompactThresholdPct)
@@ -269,9 +285,11 @@ func older(col string) string {
 }
 
 // cleanup deletes each category in its own transaction, so one failure rolls
-// back only that category.
-func (s *Service) cleanup(cutoff string, deleted map[string]int64) error {
+// back only that category. Messages use msgCutoff; a zero cutoff deletes
+// nothing else.
+func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]int64) error {
 	var errs []error
+	cutoff, msgCutoff := cutoffAt.Format(time.RFC3339Nano), msgCutoffAt.Format(time.RFC3339Nano)
 	step := func(name string, fn func(tx *sql.Tx) (int64, error)) bool {
 		tx, err := s.st.DB.Begin()
 		if err != nil {
@@ -300,6 +318,10 @@ func (s *Service) cleanup(cutoff string, deleted map[string]int64) error {
 			return r.RowsAffected()
 		}
 	}
+	if cutoffAt.IsZero() {
+		step("messages", func(tx *sql.Tx) (int64, error) { return purgeMessages(tx, msgCutoff) })
+		return errors.Join(errs...)
+	}
 	var purged []string
 	if step("tasks", func(tx *sql.Tx) (n int64, err error) {
 		n, purged, err = purgeTasks(tx, cutoff)
@@ -324,7 +346,7 @@ func (s *Service) cleanup(cutoff string, deleted map[string]int64) error {
 		}
 		return r.RowsAffected()
 	})
-	step("messages", func(tx *sql.Tx) (int64, error) { return purgeMessages(tx, cutoff) })
+	step("messages", func(tx *sql.Tx) (int64, error) { return purgeMessages(tx, msgCutoff) })
 	step("events", simple(`DELETE FROM events WHERE `+older("ts")))
 	step("task_idempotency", simple(`DELETE FROM task_idempotency WHERE `+older("created_at")))
 	return errors.Join(errs...)

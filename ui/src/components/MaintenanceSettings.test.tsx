@@ -16,7 +16,8 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 }));
 
 const defaults: MaintenanceSettings = {
-  enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, compact: true, compact_threshold_pct: 10,
+  enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, chat_retention_days: 7, compact: true,
+  compact_threshold_pct: 10,
 };
 const lastRun = {
   started_at: "2026-09-24T03:00:00Z", finished_at: "2026-09-24T03:00:09Z", trigger: "scheduled",
@@ -38,6 +39,7 @@ describe("MaintenanceSettingsCard", () => {
     expect(await screen.findByLabelText("Nightly run time")).toHaveValue("03:00");
     expect(screen.getByLabelText("Keep data for (days)")).toHaveValue("90");
     expect(screen.getByLabelText("Backups to keep")).toHaveValue("7");
+    expect(screen.getByLabelText("Keep chat history for (days)")).toHaveValue("7");
     expect(screen.getByRole("switch", { name: "Nightly backup and cleanup" })).toBeChecked();
     expect(screen.getByText(/tasks 4/)).toBeInTheDocument();
     expect(screen.getByText(/150\.0 MiB → 100\.0 MiB/)).toBeInTheDocument();
@@ -48,9 +50,11 @@ describe("MaintenanceSettingsCard", () => {
     const target = { id: "r", label: "R", baseURL: "https://r.test", token: "t" };
     render(<MaintenanceSettingsCard target={target} />);
     fireEvent.change(await screen.findByLabelText("Keep data for (days)"), { target: { value: "120" } });
+    fireEvent.change(screen.getByLabelText("Keep chat history for (days)"), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("switch", { name: "Compact after cleanup" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(setMaintenanceOn).toHaveBeenCalledWith(target, { ...defaults, retention_days: 120, compact: false }));
+    await waitFor(() => expect(setMaintenanceOn).toHaveBeenCalledWith(
+      target, { ...defaults, retention_days: 120, chat_retention_days: 3, compact: false }));
   });
 
   it("edits the server-wide iteration retention defaults", async () => {

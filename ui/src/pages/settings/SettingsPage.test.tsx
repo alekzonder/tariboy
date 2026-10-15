@@ -29,7 +29,7 @@ beforeEach(() => {
   vi.mocked(getIterationRetentionDefaultOn).mockResolvedValue({ keep_iterations: 0, keep_days: 0, max_bytes: 0 });
   vi.mocked(setGlobalAgentShellScriptOn).mockResolvedValue({ saved: true });
   vi.mocked(getMaintenanceOn).mockResolvedValue({
-    settings: { enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, compact: true, compact_threshold_pct: 10 },
+    settings: { enabled: true, time: "03:00", keep_backups: 7, retention_days: 90, chat_retention_days: 7, compact: true, compact_threshold_pct: 10 },
     last_run: null,
   });
 });

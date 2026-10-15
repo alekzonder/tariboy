@@ -339,6 +339,7 @@ export interface MaintenanceSettings {
   time: string;
   keep_backups: number;
   retention_days: number;
+  chat_retention_days: number;
   compact: boolean;
   compact_threshold_pct: number;
 }
@@ -361,6 +362,7 @@ export const setMaintenanceOn = (target: ApiTarget, settings: MaintenanceSetting
     time: settings.time,
     "keep-backups": settings.keep_backups,
     "retention-days": settings.retention_days,
+    "chat-retention-days": settings.chat_retention_days,
     compact: settings.compact,
     "compact-threshold-pct": settings.compact_threshold_pct,
   });

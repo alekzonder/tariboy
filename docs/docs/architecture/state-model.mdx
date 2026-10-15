@@ -112,7 +112,7 @@ A revoked subscription is skipped by fan-out and still owns its past deliveries.
 The invariant underneath all of it: **`messages` rows are never rewritten.**
 No chat operation re-channels, edits or deletes a published message; only
 [nightly retention](#nightly-backup-and-data-retention) deletes fully delivered
-messages older than the retention period. That is
+messages older than the chat history period. That is
 what lets pre-chats history stay readable without a data migration — a personal
 chat carries `legacy_agent`, and its feed unions the chat channel with the old
 projection of `agent:<a>:inbox` and `user:<customer>` merged by time — and it is
@@ -129,7 +129,10 @@ chat reads filter on it instead of parsing `data`.
 
 Maintenance settings are one JSON value under `maintenance` in `daemon_config`;
 a missing value means the defaults: enabled, 03:00 daemon-host local time, 7
-backups, 90 days of retention, compaction on at 10% free pages. The last run's
+backups, 90 days of retention, 7 days of chat history, compaction on at 10%
+free pages. A field missing from a stored value takes its default, so a host
+upgraded from a release without chat history retention starts deleting chat
+history older than 7 days on its next run. The last run's
 result (times, trigger, backup path, rows deleted per category, logical size
 before and after, compaction, error) is stored under `maintenance_last_run`.
 Operators change both with **Settings → General → Backup & data retention**,
@@ -141,7 +144,9 @@ A run, scheduled or manual, is serialized and always starts with a backup:
 number of those exact names are kept; other files in the directory are never
 rotated. **If the backup fails, nothing is deleted.** The run then prunes agent
 iterations (see [Iteration retention](#iteration-retention)) and removes data
-older than the retention period, each category in its own transaction:
+older than the retention period, each category in its own transaction. Messages
+use the chat history period instead when it is shorter, and are deleted even
+when retention is `0`:
 
 - **Native Tasks** — only whole trees whose every task is `done` or
   `cancelled` with `completed_at` before the cutoff, with their comments,
@@ -156,8 +161,11 @@ older than the retention period, each category in its own transaction:
 - **Messages** — messages whose every delivery is acknowledged or
   dead-lettered, with those deliveries. Unacknowledged work, and messages that
   queue-trigger ingress has not consumed yet, are never deleted.
+  The cutoff is the more recent of the retention period and
+  `chat_retention_days` (any value `>= 0`; `0` leaves messages to the retention
+  period), which covers the history of every chat and every agent at once.
   This is the only path that removes `messages` rows; old chat history
-  therefore ends at the retention period.
+  therefore ends at that cutoff and stays only in the database backups.
 - **Daemon events** (`events`) and task mutation idempotency records.
 
 When compaction is on and at least the threshold share of pages is free, a

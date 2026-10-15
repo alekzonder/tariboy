@@ -88,9 +88,25 @@ func TestDefaultsWhenUnset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 90, Compact: true, CompactThresholdPct: 10}
+	want := Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 90, ChatRetentionDays: 7, Compact: true, CompactThresholdPct: 10}
 	if got != want {
 		t.Fatalf("defaults = %+v, want %+v", got, want)
+	}
+}
+
+// Settings saved before chat_retention_days existed turn it on with the
+// default.
+func TestStoredSettingsWithoutChatRetentionGetDefault(t *testing.T) {
+	svc, st, _ := open(t)
+	if err := st.ConfigSet(settingsKey, `{"enabled":true,"time":"04:00","keep_backups":3,"retention_days":60,"compact":true,"compact_threshold_pct":10}`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.Settings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ChatRetentionDays != 7 || got.RetentionDays != 60 {
+		t.Fatalf("settings = %+v", got)
 	}
 }
 
@@ -105,6 +121,7 @@ func TestSetSettingsValidates(t *testing.T) {
 		// calendar-month budget window.
 		{Time: "03:00", KeepBackups: 1, RetentionDays: 30},
 		{Time: "03:00", KeepBackups: 1, RetentionDays: 90, CompactThresholdPct: 101},
+		{Time: "03:00", KeepBackups: 1, ChatRetentionDays: -1},
 	} {
 		if err := svc.SetSettings(bad); err == nil {
 			t.Errorf("SetSettings(%+v) accepted", bad)
@@ -357,6 +374,90 @@ func TestCleanupAIRequestsMessagesAndEvents(t *testing.T) {
 	}
 }
 
+func messageIDs(t *testing.T, db *sql.DB) string {
+	t.Helper()
+	rows, err := db.Query(`SELECT id FROM messages ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(ids, ",")
+}
+
+func addChatMessages(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, m := range []struct{ id, ts string }{{"old", ts(8)}, {"recent", ts(6)}, {"pending", ts(8)}} {
+		exec(t, db, `INSERT INTO messages(id,channel,ts) VALUES (?,'chat:dm:a',?)`, m.id, m.ts)
+	}
+	exec(t, db, `INSERT INTO deliveries(subscription_id,message_id,acked_at,dlq) VALUES
+		('s','old',?,0),('s','recent',?,0),('s','pending',NULL,0)`, ts(8), ts(6))
+	exec(t, db, `INSERT INTO ai_requests(id,ts) VALUES ('usage',?)`, ts(8))
+}
+
+// Chat history has its own shorter period that applies even when general
+// retention keeps everything, and leaves the other data alone.
+func TestChatRetentionPurgesOnlyOldAckedMessages(t *testing.T) {
+	svc, st, _ := open(t)
+	if err := svc.SetSettings(Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 0, ChatRetentionDays: 7}); err != nil {
+		t.Fatal(err)
+	}
+	addChatMessages(t, st.DB)
+
+	res, err := svc.Run()
+	if err != nil || res.Error != "" {
+		t.Fatalf("run: %+v %v", res, err)
+	}
+	if got := messageIDs(t, st.DB); got != "pending,recent" {
+		t.Errorf("messages = %s, want pending,recent", got)
+	}
+	if n := count(t, st.DB, `SELECT COUNT(*) FROM deliveries`); n != 2 {
+		t.Errorf("deliveries = %d, want 2", n)
+	}
+	if n := count(t, st.DB, `SELECT COUNT(*) FROM ai_requests`); n != 1 {
+		t.Errorf("ai_requests = %d, want 1", n)
+	}
+	if res.Deleted["messages"] != 1 {
+		t.Errorf("deleted = %v", res.Deleted)
+	}
+}
+
+// With both periods set, messages expire at the shorter one.
+func TestChatRetentionIsShorterThanGeneralRetention(t *testing.T) {
+	svc, st, _ := open(t)
+	addChatMessages(t, st.DB) // default settings: 90 days, chat 7 days
+	if _, err := svc.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if got := messageIDs(t, st.DB); got != "pending,recent" {
+		t.Errorf("messages = %s, want pending,recent", got)
+	}
+}
+
+func TestChatRetentionZeroFollowsGeneralRetention(t *testing.T) {
+	svc, st, _ := open(t)
+	if err := svc.SetSettings(Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 0, ChatRetentionDays: 0}); err != nil {
+		t.Fatal(err)
+	}
+	addChatMessages(t, st.DB)
+	if _, err := svc.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if got := messageIDs(t, st.DB); got != "old,pending,recent" {
+		t.Errorf("messages = %s, want old,pending,recent", got)
+	}
+}
+
 func TestRetentionZeroKeepsEverything(t *testing.T) {
 	svc, st, _ := open(t)
 	if err := svc.SetSettings(Settings{Enabled: true, Time: "03:00", KeepBackups: 7, RetentionDays: 0}); err != nil {
@@ -374,6 +475,7 @@ func TestRetentionZeroKeepsEverything(t *testing.T) {
 func TestFailedBackupSkipsCleanup(t *testing.T) {
 	svc, st, backups := open(t)
 	exec(t, st.DB, `INSERT INTO ai_requests(id,ts) VALUES ('old',?)`, ts(100))
+	exec(t, st.DB, `INSERT INTO messages(id,channel,ts) VALUES ('old','chat:dm:a',?)`, ts(100))
 	// A regular file where the backup directory should be makes the backup fail.
 	if err := os.MkdirAll(filepath.Dir(backups), 0o700); err != nil {
 		t.Fatal(err)
@@ -387,6 +489,9 @@ func TestFailedBackupSkipsCleanup(t *testing.T) {
 	}
 	if n := count(t, st.DB, `SELECT COUNT(*) FROM ai_requests`); n != 1 {
 		t.Fatalf("cleanup ran after failed backup")
+	}
+	if n := count(t, st.DB, `SELECT COUNT(*) FROM messages`); n != 1 {
+		t.Fatalf("chat history purged after failed backup")
 	}
 	if last, _ := svc.LastResult(); last == nil || last.Error == "" {
 		t.Fatalf("failure not recorded: %+v", last)

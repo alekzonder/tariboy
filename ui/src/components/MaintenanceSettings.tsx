@@ -89,8 +89,9 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
         <CardDescription>
           Every night the whole database is backed up; after a successful backup, agent iterations
           beyond the iteration limits are archived with their database rows and deleted, finished tasks,
-          AI proxy usage, delivered messages, and events older than the retention period are deleted,
-          and the database is compacted.
+          AI proxy usage, and events older than the retention period are deleted, delivered chat
+          messages of all agents older than the chat history period are deleted, and the database
+          is compacted.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -111,6 +112,12 @@ export function MaintenanceSettingsCard({ target }: { target: ApiTarget }) {
                 <Input id="maint-days" inputMode="numeric" className="h-9" value={String(form.retention_days)}
                   aria-describedby="maint-days-help" onChange={(e) => patch({ retention_days: num(e.target.value) })} />
                 <p id="maint-days-help" className="text-xs text-muted-foreground">0 keeps everything; otherwise at least 31.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="maint-chat-days">Keep chat history for (days)</Label>
+                <Input id="maint-chat-days" inputMode="numeric" className="h-9" value={String(form.chat_retention_days)}
+                  aria-describedby="maint-chat-days-help" onChange={(e) => patch({ chat_retention_days: num(e.target.value) })} />
+                <p id="maint-chat-days-help" className="text-xs text-muted-foreground">0 keeps chat history for the data period.</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maint-backups">Backups to keep</Label>
