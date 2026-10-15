@@ -1,3 +1,21 @@
+## [0.80.0] - 2026-10-15
+
+### Added
+
+- The operator can run the checks of a failed workflow transition request
+  again with `ttasks workflow retry KEY [REQUEST]`,
+  `POST /api/tasks/{key}/workflow/requests/{id}/retry`, or **Retry** on the
+  Failed notice of the Desktop workflow panel. Only the task's latest request
+  in its current visit can be retried, and only when it failed.
+
+### Fixed
+
+- Durable script runs and `run_as: agent` workflow checks now source the global
+  and per-agent shell scripts, so their exports (such as tokens from a sourced
+  secrets file) reach those commands.
+
+[0.80.0]: https://github.com/alekzonder/tariboy/compare/v0.79.0...v0.80.0
+
 ## [0.79.0] - 2026-10-15
 
 ### Added
