@@ -35,6 +35,24 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 	if err := validateActor(actor); err != nil {
 		return TransitionRequest{}, err
 	}
+	return s.advance(ctx, actor, key, in, 0)
+}
+
+// RetryTransitionRequest runs the checks of failed request id again as a new
+// request with the same outcome, message and requester. Customer only, and
+// only for the task's latest request made in its open visit: a failure is a
+// broken script or environment the customer may have fixed since, while a
+// rejection is the holder's to answer.
+func (s *Service) RetryTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
+	if err := requireWorkflowOperator(actor); err != nil {
+		return TransitionRequest{}, err
+	}
+	return s.advance(ctx, actor, key, AdvanceInput{}, id)
+}
+
+// advance records a transition request. With retryOf set it repeats that
+// failed request in place of in, on behalf of its requester.
+func (s *Service) advance(ctx context.Context, actor Actor, key string, in AdvanceInput, retryOf int64) (TransitionRequest, error) {
 	in.Outcome = strings.TrimSpace(in.Outcome)
 	if len(in.Message) > maxTransitionMessageBytes {
 		return TransitionRequest{}, domainError(http.StatusBadRequest, "invalid_message",
@@ -52,6 +70,12 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 	if err := requireOpenWorkflow(task); err != nil {
 		return TransitionRequest{}, err
 	}
+	requester := actor.Principal
+	if retryOf != 0 {
+		if in, requester, err = retriedRequestTx(ctx, tx, task, retryOf); err != nil {
+			return TransitionRequest{}, err
+		}
+	}
 	if in.From = strings.TrimSpace(in.From); in.From != "" && in.From != task.WorkflowStatus {
 		changed := domainError(http.StatusConflict, "status_changed",
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", not "+in.From).(*Error)
@@ -63,9 +87,13 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 		return TransitionRequest{}, domainError(http.StatusConflict, "status_unknown",
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
 	}
-	owns, err := ownsStatusTx(ctx, tx, task, manifest, status, actor)
-	if err != nil {
-		return TransitionRequest{}, err
+	// A retry is the customer's override; the requester owned the status when
+	// it first asked.
+	owns := retryOf != 0
+	if !owns {
+		if owns, err = ownsStatusTx(ctx, tx, task, manifest, status, actor); err != nil {
+			return TransitionRequest{}, err
+		}
 	}
 	if !owns {
 		return TransitionRequest{}, domainError(http.StatusForbidden, "not_holder",
@@ -124,7 +152,7 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO task_transition_requests(task_id, visit_id, outcome, message, actor, state, created_at)
 		VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
-		task.ID, visitID, in.Outcome, in.Message, actor.Principal, now)
+		task.ID, visitID, in.Outcome, in.Message, requester, now)
 	if err != nil {
 		return TransitionRequest{}, err
 	}
@@ -137,14 +165,18 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 		return TransitionRequest{}, err
 	}
 	request := TransitionRequest{ID: id, TaskKey: task.Key, Outcome: in.Outcome, Message: in.Message,
-		Actor: actor.Principal, State: "applied", CreatedAt: now, FinishedAt: now}
+		Actor: requester, State: "applied", CreatedAt: now, FinishedAt: now}
 	if len(transition.Checks) > 0 {
 		request.State, request.FinishedAt = "pending", ""
 		request.WaitSeconds = checkWaitSeconds(transition)
 	}
-	if _, err := appendEventTx(ctx, tx, task, "workflow.transition_requested", actor, map[string]any{
-		"request_id": id, "status": status.ID, "outcome": in.Outcome, "actor": actor.Principal, "state": request.State,
-	}, now); err != nil {
+	payload := map[string]any{
+		"request_id": id, "status": status.ID, "outcome": in.Outcome, "actor": requester, "state": request.State,
+	}
+	if retryOf != 0 {
+		payload["retry_of"], payload["retried_by"] = retryOf, actor.Principal
+	}
+	if _, err := appendEventTx(ctx, tx, task, "workflow.transition_requested", actor, payload, now); err != nil {
 		return TransitionRequest{}, err
 	}
 	// A transition with checks stays pending; the worker runs the first check
@@ -172,6 +204,38 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 	}
 	s.signal()
 	return request, nil
+}
+
+// retriedRequestTx returns the outcome, message and requester of failed
+// request id, refusing a request that is not the task's latest or was made in
+// an earlier visit.
+func retriedRequestTx(ctx context.Context, tx *sql.Tx, task Task, id int64) (AdvanceInput, string, error) {
+	var in AdvanceInput
+	var requester, state string
+	var latest, current bool
+	err := tx.QueryRowContext(ctx, `
+		SELECT r.outcome, r.message, r.actor, r.state,
+			r.id = (SELECT MAX(id) FROM task_transition_requests WHERE task_id = r.task_id),
+			v.left_at = ''
+		FROM task_transition_requests r JOIN task_status_visits v ON v.id = r.visit_id
+		WHERE r.task_id = ? AND r.id = ?`, task.ID, id).
+		Scan(&in.Outcome, &in.Message, &requester, &state, &latest, &current)
+	if err == sql.ErrNoRows {
+		return in, "", domainError(http.StatusNotFound, "not_found",
+			fmt.Sprintf("transition request %d of %s not found", id, task.Key))
+	}
+	if err != nil {
+		return in, "", err
+	}
+	if state != "failed" {
+		return in, "", domainError(http.StatusConflict, "request_not_failed",
+			fmt.Sprintf("transition request %d of %s is %s; only a failed request can be retried", id, task.Key, state))
+	}
+	if !latest || !current {
+		return in, "", domainError(http.StatusConflict, "request_superseded",
+			fmt.Sprintf("transition request %d of %s is no longer the task's latest request in its current status", id, task.Key))
+	}
+	return in, requester, nil
 }
 
 // applyTransitionTx applies a transition request: it marks request requestID

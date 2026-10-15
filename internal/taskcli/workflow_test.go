@@ -72,6 +72,7 @@ func TestOperatorWorkflowCommandsUseRestRoutes(t *testing.T) {
 		{[]string{"workflow", "move", "DEV-1", "--to", "develop", "--reason", "regression"}, "POST", "/api/tasks/DEV-1/workflow/move", map[string]any{"to": "develop", "reason": "regression"}},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", "continue"}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "continue"}},
 		{[]string{"workflow", "resume", "DEV-1", "--decision", " release "}, "POST", "/api/tasks/DEV-1/workflow/resume", map[string]any{"decision": "release"}},
+		{[]string{"workflow", "retry", "DEV-1", "7"}, "POST", "/api/tasks/DEV-1/workflow/requests/7/retry", map[string]any{}},
 		{[]string{"cancel", "DEV-1"}, "POST", "/api/tasks/DEV-1/cancel", map[string]any{}},
 	}
 	for _, tt := range tests {
@@ -89,12 +90,26 @@ func TestOperatorWorkflowCommandsUseRestRoutes(t *testing.T) {
 	}
 }
 
+func TestWorkflowRetryDefaultsToTheLatestRequest(t *testing.T) {
+	r := &recorder{result: json.RawMessage(`{"last_request":{"id":7,"state":"failed"}}`)}
+	withCaller(t, r)
+	var errOut strings.Builder
+	if code := Run(context.Background(), []string{"workflow", "retry", "DEV-1"}, operatorEnv(t), io.Discard, &errOut); code != 0 {
+		t.Fatalf("code %d: %s", code, &errOut)
+	}
+	if len(r.calls) != 2 || r.calls[0].route != "/api/tasks/DEV-1/workflow" ||
+		r.calls[1].method != "POST" || r.calls[1].route != "/api/tasks/DEV-1/workflow/requests/7/retry" {
+		t.Fatalf("calls = %#v", r.calls)
+	}
+}
+
 func TestAgentModeRefusesOperatorOnlyWorkflowCommandsLocally(t *testing.T) {
 	r := &recorder{result: json.RawMessage(`{}`)}
 	withCaller(t, r)
 	for _, argv := range [][]string{
 		{"workflow", "move", "DEV-1", "--to", "develop", "--reason", "x"},
 		{"workflow", "resume", "DEV-1", "--decision", "continue"},
+		{"workflow", "retry", "DEV-1", "7"},
 		{"cancel", "DEV-1"},
 		{"queue", "workflow", "get", "DEV"},
 		{"queue", "workflow", "set", "DEV", "development:latest"},
@@ -123,6 +138,9 @@ func TestWorkflowCommandUsageErrors(t *testing.T) {
 		{"artifacts", "show", "DEV-1"},
 		{"workflow", "get"},
 		{"workflow", "move", "DEV-1", "--to", "develop"},
+		{"workflow", "retry"},
+		{"workflow", "retry", "DEV-1", "x"},
+		{"workflow", "retry", "DEV-1", "7", "8"},
 		{"workflow", "move", "DEV-1", "--reason", "x"},
 		{"workflow", "resume", "DEV-1"},
 		{"workflow", "resume", "DEV-1", "--decision", "restart"},

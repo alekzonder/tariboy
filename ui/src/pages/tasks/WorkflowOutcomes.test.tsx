@@ -5,7 +5,7 @@ import type { TransitionRequest } from "@/lib/tasks"
 import WorkflowOutcomes from "./WorkflowOutcomes"
 import { customerView, poolView, remoteTarget } from "./workflowFixtures"
 
-const api = vi.hoisted(() => ({ advanceTask: vi.fn(), getTransitionRequest: vi.fn() }))
+const api = vi.hoisted(() => ({ advanceTask: vi.fn(), getTransitionRequest: vi.fn(), retryTransitionRequest: vi.fn() }))
 vi.mock("@/lib/tasks", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/tasks")>(),
   ...api,
@@ -120,6 +120,27 @@ it("shows the last request's failure from the view", () => {
   const notice = screen.getByRole("alert")
   expect(notice).toHaveTextContent("Failed")
   expect(notice).toHaveTextContent("check timed out")
+})
+
+it("retries the last failed request, even in a pool status, and follows it like an advance", async () => {
+  vi.useFakeTimers()
+  api.retryTransitionRequest.mockResolvedValue(request("pending", { id: 12, wait_seconds: 30 }))
+  api.getTransitionRequest.mockResolvedValueOnce(request("applied", { id: 12 }))
+  const { onChanged } = renderOutcomes({ ...poolView, last_request: request("failed", { result_message: "GitHub answered HTTP 401" }) })
+  await act(async () => { fireEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: "Retry" })) })
+  expect(api.retryTransitionRequest).toHaveBeenCalledWith("REL-1", 11, target)
+  expect(screen.getByText("checking…")).toBeInTheDocument()
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  expect(api.getTransitionRequest).toHaveBeenCalledWith("REL-1", 12, target)
+  expect(onChanged).toHaveBeenCalledTimes(1)
+})
+
+it("offers no retry for a rejection or on a paused task", () => {
+  const { unmount } = renderOutcomes({ ...poolView, last_request: request("rejected", { result_message: "no heading" }) })
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument()
+  unmount()
+  renderOutcomes({ ...poolView, waiting_on: "pause", last_request: request("failed") })
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument()
 })
 
 it("refetches the view when another request is still pending, and when the task is paused or lacks an artifact", async () => {

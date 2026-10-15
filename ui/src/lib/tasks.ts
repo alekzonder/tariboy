@@ -564,6 +564,8 @@ export const advanceTask = (
 })
 export const getTransitionRequest = (key: string, id: number, target?: ApiTarget) =>
   call<TransitionRequest>(target, "GET", `${taskPath(key)}/workflow/requests/${id}`)
+export const retryTransitionRequest = (key: string, id: number, target?: ApiTarget) =>
+  call<TransitionRequest>(target, "POST", `${taskPath(key)}/workflow/requests/${id}/retry`, {})
 export const setTaskArtifact = (key: string, name: string, value: string, target?: ApiTarget) =>
   call<WorkflowArtifact>(target, "PUT", `${taskPath(key)}/artifacts/${encodeURIComponent(name)}`, { value })
 export const getTaskArtifactHistory = async (key: string, name: string, target?: ApiTarget) =>

@@ -250,6 +250,10 @@ func TaskOperatorCommands() []registry.Command {
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				return control.GetTransitionRequest(ctx, actor, stringParam(p, "key"), int64Param(p, "id"))
 			}),
+		taskRoute("tasks.workflow.requests.retry", "POST", "/api/tasks/{key}/workflow/requests/{id}/retry", "Run the checks of a failed transition request again",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				return control.RetryTransitionRequest(ctx, actor, stringParam(p, "key"), int64Param(p, "id"))
+			}),
 		taskRoute("tasks.workflow.runs.list", "GET", "/api/tasks/{key}/workflow/runs", "List the script runs of a workflow task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				runs, err := control.ListScriptRuns(ctx, actor, stringParam(p, "key"))
@@ -495,7 +499,7 @@ func taskHTTPResultSchema(path string) map[string]any {
 		return schemaRef("QueueWorkflowTrigger")
 	case "tasks.queue.trigger.list":
 		return listSchema("QueueWorkflowTrigger")
-	case "tasks.advance", "tasks.workflow.requests.get":
+	case "tasks.advance", "tasks.workflow.requests.get", "tasks.workflow.requests.retry":
 		return schemaRef("TransitionRequest")
 	case "tasks.workflow.runs.list":
 		return objectSchema([]string{"runs", "count"}, map[string]any{"runs": arrayOf("ScriptRun"), "count": map[string]any{"type": "integer"}})

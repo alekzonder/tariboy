@@ -53,6 +53,10 @@ func (s *workflowStub) GetTransitionRequest(_ context.Context, a tasks.Actor, ke
 	s.record(a, "request_get %s %d", key, id)
 	return tasks.TransitionRequest{ID: id, TaskKey: key, State: "pending", WaitSeconds: 90}, s.err
 }
+func (s *workflowStub) RetryTransitionRequest(_ context.Context, a tasks.Actor, key string, id int64) (tasks.TransitionRequest, error) {
+	s.record(a, "request_retry %s %d", key, id)
+	return tasks.TransitionRequest{ID: id + 1, TaskKey: key, State: "pending", WaitSeconds: 90}, s.err
+}
 func (s *workflowStub) ListScriptRuns(_ context.Context, a tasks.Actor, key string) ([]tasks.ScriptRun, error) {
 	s.record(a, "runs %s", key)
 	return []tasks.ScriptRun{{ID: 4, TaskKey: key, Kind: "check", State: "finished"}}, s.err
@@ -143,6 +147,7 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 		{"artifact show", "GET", "/api/tasks/DEV-1/artifacts/plan", nil, `artifact_show DEV-1 plan`, `"history":[`},
 		{"workflow get", "GET", "/api/tasks/DEV-1/workflow", nil, `workflow_get DEV-1`, `"status":"develop"`},
 		{"request get", "GET", "/api/tasks/DEV-1/workflow/requests/7", nil, `request_get DEV-1 7`, `"wait_seconds":90`},
+		{"request retry", "POST", "/api/tasks/DEV-1/workflow/requests/7/retry", nil, `request_retry DEV-1 7`, `"id":8`},
 		{"runs list", "GET", "/api/tasks/DEV-1/workflow/runs", nil, `runs DEV-1`, `"runs":[{"id":4`},
 		{"run get", "GET", "/api/tasks/DEV-1/workflow/runs/4", nil, `run_get DEV-1 4`, `"kind":"check"`},
 		{"run log", "GET", "/api/tasks/DEV-1/workflow/runs/4/log", nil, `run_log DEV-1 4 max=0`,
@@ -246,8 +251,10 @@ func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
 		"/api/tasks/{key}/workflow/runs/{id}":     "get",
 		"/api/tasks/{key}/workflow/runs/{id}/log": "get",
 		"/api/tasks/{key}/workflow/requests/{id}": "get",
-		"/api/tasks/{key}/cancel":                 "post",
-		"/api/task-queues/{queue}/workflow":       "delete",
+
+		"/api/tasks/{key}/workflow/requests/{id}/retry": "post",
+		"/api/tasks/{key}/cancel":                       "post",
+		"/api/task-queues/{queue}/workflow":             "delete",
 	} {
 		if _, ok := doc.Paths[path][method]; !ok {
 			t.Errorf("openapi lacks %s %s", method, path)

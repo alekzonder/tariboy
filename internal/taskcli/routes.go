@@ -16,6 +16,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut bool, stdout, stderr io.Writer) int {
@@ -126,6 +127,23 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 	case "workflow_resume":
 		method, route = "POST", "/api/tasks/"+url.PathEscape(key)+"/workflow/resume"
 		delete(body, "key")
+	case "workflow_retry":
+		id, _ := body["id"].(int64)
+		if id == 0 {
+			// Without an id the retry names the task's latest request; the
+			// daemon refuses it unless it failed.
+			raw, err := caller.Call("GET", "/api/tasks/"+url.PathEscape(key)+"/workflow", map[string]string{})
+			if err != nil {
+				return operatorErrorFor(err, key, stderr)
+			}
+			var view tasks.WorkflowView
+			if json.Unmarshal(raw, &view) != nil || view.LastRequest == nil {
+				fmt.Fprintf(stderr, "tasks workflow retry: %s has no transition request\n", key)
+				return 1
+			}
+			id = view.LastRequest.ID
+		}
+		method, route, body = "POST", "/api/tasks/"+url.PathEscape(key)+"/workflow/requests/"+strconv.FormatInt(id, 10)+"/retry", map[string]any{}
 	case "cancel":
 		method, route = "POST", "/api/tasks/"+url.PathEscape(key)+"/cancel"
 		delete(body, "key")
@@ -141,7 +159,7 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 	if err != nil {
 		return operatorErrorFor(err, key, stderr)
 	}
-	if parsed.action == "advance" && !parsed.noWait {
+	if (parsed.action == "advance" || parsed.action == "workflow_retry") && !parsed.noWait {
 		return waitForAdvance(ctx, parsed, raw, func(id int64) (json.RawMessage, error) {
 			return caller.Call("GET", "/api/tasks/"+url.PathEscape(key)+"/workflow/requests/"+strconv.FormatInt(id, 10), map[string]string{})
 		}, func(err error) int { return operatorErrorFor(err, key, stderr) }, jsonOut, stdout, stderr)
