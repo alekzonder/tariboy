@@ -616,8 +616,12 @@ export const clearQueueWorkflow = async (queue: string, revision: number, target
 
 // Secret values are write-only: a client lists keys and sets or removes them,
 // and never reads a value back.
-export const listQueueSecrets = async (queue: string, target?: ApiTarget) =>
-  (await call<{ secrets: QueueSecretInfo[]; count: number }>(target, "GET", `${queuePath(queue)}/secrets`)).secrets
+/** The queue's secrets, and by name the bound workflow's required secrets the daemon's global env holds. */
+export interface QueueSecretList { secrets: QueueSecretInfo[]; global_env: string[] }
+export const listQueueSecrets = async (queue: string, target?: ApiTarget): Promise<QueueSecretList> => {
+  const { secrets, global_env } = await call<QueueSecretList & { count: number }>(target, "GET", `${queuePath(queue)}/secrets`)
+  return { secrets, global_env: global_env ?? [] }
+}
 export const setQueueSecret = (queue: string, key: string, value: string, target?: ApiTarget) =>
   call<{ queue: string; key: string; updated_at: string }>(
     target,

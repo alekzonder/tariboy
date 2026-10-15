@@ -15,7 +15,7 @@ const fill = (key: string, value: string) => {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  api.listQueueSecrets.mockResolvedValue([{ key: "TOKEN", updated_at: "2026-10-02T10:00:00Z" }])
+  api.listQueueSecrets.mockResolvedValue({ secrets: [{ key: "TOKEN", updated_at: "2026-10-02T10:00:00Z" }], global_env: [] })
 })
 
 it("lists keys only and uses a password input for the value", async () => {
@@ -34,7 +34,7 @@ it("shows a failed load instead of claiming there are no secrets", async () => {
 
 it("sets a secret, clears the value input, and never renders the value", async () => {
   api.setQueueSecret.mockResolvedValue({ queue: "REL", key: "NEW_KEY", updated_at: "2026-10-02T11:00:00Z" })
-  api.listQueueSecrets.mockResolvedValueOnce([]).mockResolvedValue([{ key: "NEW_KEY", updated_at: "2026-10-02T11:00:00Z" }])
+  api.listQueueSecrets.mockResolvedValueOnce({ secrets: [], global_env: [] }).mockResolvedValue({ secrets: [{ key: "NEW_KEY", updated_at: "2026-10-02T11:00:00Z" }], global_env: [] })
   const { container } = renderIt()
   await screen.findByLabelText("Secret key")
   fill("NEW_KEY", "s3cr3t-value")
@@ -105,7 +105,7 @@ it("disables Set and every Remove while a request runs", async () => {
 
 it("drops a needed name once that key is in the list", async () => {
   api.setQueueSecret.mockResolvedValue({ queue: "REL", key: "API_KEY", updated_at: "2026-10-02T11:00:00Z" })
-  api.listQueueSecrets.mockResolvedValueOnce([]).mockResolvedValue([{ key: "API_KEY", updated_at: "2026-10-02T11:00:00Z" }])
+  api.listQueueSecrets.mockResolvedValueOnce({ secrets: [], global_env: [] }).mockResolvedValue({ secrets: [{ key: "API_KEY", updated_at: "2026-10-02T11:00:00Z" }], global_env: [] })
   render(<QueueSecrets queue="REL" target={remoteTarget} missing={["API_KEY", "OTHER"]} />)
   expect(await screen.findByRole("alert", { name: "Secrets needed" })).toHaveTextContent("API_KEY, OTHER")
   fill("API_KEY", "v")
@@ -117,4 +117,13 @@ it("drops a needed name once that key is in the list", async () => {
 it("renders the names a bind needs next to the control", async () => {
   render(<QueueSecrets queue="REL" target={remoteTarget} missing={["API_KEY"]} missingMessage="workflow secrets have no value: API_KEY" />)
   expect(await screen.findByRole("alert", { name: "Secrets needed" })).toHaveTextContent("API_KEY")
+})
+
+it("names required secrets the global env holds, and which a queue secret overrides", async () => {
+  api.listQueueSecrets.mockResolvedValue({ secrets: [{ key: "TOKEN", updated_at: "2026-10-02T10:00:00Z" }], global_env: ["GH_TOKEN", "TOKEN"] })
+  renderIt()
+  const global = await screen.findByRole("list", { name: "Global env" })
+  expect(global).toHaveTextContent("GH_TOKEN present in global env")
+  expect(global).toHaveTextContent("TOKEN present in global env, overridden by the queue secret")
+  expect(screen.getByLabelText("Secret key")).toBeEnabled()
 })

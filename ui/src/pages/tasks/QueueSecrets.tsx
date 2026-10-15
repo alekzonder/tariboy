@@ -18,7 +18,8 @@ function keyProblem(key: string): string {
 }
 
 /**
- * A queue's secrets: keys with their time, Set and Remove. A value is
+ * A queue's secrets: keys with their time, Set and Remove, and the required
+ * secrets the global env holds, which a queue secret of that name overrides. A value is
  * write-only: it lives in the password input until submit, then is cleared,
  * and nothing here ever reads or renders one.
  */
@@ -30,6 +31,7 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
   missingMessage?: string
 }) {
   const [secrets, setSecrets] = useState<QueueSecretInfo[]>([])
+  const [globalEnv, setGlobalEnv] = useState<string[]>([])
   const [key, setKey] = useState("")
   const [value, setValue] = useState("")
   const [error, setError] = useState("")
@@ -40,7 +42,9 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
 
   const load = useCallback(async () => {
     try {
-      setSecrets(await listQueueSecrets(queue, target))
+      const list = await listQueueSecrets(queue, target)
+      setSecrets(list.secrets)
+      setGlobalEnv(list.global_env)
       setLoaded(true)
     } catch (err) { setError(errorText(err)) }
   }, [queue, target])
@@ -82,6 +86,14 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
           <p>{missingMessage || "These secrets have no value:"}</p>
           <p className="font-mono">{stillMissing.join(", ")}</p>
         </div>
+      )}
+      {globalEnv.length > 0 && (
+        <ul aria-label="Global env" className="flex min-w-0 flex-col gap-1 text-[12px] text-muted-foreground">
+          {globalEnv.map((name) => (
+            <li key={name}><span className="font-mono">{name}</span> present in global env
+              {secrets.some((secret) => secret.key === name) && ", overridden by the queue secret"}</li>
+          ))}
+        </ul>
       )}
       {secrets.length === 0 ? loaded && <span className={EMPTY}>No secrets.</span> : (
         <ul className="flex min-w-0 flex-col gap-1">

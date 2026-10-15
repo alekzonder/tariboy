@@ -17,7 +17,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   api.getQueueWorkflow.mockResolvedValue(null)
   api.listWorkflowImages.mockResolvedValue([])
-  api.listQueueSecrets.mockResolvedValue([])
+  api.listQueueSecrets.mockResolvedValue({ secrets: [], global_env: [] })
   api.listAgentPools.mockResolvedValue({ items: [] })
 })
 

@@ -106,6 +106,12 @@ func (s *workflowStub) ListQueueSecrets(_ context.Context, a tasks.Actor, queue 
 	s.record(a, "queue_secret_ls %s", queue)
 	return []tasks.QueueSecretInfo{{Key: "GH_TOKEN", UpdatedAt: "2026-10-02T00:00:00Z"}}, s.err
 }
+
+// QueueSecretsInGlobalEnv records nothing: the secret ls route calls it after
+// ListQueueSecrets, and the table expects one recorded call per route.
+func (s *workflowStub) QueueSecretsInGlobalEnv(context.Context, tasks.Actor, string) ([]string, error) {
+	return []string{"GH_TOKEN"}, s.err
+}
 func (s *workflowStub) RemoveQueueSecret(_ context.Context, a tasks.Actor, queue, key string) error {
 	s.record(a, "queue_secret_rm %s %s", queue, key)
 	return s.err
@@ -164,7 +170,7 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 		{"queue workflow clear", "DELETE", "/api/task-queues/DEV/workflow?revision=3", nil, `queue_workflow_clear DEV 3`,
 			`"cleared":true`},
 		{"queue secret ls", "GET", "/api/task-queues/DEV/secrets", nil, `queue_secret_ls DEV`,
-			`"secrets":[{"key":"GH_TOKEN","updated_at":"2026-10-02T00:00:00Z"}]`},
+			`"global_env":["GH_TOKEN"],"secrets":[{"key":"GH_TOKEN","updated_at":"2026-10-02T00:00:00Z"}]`},
 		{"queue source ls", "GET", "/api/task-queues/DEV/sources", nil, `queue_source_ls DEV`,
 			`"sources":[{"queue":"DEV","name":"pull-requests"`},
 		{"queue source log", "GET", "/api/task-queues/DEV/source-runs/5/log?max_bytes=10", nil, `queue_source_log DEV 5 max=10`,

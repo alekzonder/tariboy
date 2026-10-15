@@ -301,10 +301,10 @@ func newHarness(t *testing.T, jobs ...tasks.RunJob) *harness {
 	h.jobs = newFakeJobs(jobs...)
 	h.sup = &Supervisor{
 		Jobs: h.jobs, Images: store, BaseDir: h.base,
-		BaseEnv: func() []string {
+		BaseEnv: func() ([]string, error) {
 			return []string{"PATH=/usr/bin:/bin", "MARK_DIR=" + h.marks, "BASE_ONLY=base", "SHARED=base",
 				"TARIBOY_TOOLS_SOCKET=/run/tools.sock", "TARIBOY_DAEMON_SOCKET=/run/daemon.sock",
-				"TARIBOY_PLUGIN_SOCKET=/run/plugin.sock", "TARIBOY_PLUGIN_TOKEN=plugintoken"}
+				"TARIBOY_PLUGIN_SOCKET=/run/plugin.sock", "TARIBOY_PLUGIN_TOKEN=plugintoken"}, nil
 		},
 		AgentRuntime: func(string) (string, []string, error) {
 			return "", nil, errors.New("no agent runtime in this test")
@@ -1074,7 +1074,7 @@ func TestPrepareGivesAQueueRunADefaultPath(t *testing.T) {
 	w := &worker{s: h.sup}
 	job := checkJob(1, "DEV-1", "scripts/env.sh")
 	job.WorkflowName, job.WorkflowVersion, job.WorkflowDigest = h.image.Name, h.image.Version, h.image.Digest
-	h.sup.BaseEnv = func() []string { return []string{"MARK_DIR=" + h.marks} }
+	h.sup.BaseEnv = func() ([]string, error) { return []string{"MARK_DIR=" + h.marks}, nil }
 	spec, reason := w.prepare(job)
 	if reason != "" || !slices.Contains(spec.Env, "PATH=/usr/bin:/bin") {
 		t.Fatalf("env = %v, reason %q", spec.Env, reason)
@@ -1083,6 +1083,20 @@ func TestPrepareGivesAQueueRunADefaultPath(t *testing.T) {
 	spec, reason = w.prepare(job)
 	if reason != "" || !slices.Contains(spec.Env, "PATH=/opt/bin") || slices.Contains(spec.Env, "PATH=/usr/bin:/bin") {
 		t.Fatalf("env with a workflow PATH = %v, reason %q", spec.Env, reason)
+	}
+}
+
+func TestPrepareRefusesAQueueRunWhoseBaseEnvFails(t *testing.T) {
+	h := newHarness(t)
+	w := &worker{s: h.sup}
+	h.sup.BaseEnv = func() ([]string, error) { return nil, errors.New("global agent shell script: exit status 3") }
+	job := checkJob(1, "DEV-1", "scripts/env.sh")
+	job.WorkflowName, job.WorkflowVersion, job.WorkflowDigest = h.image.Name, h.image.Version, h.image.Digest
+	if _, reason := w.prepare(job); !strings.Contains(reason, "exit status 3") {
+		t.Fatalf("check reason = %q; want the global environment failure", reason)
+	}
+	if _, reason := w.prepareSource(sourceJob(h, "scripts/env.sh"), 1); !strings.Contains(reason, "exit status 3") {
+		t.Fatalf("source reason = %q; want the global environment failure", reason)
 	}
 }
 

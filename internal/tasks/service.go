@@ -26,6 +26,7 @@ type Service struct {
 	goalSignal                               func()
 	workflowResolver                         WorkflowResolver
 	runBaseDir                               string
+	globalEnv                                func() ([]string, error)
 	log                                      *slog.Logger
 	holderFailuresMu                         sync.Mutex
 	holderFailures                           map[int64]string // task id -> logged manifest failure of CheckHolders

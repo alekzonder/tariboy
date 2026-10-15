@@ -310,10 +310,16 @@ func TaskOperatorCommands() []registry.Command {
 				}
 				return map[string]any{"queue": strings.ToUpper(queue), "key": key, "updated_at": info.UpdatedAt}, nil
 			}), maxQueueSecretBody),
-		taskRoute("tasks.queue.secret.ls", "GET", "/api/task-queues/{queue}/secrets", "List the keys of a queue's secrets",
+		taskRoute("tasks.queue.secret.ls", "GET", "/api/task-queues/{queue}/secrets", "List the keys of a queue's secrets and the required ones the global env holds",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				items, err := control.ListQueueSecrets(ctx, actor, stringParam(p, "queue"))
-				return map[string]any{"secrets": items, "count": len(items)}, err
+				queue := stringParam(p, "queue")
+				items, err := control.ListQueueSecrets(ctx, actor, queue)
+				if err != nil {
+					return nil, err
+				}
+				// Names only: a value of the global environment never leaves the daemon.
+				global, err := control.QueueSecretsInGlobalEnv(ctx, actor, queue)
+				return map[string]any{"secrets": items, "count": len(items), "global_env": global}, err
 			}),
 		taskRoute("tasks.queue.source.ls", "GET", "/api/task-queues/{queue}/sources", "List the workflow sources of a queue and their recent runs",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
