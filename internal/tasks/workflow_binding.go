@@ -341,6 +341,10 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 	if err != nil {
 		return QueueWorkflow{}, err
 	}
+	global, err := s.globalEnvNames()
+	if err != nil {
+		return QueueWorkflow{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return QueueWorkflow{}, err
@@ -373,7 +377,7 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 	} else if len(missing) > 0 {
 		return QueueWorkflow{}, poolsEmptyError(missing)
 	}
-	if missing, err := s.missingQueueSecrets(ctx, tx, queue, manifest.Definition.RequiresSecrets); err != nil {
+	if missing, err := missingQueueSecrets(ctx, tx, queue, manifest.Definition.RequiresSecrets, global); err != nil {
 		return QueueWorkflow{}, err
 	} else if len(missing) > 0 {
 		return QueueWorkflow{}, queueSecretsMissingError(missing)
