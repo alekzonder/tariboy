@@ -297,7 +297,7 @@ A bind checks pools first, then secrets:
 | Error | Meaning |
 | --- | --- |
 | `workflow_pool_empty` | A pool the image names is missing or has no agents. The error lists the pools. Emptying a pool that the bound image uses, or that the pinned version of an unfinished task in the queue uses, is refused with the same code. |
-| `workflow_secret_missing` | A secret the image lists in `requires_secrets` has no value in the queue. The error lists the names in `details.secrets`. |
+| `workflow_secret_missing` | A secret the image lists in `requires_secrets` has no value in the queue and is not set in the global env. The error lists the names in `details.secrets`. |
 | `revision_conflict` | The revision is not the current one; read the binding again and retry. |
 | `not_found` | No published image matches the reference. |
 | `invalid_workflow_ref` | The reference is malformed. |
@@ -319,6 +319,14 @@ task trees, which frees the image later. See
 Secrets the image lists in `requires_secrets` live per queue and reach the
 queue's workflow scripts as environment variables of the same name.
 
+A required secret may instead come from the **global env**: the daemon's
+environment after `<base-dir>/global-agent-shell.sh` is sourced, the
+environment every workflow script starts from (see [Run modes](#run-modes)).
+A name the global env exports with a non-empty value needs no queue secret: the
+queue binds without it, and its queue secret may be removed. A queue secret of
+the same name still overrides the global value, so a stale queue secret hides
+a valid global one.
+
 ```bash
 printf '%s' "$TOKEN" | ttasks queue secret set DEV GH_TOKEN
 ttasks queue secret set DEV GH_TOKEN --value "$TOKEN"   # shows in the process list
@@ -332,11 +340,12 @@ ttasks queue secret rm DEV GH_TOKEN
 - A key matches `[A-Za-z_][A-Za-z0-9_]*` and does not start with `TARIBOY_`
   (`invalid_secret_key`). A value is non-empty UTF-8 text (`invalid_secret`) of
   at most 64 KiB (`secret_too_large`). Setting a key again replaces its value.
-- `ls` returns keys and update times. No command or route ever returns a value,
-  and the `queue.secret_set` and `queue.secret_removed` events carry only the
-  key.
-- Removing a secret that the queue's **bound** image requires is refused with
-  `workflow_secret_missing`. The check does not look at older workflow versions
+- `ls` returns keys and update times, and in `global_env` the names the bound
+  image requires that the global env holds. No command or route ever returns a
+  value, and the `queue.secret_set` and `queue.secret_removed` events carry only
+  the key.
+- Removing a secret that the queue's **bound** image requires, and that the
+  global env does not hold, is refused with `workflow_secret_missing`. The check does not look at older workflow versions
   still pinned by unfinished tasks: a script of such a task that needs the
   removed secret fails.
 - Database backups hold queue secrets in plaintext, as they hold agent secrets.
@@ -626,7 +635,7 @@ and report the outcome again.
 
 | `run_as` | Working directory | Environment, later entries winning |
 | --- | --- | --- |
-| `queue` (default) | `TARIBOY_TASK_DIR` | the daemon's own environment, then the image's `env`, then the queue secrets; `PATH=/usr/bin:/bin` when none of them sets `PATH` |
+| `queue` (default) | `TARIBOY_TASK_DIR` | the global env (the daemon's own environment and the exports of `<base-dir>/global-agent-shell.sh`), then the image's `env`, then the queue secrets; `PATH=/usr/bin:/bin` when none of them sets `PATH` |
 | `agent` | the holder's effective working directory | the daemon's own environment, the holder's environment and agent secrets, and the exports of the global and agent shell scripts (as its own background scripts get them), then the image's `env`, then the queue secrets |
 
 Watch scripts always run as `queue`, so they do not depend on which agent held
@@ -1319,7 +1328,7 @@ the key, and the run id. A failed source run records the queue event
 | `invalid_decision` | 400 | A resume decision that is not `continue` or `release`, or `release` outside a pool status. |
 | `workflow_in_use` | 409 | A queue binds the image or a task, open or closed, pins it. |
 | `workflow_pool_empty` | 409 | A pool the image names is missing or has no agents. |
-| `workflow_secret_missing` | 409 | A secret the image requires has no value in the queue, or `secret rm` would remove a secret the bound image requires. |
+| `workflow_secret_missing` | 409 | A secret the image requires has no value in the queue or the global env, or `secret rm` would remove a secret the bound image requires and the global env does not hold. |
 | `workflow_unavailable` | 503 | The workflow image store is not available. |
 | `queue_workflow_not_found` | 404 | The queue has no binding. |
 | `not_holder` | 403 | The caller does not own the current status. |
@@ -1354,7 +1363,8 @@ pending request.
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `queue workflow set` fails with `workflow_secret_missing` | Set every key in `details.secrets` with `ttasks queue secret set`, then bind again. |
+| `queue workflow set` fails with `workflow_secret_missing` | Set every key in `details.secrets` with `ttasks queue secret set`, or export it from `global-agent-shell.sh`, then bind again. |
+| A `run_as: queue` script fails with `cannot prepare the environment` | `global-agent-shell.sh` exited with an error or ran longer than 30 seconds. Fix the script; the message carries its stderr. A bind, a secret removal, and `secret ls` fail the same way. |
 | A new task stays in category `open` | No pool member is eligible: enable the agent, its loop, and Goal, clear a halt, or finish its other assigned task. The daemon retries every minute. |
 | `advance` prints `rejected:` | A check says the condition does not hold. Fix what its message says, then repeat the advance. |
 | `advance` prints `failed:` | A check could not run or broke the protocol. Read the log it names with `ttasks workflow log KEY RUN`. A check that failed with `the daemon restarted during check ...` was interrupted; repeat the advance. Once the cause is fixed, the operator can run the checks again with `ttasks workflow retry KEY` or **Retry** in Desktop. |
@@ -1549,7 +1559,9 @@ so its row agrees with the sheet.
 - **Secrets.** The secret keys with their update time, a form to **Set** one,
   and **Remove** with confirmation. A value is write-only: it is cleared from
   the form when sent and is never read back or shown. A bind refused with
-  `workflow_secret_missing` lists the missing names here.
+  `workflow_secret_missing` lists the missing names here. Each secret the bound
+  image requires that the global env holds shows as `NAME present in global
+  env`, with `overridden by the queue secret` when the queue sets it too.
 
 ### What Desktop does not do
 

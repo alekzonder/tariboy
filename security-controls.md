@@ -156,7 +156,8 @@ you trust that far.
   variables cannot be overridden by the daemon environment, an agent, the
   image's `env`, or a secret.
 - A `run_as: queue` script runs in the task's owner-only state directory with
-  the daemon's environment, the image's `env`, and the queue secrets; when none
+  the daemon's environment after the exports of the global shell script, the
+  image's `env`, and the queue secrets; when none
   of these sets `PATH`, it gets `PATH=/usr/bin:/bin`. A `run_as: agent` check
   also receives the holder's environment and agent secrets, plus the exports of
   the global and agent shell scripts, and runs in the holder's working
@@ -222,7 +223,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.80.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.81.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

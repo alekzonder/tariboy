@@ -348,7 +348,7 @@ revision is given, so a retried bind succeeds.</p>
 </tr>
 <tr>
 <td><code>workflow_secret_missing</code></td>
-<td>A secret the image lists in <code>requires_secrets</code> has no value in the queue. The error lists the names in <code>details.secrets</code>.</td>
+<td>A secret the image lists in <code>requires_secrets</code> has no value in the queue and is not set in the global env. The error lists the names in <code>details.secrets</code>.</td>
 </tr>
 <tr>
 <td><code>revision_conflict</code></td>
@@ -389,6 +389,13 @@ task trees, which frees the image later. See
 <h3 id="queue-secrets"><a class="blume-heading-anchor" href="#queue-secrets">Queue secrets</a></h3>
 <p>Secrets the image lists in <code>requires_secrets</code> live per queue and reach the
 queue’s workflow scripts as environment variables of the same name.</p>
+<p>A required secret may instead come from the <strong>global env</strong>: the daemon’s
+environment after <code>&lt;base-dir&gt;/global-agent-shell.sh</code> is sourced, the
+environment every workflow script starts from (see <a href="#run-modes">Run modes</a>).
+A name the global env exports with a non-empty value needs no queue secret: the
+queue binds without it, and its queue secret may be removed. A queue secret of
+the same name still overrides the global value, so a stale queue secret hides
+a valid global one.</p>
 <pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;overflow-x:auto" tabindex="0" data-language="bash" data-icon><svg aria-hidden="true" class="blume-lang-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="M21.038,4.9l-7.577-4.498C13.009,0.134,12.505,0,12,0c-0.505,0-1.009,0.134-1.462,0.403L2.961,4.9 C2.057,5.437,1.5,6.429,1.5,7.503v8.995c0,1.073,0.557,2.066,1.462,2.603l7.577,4.497C10.991,23.866,11.495,24,12,24 c0.505,0,1.009-0.134,1.461-0.402l7.577-4.497c0.904-0.537,1.462-1.529,1.462-2.603V7.503C22.5,6.429,21.943,5.437,21.038,4.9z M15.17,18.946l0.013,0.646c0.001,0.078-0.05,0.167-0.111,0.198l-0.383,0.22c-0.061,0.031-0.111-0.007-0.112-0.085L14.57,19.29 c-0.328,0.136-0.66,0.169-0.872,0.084c-0.04-0.016-0.057-0.075-0.041-0.142l0.139-0.584c0.011-0.046,0.036-0.092,0.069-0.121 c0.012-0.011,0.024-0.02,0.036-0.026c0.022-0.011,0.043-0.014,0.062-0.006c0.229,0.077,0.521,0.041,0.802-0.101 c0.357-0.181,0.596-0.545,0.592-0.907c-0.003-0.328-0.181-0.465-0.613-0.468c-0.55,0.001-1.064-0.107-1.072-0.917 c-0.007-0.667,0.34-1.361,0.889-1.8l-0.007-0.652c-0.001-0.08,0.048-0.168,0.111-0.2l0.37-0.236 c0.061-0.031,0.111,0.007,0.112,0.087l0.006,0.653c0.273-0.109,0.511-0.138,0.726-0.088c0.047,0.012,0.067,0.076,0.048,0.151 l-0.144,0.578c-0.011,0.044-0.036,0.088-0.065,0.116c-0.012,0.012-0.025,0.021-0.038,0.028c-0.019,0.01-0.038,0.013-0.057,0.009 c-0.098-0.022-0.332-0.073-0.699,0.113c-0.385,0.195-0.52,0.53-0.517,0.778c0.003,0.297,0.155,0.387,0.681,0.396 c0.7,0.012,1.003,0.318,1.01,1.023C16.105,17.747,15.736,18.491,15.17,18.946z M19.143,17.859c0,0.06-0.008,0.116-0.058,0.145 l-1.916,1.164c-0.05,0.029-0.09,0.004-0.09-0.056v-0.494c0-0.06,0.037-0.093,0.087-0.122l1.887-1.129 c0.05-0.029,0.09-0.004,0.09,0.056V17.859z M20.459,6.797l-7.168,4.427c-0.894,0.523-1.553,1.109-1.553,2.187v8.833 c0,0.645,0.26,1.063,0.66,1.184c-0.131,0.023-0.264,0.039-0.398,0.039c-0.42,0-0.833-0.114-1.197-0.33L3.226,18.64 c-0.741-0.44-1.201-1.261-1.201-2.142V7.503c0-0.881,0.46-1.702,1.201-2.142l7.577-4.498c0.363-0.216,0.777-0.33,1.197-0.33 c0.419,0,0.833,0.114,1.197,0.33l7.577,4.498c0.624,0.371,1.046,1.013,1.164,1.732C21.686,6.557,21.12,6.411,20.459,6.797z"></path></svg><code><span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF">printf</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> &#39;%s&#39;</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> &quot;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">$TOKEN</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">&quot;</span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583"> |</span><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0"> ttasks</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> queue</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> secret</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> set</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> DEV</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> GH_TOKEN</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ttasks</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> queue</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> secret</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> set</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> DEV</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> GH_TOKEN</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF"> --value</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> &quot;</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">$TOKEN</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">&quot;</span><span style="--shiki-light:#6A737D;--shiki-dark:#6A737D">   # shows in the process list</span></span>
 <span class="line"><span style="--shiki-light:#6F42C1;--shiki-dark:#B392F0">ttasks</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> queue</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> secret</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> ls</span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF"> DEV</span></span>
@@ -400,11 +407,12 @@ stripped, unlike artifacts, because a piped token almost always carries one.</li
 <li>A key matches <code>[A-Za-z_][A-Za-z0-9_]*</code> and does not start with <code>TARIBOY_</code>
 (<code>invalid_secret_key</code>). A value is non-empty UTF-8 text (<code>invalid_secret</code>) of
 at most 64 KiB (<code>secret_too_large</code>). Setting a key again replaces its value.</li>
-<li><code>ls</code> returns keys and update times. No command or route ever returns a value,
-and the <code>queue.secret_set</code> and <code>queue.secret_removed</code> events carry only the
-key.</li>
-<li>Removing a secret that the queue’s <strong>bound</strong> image requires is refused with
-<code>workflow_secret_missing</code>. The check does not look at older workflow versions
+<li><code>ls</code> returns keys and update times, and in <code>global_env</code> the names the bound
+image requires that the global env holds. No command or route ever returns a
+value, and the <code>queue.secret_set</code> and <code>queue.secret_removed</code> events carry only
+the key.</li>
+<li>Removing a secret that the queue’s <strong>bound</strong> image requires, and that the
+global env does not hold, is refused with <code>workflow_secret_missing</code>. The check does not look at older workflow versions
 still pinned by unfinished tasks: a script of such a task that needs the
 removed secret fails.</li>
 <li>Database backups hold queue secrets in plaintext, as they hold agent secrets.</li>
@@ -880,7 +888,7 @@ and report the outcome again.</p>
 <tr>
 <td><code>queue</code> (default)</td>
 <td><code>TARIBOY_TASK_DIR</code></td>
-<td>the daemon’s own environment, then the image’s <code>env</code>, then the queue secrets; <code>PATH=/usr/bin:/bin</code> when none of them sets <code>PATH</code></td>
+<td>the global env (the daemon’s own environment and the exports of <code>&lt;base-dir&gt;/global-agent-shell.sh</code>), then the image’s <code>env</code>, then the queue secrets; <code>PATH=/usr/bin:/bin</code> when none of them sets <code>PATH</code></td>
 </tr>
 <tr>
 <td><code>agent</code></td>
@@ -1975,7 +1983,7 @@ the key, and the run id. A failed source run records the queue event
 <tr>
 <td><code>workflow_secret_missing</code></td>
 <td>409</td>
-<td>A secret the image requires has no value in the queue, or <code>secret rm</code> would remove a secret the bound image requires.</td>
+<td>A secret the image requires has no value in the queue or the global env, or <code>secret rm</code> would remove a secret the bound image requires and the global env does not hold.</td>
 </tr>
 <tr>
 <td><code>workflow_unavailable</code></td>
@@ -2114,7 +2122,11 @@ pending request.</p>
 <tbody>
 <tr>
 <td><code>queue workflow set</code> fails with <code>workflow_secret_missing</code></td>
-<td>Set every key in <code>details.secrets</code> with <code>ttasks queue secret set</code>, then bind again.</td>
+<td>Set every key in <code>details.secrets</code> with <code>ttasks queue secret set</code>, or export it from <code>global-agent-shell.sh</code>, then bind again.</td>
+</tr>
+<tr>
+<td>A <code>run_as: queue</code> script fails with <code>cannot prepare the environment</code></td>
+<td><code>global-agent-shell.sh</code> exited with an error or ran longer than 30 seconds. Fix the script; the message carries its stderr. A bind, a secret removal, and <code>secret ls</code> fail the same way.</td>
 </tr>
 <tr>
 <td>A new task stays in category <code>open</code></td>
@@ -2389,7 +2401,8 @@ it; a pool leaves the list once the editor saves it with members.</li>
 <li><strong>Secrets.</strong> The secret keys with their update time, a form to <strong>Set</strong> one,
 and <strong>Remove</strong> with confirmation. A value is write-only: it is cleared from
 the form when sent and is never read back or shown. A bind refused with
-<code>workflow_secret_missing</code> lists the missing names here.</li>
+<code>workflow_secret_missing</code> lists the missing names here. Each secret the bound
+image requires that the global env holds shows as <code>NAME present in global env</code>, with <code>overridden by the queue secret</code> when the queue sets it too.</li>
 </ul>
 <h3 id="what-desktop-does-not-do"><a class="blume-heading-anchor" href="#what-desktop-does-not-do">What Desktop does not do</a></h3>
 <ul>
