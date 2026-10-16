@@ -312,6 +312,7 @@ func Run(ctx context.Context, o Options) error {
 		return fmt.Errorf("migrate task keys: %w", err)
 	}
 	taskService := tasks.NewService(st.DB, customerLogin, time.Now)
+	taskService.SetReader(st.Reader())
 	workflowIngress := newWorkflowIngressSignal()
 	taskHub := tasks.NewHub(taskService)
 	taskService.SetHub(taskHub)

@@ -62,6 +62,7 @@ type AIRequest struct {
 
 type Store struct {
 	db                   *sql.DB
+	read                 *sql.DB // read-only pool for polled reads
 	clock                func() time.Time
 	reportProjectionHook func()
 }
@@ -70,7 +71,7 @@ func NewStore(s *store.Store, clock func() time.Time) *Store {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Store{db: s.DB, clock: clock}
+	return &Store{db: s.DB, read: s.Reader(), clock: clock}
 }
 
 // setReportProjectionHook is a private test seam for forcing a concurrent WAL

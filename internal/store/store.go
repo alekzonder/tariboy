@@ -8,7 +8,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-type Store struct{ DB *sql.DB }
+// Store holds the single writer connection (DB) and a small pool of read-only
+// connections (Reader). WAL mode lets those readers run while a write is open.
+type Store struct {
+	DB   *sql.DB
+	read *sql.DB
+}
+
+// readPoolSize is the number of read-only connections for API reads.
+const readPoolSize = 4
 
 func Open(path string) (*Store, error) {
 	dsn := "file:" + url.PathEscape(path) + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)"
@@ -22,10 +30,31 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	read, err := sql.Open("sqlite", "file:"+url.PathEscape(path)+"?mode=ro&_pragma=busy_timeout(5000)&_pragma=query_only(1)")
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	read.SetMaxOpenConns(readPoolSize)
+	s.read = read
 	return s, nil
 }
 
-func (s *Store) Close() error { return s.DB.Close() }
+// Reader is the read-only pool for queries that never write, such as the API
+// list reads the UI polls. A Store built without Open reads through DB.
+func (s *Store) Reader() *sql.DB {
+	if s.read != nil {
+		return s.read
+	}
+	return s.DB
+}
+
+func (s *Store) Close() error {
+	if s.read != nil {
+		s.read.Close()
+	}
+	return s.DB.Close()
+}
 
 func (s *Store) ConfigGet(key string) (string, bool, error) {
 	var v string

@@ -124,7 +124,7 @@ func (s *Store) AgentBudgetStatus(agent string, now time.Time) (AgentBudgetStatu
 // as the zero status.
 func (s *Store) AgentBudgetStatuses(now time.Time) (map[string]AgentBudgetStatus, error) {
 	out := map[string]AgentBudgetStatus{}
-	rows, err := s.db.Query(`SELECT agent_name,hour_usd,day_usd,week_usd,month_usd FROM agent_budgets`)
+	rows, err := s.read.Query(`SELECT agent_name,hour_usd,day_usd,week_usd,month_usd FROM agent_budgets`)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (s *Store) AgentBudgetStatuses(now time.Time) (map[string]AgentBudgetStatus
 		return nil, err
 	}
 	sums, args := windowSpendQuery(now)
-	rows, err = s.db.Query(`SELECT agent, `+sums+` FROM (
+	rows, err = s.read.Query(`SELECT agent, `+sums+` FROM (
 		SELECT agent, julianday(ts) AS t, cost_usd FROM ai_requests WHERE ts>=? LIMIT -1) GROUP BY agent`, args...)
 	if err != nil {
 		return nil, err

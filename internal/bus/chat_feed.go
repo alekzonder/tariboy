@@ -71,7 +71,7 @@ func (b *Bus) ChatFeed(chat Chat, viewer string, types []string, limit int, befo
 // participant own read mark. A chat with no messages yet is still listed: the
 // chat exists as an entity, not as a side effect of traffic.
 func (b *Bus) ChatList(principal string, types []string) ([]ChatSummary, error) {
-	rows, err := b.db.Query(`SELECT `+chatColumns+`, p.read_ts
+	rows, err := b.read.Query(`SELECT `+chatColumns+`, p.read_ts
 		FROM chats AS c JOIN chat_participants AS p ON p.chat_id = c.id
 		WHERE p.principal = ? AND c.archived_at = ''
 		ORDER BY c.id`, principal)
@@ -158,7 +158,7 @@ func (b *Bus) chatChannelSummaries(principal string, types []string) (map[string
 	filter, filterArgs := typeFilterSQL(types)
 	// The bare columns beside max(m.ts) are SQLite documented "row that holds
 	// the maximum" behaviour, so each chat last message comes back in one pass.
-	rows, err := b.db.Query(`
+	rows, err := b.read.Query(`
 		SELECT p.chat_id, max(m.ts), m.type, m.text, m.sender,
 		       COALESCE(sum(CASE WHEN m.sender <> p.principal AND m.ts > p.read_ts AND m.sender IN (
 		           SELECT principal FROM chat_participants WHERE chat_id = p.chat_id) THEN 1 ELSE 0 END), 0)
@@ -187,7 +187,7 @@ func (b *Bus) chatChannelSummaries(principal string, types []string) (map[string
 // chatParticipants lists the participants of every chat principal is in, in
 // the order Participants returns them.
 func (b *Bus) chatParticipants(principal string) (map[string][]string, error) {
-	rows, err := b.db.Query(`SELECT chat_id, principal FROM chat_participants
+	rows, err := b.read.Query(`SELECT chat_id, principal FROM chat_participants
 		WHERE chat_id IN (SELECT chat_id FROM chat_participants WHERE principal = ?)
 		ORDER BY chat_id, principal`, principal)
 	if err != nil {

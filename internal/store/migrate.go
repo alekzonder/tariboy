@@ -123,6 +123,6 @@ func migrationColumnExists(tx *sql.Tx, table, column string) (bool, error) {
 // SchemaVersion returns the number of applied migrations.
 func (s *Store) SchemaVersion() (int, error) {
 	var n int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n)
+	err := s.Reader().QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n)
 	return n, err
 }

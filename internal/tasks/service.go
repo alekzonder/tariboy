@@ -20,6 +20,7 @@ var queuePrefixRE = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
 type Service struct {
 	db                                       *sql.DB
+	read                                     *sql.DB
 	customer                                 string
 	clock                                    func() time.Time
 	hub                                      *Hub
@@ -42,6 +43,17 @@ func NewService(db *sql.DB, customer string, clock func() time.Time) *Service {
 	s := &Service{db: db, customer: strings.TrimPrefix(strings.TrimSpace(customer), "user:"), clock: clock}
 	s.refreshWorkflowIngressEnabled(context.Background())
 	return s
+}
+
+// SetReader makes ListTasks, which the UI polls, read through a read-only
+// connection pool instead of the writer connection.
+func (s *Service) SetReader(db *sql.DB) { s.read = db }
+
+func (s *Service) reader() *sql.DB {
+	if s.read != nil {
+		return s.read
+	}
+	return s.db
 }
 
 func (s *Service) WorkflowIngressEnabled() bool { return s.workflowIngressEnabled.Load() }
@@ -509,7 +521,7 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 		}
 		visibilityActor = AgentActor(filter.ScopeAgent)
 	}
-	visible, err := visibleTaskIDs(ctx, s.db, visibilityActor)
+	visible, err := visibleTaskIDs(ctx, s.reader(), visibilityActor)
 	if err != nil {
 		return TaskPage{}, err
 	}
@@ -593,7 +605,7 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 	query += ` ORDER BY t.queue_prefix, t.parent_id, t.priority, t.position, t.task_key`
 	query += ` LIMIT ?`
 	args = append(args, limit+1)
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := s.reader().QueryContext(ctx, query, args...)
 	if err != nil {
 		return TaskPage{}, err
 	}
@@ -616,6 +628,6 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 		out = out[:limit]
 	}
 	var sequence int64
-	_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence), 0) FROM task_events`).Scan(&sequence)
+	_ = s.reader().QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence), 0) FROM task_events`).Scan(&sequence)
 	return TaskPage{Tasks: out, NextCursor: nextCursor, Sequence: sequence}, nil
 }

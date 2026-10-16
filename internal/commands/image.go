@@ -473,7 +473,7 @@ func imageLs() registry.Command {
 			currentAgents := map[string][]string{}
 			pendingAgents := map[string][]string{}
 			if c.Store != nil {
-				rows, queryErr := c.Store.DB.Query(`SELECT name, image_ref, pending_image_ref FROM agents ORDER BY name`)
+				rows, queryErr := c.Store.Reader().Query(`SELECT name, image_ref, pending_image_ref FROM agents ORDER BY name`)
 				if queryErr != nil {
 					return nil, queryErr
 				}
