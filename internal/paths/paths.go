@@ -90,9 +90,9 @@ func (p Paths) ProxyHandoffFile() string {
 func (p Paths) PricingCatalogFile() string {
 	return filepath.Join(p.Base, "model-prices-litellm.json")
 }
-func (p Paths) Socket() string    { return filepath.Join(p.RuntimeDir(), "tariboyd.sock") }
-func (p Paths) PidFile() string   { return filepath.Join(p.RuntimeDir(), "tariboyd.pid") }
-func (p Paths) LogFile() string   { return filepath.Join(p.RuntimeDir(), "tariboyd.log") }
+func (p Paths) Socket() string  { return filepath.Join(p.RuntimeDir(), "tariboyd.sock") }
+func (p Paths) PidFile() string { return filepath.Join(p.RuntimeDir(), "tariboyd.pid") }
+func (p Paths) LogFile() string { return filepath.Join(p.RuntimeDir(), "tariboyd.log") }
 func (p Paths) AccessLogFile() string {
 	return filepath.Join(p.RuntimeDir(), "tariboyd.access.log")
 }
