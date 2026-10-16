@@ -168,6 +168,12 @@ host. A frame carries <code>{chat, agent, id, channel, type, from, ts}</code> �
 the channel’s own chat and is absent for a channel no chat owns, so a client can
 refetch exactly one conversation — and is only a refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
 because a client refetches on connect and on every reconnect.</p>
+<p><code>GET /api/agent-states/ws</code> uses the same hint loop for agent state. It sends
+<code>{agent, type, ts}</code> for every <code>iteration</code> and <code>state</code> event of any agent on
+the host, so the UI refetches the agents list and the agent status. The loop
+manager emits <code>state</code> when an agent is started or stopped, when its Autopilot
+switch or status line changes, and when its loop halts or stops for idleness. The route
+is not under <code>/api/agents/</code> because an agent may be named <code>ws</code>.</p>
 <p>The bundled Telegram process remains outside the daemon. It authorizes and
 maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto <code>chat:telegram:&lt;agent&gt;</code>. Agent replies return through the

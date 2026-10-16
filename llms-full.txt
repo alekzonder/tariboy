@@ -474,7 +474,25 @@ flowchart LR
 
 Structured daemon logs, per-agent audit JSONL, iteration results, task
 events, usage records, and optional OpenTelemetry signals make the system
-observable. OTLP stays off until an endpoint is explicitly configured. Proxy
+observable.
+
+The daemon writes two logs in its runtime directory (`~/.tariboyd` by
+default). `tariboyd.log` is the application log: the launcher sends the
+daemon's stdout and stderr to it. It has startup lines, warnings and errors,
+and one `WARN` line `slow or failed http request` for each API request that
+takes 500 ms or more or ends with a 5xx status. WebSocket and SSE requests stay
+open by design and are not slow requests. `tariboyd.access.log` has one JSON
+line for every API request: method, path, status and `dur_ms`. The daemon
+rotates the access log at 50 MB and keeps three old copies
+(`tariboyd.access.log.1` is the newest). The CLI and Desktop launchers move a
+`tariboyd.log` that is larger than 50 MB to `tariboyd.log.1` before they start
+a daemon. `tariboy daemon logs` shows only `tariboyd.log`.
+
+The daemon has one SQLite writer connection for all writes. The reads that the
+UI polls — daemon status, the agents list, the chat list, the task list and
+the image list — use a separate pool of four read-only connections. WAL mode
+lets those reads see the last committed state while a write is open, so they do
+not wait behind the writer. OTLP stays off until an endpoint is explicitly configured. Proxy
 transcripts are sensitive data and support bundles intentionally exclude them.
 
 ## Key daemon flags
@@ -1196,6 +1214,13 @@ the channel's own chat and is absent for a channel no chat owns, so a client can
 refetch exactly one conversation — and is only a refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
 because a client refetches on connect and on every reconnect.
 
+`GET /api/agent-states/ws` uses the same hint loop for agent state. It sends
+`{agent, type, ts}` for every `iteration` and `state` event of any agent on
+the host, so the UI refetches the agents list and the agent status. The loop
+manager emits `state` when an agent is started or stopped, when its Autopilot
+switch or status line changes, and when its loop halts or stops for idleness. The route
+is not under `/api/agents/` because an agent may be named `ws`.
+
 The bundled Telegram process remains outside the daemon. It authorizes and
 maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto `chat:telegram:<agent>`. Agent replies return through the
@@ -1498,7 +1523,8 @@ Operators change both with **Settings → General → Backup & data retention**,
 `tariboy maintenance get|set|run`, or `/api/maintenance`.
 
 A run, scheduled or manual, is serialized and always starts with a backup:
-`VACUUM INTO` writes a consistent copy while the daemon keeps serving, to
+`VACUUM INTO` on its own short-lived connection writes a consistent copy
+while the daemon keeps serving and writing, to
 `<base-dir>/backups/db/tariboyd-<UTC time>.db`, and only the newest configured
 number of those exact names are kept; other files in the directory are never
 rotated. **If the backup fails, nothing is deleted.** The run then prunes agent
@@ -1529,9 +1555,9 @@ when retention is `0`:
 
 When compaction is on and at least the threshold share of pages is free, a
 full `VACUUM` plus `wal_checkpoint(TRUNCATE)` returns the space to the file
-system. The daemon uses one SQLite connection, so every other database request
-waits for the few seconds this takes, and the disk needs free space about the
-size of the database. A failed `VACUUM` is rolled back by SQLite and recorded in
+system. `VACUUM` holds the daemon's single writer connection, so every write
+waits for the few seconds this takes; the read-only pool that serves the polled
+API reads continues. The disk needs free space about the size of the database. A failed `VACUUM` is rolled back by SQLite and recorded in
 the run result. The scheduler checks the wall clock every minute, so the slot
 holds across system sleep; a slot noticed more than 15 minutes late — the
 daemon was down or the machine asleep — is skipped, not caught up.
@@ -2283,15 +2309,38 @@ already performs; `scope_agent`, `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. A new task is created in the selected queue,
 or in the first queue when `All queues` is selected.
 
-The table header and its rows read one set of column widths, so a column cannot
-drift from its heading. `Pri` comes first in every table, then `Key`, a fixed
-168px holding the tree indents, the chevron and the key, which truncates rather
-than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
+The table header and its rows read one column layout, so a column cannot
+drift from its heading. By default `Pri` comes first in every table, then
+`Key`, 168px holding the tree indents, the chevron and the key, which truncates
+rather than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
 `in_progress` (`started_at`) to completion, or to now while the task is open,
 and `—` for a task never started — and the server table adds `Agent`. There is no
 `Queue` column: the key prefix already names the queue. In the server table the
 header is sticky. The drag grip lives in the row's left padding and appears on
 hover.
+
+The column order and widths are the user's. One order covers the agent, server
+and every-server tables; each shows its own columns in that order. Every column
+except `Task` has its own width, from 40px to 480px (`Key` from 96px, `Pri`
+from 24px); `Task` can move but always takes the rest of the row, so very wide
+columns on a narrow screen squeeze it. The layout is the versioned WebView
+localStorage record `tasks:columns:v1`, written on every change and read once
+per page load, so it survives a reload or an app restart on that device; it is
+not synced between devices. An unreadable record, an unknown column or an
+out-of-range width falls back to the default for that part, and when storage
+is unavailable changes last until the next reload.
+
+- **Width:** the edge after each header cell is a `separator`. A mouse or a
+  finger drags it (Pointer Events with capture, `touch-action: none`, a 16px
+  target on a coarse pointer); arrows step 8px, Shift+arrows 32px, and Home or
+  a double click restores the default.
+- **Order:** a header label is a drag grip in its own drag context, apart from
+  the row drags. A mouse starts after 5px, a finger after a 250ms press, so a
+  swipe still scrolls; Space or Enter starts a keyboard move.
+- **Columns menu:** the `Columns` button in the filter bar lists the current
+  table's columns with one-tap `Narrow`/`Widen` (16px) and left/right moves,
+  and `Reset columns`. It is the touch path on a phone or tablet and stays
+  open between steps.
 
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
@@ -2438,7 +2487,17 @@ type, from, ts}` — so an open conversation refetches only when its own chat is
 named; `chat` is absent for a channel no chat owns, and such a frame still
 falls back to the agent it concerns, which is what existing consumers read. The
 sidebar mounts one such socket per configured host, so the chat order changes as
-a message lands rather than on the next poll. **Chat → Queue**
+a message lands rather than on the next poll.
+
+Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
+frames `{agent, type, ts}` say that an iteration event or a state change
+(start, stop, Autopilot switch, status line, halt, idle stop) happened for
+that agent. The sidebar refetches its agents at most once a second
+on these hints, and the agent header refetches its status on a hint for its own
+agent. While every host's state socket is open, the sidebar polls every 15
+seconds and the agent header every 15 seconds as a fallback. A host without the
+socket (an older daemon) keeps the 3-second polls. The daemon banner probes
+`/api/daemon/status` every 10 seconds. **Chat → Queue**
 (Queue/Archive/DLQ) refreshes from the agent event stream with a 3s poll.
 
 An agent's **Chat → Queue** view can still mark one row processed. Its
@@ -2620,7 +2679,7 @@ part of a page's identity: Tasks, Workflows, Stores, Settings and Configuration
 keep their loaded data, the open task, filters, scroll position and every
 unsaved draft. The route boundary keeps one tree shape and only dims the page
 and makes it inert under a single status line. A host object keeps its
-identity until one of its fields changes, so the 3-second sidebar poll does not
+identity until one of its fields changes, so the sidebar poll does not
 restart page loads.
 
 While the host has no endpoint, background loads are skipped rather than
@@ -3848,7 +3907,10 @@ in that SPA build and drops the bundled resources. The Gradle project under
 `desktop/src-tauri/gen/android` is generated by `cargo tauri android init` and
 committed; it adds `res/xml/network_security_config.xml` (plain http only to
 `127.0.0.1`, `localhost`, and `::1`), Android launcher icons generated from
-`desktop/branding`, and release signing from an ignored `keystore.properties`.
+`desktop/branding`, release signing from an ignored `keystore.properties`, and
+a `MainActivity` that pads the edge-to-edge WebView by the system bars, the
+display cutout, and the keyboard. Keep that padding after a regeneration;
+`scripts/android_activity_test.go` checks it.
 
 Building needs a JDK 17 or newer, the Android SDK with a platform and
 build-tools in `ANDROID_HOME`, and an NDK in `NDK_HOME`:
@@ -6139,7 +6201,7 @@ Agents can inspect, create, organize, delegate, discuss, and complete visible
 work:
 
 ```bash
-ttasks mine
+ttasks list --queue OPS --status in_progress
 ttasks ready --queue OPS --claim
 ttasks show OPS-12
 ttasks create --parent OPS-12 --title "Add regression coverage"
@@ -6357,13 +6419,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.83.0` alpha on an Apple Silicon Mac.
+This path is for the `0.84.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.83.0_aarch64.dmg`;
+- a verified `Tariboy_0.84.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -7285,7 +7347,8 @@ derives identity from the socket.
 
 | Command | Purpose |
 | --- | --- |
-| `ttasks mine` | List visible tasks |
+| `ttasks list [--status S] [--text T] [--sort ORDER] [--limit N] [--after KEY]` | List and search visible tasks; [Native Tasks](/docs/tasks) lists every filter |
+| `ttasks mine` | Alias of `ttasks list` |
 | `ttasks ready [--queue Q] [--claim]` | List ready work; `--claim` requires agent mode |
 | `ttasks show KEY` | Show task detail, comments, waits, and relations |
 | `ttasks create --queue Q --title T [--assignee A]` | Create a queue-root task |
@@ -7913,7 +7976,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.83.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.84.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -7963,7 +8026,8 @@ window mutation permissions.
 
 Every export selects exactly one host. The default bundle includes its raw ID
 and label plus bounded platform/version/health/prerequisite state and
-allowlisted lifecycle/error lines. Other host records are not exported.
+allowlisted lifecycle/error lines from `tariboyd.log`. The per-request
+`tariboyd.access.log` is not exported. Other host records are not exported.
 
 An explicit, unchecked sensitive-data option adds the complete redacted allowed
 files for the newest 10 iterations of each agent on that host. It reads only
@@ -8012,7 +8076,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.83.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.84.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -8065,7 +8129,8 @@ after it is shared.
 
 By default the export contains only Desktop metadata, the selected host ID and
 label, bounded health/platform/prerequisite state, and allowlisted lifecycle
-diagnostics from that host's daemon. No other registered host is included. If a
+diagnostics from that host's daemon. Those diagnostics come from
+`tariboyd.log`; the per-request `tariboyd.access.log` is never included. No other registered host is included. If a
 host is unreachable, or still runs a daemon without the diagnostics endpoint,
 Desktop still creates a partial ZIP with a stable collection error.
 
@@ -9979,9 +10044,9 @@ The Tasks toolbar starts in **Active** view. Its `GET /api/tasks` request sends
 `status_view=active`, and the daemon applies that predicate to the task's
 category before it builds the response. A flexible task's category equals its
 status; a workflow task's category is the one its workflow status maps to.
-Active returns only the categories `open` and `in_progress`; **Closed**
-(`status_view=closed`) returns only the completed category, `done`; and **All**
-(`status_view=all`) returns every category, including `cancelled`. An omitted
+Active returns the categories `open`, `in_progress`, and `wait_customer`;
+**Closed** (`status_view=closed`) returns the finished categories, `done` and
+`cancelled`; and **All** (`status_view=all`) returns every category. An omitted
 `status_view` is Active when no explicit `status` filter is present;
 an explicit `status` without a view keeps its legacy authoritative semantics.
 When both are supplied, their predicates intersect. Other task filters and
@@ -10084,7 +10149,7 @@ rest of the queue. `--group` remains forbidden there. See **Filing a task into
 a queue**.
 
 ```bash
-ttasks mine
+ttasks list
 ttasks ready --claim
 ttasks show TEST-fkt3
 ttasks create --queue TEST --title "Investigate failure" --priority P1
@@ -10099,6 +10164,48 @@ ttasks move TEST-fkt3 --to-root
 ttasks block TEST-fkt3 --by TEST-2xwv
 ttasks relate TEST-fkt3 TEST-hb4k
 ttasks done TEST-fkt3
+```
+
+### Listing and searching tasks
+
+`ttasks list` lists the tasks the caller can see: in agent mode the agent's
+visible tasks, in operator mode every host task. `ttasks mine` is an alias with
+the same flags and output. Search is `list --text`, which matches the key,
+title, and description without regard to case.
+
+Filters combine with AND, and a comma-separated value matches any of its items:
+
+| Flag | Selects |
+| --- | --- |
+| `--status S` | The status `show` prints: the workflow status of a workflow task, the stored status of a flexible task. A category value also finds workflow tasks in that category. |
+| `--category C` | Only the category: `open`, `in_progress`, `wait_customer`, `done`, `cancelled` |
+| `--priority P` | `P0` to `P3` |
+| `--queue`, `--assignee`, `--group` | The queue prefix, the assigned agent, the task group |
+| `--author`, `--customer` | A principal, `user:login` or `agent:name`; a bare name means `agent:name` |
+| `--parent KEY`, `--subtree KEY` | Direct children, or every descendant, of `KEY`; not both |
+| `--waiting-for P` | Tasks with an open question to `P`; `me` is the current agent |
+| `--blocked true` or `false` | Blocked or unblocked tasks |
+| `--view V` | `active` (the default without `--status`), `closed` (done and cancelled), or `all` |
+
+`--sort` is `tree` (the queue tree order, the default), `updated` or `created`
+(newest first), or `priority` (`P0` first, then newest). A page holds `--limit`
+tasks, 50 by default and 500 at most. The output is a table of key, priority,
+status, assignee, update time, and title. A `B` before the key marks a blocked
+task, and a workflow task shows its category in brackets. When more tasks
+remain, a last line `next:` prints the command for the next page: the same
+filters with `--after KEY`. `--json` prints the page as `tasks`, `next_cursor`,
+and `sequence`.
+
+Every filter applies inside the caller's visibility. A `--parent` or
+`--subtree` key the caller cannot see gives an empty list, the same as a key
+that does not exist, and a subtree never shows a descendant the caller cannot
+see.
+
+```bash
+ttasks list --status plan,review
+ttasks list --text "login bug" --sort updated --limit 20
+ttasks list --subtree TEST-fkt3 --view all
+ttasks list --waiting-for me --json
 ```
 
 On a task in a queue bound to a workflow, use the workflow commands instead of

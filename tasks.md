@@ -251,9 +251,9 @@ The Tasks toolbar starts in **Active** view. Its `GET /api/tasks` request sends
 `status_view=active`, and the daemon applies that predicate to the task's
 category before it builds the response. A flexible task's category equals its
 status; a workflow task's category is the one its workflow status maps to.
-Active returns only the categories `open` and `in_progress`; **Closed**
-(`status_view=closed`) returns only the completed category, `done`; and **All**
-(`status_view=all`) returns every category, including `cancelled`. An omitted
+Active returns the categories `open`, `in_progress`, and `wait_customer`;
+**Closed** (`status_view=closed`) returns the finished categories, `done` and
+`cancelled`; and **All** (`status_view=all`) returns every category. An omitted
 `status_view` is Active when no explicit `status` filter is present;
 an explicit `status` without a view keeps its legacy authoritative semantics.
 When both are supplied, their predicates intersect. Other task filters and
@@ -356,7 +356,7 @@ rest of the queue. `--group` remains forbidden there. See **Filing a task into
 a queue**.
 
 ```bash
-ttasks mine
+ttasks list
 ttasks ready --claim
 ttasks show TEST-fkt3
 ttasks create --queue TEST --title "Investigate failure" --priority P1
@@ -371,6 +371,48 @@ ttasks move TEST-fkt3 --to-root
 ttasks block TEST-fkt3 --by TEST-2xwv
 ttasks relate TEST-fkt3 TEST-hb4k
 ttasks done TEST-fkt3
+```
+
+### Listing and searching tasks
+
+`ttasks list` lists the tasks the caller can see: in agent mode the agent's
+visible tasks, in operator mode every host task. `ttasks mine` is an alias with
+the same flags and output. Search is `list --text`, which matches the key,
+title, and description without regard to case.
+
+Filters combine with AND, and a comma-separated value matches any of its items:
+
+| Flag | Selects |
+| --- | --- |
+| `--status S` | The status `show` prints: the workflow status of a workflow task, the stored status of a flexible task. A category value also finds workflow tasks in that category. |
+| `--category C` | Only the category: `open`, `in_progress`, `wait_customer`, `done`, `cancelled` |
+| `--priority P` | `P0` to `P3` |
+| `--queue`, `--assignee`, `--group` | The queue prefix, the assigned agent, the task group |
+| `--author`, `--customer` | A principal, `user:login` or `agent:name`; a bare name means `agent:name` |
+| `--parent KEY`, `--subtree KEY` | Direct children, or every descendant, of `KEY`; not both |
+| `--waiting-for P` | Tasks with an open question to `P`; `me` is the current agent |
+| `--blocked true` or `false` | Blocked or unblocked tasks |
+| `--view V` | `active` (the default without `--status`), `closed` (done and cancelled), or `all` |
+
+`--sort` is `tree` (the queue tree order, the default), `updated` or `created`
+(newest first), or `priority` (`P0` first, then newest). A page holds `--limit`
+tasks, 50 by default and 500 at most. The output is a table of key, priority,
+status, assignee, update time, and title. A `B` before the key marks a blocked
+task, and a workflow task shows its category in brackets. When more tasks
+remain, a last line `next:` prints the command for the next page: the same
+filters with `--after KEY`. `--json` prints the page as `tasks`, `next_cursor`,
+and `sequence`.
+
+Every filter applies inside the caller's visibility. A `--parent` or
+`--subtree` key the caller cannot see gives an empty list, the same as a key
+that does not exist, and a subtree never shows a descendant the caller cannot
+see.
+
+```bash
+ttasks list --status plan,review
+ttasks list --text "login bug" --sort updated --limit 20
+ttasks list --subtree TEST-fkt3 --view all
+ttasks list --waiting-for me --json
 ```
 
 On a task in a queue bound to a workflow, use the workflow commands instead of

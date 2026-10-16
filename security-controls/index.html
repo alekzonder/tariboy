@@ -196,7 +196,7 @@ any other support-bundle exclusion. See <a href="/tariboy/docs/architecture/ai-p
 audit</a> for its
 runtime lifecycle.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.83.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.84.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;
@@ -238,7 +238,8 @@ window mutation permissions.</p>
 <h2 id="support-bundle-boundary"><a class="blume-heading-anchor" href="#support-bundle-boundary">Support-bundle boundary</a></h2>
 <p>Every export selects exactly one host. The default bundle includes its raw ID
 and label plus bounded platform/version/health/prerequisite state and
-allowlisted lifecycle/error lines. Other host records are not exported.</p>
+allowlisted lifecycle/error lines from <code>tariboyd.log</code>. The per-request
+<code>tariboyd.access.log</code> is not exported. Other host records are not exported.</p>
 <p>An explicit, unchecked sensitive-data option adds the complete redacted allowed
 files for the newest 10 iterations of each agent on that host. It reads only
 <code>result.json</code>, <code>logs/shim.log</code>, <code>logs/harness.stdout.log</code>, and

@@ -223,7 +223,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.83.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.84.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -273,7 +273,8 @@ window mutation permissions.
 
 Every export selects exactly one host. The default bundle includes its raw ID
 and label plus bounded platform/version/health/prerequisite state and
-allowlisted lifecycle/error lines. Other host records are not exported.
+allowlisted lifecycle/error lines from `tariboyd.log`. The per-request
+`tariboyd.access.log` is not exported. Other host records are not exported.
 
 An explicit, unchecked sensitive-data option adds the complete redacted allowed
 files for the newest 10 iterations of each agent on that host. It reads only

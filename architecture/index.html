@@ -366,7 +366,23 @@ for the detailed scheduler and watchdog behavior.</p>
 </table></div>
 <p>Structured daemon logs, per-agent audit JSONL, iteration results, task
 events, usage records, and optional OpenTelemetry signals make the system
-observable. OTLP stays off until an endpoint is explicitly configured. Proxy
+observable.</p>
+<p>The daemon writes two logs in its runtime directory (<code>~/.tariboyd</code> by
+default). <code>tariboyd.log</code> is the application log: the launcher sends the
+daemon’s stdout and stderr to it. It has startup lines, warnings and errors,
+and one <code>WARN</code> line <code>slow or failed http request</code> for each API request that
+takes 500 ms or more or ends with a 5xx status. WebSocket and SSE requests stay
+open by design and are not slow requests. <code>tariboyd.access.log</code> has one JSON
+line for every API request: method, path, status and <code>dur_ms</code>. The daemon
+rotates the access log at 50 MB and keeps three old copies
+(<code>tariboyd.access.log.1</code> is the newest). The CLI and Desktop launchers move a
+<code>tariboyd.log</code> that is larger than 50 MB to <code>tariboyd.log.1</code> before they start
+a daemon. <code>tariboy daemon logs</code> shows only <code>tariboyd.log</code>.</p>
+<p>The daemon has one SQLite writer connection for all writes. The reads that the
+UI polls — daemon status, the agents list, the chat list, the task list and
+the image list — use a separate pool of four read-only connections. WAL mode
+lets those reads see the last committed state while a write is open, so they do
+not wait behind the writer. OTLP stays off until an endpoint is explicitly configured. Proxy
 transcripts are sensitive data and support bundles intentionally exclude them.</p>
 <h2 id="key-daemon-flags"><a class="blume-heading-anchor" href="#key-daemon-flags">Key daemon flags</a></h2>
 <ul>

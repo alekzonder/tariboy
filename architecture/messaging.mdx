@@ -176,6 +176,13 @@ the channel's own chat and is absent for a channel no chat owns, so a client can
 refetch exactly one conversation — and is only a refetch hint — the HTTP responses stay authoritative. Nothing is replayed,
 because a client refetches on connect and on every reconnect.
 
+`GET /api/agent-states/ws` uses the same hint loop for agent state. It sends
+`{agent, type, ts}` for every `iteration` and `state` event of any agent on
+the host, so the UI refetches the agents list and the agent status. The loop
+manager emits `state` when an agent is started or stopped, when its Autopilot
+switch or status line changes, and when its loop halts or stops for idleness. The route
+is not under `/api/agents/` because an agent may be named `ws`.
+
 The bundled Telegram process remains outside the daemon. It authorizes and
 maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto `chat:telegram:<agent>`. Agent replies return through the

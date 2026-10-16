@@ -15,7 +15,7 @@ sidebar:
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.83.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.84.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -68,7 +68,8 @@ after it is shared.
 
 By default the export contains only Desktop metadata, the selected host ID and
 label, bounded health/platform/prerequisite state, and allowlisted lifecycle
-diagnostics from that host's daemon. No other registered host is included. If a
+diagnostics from that host's daemon. Those diagnostics come from
+`tariboyd.log`; the per-request `tariboyd.access.log` is never included. No other registered host is included. If a
 host is unreachable, or still runs a daemon without the diagnostics endpoint,
 Desktop still creates a partial ZIP with a stable collection error.
 

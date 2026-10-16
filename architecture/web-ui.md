@@ -450,15 +450,38 @@ already performs; `scope_agent`, `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. A new task is created in the selected queue,
 or in the first queue when `All queues` is selected.
 
-The table header and its rows read one set of column widths, so a column cannot
-drift from its heading. `Pri` comes first in every table, then `Key`, a fixed
-168px holding the tree indents, the chevron and the key, which truncates rather
-than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
+The table header and its rows read one column layout, so a column cannot
+drift from its heading. By default `Pri` comes first in every table, then
+`Key`, 168px holding the tree indents, the chevron and the key, which truncates
+rather than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
 `in_progress` (`started_at`) to completion, or to now while the task is open,
 and `—` for a task never started — and the server table adds `Agent`. There is no
 `Queue` column: the key prefix already names the queue. In the server table the
 header is sticky. The drag grip lives in the row's left padding and appears on
 hover.
+
+The column order and widths are the user's. One order covers the agent, server
+and every-server tables; each shows its own columns in that order. Every column
+except `Task` has its own width, from 40px to 480px (`Key` from 96px, `Pri`
+from 24px); `Task` can move but always takes the rest of the row, so very wide
+columns on a narrow screen squeeze it. The layout is the versioned WebView
+localStorage record `tasks:columns:v1`, written on every change and read once
+per page load, so it survives a reload or an app restart on that device; it is
+not synced between devices. An unreadable record, an unknown column or an
+out-of-range width falls back to the default for that part, and when storage
+is unavailable changes last until the next reload.
+
+- **Width:** the edge after each header cell is a `separator`. A mouse or a
+  finger drags it (Pointer Events with capture, `touch-action: none`, a 16px
+  target on a coarse pointer); arrows step 8px, Shift+arrows 32px, and Home or
+  a double click restores the default.
+- **Order:** a header label is a drag grip in its own drag context, apart from
+  the row drags. A mouse starts after 5px, a finger after a 250ms press, so a
+  swipe still scrolls; Space or Enter starts a keyboard move.
+- **Columns menu:** the `Columns` button in the filter bar lists the current
+  table's columns with one-tap `Narrow`/`Widen` (16px) and left/right moves,
+  and `Reset columns`. It is the touch path on a phone or tablet and stays
+  open between steps.
 
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,
@@ -605,7 +628,17 @@ type, from, ts}` — so an open conversation refetches only when its own chat is
 named; `chat` is absent for a channel no chat owns, and such a frame still
 falls back to the agent it concerns, which is what existing consumers read. The
 sidebar mounts one such socket per configured host, so the chat order changes as
-a message lands rather than on the next poll. **Chat → Queue**
+a message lands rather than on the next poll.
+
+Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
+frames `{agent, type, ts}` say that an iteration event or a state change
+(start, stop, Autopilot switch, status line, halt, idle stop) happened for
+that agent. The sidebar refetches its agents at most once a second
+on these hints, and the agent header refetches its status on a hint for its own
+agent. While every host's state socket is open, the sidebar polls every 15
+seconds and the agent header every 15 seconds as a fallback. A host without the
+socket (an older daemon) keeps the 3-second polls. The daemon banner probes
+`/api/daemon/status` every 10 seconds. **Chat → Queue**
 (Queue/Archive/DLQ) refreshes from the agent event stream with a 3s poll.
 
 An agent's **Chat → Queue** view can still mark one row processed. Its
@@ -787,7 +820,7 @@ part of a page's identity: Tasks, Workflows, Stores, Settings and Configuration
 keep their loaded data, the open task, filters, scroll position and every
 unsaved draft. The route boundary keeps one tree shape and only dims the page
 and makes it inert under a single status line. A host object keeps its
-identity until one of its fields changes, so the 3-second sidebar poll does not
+identity until one of its fields changes, so the sidebar poll does not
 restart page loads.
 
 While the host has no endpoint, background loads are skipped rather than

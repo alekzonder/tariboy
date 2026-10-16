@@ -110,7 +110,8 @@ before and after, compaction, error) is stored under <code>maintenance_last_run<
 Operators change both with <strong>Settings → General → Backup &amp; data retention</strong>,
 <code>tariboy maintenance get|set|run</code>, or <code>/api/maintenance</code>.</p>
 <p>A run, scheduled or manual, is serialized and always starts with a backup:
-<code>VACUUM INTO</code> writes a consistent copy while the daemon keeps serving, to
+<code>VACUUM INTO</code> on its own short-lived connection writes a consistent copy
+while the daemon keeps serving and writing, to
 <code>&lt;base-dir&gt;/backups/db/tariboyd-&lt;UTC time&gt;.db</code>, and only the newest configured
 number of those exact names are kept; other files in the directory are never
 rotated. <strong>If the backup fails, nothing is deleted.</strong> The run then prunes agent
@@ -141,9 +142,9 @@ therefore ends at that cutoff and stays only in the database backups.</li>
 </ul>
 <p>When compaction is on and at least the threshold share of pages is free, a
 full <code>VACUUM</code> plus <code>wal_checkpoint(TRUNCATE)</code> returns the space to the file
-system. The daemon uses one SQLite connection, so every other database request
-waits for the few seconds this takes, and the disk needs free space about the
-size of the database. A failed <code>VACUUM</code> is rolled back by SQLite and recorded in
+system. <code>VACUUM</code> holds the daemon’s single writer connection, so every write
+waits for the few seconds this takes; the read-only pool that serves the polled
+API reads continues. The disk needs free space about the size of the database. A failed <code>VACUUM</code> is rolled back by SQLite and recorded in
 the run result. The scheduler checks the wall clock every minute, so the slot
 holds across system sleep; a slot noticed more than 15 minutes late — the
 daemon was down or the machine asleep — is skipped, not caught up.</p>
