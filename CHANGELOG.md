@@ -1,3 +1,30 @@
+## [0.82.0] - 2026-10-16
+
+### Added
+
+- Nightly maintenance deletes chat history older than the new chat history
+  period: delivered bus messages of every chat and agent, with the existing
+  guards for unacknowledged and unconsumed messages. Set it with
+  `tariboy maintenance set --chat-retention-days N`, the
+  `chat_retention_days` maintenance setting, or **Keep chat history for
+  (days)** in **Settings → General → Backup & data retention**. `0` leaves
+  messages to the general retention period.
+
+### Changed
+
+- The chat history period defaults to 7 days, also for hosts whose stored
+  maintenance settings predate it. After upgrading, the next nightly run
+  deletes delivered chat messages older than 7 days, even when
+  `retention_days` is `0`; older history stays only in database backups. Set
+  `--chat-retention-days 0` before the next run to keep the previous behavior.
+
+### Fixed
+
+- Desktop queue settings no longer remount the Secrets section on every
+  render of a workflow-bound queue.
+
+[0.82.0]: https://github.com/alekzonder/tariboy/compare/v0.81.0...v0.82.0
+
 ## [0.81.0] - 2026-10-15
 
 ### Added
