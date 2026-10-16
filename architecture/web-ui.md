@@ -319,7 +319,8 @@ remain unavailable until loading succeeds and while a save is pending, so saves
 cannot overlap. Edits made during a save remain an unsaved draft.
 
 **Settings → General** also carries **Backup & data retention** for the same
-explicit host: the nightly switch and time, retention days, backups to keep,
+explicit host: the nightly switch and time, retention days, chat history days,
+backups to keep,
 compaction switch and threshold, the server-wide iteration retention defaults
 (keep iterations per agent, keep days, max bytes; `0` is unlimited), **Save**,
 and **Run now**. **Save** stores the maintenance settings and the iteration
