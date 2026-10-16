@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	if s.events != nil {
 		mux.HandleFunc("GET /api/agents/{name}/events", s.serveEvents)
 		mux.HandleFunc("GET /api/messages/ws", s.serveMessages)
+		mux.HandleFunc("GET /api/agent-states/ws", s.serveAgentStates)
 	}
 	mux.HandleFunc("GET /api/agents/{name}/terminal", s.serveTerminal)
 	mux.HandleFunc("GET /api/agents/{name}/audit-export", s.serveAuditExport)

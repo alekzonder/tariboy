@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/coder/websocket"
 )
 
@@ -14,6 +15,30 @@ import (
 // refetches over HTTP, which stays authoritative. Nothing is replayed, because a
 // client refetches on connect and on every reconnect anyway.
 func (s *Server) serveMessages(w http.ResponseWriter, r *http.Request) {
+	// "message" excludes terminal stream bytes, which are not conversation.
+	s.serveHints(w, r, []string{"message"}, func(event events.Event) map[string]any {
+		hint := map[string]any{"agent": event.Agent, "ts": event.Time}
+		for _, key := range []string{"id", "channel", "chat", "type", "from"} {
+			if value, present := event.Data[key]; present {
+				hint[key] = value
+			}
+		}
+		return hint
+	})
+}
+
+// serveAgentStates streams a hint naming the agent whenever something that can
+// change its state happens: an iteration starts or ends, or a lifecycle audit
+// event is recorded (start, stop, enable, error). The agents list and the agent
+// status refetch on a hint, so they can poll slowly.
+func (s *Server) serveAgentStates(w http.ResponseWriter, r *http.Request) {
+	s.serveHints(w, r, []string{"iteration", "audit"}, func(event events.Event) map[string]any {
+		return map[string]any{"agent": event.Agent, "type": event.Type, "ts": event.Time}
+	})
+}
+
+// serveHints forwards every agent's events of the given types as hint frames.
+func (s *Server) serveHints(w http.ResponseWriter, r *http.Request, types []string, hint func(events.Event) map[string]any) {
 	// The tokenless loopback listener relies on the browser Origin boundary,
 	// exactly as the Tasks socket does.
 	if !requestAuthenticated(r) {
@@ -28,9 +53,8 @@ func (s *Server) serveMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.CloseNow()
 	ctx := ws.CloseRead(r.Context())
-	// An empty agent watches every agent; "message" excludes terminal stream
-	// bytes, which are not conversation.
-	stream, cancel := s.events.Subscribe("", []string{"message"})
+	// An empty agent watches every agent.
+	stream, cancel := s.events.Subscribe("", types)
 	defer cancel()
 
 	ping := time.NewTicker(25 * time.Second)
@@ -43,13 +67,7 @@ func (s *Server) serveMessages(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			hint := map[string]any{"agent": event.Agent, "ts": event.Time}
-			for _, key := range []string{"id", "channel", "chat", "type", "from"} {
-				if value, present := event.Data[key]; present {
-					hint[key] = value
-				}
-			}
-			if err := ws.Write(ctx, websocket.MessageText, mustJSON(hint)); err != nil {
+			if err := ws.Write(ctx, websocket.MessageText, mustJSON(hint(event))); err != nil {
 				return
 			}
 		case <-ping.C:

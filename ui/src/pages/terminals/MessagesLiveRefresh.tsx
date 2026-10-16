@@ -1,41 +1,63 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useMessagesSocket } from "@/hooks/useMessagesSocket";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAgentStatesSocket, useMessagesSocket } from "@/hooks/useMessagesSocket";
 import { targetFor } from "@/lib/terminalsHost";
 
-/** One socket per server. It renders nothing: its only job is to turn a live
- *  publication into an immediate refresh of the authoritative HTTP snapshot, so
- *  the chat list reorders as a message lands instead of on the next poll. */
-function HostMessagesWatch({ hostId, onChange }: { hostId: string; onChange: () => void }) {
+/** Two sockets per server. It renders nothing: its only job is to turn a live
+ *  publication or agent state change into an immediate refresh of the
+ *  authoritative HTTP snapshot, so the sidebar updates as it happens instead of
+ *  on the next poll. */
+function HostMessagesWatch({ hostId, onMessage, onState, onAgentStates }: {
+  hostId: string;
+  onMessage: () => void;
+  onState: () => void;
+  onAgentStates: (hostId: string, open: boolean) => void;
+}) {
   const target = targetFor(hostId);
-  useMessagesSocket({
-    target,
-    enabled: !target || Boolean(target.baseURL),
-    onHint: onChange,
-  });
+  const enabled = !target || Boolean(target.baseURL);
+  useMessagesSocket({ target, enabled, onHint: onMessage });
+  const states = useAgentStatesSocket({ target, enabled, onHint: onState });
+  useEffect(() => { onAgentStates(hostId, states === "open"); }, [hostId, states, onAgentStates]);
   return null;
 }
 
-/** Watch every configured server's messages at once. A burst of publications is
- *  one refresh, not one per message: the snapshot is the same either way. */
-export function MessagesLiveRefresh({ hostIds, onChange }: {
-  hostIds: string[];
-  onChange: () => void;
-}) {
-  const latest = useRef(onChange);
-  useEffect(() => { latest.current = onChange; }, [onChange]);
+/** useCoalesced runs fn at most once per window, however many calls land in it. */
+function useCoalesced(fn: () => void, windowMs: number) {
+  const latest = useRef(fn);
+  useEffect(() => { latest.current = fn; }, [fn]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => { if (timer.current !== undefined) clearTimeout(timer.current); }, []);
-  const coalesced = useCallback(() => {
+  return useCallback(() => {
     if (timer.current !== undefined) return;
     timer.current = setTimeout(() => {
       timer.current = undefined;
       latest.current();
-    }, 250);
+    }, windowMs);
+  }, [windowMs]);
+}
+
+/** Watch every configured server's messages and agent states at once. A burst
+ *  of hints is one refresh, not one per hint: the snapshot is the same either
+ *  way. onLive reports whether every server's agent states socket is open, so
+ *  the caller can poll slowly while hints keep the sidebar current. */
+export function MessagesLiveRefresh({ hostIds, onChange, onLive }: {
+  hostIds: string[];
+  onChange: () => void;
+  onLive?: (live: boolean) => void;
+}) {
+  // A chat reorders quickly; agent state hints come in bursts from busy
+  // agents, so they refetch at most once a second.
+  const onMessage = useCoalesced(onChange, 250);
+  const onState = useCoalesced(onChange, 1000);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const onAgentStates = useCallback((hostId: string, isOpen: boolean) => {
+    setOpen((previous) => (previous[hostId] === isOpen ? previous : { ...previous, [hostId]: isOpen }));
   }, []);
+  const live = hostIds.length > 0 && hostIds.every((id) => open[id]);
+  useEffect(() => { onLive?.(live); }, [live, onLive]);
   return (
     <>
       {hostIds.map((hostId) => (
-        <HostMessagesWatch key={hostId} hostId={hostId} onChange={coalesced} />
+        <HostMessagesWatch key={hostId} hostId={hostId} onMessage={onMessage} onState={onState} onAgentStates={onAgentStates} />
       ))}
     </>
   );
