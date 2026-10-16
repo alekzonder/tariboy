@@ -28,6 +28,28 @@ argument-hint: "[lite|full|ultra]"
 	}
 }
 
+func TestParseFrontmatterAcceptsAdditionalFields(t *testing.T) {
+	body := []byte(`---
+name: code-review
+description: review
+version: 1.0
+custom: value
+model: sonnet
+disable-model-invocation: true
+hooks:
+  - event: start
+    run: [echo, hi]
+---
+`)
+	got, err := parseFrontmatter(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "code-review" || got.Description != "review" {
+		t.Fatalf("frontmatter = %#v", got)
+	}
+}
+
 func TestParseFrontmatterRejectsInvalidDocuments(t *testing.T) {
 	tests := map[string]string{
 		"missing opening delimiter": "name: code-review\ndescription: review\n---\n",
@@ -36,7 +58,6 @@ func TestParseFrontmatterRejectsInvalidDocuments(t *testing.T) {
 		"not a mapping":             "---\n- name\n- description\n---\n",
 		"missing name":              "---\ndescription: review\n---\n",
 		"missing description":       "---\nname: code-review\n---\n",
-		"unknown field":             "---\nname: code-review\ndescription: review\ncustom: value\n---\n",
 		"duplicate field":           "---\nname: code-review\nname: other\ndescription: review\n---\n",
 		"yaml alias":                "---\nname: &name code-review\ndescription: *name\n---\n",
 		"consecutive hyphens":       "---\nname: code--review\ndescription: review\n---\n",
