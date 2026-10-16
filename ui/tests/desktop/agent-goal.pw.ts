@@ -40,8 +40,8 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
   `), { timeout: 30_000 }).toBe("TARI-1");
 
   await desktop.elementClick(await desktop.findElement("css selector", "#goal-enabled"));
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save Goal settings']"));
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Goal settings saved");
+  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"));
+  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("All changes saved");
   await desktop.execute(`window.location.hash = "#/servers/local/tasks"; return true;`);
   await desktop.execute(`window.location.hash = "#/agents/local/worker/configuration"; return true;`);
   await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Current goal");
@@ -59,8 +59,8 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
     input.dispatchEvent(new Event("input", { bubbles: true }));
     return true;
   `);
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save Goal settings']"));
-  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Goal settings saved");
+  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"));
+  await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("All changes saved");
   await desktop.execute(`window.location.hash = "#/servers/local/tasks"; return true;`);
   await desktop.execute(`window.location.hash = "#/agents/local/worker/configuration"; return true;`);
   await expect.poll(() => desktop.execute<string>("return document.body.innerText")).toContain("Current goal");

@@ -82,7 +82,7 @@ an enabled-by-default switch, a positive whole-second customer-wait timeout
 default). Configuration shows the daemon-selected goal key read-only.
 The agent header links that key to its task detail, or shows **No current goal**
 when none is selected. A question-mark action in both the header and the
-Configuration Goal section explains the sticky selection and release rules.
+Configuration Goal block explains the sticky selection and release rules.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
@@ -312,11 +312,13 @@ Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
 
 **Settings → General** edits the selected host's **Global Agent Shell Script**;
-an agent's **Configuration** edits its **Agent Shell Script**. Both controls use
-the route's explicit host target, retain an invalid draft and accessible Bash
-error after rejection, and keep drafts only in React memory. Save and Discard
-remain unavailable until loading succeeds and while a save is pending, so saves
-cannot overlap. Edits made during a save remain an unsaved draft.
+an agent's **Configuration** edits its **Agent Shell Script** in the
+Environment block. Both controls use the route's explicit host target, retain
+an invalid draft and accessible Bash error after rejection, and keep drafts
+only in React memory. The global editor keeps its own Save and Discard, which
+stay unavailable until loading succeeds and while a save is pending, so saves
+cannot overlap; the agent script is saved with the Configuration page's single
+Save. Edits made during a save remain an unsaved draft.
 
 **Settings → General** also carries **Backup & data retention** for the same
 explicit host: the nightly switch and time, retention days, chat history days,
@@ -812,33 +814,52 @@ still reports its failure. Its draft stays in the form, ready to send again
 once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
-For a stopped agent, Configuration offers a working-directory editor backed by
-the selected host's directory autocomplete. Saving changes the CWD used by the
-next launch; it does not move files or start, stop, or restart the agent. Active
-agents show the current CWD read-only until they are stopped. Remote agent
-reads, directory suggestions, and saves all use the host identified by the
-agent route rather than whichever daemon was previously active.
-Refreshing live agent or host status does not replace an unsaved CWD draft;
-the field is synchronized from the daemon only when its agent or effective host
-descriptor actually changes, or after a successful save.
+Configuration is one column of blocks in a fixed order: **General** (agent
+image, image digest, working directory), **Runtime** (harness, model, effort,
+Interactive), **Loop and timeouts** (the Loop switch and the scheduling
+fields), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+shell script and secrets), and **Retention and cleanup**. Start, Stop and
+Restart are actions, not settings: they sit in the page header next to the
+master-switch state and apply immediately.
 
-Configuration commits its remaining editable fields per section rather than per
-control. The Loop section's scheduling fields and the Runtime section's model
-and effort save as one batch each (model and effort use the same grouped
-suggestions as agent creation, for the agent's host and harness), while the working directory, secrets,
-retention, the Loop enable and disable actions, the harness, and Interactive
-keep their own separate immediate operations. A section is dirty when a
-normalized draft differs from the value it last loaded or saved, and only a
-dirty section shows its footer with an unsaved-changes status, a discard
-action, and a single save button. Saving submits just the changed fields,
-serially in a stable order, and stops at the first failure without sending the
-fields after it: acknowledged fields adopt the daemon's canonical values, while
-the failed field and the ones never attempted stay dirty drafts. The agent view
-is reloaded to reconcile those canonical values without overwriting any draft
-that is still unsaved. Harness and Interactive remain separate immediate
-operations: each selection is persisted without confirmation or an automatic
-restart, takes effect the next time the agent starts, and leaves the timing of
-any restart under the operator's control.
+Every editable field of every block belongs to one page-wide draft with one
+save mechanic. A field is dirty when its normalized draft differs from the
+value last loaded; the field shows **Changed**, its block counts its unsaved
+changes, and a sticky bar at the bottom of the page lists the count and the
+blocks and offers **Reset** and **Save**. No block has its own save button.
+**Reset** drops every draft. **Save** first validates every changed field in
+the browser and sends nothing while any is invalid: it shows the field (clearing
+a search that hid it) and focuses it. Then it sends only the changed fields,
+serially in page order (harness before model and effort), using the existing
+per-field endpoints; the four budget limits and the two retention limits are
+sent as one request each, as before. It stops at the first failure without
+sending the fields after it: acknowledged fields adopt the daemon's canonical
+values after a reload, while the failed field (with the server's reason beside
+it) and the ones never attempted stay dirty drafts, so the next Save sends only
+them. There is no batch endpoint, so a Save is not atomic. Harness and
+Interactive are saved with the page like every other field; they take effect the
+next time the agent starts and never restart it.
+
+A search box above the blocks filters by block: a case-insensitive match of
+every query word against a block's title, description, field labels, helpers
+and keywords (for example `cwd`, `tmux`, `dlq`, `usd`) shows that whole block
+and highlights the matching fields. **Changed only** shows just the blocks with
+unsaved changes. Block chips jump to a block and show its change count. Search
+only hides blocks; drafts in hidden blocks are kept and are still saved.
+
+For a stopped agent, the working directory is edited with the selected host's
+directory autocomplete. Saving changes the CWD used by the next launch; it does
+not move files or start, stop, or restart the agent. Active agents show the
+current CWD read-only until they are stopped. Remote agent reads, directory
+suggestions, and saves all use the host identified by the agent route rather
+than whichever daemon was previously active. Refreshing live agent, image or
+host status does not replace an unsaved draft; the draft is discarded only when
+the agent or the host changes. The agent image is a draft field too; **Copy
+digest**, **Cancel pending** and **Retry** of a failed pending assignment stay
+immediate actions in an actions row that says they are not part of Save.
+
+Model and effort use the same grouped suggestions as agent creation, for the
+agent's host and the selected harness.
 
 The Loop section also exposes the positive **AI inactivity timeout** in seconds,
 defaulting to 1800 (30 minutes) per agent. When a running iteration exceeds it without an
@@ -848,15 +869,16 @@ signal does not stop the loop or iteration; the next request restores
 `state=running`. Ordinary creation starts at 1800 seconds, while Clone preserves
 the source agent's configured value.
 
-The **Messages & Channels** section uses that same draft contract for the
+The **Messages** block uses that same draft contract for the
 positive whole-number `messages_batch` and `messages_max_queue` fields.
 New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent's configured value.
 
 Configuration also renders the daemon-authoritative per-agent USD budget
 projection. Its four calendar rows pair each current spend with one editable
-limit (`spent / limit`), label zero as Unlimited, and save atomically against
-the explicit agent-route host. The agent header and sidebar use the same
+limit (spent beside the limit), label zero as Unlimited, and save in one
+request against the explicit agent-route host. Older daemons that omit the
+projection get no Budgets block. The agent header and sidebar use the same
 projection; they show an explicit Out of budget state and every exhausted
 period rather than recomputing spend in the browser. Older daemons simply omit
 the additive projection.
@@ -957,11 +979,18 @@ and reports the error so the operator can retry. **Kill session** remains a
 separate action with its existing browser confirmation and does not delete the
 agent or its durable data.
 
-An agent's **Retention and cleanup** card edits that agent's override of the
-server-wide iteration defaults: each field shows `0 = server default (N)`, and
-the card lists the effective limits and that pruned iterations are archived
-with their database rows first.
+An agent's **Retention and cleanup** block edits that agent's override of the
+server-wide iteration defaults with the page Save: each field shows
+`0 = server default (N)`, and the block lists the effective limits and that
+pruned iterations are archived with their database rows first.
 
+Secrets in the Environment block are write-only. The block lists key names
+only. Removing a key and adding a key and value are page drafts applied by
+Save: a removal is shown as **Will be removed** until then, and a new value
+lives only in tab memory, is sent in a POST body and never in a URL, is never
+rendered, and is cleared once the daemon acknowledges it.
+
+**Preview cleanup** and **Prune now** stay immediate actions outside Save.
 The in-app retention prune is guarded by a confirmation dialog that names
 the operation as permanently destructive and bounds it to the current
 retention policy. Confirming dismisses the dialog and issues the real,

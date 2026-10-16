@@ -1,208 +1,24 @@
 import { afterEach, expect, it, vi } from "vitest";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
-import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import type { Daemon } from "@/lib/daemons";
-import type { AgentStatus, AgentView } from "@/lib/types";
 import type { AgentImageStatus } from "@/lib/api";
+import type { AgentStatus, AgentView } from "@/lib/types";
+import { clearHarnessCatalogCache } from "@/hooks/useHarnessCatalog";
+import { RUNTIME_PRESETS_STORAGE_KEY } from "@/lib/runtimePresets";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 
-vi.mock("@/pages/AgentSettings", () => ({
-  default: ({ target }: { target?: Daemon | null }) => (
-    <div
-      data-testid="agent-settings"
-      data-target-id={target?.id ?? ""}
-      data-target-base-url={target?.baseURL ?? ""}
-      data-target-token={target?.token ?? ""}
-    />
-  ),
-}));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-afterEach(() => vi.restoreAllMocks());
-
-const projection = {
-  name: "worker",
-  current: { ref: "worker:latest", digest: "old-digest", image_version: "1.0.0" },
-  pending: { ref: "", digest: "", error: "" },
-  next: { ref: "worker:latest", digest: "new-digest", image_version: "1.1.0", reason: "ref_moved" },
-} satisfies AgentImageStatus;
-
-function configurationTree(target = remote, name = "worker", status: AgentStatus | null = null) {
-  return <MemoryRouter><AgentNameContext.Provider value={name}>
-    <AgentStatusContext.Provider value={{ status, refresh: async () => {} }}>
-      <AgentConfigurationTab target={target} refresh={vi.fn()} />
-    </AgentStatusContext.Provider>
-  </AgentNameContext.Provider></MemoryRouter>;
-}
-
-function imageFetch(state: () => unknown = () => projection) {
-  return vi.fn((url: string) => {
-    if (url.endsWith("/image")) return response(state());
-    if (url.endsWith("/api/images")) return response({ images: [] });
-    if (url.includes("/api/fs/list")) return response({ path: "/srv", parent: "/", entries: [] });
-    return response(stopped);
-  });
-}
-
-it("shows pinned Activated version and next digest even when source versions match", async () => {
-  vi.stubGlobal("fetch", imageFetch(() => ({ ...projection, next: { ...projection.next, image_version: "1.0.0" } })));
-  render(configurationTree());
-  const current = await screen.findByRole("group", { name: "Activated version" });
-  const next = screen.getByRole("group", { name: "Next iteration" });
-  expect(current).toHaveTextContent("1.0.0");
-  expect(current).toHaveTextContent("old-digest");
-  expect(next).toHaveTextContent("1.0.0");
-  expect(next).toHaveTextContent("new-digest");
-  expect(within(next).getByRole("link", { name: "worker:latest" })).toHaveAttribute("href", "/servers/remote-1/images/worker/latest");
-  expect(screen.getByText("Update on next iteration")).toBeInTheDocument();
-  expect(screen.getByText(/preview.*not a reservation/i)).toBeInTheDocument();
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  clearHarnessCatalogCache();
+  localStorage.clear();
 });
 
-it("shows inspection and activation failures without a pending ref", async () => {
-  vi.stubGlobal("fetch", imageFetch(() => ({
-    ...projection,
-    current: { ...projection.current, image_version: undefined },
-    next: { ref: "worker:latest", digest: "", reason: "ref_moved", error: "latest is unreadable" },
-    pending: { ref: "", digest: "", error: "bridge preparation failed" },
-  })));
-  render(configurationTree());
-  expect(await screen.findByText("latest is unreadable")).toBeInTheDocument();
-  expect(screen.getByText("bridge preparation failed")).toBeInTheDocument();
-  expect(within(screen.getByRole("group", { name: "Activated version" })).getByText("Version not specified")).toBeInTheDocument();
-  expect(screen.queryByText("Update on next iteration")).not.toBeInTheDocument();
-});
-
-it("reports an unavailable image endpoint", async () => {
-  const fallback = imageFetch();
-  vi.stubGlobal("fetch", vi.fn((url: string) => url.endsWith("/image")
-    ? Promise.reject(new Error("image request failed")) : fallback(url)));
-  render(configurationTree());
-  expect(await screen.findByRole("alert")).toHaveTextContent(/Image status unavailable:.*image request failed/);
-  expect(screen.queryByRole("group", { name: "Next iteration" })).not.toBeInTheDocument();
-});
-
-it.each(["failed", "loading"])("keeps image diagnostics and cancellation usable when inventory is %s", async (inventory) => {
-  let state: AgentImageStatus = {
-    ...projection,
-    pending: { ref: "explicit:v2", digest: "explicit-digest", error: "bridge preparation failed" },
-    next: { ref: "explicit:v2", digest: "explicit-digest", reason: "pending", error: "pending archive is unreadable" },
-  };
-  let finish!: (value: Response) => void;
-  const listing = new Promise<Response>((resolve) => { finish = resolve; });
-  const fallback = imageFetch(() => state);
-  vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
-    if (url.endsWith("/api/images")) return inventory === "loading" ? listing
-      : response({ code: "internal", message: "unrelated archive is corrupt" }, false, 500);
-    if (url.endsWith("/image") && init?.method === "DELETE") state = projection;
-    return fallback(url);
-  }));
-  render(configurationTree());
-  expect(await screen.findByRole("group", { name: "Activated version" })).toHaveTextContent("old-digest");
-  expect(screen.getByRole("group", { name: "Next iteration" })).toHaveTextContent("pending archive is unreadable");
-  expect(screen.getByText("bridge preparation failed")).toBeInTheDocument();
-  if (inventory === "failed") expect(screen.getByText(/Image inventory unavailable:/)).toHaveTextContent("unrelated archive is corrupt");
-  expect(screen.getByRole("combobox", { name: "Agent image" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Retry" })).toBeDisabled();
-  const cancel = screen.getByRole("button", { name: "Cancel pending" });
-  expect(cancel).toBeEnabled();
-  fireEvent.click(cancel);
-  expect(await screen.findByText("1.1.0")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Cancel pending" })).not.toBeInTheDocument();
-  expect(screen.queryByText("bridge preparation failed")).not.toBeInTheDocument();
-  await act(async () => finish(await response({ images: [] })));
-});
-
-it("preserves the selected image draft on refresh and disables assignment after inventory failure", async () => {
-  let inventoryFailed = false;
-  let state = projection;
-  const fallback = imageFetch(() => state);
-  vi.stubGlobal("fetch", vi.fn((url: string) => url.endsWith("/api/images")
-    ? inventoryFailed ? response({ code: "internal", message: "archive is corrupt" }, false, 500)
-      : response({ images: [{ name: "worker", tag: "latest", bare: false }, { name: "reviewer", tag: "v2", bare: false }] })
-    : fallback(url)));
-  render(configurationTree());
-  fireEvent.click(await screen.findByRole("combobox", { name: "Agent image" }));
-  fireEvent.click(await screen.findByRole("option", { name: "reviewer:v2" }));
-  state = { ...projection, next: { ...projection.next, image_version: "1.2.0" } };
-  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
-  await screen.findByText("1.2.0");
-  expect(screen.getByRole("combobox", { name: "Agent image" })).toHaveTextContent("reviewer:v2");
-  expect(screen.getByRole("button", { name: "Use next iteration" })).toBeEnabled();
-  inventoryFailed = true;
-  state = { ...projection, next: { ...projection.next, image_version: "1.3.0" } };
-  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
-  expect(await screen.findByText(/Image inventory unavailable:/)).toHaveTextContent("archive is corrupt");
-  expect(screen.getByRole("group", { name: "Next iteration" })).toHaveTextContent("1.3.0");
-  expect(screen.getByRole("combobox", { name: "Agent image" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Use next iteration" })).toBeDisabled();
-});
-
-it("cancels explicit pending and previews the moved ref again", async () => {
-  let state: AgentImageStatus = {
-    ...projection,
-    pending: { ref: "explicit:v2", digest: "explicit-digest", error: "" },
-    next: { ref: "explicit:v2", digest: "explicit-digest", image_version: "2.0.0", reason: "pending" },
-  };
-  const fallback = imageFetch(() => state);
-  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    if (url.endsWith("/image") && init?.method === "DELETE") state = projection;
-    return fallback(url);
-  });
-  vi.stubGlobal("fetch", fetchMock);
-  render(configurationTree());
-  fireEvent.click(await screen.findByRole("button", { name: "Cancel pending" }));
-  expect(await screen.findByText("1.1.0")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Cancel pending" })).not.toBeInTheDocument();
-  expect(fetchMock).toHaveBeenCalledWith("https://remote.example/api/agents/worker/image", expect.objectContaining({ method: "DELETE" }));
-});
-
-it("refreshes image projection on agent status and build events without replacing CWD drafts", async () => {
-  let state = projection;
-  vi.stubGlobal("fetch", imageFetch(() => state));
-  const { rerender } = render(configurationTree());
-  await screen.findByRole("group", { name: "Next iteration" });
-  fireEvent.change(await screen.findByLabelText("Working directory"), { target: { value: "/srv/draft" } });
-  state = { ...projection, next: { ...projection.next, image_version: "1.2.0" } };
-  rerender(configurationTree(remote, "worker", { name: "worker", state: "stopped" } as AgentStatus));
-  expect(await screen.findByText("1.2.0")).toBeInTheDocument();
-  state = { ...projection, next: { ...projection.next, image_version: "1.3.0" } };
-  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
-  expect(await screen.findByText("1.3.0")).toBeInTheDocument();
-  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
-});
-
-it.each(["host", "agent", "refresh"])("ignores delayed image responses after a %s change", async (change) => {
-  let finish!: (value: Response) => void;
-  let count = 0;
-  const fresh = { ...projection, next: { ...projection.next, image_version: "2.0.0" } };
-  const fallback = imageFetch(() => fresh);
-  vi.stubGlobal("fetch", vi.fn((url: string) => {
-    if (url.endsWith("/image") && count++ === 0) return new Promise<Response>((resolve) => { finish = resolve; });
-    return fallback(url);
-  }));
-  const { rerender } = render(configurationTree());
-  await waitFor(() => expect(finish).toBeDefined());
-  if (change === "refresh") act(() => window.dispatchEvent(new Event("tariboy:image-built")));
-  else rerender(configurationTree(change === "host" ? { ...remote, id: "remote-2", baseURL: "https://other.example" } : remote, change === "agent" ? "other" : "worker"));
-  expect(await screen.findByText("2.0.0")).toBeInTheDocument();
-  await act(async () => finish(await response(projection)));
-  expect(screen.getByText("2.0.0")).toBeInTheDocument();
-  expect(screen.queryByText("1.1.0")).not.toBeInTheDocument();
-});
-
-const remote = {
-  id: "remote-1",
-  label: "Remote",
-  baseURL: "https://remote.example",
-  token: "secret",
-};
+const remote: Daemon = { id: "remote-1", label: "Remote", baseURL: "https://remote.example", token: "secret" };
 
 const stopped: AgentView = {
   name: "worker",
@@ -216,12 +32,15 @@ const stopped: AgentView = {
   interactive: true,
   loop_enabled: false,
   enabled: false,
-  interval_s: 0,
+  interval_s: 30,
   timeout_s: 60,
   hard_timeout_s: 120,
   on_timeout: "restart",
   on_error: "restart",
   max_idle_iterations: 0,
+  ai_stall_timeout_s: 1800,
+  messages_batch: 10,
+  messages_max_queue: 100,
   user_prompt: "",
   env: {},
   plugins: [],
@@ -232,511 +51,617 @@ const stopped: AgentView = {
   group: null,
   alias: "",
   notes: "",
+  budget: {
+    hour_usd: 1, day_usd: 0, week_usd: 0, month_usd: 0,
+    hour_spent_usd: 0.25, day_spent_usd: 0.25, week_spent_usd: 0.25, month_spent_usd: 0.25,
+    exhausted: [],
+  },
 };
+
+const projection = {
+  name: "worker",
+  current: { ref: "worker:latest", digest: "old-digest", image_version: "1.0.0" },
+  pending: { ref: "", digest: "", error: "" },
+  next: { ref: "worker:latest", digest: "new-digest", image_version: "1.1.0", reason: "ref_moved" },
+} satisfies AgentImageStatus;
 
 function response(result: unknown, ok = true, status = 200) {
   const body = ok ? { ok: true, result } : { ok: false, error: result };
-  return Promise.resolve({
-    ok,
-    status,
-    text: async () => JSON.stringify(body),
-  } as Response);
+  return Promise.resolve({ ok, status, text: async () => JSON.stringify(body) } as Response);
 }
 
-function renderConfiguration(refresh = vi.fn()) {
-  const view = render(
-    <AgentNameContext.Provider value="worker">
-      <AgentConfigurationTab target={remote} refresh={refresh} />
-    </AgentNameContext.Provider>,
-  );
-  return { ...view, refresh };
-}
+type Call = { method: string; path: string; url: string; body: unknown; headers?: HeadersInit };
 
-it("passes the route's remote request target to Agent settings", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) => {
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response(stopped);
-    }),
-  );
+// The view field each loop/runtime/goal/message write lands in, so a reload
+// after an accepted write reads the new value, exactly as a real daemon does.
+const VIEW_FIELD: Record<string, [keyof AgentView, string]> = {
+  "loop/interval": ["interval_s", "value"],
+  "loop/timeout": ["timeout_s", "value"],
+  "loop/hard-timeout": ["hard_timeout_s", "value"],
+  "loop/on-timeout": ["on_timeout", "value"],
+  "loop/on-error": ["on_error", "value"],
+  "loop/max-idle": ["max_idle_iterations", "value"],
+  "loop/ai-stall-timeout": ["ai_stall_timeout_s", "value"],
+  model: ["model", "value"],
+  effort: ["effort", "value"],
+  harness: ["harness", "value"],
+  interactive: ["interactive", "value"],
+  cwd: ["cwd", "value"],
+  "goal-enabled": ["goal_enabled", "enabled"],
+  "goal-wait-customer-timeout": ["goal_wait_customer_timeout_s", "seconds"],
+  "goal-delivery-cooldown": ["goal_delivery_cooldown_s", "seconds"],
+  "messages/batch": ["messages_batch", "value"],
+  "messages/max-queue": ["messages_max_queue", "value"],
+};
 
-  renderConfiguration();
-
-  await screen.findByTestId("master-switch-state");
-  expect(screen.getByTestId("agent-settings")).toHaveAttribute(
-    "data-target-id",
-    "remote-1",
-  );
-  expect(screen.getByTestId("agent-settings")).toHaveAttribute(
-    "data-target-base-url",
-    "https://remote.example",
-  );
-  expect(screen.getByTestId("agent-settings")).toHaveAttribute(
-    "data-target-token",
-    "secret",
-  );
-});
-
-it("shows both run flags with their controls and the explanation line", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) => {
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response({ ...stopped, enabled: false, loop_enabled: true });
-    }),
-  );
-
-  renderConfiguration();
-
-  expect(
-    await screen.findByText(
-      "The master switch permits the agent to run; Loop schedules new autonomous iterations.",
-    ),
-  ).toBeInTheDocument();
-  // Both flags, together: the master switch is off while Loop is on.
-  expect(screen.getByTestId("master-switch-state")).toHaveTextContent(
-    "Disabled",
-  );
-  expect(screen.getByTestId("loop-state")).toHaveTextContent("Enabled");
-  // Each keeps its own existing control...
-  expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Restart" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Disable" })).toBeInTheDocument();
-  // ...and neither drags along the destructive actions of AgentControls.
-  expect(
-    screen.queryByRole("button", { name: "Kill" }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Remove" }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Exec" }),
-  ).not.toBeInTheDocument();
-});
-
-it("enables the loop from the run state strip and reloads the agent", async () => {
-  let current = { ...stopped, loop_enabled: false };
+// fakeServer answers every request the page makes from one mutable state.
+// `fail` rejects a write by "METHOD rest" with the given message.
+function fakeServer(opts: {
+  view?: Partial<AgentView>;
+  image?: () => unknown;
+  images?: () => Promise<Response>;
+  fail?: Record<string, string>;
+} = {}) {
+  const state = {
+    view: { ...stopped, ...opts.view } as AgentView,
+    pending: { ref: "", digest: "", error: "" },
+    script: "echo hi\n",
+    retention: { keep_iterations: 5, keep_days: 7, max_bytes: 1024, override: { keep_iterations: 5, keep_days: 0, max_bytes: 0 }, default: { keep_iterations: 10, keep_days: 7, max_bytes: 1024 } },
+    secrets: ["API_KEY"],
+  };
+  const calls: Call[] = [];
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    if (
-      url.endsWith("/api/agents/worker/loop/enable") &&
-      init?.method === "POST"
-    ) {
-      current = { ...current, loop_enabled: true };
+    const parsed = new URL(url, "http://local");
+    const method = init?.method ?? "GET";
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ method, path: parsed.pathname + parsed.search, url, body, headers: init?.headers });
+    const agentPrefix = /^\/api\/agents\/[^/]+/.exec(parsed.pathname)?.[0];
+    const agentRest = agentPrefix ? parsed.pathname.slice(agentPrefix.length).replace(/^\//, "") : null;
+    const failure = agentRest !== null ? opts.fail?.[`${method} ${agentRest}`] : undefined;
+    if (failure) return response({ code: "invalid", message: failure }, false, 400);
+    if (parsed.pathname.startsWith("/api/fs/list")) return response({ path: "/srv", parent: "/", entries: [{ name: "new", dir: true }] });
+    if (parsed.pathname === "/api/images") {
+      return opts.images?.() ?? response({ images: [{ name: "worker", tag: "latest" }, { name: "reviewer", tag: "v2" }] });
+    }
+    if (parsed.pathname.startsWith("/api/harnesses/")) {
+      return response({ harness: "codex", models: [{ id: "gpt-x" }], efforts: ["low", "high"], error: "" });
+    }
+    if (agentRest === null) return response({ code: "unexpected", message: `${method} ${url}` }, false, 500);
+    if (agentRest === "") return response(state.view);
+    if (agentRest === "image") {
+      if (method === "POST") state.pending = { ref: body.image, digest: "sha256:v2", error: "" };
+      if (method === "DELETE") state.pending = { ref: "", digest: "", error: "" };
+      return response(opts.image?.() ?? { ...projection, pending: state.pending });
+    }
+    if (agentRest === "shell-script") {
+      if (method === "POST") { state.script = body.script; return response({ saved: true }); }
+      return response({ script: state.script });
+    }
+    if (agentRest === "retention") {
+      if (method === "POST") state.retention = { ...state.retention, override: { ...state.retention.override, keep_iterations: body["keep-iterations"], keep_days: body["keep-days"] } };
+      return response(state.retention);
+    }
+    if (agentRest === "secrets") {
+      if (method === "POST") state.secrets = [...state.secrets, body.key];
+      if (method === "DELETE") state.secrets = state.secrets.filter((key) => key !== parsed.searchParams.get("key"));
+      return response({ keys: state.secrets, count: state.secrets.length });
+    }
+    if (method === "POST") {
+      if (agentRest === "loop/enable" || agentRest === "loop/disable") state.view = { ...state.view, loop_enabled: agentRest === "loop/enable" };
+      else if (agentRest === "budget") state.view = { ...state.view, budget: { ...state.view.budget!, hour_usd: Number(body.hour_usd), day_usd: Number(body.day_usd), week_usd: Number(body.week_usd), month_usd: Number(body.month_usd) } };
+      else if (VIEW_FIELD[agentRest]) {
+        const [field, key] = VIEW_FIELD[agentRest];
+        state.view = { ...state.view, [field]: body[key] };
+      }
       return response({});
     }
-    if (url.includes("/api/fs/list")) {
-      return response({ path: "/srv", parent: "/", entries: [] });
-    }
-    return response(current);
+    return response({ code: "unexpected", message: `${method} ${url}` }, false, 500);
   });
   vi.stubGlobal("fetch", fetchMock);
+  const writes = () => calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path.replace("/api/agents/worker/", "")}`);
+  return { state, calls, writes, fetchMock };
+}
 
-  renderConfiguration();
-
-  fireEvent.click(await screen.findByRole("button", { name: "Enable" }));
-
-  await waitFor(() =>
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/agents/worker/loop/enable",
-      expect.objectContaining({ method: "POST" }),
-    ),
+function tree(target: Daemon | null = remote, name = "worker", status: AgentStatus | null = null, refresh = vi.fn()) {
+  return (
+    <MemoryRouter>
+      <AgentNameContext.Provider value={name}>
+        <AgentStatusContext.Provider value={{ status, refresh: async () => {} }}>
+          <AgentConfigurationTab target={target} refresh={refresh} />
+        </AgentStatusContext.Provider>
+      </AgentNameContext.Provider>
+    </MemoryRouter>
   );
-  expect(
-    await screen.findByRole("button", { name: "Disable" }),
-  ).toBeInTheDocument();
-  expect(screen.getByTestId("loop-state")).toHaveTextContent("Enabled");
+}
+
+const block = (title: string) => screen.getByRole("region", { name: title });
+const queryBlock = (title: string) => screen.queryByRole("region", { name: title });
+const search = (text: string) => fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: text } });
+const saveBar = () => screen.getByRole("region", { name: "Unsaved changes" });
+const save = () => fireEvent.click(within(saveBar()).getByRole("button", { name: "Save" }));
+const ready = () => screen.findByLabelText("Interval");
+
+// --- The task scenario and the shared save mechanic --------------------------
+
+it("finds one setting, changes it, finds another, changes it, and saves both with one Save", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  expect(screen.queryByRole("region", { name: "Unsaved changes" })).not.toBeInTheDocument();
+
+  search("interval");
+  fireEvent.change(within(block("Loop and timeouts")).getByLabelText("Interval"), { target: { value: "45" } });
+  expect(saveBar()).toHaveTextContent("1 unsaved change in Loop and timeouts");
+
+  search("budget");
+  expect(queryBlock("Loop and timeouts")).not.toBeInTheDocument();
+  fireEvent.change(within(block("Budgets (USD)")).getByLabelText("Day budget"), { target: { value: "5" } });
+  expect(saveBar()).toHaveTextContent("2 unsaved changes in Loop and timeouts, Budgets (USD)");
+
+  save();
+  await waitFor(() => expect(saveBar()).toHaveTextContent("All changes saved"));
+  expect(server.writes()).toEqual(["POST loop/interval", "POST budget"]);
+  expect(server.calls.find((c) => c.path.endsWith("/budget"))?.body).toEqual({ hour_usd: "1", day_usd: "5", week_usd: "0", month_usd: "0" });
+  expect(server.calls.every((c) => c.url.startsWith("https://remote.example/"))).toBe(true);
+  expect(within(saveBar()).queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+  search("");
+  expect(screen.getByLabelText("Interval")).toHaveValue("45");
+});
+
+it("has no save buttons inside the blocks", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  for (const region of screen.getAllByRole("region")) {
+    expect(within(region).queryByRole("button", { name: /^save/i })).not.toBeInTheDocument();
+  }
+});
+
+it("marks the changed field and counts changes on its block", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  fireEvent.change(screen.getByLabelText("Timeout"), { target: { value: "90" } });
+  const loop = block("Loop and timeouts");
+  expect(within(loop).getByText("1 unsaved change")).toBeInTheDocument();
+  expect(within(loop).getByText("Changed")).toBeInTheDocument();
+  expect(within(screen.getByRole("navigation", { name: "Configuration blocks" })).getByRole("button", { name: /Loop and timeouts\s*1/ })).toBeInTheDocument();
+});
+
+it("resets every change on every block without writing", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  fireEvent.change(screen.getByLabelText("Interval"), { target: { value: "45" } });
+  fireEvent.change(screen.getByLabelText("Hour budget"), { target: { value: "9" } });
+  fireEvent.click(within(saveBar()).getByRole("button", { name: "Reset" }));
+  expect(screen.getByLabelText("Interval")).toHaveValue("30");
+  expect(screen.getByLabelText("Hour budget")).toHaveValue(1);
+  expect(server.writes()).toEqual([]);
+});
+
+it("stops at a failed write, reports it at the field, and keeps the unsent changes", async () => {
+  const server = fakeServer({ fail: { "POST cwd": "directory does not exist" } });
+  render(tree());
+  await ready();
+  fireEvent.change(screen.getByLabelText("Working directory"), { target: { value: "/srv/missing" } });
+  fireEvent.change(screen.getByLabelText("Interval"), { target: { value: "45" } });
+  save();
+  expect(await within(saveBar()).findByText(/Some changes were not saved/)).toBeInTheDocument();
+  expect(server.writes()).toEqual(["POST cwd"]);
+  const general = block("General");
+  expect(within(general).getByRole("alert")).toHaveTextContent("directory does not exist");
+  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/missing");
+  expect(saveBar()).toHaveTextContent("2 unsaved changes in General, Loop and timeouts");
+});
+
+it("sends nothing while a change is invalid and shows the field even if search hid it", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  fireEvent.change(screen.getByLabelText("Goal delivery cooldown seconds"), { target: { value: "0" } });
+  search("interval");
+  fireEvent.change(screen.getByLabelText("Interval"), { target: { value: "45" } });
+  save();
+  const field = await screen.findByLabelText("Goal delivery cooldown seconds");
+  expect(screen.getByRole("searchbox", { name: "Search settings" })).toHaveValue("");
+  await waitFor(() => expect(field).toHaveFocus());
+  expect(within(block("Goal")).getByRole("alert")).toHaveTextContent(/positive whole number/);
+  expect(server.writes()).toEqual([]);
+});
+
+// --- Search ------------------------------------------------------------------
+
+it("shows the whole block for a single matching setting and highlights that setting", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  search("hard timeout");
+  const loop = block("Loop and timeouts");
+  expect(within(loop).getByLabelText("Interval")).toBeInTheDocument();
+  expect(loop.querySelector('[data-field="hard-timeout"]')).toHaveAttribute("data-matched", "true");
+  expect(loop.querySelector('[data-field="interval"]')).not.toHaveAttribute("data-matched");
+  expect(queryBlock("Budgets (USD)")).not.toBeInTheDocument();
+  expect(screen.getByText("1 of 8 blocks match")).toBeInTheDocument();
+});
+
+it("reports no matches and clears the search", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  search("zzz");
+  expect(screen.getByText("No settings match “zzz”")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(block("Runtime")).toBeInTheDocument();
+});
+
+it("shows only blocks with unsaved changes when Changed only is on", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  fireEvent.change(screen.getByLabelText("Messages per iteration"), { target: { value: "20" } });
+  fireEvent.click(screen.getByRole("button", { name: "Changed only (1)" }));
+  expect(block("Messages")).toBeInTheDocument();
+  expect(queryBlock("Runtime")).not.toBeInTheDocument();
+});
+
+// --- Run actions -------------------------------------------------------------
+
+it("keeps Start, Stop and Restart as immediate actions in the page header", async () => {
+  fakeServer({ view: { enabled: false } });
+  render(tree());
+  await ready();
+  expect(screen.getByTestId("master-switch-state")).toHaveTextContent("Disabled");
+  expect(screen.getByText("Run actions apply immediately.")).toBeInTheDocument();
+  for (const name of ["Start", "Stop", "Restart"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+  for (const name of ["Kill", "Remove", "Exec"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+});
+
+it("saves the Loop switch with Save rather than at once", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  fireEvent.click(screen.getByRole("switch", { name: "Loop" }));
+  expect(server.writes()).toEqual([]);
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST loop/enable"]));
+  await waitFor(() => expect(screen.getByRole("switch", { name: "Loop" })).toBeChecked());
+});
+
+// --- Runtime -----------------------------------------------------------------
+
+it("saves harness before model and remembers the model for that harness", async () => {
+  const server = fakeServer();
+  render(tree());
+  await ready();
+  fireEvent.change(screen.getByLabelText("Model"), { target: { value: "opus" } });
+  fireEvent.change(screen.getByLabelText("Harness"), { target: { value: "claude" } });
+  fireEvent.click(screen.getByRole("switch", { name: "Interactive (tmux TUI)" }));
+  expect(server.writes()).toEqual([]);
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST harness", "POST model", "POST interactive"]));
+  expect(server.calls.find((c) => c.path.endsWith("/interactive"))?.body).toEqual({ value: false });
+  await waitFor(() => expect(localStorage.getItem(RUNTIME_PRESETS_STORAGE_KEY)).toContain("opus"));
+});
+
+it("offers the operator harnesses and keeps an agent's out-of-list harness", async () => {
+  fakeServer({ view: { harness: "stub" } });
+  render(tree());
+  await ready();
+  const options = within(screen.getByLabelText("Harness")).getAllByRole("option").map((o) => o.textContent);
+  expect(options).toEqual(["claude", "codex", "opencode", "cursor", "stub"]);
+});
+
+// --- General: image, digest, working directory --------------------------------
+
+it("selects a built image and applies it with Save", async () => {
+  const server = fakeServer({ image: undefined });
+  render(tree());
+  fireEvent.click(await screen.findByRole("combobox", { name: "Agent image" }));
+  fireEvent.click(await screen.findByRole("option", { name: "reviewer:v2" }));
+  expect(server.writes()).toEqual([]);
+  save();
+  expect(await screen.findByText("Pending:")).toBeInTheDocument();
+  expect(server.calls.find((c) => c.method === "POST" && c.path.endsWith("/image"))?.body).toEqual({ image: "reviewer:v2" });
+  expect(within(screen.getByText("Pending:").parentElement!).getByRole("link", { name: "reviewer:v2" })).toHaveAttribute("href", "/servers/remote-1/images/reviewer/v2");
+});
+
+it("cancels an explicit pending image at once, outside Save", async () => {
+  let state: AgentImageStatus = {
+    ...projection,
+    pending: { ref: "explicit:v2", digest: "explicit-digest", error: "" },
+    next: { ref: "explicit:v2", digest: "explicit-digest", image_version: "2.0.0", reason: "pending" },
+  };
+  const server = fakeServer({ image: () => state });
+  const original = server.fetchMock.getMockImplementation()!;
+  server.fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (url.endsWith("/image") && init?.method === "DELETE") state = projection;
+    return original(url, init);
+  });
+  render(tree());
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel pending" }));
+  expect(await screen.findByText("1.1.0")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Cancel pending" })).not.toBeInTheDocument();
+  expect(server.writes()).toEqual(["DELETE image"]);
+});
+
+it("shows pinned Activated version and next digest even when source versions match", async () => {
+  fakeServer({ image: () => ({ ...projection, next: { ...projection.next, image_version: "1.0.0" } }) });
+  render(tree());
+  const current = await screen.findByRole("group", { name: "Activated version" });
+  const next = screen.getByRole("group", { name: "Next iteration" });
+  expect(current).toHaveTextContent("old-digest");
+  expect(next).toHaveTextContent("new-digest");
+  expect(within(next).getByRole("link", { name: "worker:latest" })).toHaveAttribute("href", "/servers/remote-1/images/worker/latest");
+  expect(screen.getByText("Update on next iteration")).toBeInTheDocument();
+  expect(screen.getByText(/preview.*not a reservation/i)).toBeInTheDocument();
+});
+
+it("shows inspection and activation failures without a pending ref", async () => {
+  fakeServer({ image: () => ({
+    ...projection,
+    current: { ...projection.current, image_version: undefined },
+    next: { ref: "worker:latest", digest: "", reason: "ref_moved", error: "latest is unreadable" },
+    pending: { ref: "", digest: "", error: "bridge preparation failed" },
+  }) });
+  render(tree());
+  expect(await screen.findByText("latest is unreadable")).toBeInTheDocument();
+  expect(screen.getByText("bridge preparation failed")).toBeInTheDocument();
+  expect(within(screen.getByRole("group", { name: "Activated version" })).getByText("Version not specified")).toBeInTheDocument();
+});
+
+it("reports an unavailable image endpoint and disables the image choice", async () => {
+  const server = fakeServer();
+  const original = server.fetchMock.getMockImplementation()!;
+  server.fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+    url.endsWith("/image") ? Promise.reject(new Error("image request failed")) : original(url, init));
+  render(tree());
+  expect(await screen.findByText(/Image status unavailable:.*image request failed/)).toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Next iteration" })).not.toBeInTheDocument();
+});
+
+it("disables the image choice while the inventory failed", async () => {
+  fakeServer({ images: () => response({ code: "internal", message: "archive is corrupt" }, false, 500) });
+  render(tree());
+  expect(await screen.findByText(/Image inventory unavailable:/)).toHaveTextContent("archive is corrupt");
+  expect(screen.getByRole("combobox", { name: "Agent image" })).toBeDisabled();
+});
+
+it.each(["host", "agent", "refresh"])("ignores delayed image responses after a %s change", async (change) => {
+  let finish!: (value: Response) => void;
+  let count = 0;
+  const fresh = { ...projection, next: { ...projection.next, image_version: "2.0.0" } };
+  const server = fakeServer({ image: () => fresh });
+  const original = server.fetchMock.getMockImplementation()!;
+  server.fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+    if (url.endsWith("/image") && count++ === 0) return new Promise<Response>((resolve) => { finish = resolve; });
+    return original(url, init);
+  });
+  const { rerender } = render(tree());
+  await waitFor(() => expect(finish).toBeDefined());
+  if (change === "refresh") act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+  else rerender(tree(change === "host" ? { ...remote, id: "remote-2", baseURL: "https://other.example" } : remote, change === "agent" ? "other" : "worker"));
+  expect(await screen.findByText("2.0.0")).toBeInTheDocument();
+  await act(async () => finish(await response(projection)));
+  expect(screen.getByText("2.0.0")).toBeInTheDocument();
+  expect(screen.queryByText("1.1.0")).not.toBeInTheDocument();
 });
 
 it("truncates the image digest while exposing the complete value, and copies it", async () => {
-  const digest =
-    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  const digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.assign(navigator, { clipboard: { writeText } });
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) => {
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response({ ...stopped, digest });
-    }),
-  );
-
-  renderConfiguration();
-
-  // The visible value is shortened...
+  fakeServer({ view: { digest } });
+  render(tree());
   const shown = await screen.findByTestId("image-digest");
-  expect(shown.textContent).not.toBe(digest);
   expect(shown.textContent).toContain("sha256:0123");
-  expect(shown.textContent).toContain("abcdef");
-  // ...while assistive technology still gets the whole digest: the shortened
-  // value is hidden from the accessibility tree and the full one is announced.
   expect(shown).toHaveAttribute("aria-hidden", "true");
-  const full = screen.getByText(digest);
-  expect(full).toHaveClass("sr-only");
-
+  expect(screen.getByText(digest)).toHaveClass("sr-only");
   fireEvent.click(screen.getByRole("button", { name: "Copy digest" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledWith(digest));
   expect(await screen.findByText("Digest copied")).toBeInTheDocument();
 });
 
-it("selects a built image for the next iteration and links current and pending images", async () => {
-  let pending = { ref: "", digest: "", error: "" };
-  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    if (url === "https://remote.example/api/agents/worker/image") {
-      if (init?.method === "POST") {
-        expect(JSON.parse(String(init.body))).toEqual({ image: "reviewer:v2" });
-        pending = { ref: "reviewer:v2", digest: "sha256:v2", error: "" };
-      }
-      return response({
-        name: "worker",
-        current: { ref: "worker:v1", digest: "sha256:abc", error: "" },
-        pending,
-      });
-    }
-    if (url === "https://remote.example/api/images") {
-      return response({
-        images: [
-          { name: "worker", tag: "v1", digest: "sha256:abc" },
-          { name: "reviewer", tag: "v2", digest: "sha256:v2" },
-        ],
-      });
-    }
-    if (url.includes("/api/fs/list")) {
-      return response({ path: "/srv", parent: "/", entries: [] });
-    }
-    return response(stopped);
-  });
-  vi.stubGlobal("fetch", fetchMock);
-
-  render(
-    <MemoryRouter>
-      <AgentNameContext.Provider value="worker">
-        <AgentConfigurationTab target={remote} refresh={vi.fn()} />
-      </AgentNameContext.Provider>
-    </MemoryRouter>,
-  );
-
-  expect(
-    await screen.findByRole("link", { name: "worker:v1" }),
-  ).toHaveAttribute("href", "/servers/remote-1/images/worker/v1");
-  fireEvent.click(screen.getByRole("combobox", { name: "Agent image" }));
-  fireEvent.click(await screen.findByRole("option", { name: "reviewer:v2" }));
-  fireEvent.click(screen.getByRole("button", { name: "Use next iteration" }));
-
-  expect(await screen.findByText("Pending:")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "reviewer:v2" })).toHaveAttribute(
-    "href",
-    "/servers/remote-1/images/reviewer/v2",
-  );
-  expect(fetchMock).toHaveBeenCalledWith(
-    "https://remote.example/api/agents/worker/image",
-    expect.objectContaining({ method: "POST" }),
-  );
-});
-
-it("edits a stopped agent CWD using suggestions and save requests from its route host", async () => {
-  let current = stopped;
+it("edits a stopped agent's working directory with suggestions from its route host", async () => {
   const refresh = vi.fn();
-  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    if (
-      url === "https://remote.example/api/agents/worker" &&
-      init?.method === "GET"
-    ) {
-      return response(current);
-    }
-    if (
-      url === "https://remote.example/api/fs/list?path=%2Fsrv%2F" &&
-      init?.method === "GET"
-    ) {
-      return response({
-        path: "/srv",
-        parent: "/",
-        entries: [{ name: "new", dir: true }],
-      });
-    }
-    if (
-      url === "https://remote.example/api/agents/worker/cwd" &&
-      init?.method === "POST"
-    ) {
-      expect(init.headers).toMatchObject({ Authorization: "Bearer secret" });
-      expect(JSON.parse(String(init.body))).toEqual({ value: "/srv/new" });
-      current = { ...current, cwd: "/srv/new" };
-      return response({ name: "worker", cwd: "/srv/new" });
-    }
-    return response(
-      { code: "unexpected", message: `${init?.method} ${url}` },
-      false,
-      500,
-    );
-  });
-  vi.stubGlobal("fetch", fetchMock);
-
-  renderConfiguration(refresh);
-
+  const server = fakeServer();
+  render(tree(remote, "worker", null, refresh));
   const input = await screen.findByLabelText("Working directory");
   expect(input).toHaveValue("/srv/old");
-  await waitFor(() =>
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://remote.example/api/fs/list?path=%2Fsrv%2F",
-      expect.objectContaining({ method: "GET" }),
-    ),
-  );
-
   fireEvent.change(input, { target: { value: "/srv/new" } });
-  expect(
-    await screen.findByRole("option", { name: "new" }),
-  ).toBeInTheDocument();
+  expect(await screen.findByRole("option", { name: "new" })).toBeInTheDocument();
   fireEvent.change(input, { target: { value: "  /srv/new  " } });
-  fireEvent.click(
-    screen.getByRole("button", { name: "Save working directory" }),
-  );
-
-  await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
-  expect(await screen.findByLabelText("Working directory")).toHaveValue(
-    "/srv/new",
-  );
+  save();
+  await waitFor(() => expect(refresh).toHaveBeenCalled());
+  const write = server.calls.find((c) => c.method === "POST" && c.path.endsWith("/cwd"))!;
+  expect(write.body).toEqual({ value: "/srv/new" });
+  expect(write.headers).toMatchObject({ Authorization: "Bearer secret" });
+  await waitFor(() => expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/new"));
 });
 
-it("keeps an unsaved CWD draft when its route host is re-rendered", async () => {
-  const fetchMock = vi.fn((url: string) => {
-    if (url.includes("/api/fs/list")) {
-      return response({ path: "/srv", parent: "/", entries: [] });
-    }
-    return response(stopped);
-  });
-  vi.stubGlobal("fetch", fetchMock);
-
-  const { rerender } = renderConfiguration();
-  const input = await screen.findByLabelText("Working directory");
-  fireEvent.change(input, { target: { value: "/srv/new" } });
-
-  rerender(
-    <AgentNameContext.Provider value="worker">
-      <AgentConfigurationTab target={{ ...remote }} refresh={vi.fn()} />
-    </AgentNameContext.Provider>,
-  );
-
-  await act(async () => {
-    await Promise.resolve();
-  });
-  expect(
-    fetchMock.mock.calls.filter(
-      ([url]) => url === "https://remote.example/api/agents/worker",
-    ),
-  ).toHaveLength(1);
-  expect(input).toHaveValue("/srv/new");
+it("keeps the working directory read-only while the agent is active", async () => {
+  fakeServer({ view: { state: "running", enabled: true } });
+  render(tree());
+  expect(await screen.findByText("/srv/old")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
+  expect(screen.getByText("Stop the agent before changing its working directory.")).toBeInTheDocument();
 });
 
-it("keeps the loaded agent and the CWD draft through a reconnect that fails", async () => {
-  vi.stubGlobal("fetch", vi.fn((url: string) => url.includes("/api/fs/list")
-    ? response({ path: "/srv", parent: "/", entries: [] })
-    : response(stopped)));
-  const { rerender } = renderConfiguration();
+it("switches to read-only when live status reports that the agent started", async () => {
+  fakeServer();
+  render(tree(remote, "worker", { name: "worker", state: "running" } as AgentStatus));
+  expect(await screen.findByText("/srv/old")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
+});
+
+it("keeps drafts when the route host is re-rendered or a reconnect fails", async () => {
+  const server = fakeServer();
+  const { rerender } = render(tree());
   const input = await screen.findByLabelText("Working directory");
   fireEvent.change(input, { target: { value: "/srv/new" } });
-  const tree = (baseURL: string) => (
-    <AgentNameContext.Provider value="worker">
-      <AgentConfigurationTab target={{ ...remote, baseURL }} refresh={vi.fn()} />
-    </AgentNameContext.Provider>
-  );
-
-  rerender(tree(""));
+  rerender(tree({ ...remote }));
+  await act(async () => {});
+  expect(server.calls.filter((c) => c.url === "https://remote.example/api/agents/worker")).toHaveLength(1);
+  rerender(tree({ ...remote, baseURL: "" }));
   const unreachable = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
   vi.stubGlobal("fetch", unreachable);
-  rerender(tree("https://moved.example"));
+  rerender(tree({ ...remote, baseURL: "https://moved.example" }));
   await waitFor(() => expect(unreachable).toHaveBeenCalled());
   await act(async () => {});
-
   expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/new");
   expect(screen.getByText("worker:v1")).toBeInTheDocument();
 });
 
-it("keeps CWD read-only while the agent is active", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() => response({ ...stopped, state: "running", enabled: true })),
-  );
-
-  renderConfiguration();
-
-  expect(await screen.findByText("/srv/old")).toBeInTheDocument();
-  expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
-  expect(
-    screen.getByText("Stop the agent before changing its working directory."),
-  ).toBeInTheDocument();
+it("refreshes the image projection on status and build events without replacing drafts", async () => {
+  let state: AgentImageStatus = projection;
+  fakeServer({ image: () => state });
+  const { rerender } = render(tree());
+  await screen.findByRole("group", { name: "Next iteration" });
+  fireEvent.change(await screen.findByLabelText("Working directory"), { target: { value: "/srv/draft" } });
+  state = { ...projection, next: { ...projection.next, image_version: "1.2.0" } };
+  rerender(tree(remote, "worker", { name: "worker", state: "stopped" } as AgentStatus));
+  expect(await screen.findByText("1.2.0")).toBeInTheDocument();
+  state = { ...projection, next: { ...projection.next, image_version: "1.3.0" } };
+  act(() => window.dispatchEvent(new Event("tariboy:image-built")));
+  expect(await screen.findByText("1.3.0")).toBeInTheDocument();
+  expect(screen.getByLabelText("Working directory")).toHaveValue("/srv/draft");
 });
 
-it("switches to read-only when live status reports that the agent started", async () => {
-  const status: AgentStatus = {
-    name: "worker",
-    state: "running",
-    loop_enabled: false,
-    iterations: 1,
-    last_iteration: null,
-    last_iteration_id: null,
-    status_message: "",
-    status_updated: "",
-  };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) => {
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response(stopped);
-    }),
-  );
+// --- Goal, budgets -----------------------------------------------------------
 
-  render(
-    <AgentNameContext.Provider value="worker">
-      <AgentStatusContext.Provider value={{ status, refresh: async () => {} }}>
-        <AgentConfigurationTab target={remote} refresh={vi.fn()} />
-      </AgentStatusContext.Provider>
-    </AgentNameContext.Provider>,
-  );
-
-  expect(await screen.findByText("/srv/old")).toBeInTheDocument();
-  expect(screen.queryByLabelText("Working directory")).not.toBeInTheDocument();
-  expect(
-    screen.getByText("Stop the agent before changing its working directory."),
-  ).toBeInTheDocument();
+it("renders the current Goal task read-only with its help", async () => {
+  fakeServer({ view: { current_goal_task_key: "DEV-7" } });
+  render(tree());
+  expect(await screen.findByLabelText("Current goal task")).toHaveValue("DEV-7");
+  expect(screen.getByLabelText("Current goal task")).toBeDisabled();
 });
 
-it("uses stopped state as a compatibility fallback when enabled is absent", async () => {
-  const legacy = { ...stopped };
-  delete legacy.enabled;
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) => {
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response(legacy);
-    }),
-  );
-
-  renderConfiguration();
-
-  expect(await screen.findByLabelText("Working directory")).toHaveValue(
-    "/srv/old",
-  );
-  expect(
-    screen.getByRole("button", { name: "Save working directory" }),
-  ).toBeInTheDocument();
-});
-
-it("shows a save error without discarding the entered CWD", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string, init?: RequestInit) => {
-      if (url.endsWith("/api/agents/worker/cwd") && init?.method === "POST") {
-        return response(
-          { code: "bad_cwd", message: "directory does not exist" },
-          false,
-          400,
-        );
-      }
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response(stopped);
-    }),
-  );
-
-  renderConfiguration();
-  const input = await screen.findByLabelText("Working directory");
-  fireEvent.change(input, { target: { value: "/srv/missing" } });
-  fireEvent.click(
-    screen.getByRole("button", { name: "Save working directory" }),
-  );
-
-  // The section copy leads, but the server's reason is still shown verbatim —
-  // the operator needs to know WHICH path was rejected and why.
-  expect(await screen.findByText(/Working directory was not saved/)).toHaveTextContent(
-    "Working directory was not saved. Fix the path and try again.",
-  );
-  expect(screen.getByText(/Working directory was not saved/)).toHaveTextContent("directory does not exist");
-  expect(input).toHaveValue("/srv/missing");
-});
-
-it("shows a budget save error without discarding the entered limit", async () => {
-  const budget = {
-    hour_usd: 1,
-    day_usd: 0,
-    week_usd: 0,
-    month_usd: 0,
-    hour_spent_usd: 0.25,
-    day_spent_usd: 0.25,
-    week_spent_usd: 0.25,
-    month_spent_usd: 0.25,
-    exhausted: [],
-  };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string, init?: RequestInit) => {
-      if (
-        url.endsWith("/api/agents/worker/budget") &&
-        init?.method === "POST"
-      ) {
-        return response(
-          { code: "bad_budget", message: "budget update rejected" },
-          false,
-          400,
-        );
-      }
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response({ ...stopped, budget });
-    }),
-  );
-
-  renderConfiguration();
-  const input = await screen.findByLabelText("Hour budget");
-  fireEvent.change(input, { target: { value: "2" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save agent budgets" }));
-
-  expect(await screen.findByText(/Agent budgets were not saved/)).toHaveTextContent("budget update rejected");
-  expect(input).toHaveValue(2);
+it("shows spend beside each budget and exhausted periods", async () => {
+  fakeServer({ view: { budget: { ...stopped.budget!, exhausted: ["day"] } } });
+  render(tree());
+  await ready();
+  const budgets = block("Budgets (USD)");
+  expect(within(budgets).getByText(/Spent 0.25 of 1.00/)).toBeInTheDocument();
+  expect(within(budgets).getAllByText(/Unlimited/).length).toBeGreaterThan(0);
+  expect(within(budgets).getByText("Out of budget: day")).toBeInTheDocument();
 });
 
 it("renders a budget projection from an older daemon without exhausted periods", async () => {
-  // Removing the defensive fallback in AgentConfigurationTab should make this
-  // fail by dereferencing the omitted additive field.
-  const legacyBudget = {
-    hour_usd: 1,
-    day_usd: 0,
-    week_usd: 0,
-    month_usd: 0,
-    hour_spent_usd: 0.25,
-    day_spent_usd: 0.25,
-    week_spent_usd: 0.25,
-    month_spent_usd: 0.25,
-  };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn((url: string) => {
-      if (url.includes("/api/fs/list")) {
-        return response({ path: "/srv", parent: "/", entries: [] });
-      }
-      return response({ ...stopped, budget: legacyBudget });
-    }),
-  );
+  const legacy = { ...stopped.budget! };
+  delete legacy.exhausted;
+  fakeServer({ view: { budget: legacy } });
+  render(tree());
+  await ready();
+  expect(within(block("Budgets (USD)")).queryByText(/Out of budget/)).not.toBeInTheDocument();
+});
 
-  renderConfiguration();
+it("leaves out the budget block when the daemon has no budget projection", async () => {
+  fakeServer({ view: { budget: undefined } });
+  render(tree());
+  await ready();
+  expect(queryBlock("Budgets (USD)")).not.toBeInTheDocument();
+  search("x-no-match");
+  expect(screen.getByText("0 of 7 blocks match")).toBeInTheDocument();
+});
 
-  expect(
-    await screen.findByRole("heading", { name: "Agent budgets (USD)" }),
-  ).toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Save agent budgets" }),
-  ).toBeInTheDocument();
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+// --- Environment ---------------------------------------------------------------
+
+it("saves the agent shell script with Save", async () => {
+  const server = fakeServer();
+  render(tree());
+  const script = await screen.findByLabelText("Agent shell script");
+  await waitFor(() => expect(script).toHaveValue("echo hi\n"));
+  fireEvent.change(script, { target: { value: "export A=1\n" } });
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST shell-script"]));
+  expect(server.state.script).toBe("export A=1\n");
+});
+
+it("adds and removes secrets on Save, never shows a value, and clears it after saving", async () => {
+  const server = fakeServer();
+  render(tree());
+  const env = await screen.findByRole("region", { name: "Environment" });
+  await within(env).findByText("API_KEY");
+  fireEvent.click(within(env).getByRole("button", { name: "Remove API_KEY" }));
+  expect(within(env).getByText("Will be removed")).toBeInTheDocument();
+  fireEvent.change(within(env).getByLabelText("Secret key"), { target: { value: "TOKEN" } });
+  fireEvent.change(within(env).getByLabelText("Secret value"), { target: { value: "s3cr3t" } });
+  expect(screen.queryByText("s3cr3t")).toBeNull();
+  expect(server.writes()).toEqual([]);
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["DELETE secrets?key=API_KEY", "POST secrets"]));
+  expect(server.calls.find((c) => c.method === "POST" && c.path.endsWith("/secrets"))?.body).toEqual({ key: "TOKEN", value: "s3cr3t" });
+  expect(server.calls.some((c) => c.url.includes("s3cr3t"))).toBe(false);
+  await waitFor(() => expect(within(env).getByLabelText("Secret value")).toHaveValue(""));
+  expect(within(env).getByText("TOKEN")).toBeInTheDocument();
+  expect(within(env).queryByText("API_KEY")).not.toBeInTheDocument();
+});
+
+it("requires a secret key when a value is entered", async () => {
+  const server = fakeServer();
+  render(tree());
+  const env = await screen.findByRole("region", { name: "Environment" });
+  await within(env).findByText("API_KEY");
+  fireEvent.change(within(env).getByLabelText("Secret value"), { target: { value: "s3cr3t" } });
+  save();
+  expect(await within(env).findByText("Enter a secret key.")).toBeInTheDocument();
+  expect(server.writes()).toEqual([]);
+});
+
+// --- Retention -------------------------------------------------------------------
+
+it("saves the retention override with Save and shows the server defaults", async () => {
+  const server = fakeServer();
+  render(tree());
+  const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
+  const days = await within(retention).findByLabelText("Keep days");
+  expect(within(retention).getByText(/0 = server default \(7\)/)).toBeInTheDocument();
+  fireEvent.change(days, { target: { value: "14" } });
+  save();
+  await waitFor(() => expect(server.writes()).toEqual(["POST retention"]));
+  expect(server.calls.find((c) => c.path.endsWith("/retention") && c.method === "POST")?.body).toEqual({ "keep-iterations": 5, "keep-days": 14 });
+});
+
+it("keeps prune and preview as confirmed, immediate actions outside Save", async () => {
+  const server = fakeServer();
+  render(tree());
+  const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
+  await within(retention).findByLabelText("Keep days");
+  fireEvent.click(within(retention).getByRole("button", { name: "Preview cleanup" }));
+  await waitFor(() => expect(server.writes()).toEqual(["POST prune"]));
+  expect(server.calls.at(-1)?.body).toEqual({ "dry-run": true });
+  fireEvent.click(within(retention).getByRole("button", { name: "Prune now" }));
+  expect(server.writes()).toHaveLength(1);
+  fireEvent.click(await screen.findByRole("button", { name: "Prune retained data" }));
+  await waitFor(() => expect(server.writes()).toEqual(["POST prune", "POST prune"]));
+  expect(server.calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({ "dry-run": false });
+  expect(screen.queryByRole("region", { name: "Unsaved changes" })).not.toBeInTheDocument();
+});
+
+it("cancelling the prune confirmation writes nothing", async () => {
+  const server = fakeServer();
+  render(tree());
+  const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
+  fireEvent.click(within(retention).getByRole("button", { name: "Prune now" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Prune retained data" })).not.toBeInTheDocument());
+  expect(server.writes()).toEqual([]);
+});
+
+it("reports the server's reason for a failed prune beside the action", async () => {
+  fakeServer({ fail: { "POST prune": "prune is not permitted while the agent runs" } });
+  render(tree());
+  const retention = await screen.findByRole("region", { name: "Retention and cleanup" });
+  fireEvent.click(within(retention).getByRole("button", { name: "Prune now" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Prune retained data" }));
+  expect(await within(retention).findByRole("alert")).toHaveTextContent("prune is not permitted while the agent runs");
+  expect(within(retention).getByRole("button", { name: "Prune now" })).toBeEnabled();
+});
+
+it("mounts no prune dialog buttons while its confirmation is closed", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  expect(screen.queryByRole("button", { name: "Prune retained data" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
 });

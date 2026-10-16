@@ -528,7 +528,7 @@ scripts/messages.sh channel unsubscribe <subscription-id>
 ```
 
 Both fields are editable as positive whole numbers in Agent
-**Configuration → Messages & Channels**. Existing persisted values and values
+**Configuration → Messages**. Existing persisted values and values
 copied by Clone are not rewritten when the default changes.
 
 ## Common workflows
