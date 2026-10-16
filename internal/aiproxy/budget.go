@@ -79,19 +79,26 @@ func localCalendarStarts(now time.Time) (hour, day, week, month time.Time) {
 // offset may differ from Z by up to 14 hours, so its lexical order is exact
 // only across whole days.
 func agentWindowSpendQuery(agent string, now time.Time) (string, []any) {
+	query, args := windowSpendQuery(now)
+	query = `SELECT ` + query + ` FROM (
+		SELECT julianday(ts) AS t, cost_usd FROM ai_requests WHERE agent=? AND ts>=? LIMIT -1)`
+	return query, append(args[:4:4], agent, args[4])
+}
+
+// windowSpendQuery returns the four window sums and their arguments: the
+// window starts, then the earliest timestamp the inner query must read.
+func windowSpendQuery(now time.Time) (string, []any) {
 	hour, day, week, month := localCalendarStarts(now)
 	earliest := week
 	if month.Before(earliest) {
 		earliest = month
 	}
 	const sum = `COALESCE(SUM(CASE WHEN t>=julianday(?) THEN cost_usd END),0)`
-	query := `SELECT ` + sum + `,` + sum + `,` + sum + `,` + sum + ` FROM (
-		SELECT julianday(ts) AS t, cost_usd FROM ai_requests WHERE agent=? AND ts>=? LIMIT -1)`
 	args := []any{}
 	for _, start := range []time.Time{hour, day, week, month} {
 		args = append(args, start.UTC().Format(time.RFC3339Nano))
 	}
-	return query, append(args, agent, earliest.Add(-24*time.Hour).UTC().Format(time.RFC3339Nano))
+	return sum + `,` + sum + `,` + sum + `,` + sum, append(args, earliest.Add(-24*time.Hour).UTC().Format(time.RFC3339Nano))
 }
 
 // AgentBudgetStatus returns zero limits for a missing row and derives spending
@@ -108,6 +115,62 @@ func (s *Store) AgentBudgetStatus(agent string, now time.Time) (AgentBudgetStatu
 		&status.WeekSpentUSD, &status.MonthSpentUSD); err != nil {
 		return AgentBudgetStatus{}, err
 	}
+	status.finish()
+	return status, nil
+}
+
+// AgentBudgetStatuses is AgentBudgetStatus for every agent in two queries; an
+// agent with no budget row and no spending is absent from the map, which reads
+// as the zero status.
+func (s *Store) AgentBudgetStatuses(now time.Time) (map[string]AgentBudgetStatus, error) {
+	out := map[string]AgentBudgetStatus{}
+	rows, err := s.db.Query(`SELECT agent_name,hour_usd,day_usd,week_usd,month_usd FROM agent_budgets`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var name string
+		var st AgentBudgetStatus
+		if err := rows.Scan(&name, &st.HourUSD, &st.DayUSD, &st.WeekUSD, &st.MonthUSD); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[name] = st
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sums, args := windowSpendQuery(now)
+	rows, err = s.db.Query(`SELECT agent, `+sums+` FROM (
+		SELECT agent, julianday(ts) AS t, cost_usd FROM ai_requests WHERE ts>=? LIMIT -1) GROUP BY agent`, args...)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var name string
+		var hour, day, week, month float64
+		if err := rows.Scan(&name, &hour, &day, &week, &month); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		st := out[name]
+		st.HourSpentUSD, st.DaySpentUSD, st.WeekSpentUSD, st.MonthSpentUSD = hour, day, week, month
+		out[name] = st
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for name, st := range out {
+		st.finish()
+		out[name] = st
+	}
+	return out, nil
+}
+
+// finish rounds the spending and lists the windows whose limit is reached.
+func (status *AgentBudgetStatus) finish() {
 	for _, spent := range []*float64{&status.HourSpentUSD, &status.DaySpentUSD, &status.WeekSpentUSD, &status.MonthSpentUSD} {
 		*spent = roundCost(*spent)
 	}
@@ -122,7 +185,6 @@ func (s *Store) AgentBudgetStatus(agent string, now time.Time) (AgentBudgetStatu
 			status.Exhausted = append(status.Exhausted, window.name)
 		}
 	}
-	return status, nil
 }
 
 type Budget struct {

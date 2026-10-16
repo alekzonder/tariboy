@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -30,6 +31,7 @@ type fakeControl struct {
 	extendName    string
 	extendID      string
 	live          string // LiveState return; defaults to "idle"
+	liveByName    int    // LiveState calls, which read the agent row again
 	loopUpdates   []bool
 	refreshed     []string
 }
@@ -58,10 +60,17 @@ func (f *fakeControl) Reprovision(n, img string) error {
 }
 func (f *fakeControl) Exec(string, string) (string, error) { return "queued", nil }
 func (f *fakeControl) LiveState(string) (string, error) {
+	f.liveByName++
 	if f.live != "" {
 		return f.live, nil
 	}
 	return "idle", nil
+}
+func (f *fakeControl) LiveStateOf(agent.Agent) string {
+	if f.live != "" {
+		return f.live
+	}
+	return "idle"
 }
 func (f *fakeControl) Screen(string) (string, error) { return "", nil }
 func (f *fakeControl) SendKeys(string, string) error { return nil }
@@ -618,5 +627,40 @@ func TestAgentInspectReportsCompleteCloneProjection(t *testing.T) {
 	}
 	if got["messages_batch"] != 17 || got["messages_max_queue"] != 1234 {
 		t.Fatalf("message limits = %#v/%#v, want 17/1234", got["messages_batch"], got["messages_max_queue"])
+	}
+}
+
+// The agents list is polled by the UI, so it computes each state from the row
+// it already read and reads every budget in one query.
+func TestAgentPsReadsStateAndBudgetWithoutPerAgentQueries(t *testing.T) {
+	c, as, fc := ctxWithStore(t)
+	for _, name := range []string{"a1", "a2"} {
+		if err := as.Create(agent.Agent{Name: name, ImageRef: "basic:latest", HarnessType: "stub", Enabled: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := aiproxy.NewStore(c.Store, time.Now).SetAgentBudget("a2", aiproxy.AgentBudget{DayUSD: 3}); err != nil {
+		t.Fatal(err)
+	}
+	fc.live = "running"
+	res, err := h(t, "agent.ps")(c, registry.Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fc.liveByName != 0 {
+		t.Fatalf("agent.ps called LiveState %d times, want 0", fc.liveByName)
+	}
+	rows := res.(map[string]any)["agents"].([]map[string]any)
+	for _, row := range rows {
+		if row["state"] != "running" {
+			t.Fatalf("row %v state = %v", row["name"], row["state"])
+		}
+		want := 0.0
+		if row["name"] == "a2" {
+			want = 3
+		}
+		if got := row["budget"].(map[string]any)["day_usd"]; got != want {
+			t.Fatalf("row %v day_usd = %v, want %v", row["name"], got, want)
+		}
 	}
 }

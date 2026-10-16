@@ -6,6 +6,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"github.com/alekzonder/tariboy/internal/agent"
 	"io"
 	"log/slog"
 	"net"
@@ -244,6 +245,12 @@ type IterationTimeoutExtension struct {
 	HardTimeoutDeadline string
 	TimeoutExtensions   int
 	ShimSync            string
+}
+
+// AgentStateControl computes an agent's live state from a row the caller has
+// already read, so a list does not read every agent again.
+type AgentStateControl interface {
+	LiveStateOf(a agent.Agent) string
 }
 
 // LoopConfigControl is the live-runtime half of persisted Autopilot settings.

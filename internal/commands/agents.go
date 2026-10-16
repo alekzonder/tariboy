@@ -23,12 +23,26 @@ func agentBudgetView(c *registry.Ctx, name string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return budgetView(b), nil
+}
+
+func budgetView(b aiproxy.AgentBudgetStatus) map[string]any {
 	return map[string]any{
 		"hour_usd": b.HourUSD, "day_usd": b.DayUSD, "week_usd": b.WeekUSD, "month_usd": b.MonthUSD,
 		"hour_spent_usd": b.HourSpentUSD, "day_spent_usd": b.DaySpentUSD,
 		"week_spent_usd": b.WeekSpentUSD, "month_spent_usd": b.MonthSpentUSD,
 		"exhausted": b.Exhausted,
-	}, nil
+	}
+}
+
+// liveStateOf avoids a second read of the agent row when the control can
+// compute the state from the row already in hand.
+func liveStateOf(c *registry.Ctx, a agent.Agent) string {
+	if sc, ok := c.Control.(registry.AgentStateControl); ok {
+		return sc.LiveStateOf(a)
+	}
+	state, _ := c.Control.LiveState(a.Name)
+	return state
 }
 
 func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, error) {
@@ -486,9 +500,13 @@ func agentPs() registry.Command {
 			if err != nil {
 				return nil, err
 			}
+			budgets, err := aiproxy.NewStore(c.Store, time.Now).AgentBudgetStatuses(time.Now())
+			if err != nil {
+				return nil, err
+			}
 			rows := make([]map[string]any, 0, len(list))
 			for _, a := range list {
-				state, _ := c.Control.LiveState(a.Name)
+				state := liveStateOf(c, a)
 				row := map[string]any{
 					"name": a.Name, "image": a.ImageRef, "state": state,
 					"alias":   a.Alias,
@@ -501,11 +519,7 @@ func agentPs() registry.Command {
 					"goal_enabled":        a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS,
 					"current_goal_task_key": a.CurrentGoalTaskKey,
 				}
-				if budget, err := agentBudgetView(c, a.Name); err != nil {
-					return nil, err
-				} else {
-					row["budget"] = budget
-				}
+				row["budget"] = budgetView(budgets[a.Name])
 				addErrorReason(row, a, state)
 				addHaltReason(row, a)
 				rows = append(rows, row)
