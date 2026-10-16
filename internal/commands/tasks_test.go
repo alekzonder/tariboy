@@ -324,7 +324,7 @@ func TestTasksHTTPFiltersStatusViewsBeforeBuildingTheResponse(t *testing.T) {
 		return len(env.Result)
 	}
 	activeBytes := assertView("/api/tasks?queue=VIEW", "open", "in_progress")
-	assertView("/api/tasks?queue=VIEW&status_view=closed", "done")
+	assertView("/api/tasks?queue=VIEW&status_view=closed", "done", "cancelled")
 	allBytes := assertView("/api/tasks?queue=VIEW&status_view=all", "open", "in_progress", "done", "cancelled")
 	if activeBytes >= allBytes {
 		t.Fatalf("active response is %d bytes, all response is %d bytes; excluded rows must not be shipped", activeBytes, allBytes)
@@ -397,6 +397,26 @@ func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
 	}
 	if len(page.Tasks) != 1 || page.Tasks[0].Priority != tasks.PriorityP0 {
 		t.Fatalf("listed tasks = %#v", page.Tasks)
+	}
+	for query, want := range map[string]int{
+		"?priority=P3,P0&sort=priority&customer=user:customer": 1,
+		"?priority=P3&category=open":                           0,
+		"?subtree=" + created.Key:                              0,
+	} {
+		status, env = taskRequest(t, httpServer.Client(), http.MethodGet, httpServer.URL+"/api/tasks"+query, nil)
+		if status != http.StatusOK || !env.OK {
+			t.Fatalf("list %s status/env = %d/%+v", query, status, env)
+		}
+		if err := json.Unmarshal(env.Result, &page); err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Tasks) != want {
+			t.Fatalf("list %s = %#v, want %d tasks", query, page.Tasks, want)
+		}
+	}
+	status, env = taskRequest(t, httpServer.Client(), http.MethodGet, httpServer.URL+"/api/tasks?sort=title", nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("list sort=title status/env = %d/%+v, want 400", status, env)
 	}
 
 	events, err := taskService.ListEvents(t.Context(), tasks.CustomerActor("customer"), created.Key, 0, 20)

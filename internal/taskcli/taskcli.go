@@ -86,6 +86,15 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 
 func runAgent(ctx context.Context, parsed request, caller Caller, jsonOut bool, stdout, stderr io.Writer) int {
 	key, _ := parsed.payload["key"].(string)
+	if parsed.action == "list" || parsed.action == "mine" {
+		// The tools socket scrubs author and customer from every body.
+		for _, name := range []string{"author", "customer"} {
+			if value, ok := parsed.payload[name]; ok {
+				delete(parsed.payload, name)
+				parsed.payload["by_"+name] = value
+			}
+		}
+	}
 	raw, err := caller.Call("POST", "/tools/tasks/"+parsed.action, parsed.payload)
 	if err != nil {
 		return agentFailure(err, key, stderr)
@@ -117,6 +126,10 @@ func printResult(parsed request, raw json.RawMessage, jsonOut bool, stdout, stde
 		return 0
 	}
 	switch parsed.action {
+	case "list", "mine":
+		if printTasks(parsed, raw, stdout) {
+			return 0
+		}
 	case "workflow_get":
 		key, _ := parsed.payload["key"].(string)
 		if printWorkflow(raw, key, stdout) {

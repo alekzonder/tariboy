@@ -15,8 +15,16 @@ type commandHelp struct {
 }
 
 var sharedHelp = map[string]commandHelp{
-	"mine": {"List tasks visible to the current actor", "mine [flags]",
-		"Agent mode lists accessible work; operator mode lists host tasks. Filters narrow the result; --waiting-for selects a principal whose answer is pending.", "", "ttasks mine --queue DEV --status in_progress\nttasks mine --waiting-for agent:worker"},
+	"list": {"List and search tasks visible to the current actor", "list [flags]",
+		"Agent mode lists the tasks the agent can see; operator mode lists every host task. Filters combine with AND; a comma-separated value matches any of its items. " +
+			"--status matches the status show prints: the workflow status of a workflow task, the stored status of a flexible task; a category value also finds workflow tasks in that category. --category matches only the category. " +
+			"--text searches the key, title, and description, ignoring case. --parent lists direct children and --subtree every descendant; they cannot be combined, and a task you cannot see gives an empty list. " +
+			"--view defaults to active (open, in_progress, wait_customer) unless --status is given; closed is done and cancelled. " +
+			"--sort tree keeps queue tree order; updated and created show the newest first; priority shows P0 first, then the newest. " +
+			"A page holds --limit tasks (default 50, maximum 500). When more remain, a last line next: prints the command for the next page. --json prints the page with tasks and next_cursor.",
+		"", "ttasks list --status plan,review\nttasks list --text 'login bug' --sort updated --limit 20\nttasks list --subtree DEV-12 --view all\nttasks list --waiting-for me"},
+	"mine": {"List tasks visible to the current actor (alias of list)", "mine [flags]",
+		"mine is an alias of list: the same flags, filters, and output. See ttasks list --help.", "", "ttasks mine --queue DEV --status in_progress\nttasks mine --waiting-for agent:worker"},
 	"ready": {"List or claim eligible flexible tasks", "ready [flags]",
 		"Ready tasks are open, unassigned, and unblocked. Agent mode may atomically claim work with --claim. Operator mode only lists it; its default limit is 50 (maximum 200).", "", "ttasks ready --queue DEV\nttasks ready --claim --idempotency-key claim-1"},
 	"show": {"Inspect a task and its conversation", "show KEY",
@@ -81,18 +89,26 @@ var helpGroups = map[string]string{
 
 var helpFlags = map[string]string{
 	"queue":               "Queue prefix, for example DEV",
-	"status":              "Task status: open, in_progress, wait_customer, done, or cancelled",
+	"status":              "Task status: open, in_progress, wait_customer, done, or cancelled; list also takes a workflow status and comma-separated values",
+	"category":            "Category: open, in_progress, wait_customer, done, or cancelled; comma-separated values",
 	"assignee":            "Agent name to assign or filter by",
-	"text":                "Search text in tasks",
-	"waiting-for":         "Filter pending answers by user:login or agent:name",
-	"limit":               "Maximum number of results (operator ready: default 50, maximum 200)",
+	"author":              "Author principal, user:login or agent:name (a bare name means agent:name)",
+	"customer":            "Customer principal, user:login or agent:name (a bare name means agent:name)",
+	"subtree":             "Task key whose descendants to list; excludes --parent",
+	"blocked":             "true lists only blocked tasks, false only unblocked ones",
+	"view":                "active (default), closed (done and cancelled), or all",
+	"sort":                "tree (default), updated, created, or priority",
+	"after":               "Task key to continue after, from the next: line or next_cursor",
+	"text":                "Search text in the key, title, and description, ignoring case",
+	"waiting-for":         "Filter pending answers by user:login or agent:name; me is the current agent",
+	"limit":               "Maximum number of results (list: default 50, maximum 500; operator ready: default 50, maximum 200)",
 	"claim":               "Atomically claim eligible flexible work (agent-only; boolean, default false)",
-	"parent":              "Parent task key; create inherits its queue",
+	"parent":              "Parent task key; create inherits its queue, list shows its direct children",
 	"title":               "Task title (required for create)",
 	"description":         "Task description as Markdown",
 	"pull-request":        "Absolute http(s) pull request URL; an empty update clears it",
 	"group":               "Task group; forbidden when filing into a queue the agent does not own",
-	"priority":            "P0 Critical, P1 High, P2 Normal (create default), P3 Low",
+	"priority":            "P0 Critical, P1 High, P2 Normal (create default), P3 Low; list takes comma-separated values",
 	"manual-block-reason": "Manual blocker text; an empty update clears it",
 	"revision":            "Expected task revision (block: blocker revision); operator mode fetches it if omitted",
 	"body":                "Markdown comment text, instead of positional TEXT",

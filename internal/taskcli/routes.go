@@ -24,7 +24,7 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 	body := parsed.payload
 	key, _ := body["key"].(string)
 	switch parsed.action {
-	case "mine":
+	case "list", "mine":
 		method, route = "GET", "/api/tasks"
 	case "ready":
 		if claim, _ := body["claim"].(bool); claim {

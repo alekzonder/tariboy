@@ -60,6 +60,8 @@ func TestHelpExplainsTaskFormsAndFlags(t *testing.T) {
 		{"ask", []string{"KEY", "PRINCIPAL", "TEXT", "--idempotency-key"}},
 		{"create", []string{"--title", "--queue", "--parent", "P0", "P3", "filed"}},
 		{"move", []string{"--to-root", "--before", "--parent"}},
+		{"list", []string{"--subtree", "--sort", "--after", "next:", "workflow status"}},
+		{"mine", []string{"alias of list"}},
 		{"queue pool set", []string{"operator-only", "--agents", "--revision", "--idempotency-key"}},
 		{"queue create", []string{"operator-only", "--prefix", "--name", "--owners"}},
 	}

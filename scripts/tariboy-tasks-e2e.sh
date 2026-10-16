@@ -81,6 +81,14 @@ ttasks update "$OPS_KEY" --title "operator updated" >/dev/null
 ttasks update "$AGT_KEY" --title "agent updated" >/dev/null
 ttasks show "$OPS_KEY" --json | grep -q '"title":"operator updated"' || fail "operator did not update OPS"
 ttasks show "$AGT_KEY" --json | grep -q '"title":"agent updated"' || fail "operator did not update AGT"
+CHILD_KEY="$(ttasks create --parent "$OPS_KEY" --title "operator child" --json | task_key)"
+SUBTREE="$(ttasks list --subtree "$OPS_KEY" --json)"
+printf '%s' "$SUBTREE" | grep -q "\"key\":\"$CHILD_KEY\"" || fail "list --subtree missed the child"
+if printf '%s' "$SUBTREE" | grep -q "\"key\":\"$OPS_KEY\""; then
+  fail "list --subtree included its root"
+fi
+ttasks list --text "OPERATOR UPDATED" --sort updated | grep -q "$OPS_KEY" || fail "list --text table missed the task"
+ttasks list --limit 1 | grep -q '^next: ttasks list --limit 1 --after ' || fail "list did not print the next page command"
 
 echo "--- agent mode is identity-bound to its real tools socket"
 "$BIN/tariboy" --socket "$SOCK" agent run tasks-test:latest --name worker --harness stub --interactive false --loop false \
@@ -105,6 +113,8 @@ printf '%s' "$AGENT" | grep -q '"queue":"AGT"' || fail "agent did not see assign
 if printf '%s' "$AGENT" | grep -q '"queue":"OPS"'; then
   fail "agent saw operator-only OPS task"
 fi
+TARIBOY_TOOLS_SOCKET="$RUNTIME/worker.sock" ttasks list --queue AGT --sort priority | grep -q "$AGT_KEY" || fail "agent list missed its AGT task"
+[ "$(TARIBOY_TOOLS_SOCKET="$RUNTIME/worker.sock" ttasks list --subtree "$OPS_KEY")" = "no tasks match" ] || fail "agent list --subtree exposed an invisible tree"
 
 echo "--- unreachable agent socket never falls back to operator mode"
 set +e

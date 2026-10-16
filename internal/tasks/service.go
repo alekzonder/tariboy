@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -490,16 +491,59 @@ func (s *Service) GetTask(ctx context.Context, actor Actor, key string) (TaskDet
 	}, nil
 }
 
+// listOrders maps each ListFilter.Sort to its ORDER BY and to the keyset
+// condition that keeps a page after the cursor task c in that order.
+var listOrders = map[string]struct{ by, after string }{
+	"tree": {
+		by: `t.queue_prefix, t.parent_id, t.priority, t.position, t.task_key`,
+		after: `(t.queue_prefix, COALESCE(t.parent_id, 0), t.priority, t.position, t.task_key) >
+			(c.queue_prefix, COALESCE(c.parent_id, 0), c.priority, c.position, c.task_key)`,
+	},
+	"updated": {by: `t.updated_at DESC, t.task_key DESC`, after: `(t.updated_at, t.task_key) < (c.updated_at, c.task_key)`},
+	"created": {by: `t.created_at DESC, t.task_key DESC`, after: `(t.created_at, t.task_key) < (c.created_at, c.task_key)`},
+	"priority": {
+		by:    `t.priority, t.updated_at DESC, t.task_key DESC`,
+		after: `(t.priority > c.priority OR (t.priority = c.priority AND (t.updated_at, t.task_key) < (c.updated_at, c.task_key)))`,
+	},
+}
+
 func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter) (TaskPage, error) {
 	if err := validateActor(actor); err != nil {
 		return TaskPage{}, err
 	}
+	statuses := filter.Statuses
+	if filter.Status != "" {
+		statuses = append(slices.Clone(statuses), filter.Status)
+	}
 	statusView := filter.StatusView
-	if statusView == "" && filter.Status == "" {
+	if statusView == "" && len(statuses) == 0 {
 		statusView = "active"
 	}
 	if statusView != "" && statusView != "active" && statusView != "closed" && statusView != "all" {
 		return TaskPage{}, domainError(http.StatusBadRequest, "invalid_status_view", "status_view must be active, closed, or all")
+	}
+	for _, category := range filter.Categories {
+		switch category {
+		case StatusOpen, StatusInProgress, StatusWaitCustomer, StatusDone, StatusCancelled:
+		default:
+			return TaskPage{}, domainError(http.StatusBadRequest, "invalid_category", "category must be open, in_progress, wait_customer, done, or cancelled")
+		}
+	}
+	for _, priority := range filter.Priorities {
+		if _, err := NormalizePriority(priority); err != nil || priority == "" {
+			return TaskPage{}, domainError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
+		}
+	}
+	if filter.ParentKey != "" && filter.SubtreeKey != "" {
+		return TaskPage{}, domainError(http.StatusBadRequest, "invalid_filter", "parent and subtree cannot be combined")
+	}
+	sortName := filter.Sort
+	if sortName == "" {
+		sortName = "tree"
+	}
+	order, ok := listOrders[sortName]
+	if !ok {
+		return TaskPage{}, domainError(http.StatusBadRequest, "invalid_sort", "sort must be tree, updated, created, or priority")
 	}
 	visibilityActor := actor
 	if filter.ScopeAgent != "" {
@@ -521,15 +565,56 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 		query += ` AND t.queue_prefix = ?`
 		args = append(args, strings.ToUpper(filter.Queue))
 	}
-	if filter.Status != "" {
-		query += ` AND t.status = ?`
-		args = append(args, filter.Status)
+	if len(statuses) > 0 {
+		marks := placeholders(len(statuses))
+		query += ` AND (t.status IN (` + marks + `) OR t.workflow_status IN (` + marks + `))`
+		for range 2 {
+			for _, status := range statuses {
+				args = append(args, status)
+			}
+		}
+	}
+	if len(filter.Categories) > 0 {
+		query += ` AND t.status IN (` + placeholders(len(filter.Categories)) + `)`
+		for _, category := range filter.Categories {
+			args = append(args, category)
+		}
+	}
+	if len(filter.Priorities) > 0 {
+		query += ` AND t.priority IN (` + placeholders(len(filter.Priorities)) + `)`
+		for _, priority := range filter.Priorities {
+			args = append(args, string(priority))
+		}
 	}
 	switch statusView {
 	case "active":
 		query += ` AND t.status IN ('open', 'in_progress', 'wait_customer')`
 	case "closed":
-		query += ` AND t.status = 'done'`
+		query += ` AND t.status IN ('done', 'cancelled')`
+	}
+	if filter.Customer != "" {
+		customer := strings.TrimSpace(filter.Customer)
+		if !strings.Contains(customer, ":") {
+			customer = agentPrincipal(customer)
+		}
+		query += ` AND t.customer = ?`
+		args = append(args, customer)
+	}
+	if filter.ParentKey != "" {
+		query += ` AND t.parent_id = (SELECT id FROM tasks WHERE task_key = ?)`
+		args = append(args, strings.TrimSpace(filter.ParentKey))
+	}
+	if filter.SubtreeKey != "" {
+		query += ` AND t.id IN (
+			WITH RECURSIVE subtree(id) AS (
+				SELECT child.id FROM tasks child
+				JOIN tasks root ON root.id = child.parent_id WHERE root.task_key = ?
+				UNION ALL
+				SELECT child.id FROM tasks child JOIN subtree ON child.parent_id = subtree.id
+			)
+			SELECT id FROM subtree
+		)`
+		args = append(args, strings.TrimSpace(filter.SubtreeKey))
 	}
 	if filter.Assignee != "" {
 		query += ` AND t.assignee = ?`
@@ -577,20 +662,14 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 		}
 	}
 	if filter.AfterKey != "" {
-		query += ` AND (
-			t.queue_prefix, COALESCE(t.parent_id, 0), t.priority, t.position, t.task_key
-		) > (
-			SELECT cursor.queue_prefix, COALESCE(cursor.parent_id, 0),
-			       cursor.priority, cursor.position, cursor.task_key
-			FROM tasks cursor WHERE cursor.task_key = ?
-		)`
+		query += ` AND EXISTS (SELECT 1 FROM tasks c WHERE c.task_key = ? AND ` + order.after + `)`
 		args = append(args, strings.TrimSpace(filter.AfterKey))
 	}
 	limit := filter.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
-	query += ` ORDER BY t.queue_prefix, t.parent_id, t.priority, t.position, t.task_key`
+	query += ` ORDER BY ` + order.by
 	query += ` LIMIT ?`
 	args = append(args, limit+1)
 	rows, err := s.db.QueryContext(ctx, query, args...)

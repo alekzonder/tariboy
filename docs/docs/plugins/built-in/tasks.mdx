@@ -31,7 +31,7 @@ Agents can inspect, create, organize, delegate, discuss, and complete visible
 work:
 
 ```bash
-ttasks mine
+ttasks list --queue OPS --status in_progress
 ttasks ready --queue OPS --claim
 ttasks show OPS-12
 ttasks create --parent OPS-12 --title "Add regression coverage"

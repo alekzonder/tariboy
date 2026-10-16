@@ -328,18 +328,30 @@ type CreateTaskInput struct {
 }
 
 type ListFilter struct {
-	Queue      string
-	Status     string
+	Queue  string
+	Status string
+	// Statuses match the status a task shows: its workflow status, or the stored
+	// status of a flexible task. A category value still finds workflow tasks in it.
+	Statuses   []string
+	Categories []string
+	Priorities []Priority
 	StatusView string
 	Assignee   string
 	Author     string
+	Customer   string
 	Group      string
 	Text       string
 	WaitingFor string
 	ScopeAgent string
-	Blocked    *bool
-	Limit      int
-	AfterKey   string
+	// ParentKey selects direct children and SubtreeKey every descendant, both
+	// inside the actor's visible tasks.
+	ParentKey  string
+	SubtreeKey string
+	// Sort is tree (the default), updated, created, or priority.
+	Sort     string
+	Blocked  *bool
+	Limit    int
+	AfterKey string
 }
 
 type TaskPage struct {

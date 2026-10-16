@@ -69,7 +69,7 @@ func TestParseCurrentTasksSurface(t *testing.T) {
 		argv         []string
 		want         map[string]any
 	}{
-		{"mine", "mine", []string{"mine", "--queue=DEV"}, map[string]any{"queue": "DEV"}},
+		{"mine", "mine", []string{"mine", "--queue=DEV"}, map[string]any{"queue": "DEV", "limit": "50"}},
 		{"ready", "ready", []string{"ready", "--claim"}, map[string]any{"claim": true}},
 		{"show", "show", []string{"show", "DEV-1"}, map[string]any{"key": "DEV-1"}},
 		{"create", "create", []string{"create", "--queue", "DEV", "--title", "new"}, map[string]any{"queue": "DEV", "title": "new"}},
@@ -281,12 +281,12 @@ func TestHelpJSONCoversRunnableTaskRootsWithoutSocket(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &tree); err != nil {
 		t.Fatalf("help = %q, tree = %#v, err = %v", out.String(), tree, err)
 	}
-	for _, root := range []string{"mine", "ready", "show", "assign", "ask", "queue", "events", "principals", "notifications", "advance", "artifacts", "workflow", "cancel"} {
+	for _, root := range []string{"list", "mine", "ready", "show", "assign", "ask", "queue", "events", "principals", "notifications", "advance", "artifacts", "workflow", "cancel"} {
 		if tree[root] == nil {
 			t.Fatalf("help tree missing runnable root %q: %#v", root, tree)
 		}
 	}
-	for _, root := range []string{"list", "get", "work", "observe", "questions", "answer", "workflows"} {
+	for _, root := range []string{"get", "work", "observe", "questions", "answer", "workflows"} {
 		if tree[root] != nil {
 			t.Fatalf("help tree advertises inaccessible root %q: %#v", root, tree)
 		}
