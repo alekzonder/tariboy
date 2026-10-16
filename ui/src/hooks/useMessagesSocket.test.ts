@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { setLocalBaseURL } from "@/lib/api"
 import type { Daemon } from "@/lib/daemons"
-import { messagesWsUrl, useMessagesSocket } from "./useMessagesSocket"
+import { messagesWsUrl, useAgentStatesSocket, useMessagesSocket } from "./useMessagesSocket"
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = []
@@ -87,5 +87,29 @@ describe("messages websocket", () => {
     expect(second).toBeDefined()
     act(() => { second.onopen?.(new Event("open")) })
     expect(onOpen).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("agent states websocket", () => {
+  it("connects to the agent states socket and reports open", () => {
+    const { result } = renderHook(() => useAgentStatesSocket({ target: null, onHint: vi.fn() }))
+    const socket = FakeWebSocket.instances[0]
+    expect(socket.url).toMatch(/^ws:\/\/.*\/api\/agent-states\/ws$/)
+    act(() => { socket.onopen?.(new Event("open")) })
+    expect(result.current).toBe("open")
+  })
+
+  it("delivers frames that name an agent and drops the rest", () => {
+    const onHint = vi.fn()
+    renderHook(() => useAgentStatesSocket({ target: null, onHint }))
+    const socket = FakeWebSocket.instances[0]
+    act(() => {
+      socket.onmessage?.(new MessageEvent("message", {
+        data: JSON.stringify({ agent: "worker", type: "iteration", ts: "t" }),
+      }))
+      socket.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ type: "iteration" }) }))
+    })
+    expect(onHint).toHaveBeenCalledTimes(1)
+    expect(onHint.mock.calls[0][0].agent).toBe("worker")
   })
 })

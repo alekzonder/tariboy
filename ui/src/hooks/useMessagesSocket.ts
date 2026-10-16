@@ -19,9 +19,17 @@ export interface MessageHint {
   ts: string
 }
 
+/** Something that can change an agent's state happened: an iteration started
+ *  or ended, or a lifecycle event was recorded. The client refetches. */
+export interface AgentStateHint {
+  agent: string
+  type: string
+  ts: string
+}
+
 export type MessagesSocketStatus = "connecting" | "open" | "closed"
 
-export function messagesWsUrl(target: Daemon | null): string {
+function hintWsUrl(target: Daemon | null, path: string): string {
   if (target && !target.baseURL) {
     throw new Error(`host ${target.label || target.id} is not ready`)
   }
@@ -39,7 +47,18 @@ export function messagesWsUrl(target: Daemon | null): string {
   const query = new URLSearchParams()
   if (target?.token) query.set("token", target.token)
   const qs = query.toString()
-  return `${base}/api/messages/ws${qs ? `?${qs}` : ""}`
+  return `${base}${path}${qs ? `?${qs}` : ""}`
+}
+
+export function messagesWsUrl(target: Daemon | null): string {
+  return hintWsUrl(target, "/api/messages/ws")
+}
+
+type HintSocketOptions<T> = {
+  target?: ApiTarget
+  enabled?: boolean
+  onHint: (hint: T) => void
+  onOpen?: () => void
 }
 
 /**
@@ -47,24 +66,43 @@ export function messagesWsUrl(target: Daemon | null): string {
  * nothing, so the caller refetches on mount and on every reconnect; that, not a
  * cursor, is what makes a missed frame harmless.
  */
-export function useMessagesSocket({
-  target,
-  enabled = true,
-  onHint,
-  onOpen,
-}: {
-  target?: ApiTarget
-  enabled?: boolean
-  onHint: (hint: MessageHint) => void
-  onOpen?: () => void
-}): MessagesSocketStatus {
+export function useMessagesSocket(options: HintSocketOptions<MessageHint>): MessagesSocketStatus {
+  return useHintSocket("/api/messages/ws", (parsed) => {
+    const hint = parsed as Partial<MessageHint>
+    // A shared chat belongs to no single agent, so a frame that names its
+    // chat is addressed even without one.
+    if (!hint || typeof hint.id !== "string") return null
+    if (typeof hint.agent !== "string" && typeof hint.chat !== "string") return null
+    return hint as MessageHint
+  }, options)
+}
+
+/**
+ * Watch every agent's state on one host. While it is open, the agents list
+ * and the agent status can poll slowly and refetch on a hint instead. A host
+ * without this socket keeps it closed, and the caller keeps its short poll.
+ */
+export function useAgentStatesSocket(options: HintSocketOptions<AgentStateHint>): MessagesSocketStatus {
+  return useHintSocket("/api/agent-states/ws", (parsed) => {
+    const hint = parsed as Partial<AgentStateHint>
+    return hint && typeof hint.agent === "string" ? (hint as AgentStateHint) : null
+  }, options)
+}
+
+function useHintSocket<T>(
+  path: string,
+  accept: (parsed: unknown) => T | null,
+  { target, enabled = true, onHint, onOpen }: HintSocketOptions<T>,
+): MessagesSocketStatus {
   const [status, setStatus] = useState<MessagesSocketStatus>(enabled ? "connecting" : "closed")
   const onHintRef = useRef(onHint)
   const onOpenRef = useRef(onOpen)
+  const acceptRef = useRef(accept)
   useEffect(() => {
     onHintRef.current = onHint
     onOpenRef.current = onOpen
-  }, [onHint, onOpen])
+    acceptRef.current = accept
+  }, [onHint, onOpen, accept])
 
   const targetKey = JSON.stringify(resolveTarget(target))
 
@@ -83,7 +121,7 @@ export function useMessagesSocket({
       if (!alive) return
       let url: string
       try {
-        url = messagesWsUrl(socketTarget)
+        url = hintWsUrl(socketTarget, path)
       } catch {
         setStatus("closed")
         return
@@ -105,12 +143,8 @@ export function useMessagesSocket({
         } catch {
           return
         }
-        const hint = parsed as Partial<MessageHint>
-        // A shared chat belongs to no single agent, so a frame that names its
-        // chat is addressed even without one.
-        if (!hint || typeof hint.id !== "string") return
-        if (typeof hint.agent !== "string" && typeof hint.chat !== "string") return
-        onHintRef.current(hint as MessageHint)
+        const hint = acceptRef.current(parsed)
+        if (hint !== null) onHintRef.current(hint)
       }
       current.onclose = () => {
         if (socket === current) socket = null
@@ -129,7 +163,7 @@ export function useMessagesSocket({
       socket?.close()
       socket = null
     }
-  }, [enabled, targetKey])
+  }, [enabled, targetKey, path])
 
   return status
 }

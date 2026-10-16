@@ -16,8 +16,12 @@ export function DaemonBanner() {
   return isDesktop() ? <DesktopBanner /> : <BrowserBanner />;
 }
 
+/** Cadence of the daemon's own HTTP status probe. Each probe is an API request
+ *  the daemon serves, so it runs less often than the local desktop read. */
+const PROBE_POLL_MS = 10000;
+
 function BrowserBanner() {
-  const { data, error } = usePolling(getDaemonStatus, 2000);
+  const { data, error } = usePolling(getDaemonStatus, PROBE_POLL_MS);
   if (error) return <Bar tone="error">daemon unreachable — is tariboyd running?</Bar>;
   if (data?.state === "error") return <Bar tone="error">tariboyd: {data.message}</Bar>;
   return null;
@@ -32,7 +36,7 @@ const DESKTOP_POLL_MS = 3000;
 //  2. A `daemon_status` read every 3 s. Push alone is not enough: registering the
 //     listener is itself asynchronous (dynamic import + `listen()`), so a
 //     transition can land in the gap and be lost forever.
-//  3. A probe of the daemon's OWN HTTP API every 3 s. This is the only signal
+//  3. A probe of the daemon's OWN HTTP API every 10 s. This is the only signal
 //     that notices an ADOPTED daemon dying: `daemon_status` is a pure read of a
 //     cached view (src-tauri/src/commands.rs) and `watch_daemon` only follows a
 //     child the app spawned itself, so Rust never learns that a daemon it merely
@@ -90,7 +94,7 @@ function DesktopBanner() {
     () => (probeable ? getDaemonStatus() : Promise.resolve(null)),
     [probeable],
   );
-  const { data: status, error: unreachable } = usePolling(reachable, DESKTOP_POLL_MS);
+  const { data: status, error: unreachable } = usePolling(reachable, PROBE_POLL_MS);
 
   // Rust still believes in a daemon that has stopped answering — the adopted
   // daemon someone stopped from the CLI. Reuse the `down` branch verbatim so the

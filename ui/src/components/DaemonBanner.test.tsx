@@ -36,6 +36,8 @@ import { getLocalBaseURL, setLocalBaseURL } from "@/lib/api";
 
 /** Must match DESKTOP_POLL_MS in DaemonBanner.tsx (the spec's 3 s cadence). */
 const POLL_MS = 3000;
+/** Must match PROBE_POLL_MS in DaemonBanner.tsx: the daemon's HTTP probe. */
+const PROBE_MS = 10000;
 
 const base: DesktopDaemonState = {
   state: "ready", base_url: "http://127.0.0.1:9990", daemon_version: "1.0.0",
@@ -132,7 +134,7 @@ describe("DaemonBanner in the desktop app", () => {
     stubDesktop(base);
     render(<DaemonBanner />);
     await settle();
-    await settle(POLL_MS);
+    await settle(PROBE_MS);
     expect(screen.getByText(/missing required tools: tmux, npx/)).toBeInTheDocument();
   });
 
@@ -156,7 +158,7 @@ describe("DaemonBanner polling for an adopted daemon that dies", () => {
 
     // `tariboy daemon stop` in a terminal: Rust still believes it is ready.
     fetchMock.mockRejectedValue(new Error("connection refused"));
-    await settle(POLL_MS);
+    await settle(PROBE_MS);
 
     expect(screen.getByText(/tariboyd is not running/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^start$/i })).toBeInTheDocument();
@@ -169,12 +171,12 @@ describe("DaemonBanner polling for an adopted daemon that dies", () => {
     await settle();
 
     fetchMock.mockRejectedValue(new Error("connection refused"));
-    await settle(POLL_MS);
+    await settle(PROBE_MS);
     expect(screen.getByText(/tariboyd is not running/i)).toBeInTheDocument();
 
     // `tariboy daemon start` from the terminal: the API answers again.
     fetchMock.mockResolvedValue(okResponse());
-    await settle(POLL_MS);
+    await settle(PROBE_MS);
     expect(container.textContent).toBe("");
   });
 

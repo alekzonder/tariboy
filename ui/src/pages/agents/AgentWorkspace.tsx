@@ -9,6 +9,7 @@ import { AgentControls } from "@/components/AgentControls";
 import { agentTone } from "@/lib/statusTone";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { agentGetOn, isConnectionError } from "@/lib/api";
+import { useAgentStatesSocket } from "@/hooks/useMessagesSocket";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
@@ -105,12 +106,20 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     }
   }, [agent.name, agentKey, connection, hostId, unavailable]);
 
+  // A state hint for this agent refetches at once; the poll is then only a
+  // fallback. A host without the socket keeps the short poll.
+  const statesSocket = useAgentStatesSocket({
+    target,
+    enabled: connection === "ready" && !unavailable,
+    onHint: (hint) => { if (hint.agent === agent.name) void refreshStatus(); },
+  });
+  const statusPollMs = statesSocket === "open" ? 15000 : 3000;
   useEffect(() => {
     if (connection !== "ready" || unavailable) return;
     void Promise.resolve().then(refreshStatus);
-    const timer = window.setInterval(() => void refreshStatus(), 3000);
+    const timer = window.setInterval(() => void refreshStatus(), statusPollMs);
     return () => window.clearInterval(timer);
-  }, [connection, refreshStatus, unavailable]);
+  }, [connection, refreshStatus, unavailable, statusPollMs]);
 
   // An unknown or hidden tab opens the default one: Terminal, or Chat in Simple.
   if (!tabs.some(([key]) => key === tab)) {

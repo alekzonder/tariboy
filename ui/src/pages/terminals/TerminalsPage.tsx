@@ -59,7 +59,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     });
     return data;
   }, []);
-  const { data, refresh } = usePolling(fetchHosts, 3000);
+  // While every server pushes agent state hints, the sidebar refetches on a
+  // hint and polls only as a fallback.
+  const [agentStatesLive, setAgentStatesLive] = useState(false);
+  const { data, refresh } = usePolling(fetchHosts, agentStatesLive ? 15000 : 3000);
   const hosts = useMemo(() => data ?? [], [data]);
   const hostId = hostParam !== undefined ? paramToHost(hostParam) : undefined;
   const [createFor, setCreateFor] = useState<CreateDialogState | null>(() => {
@@ -309,9 +312,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     // Terminal body: the chrome shows through as an 8px gutter around the
     // content island, so neither the sidebar nor the island needs a border.
     <div className="flex h-full px-2 pb-2">
-      {/* Chat order is live: a published message refreshes the authoritative
-          snapshot at once rather than waiting for the next poll. */}
-      <MessagesLiveRefresh hostIds={hosts.map((entry) => entry.host.id)} onChange={refresh} />
+      {/* Chat order and agent state are live: a published message or a state
+          change refreshes the authoritative snapshot at once rather than
+          waiting for the next poll. */}
+      <MessagesLiveRefresh hostIds={hosts.map((entry) => entry.host.id)} onChange={refresh} onLive={setAgentStatesLive} />
       {/* All tasks spans every server, so no agent is the subject there. */}
       {!sidebar.hidden && !allTasks && <AgentSidebar
         hosts={orderedSidebarHosts}
