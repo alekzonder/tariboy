@@ -1,3 +1,42 @@
+## [0.84.0] - 2026-10-16
+
+### Added
+
+- `ttasks list` lists the tasks the caller can see, in agent and operator
+  mode; `ttasks mine` becomes its alias and search is `list --text`. New
+  filters: `--category`, `--priority`, `--author`, `--customer`, `--group`,
+  `--parent`, `--subtree`, `--blocked` and `--view`, plus `--sort tree|updated|created|priority`.
+  A page holds 50 tasks; the table ends with the next-page command. The agent
+  tools socket gains a matching `list` action.
+- Task table columns can be resized and reordered by dragging, from the
+  keyboard, or from a new **Columns** menu in the filter bar (the touch path
+  on phones). The layout survives reloads and app restarts.
+- The daemon writes every API request to a size-rotated
+  `tariboyd.access.log` (50 MB, 3 copies). `tariboyd.log` keeps a WARN line
+  only for requests that take 500 ms or more or fail with a 5xx status.
+  Launchers rotate a `tariboyd.log` larger than 50 MB before starting the daemon.
+- The new `GET /api/agent-states/ws` socket pushes agent state hints. The
+  sidebar and the agent header refresh on hints and fall back to a 15 s poll
+  (3 s against hosts without the socket).
+
+### Changed
+
+- `ttasks --status` matches the workflow status a task shows (a category
+  value still finds workflow tasks in it), and `status_view=closed` now
+  includes cancelled tasks.
+- The daemon banner probes daemon status every 10 s instead of every 2–3 s.
+- Polled API reads (daemon status, agents, chats, tasks, images) use a
+  read-only SQLite connection pool, so they no longer wait behind writes.
+  The chat and agent lists read in a fixed number of queries.
+- The nightly maintenance backup no longer blocks API requests and agent
+  writes while it runs.
+
+### Fixed
+
+- The Android WebView stays clear of the system bars and the keyboard.
+
+[0.84.0]: https://github.com/alekzonder/tariboy/compare/v0.83.0...v0.84.0
+
 ## [0.83.0] - 2026-10-16
 
 ### Added
