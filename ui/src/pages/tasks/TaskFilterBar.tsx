@@ -10,6 +10,7 @@ import {
 import { Segmented } from "@/components/ui/segmented"
 import { cn } from "@/lib/utils"
 import type { TaskQueue, TaskStatusView } from "@/lib/tasks"
+import TaskColumnsMenu from "./TaskColumnsMenu"
 import type { TaskRowMode } from "./taskColumns"
 
 const STATUS_OPTIONS = [
@@ -220,6 +221,7 @@ export function TaskFilterBar({
         </span>
       )}
       <div className="ml-auto flex items-center gap-1.5">
+        <TaskColumnsMenu mode={mode} />
         <Button
           type="button"
           variant="ghost"

@@ -1,0 +1,105 @@
+import { ChevronLeft, ChevronRight, Columns3, Minus, Plus, RotateCcw } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  clampTaskColumnWidth,
+  moveTaskColumn,
+  resetTaskColumns,
+  setTaskColumnWidth,
+  TASK_COLUMN_LABELS,
+  useTaskColumns,
+} from "./taskColumnLayout"
+import type { TaskRowMode } from "./taskColumns"
+
+const WIDTH_STEP = 16
+
+// Each step is one tap on a full-size target, so a phone never has to hit the
+// narrow edge of a header cell. Steps keep the menu open for the next one.
+const keepOpen = (action: () => void) => (event: Event) => {
+  event.preventDefault()
+  action()
+}
+
+const stepClass = "size-7 justify-center rounded-[7px] p-0"
+
+/** The touch path to the column layout: order and width per column of the
+ *  current table, and a reset. */
+export default function TaskColumnsMenu({ mode }: { mode: TaskRowMode }) {
+  const columns = useTaskColumns(mode)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Columns"
+          className="flex h-7 shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Columns3 aria-hidden="true" className="size-3" />
+          Columns
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[240px] rounded-[12px] p-[5px]">
+        {columns.map((column, index) => {
+          const label = TASK_COLUMN_LABELS[column.id]
+          const id = column.id
+          const width = column.width
+          return (
+            <div
+              key={id}
+              data-testid="task-column-menu-row"
+              data-column={id}
+              className="flex h-8 items-center gap-0.5 pl-[9px] text-[12.5px]"
+            >
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+              {id !== "task" && width !== undefined && <>
+                <span className="w-9 text-right text-[11.5px] text-muted-foreground tabular-nums">{width}</span>
+                <DropdownMenuItem
+                  aria-label={`Narrow ${label}`}
+                  disabled={width <= clampTaskColumnWidth(id, 0)}
+                  onSelect={keepOpen(() => setTaskColumnWidth(id, width - WIDTH_STEP))}
+                  className={stepClass}
+                >
+                  <Minus aria-hidden="true" className="size-3" />
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  aria-label={`Widen ${label}`}
+                  disabled={width >= clampTaskColumnWidth(id, Infinity)}
+                  onSelect={keepOpen(() => setTaskColumnWidth(id, width + WIDTH_STEP))}
+                  className={stepClass}
+                >
+                  <Plus aria-hidden="true" className="size-3" />
+                </DropdownMenuItem>
+              </>}
+              <DropdownMenuItem
+                aria-label={`Move ${label} left`}
+                disabled={index === 0}
+                onSelect={keepOpen(() => moveTaskColumn(id, columns[index - 1].id))}
+                className={stepClass}
+              >
+                <ChevronLeft aria-hidden="true" className="size-3.5" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                aria-label={`Move ${label} right`}
+                disabled={index === columns.length - 1}
+                onSelect={keepOpen(() => moveTaskColumn(id, columns[index + 1].id))}
+                className={stepClass}
+              >
+                <ChevronRight aria-hidden="true" className="size-3.5" />
+              </DropdownMenuItem>
+            </div>
+          )
+        })}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={resetTaskColumns} className="h-7 gap-2 rounded-[7px] px-[9px] text-[12.5px]">
+          <RotateCcw aria-hidden="true" className="size-3" />
+          Reset columns
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
