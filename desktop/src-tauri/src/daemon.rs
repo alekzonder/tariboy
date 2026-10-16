@@ -332,7 +332,10 @@ fn configure_daemon_command(
     shell: Option<&Path>,
     log_file: &Path,
 ) -> std::io::Result<()> {
-    rotate_if_larger(log_file, LOG_MAX_BYTES)?;
+    // A failed rotation only means the log keeps growing; the daemon still starts.
+    if let Err(e) = rotate_if_larger(log_file, LOG_MAX_BYTES) {
+        eprintln!("rotate {}: {e}", log_file.display());
+    }
     let log = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useCoalesced } from "@/hooks/useCoalesced";
 import { useAgentStatesSocket, useMessagesSocket } from "@/hooks/useMessagesSocket";
 import { targetFor } from "@/lib/terminalsHost";
 
@@ -18,21 +19,6 @@ function HostMessagesWatch({ hostId, onMessage, onState, onAgentStates }: {
   const states = useAgentStatesSocket({ target, enabled, onHint: onState });
   useEffect(() => { onAgentStates(hostId, states === "open"); }, [hostId, states, onAgentStates]);
   return null;
-}
-
-/** useCoalesced runs fn at most once per window, however many calls land in it. */
-function useCoalesced(fn: () => void, windowMs: number) {
-  const latest = useRef(fn);
-  useEffect(() => { latest.current = fn; }, [fn]);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => { if (timer.current !== undefined) clearTimeout(timer.current); }, []);
-  return useCallback(() => {
-    if (timer.current !== undefined) return;
-    timer.current = setTimeout(() => {
-      timer.current = undefined;
-      latest.current();
-    }, windowMs);
-  }, [windowMs]);
 }
 
 /** Watch every configured server's messages and agent states at once. A burst

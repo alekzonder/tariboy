@@ -42,6 +42,31 @@ func TestFileRotatesAtLimitAndKeepsNCopies(t *testing.T) {
 	}
 }
 
+// A failed rotation must not lose the log: writes continue in the current
+// file, and the next attempt waits for another max bytes instead of shifting
+// the old copies on every write.
+func TestFileKeepsWritingWhenRotationFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.log")
+	f, err := Open(path, 10, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.Write([]byte("1111111\n"))
+	// A read-only directory makes the rename fail.
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o755)
+	if _, err := f.Write([]byte("2222222\n")); err != nil {
+		t.Fatalf("write after failed rotation: %v", err)
+	}
+	if got := read(t, path); got != "1111111\n2222222\n" {
+		t.Fatalf("current = %q", got)
+	}
+}
+
 func TestOpenAppendsToExistingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a.log")
 	os.WriteFile(path, []byte("old\n"), 0o644)

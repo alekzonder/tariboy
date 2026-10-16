@@ -1044,6 +1044,7 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 			if err := m.cfg.Store.SetStatus(ag.Name, message, updated); err != nil {
 				return nil, err
 			}
+			m.emitState(agName)
 			// Mirror the write into the audit log so `iteration logs`/audit shows
 			// the full status timeline (v1 recorded type="status" per set).
 			if m.cfg.AuditFor != nil {
@@ -1350,6 +1351,14 @@ func (m *Manager) start(ag agent.Agent) error {
 // — launches an iteration so the tmux/PTY session comes up (an interactive agent
 // has no autonomous tick to spin one, so it would otherwise park at idle with no
 // session to attach to).
+// emitState tells live listeners (the agent states socket) that name's state
+// may have changed, so the UI refetches it instead of polling often.
+func (m *Manager) emitState(name string) {
+	if m.cfg.Emit != nil {
+		m.cfg.Emit(events.Event{Agent: name, Type: "state", Time: m.cfg.Clock().UTC().Format(time.RFC3339)})
+	}
+}
+
 func (m *Manager) Start(name string) error {
 	ag, err := m.cfg.Store.Get(name)
 	if err != nil {
@@ -1359,6 +1368,7 @@ func (m *Manager) Start(name string) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.emitState(name)
 	m.signalGoals()
 	if err := m.start(ag); err != nil {
 		if errors.Is(err, errIterationAdopting) {
@@ -1397,6 +1407,7 @@ func (m *Manager) Stop(name string) error {
 		rt.engine.Wake(WakeStop)
 	}
 	m.mu.Unlock()
+	m.emitState(name)
 	m.signalGoals()
 	_ = m.Kill(name)
 	return nil
@@ -1413,6 +1424,7 @@ func (m *Manager) SetLoopEnabled(name string, enabled bool) error {
 	if err := m.cfg.Store.Update(ag); err != nil {
 		return err
 	}
+	m.emitState(name)
 	m.RefreshLoopConfig(name)
 	return nil
 }

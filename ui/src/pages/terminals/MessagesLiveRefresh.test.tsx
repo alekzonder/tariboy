@@ -50,7 +50,7 @@ describe("MessagesLiveRefresh", () => {
     act(() => {
       for (let i = 0; i < 5; i++) {
         statesSocket().onmessage?.(new MessageEvent("message", {
-          data: JSON.stringify({ agent: "worker", type: "audit", ts: "t" }),
+          data: JSON.stringify({ agent: "worker", type: "state", ts: "t" }),
         }))
       }
     })

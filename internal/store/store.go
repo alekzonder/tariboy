@@ -3,6 +3,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"net/url"
 
 	_ "modernc.org/sqlite"
@@ -69,10 +70,11 @@ func (s *Store) Reader() *sql.DB {
 }
 
 func (s *Store) Close() error {
+	var readErr error
 	if s.read != nil {
-		s.read.Close()
+		readErr = s.read.Close()
 	}
-	return s.DB.Close()
+	return errors.Join(readErr, s.DB.Close())
 }
 
 func (s *Store) ConfigGet(key string) (string, bool, error) {
