@@ -6,7 +6,6 @@ package registry
 import (
 	"context"
 	"fmt"
-	"github.com/alekzonder/tariboy/internal/agent"
 	"io"
 	"log/slog"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/retention"

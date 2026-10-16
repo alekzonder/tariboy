@@ -608,8 +608,9 @@ sidebar mounts one such socket per configured host, so the chat order changes as
 a message lands rather than on the next poll.
 
 Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
-frames `{agent, type, ts}` say that an iteration event or an audit event was
-recorded for that agent. The sidebar refetches its agents at most once a second
+frames `{agent, type, ts}` say that an iteration event or a state change
+(start, stop, Autopilot switch, status line, halt, idle stop) happened for
+that agent. The sidebar refetches its agents at most once a second
 on these hints, and the agent header refetches its status on a hint for its own
 agent. While every host's state socket is open, the sidebar polls every 15
 seconds and the agent header every 15 seconds as a fallback. A host without the

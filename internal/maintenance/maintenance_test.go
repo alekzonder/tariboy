@@ -472,8 +472,8 @@ func TestRetentionZeroKeepsEverything(t *testing.T) {
 	}
 }
 
-// The backup reads through the read-only pool, so an open write does not hold
-// it back and it does not hold back the writer: the UI keeps working.
+// The backup runs on its own connection as a WAL read, so an open write does
+// not hold it back and it does not hold back the writer: the UI keeps working.
 func TestBackupDoesNotWaitForTheWriter(t *testing.T) {
 	svc, st, _ := open(t)
 	exec(t, st.DB, `INSERT INTO ai_requests(id,ts) VALUES ('committed',?)`, ts(1))

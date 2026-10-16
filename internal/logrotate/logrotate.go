@@ -46,11 +46,15 @@ func (l *File) Write(p []byte) (int, error) {
 	defer l.mu.Unlock()
 	if l.size > 0 && l.size+int64(len(p)) > l.max {
 		l.f.Close()
-		if err := Rotate(l.path, l.keep); err != nil {
-			return 0, err
-		}
+		rotated := Rotate(l.path, l.keep) == nil
 		if err := l.open(); err != nil {
 			return 0, err
+		}
+		if !rotated {
+			// Keep writing to the current file and try again only after
+			// another max bytes, so a failing rename does not shift the old
+			// copies on every write.
+			l.size = 0
 		}
 	}
 	n, err := l.f.Write(p)

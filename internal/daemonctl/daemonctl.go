@@ -83,8 +83,9 @@ func EnsureUp(ctx context.Context, cfg Config, out io.Writer) (bool, error) {
 	if err := os.MkdirAll(cfg.RuntimeDir, 0o700); err != nil {
 		return false, fmt.Errorf("create runtime dir: %w", err)
 	}
+	// A failed rotation only means the log keeps growing; the daemon still starts.
 	if err := logrotate.RotateIfLarger(cfg.LogFile, LogMaxBytes, 1); err != nil {
-		return false, fmt.Errorf("rotate log file: %w", err)
+		fmt.Fprintf(out, "warning: rotate %s: %v\n", cfg.LogFile, err)
 	}
 	logf, err := os.OpenFile(cfg.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {

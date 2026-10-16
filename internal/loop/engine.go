@@ -251,6 +251,14 @@ func (e *Engine) SetIterationCompleted(fn func(agent, iterationID string)) {
 	e.iterationCompleted = fn
 }
 
+// emitState tells live listeners that the agent's state changed outside an
+// iteration event: a halt or an idle stop.
+func (e *Engine) emitState() {
+	if e.emit != nil {
+		e.emit(events.Event{Agent: e.ag.Name, Type: "state", Time: e.clock().UTC().Format(time.RFC3339)})
+	}
+}
+
 func (e *Engine) emitIteration(id, trigger, status, phase string) {
 	if e.emit == nil {
 		return
@@ -798,6 +806,7 @@ func (e *Engine) disableLoop(reason string) {
 	if err := e.store.SetError(e.ag.Name, "halted: "+reason); err != nil {
 		e.log.Error("disable loop", "agent", e.ag.Name, "err", err)
 	}
+	e.emitState()
 }
 
 // maybeIdleStop applies the idle-autostop policy after a completed iteration
@@ -841,6 +850,7 @@ func (e *Engine) idleStop(reason string) {
 	if err := e.store.SetIdleStopped(e.ag.Name, reason, updated); err != nil {
 		e.log.Error("idle stop", "agent", e.ag.Name, "err", err)
 	}
+	e.emitState()
 	e.log.Info("loop idle-stopped", "agent", e.ag.Name, "reason", reason)
 	e.recordAudit("loop_idle_stopped", "system", "", map[string]any{"reason": reason})
 }

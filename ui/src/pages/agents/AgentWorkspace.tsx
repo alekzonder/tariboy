@@ -10,6 +10,7 @@ import { agentTone } from "@/lib/statusTone";
 import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { agentGetOn, isConnectionError } from "@/lib/api";
 import { useAgentStatesSocket } from "@/hooks/useMessagesSocket";
+import { useCoalesced } from "@/hooks/useCoalesced";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
@@ -108,10 +109,11 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
 
   // A state hint for this agent refetches at once; the poll is then only a
   // fallback. A host without the socket keeps the short poll.
+  const refreshOnHint = useCoalesced(() => void refreshStatus(), 500);
   const statesSocket = useAgentStatesSocket({
     target,
     enabled: connection === "ready" && !unavailable,
-    onHint: (hint) => { if (hint.agent === agent.name) void refreshStatus(); },
+    onHint: (hint) => { if (hint.agent === agent.name) refreshOnHint(); },
   });
   const statusPollMs = statesSocket === "open" ? 15000 : 3000;
   useEffect(() => {

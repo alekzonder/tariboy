@@ -98,7 +98,7 @@ func typeFilterSQL(types []string) (string, []any) {
 // messages it sent the customer. Only messages the agent sent can be unread.
 func (b *Bus) ChatSummaries(customer string, types []string, reads map[string]string) ([]ChatSummary, error) {
 	query, args := chatSummariesQuery(customer, types, reads)
-	rows, err := b.db.Query(query, args...)
+	rows, err := b.read.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
