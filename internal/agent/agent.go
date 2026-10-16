@@ -306,9 +306,11 @@ func (s *Store) SnapshotIterationImage(iterationID, ref, version, digest, templa
 	return affected(res)
 }
 
-type Store struct{ db *sql.DB }
+// Store reads and writes agents through the writer connection; List, which
+// the UI polls, reads through the read-only pool.
+type Store struct{ db, read *sql.DB }
 
-func NewStore(s *store.Store) *Store { return &Store{db: s.DB} }
+func NewStore(s *store.Store) *Store { return &Store{db: s.DB, read: s.Reader()} }
 
 func b2i(b bool) int {
 	if b {
@@ -546,7 +548,7 @@ func (s *Store) Get(name string) (Agent, error) {
 }
 
 func (s *Store) List() ([]Agent, error) {
-	rows, err := s.db.Query(`SELECT name, image_ref, image_digest, created_at, error_reason, cwd,
+	rows, err := s.read.Query(`SELECT name, image_ref, image_digest, created_at, error_reason, cwd,
 		harness_type, model, effort, interactive, loop_enabled, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,

@@ -42,6 +42,7 @@ type dbtx interface {
 
 type Bus struct {
 	db    *sql.DB
+	read  *sql.DB // read-only pool for the polled chat list
 	clock func() time.Time
 	hook  func(Message, []string)
 	// audit, if set, receives the per-agent audit events the lifecycle methods
@@ -81,7 +82,7 @@ func New(s *store.Store, clock func() time.Time) *Bus {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Bus{db: s.DB, clock: clock}
+	return &Bus{db: s.DB, read: s.Reader(), clock: clock}
 }
 
 func (b *Bus) SetPublishHook(fn func(msg Message, deliveredTo []string)) { b.hook = fn }
