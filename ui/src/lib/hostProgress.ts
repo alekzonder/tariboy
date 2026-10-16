@@ -27,7 +27,7 @@ export const HOST_PROGRESS_STEPS: ReadonlyArray<{
 }> = [
   { id: "connect", provisionLabel: "Connect to host", updateLabel: "Connect to host" },
   { id: "check", provisionLabel: "Check server", updateLabel: "Check server" },
-  { id: "upload", provisionLabel: "Upload release", updateLabel: "Upload release" },
+  { id: "upload", provisionLabel: "Upload release", updateLabel: "Get release" },
   { id: "install", provisionLabel: "Install release", updateLabel: "Install release" },
   { id: "service", provisionLabel: "Start Tariboy", updateLabel: "Restart Tariboy" },
   { id: "reconnect", provisionLabel: "Connect to Tariboy", updateLabel: "Reconnect" },
@@ -40,6 +40,7 @@ const PHASE_STEPS: Record<string, HostProgressStep> = {
   preflight: "check",
   stage: "upload",
   upload: "upload",
+  download: "upload",
   stage_release: "install",
   verify: "install",
   verify_install: "install",

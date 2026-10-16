@@ -82,6 +82,40 @@ TARIBOY_HTTP_ADDR="127.0.0.1:$port" "$cli" daemon start >/dev/null
 exec "$cli" daemon status --json
 "#;
 
+/// Reports whether the server CLI can update itself with `--cleanup` and which
+/// release the managed `tariboy` link points at.
+const SERVER_UPDATE_PROBE_SCRIPT: &[u8] = br#"set -eu
+: "${HOME:?HOME is required}"
+cli=$HOME/.local/bin/tariboy
+previous=
+capable=false
+if test -L "$cli"; then
+  target=$(readlink "$cli")
+  version=$(basename "$(dirname "$target")")
+  case "$version" in
+    ""|*[!A-Za-z0-9._-]*|.*|*/*) ;;
+    *) test "$target" != "$HOME/.local/lib/tariboy/$version/tariboy" || previous=$version ;;
+  esac
+fi
+if test -n "$previous" && "$cli" update --help 2>/dev/null | grep -q -e --cleanup; then
+  capable=true
+fi
+printf '{"capable":%s,"previous":"%s"}\n' "$capable" "$previous"
+"#;
+
+/// The server downloads, verifies, installs and restarts on its own, then
+/// deletes old releases.
+const SERVER_UPDATE_SCRIPT: &[u8] = br#"set -eu
+: "${HOME:?HOME is required}"
+version=${1-}
+port=${2-}
+case "$version" in ""|*[!A-Za-z0-9._-]*|.*|*/*) exit 64 ;; esac
+case "$port" in ""|*[!0-9]*) exit 64 ;; esac
+TARIBOY_HTTP_ADDR="127.0.0.1:$port" exec "$HOME/.local/bin/tariboy" update "$version" --cleanup
+"#;
+
+const SERVER_UPDATE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Result {
     pub state: String,
@@ -99,6 +133,12 @@ pub struct VersionSwitch<'a> {
 pub struct StagedRelease {
     pub previous: String,
     version: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServerUpdateProbe {
+    pub capable: bool,
+    pub previous: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -497,6 +537,131 @@ fn rollback_after_update_failure(
     })
 }
 
+pub fn probe_server_update(
+    transport: &ssh::Transport,
+    operation: &Operation,
+    alias: &str,
+    socket: &Path,
+    sink: OutputSink,
+) -> std::result::Result<ServerUpdateProbe, ssh::SshError> {
+    let remote = SshRemote {
+        transport,
+        operation,
+        alias,
+        socket,
+    };
+    probe_server_update_with(&remote, sink)
+}
+
+fn probe_server_update_with(
+    remote: &dyn Remote,
+    sink: OutputSink,
+) -> std::result::Result<ServerUpdateProbe, ssh::SshError> {
+    let output = remote.run(
+        &["sh".into(), "-s".into()],
+        SERVER_UPDATE_PROBE_SCRIPT,
+        Duration::from_secs(20),
+        sink,
+    )?;
+    let probe: ServerUpdateProbe =
+        serde_json::from_str(&output).map_err(|error| ssh::SshError {
+            code: "remote_probe_invalid".into(),
+            message: format!("parse remote update probe: {error}"),
+        })?;
+    if !probe.previous.is_empty() {
+        validate_version(&probe.previous)?;
+    }
+    Ok(probe)
+}
+
+/// Updates the host with `tariboy update VERSION --cleanup` run on the server
+/// itself. A failure after the managed links switched rolls back to `previous`.
+pub fn update_on_server(
+    transport: &ssh::Transport,
+    operation: &Operation,
+    alias: &str,
+    socket: &Path,
+    versions: VersionSwitch<'_>,
+    remote_port: u16,
+    sink: OutputSink,
+) -> std::result::Result<Result, ssh::SshError> {
+    let remote = SshRemote {
+        transport,
+        operation,
+        alias,
+        socket,
+    };
+    update_on_server_with(&remote, operation, versions, remote_port, sink)
+}
+
+fn update_on_server_with(
+    remote: &dyn Remote,
+    operation: &Operation,
+    versions: VersionSwitch<'_>,
+    remote_port: u16,
+    sink: OutputSink,
+) -> std::result::Result<Result, ssh::SshError> {
+    validate_version(versions.next)?;
+    if !versions.previous.is_empty() {
+        validate_version(versions.previous)?;
+    }
+    let version_args = |script_version: &str| -> Vec<String> {
+        vec![
+            "sh".into(),
+            "-s".into(),
+            "--".into(),
+            script_version.into(),
+            remote_port.to_string(),
+        ]
+    };
+    let result = (|| {
+        phase(operation, &sink, "download");
+        remote.run(
+            &version_args(versions.next),
+            SERVER_UPDATE_SCRIPT,
+            SERVER_UPDATE_TIMEOUT,
+            sink.clone(),
+        )?;
+        phase(operation, &sink, "status");
+        let output = remote.run(
+            &version_args(versions.next),
+            STATUS_SCRIPT,
+            Duration::from_secs(30),
+            sink.clone(),
+        )?;
+        let result = parse_result(&output, versions.next)?;
+        if result.version != versions.next {
+            return Err(ssh::SshError {
+                code: "version_mismatch".into(),
+                message: format!(
+                    "remote daemon reports {}, expected {}",
+                    result.version, versions.next
+                ),
+            });
+        }
+        Ok(result)
+    })();
+    let error = match result {
+        Ok(result) => return Ok(result),
+        Err(error) => error,
+    };
+    // Only a host whose links already moved to the new release needs a rollback.
+    match probe_server_update_with(remote, sink.clone()) {
+        Ok(probe) if probe.previous == versions.next && versions.previous != versions.next => {
+            rollback_after_update_failure(
+                remote,
+                operation,
+                versions.previous,
+                versions.next,
+                remote_port,
+                sink,
+                error,
+            )
+        }
+        _ => Err(error),
+    }
+}
+
 fn run_with(
     remote: &dyn Remote,
     operation: &Operation,
@@ -644,6 +809,7 @@ mod tests {
         activation_previous: Mutex<Option<String>>,
         status: Mutex<String>,
         upload_timeout: Mutex<Option<Duration>>,
+        links_version: Mutex<String>,
     }
 
     impl FakeRemote {
@@ -687,6 +853,10 @@ mod tests {
                 }
             } else if stdin == RESTART_STATUS_SCRIPT {
                 "restart"
+            } else if stdin == SERVER_UPDATE_PROBE_SCRIPT {
+                "probe"
+            } else if stdin == SERVER_UPDATE_SCRIPT {
+                "server_update"
             } else {
                 "status"
             };
@@ -732,7 +902,10 @@ mod tests {
                     r#"{{"previous":"{previous}","version":"{version}"}}"#
                 ));
             }
-            if kind == "status" {
+            if kind == "probe" {
+                let links = self.links_version.lock().unwrap().clone();
+                Ok(format!(r#"{{"capable":true,"previous":"{links}"}}"#))
+            } else if kind == "status" {
                 Ok(self.status.lock().unwrap().clone())
             } else if kind == "restart" {
                 let version = args.get(3).cloned().unwrap_or_default();
@@ -1024,6 +1197,170 @@ mod tests {
         unsafe_bundle.version = "1.0;id".into();
         assert!(stage_with(&remote, &operation, &unsafe_bundle, sink).is_err());
         assert!(remote.calls().is_empty());
+    }
+
+    fn server_remote(status_version: &str, links: &str, fail: Option<&str>) -> FakeRemote {
+        FakeRemote {
+            fail: Mutex::new(fail.map(str::to_string)),
+            status: Mutex::new(format!(
+                r#"{{"version":"{status_version}","http_addr":"127.0.0.1:9990"}}"#
+            )),
+            links_version: Mutex::new(links.into()),
+            ..FakeRemote::default()
+        }
+    }
+
+    const NEW_FROM_OLD: VersionSwitch<'static> = VersionSwitch {
+        next: "new",
+        previous: "old",
+    };
+
+    #[test]
+    fn server_update_runs_tariboy_update_with_cleanup_and_uploads_nothing() {
+        let script = std::str::from_utf8(SERVER_UPDATE_SCRIPT).unwrap();
+        assert!(script.contains(r#"update "$version" --cleanup"#));
+        assert!(script.contains(r#"TARIBOY_HTTP_ADDR="127.0.0.1:$port""#));
+
+        let (_dir, _bundle, operation, _sink) = fixture();
+        let remote = server_remote("new", "new", None);
+        let phases = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let captured = phases.clone();
+        let sink: OutputSink = std::sync::Arc::new(move |event| {
+            if event.stream == "phase" {
+                captured.lock().unwrap().push(event.text);
+            }
+        });
+
+        let result = update_on_server_with(&remote, &operation, NEW_FROM_OLD, 9990, sink).unwrap();
+
+        assert_eq!(result.version, "new");
+        assert_eq!(*phases.lock().unwrap(), ["download", "status"]);
+        assert_eq!(
+            remote.calls(),
+            [
+                "run:server_update:sh|-s|--|new|9990",
+                "run:status:sh|-s|--|new|9990"
+            ]
+        );
+    }
+
+    #[test]
+    fn server_update_failure_after_the_switch_rolls_back_to_previous() {
+        let (_dir, _bundle, operation, sink) = fixture();
+        let remote = server_remote("new", "new", Some("server_update"));
+
+        let error =
+            update_on_server_with(&remote, &operation, NEW_FROM_OLD, 9990, sink).unwrap_err();
+
+        assert_eq!(error.code, "test_failure");
+        let calls = remote.calls();
+        assert_eq!(calls[1], "run:probe:sh|-s");
+        assert!(calls[2].contains("run:activate:sh|-s|--|old|.stage-"));
+        assert!(calls[2].ends_with("|activate|new"));
+        assert_eq!(calls[3], "run:restart:sh|-s|--|old|9990");
+    }
+
+    #[test]
+    fn server_update_failure_before_the_switch_leaves_the_host_alone() {
+        let (_dir, _bundle, operation, sink) = fixture();
+        let remote = server_remote("new", "old", Some("server_update"));
+
+        let error =
+            update_on_server_with(&remote, &operation, NEW_FROM_OLD, 9990, sink).unwrap_err();
+
+        assert_eq!(error.code, "test_failure");
+        assert_eq!(
+            remote.calls(),
+            ["run:server_update:sh|-s|--|new|9990", "run:probe:sh|-s"]
+        );
+    }
+
+    #[test]
+    fn server_update_version_mismatch_rolls_back() {
+        let (_dir, _bundle, operation, sink) = fixture();
+        let remote = server_remote("old", "new", None);
+
+        let error =
+            update_on_server_with(&remote, &operation, NEW_FROM_OLD, 9990, sink).unwrap_err();
+
+        assert_eq!(error.code, "version_mismatch");
+        assert!(remote
+            .calls()
+            .iter()
+            .any(|call| call.starts_with("run:activate:sh|-s|--|old|")));
+    }
+
+    #[test]
+    fn server_update_rejects_unsafe_versions_before_running_ssh() {
+        let (_dir, _bundle, operation, sink) = fixture();
+        let remote = server_remote("new", "new", None);
+        for version in ["bad;touch /tmp/pwn", "$(id)", "-oProxyCommand=x", ".hidden"] {
+            let switch = VersionSwitch {
+                next: version,
+                previous: "old",
+            };
+            assert!(
+                update_on_server_with(&remote, &operation, switch, 9990, sink.clone()).is_err()
+            );
+            let switch = VersionSwitch {
+                next: "new",
+                previous: version,
+            };
+            assert!(
+                update_on_server_with(&remote, &operation, switch, 9990, sink.clone()).is_err()
+            );
+        }
+        assert!(remote.calls().is_empty());
+
+        let probing = server_remote("new", "$(id)", None);
+        assert!(probe_server_update_with(&probing, sink).is_err());
+    }
+
+    fn run_probe_script(home: &Path) -> String {
+        use std::io::Write;
+        let mut child = Command::new("sh")
+            .arg("-s")
+            .env("HOME", home)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(SERVER_UPDATE_PROBE_SCRIPT)
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap()
+    }
+
+    #[test]
+    fn probe_script_reports_managed_version_and_cleanup_support() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = tempfile::tempdir().unwrap();
+        let bin = home.path().join(".local/bin");
+        fs::create_dir_all(&bin).unwrap();
+        assert_eq!(
+            run_probe_script(home.path()),
+            "{\"capable\":false,\"previous\":\"\"}\n"
+        );
+
+        for (version, help) in [("0.64.0", "--force"), ("0.83.0", "--force --cleanup")] {
+            let release = home.path().join(".local/lib/tariboy").join(version);
+            fs::create_dir_all(&release).unwrap();
+            let cli = release.join("tariboy");
+            fs::write(&cli, format!("#!/bin/sh\necho 'Usage: {help}'\n")).unwrap();
+            fs::set_permissions(&cli, fs::Permissions::from_mode(0o755)).unwrap();
+            let _ = fs::remove_file(bin.join("tariboy"));
+            std::os::unix::fs::symlink(&cli, bin.join("tariboy")).unwrap();
+            let capable = version == "0.83.0";
+            assert_eq!(
+                run_probe_script(home.path()),
+                format!("{{\"capable\":{capable},\"previous\":\"{version}\"}}\n")
+            );
+        }
     }
 
     fn write_release(dir: &Path, version: &str, valid_checksums: bool) {

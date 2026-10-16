@@ -1123,6 +1123,40 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
                 });
             }
             let server_bundle = remote_bundle(&bundle, &preflight)?;
+            let prepare_restart = |previous: &str| {
+                remote_restart_handoff_preflight(&running_version, previous, || {
+                    active_remote_work(local_port)
+                })
+                .map_err(|message| ssh::SshError {
+                    code: "legacy_active_work".into(),
+                    message,
+                })?;
+                handle.state::<AppState>().tunnels.cancel(&host.id);
+                Ok::<(), ssh::SshError>(())
+            };
+            let probe = provision::probe_server_update(
+                &ssh::Transport::system(),
+                &operation,
+                &host.ssh_alias,
+                master.socket(),
+                sink.clone(),
+            );
+            if use_server_update(&preflight.platform, &probe) {
+                let previous = probe.map(|probe| probe.previous).unwrap_or_default();
+                prepare_restart(&previous)?;
+                return provision::update_on_server(
+                    &ssh::Transport::system(),
+                    &operation,
+                    &host.ssh_alias,
+                    master.socket(),
+                    provision::VersionSwitch {
+                        next: &server_bundle.version,
+                        previous: &previous,
+                    },
+                    host.remote_port,
+                    sink,
+                );
+            }
             let staged = provision::stage(
                 &ssh::Transport::system(),
                 &operation,
@@ -1131,14 +1165,7 @@ pub fn host_update(app: AppHandle, id: String) -> Result<OperationResult, String
                 &server_bundle,
                 sink.clone(),
             )?;
-            remote_restart_handoff_preflight(&running_version, &staged.previous, || {
-                active_remote_work(local_port)
-            })
-            .map_err(|message| ssh::SshError {
-                code: "legacy_active_work".into(),
-                message,
-            })?;
-            handle.state::<AppState>().tunnels.cancel(&host.id);
+            prepare_restart(&staged.previous)?;
             let installed = provision::activate_and_restart(
                 &ssh::Transport::system(),
                 &operation,
@@ -1326,6 +1353,15 @@ fn establish_host_preflight(
         prompt: None,
     });
     Ok((result, master))
+}
+
+/// Linux hosts whose CLI supports `update --cleanup` update themselves; macOS
+/// (which `tariboy update` does not serve) and older CLIs get the upload path.
+fn use_server_update(
+    platform: &str,
+    probe: &Result<provision::ServerUpdateProbe, ssh::SshError>,
+) -> bool {
+    platform == "Linux" && matches!(probe, Ok(probe) if probe.capable)
 }
 
 /// remote_bundle picks the packaged set matching the server's `uname -s`/`uname -m`.
@@ -1844,6 +1880,26 @@ mod tests {
         view.base_url = "http://localhost:not-a-port".into();
         let error = restart_handoff_preflight(&view, |_| Ok(Vec::new())).unwrap_err();
         assert!(error.contains("loopback HTTP address"));
+    }
+
+    #[test]
+    fn server_update_is_used_only_for_capable_linux_hosts() {
+        let probe = |capable| {
+            Ok(provision::ServerUpdateProbe {
+                capable,
+                previous: "0.82.0".into(),
+            })
+        };
+        assert!(use_server_update("Linux", &probe(true)));
+        assert!(!use_server_update("Darwin", &probe(true)));
+        assert!(!use_server_update("Linux", &probe(false)));
+        assert!(!use_server_update(
+            "Linux",
+            &Err(ssh::SshError {
+                code: "remote_probe_invalid".into(),
+                message: "probe failed".into(),
+            })
+        ));
     }
 
     #[test]
