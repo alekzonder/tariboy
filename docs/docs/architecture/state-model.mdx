@@ -139,7 +139,8 @@ Operators change both with **Settings → General → Backup & data retention**,
 `tariboy maintenance get|set|run`, or `/api/maintenance`.
 
 A run, scheduled or manual, is serialized and always starts with a backup:
-`VACUUM INTO` writes a consistent copy while the daemon keeps serving, to
+`VACUUM INTO` on its own short-lived connection writes a consistent copy
+while the daemon keeps serving and writing, to
 `<base-dir>/backups/db/tariboyd-<UTC time>.db`, and only the newest configured
 number of those exact names are kept; other files in the directory are never
 rotated. **If the backup fails, nothing is deleted.** The run then prunes agent
@@ -170,9 +171,9 @@ when retention is `0`:
 
 When compaction is on and at least the threshold share of pages is free, a
 full `VACUUM` plus `wal_checkpoint(TRUNCATE)` returns the space to the file
-system. The daemon uses one SQLite connection, so every other database request
-waits for the few seconds this takes, and the disk needs free space about the
-size of the database. A failed `VACUUM` is rolled back by SQLite and recorded in
+system. `VACUUM` holds the daemon's single writer connection, so every write
+waits for the few seconds this takes; the read-only pool that serves the polled
+API reads continues. The disk needs free space about the size of the database. A failed `VACUUM` is rolled back by SQLite and recorded in
 the run result. The scheduler checks the wall clock every minute, so the slot
 holds across system sleep; a slot noticed more than 15 minutes late — the
 daemon was down or the machine asleep — is skipped, not caught up.
