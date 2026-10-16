@@ -118,12 +118,17 @@ func (b *Bus) ChatList(principal string, types []string) ([]ChatSummary, error) 
 		}
 	}
 
+	summaries, err := b.chatChannelSummaries(principal, types)
+	if err != nil {
+		return nil, err
+	}
+	participants, err := b.chatParticipants(principal)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]ChatSummary, 0, len(entries))
 	for _, e := range entries {
-		summary, err := b.chatChannelSummary(e.chat, principal, e.readTS, types)
-		if err != nil {
-			return nil, err
-		}
+		summary := summaries[e.chat.ID]
 		if old, ok := legacy[e.chat.LegacyAgent]; ok && e.chat.LegacyAgent != "" {
 			summary.Unread += old.Unread
 			if old.LastTS > summary.LastTS {
@@ -134,13 +139,9 @@ func (b *Bus) ChatList(principal string, types []string) ([]ChatSummary, error) 
 		summary.ID, summary.Kind, summary.Title = e.chat.ID, e.chat.Kind, e.chat.Title
 		summary.Channel, summary.ReadTS = e.chat.Channel, e.readTS
 		summary.Agent = ChatAgent(e.chat)
-		parts, err := b.Participants(e.chat.ID)
-		if err != nil {
-			return nil, err
-		}
-		summary.Participants = make([]string, 0, len(parts))
-		for _, part := range parts {
-			summary.Participants = append(summary.Participants, part.Principal)
+		summary.Participants = participants[e.chat.ID]
+		if summary.Participants == nil {
+			summary.Participants = []string{}
 		}
 		out = append(out, summary)
 	}
@@ -148,38 +149,60 @@ func (b *Bus) ChatList(principal string, types []string) ([]ChatSummary, error) 
 	return out, nil
 }
 
-// chatChannelSummary aggregates one chat own channel: its last message and how
-// many messages from other participants arrived after the read mark. A sender
-// that is not a participant, such as a system:* notice addressed to the agent,
-// is shown in the feed but never counts as unread.
-func (b *Bus) chatChannelSummary(chat Chat, principal, readTS string, types []string) (ChatSummary, error) {
+// chatChannelSummaries aggregates the own channel of every unarchived chat of
+// principal in one query: its last message and how many messages from other
+// participants arrived after principal read mark. A sender that is not a
+// participant, such as a system:* notice addressed to the agent, is shown in
+// the feed but never counts as unread. A chat with no messages is absent.
+func (b *Bus) chatChannelSummaries(principal string, types []string) (map[string]ChatSummary, error) {
 	filter, filterArgs := typeFilterSQL(types)
-	var summary ChatSummary
-	var lastTS, lastType, lastText, lastFrom *string
-	// The bare columns beside max(ts) are SQLite documented "row that holds the
-	// maximum" behaviour, so the last message comes back in one pass.
-	err := b.db.QueryRow(`
-		SELECT max(ts), type, text, sender,
-		       COALESCE(sum(CASE WHEN sender <> ? AND ts > ? AND sender IN (
-		           SELECT principal FROM chat_participants WHERE chat_id = ?) THEN 1 ELSE 0 END), 0)
-		FROM messages WHERE channel = ? AND `+filter,
-		append([]any{principal, readTS, chat.ID, chat.Channel}, filterArgs...)...,
-	).Scan(&lastTS, &lastType, &lastText, &lastFrom, &summary.Unread)
+	// The bare columns beside max(m.ts) are SQLite documented "row that holds
+	// the maximum" behaviour, so each chat last message comes back in one pass.
+	rows, err := b.db.Query(`
+		SELECT p.chat_id, max(m.ts), m.type, m.text, m.sender,
+		       COALESCE(sum(CASE WHEN m.sender <> p.principal AND m.ts > p.read_ts AND m.sender IN (
+		           SELECT principal FROM chat_participants WHERE chat_id = p.chat_id) THEN 1 ELSE 0 END), 0)
+		FROM chat_participants AS p
+		JOIN chats AS c ON c.id = p.chat_id
+		JOIN messages AS m ON m.channel = c.channel
+		WHERE p.principal = ? AND c.archived_at = '' AND `+filter+`
+		GROUP BY p.chat_id`,
+		append([]any{principal}, filterArgs...)...)
 	if err != nil {
-		return ChatSummary{}, err
+		return nil, err
 	}
-	summary.LastTS, summary.LastType = deref(lastTS), deref(lastType)
-	summary.LastText, summary.LastFrom = deref(lastText), deref(lastFrom)
-	return summary, nil
+	defer rows.Close()
+	out := map[string]ChatSummary{}
+	for rows.Next() {
+		var id string
+		var s ChatSummary
+		if err := rows.Scan(&id, &s.LastTS, &s.LastType, &s.LastText, &s.LastFrom, &s.Unread); err != nil {
+			return nil, err
+		}
+		out[id] = s
+	}
+	return out, rows.Err()
 }
 
-// deref reads an optional text column: an empty chat has no last message, so
-// every one of them comes back NULL.
-func deref(value *string) string {
-	if value == nil {
-		return ""
+// chatParticipants lists the participants of every chat principal is in, in
+// the order Participants returns them.
+func (b *Bus) chatParticipants(principal string) (map[string][]string, error) {
+	rows, err := b.db.Query(`SELECT chat_id, principal FROM chat_participants
+		WHERE chat_id IN (SELECT chat_id FROM chat_participants WHERE principal = ?)
+		ORDER BY chat_id, principal`, principal)
+	if err != nil {
+		return nil, err
 	}
-	return *value
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var chatID, p string
+		if err := rows.Scan(&chatID, &p); err != nil {
+			return nil, err
+		}
+		out[chatID] = append(out[chatID], p)
+	}
+	return out, rows.Err()
 }
 
 // ChatAgent is the agent a per-agent chat belongs to, or "" for a chat that is

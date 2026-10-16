@@ -1,6 +1,50 @@
 package bus
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+// The list is built from one summary query and one participants query for all
+// chats; each chat must still get only its own messages and participants.
+func TestChatListKeepsEachChatSeparate(t *testing.T) {
+	b, chat := chatFixture(t)
+	tasks, err := b.GetChat(ChatIDTasks("worker"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	publish(t, b, Message{Channel: chat.Channel, Source: "agent:worker", Type: "message", Text: "direct"})
+	publish(t, b, Message{Channel: chat.Channel, Source: "agent:worker", Type: "hidden.type", Text: "filtered"})
+	publish(t, b, Message{Channel: tasks.Channel, Source: "agent:worker", Type: "message", Text: "tasks"})
+
+	list, err := b.ChatList("user:customer", []string{"message"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]ChatSummary{}
+	for _, row := range list {
+		seen[row.ID] = row
+	}
+	if got := seen[chat.ID]; got.LastText != "direct" || got.Unread != 1 {
+		t.Fatalf("direct chat = %+v", got)
+	}
+	if got := seen[tasks.ID]; got.LastText != "tasks" || got.Unread != 1 {
+		t.Fatalf("tasks chat = %+v", got)
+	}
+	for _, id := range []string{chat.ID, tasks.ID} {
+		parts, err := b.Participants(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{}
+		for _, p := range parts {
+			want = append(want, p.Principal)
+		}
+		if !reflect.DeepEqual(seen[id].Participants, want) {
+			t.Fatalf("%s participants = %v, want %v", id, seen[id].Participants, want)
+		}
+	}
+}
 
 // chatFixture is a bus with one reconciled agent plus that agent's personal
 // chat, which is the row every read-path test reads through.

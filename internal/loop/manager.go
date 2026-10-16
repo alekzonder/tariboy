@@ -2493,13 +2493,19 @@ func (m *Manager) LiveState(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return m.LiveStateOf(a), nil
+}
+
+// LiveStateOf is LiveState for an agent row the caller has already read.
+func (m *Manager) LiveStateOf(a agent.Agent) string {
+	name := a.Name
 	// Master switch wins: a disabled agent is "stopped" regardless of a stale
 	// error_reason or loop_enabled intent.
 	if !a.Enabled {
-		return "stopped", nil
+		return "stopped"
 	}
 	if a.ErrorReason != "" {
-		return "error", nil
+		return "error"
 	}
 	m.mu.Lock()
 	iterationID := ""
@@ -2519,16 +2525,16 @@ func (m *Manager) LiveState(name string) (string, error) {
 			}
 			if at, err := time.Parse(time.RFC3339Nano, last); err == nil &&
 				m.cfg.Clock().Sub(at) >= time.Duration(a.AIStallTimeoutS)*time.Second {
-				return "error", nil
+				return "error"
 			}
 		}
-		return "running", nil
+		return "running"
 	}
 	if m.hasLiveIterationOnDisk(name) {
-		return "running", nil
+		return "running"
 	}
 	// Enabled but nothing executing (loop on-waiting or loop off) → idle.
-	return "idle", nil
+	return "idle"
 }
 
 // hasLiveIterationOnDisk reports whether a shim socket exists for the agent's

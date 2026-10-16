@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -397,4 +398,40 @@ func TestBudgetCacheRace(t *testing.T) {
 		close(stop)
 	}()
 	wg.Wait()
+}
+
+// The agents list reads every agent's budget in one call; it must report
+// exactly what the per-agent read reports.
+func TestAgentBudgetStatusesMatchesPerAgentStatus(t *testing.T) {
+	now := time.Date(2026, time.August, 19, 10, 30, 0, 0, time.UTC)
+	st := newStore(t)
+	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 1, MonthUSD: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetAgentBudget("carol", AgentBudget{DayUSD: 2}); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []AIRequest{
+		sampleReq("a1", "alice", "basic", 1.25, now.Add(-20*time.Minute)),
+		sampleReq("a2", "alice", "basic", 2, now.Add(-30*time.Hour)),
+		sampleReq("b1", "bob", "basic", 0.75, now.Add(-2*time.Hour)),
+		sampleReq("b2", "bob", "basic", 9, now.AddDate(0, -2, 0)),
+	} {
+		if err := st.Insert(row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	all, err := st.AgentBudgetStatuses(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"alice", "bob", "carol", "dave"} {
+		want, err := st.AgentBudgetStatus(name, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := all[name]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: batch = %+v, single = %+v", name, got, want)
+		}
+	}
 }
