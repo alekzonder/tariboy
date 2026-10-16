@@ -128,6 +128,22 @@ keys, `known_hosts`, and organization authentication. Tariboy never adds
 
 ## Install and update behavior
 
+**Update Tariboy** on a Linux host whose CLI supports `tariboy update
+--cleanup` uploads nothing: Desktop runs
+`tariboy update <Desktop version> --cleanup` on the server over SSH. The server
+downloads and verifies that release from GitHub, installs it with the same
+fixed installer, restarts the daemon, and deletes old releases, keeping the
+five newest and the active one. Desktop then checks the reported version, as
+below. When the command fails after the managed links already moved to the new
+release, Desktop reactivates and restarts the previous release; a failure
+before the switch leaves the host unchanged. The server needs outbound HTTPS to
+GitHub, and the Desktop version must be a published release with a server
+archive. Desktop does not fall back to uploading when the download fails.
+
+The upload path below remains for the first install, for macOS hosts, and for
+a host whose CLI predates `--cleanup`; such a host is updated by upload once,
+and its next update runs on the server.
+
 Desktop uploads five bundled binaries including the Tasks client and Telegram plugin, a version marker, checksums, and a
 fixed installer script to a staging directory. The remote installer:
 
@@ -189,6 +205,20 @@ server is updated with the Desktop update button instead. `--force` reinstalls a
 version that is already active. `TARIBOY_UPDATE_BASE_URL` overrides the GitHub
 releases root for a mirror.
 
+`--cleanup` deletes older releases from `~/.local/lib/tariboy` after the update
+succeeds, or right away when the version is already installed. It keeps the
+newest five releases by version number, or `--keep N`, and always the active
+release among them. It removes only release directories whose `VERSION` file
+matches their name, leaves staging directories and other files alone, and holds
+the installer lock while it works. A failed daemon restart skips the cleanup so
+the previous release stays available for rollback, and a cleanup error is only
+a warning: the update itself has already succeeded.
+
+```bash
+ssh build-box 'tariboy update latest --cleanup'
+ssh build-box 'tariboy update 0.64.0 --cleanup --keep 3'
+```
+
 Releases published before this archive existed cannot be fetched this way:
 move to the first release that carries it through the desktop app once, then
 `tariboy update` works from there.
@@ -197,7 +227,8 @@ The host dialog presents provisioning and updates as one vertical sequence:
 
 1. Connect to host.
 2. Check server.
-3. Upload release.
+3. Upload release; **Get release** for an update, which also covers the
+   server-side download.
 4. Install release.
 5. Start or restart Tariboy.
 6. Connect or reconnect to Tariboy.

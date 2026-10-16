@@ -135,7 +135,7 @@ daemon is down.
 | Command | Summary |
 | --- | --- |
 | `tariboy daemon start\|stop\|restart\|status\|logs` | Control and inspect the local daemon process |
-| `tariboy update [VERSION\|latest] [--force]` | Install a published release over this installer-managed installation and restart a running daemon |
+| `tariboy update [VERSION\|latest] [--force] [--cleanup [--keep N]]` | Install a published release over this installer-managed installation, restart a running daemon, and with `--cleanup` delete all but the newest N releases (default 5) |
 
 `tariboy update` updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation

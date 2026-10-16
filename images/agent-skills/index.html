@@ -223,8 +223,10 @@ frontmatter document:</p>
 <p><code>name</code> and <code>description</code> are required. <code>license</code>, <code>compatibility</code>,
 <code>allowed-tools</code>, <code>argument-hint</code>, and string-to-string <code>metadata</code> are optional.
 <code>argument-hint</code> must be a string; it is preserved in the packaged <code>SKILL.md</code>
-for harnesses that support argument hints. Unknown fields,
-YAML anchors or aliases, and multiple YAML documents are rejected.</p>
+for harnesses that support argument hints. Other fields, such as <code>version</code>
+or harness-specific keys, are accepted with any YAML value and preserved
+without validation. YAML anchors or aliases, non-string keys, duplicate keys,
+and multiple YAML documents are rejected.</p>
 <p>The name must:</p>
 <ul>
 <li>match the skill directory basename;</li>

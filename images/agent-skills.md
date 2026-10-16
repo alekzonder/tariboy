@@ -248,8 +248,10 @@ Inspect the complete diff and report findings by severity.
 `name` and `description` are required. `license`, `compatibility`,
 `allowed-tools`, `argument-hint`, and string-to-string `metadata` are optional.
 `argument-hint` must be a string; it is preserved in the packaged `SKILL.md`
-for harnesses that support argument hints. Unknown fields,
-YAML anchors or aliases, and multiple YAML documents are rejected.
+for harnesses that support argument hints. Other fields, such as `version`
+or harness-specific keys, are accepted with any YAML value and preserved
+without validation. YAML anchors or aliases, non-string keys, duplicate keys,
+and multiple YAML documents are rejected.
 
 The name must:
 
