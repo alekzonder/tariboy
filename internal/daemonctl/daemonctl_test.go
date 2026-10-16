@@ -167,6 +167,31 @@ func TestEnsureUpNoopWhenAlreadyRunning(t *testing.T) {
 	}
 }
 
+// A large daemon log from the previous run moves to tariboyd.log.1 before the
+// new daemon starts writing.
+func TestEnsureUpRotatesLargeLog(t *testing.T) {
+	dir := t.TempDir()
+	cfg := cfgIn(dir)
+	if err := os.WriteFile(cfg.LogFile, []byte("OLD RUN OUTPUT\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(cfg.LogFile, LogMaxBytes+1); err != nil { // sparse
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "fakedaemon.sh")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho NEW >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg.DaemonBin = bin
+	_, _ = EnsureUp(context.Background(), cfg, io.Discard)
+	if b, _ := os.ReadFile(cfg.LogFile + ".1"); !strings.HasPrefix(string(b), "OLD RUN OUTPUT\n") {
+		t.Fatalf("rotated log starts with %q", b[:min(len(b), 20)])
+	}
+	if b, _ := os.ReadFile(cfg.LogFile); strings.Contains(string(b), "OLD") {
+		t.Fatalf("current log still has the old run: %q", b)
+	}
+}
+
 func TestEnsureUpTimeoutSurfacesLog(t *testing.T) {
 	dir := t.TempDir()
 	cfg := cfgIn(dir)

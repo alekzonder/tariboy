@@ -93,6 +93,9 @@ func (p Paths) PricingCatalogFile() string {
 func (p Paths) Socket() string    { return filepath.Join(p.RuntimeDir(), "tariboyd.sock") }
 func (p Paths) PidFile() string   { return filepath.Join(p.RuntimeDir(), "tariboyd.pid") }
 func (p Paths) LogFile() string   { return filepath.Join(p.RuntimeDir(), "tariboyd.log") }
+func (p Paths) AccessLogFile() string {
+	return filepath.Join(p.RuntimeDir(), "tariboyd.access.log")
+}
 func (p Paths) AgentsDir() string { return filepath.Join(p.Base, "agents") }
 func (p Paths) ImagesDir() string { return filepath.Join(p.Base, "images") }
 func (p Paths) ImageSourcesDir() string {

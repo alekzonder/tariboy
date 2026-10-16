@@ -277,8 +277,9 @@ func TestSSEStream(t *testing.T) {
 func TestAccessLogRecordsStatus(t *testing.T) {
 	var buf bytes.Buffer
 	reg := registry.New()
-	cctx := &registry.Ctx{Version: "t", Log: slog.New(slog.NewTextHandler(&buf, nil))}
+	cctx := &registry.Ctx{Version: "t", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	srv := NewServer(reg, cctx)
+	srv.SetAccessLog(slog.New(slog.NewTextHandler(&buf, nil)))
 
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/nope", nil))

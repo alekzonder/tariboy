@@ -28,6 +28,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/groups"
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/logrotate"
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/maintenance"
 	"github.com/alekzonder/tariboy/internal/paths"
@@ -195,6 +196,12 @@ func runWorkflowDispatcher(ctx context.Context, dispatcher workflowDispatcher, s
 		}
 	}
 }
+
+// The access log gets one line per API request, so it rotates by size.
+const (
+	accessLogMaxBytes = 50 << 20
+	accessLogKeep     = 3
+)
 
 func Run(ctx context.Context, o Options) error {
 	lvl := slog.LevelInfo
@@ -735,6 +742,12 @@ func Run(ctx context.Context, o Options) error {
 		return tasks.CustomerActor(taskService.CustomerLogin())
 	})
 	srv.SetPluginAPI(pluginAPI)
+	accessLog, err := logrotate.Open(p.AccessLogFile(), accessLogMaxBytes, accessLogKeep)
+	if err != nil {
+		return fmt.Errorf("open access log: %w", err)
+	}
+	defer accessLog.Close()
+	srv.SetAccessLog(slog.New(slog.NewJSONHandler(accessLog, nil)))
 	srv.SetExternalPlugins(plugins.ResolveInstalled(p.PluginsDir()))
 	srv.SetSupportBundleSource(supportbundle.Collector{
 		Store: st, Control: manager, BaseDir: p.Base, LogFile: p.LogFile(),
