@@ -605,7 +605,16 @@ type, from, ts}` — so an open conversation refetches only when its own chat is
 named; `chat` is absent for a channel no chat owns, and such a frame still
 falls back to the agent it concerns, which is what existing consumers read. The
 sidebar mounts one such socket per configured host, so the chat order changes as
-a message lands rather than on the next poll. **Chat → Queue**
+a message lands rather than on the next poll.
+
+Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
+frames `{agent, type, ts}` say that an iteration event or an audit event was
+recorded for that agent. The sidebar refetches its agents at most once a second
+on these hints, and the agent header refetches its status on a hint for its own
+agent. While every host's state socket is open, the sidebar polls every 15
+seconds and the agent header every 15 seconds as a fallback. A host without the
+socket (an older daemon) keeps the 3-second polls. The daemon banner probes
+`/api/daemon/status` every 10 seconds. **Chat → Queue**
 (Queue/Archive/DLQ) refreshes from the agent event stream with a 3s poll.
 
 An agent's **Chat → Queue** view can still mark one row processed. Its
@@ -787,7 +796,7 @@ part of a page's identity: Tasks, Workflows, Stores, Settings and Configuration
 keep their loaded data, the open task, filters, scroll position and every
 unsaved draft. The route boundary keeps one tree shape and only dims the page
 and makes it inert under a single status line. A host object keeps its
-identity until one of its fields changes, so the 3-second sidebar poll does not
+identity until one of its fields changes, so the sidebar poll does not
 restart page loads.
 
 While the host has no endpoint, background loads are skipped rather than

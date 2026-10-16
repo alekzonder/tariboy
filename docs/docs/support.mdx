@@ -68,7 +68,8 @@ after it is shared.
 
 By default the export contains only Desktop metadata, the selected host ID and
 label, bounded health/platform/prerequisite state, and allowlisted lifecycle
-diagnostics from that host's daemon. No other registered host is included. If a
+diagnostics from that host's daemon. Those diagnostics come from
+`tariboyd.log`; the per-request `tariboyd.access.log` is never included. No other registered host is included. If a
 host is unreachable, or still runs a daemon without the diagnostics endpoint,
 Desktop still creates a partial ZIP with a stable collection error.
 
