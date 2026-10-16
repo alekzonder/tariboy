@@ -13,16 +13,31 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 		return nil, domainError(http.StatusForbidden, "forbidden", "agent identity required")
 	}
 	switch action {
-	case "mine":
+	case "list", "mine":
 		waiting := actionString(body, "waiting_for")
 		if waiting == "me" {
 			waiting = actor.Principal
 		}
-		return s.ListTasks(ctx, actor, ListFilter{
-			Queue: actionString(body, "queue"), Status: actionString(body, "status"),
-			Assignee: actionString(body, "assignee"), WaitingFor: waiting,
-			Text: actionString(body, "text"),
-		})
+		// The tools socket scrubs author and customer from every body, so those
+		// filters arrive as by_author and by_customer. scope_agent is never read:
+		// an agent lists only what it sees itself.
+		filter := ListFilter{
+			Queue: actionString(body, "queue"), Statuses: actionList(body, "status"),
+			Categories: actionList(body, "category"), StatusView: actionString(body, "status_view"),
+			Assignee: actionString(body, "assignee"), Author: actionString(body, "by_author"),
+			Customer: actionString(body, "by_customer"), Group: actionString(body, "group"),
+			WaitingFor: waiting, Text: actionString(body, "text"),
+			ParentKey: actionString(body, "parent"), SubtreeKey: actionString(body, "subtree"),
+			Sort: actionString(body, "sort"), Limit: actionInt(body, "limit"), AfterKey: actionString(body, "after"),
+		}
+		for _, priority := range actionList(body, "priority") {
+			filter.Priorities = append(filter.Priorities, Priority(priority))
+		}
+		if blocked := actionString(body, "blocked"); blocked != "" {
+			value := blocked == "true"
+			filter.Blocked = &value
+		}
+		return s.ListTasks(ctx, actor, filter)
 	case "ready":
 		filter := ReadyFilter{Queue: actionString(body, "queue"), Limit: actionInt(body, "limit")}
 		if actionBool(body, "claim") {
@@ -176,6 +191,17 @@ func (s *Service) actionRevision(ctx context.Context, actor Actor, key string, b
 func actionString(body map[string]any, key string) string {
 	value, _ := body[key].(string)
 	return strings.TrimSpace(value)
+}
+
+// actionList reads a comma-separated value as its non-empty items.
+func actionList(body map[string]any, key string) []string {
+	var out []string
+	for _, item := range strings.Split(actionString(body, key), ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 // actionRawString is actionString without the trimming, for values stored as

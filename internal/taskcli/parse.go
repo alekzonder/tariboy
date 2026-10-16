@@ -2,6 +2,7 @@ package taskcli
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -12,6 +13,9 @@ type request struct {
 	// noWait makes advance return a pending request at once instead of waiting
 	// for its checks. It is a client option and never part of the payload.
 	noWait bool
+	// args are the command's own arguments, so list can print the command for
+	// its next page.
+	args []string
 }
 type usageError struct{ message string }
 
@@ -21,7 +25,7 @@ var boolFlags = map[string]bool{"claim": true, "to-root": true, "complete-anyway
 
 func taskCommandFlags() map[string]map[string]bool {
 	return map[string]map[string]bool{
-		"mine": set("queue,status,assignee,text,waiting-for"), "ready": set("queue,limit,idempotency-key,claim"), "show": {},
+		"list": set(listFlags), "mine": set(listFlags), "ready": set("queue,limit,idempotency-key,claim"), "show": {},
 		"create": set("queue,parent,title,description,pull-request,assignee,group,priority,idempotency-key"),
 		"update": set("title,description,status,pull-request,assignee,manual-block-reason,priority,revision"), "assign": set("revision"),
 		"comment": set("body,idempotency-key"), "ask": set("idempotency-key"),
@@ -31,6 +35,8 @@ func taskCommandFlags() map[string]map[string]bool {
 		"workflow_move": set("to,reason"), "workflow_resume": set("decision"), "workflow_retry": {}, "cancel": {},
 	}
 }
+
+const listFlags = "queue,status,category,priority,assignee,author,customer,group,parent,subtree,waiting-for,blocked,text,view,sort,limit,after"
 
 // commandWords maps a two-word command to its action name, which is also the
 // agent tools-socket action where one exists.
@@ -84,9 +90,12 @@ func parse(argv []string) (request, error) {
 		return pos[index], nil
 	}
 	switch action {
-	case "mine":
+	case "list", "mine":
 		for name := range valid {
 			copyFlag(name, false)
+		}
+		if err := checkListFlags(action, p); err != nil {
+			return request{}, err
 		}
 	case "ready":
 		for _, name := range []string{"queue", "limit", "idempotency-key"} {
@@ -338,7 +347,7 @@ func parse(argv []string) (request, error) {
 	if err := noExtra(action, pos); err != nil {
 		return request{}, err
 	}
-	return request{action: action, payload: p, noWait: noWait}, nil
+	return request{action: action, payload: p, noWait: noWait, args: rest}, nil
 }
 
 func set(csv string) map[string]bool {
@@ -397,10 +406,51 @@ func commandName(action string) string {
 }
 
 func noExtra(action string, pos []string) error {
-	limits := map[string]int{"mine": 0, "ready": 0, "show": 1, "create": 0, "update": 1, "assign": 2, "comment": -1, "ask": -1, "move": 1, "block": 1, "relate": 2, "done": 1,
+	limits := map[string]int{"list": 0, "mine": 0, "ready": 0, "show": 1, "create": 0, "update": 1, "assign": 2, "comment": -1, "ask": -1, "move": 1, "block": 1, "relate": 2, "done": 1,
 		"advance": 1, "artifact_set": 3, "artifact_ls": 1, "artifact_show": 2, "workflow_get": 1, "workflow_runs": 1, "workflow_run_log": 2, "workflow_move": 1, "workflow_resume": 1, "workflow_retry": 2, "cancel": 1}
 	if limit, ok := limits[action]; ok && limit >= 0 && len(pos) > limit {
 		return usageError{fmt.Sprintf("tasks %s: unexpected argument: %s", commandName(action), pos[limit])}
+	}
+	return nil
+}
+
+// checkListFlags validates list values before any call and moves --view to
+// the status_view the daemon reads. Without --limit a page holds 50 tasks.
+func checkListFlags(action string, p map[string]any) error {
+	fail := func(format string, args ...any) error {
+		return usageError{fmt.Sprintf("tasks %s: "+format, append([]any{action}, args...)...)}
+	}
+	value := func(name string) string { v, _ := p[name].(string); return v }
+	if value("parent") != "" && value("subtree") != "" {
+		return fail("--parent cannot be combined with --subtree")
+	}
+	if sort := value("sort"); sort != "" && !slices.Contains([]string{"tree", "updated", "created", "priority"}, sort) {
+		return fail("--sort must be tree, updated, created, or priority, got %q", sort)
+	}
+	if view := value("view"); view != "" {
+		if !slices.Contains([]string{"active", "closed", "all"}, view) {
+			return fail("--view must be active, closed, or all, got %q", view)
+		}
+		delete(p, "view")
+		p["status_view"] = view
+	}
+	if blocked := value("blocked"); blocked != "" && blocked != "true" && blocked != "false" {
+		return fail("--blocked must be true or false, got %q", blocked)
+	}
+	for _, priority := range csv(value("priority")) {
+		if !slices.Contains([]string{"P0", "P1", "P2", "P3"}, priority) {
+			return fail("--priority must be P0, P1, P2, or P3, got %q", priority)
+		}
+	}
+	for _, category := range csv(value("category")) {
+		if !slices.Contains([]string{"open", "in_progress", "wait_customer", "done", "cancelled"}, category) {
+			return fail("--category must be open, in_progress, wait_customer, done, or cancelled, got %q", category)
+		}
+	}
+	if limit := value("limit"); limit == "" {
+		p["limit"] = "50"
+	} else if n, err := strconv.Atoi(limit); err != nil || n < 1 || n > 500 {
+		return fail("--limit must be a number from 1 to 500, got %q", limit)
 	}
 	return nil
 }

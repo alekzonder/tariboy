@@ -210,7 +210,8 @@ derives identity from the socket.
 
 | Command | Purpose |
 | --- | --- |
-| `ttasks mine` | List visible tasks |
+| `ttasks list [--status S] [--text T] [--sort ORDER] [--limit N] [--after KEY]` | List and search visible tasks; [Native Tasks](/docs/tasks) lists every filter |
+| `ttasks mine` | Alias of `ttasks list` |
 | `ttasks ready [--queue Q] [--claim]` | List ready work; `--claim` requires agent mode |
 | `ttasks show KEY` | Show task detail, comments, waits, and relations |
 | `ttasks create --queue Q --title T [--assignee A]` | Create a queue-root task |

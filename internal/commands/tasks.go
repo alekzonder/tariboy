@@ -56,16 +56,24 @@ func TaskOperatorCommands() []registry.Command {
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
 				filter := tasks.ListFilter{
 					Queue:      stringParam(p, "queue"),
-					Status:     stringParam(p, "status"),
+					Statuses:   csvParam(p, "status"),
+					Categories: csvParam(p, "category"),
 					StatusView: stringParam(p, "status_view"),
 					Assignee:   stringParam(p, "assignee"),
 					Author:     stringParam(p, "author"),
+					Customer:   stringParam(p, "customer"),
 					Group:      stringParam(p, "group"),
 					Text:       stringParam(p, "text"),
 					WaitingFor: stringParam(p, "waiting_for"),
 					ScopeAgent: stringParam(p, "scope_agent"),
+					ParentKey:  stringParam(p, "parent"),
+					SubtreeKey: stringParam(p, "subtree"),
+					Sort:       stringParam(p, "sort"),
 					Limit:      int(int64Param(p, "limit")),
 					AfterKey:   stringParam(p, "after"),
+				}
+				for _, priority := range csvParam(p, "priority") {
+					filter.Priorities = append(filter.Priorities, tasks.Priority(priority))
 				}
 				if value, ok := boolParam(p, "blocked"); ok {
 					filter.Blocked = &value
@@ -547,6 +555,17 @@ func poolMutationArgs(primary registry.Arg) []registry.Arg {
 func stringParam(p registry.Params, key string) string {
 	value, _ := p[key].(string)
 	return strings.TrimSpace(value)
+}
+
+// csvParam reads a comma-separated value as its non-empty items.
+func csvParam(p registry.Params, key string) []string {
+	var out []string
+	for _, item := range strings.Split(stringParam(p, key), ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 // rawStringParam is stringParam without the trimming, for values stored as
