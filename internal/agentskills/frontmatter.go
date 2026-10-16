@@ -88,8 +88,6 @@ func validateFrontmatterNode(doc *yaml.Node) error {
 					return errors.New("frontmatter field \"metadata\" must be a string map")
 				}
 			}
-		default:
-			return fmt.Errorf("unexpected SKILL.md frontmatter field %q", key.Value)
 		}
 	}
 	return nil
