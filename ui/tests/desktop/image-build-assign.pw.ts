@@ -111,7 +111,7 @@ test("builds a transparent image from its original directory and assigns it to a
     }
   }).not.toBeNull().then(() => desktop.findElement("xpath", "//*[@role='option' and normalize-space(.)='transparent-e2e:latest']"));
   await desktop.elementClick(option);
-  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Use next iteration']"));
+  await desktop.elementClick(await desktop.findElement("xpath", "//button[normalize-space(.)='Save']"));
   await expect.poll(() => bodyText(desktop)).toContain("Pending: transparent-e2e:latest");
 
   await desktop.execute(`window.__imageActivation = "pending";

@@ -69,7 +69,7 @@ test("portable image export, source states, and import retag work in a real brow
   await builtOption.dispatchEvent("pointerdown", { pointerType: "mouse", button: 0 });
   await builtOption.dispatchEvent("pointerup", { pointerType: "mouse", button: 0 });
   await expect(imageSelector).toContainText("browser-built:latest");
-  await page.getByRole("button", { name: "Use next iteration" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Pending:").locator("..")).toContainText("browser-built:latest");
   await page.getByRole("button", { name: "Simulate next iteration" }).click();
   await expect(page.getByText("Current:").locator("..")).toContainText("browser-built:latest");
