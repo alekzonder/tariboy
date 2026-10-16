@@ -1,7 +1,8 @@
-import { render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { Task } from "@/lib/tasks"
+import { moveTaskColumn, readTaskColumnLayout, resetTaskColumns, setTaskColumnWidth } from "./taskColumnLayout"
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns"
 import TaskRow, { TaskTableHeader } from "./TaskRow"
 import { formatTaskDuration } from "./taskTime"
@@ -52,6 +53,9 @@ function renderRow(mode: TaskRowMode) {
     </>,
   )
 }
+
+beforeEach(() => resetTaskColumns())
+afterEach(() => vi.restoreAllMocks())
 
 describe("task table columns", () => {
   it.each(["agent", "all"] as const)("lays the %s header and row out on one set of widths", (mode) => {
@@ -119,6 +123,80 @@ describe("task table columns", () => {
     expect(header).not.toHaveTextContent("Duration")
     expect(within(screen.getByTestId(`task-row-${task.key}`)).getByText("builder")).toBeInTheDocument()
     expect(screen.queryByText("IMPROVE", { exact: true })).toBeNull()
+  })
+})
+
+describe("task table column layout", () => {
+  const labels = (scope: HTMLElement) => [...scope.querySelectorAll("[data-column]")]
+    .map((cell) => cell.getAttribute("data-column"))
+
+  it("draws the header and the row in the stored order and widths", () => {
+    act(() => {
+      moveTaskColumn("status", "task")
+      setTaskColumnWidth("status", 150)
+    })
+    renderRow("all")
+
+    const header = screen.getByTestId("task-table-header")
+    const row = screen.getByTestId(`task-row-${task.key}`)
+    expect(labels(header)).toEqual(["priority", "key", "status", "task", "agent", "updated"])
+    expect(labels(row)).toEqual(labels(header))
+    expect(widths(row)).toEqual(widths(header))
+    expect(widths(header)[2]).toBe("150px")
+    const status = within(row).getByText("In progress")
+    expect(status.compareDocumentPosition(within(row).getByText(task.title)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("resizes a column from the keyboard within its bounds", () => {
+    renderRow("agent")
+    const handle = screen.getByRole("separator", { name: "Resize Status column" })
+    expect(handle).toHaveAttribute("aria-valuenow", "110")
+
+    fireEvent.keyDown(handle, { key: "ArrowRight" })
+    expect(readTaskColumnLayout().widths.status).toBe(118)
+    fireEvent.keyDown(handle, { key: "ArrowLeft", shiftKey: true })
+    expect(readTaskColumnLayout().widths.status).toBe(86)
+    fireEvent.keyDown(handle, { key: "Home" })
+    expect(readTaskColumnLayout().widths.status).toBe(110)
+    expect(within(screen.getByTestId(`task-row-${task.key}`)).getByText("In progress").parentElement!.style.width).toBe("110px")
+    expect(screen.queryByRole("separator", { name: "Resize Task column" })).toBeNull()
+  })
+
+  it("resizes a column by dragging its edge with a mouse or a finger", () => {
+    renderRow("agent")
+    const handle = screen.getByRole("separator", { name: "Resize Key column" })
+
+    fireEvent.pointerDown(handle, { pointerId: 3, button: 0, clientX: 200, isPrimary: true })
+    fireEvent.pointerMove(window, { pointerId: 3, clientX: 260 })
+    expect(screen.getByText(task.key).parentElement!.style.width).toBe("228px")
+    fireEvent.pointerUp(window, { pointerId: 3, clientX: 260 })
+    fireEvent.pointerMove(window, { pointerId: 3, clientX: 400 })
+
+    expect(readTaskColumnLayout().widths.key).toBe(228)
+    fireEvent.doubleClick(handle)
+    expect(readTaskColumnLayout().widths.key).toBe(TASK_COLUMNS.key)
+  })
+
+  it("moves a column by dragging its header", async () => {
+    // jsdom has no layout: give each header cell a 100px slot in DOM order.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const cells = [...document.querySelectorAll("[data-testid=task-table-header] [data-column]")]
+      const left = Math.max(0, cells.indexOf(this)) * 100
+      return { x: left, y: 0, left, top: 0, right: left + 100, bottom: 30, width: 100, height: 30, toJSON: () => ({}) } as DOMRect
+    })
+    renderRow("agent")
+    const grip = screen.getByRole("button", { name: "Move Updated column" })
+
+    grip.focus()
+    fireEvent.keyDown(grip, { key: " ", code: "Space" })
+    // The sensor starts listening on the next tick.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    // The keyboard sensor steps 25px: 16 steps carry Updated's centre onto Key's.
+    for (let step = 0; step < 16; step += 1) fireEvent.keyDown(document, { key: "ArrowLeft", code: "ArrowLeft" })
+    fireEvent.keyDown(document, { key: " ", code: "Space" })
+
+    expect(labels(screen.getByTestId("task-table-header")))
+      .toEqual(["priority", "updated", "key", "task", "status", "duration"])
   })
 })
 

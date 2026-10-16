@@ -450,15 +450,38 @@ already performs; `scope_agent`, `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. A new task is created in the selected queue,
 or in the first queue when `All queues` is selected.
 
-The table header and its rows read one set of column widths, so a column cannot
-drift from its heading. `Pri` comes first in every table, then `Key`, a fixed
-168px holding the tree indents, the chevron and the key, which truncates rather
-than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
+The table header and its rows read one column layout, so a column cannot
+drift from its heading. By default `Pri` comes first in every table, then
+`Key`, 168px holding the tree indents, the chevron and the key, which truncates
+rather than wrapping; `Task` takes the rest. The agent table adds `Duration` — the task's first move to
 `in_progress` (`started_at`) to completion, or to now while the task is open,
 and `—` for a task never started — and the server table adds `Agent`. There is no
 `Queue` column: the key prefix already names the queue. In the server table the
 header is sticky. The drag grip lives in the row's left padding and appears on
 hover.
+
+The column order and widths are the user's. One order covers the agent, server
+and every-server tables; each shows its own columns in that order. Every column
+except `Task` has its own width, from 40px to 480px (`Key` from 96px, `Pri`
+from 24px); `Task` can move but always takes the rest of the row, so very wide
+columns on a narrow screen squeeze it. The layout is the versioned WebView
+localStorage record `tasks:columns:v1`, written on every change and read once
+per page load, so it survives a reload or an app restart on that device; it is
+not synced between devices. An unreadable record, an unknown column or an
+out-of-range width falls back to the default for that part, and when storage
+is unavailable changes last until the next reload.
+
+- **Width:** the edge after each header cell is a `separator`. A mouse or a
+  finger drags it (Pointer Events with capture, `touch-action: none`, a 16px
+  target on a coarse pointer); arrows step 8px, Shift+arrows 32px, and Home or
+  a double click restores the default.
+- **Order:** a header label is a drag grip in its own drag context, apart from
+  the row drags. A mouse starts after 5px, a finger after a 250ms press, so a
+  swipe still scrolls; Space or Enter starts a keyboard move.
+- **Columns menu:** the `Columns` button in the filter bar lists the current
+  table's columns with one-tap `Narrow`/`Widen` (16px) and left/right moves,
+  and `Reset columns`. It is the touch path on a phone or tablet and stays
+  open between steps.
 
 Task descriptions and comments use the MIT-licensed Tiptap OSS visual editor
 with an explicit Markdown source mode. Headings, bold, italic, strikethrough,

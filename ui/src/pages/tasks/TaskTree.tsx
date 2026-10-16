@@ -98,9 +98,10 @@ export default function TaskTree({
     onMove(key, parentKey, beforeKey)
   }
 
-  return (
+  // The header moves columns in its own drag context, outside the rows' one.
+  return (<>
+    <TaskTableHeader mode={mode} sticky={mode === "all"} />
     <DndContext sensors={sensors} collisionDetection={preferSpecificDropTarget} onDragEnd={finish}>
-      <TaskTableHeader mode={mode} sticky={mode === "all"} />
       <RootDrop>
         {visible.map((row) => (
           <TaskRow
@@ -119,5 +120,5 @@ export default function TaskTree({
         {visible.length === 0 && <div className="tasks-empty">No tasks match this view.</div>}
       </RootDrop>
     </DndContext>
-  )
+  </>)
 }

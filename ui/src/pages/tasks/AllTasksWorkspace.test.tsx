@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, expect, it, vi } from "vitest"
 import type { HostAgents } from "@/lib/aggregate"
 import type { Task } from "@/lib/tasks"
 import AllTasksWorkspace from "./AllTasksWorkspace"
+import { resetTaskColumns } from "./taskColumnLayout"
 
 const api = vi.hoisted(() => ({
   createTask: vi.fn(),
@@ -82,6 +83,20 @@ it("lists every reachable server's tasks, newest first, with a Server column", a
   expect(within(screen.getByTestId("task-row-IMPROVE-c3")).getByText("hetzner-02")).toBeInTheDocument()
   expect(within(screen.getByTestId("task-row-IMPROVE-c3")).getByText("builder")).toBeInTheDocument()
   expect(screen.queryByRole("checkbox")).toBeNull()
+})
+
+it("reorders the every-server table from its Columns menu", async () => {
+  render(<AllTasksWorkspace hosts={hosts} />)
+  await waitFor(() => expect(rowKeys()).toHaveLength(3))
+
+  await userEvent.click(screen.getByRole("button", { name: "Columns" }))
+  await userEvent.click(screen.getByRole("menuitem", { name: "Move Server left" }))
+
+  const order = (scope: HTMLElement) => [...scope.querySelectorAll("[data-column]")].map((cell) => cell.getAttribute("data-column"))
+  const header = screen.getByTestId("task-table-header")
+  expect(order(header)).toEqual(["priority", "key", "task", "server", "agent", "status", "updated"])
+  expect(order(screen.getByTestId("task-row-IMPROVE-c3"))).toEqual(order(header))
+  act(() => resetTaskColumns())
 })
 
 it("reports an unavailable server above the list and retries only it", async () => {
