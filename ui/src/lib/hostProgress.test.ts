@@ -32,6 +32,8 @@ describe("host progress model", () => {
       "service",
       "reconnect",
     ]);
+    expect(hostStepForPhase("download")).toBe("upload");
+    expect(HOST_PROGRESS_STEPS.find((step) => step.id === "upload")?.updateLabel).toBe("Get release");
     expect(hostStepForPhase("rollback")).toBe("install");
     expect(hostStepForPhase("status")).toBe("service");
     expect(hostStepForPhase("unknown")).toBeNull();

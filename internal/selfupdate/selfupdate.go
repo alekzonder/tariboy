@@ -5,6 +5,7 @@ package selfupdate
 
 import (
 	"archive/tar"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/rand"
@@ -17,7 +18,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/daemonctl"
@@ -34,6 +38,8 @@ const (
 	installerName = "remote-install.sh"
 	// maxArchiveBytes bounds an untrusted download; the real archive is far smaller.
 	maxArchiveBytes = 512 << 20
+	// DefaultKeep is how many of the newest releases a cleanup keeps.
+	DefaultKeep = 5
 )
 
 // archiveArches maps a supported GOARCH to the `uname -m` name in its archive.
@@ -60,7 +66,11 @@ type Options struct {
 	// Version is an explicit release version or "latest".
 	Version string
 	// Force reinstalls the target version even when it is already active.
-	Force   bool
+	Force bool
+	// Cleanup deletes older releases after a successful update, keeping the
+	// Keep newest ones (DefaultKeep when unset) and always the active one.
+	Cleanup bool
+	Keep    int
 	BaseURL string
 	Home    string
 	GOOS    string
@@ -118,6 +128,7 @@ func Run(ctx context.Context, opts Options) error {
 	fmt.Fprintf(opts.Out, "target version %s (installed %s)\n", target, current)
 	if target == current && !opts.Force {
 		fmt.Fprintf(opts.Out, "%s is already installed; pass --force to reinstall\n", target)
+		opts.cleanupAfterUpdate(root)
 		return nil
 	}
 
@@ -151,7 +162,103 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	fmt.Fprintf(opts.Out, "installed %s\n", target)
-	return restartDaemon(ctx, opts, target)
+	// A failed restart keeps every release, so the previous one stays available
+	// for a rollback.
+	if err := restartDaemon(ctx, opts, target); err != nil {
+		return err
+	}
+	opts.cleanupAfterUpdate(root)
+	return nil
+}
+
+// cleanupAfterUpdate runs the requested cleanup. The update is already applied,
+// so a cleanup failure is only reported.
+func (o Options) cleanupAfterUpdate(root string) {
+	if !o.Cleanup {
+		return
+	}
+	keep := o.Keep
+	if keep < 1 {
+		keep = DefaultKeep
+	}
+	if err := cleanup(root, o.Home, keep, o.Out); err != nil {
+		fmt.Fprintf(o.Out, "warning: cleanup: %v\n", err)
+	}
+}
+
+// cleanup deletes all but the keep newest releases under root, counting and
+// always keeping the active one. It removes only directories the installer
+// published (a valid version name whose VERSION file matches) and holds the
+// installer's lock so it never races an install.
+func cleanup(root, home string, keep int, out io.Writer) error {
+	lock, err := os.OpenFile(filepath.Join(root, ".install.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Close() }()
+	// Same 60 s wait the installer uses for its own flock.
+	for deadline := time.Now().Add(60 * time.Second); ; {
+		if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("another tariboy install holds %s", lock.Name())
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	active, err := managedVersion(home, root)
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	var releases []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() || name == active || validateVersion(name) != nil {
+			continue
+		}
+		recorded, err := os.ReadFile(filepath.Join(root, name, "VERSION"))
+		if err != nil || strings.TrimSpace(string(recorded)) != name {
+			continue
+		}
+		releases = append(releases, name)
+	}
+	slices.SortFunc(releases, func(a, b string) int { return compareVersions(b, a) })
+
+	var errs []error
+	for i, name := range releases {
+		if i < keep-1 {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(root, name)); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		fmt.Fprintf(out, "removed release %s\n", name)
+	}
+	return errors.Join(errs...)
+}
+
+// compareVersions orders versions by their dot-separated components, numerically
+// where both are numbers, so 0.10.0 sorts above 0.9.0.
+func compareVersions(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		an, aerr := strconv.Atoi(as[i])
+		bn, berr := strconv.Atoi(bs[i])
+		c := strings.Compare(as[i], bs[i])
+		if aerr == nil && berr == nil {
+			c = cmp.Compare(an, bn)
+		}
+		if c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(len(as), len(bs))
 }
 
 // managedVersion returns the version the managed symlinks currently point at.

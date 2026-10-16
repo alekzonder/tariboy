@@ -167,6 +167,124 @@ func TestRunInstallsRelease(t *testing.T) {
 	}
 }
 
+// addRelease publishes one more release directory without moving the links.
+func addRelease(t *testing.T, home, version string) {
+	t.Helper()
+	release := filepath.Join(home, ".local", "lib", "tariboy", version)
+	if err := os.MkdirAll(release, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(release, "VERSION"), []byte(version+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func releaseNames(t *testing.T, home string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(home, ".local", "lib", "tariboy"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
+}
+
+func TestCleanupKeepsActiveAndNewestReleases(t *testing.T) {
+	home := managedHome(t, "0.1.0")
+	for _, v := range []string{"0.2.0", "0.3.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"} {
+		addRelease(t, home, v)
+	}
+	root := filepath.Join(home, ".local", "lib", "tariboy")
+	if err := os.Mkdir(filepath.Join(root, ".stage-x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cleanup(root, home, 5, &bytes.Buffer{}); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	got := strings.Join(releaseNames(t, home), " ")
+	// 0.10.0 sorts above 0.9.0 numerically, so 0.9.0 and older go except the active 0.1.0.
+	want := ".install.lock .stage-x 0.1.0 0.10.0 0.11.0 0.12.0 0.9.0 notes.txt"
+	if got != want {
+		t.Fatalf("left %q, want %q", got, want)
+	}
+}
+
+func TestCleanupKeepsDirectoriesItDoesNotOwn(t *testing.T) {
+	home := managedHome(t, "0.5.0")
+	root := filepath.Join(home, ".local", "lib", "tariboy")
+	if err := os.Mkdir(filepath.Join(root, "0.1.0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	addRelease(t, home, "0.2.0")
+	if err := os.WriteFile(filepath.Join(root, "0.2.0", "VERSION"), []byte("9.9.9\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	addRelease(t, home, "0.3.0")
+
+	if err := cleanup(root, home, 1, &bytes.Buffer{}); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	got := strings.Join(releaseNames(t, home), " ")
+	if want := ".install.lock 0.1.0 0.2.0 0.5.0"; got != want {
+		t.Fatalf("left %q, want %q", got, want)
+	}
+}
+
+func TestCleanupReportsRemovalFailureAsWarning(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	home := managedHome(t, "0.5.0")
+	addRelease(t, home, "0.1.0")
+	locked := filepath.Join(home, ".local", "lib", "tariboy", "0.1.0")
+	if err := os.Chmod(locked, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	var out bytes.Buffer
+	opts := testOptions(t, home, "", "0.5.0", "linux", "amd64")
+	opts.Out = &out
+	opts.Cleanup, opts.Keep = true, 1
+	if err := Run(context.Background(), opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(out.String(), "warning: cleanup") {
+		t.Fatalf("output %q does not warn about the failed cleanup", out.String())
+	}
+}
+
+func TestRunCleansUpWhenAlreadyInstalled(t *testing.T) {
+	home := managedHome(t, testVersion)
+	addRelease(t, home, "0.0.1")
+	opts := testOptions(t, home, "", testVersion, "linux", "amd64")
+	opts.Cleanup, opts.Keep = true, 1
+	if err := Run(context.Background(), opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := strings.Join(releaseNames(t, home), " "); got != ".install.lock "+testVersion {
+		t.Fatalf("left %q, want only the active release", got)
+	}
+}
+
+func TestRunWithoutCleanupKeepsReleases(t *testing.T) {
+	home := managedHome(t, testVersion)
+	addRelease(t, home, "0.0.1")
+	if err := Run(context.Background(), testOptions(t, home, "", testVersion, "linux", "amd64")); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := strings.Join(releaseNames(t, home), " "); got != "0.0.1 "+testVersion {
+		t.Fatalf("left %q, want both releases", got)
+	}
+}
+
 func testOptions(t *testing.T, home, baseURL, version, goos, goarch string) Options {
 	t.Helper()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
