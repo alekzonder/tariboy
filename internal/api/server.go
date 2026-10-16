@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -41,6 +42,7 @@ type Server struct {
 	tasks           tasks.EventSource
 	taskActor       func() tasks.Actor
 	externalPlugins plugincaps.ExternalResolver
+	access          *slog.Logger
 }
 
 func NewServer(reg *registry.Registry, cctx *registry.Ctx) *Server {
@@ -57,6 +59,10 @@ func (s *Server) SetEventSource(src events.Source) { s.events = src }
 // GET /api/plugin/subscriptions, GET /api/plugin/watches), called by plugins
 // with their plugin-token over the daemon unix socket.
 func (s *Server) SetPluginAPI(h http.Handler) { s.plugins = h }
+
+// SetAccessLog installs the logger that receives one line per API request
+// (tariboyd.access.log). Without it, requests are not logged one by one.
+func (s *Server) SetAccessLog(l *slog.Logger) { s.access = l }
 
 func (s *Server) SetExternalPlugins(resolver plugincaps.ExternalResolver) {
 	s.externalPlugins = resolver
@@ -677,10 +683,23 @@ func (s *Server) accessLog(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(sw, r)
-		s.cctx.Log.Info("http", "method", r.Method, "path", r.URL.Path,
-			"status", sw.status, "dur_ms", time.Since(start).Milliseconds())
+		dur := time.Since(start).Milliseconds()
+		if s.access != nil {
+			s.access.Info("http", "method", r.Method, "path", r.URL.Path, "status", sw.status, "dur_ms", dur)
+		}
+		// WebSocket and SSE requests stay open by design, so their duration is
+		// not a slow request.
+		longLived := r.Header.Get("Upgrade") != "" || strings.Contains(r.Header.Get("Accept"), "text/event-stream")
+		if sw.status >= 500 || (!longLived && time.Duration(dur)*time.Millisecond >= slowRequest) {
+			s.cctx.Log.Warn("slow or failed http request", "method", r.Method, "path", r.URL.Path,
+				"status", sw.status, "dur_ms", dur)
+		}
 	})
 }
+
+// slowRequest is the duration from which a request also goes to the
+// application log. A variable so tests can lower it.
+var slowRequest = 500 * time.Millisecond
 
 func (s *Server) openapi() map[string]any {
 	paths := map[string]any{}

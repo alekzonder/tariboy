@@ -66,6 +66,9 @@ func TestResolveRuntimeDefaultsToTariboyd(t *testing.T) {
 	if got, want := p.LogFile(), "/home/u/.tariboyd/tariboyd.log"; got != want {
 		t.Fatalf("logfile = %q, want %q", got, want)
 	}
+	if got, want := p.AccessLogFile(), "/home/u/.tariboyd/tariboyd.access.log"; got != want {
+		t.Fatalf("logfile = %q, want %q", got, want)
+	}
 }
 
 func TestResolveRuntimeEnvOverride(t *testing.T) {

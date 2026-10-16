@@ -332,6 +332,7 @@ fn configure_daemon_command(
     shell: Option<&Path>,
     log_file: &Path,
 ) -> std::io::Result<()> {
+    rotate_if_larger(log_file, LOG_MAX_BYTES)?;
     let log = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -439,6 +440,23 @@ pub fn ensure_up(cfg: &Config) -> Result<Ready, String> {
             watch_exit(child, || {});
             Err(format!("{e}; last log:\n{}", log_tail(&cfg.log_file, 40)))
         }
+    }
+}
+
+/// LOG_MAX_BYTES mirrors internal/daemonctl.LogMaxBytes: a daemon start moves
+/// a larger tariboyd.log to tariboyd.log.1, replacing the previous copy.
+const LOG_MAX_BYTES: u64 = 50 << 20;
+
+fn rotate_if_larger(path: &Path, max: u64) -> std::io::Result<()> {
+    match std::fs::metadata(path) {
+        Ok(m) if m.len() > max => {
+            let mut old = path.as_os_str().to_owned();
+            old.push(".1");
+            std::fs::rename(path, old)
+        }
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
     }
 }
 
@@ -709,6 +727,21 @@ pub(crate) mod tests {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&shell, std::fs::Permissions::from_mode(0o755)).unwrap();
         shell
+    }
+
+    #[test]
+    fn rotate_if_larger_moves_only_a_large_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let small = dir.path().join("small.log");
+        let big = dir.path().join("big.log");
+        std::fs::write(&small, "abc").unwrap();
+        std::fs::write(&big, "x".repeat(20)).unwrap();
+        rotate_if_larger(&small, 10).unwrap();
+        rotate_if_larger(&big, 10).unwrap();
+        rotate_if_larger(&dir.path().join("missing.log"), 10).unwrap();
+        assert_eq!(std::fs::read_to_string(&small).unwrap(), "abc");
+        assert!(!big.exists());
+        assert_eq!(std::fs::read_to_string(dir.path().join("big.log.1")).unwrap().len(), 20);
     }
 
     #[test]

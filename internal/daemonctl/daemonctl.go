@@ -19,8 +19,13 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/client"
+	"github.com/alekzonder/tariboy/internal/logrotate"
 	"github.com/alekzonder/tariboy/internal/paths"
 )
+
+// LogMaxBytes is the size from which a new daemon start moves tariboyd.log to
+// tariboyd.log.1. The Desktop launcher uses the same limit.
+const LogMaxBytes = 50 << 20
 
 type Config struct {
 	RuntimeDir   string
@@ -77,6 +82,9 @@ func EnsureUp(ctx context.Context, cfg Config, out io.Writer) (bool, error) {
 	}
 	if err := os.MkdirAll(cfg.RuntimeDir, 0o700); err != nil {
 		return false, fmt.Errorf("create runtime dir: %w", err)
+	}
+	if err := logrotate.RotateIfLarger(cfg.LogFile, LogMaxBytes, 1); err != nil {
+		return false, fmt.Errorf("rotate log file: %w", err)
 	}
 	logf, err := os.OpenFile(cfg.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
