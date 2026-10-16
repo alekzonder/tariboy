@@ -472,6 +472,44 @@ func TestRetentionZeroKeepsEverything(t *testing.T) {
 	}
 }
 
+// The backup reads through the read-only pool, so an open write does not hold
+// it back and it does not hold back the writer: the UI keeps working.
+func TestBackupDoesNotWaitForTheWriter(t *testing.T) {
+	svc, st, _ := open(t)
+	exec(t, st.DB, `INSERT INTO ai_requests(id,ts) VALUES ('committed',?)`, ts(1))
+	tx, err := st.DB.Begin() // holds the only writer connection
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO ai_requests(id,ts) VALUES ('open',?)`, ts(1)); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	var path string
+	go func() {
+		var err error
+		path, err = svc.backup(7)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("backup waited for the writer connection")
+	}
+	copy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copy.Close()
+	if n := count(t, copy, `SELECT COUNT(*) FROM ai_requests`); n != 1 {
+		t.Fatalf("backup has %d rows, want only the committed one", n)
+	}
+}
+
 func TestFailedBackupSkipsCleanup(t *testing.T) {
 	svc, st, backups := open(t)
 	exec(t, st.DB, `INSERT INTO ai_requests(id,ts) VALUES ('old',?)`, ts(100))

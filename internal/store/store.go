@@ -13,6 +13,7 @@ import (
 type Store struct {
 	DB   *sql.DB
 	read *sql.DB
+	path string
 }
 
 // readPoolSize is the number of read-only connections for API reads.
@@ -25,7 +26,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // single writer; serialize access to the file
-	s := &Store{DB: db}
+	s := &Store{DB: db, path: path}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -38,6 +39,24 @@ func Open(path string) (*Store, error) {
 	read.SetMaxOpenConns(readPoolSize)
 	s.read = read
 	return s, nil
+}
+
+// BackupTo writes a consistent copy of the database to dst with VACUUM INTO.
+// It uses its own short-lived connection: VACUUM INTO only reads the source,
+// so it neither waits for nor blocks the writer connection, and a read-only
+// connection cannot create the output file.
+func (s *Store) BackupTo(dst string) error {
+	if s.path == "" {
+		_, err := s.DB.Exec(`VACUUM INTO ?`, dst)
+		return err
+	}
+	db, err := sql.Open("sqlite", "file:"+url.PathEscape(s.path)+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec(`VACUUM INTO ?`, dst)
+	return err
 }
 
 // Reader is the read-only pool for queries that never write, such as the API

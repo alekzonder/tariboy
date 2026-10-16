@@ -248,7 +248,7 @@ func (s *Service) backup(keep int) (string, error) {
 			_ = os.Remove(f)
 		}
 	}
-	if _, err := s.st.DB.Exec(`VACUUM INTO ?`, tmp); err != nil {
+	if err := s.st.BackupTo(tmp); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
 	}
