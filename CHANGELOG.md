@@ -1,3 +1,29 @@
+## [0.83.0] - 2026-10-16
+
+### Added
+
+- `tariboy update --cleanup [--keep N]` deletes all but the N newest
+  installed releases (default 5) after a successful update, or right away
+  when the version is already installed. The active release is always kept,
+  the installer lock is held, a failed restart skips the cleanup, and a
+  cleanup error is only a warning.
+
+### Changed
+
+- Desktop **Update Tariboy** on a Linux host whose CLI supports
+  `tariboy update --cleanup` no longer uploads the release: it runs
+  `tariboy update <Desktop version> --cleanup` on the server over SSH, checks
+  the daemon version, and rolls back to the previous release when a failure
+  happens after the managed links switched. The server needs outbound HTTPS
+  to GitHub. macOS hosts, first installs and older CLIs keep the upload
+  path. The update dialog step "Upload release" now reads "Get release".
+- Image validation accepts additional `SKILL.md` frontmatter fields, such as
+  `version` or harness-specific keys, and preserves them unvalidated. Only
+  `name` and `description` are required; known optional fields keep their
+  type checks.
+
+[0.83.0]: https://github.com/alekzonder/tariboy/compare/v0.82.0...v0.83.0
+
 ## [0.82.0] - 2026-10-16
 
 ### Added
