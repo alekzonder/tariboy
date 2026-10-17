@@ -339,3 +339,14 @@ answers, but the WebView blocks its responses; forward its token listener
 instead. Any app on the phone can reach a forwarded tokenless port while the
 forward is up. A token lives in WebView session storage and must be entered
 again after Android stops the app; the server list is kept.
+
+Web links open in the phone's default browser, never inside the app: links in
+chat messages and task descriptions on a tap, and `http://` or `https://` text
+in the Terminal tab on a tap (there is no Command key). Other link schemes open
+nothing. If no browser can open the address, nothing opens and the app shows no
+message.
+
+On a phone or a tablet narrower than 1024 CSS pixels the agent list is a
+drawer: the menu button at the left of the titlebar opens it, and picking an
+agent, a server or a team closes it. See
+[Web UI](/docs/architecture/web-ui#compact-screens).

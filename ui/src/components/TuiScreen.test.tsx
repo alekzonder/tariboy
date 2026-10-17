@@ -918,6 +918,18 @@ describe("TuiScreen", () => {
       expect(opened()).toHaveBeenCalledExactlyOnceWith("http://example.test/a")
     })
 
+    it("web links case 3a: on Android, where there is no Command key, a tap opens the link", async () => {
+      vi.stubEnv("VITE_TARIBOY_SHELL", "android")
+      try {
+        const { activate } = mountLink()
+        await activate(mouse(), "https://example.test/a")
+        await activate(mouse(), "javascript:alert(1)")
+        expect(opened()).toHaveBeenCalledExactlyOnceWith("https://example.test/a")
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
     it("web links case 4: a Command-click preserves the link's query string", async () => {
       const { activate } = mountLink()
       await activate(mouse({ metaKey: true }), "https://example.test/a?token=secret")

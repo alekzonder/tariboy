@@ -25,7 +25,7 @@ import { useFileDropTarget } from "@/hooks/useFileDropTarget"
 import { useSendFiles } from "@/hooks/useSendFiles"
 import type { TerminalSocketController } from "@/hooks/useTerminalSocket"
 import type { Daemon } from "@/lib/daemons"
-import { openExternalUrl } from "@/lib/desktop"
+import { isAndroidShell, openExternalUrl } from "@/lib/desktop"
 import { HOTKEY_BYTES } from "@/lib/terminalBytes"
 import { buildPathsText, useTuiDraft } from "@/lib/tui"
 import { cn } from "@/lib/utils"
@@ -86,9 +86,10 @@ const WEB_LINK_ERROR = "Could not open web link"
  * `stopPropagation`, or focus call, so selection, mouse reporting and focus
  * behave exactly as they did before. The URL is parsed and its scheme checked
  * here, and again natively in `open_external_url` — this side is a usability
- * filter, not the authorization boundary. */
+ * filter, not the authorization boundary. A phone has no Command key, so in
+ * the Android app a tap on the link opens it. */
 async function openWebLink(event: MouseEvent, text: string) {
-  if (!event.metaKey) return
+  if (!event.metaKey && !isAndroidShell()) return
   let url: URL
   try {
     url = new URL(text)

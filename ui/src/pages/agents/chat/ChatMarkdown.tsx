@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
-import { isDesktop, openExternalUrl } from "@/lib/desktop";
+import { opensWebLinks, openExternalUrl } from "@/lib/desktop";
 import { toast } from "sonner";
 import { TASK_KEY } from "./chatFeed";
 
@@ -116,7 +116,7 @@ export default function ChatMarkdown({ children, onOpenTask }: {
                 className="text-primary underline decoration-primary/35 underline-offset-2"
                 onClick={(event) => {
                   if (key) { event.preventDefault(); onOpenTask(key); return; }
-                  if (!isDesktop() || !href) return;
+                  if (!opensWebLinks() || !href) return;
                   let url: URL;
                   try { url = new URL(href); } catch { return; }
                   if (url.protocol !== "http:" && url.protocol !== "https:") return;
