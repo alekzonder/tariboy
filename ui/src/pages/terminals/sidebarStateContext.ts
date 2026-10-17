@@ -5,6 +5,10 @@ export interface SidebarStateValue {
   hidden: boolean;
   setWidth: (px: number) => void;
   setHidden: (hidden: boolean) => void;
+  /** A narrow window: the agent list is a drawer behind the menu button. */
+  compact: boolean;
+  drawerOpen: boolean;
+  setDrawerOpen: (open: boolean) => void;
 }
 
 export const SidebarStateContext = createContext<SidebarStateValue | null>(null);

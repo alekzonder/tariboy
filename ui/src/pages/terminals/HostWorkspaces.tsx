@@ -61,7 +61,7 @@ export function WorkspaceSwitcher({ hosts, onSelect, onManage }: {
           aria-label={`Workspace: ${current.name}`}
           className="flex h-[26px] min-w-0 shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[13px] hover:bg-accent"
         >
-          <span className="max-w-40 truncate font-medium">{current.name}</span>
+          <span className="max-w-40 truncate font-medium max-sm:max-w-20">{current.name}</span>
           <ChevronDown aria-hidden="true" className="size-2.5 shrink-0 opacity-45" />
         </button>
       </DropdownMenuTrigger>

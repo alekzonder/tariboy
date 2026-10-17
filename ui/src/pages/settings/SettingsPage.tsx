@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useOutletContext } from "react-router-dom";
 import { getGlobalAgentShellScriptOn, getPluginContributionsOn, setGlobalAgentShellScriptOn, type ApiTarget, type PluginContribution } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { ShellScriptEditor } from "@/components/ShellScriptEditor";
 import { SupportBundle } from "@/components/SupportBundle";
 import { CodexApprovalCard } from "@/components/CodexApprovalSettings";
@@ -31,6 +32,7 @@ export default function SettingsPage({ basePath = "/settings", target = null }: 
 }) {
   const location = useLocation();
   const advanced = location.pathname.startsWith(`${basePath}/advanced`);
+  const strip = useActiveLinkIntoView<HTMLElement>();
   const [integrations, setIntegrations] = useState<PluginContribution[]>([]);
   useEffect(() => {
     let current = true;
@@ -39,34 +41,34 @@ export default function SettingsPage({ basePath = "/settings", target = null }: 
       .catch(() => { if (current) setIntegrations([]); });
     return () => { current = false; };
   }, [target]);
+  // Below lg the side column is one sideways-scrolling strip above the page.
+  const group = "max-lg:mt-0 max-lg:flex max-lg:shrink-0 max-lg:items-center max-lg:gap-1 max-lg:border-t-0 max-lg:border-l max-lg:pt-0 max-lg:pl-2";
+  const link = ({ isActive }: { isActive: boolean }) =>
+    cn("block rounded px-3 py-1.5 text-sm whitespace-nowrap hover:bg-accent max-lg:shrink-0", isActive && "bg-accent font-medium");
   return (
-    <div className="flex h-full min-h-0">
-      <aside className="w-52 shrink-0 overflow-y-auto border-r p-3">
-        <h1 className="mb-3 text-lg font-semibold">Settings</h1>
-        <nav aria-label="Settings" className="space-y-1">
+    <div className="flex h-full min-h-0 max-lg:flex-col">
+      <aside ref={strip} className="w-52 shrink-0 overflow-y-auto border-r p-3 max-lg:scrollbar-none max-lg:flex max-lg:w-auto max-lg:items-center max-lg:gap-2 max-lg:overflow-x-auto max-lg:border-r-0 max-lg:border-b max-lg:py-1.5">
+        <h1 className="mb-3 text-lg font-semibold max-lg:sr-only">Settings</h1>
+        <nav aria-label="Settings" className="space-y-1 max-lg:flex max-lg:shrink-0 max-lg:gap-1 max-lg:space-y-0">
           {SECTIONS.map((item) => (
             <NavLink
               key={item.suffix}
               to={`${basePath}${item.suffix}`}
               end={item.end}
-              className={({ isActive }) =>
-                cn("block rounded px-3 py-2 text-sm hover:bg-accent", isActive && "bg-accent font-medium")
-              }
+              className={({ isActive }) => cn(link({ isActive }), "lg:py-2")}
             >
               {item.label}
             </NavLink>
           ))}
         </nav>
         {integrations.length > 0 && (
-          <nav aria-label="Integration settings" className="mt-4 border-t pt-3">
-            <div className="mb-1 px-3 text-xs font-semibold uppercase text-muted-foreground">Integrations</div>
+          <nav aria-label="Integration settings" className={cn("mt-4 border-t pt-3", group)}>
+            <div className="mb-1 px-3 text-xs font-semibold uppercase text-muted-foreground max-lg:hidden">Integrations</div>
             {integrations.map((plugin) => (
               <NavLink
                 key={plugin.name}
                 to={`${basePath}/integrations/${encodeURIComponent(plugin.name)}`}
-                className={({ isActive }) =>
-                  cn("block rounded px-3 py-1.5 text-sm hover:bg-accent", isActive && "bg-accent font-medium")
-                }
+                className={link}
               >
                 {plugin.settings?.title ?? plugin.name}
               </NavLink>
@@ -74,15 +76,13 @@ export default function SettingsPage({ basePath = "/settings", target = null }: 
           </nav>
         )}
         {advanced && (
-          <nav aria-label="Advanced settings" className="mt-4 border-t pt-3">
-            <div className="mb-1 px-3 text-xs font-semibold uppercase text-muted-foreground">Operator tools</div>
+          <nav aria-label="Advanced settings" className={cn("mt-4 border-t pt-3", group)}>
+            <div className="mb-1 px-3 text-xs font-semibold uppercase text-muted-foreground max-lg:hidden">Operator tools</div>
             {ADVANCED.map(([path, label]) => (
               <NavLink
                 key={path}
                 to={`${basePath}/advanced/${path}`}
-                className={({ isActive }) =>
-                  cn("block rounded px-3 py-1.5 text-sm hover:bg-accent", isActive && "bg-accent font-medium")
-                }
+                className={link}
               >
                 {label}
               </NavLink>
@@ -90,7 +90,7 @@ export default function SettingsPage({ basePath = "/settings", target = null }: 
           </nav>
         )}
       </aside>
-      <section className="min-w-0 flex-1 overflow-auto p-5">
+      <section className="min-w-0 flex-1 overflow-auto p-5 max-sm:p-3">
         <Outlet context={target} />
       </section>
     </div>
