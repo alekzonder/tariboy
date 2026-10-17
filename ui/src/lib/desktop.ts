@@ -192,14 +192,12 @@ export const supportBundleExport = (hostId: string, includeAgentData: boolean) =
     includeAgentData,
   });
 /**
- * Hand an absolute http(s) URL to the platform's browser through the native
- * `open_external_url` command, which re-validates the scheme before launching
- * an opener. Never use `window.open` or WebView navigation for terminal text:
- * the native command, not the WebView, is the authorization boundary.
- *
- * The Android host has no commands. There the WebView navigates, and the
- * host's navigation guard cancels it and hands the URL to the system browser;
- * that guard, not this check, is the boundary.
+ * Hand an absolute http(s) URL to the platform's browser. Desktop: through the
+ * native `open_external_url` command, which re-validates the scheme before
+ * launching an opener; never use `window.open` or WebView navigation there.
+ * Android: the host has no commands, so the WebView navigates, and the host's
+ * navigation guard cancels that and hands the URL to the system browser. The
+ * native side, not this check, is the authorization boundary on both.
  */
 export const openExternalUrl = async (url: string): Promise<null> => {
   if (!isAndroidShell()) return invokeDesktop<null>("open_external_url", { url });

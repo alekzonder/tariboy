@@ -198,6 +198,25 @@ describe("task table column layout", () => {
     expect(labels(screen.getByTestId("task-table-header")))
       .toEqual(["priority", "updated", "key", "task", "status", "duration"])
   })
+
+  it("on a phone the header can neither move nor resize the saved layout", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 639.98px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    try {
+      renderRow("agent")
+      const header = screen.getByTestId("task-table-header")
+      expect(labels(header)).toEqual(["key", "task", "status"])
+      expect(within(header).queryByRole("button")).toBeNull()
+      expect(within(header).queryByRole("separator")).toBeNull()
+      expect(within(header).getByText("Status")).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 function renderTask(next: Task) {

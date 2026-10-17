@@ -85,9 +85,10 @@ const WEB_LINK_ERROR = "Could not open web link"
  * Every other click is left entirely to xterm: no `preventDefault`,
  * `stopPropagation`, or focus call, so selection, mouse reporting and focus
  * behave exactly as they did before. The URL is parsed and its scheme checked
- * here, and again natively in `open_external_url` — this side is a usability
- * filter, not the authorization boundary. A phone has no Command key, so in
- * the Android app a tap on the link opens it. */
+ * here, and again natively (`open_external_url` on Desktop, the navigation
+ * guard on Android) — this side is a usability filter, not the authorization
+ * boundary. A phone has no Command key, so in the Android app a tap on the
+ * link opens it. */
 async function openWebLink(event: MouseEvent, text: string) {
   if (!event.metaKey && !isAndroidShell()) return
   let url: URL

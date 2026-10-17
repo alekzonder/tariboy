@@ -311,9 +311,9 @@ const horizontalOnly: Modifier = ({ transform }) => ({ ...transform, y: 0 })
  *  apart from the row drags under it. */
 export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; sticky?: boolean }) {
   const columns = useTaskColumns(mode)
-  // A phone's widths are fixed, so dragging one would only rewrite the layout
-  // the wider screens use.
-  const resizable = !useMediaQuery(PHONE_TASK_QUERY)
+  // A phone shows fixed columns, so moving or resizing one there would only
+  // rewrite the layout the wider screens use.
+  const editable = !useMediaQuery(PHONE_TASK_QUERY)
   const sensors = useSensors(
     useSensor(MouseSensor, headerSensorOptions.mouse),
     useSensor(TouchSensor, headerSensorOptions.touch),
@@ -331,15 +331,15 @@ export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; s
           sticky && "sticky top-0 z-2 bg-card",
         )}
       >
-        {columns.map((column) => <TaskHeaderCell key={column.id} column={column} resizable={resizable} />)}
+        {columns.map((column) => <TaskHeaderCell key={column.id} column={column} editable={editable} />)}
         {mode !== "servers" && <span aria-hidden="true" style={{ width: TASK_COLUMNS.add }} className="shrink-0" />}
       </div>
     </DndContext>
   )
 }
 
-function TaskHeaderCell({ column, resizable }: { column: TaskColumn; resizable: boolean }) {
-  const drag = useDraggable({ id: column.id })
+function TaskHeaderCell({ column, editable }: { column: TaskColumn; editable: boolean }) {
+  const drag = useDraggable({ id: column.id, disabled: !editable })
   const drop = useDroppable({ id: column.id })
   const label = TASK_COLUMN_LABELS[column.id]
   const end = column.id === "duration" || column.id === "updated"
@@ -362,17 +362,19 @@ function TaskHeaderCell({ column, resizable }: { column: TaskColumn; resizable: 
         drop.isOver && !drag.isDragging && "rounded-[6px] ring-1 ring-primary ring-inset",
       )}
     >
-      <button
-        type="button"
-        ref={drag.setActivatorNodeRef}
-        aria-label={`Move ${label} column`}
-        className="task-column-grip min-w-0 cursor-grab truncate"
-        {...drag.listeners}
-        {...drag.attributes}
-      >
-        {label}
-      </button>
-      {resizable && column.id !== "task" && column.width !== undefined && (
+      {editable ? (
+        <button
+          type="button"
+          ref={drag.setActivatorNodeRef}
+          aria-label={`Move ${label} column`}
+          className="task-column-grip min-w-0 cursor-grab truncate"
+          {...drag.listeners}
+          {...drag.attributes}
+        >
+          {label}
+        </button>
+      ) : <span className="min-w-0 truncate">{label}</span>}
+      {editable && column.id !== "task" && column.width !== undefined && (
         <TaskColumnResizeHandle id={column.id} label={label} width={column.width} />
       )}
     </span>

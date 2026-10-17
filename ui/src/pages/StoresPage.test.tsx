@@ -40,15 +40,15 @@ function renderPage(path: string, hostParam: string, otherHostParam?: string) {
   return render(
     <DaemonProvider>
       <CustomerQuestionNotificationsContext.Provider value={{ attention: new Map(), refreshHost: async () => {} }}>
-        <SidebarStateProvider>
-          <MemoryRouter initialEntries={[path]}>
+        <MemoryRouter initialEntries={[path]}>
+          <SidebarStateProvider>
             <RouteButtons hostParam={hostParam} otherHostParam={otherHostParam} />
             <Routes>
               <Route path="/servers/:hostId/stores" element={<TerminalsPage serverView="stores" />} />
               <Route path="/servers/:hostId/stores/:name" element={<TerminalsPage serverView="store-detail" />} />
             </Routes>
-          </MemoryRouter>
-        </SidebarStateProvider>
+          </SidebarStateProvider>
+        </MemoryRouter>
       </CustomerQuestionNotificationsContext.Provider>
     </DaemonProvider>,
   );

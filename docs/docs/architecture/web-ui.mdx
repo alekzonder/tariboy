@@ -945,7 +945,10 @@ then takes no room beside the island. The titlebar's sidebar toggle becomes a
 **Open menu** button that opens the same list as a drawer from the left, at
 most 85% of the width. Picking an agent, a server or a team, **New agent**,
 **Add server**, editing a server or cloning an agent closes it, and so do a tap
-outside, Back and Escape. The drawer has no resize handle and is never stored:
+outside, Escape, and any route change, Back included: the drawer belongs to the
+history entry it opened on. A window that grows past the threshold drops it, so
+it does not come back when the tablet turns again. It has no resize handle and
+is never stored:
 the wide layout's width and hidden state in `terminals:sidebar:v1` stay as
 they were.
 
@@ -960,7 +963,8 @@ Other compact rules:
   Settings navigation is a strip above the page instead of a column.
 - Below 640 CSS pixels (`sm`) the workspace switcher shows its icon only, the
   task table shows only `Key`, `Task` and `Status` at fixed widths, and the
-  Columns menu and the column resize handles are hidden. The saved column
+  Columns menu, the column move grips and the resize handles are hidden. The
+  saved column
   layout `tasks:columns:v1` is not changed; priority stays in the task's
   detail.
 - Dialogs keep a 16px margin on each side, and two-column dialogs and editors
