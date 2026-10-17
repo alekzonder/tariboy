@@ -138,8 +138,8 @@ function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map
     <TitlebarSlotContext.Provider value={slot}>
     <DaemonProvider>
       <CustomerQuestionNotificationsContext.Provider value={{ attention, refreshHost: async () => {} }}>
-        <SidebarStateProvider>
-          <MemoryRouter initialEntries={[path]}>
+        <MemoryRouter initialEntries={[path]}>
+          <SidebarStateProvider>
             <RoutedLocation />
             <Routes>
               <Route path="/" element={<TerminalsPage />} />
@@ -149,8 +149,8 @@ function renderAt(path: string, attention: ReadonlyMap<string, number> = new Map
               <Route path="/agents/:hostId/teams/:team" element={<TerminalsPage />} />
               <Route path="/servers/:hostId/tasks" element={<TerminalsPage />} />
             </Routes>
-          </MemoryRouter>
-        </SidebarStateProvider>
+          </SidebarStateProvider>
+        </MemoryRouter>
       </CustomerQuestionNotificationsContext.Provider>
     </DaemonProvider>
     </TitlebarSlotContext.Provider>,

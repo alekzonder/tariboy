@@ -16,13 +16,14 @@ pub enum Navigation {
     Block,
 }
 
-/// The one decision for every top-level navigation. `app` is the page the
-/// WebView shows now; only its own origin may load inside the app.
-pub fn navigation_for(app: Option<&Url>, target: &Url) -> Navigation {
-    let same_origin = app.is_some_and(|app| app.origin() == target.origin());
+/// The one decision for every top-level navigation. Only the app's fixed
+/// origin, `tauri.localhost`, loads inside the WebView, plus `dev`, the dev
+/// server a debug build is served from. The page shown now never counts: a
+/// foreign page must not make its own origin the app's.
+pub fn navigation_for(dev: Option<&Url>, target: &Url) -> Navigation {
+    let from_dev = dev.is_some_and(|dev| dev.origin() == target.origin());
     match target.scheme() {
-        // tauri.localhost is the Android asset origin before the first page.
-        "http" | "https" if same_origin || target.host_str() == Some("tauri.localhost") => {
+        "http" | "https" if from_dev || target.host_str() == Some("tauri.localhost") => {
             Navigation::Stay
         }
         "http" | "https" if target.host_str().is_some() => Navigation::Browser,
@@ -40,7 +41,12 @@ pub fn run() {
 
     let external_links = tauri::plugin::Builder::<tauri::Wry>::new("external-links")
         .on_navigation(|webview, target| {
-            match navigation_for(webview.url().ok().as_ref(), target) {
+            let dev = if cfg!(debug_assertions) {
+                webview.app_handle().config().build.dev_url.clone()
+            } else {
+                None
+            };
+            match navigation_for(dev.as_ref(), target) {
                 Navigation::Stay => true,
                 Navigation::Browser => {
                     if let Err(error) = webview
@@ -75,7 +81,6 @@ mod tests {
 
     #[test]
     fn app_pages_load_in_the_webview() {
-        let app = url("http://tauri.localhost/#/agents");
         for target in [
             "http://tauri.localhost/#/servers/local/tasks",
             "http://tauri.localhost/index.html",
@@ -83,16 +88,12 @@ mod tests {
             "about:blank",
         ] {
             assert_eq!(
-                navigation_for(Some(&app), &url(target)),
+                navigation_for(None, &url(target)),
                 Navigation::Stay,
                 "{target}"
             );
         }
-        assert_eq!(
-            navigation_for(None, &url("http://tauri.localhost/")),
-            Navigation::Stay
-        );
-        // A dev server origin is the app's own when the app is served from it.
+        // A debug build is served from its dev server.
         let dev = url("http://192.168.1.5:1420/");
         assert_eq!(
             navigation_for(Some(&dev), &url("http://192.168.1.5:1420/#/x")),
@@ -101,8 +102,16 @@ mod tests {
     }
 
     #[test]
+    fn a_release_build_trusts_no_other_origin() {
+        assert_eq!(
+            navigation_for(None, &url("http://192.168.1.5:1420/#/x")),
+            Navigation::Browser
+        );
+    }
+
+    #[test]
     fn web_pages_open_in_the_browser() {
-        let app = url("http://tauri.localhost/");
+        let app = url("http://192.168.1.5:1420/");
         for target in [
             "https://example.com/",
             "http://example.com/path?q=1",

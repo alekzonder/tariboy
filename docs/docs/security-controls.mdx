@@ -29,7 +29,9 @@ persisted `otlp_endpoint` daemon setting.
   permissions. It keeps server tokens in WebView session storage, not a
   keystore.
 - The Android app's native navigation guard decides every top-level WebView
-  navigation. Only the app's own origin loads inside the WebView. Any other
+  navigation. Only the app's fixed origin `tauri.localhost` (and, in a debug
+  build, its configured dev server) loads inside the WebView. The page that is
+  shown now never widens that. Any other
   `http` or `https` address is cancelled and given to the system browser
   through the opener plugin; every other scheme (`javascript:`, `file:`,
   `intent:`, and the rest) is cancelled and opens nothing. The guard never logs

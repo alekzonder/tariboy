@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { SidebarStateProvider } from "./SidebarStateProvider";
 import { useSharedSidebarState } from "./sidebarStateContext";
 
@@ -22,10 +23,10 @@ beforeEach(() => localStorage.clear());
 describe("SidebarStateProvider", () => {
   it("shares one persisted sidebar state between independent consumers", () => {
     render(
-      <SidebarStateProvider>
+      <MemoryRouter><SidebarStateProvider>
         <Toggle />
         <Observer />
-      </SidebarStateProvider>,
+      </SidebarStateProvider></MemoryRouter>,
     );
 
     expect(screen.getByText("268:false")).toBeInTheDocument();

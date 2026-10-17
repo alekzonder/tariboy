@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { fetchAllAgents } from "@/lib/aggregate";
 import App from "./App";
@@ -285,6 +285,28 @@ describe("compact screens", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/chat");
     // The wide layout's saved state is not touched by the drawer.
     expect(localStorage.getItem("terminals:sidebar:v1")).toBeNull();
+  });
+
+  it("closes the drawer on Back", async () => {
+    function Back() {
+      const navigate = useNavigate();
+      return <button type="button" onClick={() => navigate(-1)}>Back</button>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/agents/local/bob/chat", "/agents/local/alice/chat"]} initialIndex={1}>
+        <App />
+        <Back />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    fireEvent.click(within(screen.getByTestId("app-titlebar")).getByRole("button", { name: "Open menu" }));
+    await screen.findByRole("dialog", { name: "Agents" });
+
+    // The drawer is modal, so Back comes from outside it, as Android's does.
+    act(() => { screen.getByText("Back", { selector: "button" }).click(); });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Agents" })).toBeNull());
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/chat");
   });
 
   it("drops the macOS traffic-light gap outside the Desktop app", () => {
