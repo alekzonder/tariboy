@@ -179,8 +179,8 @@ because a client refetches on connect and on every reconnect.
 `GET /api/agent-states/ws` uses the same hint loop for agent state. It sends
 `{agent, type, ts}` for every `iteration` and `state` event of any agent on
 the host, so the UI refetches the agents list and the agent status. The loop
-manager emits `state` when an agent is started or stopped, when its Autopilot
-switch or status line changes, and when its loop halts or stops for idleness. The route
+manager emits `state` when an agent is started or stopped, when its status line
+changes, and when its loop halts or stops for idleness. The route
 is not under `/api/agents/` because an agent may be named `ws`.
 
 The bundled Telegram process remains outside the daemon. It authorizes and

@@ -84,7 +84,7 @@ func socketIno(t *testing.T, sock string) uint64 {
 func liveIterationOnDisk(t *testing.T, m *Manager, as *agent.Store, agentsDir, name string, enabled bool) (agentdir.Layout, string) {
 	t.Helper()
 	ag := agent.Agent{Name: name, ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: enabled, LoopEnabled: enabled, IntervalS: 60, Plugins: []string{"whoami", "loop", "messages", "context", "status"}}
+		Enabled: enabled, IntervalS: 60, Plugins: []string{"whoami", "loop", "messages", "context", "status"}}
 	pinBasicImage(t, m, &ag)
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)

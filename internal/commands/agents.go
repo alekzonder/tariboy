@@ -50,7 +50,7 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, er
 		"name": a.Name, "image": a.ImageRef, "digest": a.ImageDigest, "state": state,
 		"cwd": a.Cwd, "configured_cwd": a.Cwd,
 		"harness": a.HarnessType, "model": a.Model, "effort": a.Effort,
-		"interactive": a.Interactive, "loop_enabled": a.LoopEnabled, "enabled": a.Enabled, "interval_s": a.IntervalS,
+		"interactive": a.Interactive, "enabled": a.Enabled, "interval_s": a.IntervalS,
 		"timeout_s": a.TimeoutS, "hard_timeout_s": a.HardTimeoutS, "on_timeout": a.OnTimeout,
 		"on_error": a.OnError, "user_prompt": a.UserPrompt, "env": a.Env, "plugins": a.Plugins,
 		"messages_batch": a.MessagesBatch, "messages_max_queue": a.MessagesMaxQueue,
@@ -323,7 +323,6 @@ func agentRun() registry.Command {
 				map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 			}}},
 			{Name: "group", Flag: "group", Short: "g", Type: registry.String, Help: "join this group"},
-			{Name: "loop", Flag: "loop", Type: registry.Bool, Default: true, Help: "set loop intent (nested; agent still starts stopped — default true)"},
 			{Name: "timeout", Flag: "timeout", Type: registry.String, Help: "soft iteration timeout duration (for example 60m or 2h)"},
 			{Name: "interval_s", Type: registry.Int, Help: "loop interval in whole seconds"},
 			{Name: "timeout_s", Type: registry.Int, Help: "soft iteration timeout in whole seconds"},
@@ -344,10 +343,6 @@ func agentRun() registry.Command {
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			loop := true
-			if v, ok := p["loop"].(bool); ok {
-				loop = v
-			}
 			interactive := true
 			if value, present := p["interactive"]; present {
 				var ok bool
@@ -451,7 +446,7 @@ func agentRun() registry.Command {
 			spec := registry.RunSpec{
 				ImageRef: str(p, "image"), Name: str(p, "name"), Cwd: str(p, "cwd"),
 				Harness: str(p, "harness"), Model: str(p, "model"), Effort: str(p, "effort"),
-				Interactive: interactive, Env: env, Plugins: pluginList, Loop: loop,
+				Interactive: interactive, Env: env, Plugins: pluginList,
 				IntervalS: intervalS, TimeoutS: timeoutS, HardTimeoutS: hardTimeoutS,
 				OnTimeout: onTimeout, OnError: onError,
 				MaxIdleIterations:        maxIdleIterations,
@@ -510,7 +505,7 @@ func agentPs() registry.Command {
 				row := map[string]any{
 					"name": a.Name, "image": a.ImageRef, "state": state,
 					"alias":   a.Alias,
-					"harness": a.HarnessType, "loop_enabled": a.LoopEnabled, "enabled": a.Enabled, "group": a.Group,
+					"harness": a.HarnessType, "enabled": a.Enabled, "group": a.Group,
 					"color": a.Color, "cwd": a.Cwd, "timeout_s": a.TimeoutS,
 					"interval_s": a.IntervalS, "on_timeout": a.OnTimeout, "on_error": a.OnError,
 					"max_idle_iterations": a.MaxIdleIterations,
@@ -642,7 +637,7 @@ func agentStatus() registry.Command {
 				last = its[n-1].Status
 				lastID = its[n-1].ID
 			}
-			out := map[string]any{"name": a.Name, "state": state, "loop_enabled": a.LoopEnabled, "enabled": a.Enabled,
+			out := map[string]any{"name": a.Name, "state": state, "enabled": a.Enabled,
 				"iterations": len(its), "last_iteration": last, "last_iteration_id": lastID,
 				"status_message": a.StatusMessage, "status_updated": a.StatusUpdated,
 				"messages_pending": messagesPending, "messages_max_queue": a.MessagesMaxQueue,

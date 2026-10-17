@@ -81,8 +81,6 @@ tariboy has three command surfaces:
 | `tariboy iteration tag rm` | Remove tags from one or more iterations |
 | `tariboy iteration tag set` | Replace the tags of one or more iterations |
 | `tariboy logs` | Stream or print an agent's events (-f to follow) |
-| `tariboy loop disable` | Turn the agent loop disable |
-| `tariboy loop enable` | Turn the agent loop enable |
 | `tariboy loop hard-timeout` | Get or set loop hard-timeout (seconds); omit value to read |
 | `tariboy loop interval` | Get or set loop interval (seconds); omit value to read |
 | `tariboy loop on-error` | Get or set loop on-error policy; omit value to read |

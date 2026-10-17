@@ -231,8 +231,11 @@ for source precedence, request accounting, and diagnostics.
 
 ## Agent iteration and durable delivery
 
-An agent's **enabled**, **loop enabled**, and **interactive** controls are
-independent. Its loop engine serializes work: a timer, explicit trigger,
+An agent has one on/off switch, **enabled**, set by Start and cleared by Stop;
+**interactive** is a separate setting for the Terminal session. The loop engine
+launches autonomous iterations only while the agent is enabled, carries no stop
+policy `error_reason`, and does not use the terminal-only `bare:latest` image.
+Its loop engine serializes work: a timer, explicit trigger,
 or message delivery may request work, but only one iteration
 runs at a time.
 

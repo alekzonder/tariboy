@@ -53,7 +53,8 @@ func TestTopicCommandsHelpAndLifecycleUseDaemonAPI(t *testing.T) {
 	update(3, 9, "/start")
 	update(4, 7, "/agent set worker loop false")
 	update(5, 7, "/agent set worker image basic:latest")
-	if len(daemon.calls) != 4 || daemon.calls[0].path != "/api/agents/worker/start" || daemon.calls[1].path != "/api/agents/worker/start" || daemon.calls[2].path != "/api/agents/worker/loop/disable" || daemon.calls[3].path != "/api/agents/worker/reprovision" {
+	// loop is not a field any more: /start and /stop are the one switch.
+	if len(daemon.calls) != 3 || daemon.calls[0].path != "/api/agents/worker/start" || daemon.calls[1].path != "/api/agents/worker/start" || daemon.calls[2].path != "/api/agents/worker/reprovision" {
 		t.Fatalf("daemon calls = %#v", daemon.calls)
 	}
 	daemon.callResult = strings.Repeat("x", 5000)

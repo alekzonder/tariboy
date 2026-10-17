@@ -70,9 +70,8 @@ export const BLOCKS: readonly ConfigBlock[] = [
     id: "loop",
     title: "Loop and timeouts",
     description: "When the agent runs and how it recovers.",
-    keywords: "schedule iteration autopilot",
+    keywords: "schedule iteration",
     fields: [
-      { key: "loop-enabled", label: "Loop", kind: "switch", helper: "Schedule new autonomous iterations.", keywords: "autopilot enable disable" },
       { key: "interval", label: "Interval", kind: "text", helper: `Seconds. ${NEXT_ITERATION}`, keywords: "period seconds" },
       { key: "timeout", label: "Timeout", kind: "text", helper: `Seconds. ${NEXT_ITERATION}`, keywords: "seconds" },
       { key: "hard-timeout", label: "Hard timeout", kind: "text", helper: `Seconds. ${NEXT_ITERATION}`, keywords: "kill seconds" },

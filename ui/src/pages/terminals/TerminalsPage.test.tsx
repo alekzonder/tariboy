@@ -68,7 +68,6 @@ const cloneProjection = {
   model: "gpt-5",
   effort: "high",
   interactive: true,
-  loop_enabled: false,
   enabled: false,
   interval_s: 0,
   timeout_s: 0,
@@ -98,8 +97,8 @@ beforeEach(() => {
     {
       host: { id: "", label: "This daemon (local)" },
       agents: [
-        { name: "a1", image: "bare:latest", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true },
-        { name: "a2", image: "img", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: false },
+        { name: "a1", image: "bare:latest", state: "running", harness: "claude", group: null, interactive: true },
+        { name: "a2", image: "img", state: "running", harness: "claude", group: null, interactive: false },
       ],
     },
     { host: { id: "d1", label: "prod" }, agents: [], error: "unauthorized: nope" },
@@ -224,7 +223,7 @@ describe("TerminalsPage", () => {
       host: { id: remote.id, label: "prod" },
       agents: state === "unavailable" ? [] : [{
         name: "worker", image: state === "recovered" ? "worker:v2" : "worker:v1", state: "running", harness: "codex",
-        loop_enabled: false, group: null, interactive: false,
+        group: null, interactive: false,
       }],
       error: state === "unavailable" ? "unreachable" : undefined,
     }]);
@@ -371,10 +370,10 @@ describe("TerminalsPage", () => {
         host: { id: "", label: "local" },
         groups: [{ name: "alpha", lead: "", members: 1 }, { name: "beta", lead: "", members: 1 }],
         agents: [
-          { name: "a1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "alpha", interactive: true },
-          { name: "b1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "beta", interactive: true },
-          { name: "solo1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
-          { name: "solo2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
+          { name: "a1", image: "img", state: "running", harness: "codex", group: "alpha", interactive: true },
+          { name: "b1", image: "img", state: "running", harness: "codex", group: "beta", interactive: true },
+          { name: "solo1", image: "img", state: "running", harness: "codex", group: null, interactive: true },
+          { name: "solo2", image: "img", state: "running", harness: "codex", group: null, interactive: true },
         ],
         sidebarOrder: { version: 1, groups: ["beta", "alpha"], agents: ["solo2", "solo1"] },
       },
@@ -469,8 +468,8 @@ describe("TerminalsPage", () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "local" },
       agents: [
-        { name: "a1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
-        { name: "a2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: null, interactive: true },
+        { name: "a1", image: "img", state: "running", harness: "codex", group: null, interactive: true },
+        { name: "a2", image: "img", state: "running", harness: "codex", group: null, interactive: true },
       ],
       groups: [],
     }]);
@@ -496,10 +495,10 @@ describe("TerminalsPage", () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "local" },
       agents: [
-        { name: "a1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "a", interactive: true },
-        { name: "a2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "a", interactive: true },
-        { name: "b1", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "b", interactive: true },
-        { name: "b2", image: "img", state: "running", harness: "codex", loop_enabled: true, group: "b", interactive: true },
+        { name: "a1", image: "img", state: "running", harness: "codex", group: "a", interactive: true },
+        { name: "a2", image: "img", state: "running", harness: "codex", group: "a", interactive: true },
+        { name: "b1", image: "img", state: "running", harness: "codex", group: "b", interactive: true },
+        { name: "b2", image: "img", state: "running", harness: "codex", group: "b", interactive: true },
       ],
       groups: [{ name: "a", lead: "", members: 2 }, { name: "b", lead: "", members: 2 }],
     }]);
@@ -627,8 +626,8 @@ describe("TerminalsPage", () => {
       host: { id: "", label: "This daemon (local)" },
       groups: [{ name: "empty-team", lead: "", members: 0 }],
       agents: [
-        { name: "lead", image: "img", state: "running", harness: "claude", loop_enabled: true, group: "dev-team", interactive: true },
-        { name: "solo", image: "img", state: "stopped", harness: "codex", loop_enabled: false, group: null, interactive: true },
+        { name: "lead", image: "img", state: "running", harness: "claude", group: "dev-team", interactive: true },
+        { name: "solo", image: "img", state: "stopped", harness: "codex", group: null, interactive: true },
       ],
     }]);
     renderAt("/");
@@ -650,8 +649,8 @@ describe("TerminalsPage", () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "This daemon (local)" },
       agents: [
-        { name: "lead", image: "worker:v1", state: "running", harness: "codex", loop_enabled: true, group: "dev-team", interactive: true },
-        { name: "solo", image: "worker:v1", state: "stopped", harness: "codex", loop_enabled: false, group: null, interactive: true },
+        { name: "lead", image: "worker:v1", state: "running", harness: "codex", group: "dev-team", interactive: true },
+        { name: "solo", image: "worker:v1", state: "stopped", harness: "codex", group: null, interactive: true },
       ],
     }]);
     vi.mocked(agentGetOn).mockResolvedValueOnce({ ...cloneProjection, name: agentName, group });
@@ -852,7 +851,7 @@ describe("TerminalsPage", () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([
       {
         host: { id: "remote-1", label: "prod" },
-        agents: [{ name: "alice", image: "bare:latest", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true }],
+        agents: [{ name: "alice", image: "bare:latest", state: "running", harness: "claude", group: null, interactive: true }],
         chats: [{ id: "dm:alice", kind: "direct", title: "alice", agent: "alice", last_ts: "2026-09-15T10:00:00Z", last_from: "agent:alice", last_type: "message", last_text: "hi", unread: 3 }],
       },
     ])
@@ -988,7 +987,7 @@ describe("TerminalsPage", () => {
       {
         host: { id, label: "prod" },
         agents: [
-          { name: "a1", image: "bare:latest", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true },
+          { name: "a1", image: "bare:latest", state: "running", harness: "claude", group: null, interactive: true },
         ],
       },
     ]);
@@ -1015,13 +1014,13 @@ describe("host workspaces", () => {
       {
         host: { id: "", label: "This daemon (local)" },
         agents: [
-          { name: "a1", image: "img", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true },
+          { name: "a1", image: "img", state: "running", harness: "claude", group: null, interactive: true },
         ],
       },
       {
         host: { id: "d1", label: "prod" },
         agents: [
-          { name: "b1", image: "img", state: "running", harness: "claude", loop_enabled: false, group: null, interactive: true },
+          { name: "b1", image: "img", state: "running", harness: "claude", group: null, interactive: true },
         ],
       },
     ]);
@@ -1134,14 +1133,14 @@ describe("sidebar tabs", () => {
       host: { id: "", label: "This daemon (local)" },
       groups: [{ name: "release", lead: "alpha", members: 1 }],
       agents: [
-        { name: "alpha", image: "img", state: "running", harness: "claude", loop_enabled: false, group: "release", interactive: true },
-        { name: "beta", image: "img", state: "stopped", harness: "claude", loop_enabled: false, group: null, interactive: true },
+        { name: "alpha", image: "img", state: "running", harness: "claude", group: "release", interactive: true },
+        { name: "beta", image: "img", state: "stopped", harness: "claude", group: null, interactive: true },
       ],
     },
     {
       host: { id: "prod", label: "prod" },
       agents: [
-        { name: "gamma", image: "img", state: "running", harness: "claude", loop_enabled: false, group: "release", interactive: true },
+        { name: "gamma", image: "img", state: "running", harness: "claude", group: "release", interactive: true },
       ],
     },
   ];

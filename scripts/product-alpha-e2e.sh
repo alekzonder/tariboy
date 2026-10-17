@@ -174,7 +174,7 @@ PY
 )
 [ "$(stat -c '%a' "$LOCAL_APP_DATA/hosts.json")" = 600 ] || fail "local host registry is not 0600"
 
-echo "--- run image → interactive Autopilot → event vertical"
+echo "--- run image → interactive agent → event vertical"
 ssh "$TARIBOY_SSH_TEST_HOST" sh -s -- \
   "$REMOTE_ROOT" "$REMOTE_HOME" "$REMOTE_BASE" "$REMOTE_RUNTIME" \
   "$REMOTE_STAGE" "$REMOTE_RELEASE" "$VERSION" "$STAMP" <<'REMOTE_VERTICAL'
@@ -310,7 +310,7 @@ api POST /api/image-sources/alpha-remote/validate '{}' | grep -q '"valid":true'
 api POST /api/image-sources/alpha-remote/build '{"tag":"latest"}' | grep -q '"ref":"alpha-remote:latest"'
 
 api POST /api/agents \
-  '{"image":"alpha-remote:latest","name":"vertical","harness":"stub","interactive":true,"loop":true}' >/dev/null
+  '{"image":"alpha-remote:latest","name":"vertical","harness":"stub","interactive":true}' >/dev/null
 api POST /api/agents/vertical/subscriptions '{"channel":"alpha:e2e"}' >/dev/null
 api POST /api/agents/vertical/start '{}' >/dev/null
 

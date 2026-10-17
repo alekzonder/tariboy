@@ -296,7 +296,7 @@ func TestReconcileAgentPreservesStickyGoalWhileAgentCannotRun(t *testing.T) {
 		reenable string
 	}{
 		{name: "agent_disabled", disable: `UPDATE agents SET enabled=0 WHERE name='worker'`, reenable: `UPDATE agents SET enabled=1 WHERE name='worker'`},
-		{name: "loop_disabled", disable: `UPDATE agents SET loop_enabled=0 WHERE name='worker'`, reenable: `UPDATE agents SET loop_enabled=1 WHERE name='worker'`},
+		{name: "bare_image", disable: `UPDATE agents SET image_ref='bare:latest' WHERE name='worker'`, reenable: `UPDATE agents SET image_ref='basic:latest' WHERE name='worker'`},
 	}
 
 	for _, tt := range tests {
@@ -464,14 +464,14 @@ func TestCurrentReturnsAuthoritativeSelectedTask(t *testing.T) {
 	}
 	assertStoredGoal(t, s, "T-2")
 
-	execGoalSQL(t, s, `UPDATE agents SET loop_enabled=0 WHERE name='worker'`)
+	execGoalSQL(t, s, `UPDATE agents SET enabled=0 WHERE name='worker'`)
 	task, ok, err = s.Current("worker", goalNow)
 	if err != nil || ok || task.Key != "" {
 		t.Fatalf("Current disabled: task=%#v ok=%t err=%v", task, ok, err)
 	}
 	assertStoredGoal(t, s, "T-2")
 
-	execGoalSQL(t, s, `UPDATE agents SET loop_enabled=1 WHERE name='worker'`)
+	execGoalSQL(t, s, `UPDATE agents SET enabled=1 WHERE name='worker'`)
 	task, ok, err = s.Current("worker", goalNow)
 	if err != nil || !ok || task.Key != "T-2" {
 		t.Fatalf("Current re-enabled: task=%#v ok=%t err=%v", task, ok, err)
@@ -511,8 +511,8 @@ func goalStore(t *testing.T, now time.Time) *Store {
 
 func seedAgent(t *testing.T, s *Store, name string, createdAt time.Time) {
 	t.Helper()
-	if _, err := s.db.Exec(`INSERT INTO agents(name,image_ref,created_at,enabled,loop_enabled,goal_enabled,goal_wait_customer_timeout_s) VALUES (?,?,?,?,?,?,?)`,
-		name, "basic:latest", createdAt.Format(time.RFC3339Nano), true, true, true, 300); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO agents(name,image_ref,created_at,enabled,goal_enabled,goal_wait_customer_timeout_s) VALUES (?,?,?,?,?,?)`,
+		name, "basic:latest", createdAt.Format(time.RFC3339Nano), true, true, 300); err != nil {
 		t.Fatalf("insert agent %s: %v", name, err)
 	}
 }

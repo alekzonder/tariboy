@@ -71,7 +71,7 @@ it("manages subscriptions under ?view=channels", async () => {
 
   expect(await screen.findByRole("combobox")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Subscribe" })).toBeInTheDocument();
-  expect(screen.getByText(/wakes this agent in Autopilot/)).toBeInTheDocument();
+  expect(screen.getByText(/wakes this agent while it is started/)).toBeInTheDocument();
 });
 
 it("in Simple never opens the queue", async () => {

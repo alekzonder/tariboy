@@ -86,7 +86,9 @@ it("orchestrates N+1 calls in order: POST /api/groups then one POST /api/agents 
   expect(calls[0].path).toBe("/api/groups");
   expect(calls[0].body).toMatchObject({ name: "squad", lead: "boss" });
   expect(calls[1].path).toBe("/api/agents");
-  expect(calls[1].body).toMatchObject({ image: "img:1", name: "boss", group: "squad", loop: true });
+  expect(calls[1].body).toMatchObject({ image: "img:1", name: "boss", group: "squad" });
+  expect(calls[1].body).not.toHaveProperty("loop");
+  expect(screen.queryByText("Autopilot")).not.toBeInTheDocument();
   expect(calls[2].path).toBe("/api/agents");
   expect(calls[2].body).toMatchObject({ image: "img:2", group: "squad" });
 });

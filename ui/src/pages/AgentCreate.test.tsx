@@ -83,9 +83,9 @@ it("gates submit on image and serializes env/plugins in the POST payload", async
     image: "img:1",
     env: "KEY=val",
     plugins: "myplugin",
-    loop: true,
     interactive: true,
   });
+  expect(posts[0]).not.toHaveProperty("loop");
 });
 
 it("omits empty optional fields from the payload", async () => {

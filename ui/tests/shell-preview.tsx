@@ -9,10 +9,10 @@ import App from "@/App";
 import "@/index.css";
 
 const AGENTS = [
-  { name: "builder", image: "worker:v2", state: "running", harness: "claude", loop_enabled: true, group: "core", interactive: true, current_goal_task_key: "TB-142", cwd: "/home/agent/github/tariboy" },
-  { name: "reviewer", image: "worker:v2", state: "running", harness: "claude", loop_enabled: false, group: "core", interactive: true },
-  { name: "packager", image: "bare:latest", state: "failed", harness: "codex", loop_enabled: false, group: null, interactive: true },
-  { name: "docs-bot", image: "bare:latest", state: "stopped", harness: "codex", loop_enabled: false, group: null, interactive: false },
+  { name: "builder", image: "worker:v2", state: "running", harness: "claude", group: "core", interactive: true, current_goal_task_key: "TB-142", cwd: "/home/agent/github/tariboy" },
+  { name: "reviewer", image: "worker:v2", state: "running", harness: "claude", group: "core", interactive: true },
+  { name: "packager", image: "bare:latest", state: "failed", harness: "codex", group: null, interactive: true },
+  { name: "docs-bot", image: "bare:latest", state: "stopped", harness: "codex", group: null, interactive: false },
 ];
 
 const TASKS = [

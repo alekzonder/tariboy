@@ -9,7 +9,7 @@ test("shows the effective agent cwd and its VS Code action", async ({ desktop })
       .then((status) => fetch(status.base_url + "/api/agents", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ image: "basic:latest", name: "cwd-vscode-e2e", interactive: false, loop: false }),
+        body: JSON.stringify({ image: "basic:latest", name: "cwd-vscode-e2e", interactive: false }),
       }).then((response) => ({ response, baseURL: status.base_url })))
       .then(async ({ response, baseURL }) => {
         const payload = await response.json();

@@ -74,7 +74,7 @@ func teamCompose() registry.Command {
 				return nil, err
 			}
 			file.Images[ref.Name] = compose.ImageSpec{Context: "./images/" + ref.Name}
-			enabled := member.LoopEnabled
+			enabled := member.Enabled
 			timeout := ""
 			if member.TimeoutS > 0 {
 				timeout = (time.Duration(member.TimeoutS) * time.Second).String()
@@ -127,14 +127,10 @@ func teamApplyYAML() registry.Command {
 			if spec.Harness != nil {
 				harness, model, effort, interactive = spec.Harness.Type, spec.Harness.Model, spec.Harness.Effort, spec.Harness.Interactive
 			}
-			loop := true
-			if spec.Loop != nil && spec.Loop.Enabled != nil {
-				loop = *spec.Loop.Enabled
-			}
 			timeoutS, timeoutErr := spec.TimeoutSeconds()
 			created, runErr := "", timeoutErr
 			if runErr == nil {
-				created, runErr = c.Control.Run(registry.RunSpec{ImageRef: spec.Image, Name: name, Cwd: spec.Cwd, Harness: harness, Model: model, Effort: effort, Interactive: interactive, Plugins: spec.Plugins, Loop: loop, TimeoutS: timeoutS, Group: spec.Group})
+				created, runErr = c.Control.Run(registry.RunSpec{ImageRef: spec.Image, Name: name, Cwd: spec.Cwd, Harness: harness, Model: model, Effort: effort, Interactive: interactive, Plugins: spec.Plugins, TimeoutS: timeoutS, Group: spec.Group})
 			}
 			item := map[string]any{"name": created, "status": "created"}
 			if runErr != nil {

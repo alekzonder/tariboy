@@ -334,7 +334,7 @@ test("Command-click opens only explicit web links from the real terminal", async
         };
         await call("POST", "/api/agents", {
           image: "basic:latest", name: ${JSON.stringify(AGENT)}, harness: "stub",
-          interactive: true, loop: false, env: "STUB_SLEEP=${HARNESS_HOLD_SECONDS},STUB_CALL_DONE=0",
+          interactive: true, env: "STUB_SLEEP=${HARNESS_HOLD_SECONDS},STUB_CALL_DONE=0",
         });
         await call("POST", "/api/agents/" + ${JSON.stringify(AGENT)} + "/start", {});
         window.__webLinksSetup = "ready";

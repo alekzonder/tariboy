@@ -74,8 +74,6 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, agentRm())
 	mustRegister(r, agentReprovision())
 	mustRegister(r, agentExec())
-	mustRegister(r, loopToggle("loop.enable", "enable", true))
-	mustRegister(r, loopToggle("loop.disable", "disable", false))
 	mustRegister(r, loopIntSetting("loop.interval", "interval"))
 	mustRegister(r, loopIntSetting("loop.timeout", "timeout"))
 	mustRegister(r, loopIntSetting("loop.hard-timeout", "hard-timeout"))

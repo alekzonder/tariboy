@@ -58,7 +58,7 @@ let pendingRef = "";
 let activated = false;
 const agentView: AgentView = {
   name: "worker", image: "basic:latest", digest: "basic-digest", state: "stopped", cwd: "/srv/worker",
-  harness: "codex", model: "", effort: "", interactive: false, loop_enabled: false, enabled: false,
+  harness: "codex", model: "", effort: "", interactive: false, enabled: false,
   interval_s: 0, timeout_s: 60, hard_timeout_s: 120, on_timeout: "restart", on_error: "restart",
   max_idle_iterations: 0, user_prompt: "", env: {}, plugins: [], group: null, alias: "", notes: "",
 };

@@ -30,7 +30,6 @@ const stopped: AgentView = {
   model: "",
   effort: "",
   interactive: true,
-  loop_enabled: false,
   enabled: false,
   interval_s: 30,
   timeout_s: 60,
@@ -147,8 +146,7 @@ function fakeServer(opts: {
       return response({ keys: state.secrets, count: state.secrets.length });
     }
     if (method === "POST") {
-      if (agentRest === "loop/enable" || agentRest === "loop/disable") state.view = { ...state.view, loop_enabled: agentRest === "loop/enable" };
-      else if (agentRest === "budget") state.view = { ...state.view, budget: { ...state.view.budget!, hour_usd: Number(body.hour_usd), day_usd: Number(body.day_usd), week_usd: Number(body.week_usd), month_usd: Number(body.month_usd) } };
+      if (agentRest === "budget") state.view = { ...state.view, budget: { ...state.view.budget!, hour_usd: Number(body.hour_usd), day_usd: Number(body.day_usd), week_usd: Number(body.week_usd), month_usd: Number(body.month_usd) } };
       else if (VIEW_FIELD[agentRest]) {
         const [field, key] = VIEW_FIELD[agentRest];
         state.view = { ...state.view, [field]: body[key] };
@@ -317,15 +315,13 @@ it("keeps Start, Stop and Restart as immediate actions in the page header", asyn
   for (const name of ["Kill", "Remove", "Exec"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
 });
 
-it("saves the Loop switch with Save rather than at once", async () => {
-  const server = fakeServer();
+it("has no Loop on/off switch: Start and Stop are the only switch", async () => {
+  fakeServer();
   render(tree());
   await ready();
-  fireEvent.click(screen.getByRole("switch", { name: "Loop" }));
-  expect(server.writes()).toEqual([]);
-  save();
-  await waitFor(() => expect(server.writes()).toEqual(["POST loop/enable"]));
-  await waitFor(() => expect(screen.getByRole("switch", { name: "Loop" })).toBeChecked());
+  const loop = block("Loop and timeouts");
+  expect(within(loop).getByLabelText("Interval")).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: "Loop" })).not.toBeInTheDocument();
 });
 
 // --- Runtime -----------------------------------------------------------------

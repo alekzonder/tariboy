@@ -25,7 +25,7 @@ describe("AllHostsPage", () => {
           text: async () =>
             JSON.stringify(
               local
-                ? { ok: true, result: localAgents ? { agents: [{ name: "local-a", image: "i", state: "running", harness: "claude", loop_enabled: true, group: null }], count: 1 } : { groups: [], count: 0 } }
+                ? { ok: true, result: localAgents ? { agents: [{ name: "local-a", image: "i", state: "running", harness: "claude", group: null }], count: 1 } : { groups: [], count: 0 } }
                 : { ok: false, error: { code: "unauthorized", message: "nope" } },
             ),
         } as unknown as Response);

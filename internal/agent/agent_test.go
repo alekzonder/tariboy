@@ -300,7 +300,7 @@ func sampleAgent() Agent {
 	return Agent{
 		Name: "smoke", ImageRef: "basic:latest", ImageDigest: "deadbeef",
 		Cwd: "/w", HarnessType: "stub", Model: "sonnet", Effort: "medium",
-		Interactive: false, LoopEnabled: true, IntervalS: 60, TimeoutS: 30,
+		Interactive: false, Enabled: true, IntervalS: 60, TimeoutS: 30,
 		HardTimeoutS: 0, OnTimeout: "restart", OnError: "restart", UserPrompt: "be good",
 		Env: map[string]string{"APP_ENV": "prod"}, Plugins: []string{"whoami", "loop", "messages", "context"},
 		MessagesBatch: 10, MessagesMaxQueue: 1000,
@@ -440,11 +440,10 @@ func TestCreatePersistsMaximumIdleIterations(t *testing.T) {
 	}
 }
 
-func TestMigrationAddsEnabledDefaultingToLoopEnabled(t *testing.T) {
+func TestEnabledRoundTrips(t *testing.T) {
 	st := openStore(t)
-	// One agent with loop on, one with loop off.
-	mustCreate := func(name string, loop bool) {
-		if err := st.Create(Agent{Name: name, ImageRef: "x:1", HarnessType: "stub", LoopEnabled: loop, Enabled: loop}); err != nil {
+	mustCreate := func(name string, enabled bool) {
+		if err := st.Create(Agent{Name: name, ImageRef: "x:1", HarnessType: "stub", Enabled: enabled}); err != nil {
 			t.Fatalf("create %s: %v", name, err)
 		}
 	}
@@ -490,7 +489,7 @@ func TestAgentCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.ImageRef != "basic:latest" || got.Env["APP_ENV"] != "prod" ||
-		len(got.Plugins) != 4 || got.LoopEnabled != true || got.IntervalS != 60 {
+		len(got.Plugins) != 4 || !got.Enabled || got.IntervalS != 60 {
 		t.Fatalf("round trip mismatch: %+v", got)
 	}
 	// message batching defaults are applied on create.
@@ -499,12 +498,12 @@ func TestAgentCRUD(t *testing.T) {
 	}
 	got.UserPrompt = "changed"
 	got.IntervalS = 120
-	got.LoopEnabled = false
+	got.Enabled = false
 	if err := st.Update(got); err != nil {
 		t.Fatal(err)
 	}
 	re, _ := st.Get("smoke")
-	if re.UserPrompt != "changed" || re.IntervalS != 120 || re.LoopEnabled {
+	if re.UserPrompt != "changed" || re.IntervalS != 120 || re.Enabled {
 		t.Fatalf("update not persisted: %+v", re)
 	}
 	if err := st.SetError("smoke", "boom"); err != nil {
@@ -691,8 +690,8 @@ func TestSetClearError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ErrorReason != "boom" || got.LoopEnabled {
-		t.Fatalf("after SetError: reason=%q loop=%v, want boom/false", got.ErrorReason, got.LoopEnabled)
+	if got.ErrorReason != "boom" {
+		t.Fatalf("after SetError: reason=%q, want boom", got.ErrorReason)
 	}
 
 	if err := st.ClearError("err-agent"); err != nil {
@@ -974,7 +973,7 @@ func TestStartResetIdlePreservesRealStatus(t *testing.T) {
 	}
 }
 
-// TestSetIdleStopped confirms the clean idle-halt path clears loop_enabled and
+// TestSetIdleStopped confirms the clean idle-halt path clears enabled and
 // records the reason in status_message WITHOUT setting error_reason, so the
 // agent stays a non-error (stopped) state.
 func TestSetIdleStopped(t *testing.T) {
@@ -990,8 +989,8 @@ func TestSetIdleStopped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.LoopEnabled {
-		t.Fatal("SetIdleStopped must clear loop_enabled")
+	if a.Enabled {
+		t.Fatal("SetIdleStopped must clear enabled")
 	}
 	if a.ErrorReason != "" {
 		t.Fatalf("SetIdleStopped must not set error_reason, got %q", a.ErrorReason)

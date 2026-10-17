@@ -489,7 +489,7 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 	}
 	worker := agent.Agent{
 		Name: "worker", ImageRef: "basic:latest", ImageDigest: manifest.Digest, HarnessType: "stub", Cwd: t.TempDir(),
-		Enabled: true, LoopEnabled: true, GoalEnabled: true, Plugins: []string{"context"},
+		Enabled: true, GoalEnabled: true, Plugins: []string{"context"},
 	}
 	if err := agent.NewStore(seed).Create(worker); err != nil {
 		t.Fatal(err)

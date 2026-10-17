@@ -53,11 +53,11 @@ test("manual Exec reaches the isolated daemon for interactive and non-interactiv
         };
         await call("POST", "/api/agents", {
           image: "basic:latest", name: "exec-interactive-e2e", harness: "stub",
-          interactive: true, loop: false,
+          interactive: true,
         });
         await call("POST", "/api/agents", {
           image: "basic:latest", name: "exec-batch-e2e", harness: "stub",
-          interactive: false, loop: false,
+          interactive: false,
         });
         // The header offers Exec only for an enabled agent.
         await call("POST", "/api/agents/exec-interactive-e2e/start", {});

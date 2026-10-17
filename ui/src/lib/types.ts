@@ -18,7 +18,6 @@ export interface AgentSummary {
   image: string;
   state: string; // running | stopped | ...
   harness: string;
-  loop_enabled: boolean;
   enabled?: boolean; // master on/off; missing (old daemon) → fall back to state
   group: string | null;
   alias?: string; // display alias; shown alias-first via displayName() when set
@@ -57,7 +56,6 @@ export interface AgentView {
   model: string;
   effort: string;
   interactive: boolean;
-  loop_enabled: boolean;
   enabled?: boolean;
   interval_s: number;
   timeout_s: number;
@@ -85,7 +83,6 @@ export interface AgentView {
 export interface AgentStatus {
   name: string;
   state: string;
-  loop_enabled: boolean;
   iterations: number;
   last_iteration: string | null;
   last_iteration_id: string | null;

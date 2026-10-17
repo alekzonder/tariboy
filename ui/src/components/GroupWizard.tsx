@@ -31,7 +31,6 @@ interface AgentDraft {
   harness: string;
   timeout: string;
   interactive: boolean;
-  loop: boolean;
   envRows: EnvRow[];
   plugins: string[];
   pluginDraft: string;
@@ -46,7 +45,7 @@ type RowStatus =
 function emptyDraft(id: number): AgentDraft {
   return {
     id, image: "", name: "", override: false, cwd: "",
-    model: "", effort: "", harness: "", timeout: "", interactive: false, loop: true, envRows: [], plugins: [], pluginDraft: "",
+    model: "", effort: "", harness: "", timeout: "", interactive: false, envRows: [], plugins: [], pluginDraft: "",
   };
 }
 
@@ -112,7 +111,6 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
     effort: a.effort || undefined,
     harness: a.harness.trim() || undefined,
     interactive: a.interactive,
-    loop: a.loop,
     env: serializeEnv(a.envRows) || undefined,
     plugins: allowsPluginOverrides(a) ? a.plugins.join(",") || undefined : undefined,
     timeout: a.timeout.trim() || undefined,
@@ -300,11 +298,6 @@ export function GroupWizard({ onCreated }: { onCreated?: () => void }) {
                       <Switch id={`interactive-${a.id}`} checked={a.interactive}
                         onCheckedChange={(v) => patch(a.id, { interactive: v })} />
                       <Label htmlFor={`interactive-${a.id}`}>interactive (tmux TUI)</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch id={`loop-${a.id}`} checked={a.loop}
-                        onCheckedChange={(v) => patch(a.id, { loop: v })} />
-                      <Label htmlFor={`loop-${a.id}`} aria-label={`autopilot ${i}`}>Autopilot</Label>
                     </div>
 
                     <div className="space-y-2">

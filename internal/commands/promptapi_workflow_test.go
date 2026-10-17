@@ -20,7 +20,7 @@ import (
 
 func TestPromptPreviewShowsTheWorkflowGoalBlock(t *testing.T) {
 	c, as, _ := ctxWithStore(t)
-	if err := as.Create(agent.Agent{Name: "v2", Enabled: true, LoopEnabled: true, GoalEnabled: true, OnTimeout: "restart", OnError: "restart"}); err != nil {
+	if err := as.Create(agent.Agent{Name: "v2", Enabled: true, GoalEnabled: true, OnTimeout: "restart", OnError: "restart"}); err != nil {
 		t.Fatal(err)
 	}
 	src := t.TempDir()

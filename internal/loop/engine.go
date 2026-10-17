@@ -19,6 +19,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/events"
+	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/telemetry"
 )
 
@@ -286,6 +287,13 @@ func (e *Engine) AbortCurrent(id string) bool {
 	return true
 }
 
+// iterates reports whether the engine may launch loop iterations on its own:
+// the agent is on, not halted by a stop policy, and not on the terminal-only
+// bare image.
+func (e *Engine) iterates() bool {
+	return e.ag.Enabled && e.ag.ErrorReason == "" && e.ag.ImageRef != image.BareRef.String()
+}
+
 // reload re-reads the agent config so runtime-mutable settings apply on the next
 // iteration (spec §5.1).
 func (e *Engine) reload() {
@@ -338,7 +346,7 @@ func (e *Engine) Run(ctx context.Context) {
 			return
 		}
 		e.reload()
-		if !e.ag.Enabled || !e.ag.LoopEnabled {
+		if !e.iterates() {
 			if messageBlocked {
 				parkMessage()
 			} else {
@@ -371,7 +379,7 @@ func (e *Engine) Run(ctx context.Context) {
 		// timer that a manual trigger would then abandon and leak.
 		var timer loopTimer
 		var timerC <-chan time.Time
-		if e.ag.Enabled && e.ag.LoopEnabled && e.ag.IntervalS > 0 {
+		if e.iterates() && e.ag.IntervalS > 0 {
 			timer = e.newTimer(e.nextWait())
 			timerC = timer.C()
 		}
@@ -395,8 +403,8 @@ func (e *Engine) Run(ctx context.Context) {
 				tryMessage()
 			} else {
 				e.reload()
-				if !e.ag.Enabled || !e.ag.LoopEnabled || !e.hasPending() {
-					if e.ag.Enabled && e.ag.LoopEnabled {
+				if !e.iterates() || !e.hasPending() {
+					if e.iterates() {
 						messageBlocked = false
 						finishMessage()
 					} else if !messageBlocked {
@@ -415,7 +423,7 @@ func (e *Engine) Run(ctx context.Context) {
 				// retry only when the blocked pending condition still applies.
 				stopMessageRetry()
 				e.reload()
-				if e.ag.Enabled && e.ag.LoopEnabled {
+				if e.iterates() {
 					if e.hasPending() {
 						armMessageRetry()
 					} else {
@@ -443,7 +451,7 @@ func (e *Engine) Run(ctx context.Context) {
 			// Re-read persisted intent at the last responsible moment so stale
 			// state cannot launch one extra billable iteration.
 			e.reload()
-			if e.ag.Enabled && e.ag.LoopEnabled && e.ag.IntervalS > 0 {
+			if e.iterates() && e.ag.IntervalS > 0 {
 				e.runOnce(ctx, "interval", "")
 			}
 		case <-messageRetryC:
@@ -798,12 +806,12 @@ func (e *Engine) applyPolicy(o Outcome) TickResult {
 }
 
 // disableLoop halts the loop when a stop policy (on_timeout=stop / on_error=stop)
-// fires. SetError records the halt reason and clears loop_enabled in one write,
-// so the agent surfaces as state=error (derived) rather than a silent stopped.
+// fires. SetError records the halt reason, which stops further iterations until
+// Start clears it, so the agent surfaces as state=error (derived).
 // The engine goroutine itself stays alive, blocked on a manual trigger.
 func (e *Engine) disableLoop(reason string) {
-	e.ag.LoopEnabled = false
-	if err := e.store.SetError(e.ag.Name, "halted: "+reason); err != nil {
+	e.ag.ErrorReason = "halted: " + reason
+	if err := e.store.SetError(e.ag.Name, e.ag.ErrorReason); err != nil {
 		e.log.Error("disable loop", "agent", e.ag.Name, "err", err)
 	}
 	e.emitState()
@@ -838,13 +846,11 @@ func (e *Engine) maybeIdleStop() (TickResult, bool) {
 	return TickIdleStop, true
 }
 
-// idleStop performs the clean idle halt: it clears loop_enabled and the master
-// enabled switch and records the reason in status_message via SetIdleStopped
+// idleStop performs the clean idle halt: it clears the enabled switch and records the reason in status_message via SetIdleStopped
 // (NOT SetError), so the agent surfaces as derived state=stopped with a
 // visible, non-error reason. The engine goroutine stays alive, blocked until a
 // manual trigger or a Start re-enables it.
 func (e *Engine) idleStop(reason string) {
-	e.ag.LoopEnabled = false
 	e.ag.Enabled = false
 	updated := e.clock().UTC().Format(time.RFC3339)
 	if err := e.store.SetIdleStopped(e.ag.Name, reason, updated); err != nil {

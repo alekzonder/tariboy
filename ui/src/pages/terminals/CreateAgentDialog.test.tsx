@@ -97,7 +97,6 @@ const cloneSource: AgentView = {
   model: "gpt-5",
   effort: "high",
   interactive: true,
-  loop_enabled: false,
   enabled: false,
   interval_s: 12,
   timeout_s: 34,
@@ -128,7 +127,6 @@ const completeOrdinarySpec = (overrides: Record<string, unknown> = {}) => ({
   model: "o3",
   effort: "high",
   interactive: true,
-  loop: true,
   env: {},
   plugins: [],
   interval_s: 0,
@@ -273,7 +271,6 @@ it("loads a complete clone draft from the explicit source host and submits every
     120,
   );
   expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
-  expect(screen.getByRole("switch", { name: "Autopilot" })).not.toBeChecked();
   expect(screen.getByRole("switch", { name: "Start now" })).not.toBeChecked();
 
   fireEvent.change(screen.getByLabelText("name"), {
@@ -293,7 +290,6 @@ it("loads a complete clone draft from the explicit source host and submits every
       model: "gpt-5",
       effort: "high",
       interactive: true,
-      loop: false,
       env: { CSV: "a,b", EQ: "a=b", LINES: "one\ntwo" },
       plugins: ["context", "custom"],
       interval_s: 12,
@@ -361,7 +357,7 @@ it("requires a daemon with the complete clone projection", async () => {
 });
 
 it("retains clone drafts while target host and image readiness change", async () => {
-  const source = { ...cloneSource, interactive: false, loop_enabled: true };
+  const source = { ...cloneSource, interactive: false };
   vi.mocked(agentGetOn).mockResolvedValueOnce(source);
   renderDialog({
     imageRef: undefined,
@@ -399,7 +395,6 @@ it("retains clone drafts while target host and image readiness change", async ()
   expect(screen.getByRole("button", { name: "Create agent" })).toBeDisabled();
   expect(await screen.findByText("Terminal only")).toBeInTheDocument();
   expect(screen.getByRole("switch", { name: "Interactive" })).toBeChecked();
-  expect(screen.getByRole("switch", { name: "Autopilot" })).not.toBeChecked();
   expect(screen.getByLabelText("alias")).toHaveValue("Source alias");
   expect(screen.getByLabelText("model")).toHaveValue("clone-model");
 
@@ -410,7 +405,6 @@ it("retains clone drafts while target host and image readiness change", async ()
     expect(screen.queryByText("Terminal only")).not.toBeInTheDocument(),
   );
   expect(screen.getByRole("switch", { name: "Interactive" })).not.toBeChecked();
-  expect(screen.getByRole("switch", { name: "Autopilot" })).toBeChecked();
 });
 
 it("keeps schema-v1 plugins editable and makes schema-v2 plugins image-owned", async () => {
@@ -526,18 +520,14 @@ it("rejects non-integral numeric configuration before creation", async () => {
 });
 
 describe.each([
-  { startNow: false, interactive: false, autopilot: false },
-  { startNow: false, interactive: false, autopilot: true },
-  { startNow: false, interactive: true, autopilot: false },
-  { startNow: false, interactive: true, autopilot: true },
-  { startNow: true, interactive: false, autopilot: false },
-  { startNow: true, interactive: false, autopilot: true },
-  { startNow: true, interactive: true, autopilot: false },
-  { startNow: true, interactive: true, autopilot: true },
+  { startNow: false, interactive: false },
+  { startNow: false, interactive: true },
+  { startNow: true, interactive: false },
+  { startNow: true, interactive: true },
 ])(
-  "creation matrix $startNow/$interactive/$autopilot",
-  ({ startNow, interactive, autopilot }) => {
-    it("creates stopped with explicit independent controls and starts only on request", async () => {
+  "creation matrix $startNow/$interactive",
+  ({ startNow, interactive }) => {
+    it("creates stopped without a loop flag and starts only on request", async () => {
       const { onCreated } = renderDialog();
       await screen.findByDisplayValue("worker:v1");
       await waitFor(() =>
@@ -547,15 +537,15 @@ describe.each([
       );
       await setSwitch("Start now", startNow);
       await setSwitch("Interactive", interactive);
-      await setSwitch("Autopilot", autopilot);
 
       fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
 
       await waitFor(() => expect(createAgent).toHaveBeenCalledOnce());
       expect(createAgent).toHaveBeenCalledWith(
-        completeOrdinarySpec({ interactive, loop: autopilot }),
+        completeOrdinarySpec({ interactive }),
         targetFor("d1"),
       );
+      expect(vi.mocked(createAgent).mock.calls[0][0]).not.toHaveProperty("loop");
       if (startNow) {
         await waitFor(() =>
           expect(startAgent).toHaveBeenCalledWith("created", targetFor("d1")),
@@ -859,10 +849,7 @@ describe.each([{ startNow: false }, { startNow: true }])(
       expect(
         screen.getByRole("switch", { name: "Interactive" }),
       ).toBeDisabled();
-      expect(
-        screen.getByRole("switch", { name: "Autopilot" }),
-      ).not.toBeChecked();
-      expect(screen.getByRole("switch", { name: "Autopilot" })).toBeDisabled();
+      expect(screen.queryByRole("switch", { name: "Autopilot" })).not.toBeInTheDocument();
       expect(
         screen.getByText(/does not contain agent instructions or tools/i),
       ).toBeInTheDocument();
@@ -877,7 +864,6 @@ describe.each([{ startNow: false }, { startNow: true }])(
           model: "",
           effort: "",
           interactive: true,
-          loop: false,
         }),
         targetFor("d1"),
       );

@@ -10,7 +10,6 @@ export interface AgentCreateDraft {
   model: string;
   effort: string;
   interactive: boolean;
-  loop: boolean;
   startNow: boolean;
   intervalS: string;
   timeoutS: string;
@@ -42,7 +41,6 @@ export function newAgentDraft(image = ""): AgentCreateDraft {
     model: "",
     effort: "",
     interactive: true,
-    loop: true,
     startNow: true,
     intervalS: "0",
     timeoutS: "7200",
@@ -86,7 +84,6 @@ export function cloneAgentDraft(source: AgentView): AgentCreateDraft {
     model: source.model,
     effort: source.effort,
     interactive: source.interactive,
-    loop: source.loop_enabled,
     startNow: source.enabled ?? false,
     intervalS: String(source.interval_s),
     timeoutS: String(source.timeout_s),

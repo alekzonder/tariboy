@@ -243,8 +243,8 @@ func holderUnavailableText(name, pool, cause string) string {
 		return "agent " + name + " no longer exists"
 	case causeDisabled:
 		return "agent " + name + " is disabled"
-	case causeLoopDisabled:
-		return "the loop of agent " + name + " is disabled"
+	case causeBare:
+		return "agent " + name + " uses the bare image and runs no iterations"
 	case causeHalted:
 		return "agent " + name + " is halted"
 	case causeLeftPool:

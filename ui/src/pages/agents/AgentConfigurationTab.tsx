@@ -224,7 +224,6 @@ function BlockView(props: BlockProps) {
     case "runtime": body = <RuntimeBlock {...props} />; break;
     case "loop":
       body = <>
-        {plain("loop-enabled")}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{plain("interval")}{plain("timeout")}{plain("hard-timeout")}</div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{plain("on-timeout")}{plain("on-error")}</div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{plain("max-idle")}{plain("ai-stall-timeout")}</div>

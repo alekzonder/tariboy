@@ -11,11 +11,11 @@ import (
 
 // Why a pool member cannot work, as holderUnavailableCauseSQL names it.
 const (
-	causeDeleted      = "deleted"
-	causeDisabled     = "disabled"
-	causeLoopDisabled = "loop_disabled"
-	causeHalted       = "halted"
-	causeLeftPool     = "left_pool"
+	causeDeleted  = "deleted"
+	causeDisabled = "disabled"
+	causeBare     = "bare"
+	causeHalted   = "halted"
+	causeLeftPool = "left_pool"
 )
 
 // holderUnavailableCauseSQL is the one reading of whether an agent can work on
@@ -23,15 +23,15 @@ const (
 // the agents row as a and the pool membership row as m, either of which may be
 // missing (NULL) under a LEFT JOIN, and takes agent.IdleStopPrefix twice. The
 // halt test mirrors agent.HaltReason: an error reason, or a status message
-// that starts with the idle-stop prefix; it comes before the loop test because
-// a halt also turns the loop off. The dispatcher's eligibility and the
+// that starts with the idle-stop prefix. The terminal-only bare image runs no
+// iterations. The dispatcher's eligibility and the
 // holder check both use it; Goal settings and the current Goal are not part of
 // it.
 const holderUnavailableCauseSQL = `CASE
 		WHEN a.name IS NULL THEN '` + causeDeleted + `'
 		WHEN a.enabled = 0 THEN '` + causeDisabled + `'
 		WHEN a.error_reason <> '' OR substr(a.status_message, 1, length(?)) = ? THEN '` + causeHalted + `'
-		WHEN a.loop_enabled = 0 THEN '` + causeLoopDisabled + `'
+		WHEN a.image_ref = 'bare:latest' THEN '` + causeBare + `'
 		WHEN m.agent IS NULL THEN '` + causeLeftPool + `'
 		ELSE '' END`
 
@@ -41,7 +41,7 @@ const holderUnavailableCauseSQL = `CASE
 // holder is neither sticky nor eligible for this task and pool until another
 // agent replaces its row or an operator move clears it. Otherwise the first
 // eligible member wins:
-// enabled, loop enabled, Goal enabled, not halted, with no current Goal, with
+// enabled, not on the bare image, Goal enabled, not halted, with no current Goal, with
 // no other assigned task that Goal could select, and not in busy; ties go to the member dispatched least recently in this queue,
 // then to pool order. It returns "" when nobody is eligible.
 func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy map[string]bool) (string, error) {

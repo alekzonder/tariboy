@@ -36,7 +36,6 @@ export function readBaseline(sources: {
       model: text(view.model),
       effort: text(view.effort),
       interactive: String(Boolean(view.interactive)),
-      "loop-enabled": String(Boolean(view.loop_enabled)),
       interval: text(view.interval_s),
       timeout: text(view.timeout_s),
       "hard-timeout": text(view.hard_timeout_s),
@@ -99,7 +98,6 @@ export function buildUnits(target: ApiTarget, name: string): CommitUnit[] {
       rememberRuntimePreset(values.harness, "efforts", value);
     }),
     one("interactive", (value) => post("interactive", { value: value === "true" })),
-    one("loop-enabled", (value) => post(value === "true" ? "loop/enable" : "loop/disable", undefined)),
     loopNumber("interval"),
     loopNumber("timeout"),
     loopNumber("hard-timeout"),

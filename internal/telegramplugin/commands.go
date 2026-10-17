@@ -72,7 +72,7 @@ func (s *Server) runCommand(ctx context.Context, command string, args []string, 
 			if len(args) != 3 {
 				break
 			}
-			return s.callText(ctx, http.MethodPost, "/api/agents", map[string]any{"name": args[1], "image": args[2], "loop": true})
+			return s.callText(ctx, http.MethodPost, "/api/agents", map[string]any{"name": args[1], "image": args[2]})
 		case "show":
 			if len(args) != 2 {
 				break
@@ -125,16 +125,6 @@ func (s *Server) setAgent(ctx context.Context, agent, field, value string) (stri
 			return "", fmt.Errorf("interactive must be true or false")
 		}
 		bodyValue = parsed
-	case "loop":
-		parsed, err := strconv.ParseBool(value)
-		if err != nil {
-			return "", fmt.Errorf("loop must be true or false")
-		}
-		verb := "disable"
-		if parsed {
-			verb = "enable"
-		}
-		return s.callText(ctx, http.MethodPost, "/api/agents/"+url.PathEscape(agent)+"/loop/"+verb, map[string]any{"name": agent})
 	case "interval", "timeout", "hard-timeout", "max-idle":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {

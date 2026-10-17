@@ -16,7 +16,7 @@ func artifactFixture(t *testing.T) (*Service, Actor, Task) {
 	if err := svc.EnsureDefaultQueue(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, loop_enabled = 1, goal_enabled = 1`); err != nil {
+	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, goal_enabled = 1`); err != nil {
 		t.Fatal(err)
 	}
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)

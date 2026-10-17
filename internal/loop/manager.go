@@ -928,7 +928,7 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 		Name: name, ImageRef: ref.String(), ImageDigest: man.Digest,
 		Cwd: spec.Cwd, HarnessType: harnessType,
 		Model: model, Effort: effort,
-		Interactive: spec.Interactive, LoopEnabled: spec.Loop, Enabled: false,
+		Interactive: spec.Interactive, Enabled: false,
 		IntervalS: spec.IntervalS, TimeoutS: spec.TimeoutS, HardTimeoutS: spec.HardTimeoutS,
 		OnTimeout: onTimeout, OnError: onError, MaxIdleIterations: spec.MaxIdleIterations,
 		AIStallTimeoutS: spec.AIStallTimeoutS,
@@ -940,7 +940,6 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	}
 	if ref == image.BareRef {
 		ag.Interactive = true
-		ag.LoopEnabled = false
 	}
 	// Group membership validates the name and ensures the group entity and shared
 	// directory exist before provisioning. Subscriptions are wired by Reconcile
@@ -1035,7 +1034,7 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 			if err != nil {
 				return nil, err
 			}
-			return map[string]any{"state": state, "loop_enabled": a.LoopEnabled,
+			return map[string]any{"state": state, "enabled": a.Enabled,
 				"current_iteration": m.currentIterationID(agName),
 				"message":           a.StatusMessage, "updated": a.StatusUpdated}, nil
 		},
@@ -1216,7 +1215,7 @@ func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi
 				return nil, err
 			}
 			return map[string]any{"agent": agName, "action": action,
-				"enabled": updated.Enabled, "loop_enabled": updated.LoopEnabled}, nil
+				"enabled": updated.Enabled}, nil
 		},
 		GroupInfo: func() (map[string]any, error) {
 			return m.groupToolsInfo(agName)
@@ -1339,7 +1338,7 @@ func (m *Manager) start(ag agent.Agent) error {
 		// the common entry point for a fresh Run, Start, and every reattach path
 		// (StartAll's direct start and startAfter's post-adoption start), so one
 		// call here covers all of them. The engine's WakeMessage handler is a
-		// no-op unless LoopEnabled && hasPending(), so this is harmless for
+		// no-op unless the agent iterates and hasPending(), so this is harmless for
 		// interval-only or currently-empty agents.
 		engine.Wake(WakeMessage)
 	}
@@ -1410,22 +1409,6 @@ func (m *Manager) Stop(name string) error {
 	m.emitState(name)
 	m.signalGoals()
 	_ = m.Kill(name)
-	return nil
-}
-
-// SetLoopEnabled persists the independent Autopilot flag and immediately wakes
-// any live runtime. Start/Stop remain responsible for the master Enabled flag.
-func (m *Manager) SetLoopEnabled(name string, enabled bool) error {
-	ag, err := m.cfg.Store.Get(name)
-	if err != nil {
-		return err
-	}
-	ag.LoopEnabled = enabled
-	if err := m.cfg.Store.Update(ag); err != nil {
-		return err
-	}
-	m.emitState(name)
-	m.RefreshLoopConfig(name)
 	return nil
 }
 
@@ -2261,10 +2244,9 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 	_ = os.Remove(rl.ShimSock())
 
 	if !purge {
-		// Preserve: leave the agent stopped (loop disabled) and every durable
+		// Preserve: leave the agent stopped and every durable
 		// artifact intact; remove only the rebuildable tree.
 		ag.Enabled = false
-		ag.LoopEnabled = false
 		if err := m.cfg.Store.Update(ag); err != nil {
 			return err
 		}
@@ -2321,7 +2303,6 @@ func (m *Manager) reprovision(name, imageRef string) error {
 	}
 	candidate := ag
 	candidate.Enabled = true
-	candidate.LoopEnabled = true
 	candidate.ImageRef = ref.String()
 	candidate.ImageDigest = man.Digest
 	if man.SchemaVersion == 2 {
@@ -2494,8 +2475,7 @@ func (m *Manager) currentIterationTargetLocked(name string) (iterationTarget, er
 
 // LiveState derives an agent's reported lifecycle state from reality — never
 // from a persisted column. The master !enabled switch wins over everything
-// else, reporting "stopped" regardless of a stale error_reason or
-// loop_enabled intent; then error_reason wins; then an actually-executing
+// else, reporting "stopped" regardless of a stale error_reason; then error_reason wins; then an actually-executing
 // iteration (a live engine with a current id, or a live iteration on disk
 // during the post-crash adopt window) reports "running" unless its AI-proxy
 // activity is stale; otherwise an
@@ -2512,7 +2492,7 @@ func (m *Manager) LiveState(name string) (string, error) {
 func (m *Manager) LiveStateOf(a agent.Agent) string {
 	name := a.Name
 	// Master switch wins: a disabled agent is "stopped" regardless of a stale
-	// error_reason or loop_enabled intent.
+	// error_reason.
 	if !a.Enabled {
 		return "stopped"
 	}
@@ -2690,7 +2670,7 @@ func (m *Manager) groupStatusRow(a agent.Agent, lead string) map[string]any {
 	state, _ := m.LiveState(a.Name)
 	row := map[string]any{
 		"name": a.Name, "role": roleOf(a.Name, lead), "state": state,
-		"loop_enabled": a.LoopEnabled, "status_message": a.StatusMessage,
+		"enabled": a.Enabled, "status_message": a.StatusMessage,
 		"status_updated": a.StatusUpdated,
 	}
 	m.mu.Lock()
@@ -2772,36 +2752,18 @@ func (m *Manager) groupToolsLoop(caller, member, action string) (map[string]any,
 		return nil, err
 	}
 	return map[string]any{"member": member, "action": action,
-		"enabled": updated.Enabled, "loop_enabled": updated.LoopEnabled}, nil
+		"enabled": updated.Enabled}, nil
 }
 
-// toolsLoopControl owns both the master and Autopilot flags for the agent-facing
-// loop controls. It intentionally leaves Start and Stop independent for the
-// operator-facing lifecycle commands.
+// toolsLoopControl is the agent-facing Start/Stop and returns the stored row.
 func (m *Manager) toolsLoopControl(name, action string) (agent.Agent, error) {
 	switch action {
 	case "start":
-		ag, err := m.cfg.Store.Get(name)
-		if err != nil {
-			return agent.Agent{}, err
-		}
-		ag.LoopEnabled = true
-		if err := m.cfg.Store.Update(ag); err != nil {
-			return agent.Agent{}, err
-		}
 		if err := m.Start(name); err != nil {
 			return agent.Agent{}, err
 		}
 	case "stop":
 		if err := m.Stop(name); err != nil {
-			return agent.Agent{}, err
-		}
-		ag, err := m.cfg.Store.Get(name)
-		if err != nil {
-			return agent.Agent{}, err
-		}
-		ag.LoopEnabled = false
-		if err := m.cfg.Store.Update(ag); err != nil {
 			return agent.Agent{}, err
 		}
 	default:

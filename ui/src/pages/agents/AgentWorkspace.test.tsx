@@ -27,7 +27,6 @@ const agent = {
   image: "worker:v1",
   state: "running",
   harness: "codex",
-  loop_enabled: false,
   group: null,
   interactive: false,
   cwd: "/srv/worker project",
@@ -42,7 +41,6 @@ beforeEach(() => {
   vi.mocked(agentGetOn).mockResolvedValue({
     name: "worker",
     state: "running",
-    loop_enabled: false,
     iterations: 0,
     last_iteration: null,
     last_iteration_id: null,
@@ -96,7 +94,7 @@ describe("AgentWorkspace", () => {
     vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
       if (action === "") return { ...agent, harness: "codex", model: "gpt-5-codex", effort: "high" };
       return {
-        name: "worker", state: "running", loop_enabled: false, iterations: 0,
+        name: "worker", state: "running", iterations: 0,
         last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       };
     });
@@ -121,7 +119,7 @@ describe("AgentWorkspace", () => {
     vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
       if (action === "") return { ...agent, harness: "opencode", model: "", effort: "" };
       return {
-        name: "worker", state: "running", loop_enabled: false, iterations: 0,
+        name: "worker", state: "running", iterations: 0,
         last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       };
     });
@@ -142,7 +140,7 @@ describe("AgentWorkspace", () => {
 
   it("shows daemon-authoritative message queue saturation", async () => {
     vi.mocked(agentGetOn).mockResolvedValue({
-      name: "worker", state: "running", loop_enabled: false, iterations: 0,
+      name: "worker", state: "running", iterations: 0,
       last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       messages_pending: 100, messages_max_queue: 100, messages_queue_full: true,
     });
@@ -162,7 +160,7 @@ describe("AgentWorkspace", () => {
 
   it("shows why the loop halted, so a failed iteration launch is visible on every tab", async () => {
     vi.mocked(agentGetOn).mockResolvedValue({
-      name: "worker", state: "error", loop_enabled: false, iterations: 0,
+      name: "worker", state: "error", iterations: 0,
       last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       halt_kind: "error",
       halt_reason: "halted: image activation failed: prepare claude image skill bridge: skills missing",
@@ -191,7 +189,7 @@ describe("AgentWorkspace", () => {
     vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
       if (!reachable) throw new ApiError(0, "network_error", "network error: Failed to fetch");
       return action === "status"
-        ? { name: "worker", state: "error", loop_enabled: false, iterations: 0, last_iteration: null,
+        ? { name: "worker", state: "error", iterations: 0, last_iteration: null,
           last_iteration_id: null, status_message: "", status_updated: "", halt_kind: "error", halt_reason: "halted: boom" }
         : agent;
     });
@@ -215,7 +213,7 @@ describe("AgentWorkspace", () => {
 
   it("renders configured budget rows when an older daemon omits exhausted periods", async () => {
     vi.mocked(agentGetOn).mockResolvedValue({
-      name: "worker", state: "running", loop_enabled: false, iterations: 0,
+      name: "worker", state: "running", iterations: 0,
       last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
       budget: {
         hour_usd: 1, day_usd: 0, week_usd: 0, month_usd: 0,
@@ -291,7 +289,7 @@ describe("AgentWorkspace", () => {
     vi.mocked(agentGetOn).mockImplementation(async (_target, _name, action) => {
       if (action !== "") {
         return {
-          name: "worker", state: "running", loop_enabled: false, iterations: 0,
+          name: "worker", state: "running", iterations: 0,
           last_iteration: null, last_iteration_id: null, status_message: "", status_updated: "",
         };
       }
@@ -340,7 +338,6 @@ describe("AgentWorkspace", () => {
       "Chat",
       "Tasks",
       "Terminal",
-      "Autopilot",
       "Activity",
       "Configuration",
       "Advanced",
@@ -363,7 +360,7 @@ describe("AgentWorkspace", () => {
 
     await waitFor(() => expect(screen.getByRole("navigation", { name: "Agent workspace" })).toBeInTheDocument());
     expect(screen.getByRole("link", { name: "Terminal" })).toHaveAttribute("href", "/agents/local/worker/console");
-    expect(screen.getByRole("link", { name: "Autopilot" })).toHaveAttribute("href", "/agents/local/worker/autopilot");
+    expect(screen.queryByRole("link", { name: "Autopilot" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute("href", "/agents/local/worker/activity");
     expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute("href", "/agents/local/worker/tasks");
     expect(screen.getByRole("link", { name: "Configuration" })).toHaveAttribute("href", "/agents/local/worker/configuration");
@@ -421,6 +418,26 @@ describe("AgentWorkspace", () => {
       ]),
     );
   });
+
+  it("treats the removed autopilot tab as unknown and opens Terminal", async () => {
+    function Location() {
+      return <p data-testid="location">{useLocation().pathname}</p>;
+    }
+    render(
+      <DaemonProvider>
+        <MemoryRouter initialEntries={["/agents/local/worker/autopilot"]}>
+          <Routes>
+            <Route
+              path="/agents/:hostId/:agent/:tab"
+              element={<><AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} /><Location /></>}
+            />
+          </Routes>
+        </MemoryRouter>
+      </DaemonProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console"));
+  });
 });
 
 describe("AgentWorkspace in Simple mode", () => {
@@ -466,7 +483,7 @@ describe("AgentWorkspace in Simple mode", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
   });
 
-  it.each(["autopilot", "activity", "advanced"])("sends a hidden %s tab to Chat", async (tab) => {
+  it.each(["activity", "advanced"])("sends a hidden %s tab to Chat", async (tab) => {
     renderAt(`/agents/local/worker/${tab}`);
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/chat"));

@@ -81,7 +81,7 @@ func (r *Runner) Up(f File) error {
 				enabled = *a.Loop.Enabled
 			}
 			// Always explicit: the create endpoint defaults interactive to true.
-			body := map[string]any{"image": a.Image, "name": name, "loop": enabled, "interactive": a.Harness != nil && a.Harness.Interactive}
+			body := map[string]any{"image": a.Image, "name": name, "interactive": a.Harness != nil && a.Harness.Interactive}
 			if a.Group != "" {
 				body["group"] = a.Group
 			}
@@ -152,14 +152,14 @@ func (r *Runner) Up(f File) error {
 				map[string]any{"image": a.Image}); err != nil {
 				return fmt.Errorf("reprovision agent %s: %w", name, err)
 			}
-			// Reprovision blanket-forces LoopEnabled=true and restarts the loop
+			// Reprovision blanket-forces Enabled=true and restarts the loop
 			// (loop/manager.go) to honour the standalone /reprovision restart
 			// contract. That leaves `cur` — fetched before reprovision — stale, so
 			// the converge steps below would diff the file against a pre-reprovision
 			// row and miss the forced enable: a preserved agent whose file says
 			// loop.enabled:false would stay enabled after `up`, breaking
 			// down(preserve)+up symmetry with a first-ever create. Re-fetch the
-			// post-reprovision row so convergeLoop sees loop_enabled=true and, for a
+			// post-reprovision row so convergeLoop sees enabled=true and, for a
 			// file that wants it off, drives it back off. No-loop-block and
 			// enabled:true files stay enabled, matching create.
 			fresh, err := r.liveAgents()
@@ -618,16 +618,17 @@ func (r *Runner) convergeLoop(name string, a AgentSpec, cur map[string]any) erro
 			}
 		}
 	}
+	// loop.enabled is the agent's on/off switch: converge it with start/stop.
 	if a.Loop.Enabled != nil && cur != nil {
 		want := *a.Loop.Enabled
-		if fmt.Sprintf("%v", cur["loop_enabled"]) != fmt.Sprintf("%v", want) {
-			verb := "disable"
+		if fmt.Sprintf("%v", cur["enabled"]) != fmt.Sprintf("%v", want) {
+			verb := "stop"
 			if want {
-				verb = "enable"
+				verb = "start"
 			}
-			r.logf("turning loop %s for agent %s", verb, name)
-			if _, err := r.call.Call("POST", "/api/agents/"+name+"/loop/"+verb, map[string]any{}); err != nil {
-				return fmt.Errorf("set loop enabled %s: %w", name, err)
+			r.logf("%s agent %s (loop.enabled=%v)", verb, name, want)
+			if _, err := r.call.Call("POST", "/api/agents/"+name+"/"+verb, nil); err != nil {
+				return fmt.Errorf("%s agent %s: %w", verb, name, err)
 			}
 		}
 	}

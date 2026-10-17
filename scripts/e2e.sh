@@ -113,10 +113,9 @@ sa --json iteration inspect smoke "$ITER_ID" | grep -q '"done":true' \
   || { echo "FAIL: iteration inspect done flag"; exit 1; }
 
 echo "--- bus: create agent B subscribed to a shared channel"
-sa agent run basic-example:latest --name bob --harness stub --interactive false --loop true \
+sa agent run basic-example:latest --name bob --harness stub --interactive false \
   --env "STUB_SUBSCRIBE=chat:team,STUB_CALL_DONE=1" | grep -q "name: bob" \
   || { echo "FAIL: run bob"; exit 1; }
-sa loop enable bob >/dev/null || { echo "FAIL: enable bob loop"; exit 1; }
 sa agent start bob >/dev/null || { echo "FAIL: start bob"; exit 1; }
 # First iteration subscribes bob to chat:team.
 sa agent exec bob >/dev/null || { echo "FAIL: exec bob subscribe"; exit 1; }
@@ -167,11 +166,10 @@ sa agent rm bob --force --purge >/dev/null || { echo "FAIL: rm bob"; exit 1; }
 # the participant subscription provisioned with that chat carries the delivery.
 if [ -n "${E2E_SLOW:-}" ]; then
   echo "--- schedule: agent arms a one-shot that wakes it (E2E_SLOW)"
-  sa agent run basic-example:latest --name sched --harness stub --interactive false --loop true \
+  sa agent run basic-example:latest --name sched --harness stub --interactive false \
     --plugins context,status,schedule \
     --env "STUB_SUBSCRIBE=agent:sched:inbox,STUB_SCHEDULE=2,STUB_CALL_DONE=1" | grep -q "name: sched" \
     || { echo "FAIL: run sched"; exit 1; }
-  sa loop enable sched >/dev/null || { echo "FAIL: enable sched loop"; exit 1; }
   sa agent start sched >/dev/null || { echo "FAIL: start sched"; exit 1; }
   # First iteration subscribes to its own inbox and arms the one-shot; the
   # schedule takes no channel, so it targets chat:service:sched.

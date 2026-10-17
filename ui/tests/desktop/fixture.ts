@@ -369,7 +369,7 @@ try:
     with db:
         for group in payload["groups"]:
             db.execute("INSERT INTO groups(name, lead) VALUES(?, ?)", (group["name"], group["lead"]))
-            db.execute('INSERT INTO agents(name, image_ref, harness_type, loop_enabled, "group") VALUES(?, ?, ?, 0, ?)',
+            db.execute('INSERT INTO agents(name, image_ref, harness_type, "group") VALUES(?, ?, ?, ?)',
                        (group["agent"], "basic:latest", "stub", group["name"]))
         for request in payload["requests"]:
             group = request.get("group")
