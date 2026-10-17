@@ -23,7 +23,9 @@ use the browser registry (`localStorage` metadata, `sessionStorage` tokens) and
 no native command is called. The implicit same-origin "This daemon (local)"
 host is absent, the router is `HashRouter`, the daemon banner is hidden, an
 empty start screen offers **Add server**, and the server dialog accepts
-`https://` or plain `http://` to a loopback port only. See
+`https://` or plain `http://` to a loopback port only. A web link navigates the
+WebView, and the Android host's navigation guard cancels that and opens the
+system browser (see [Security and controls](/docs/security-controls)). See
 [Remote hosts](/docs/remote-hosts#android-app).
 
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
@@ -932,7 +934,43 @@ below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Its
 width and hidden state persist in the WebView localStorage record
 `terminals:sidebar:v1`; the first read after upgrading adopts the sidebar saved by
-the removed terminal canvas under `terminals:workspace:v1`.
+the removed terminal canvas under `terminals:workspace:v1`. The 72px gap kept
+for the traffic lights exists only in the Desktop app.
+
+### Compact screens
+
+Below 1024 CSS pixels (Tailwind's `lg`, the `COMPACT_QUERY` of
+`useMediaQuery`) the window is compact: phones and most tablets. The agent list
+then takes no room beside the island. The titlebar's sidebar toggle becomes a
+**Open menu** button that opens the same list as a drawer from the left, at
+most 85% of the width. Picking an agent, a server or a team, **New agent**,
+**Add server**, editing a server or cloning an agent closes it, and so do a tap
+outside, Back and Escape. The drawer has no resize handle and is never stored:
+the wide layout's width and hidden state in `terminals:sidebar:v1` stay as
+they were.
+
+Other compact rules:
+
+- The agent header wraps instead of overflowing. The image and runtime badges
+  truncate with the full value in their tooltip, and the Exec / Start or Stop /
+  Kill / menu cluster takes a row of its own under the identity, so it never
+  covers it.
+- The agent tabs, the server context bar and the Settings navigation scroll
+  sideways with no visible bar, and the current tab scrolls into view. The
+  Settings navigation is a strip above the page instead of a column.
+- Below 640 CSS pixels (`sm`) the workspace switcher shows its icon only, the
+  task table shows only `Key`, `Task` and `Status` at fixed widths, and the
+  Columns menu and the column resize handles are hidden. The saved column
+  layout `tasks:columns:v1` is not changed; priority stays in the task's
+  detail.
+- Dialogs keep a 16px margin on each side, and two-column dialogs and editors
+  (the workspace manager, the image source editor) stack.
+
+`ui/tests/responsive.pw.ts` checks these at 360×800, 390×844, 820×1180 and
+1180×820 against an isolated daemon: no visible element may end past the right
+edge of the window unless it is inside its own horizontal scroller, the header
+controls must not cover the agent's details, and the agent list must be a
+drawer exactly when the window is compact.
 
 **Send files**, Attach, and terminal file drops all upload through the selected
 server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
@@ -950,7 +988,8 @@ session.
 
 In the Terminal tab, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`
-modifier); this is a Desktop capability and does nothing in a plain browser. An
+modifier); this is a Desktop capability and does nothing in a plain browser.
+The Android app has no Command key, so there a tap on the link opens it. An
 ordinary click never opens anything and keeps xterm's own focus, selection and
 mouse behaviour untouched. Nothing else is actionable: file paths, `file://`,
 `javascript:`, `data:`, custom schemes, protocol-relative and bare-host text are

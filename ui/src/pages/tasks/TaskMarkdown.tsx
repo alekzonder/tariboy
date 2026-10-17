@@ -13,7 +13,7 @@ import { Bold, Italic, Strikethrough, List, ListOrdered, ListTodo, Link, Quote, 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { isDesktop, openExternalUrl } from "@/lib/desktop"
+import { opensWebLinks, openExternalUrl } from "@/lib/desktop"
 import { toast } from "sonner"
 
 const extensions = [
@@ -94,7 +94,7 @@ function richMarkdown(value: string, editor: Editor) {
 }
 
 function openMarkdownLink(event: MouseEvent, href?: string) {
-  if (!isDesktop() || !href) return
+  if (!opensWebLinks() || !href) return
   let url: URL
   try {
     url = new URL(href)

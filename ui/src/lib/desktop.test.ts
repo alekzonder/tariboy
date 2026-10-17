@@ -5,7 +5,7 @@ import {
   daemonLogTail, installCli, hostsList, hostSaveSsh, hostSaveHttps,
   hostSessionCredentials, hostHasToken, hostRemove, onDaemonState,
   hostProvision, hostConnect, hostUpdate, hostPromptReply,
-  openAgentCwdInVSCode, openExternalUrl,
+  openAgentCwdInVSCode, openExternalUrl, opensWebLinks,
   showTaskNotification, onTaskNotificationActivated,
   onHostState, onHostProvisionOutput,
   versionMismatch, missingHTTPListener,
@@ -170,6 +170,22 @@ describe("android shell", () => {
   it("is off in the desktop and browser builds", () => {
     expect(isAndroidShell()).toBe(false);
     expect(hasLocalDaemon()).toBe(true);
+    expect(opensWebLinks()).toBe(false);
+  });
+
+  it("opens web links by navigating, which the native guard sends to the browser", async () => {
+    vi.stubEnv("VITE_TARIBOY_SHELL", "android");
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    expect(opensWebLinks()).toBe(true);
+
+    await expect(openExternalUrl("https://example.test/a?b=1")).resolves.toBeNull();
+    expect(open).toHaveBeenCalledWith("https://example.test/a?b=1", "_self");
+    for (const bad of ["javascript:alert(1)", "file:///etc/passwd", "intent://x#Intent;end", "not a url"]) {
+      await expect(openExternalUrl(bad), bad).rejects.toThrow();
+    }
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("accepts https anywhere and http only on a loopback port", () => {

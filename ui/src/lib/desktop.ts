@@ -138,6 +138,12 @@ export function isDesktop(): boolean {
   return !isAndroidShell() && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** Whether a clicked web link leaves the app: through the Desktop opener, or
+ *  on Android through the system browser. A plain browser follows it itself. */
+export function opensWebLinks(): boolean {
+  return isDesktop() || isAndroidShell();
+}
+
 /** Whether the implicit same-origin "This daemon (local)" host exists. */
 export function hasLocalDaemon(): boolean {
   return !isAndroidShell();
@@ -190,9 +196,18 @@ export const supportBundleExport = (hostId: string, includeAgentData: boolean) =
  * `open_external_url` command, which re-validates the scheme before launching
  * an opener. Never use `window.open` or WebView navigation for terminal text:
  * the native command, not the WebView, is the authorization boundary.
+ *
+ * The Android host has no commands. There the WebView navigates, and the
+ * host's navigation guard cancels it and hands the URL to the system browser;
+ * that guard, not this check, is the boundary.
  */
-export const openExternalUrl = (url: string) =>
-  invokeDesktop<null>("open_external_url", { url });
+export const openExternalUrl = async (url: string): Promise<null> => {
+  if (!isAndroidShell()) return invokeDesktop<null>("open_external_url", { url });
+  const { protocol } = new URL(url);
+  if (protocol !== "http:" && protocol !== "https:") throw new Error("not a web link");
+  window.open(url, "_self");
+  return null;
+};
 export const installCli = () => invokeDesktop<InstallCliResult>("install_cli");
 export const hostsList = () => invokeDesktop<DesktopHostView[]>("hosts_list");
 export const hostSaveSsh = (input: SaveSshHostInput) =>

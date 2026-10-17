@@ -8,6 +8,7 @@ const { openExternalUrl } = vi.hoisted(() => ({ openExternalUrl: vi.fn().mockRes
 
 vi.mock("@/lib/desktop", () => ({
   isDesktop: () => true,
+  opensWebLinks: () => true,
   openExternalUrl,
 }))
 
