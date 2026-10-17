@@ -1,4 +1,4 @@
-import { useCallback, useContext, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useMemo, useRef, useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
@@ -12,6 +12,7 @@ import { useDaemons } from "@/components/DaemonProvider";
 import { listDaemons, removeDaemon, resolveDaemon, type DaemonMeta } from "@/lib/daemons";
 import { apiOn } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { hasLocalDaemon, hostConnect, hostConnected, hostUpdate } from "@/lib/desktop";
 import AgentWorkspace from "@/pages/agents/AgentWorkspace";
 import { ServerContextBar } from "./ServerContextBar";
@@ -308,6 +309,47 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
     }
   };
 
+  // A pick in the drawer leaves it: navigation or a dialog takes over the screen.
+  const closing = <A extends unknown[]>(act: (...args: A) => void) => (...args: A) => {
+    sidebar.setDrawerOpen(false);
+    act(...args);
+  };
+  const sidebarProps: ComponentProps<typeof AgentSidebar> = {
+    hosts: orderedSidebarHosts,
+    selectedHostId: hostId,
+    selected: hostId !== undefined && agentName ? { hostId, agent: agentName } : undefined,
+    onSelectHost: closing((id: string) => navigate(serverPath(id, "tasks"))),
+    onSelect: closing((h: string, a: string) => {
+      // Switching agents keeps the tab the operator is reading, so the same
+      // view answers the same question about the next agent. Any query
+      // (a selected task) belongs to the agent being left, so it is dropped.
+      navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/${agentName && agentTab ? agentTab : defaultAgentTab()}`);
+    }),
+    onSelectTeam: closing((h: string, team: string) => {
+      navigate(`/agents/${hostToParam(h)}/teams/${encodeURIComponent(team)}`);
+    }),
+    onReorder: (kind, id, ids) => void reorderSidebar(kind, id, ids),
+    onClone: closing((cloneHostId: string, cloneAgentName: string) => {
+      const hostLabel = sidebarHosts.find((entry) => entry.host.id === cloneHostId)?.host.label
+        ?? (cloneHostId === "" ? "This daemon (local)" : cloneHostId);
+      setCreateFor({
+        hostId: cloneHostId,
+        cloneSource: { hostId: cloneHostId, agentName: cloneAgentName, hostLabel },
+      });
+    }),
+    onCreate: closing((id: string) => setCreateFor({ hostId: id })),
+    onAddServer: closing(() => setServerDialog({ mode: "add" })),
+    onEditServer: closing((id: string) => void editServer(id)),
+    onUpdateAll: (ids) => void updateAllServers(ids),
+    onRemoveServer: (id) => void removeServer(id),
+    daemonViews: daemons,
+    appVersion,
+    onConnectHost: (id) => void connectHost(id),
+    attention,
+    width: sidebar.width,
+    onResize: sidebar.setWidth,
+  };
+
   return (
     // Terminal body: the chrome shows through as an 8px gutter around the
     // content island, so neither the sidebar nor the island needs a border.
@@ -316,42 +358,21 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
           change refreshes the authoritative snapshot at once rather than
           waiting for the next poll. */}
       <MessagesLiveRefresh hostIds={hosts.map((entry) => entry.host.id)} onChange={refresh} onLive={setAgentStatesLive} />
-      {/* All tasks spans every server, so no agent is the subject there. */}
-      {!sidebar.hidden && !allTasks && <AgentSidebar
-        hosts={orderedSidebarHosts}
-        selectedHostId={hostId}
-        selected={hostId !== undefined && agentName ? { hostId, agent: agentName } : undefined}
-        onSelectHost={(id) => navigate(serverPath(id, "tasks"))}
-        onSelect={(h, a) => {
-          // Switching agents keeps the tab the operator is reading, so the same
-          // view answers the same question about the next agent. Any query
-          // (a selected task) belongs to the agent being left, so it is dropped.
-          navigate(`/agents/${hostToParam(h)}/${encodeURIComponent(a)}/${agentName && agentTab ? agentTab : defaultAgentTab()}`);
-        }}
-        onSelectTeam={(h, team) => {
-          navigate(`/agents/${hostToParam(h)}/teams/${encodeURIComponent(team)}`);
-        }}
-        onReorder={(kind, id, ids) => void reorderSidebar(kind, id, ids)}
-        onClone={(cloneHostId, cloneAgentName) => {
-          const hostLabel = sidebarHosts.find((entry) => entry.host.id === cloneHostId)?.host.label
-            ?? (cloneHostId === "" ? "This daemon (local)" : cloneHostId);
-          setCreateFor({
-            hostId: cloneHostId,
-            cloneSource: { hostId: cloneHostId, agentName: cloneAgentName, hostLabel },
-          });
-        }}
-        onCreate={(hostId) => setCreateFor({ hostId })}
-        onAddServer={() => setServerDialog({ mode: "add" })}
-        onEditServer={(id) => void editServer(id)}
-        onUpdateAll={(ids) => void updateAllServers(ids)}
-        onRemoveServer={(id) => void removeServer(id)}
-        daemonViews={daemons}
-        appVersion={appVersion}
-        onConnectHost={(id) => void connectHost(id)}
-        attention={attention}
-        width={sidebar.width}
-        onResize={sidebar.setWidth}
-      />}
+      {/* All tasks spans every server, so no agent is the subject there. On a
+          compact screen the list is a drawer that any pick closes. */}
+      {!allTasks && (sidebar.compact ? (
+        <Sheet open={sidebar.drawerOpen} onOpenChange={sidebar.setDrawerOpen}>
+          <SheetContent
+            side="left"
+            showCloseButton={false}
+            aria-describedby={undefined}
+            className="w-[85vw] max-w-[340px] gap-0 bg-background px-1.5 pt-3 pb-2"
+          >
+            <SheetTitle className="sr-only">Agents</SheetTitle>
+            <AgentSidebar {...sidebarProps} drawer />
+          </SheetContent>
+        </Sheet>
+      ) : !sidebar.hidden && <AgentSidebar {...sidebarProps} />)}
       {/* The content island: --card on the --background chrome, one radius and
           one of the two allowed shadows. Everything the operator works with
           lives inside it. */}

@@ -11,6 +11,7 @@ import { AgentNameContext, AgentStatusContext } from "@/lib/agent";
 import { agentGetOn, isConnectionError } from "@/lib/api";
 import { useAgentStatesSocket } from "@/hooks/useMessagesSocket";
 import { useCoalesced } from "@/hooks/useCoalesced";
+import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { openHostPathInVSCode } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
@@ -70,6 +71,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   // The Chat tab's dot. It is the daemon's own unread count rather than tab
   // state, so it is right while another tab is open and survives a remount.
   const unreadChat = useChatUnread(target, agent.name, connection === "ready" && !unavailable);
+  const tabStrip = useActiveLinkIntoView<HTMLElement>();
 
   useEffect(() => {
     let cancelled = false;
@@ -170,11 +172,13 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
               runs, what it is working toward), one line of location, and the
               lifecycle cluster — visible on every tab. */}
           <header className="shrink-0">
-            <div className="flex items-start gap-2.5 px-4 pt-3.5 pb-[11px]">
-              <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
-                <div className="flex min-w-0 items-center gap-[9px]">
+            {/* Below lg the identity wraps and the lifecycle cluster takes a
+                row of its own, so neither ever covers the other. */}
+            <div className="flex flex-wrap items-start gap-2.5 px-4 pt-3.5 pb-[11px] lg:flex-nowrap">
+              <div className="flex min-w-0 flex-1 flex-col gap-[5px] max-lg:basis-full">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-[9px] gap-y-1 lg:flex-nowrap">
                   <StatusDot tone={tone} size={8} />
-                  <h1 className="shrink-0 text-[15px] font-semibold tracking-[-.01em] whitespace-nowrap">
+                  <h1 className="min-w-0 truncate text-[15px] font-semibold tracking-[-.01em] lg:shrink-0">
                     {agent.name}
                   </h1>
                   <StatusPill tone={tone}>{outOfBudget ? "no budget" : agent.state}</StatusPill>
@@ -183,18 +187,19 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                   </span>
                   <span
                     title={agent.image}
-                    className="inline-flex h-5 shrink-0 items-center gap-[5px] rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground"
+                    data-testid="agent-image"
+                    className="inline-flex h-5 max-w-full min-w-0 items-center gap-[5px] rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground lg:shrink-0"
                   >
-                    <Container className="size-2.5" aria-hidden="true" />
-                    {agent.image}
+                    <Container className="size-2.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{agent.image}</span>
                   </span>
                   {runtime && (
                     <span
                       data-testid="agent-runtime"
-                      title="Harness · model · effort"
-                      className="inline-flex h-5 shrink-0 items-center rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground"
+                      title={`Harness · model · effort: ${runtime}`}
+                      className="inline-flex h-5 max-w-full min-w-0 items-center rounded-[6px] bg-muted px-[7px] font-mono text-[11.5px] whitespace-nowrap text-muted-foreground lg:shrink-0"
                     >
-                      {runtime}
+                      <span className="truncate">{runtime}</span>
                     </span>
                   )}
                   <span className="flex min-w-0 flex-1 items-center gap-[5px] overflow-hidden text-[12.5px] whitespace-nowrap text-muted-foreground">
@@ -269,13 +274,13 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
               {exhaustedPeriods.length > 0 && <p className="font-medium text-destructive">Out of budget: {exhaustedPeriods.join(", ")}</p>}
               <p className="text-muted-foreground tabular-nums">Hour {status.budget.hour_spent_usd.toFixed(2)} / {status.budget.hour_usd || "Unlimited"} · Day {status.budget.day_spent_usd.toFixed(2)} / {status.budget.day_usd || "Unlimited"} · Week {status.budget.week_spent_usd.toFixed(2)} / {status.budget.week_usd || "Unlimited"} · Month {status.budget.month_spent_usd.toFixed(2)} / {status.budget.month_usd || "Unlimited"}</p>
             </div>}
-            <nav aria-label="Agent workspace" className="flex items-center gap-0.5 border-b px-3">
+            <nav ref={tabStrip} aria-label="Agent workspace" className="scrollbar-none flex items-center gap-0.5 overflow-x-auto border-b px-3">
               {tabs.map(([key, label]) => (
                 <NavLink
                   key={key}
                   to={`${base}/${key}`}
                   className={({ isActive }) =>
-                    cn("flex h-[34px] items-center border-b-2 border-transparent px-2.5 text-[13px] text-muted-foreground hover:text-foreground",
+                    cn("flex h-[34px] shrink-0 items-center border-b-2 border-transparent px-2.5 text-[13px] whitespace-nowrap text-muted-foreground hover:text-foreground",
                       isActive && "border-primary font-medium text-foreground")
                   }
                 >

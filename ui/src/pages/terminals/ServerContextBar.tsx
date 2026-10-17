@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useActiveLinkIntoView } from "@/hooks/useActiveLinkIntoView";
 import { serverPath, type ServerSection } from "@/lib/terminalsHost";
 import { cn } from "@/lib/utils";
 
@@ -14,12 +15,14 @@ const SECTIONS: Array<{ section: ServerSection; label: string }> = [
  *  34px, a 2px --primary underline on the active section — so the two ways of
  *  entering the island read as one control surface. */
 export function ServerContextBar({ hostId, label }: { hostId: string; label: string }) {
+  const strip = useActiveLinkIntoView<HTMLElement>();
   return (
     <nav
+      ref={strip}
       aria-label="Server workspace"
-      className="flex shrink-0 items-center gap-0.5 border-b px-3"
+      className="scrollbar-none flex shrink-0 items-center gap-0.5 overflow-x-auto border-b px-3"
     >
-      <span className="mr-2 flex min-w-0 items-baseline gap-1.5 text-[12.5px]">
+      <span className="mr-2 flex max-w-[40vw] min-w-0 shrink-0 items-baseline gap-1.5 text-[12.5px]">
         <span className="text-muted-foreground">Server:</span>
         <span className="truncate font-medium" title={label}>{label}</span>
       </span>
@@ -28,7 +31,7 @@ export function ServerContextBar({ hostId, label }: { hostId: string; label: str
           key={section}
           to={serverPath(hostId, section)}
           className={({ isActive }) => cn(
-            "flex h-[34px] items-center border-b-2 border-transparent px-2.5 text-[13px] text-muted-foreground hover:text-foreground",
+            "flex h-[34px] shrink-0 items-center border-b-2 border-transparent px-2.5 text-[13px] whitespace-nowrap text-muted-foreground hover:text-foreground",
             isActive && "border-primary font-medium text-foreground",
           )}
         >

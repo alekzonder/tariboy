@@ -117,7 +117,7 @@ export function AgentControls({
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div data-testid="agent-controls" className="flex shrink-0 items-center gap-1.5">
       {alive && image !== "bare:latest" && (
         <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setExecOpen(true)}>Exec</Button>
       )}

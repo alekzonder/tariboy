@@ -6,7 +6,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { DaemonBanner } from "@/components/DaemonBanner";
 import { DaemonProvider, useDaemons } from "@/components/DaemonProvider";
 import { Button } from "@/components/ui/button";
-import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { isDesktop } from "@/lib/desktop";
 import ImageOverview from "@/pages/ImageOverview";
 import ImageTemplate from "@/pages/images/ImageTemplate";
 import ImageSkills from "@/pages/images/ImageSkills";
@@ -81,11 +82,28 @@ function MainApp() {
         data-testid="app-titlebar"
       >
         <div className="flex min-w-0 items-center">
-          <div
+          {/* Room for the macOS traffic lights under the Desktop app's overlay
+              titlebar; a browser or the Android app has none. */}
+          {isDesktop() && <div
             aria-hidden="true"
+            data-testid="titlebar-window-controls-gap"
             className="h-full w-[72px] shrink-0"
-          />
-          {sidebarRoute && !allTasks && (
+          />}
+          {sidebarRoute && !allTasks && sidebar.compact && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-9 shrink-0 rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Open menu"
+              title="Open menu"
+              aria-expanded={sidebar.drawerOpen}
+              onClick={() => sidebar.setDrawerOpen(true)}
+            >
+              <Menu className="size-[18px]" />
+            </Button>
+          )}
+          {sidebarRoute && !allTasks && !sidebar.compact && (
             <Button
               type="button"
               variant="ghost"

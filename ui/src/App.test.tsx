@@ -246,3 +246,49 @@ describe("product routing", () => {
     expect(screen.getByTestId("location")).not.toHaveTextContent("/agents/local/");
   });
 });
+
+describe("compact screens", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 1023.98px)",
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    vi.mocked(fetchAllAgents).mockResolvedValue([{
+      host: { id: "", label: "This daemon (local)" },
+      agents: [
+        { name: "alice", image: "bare:latest", state: "idle", harness: "claude", loop_enabled: false, group: null, interactive: true },
+        { name: "bob", image: "bare:latest", state: "idle", harness: "claude", loop_enabled: false, group: null, interactive: true },
+      ],
+    }] as never);
+  });
+
+  it("keeps the agent list behind a menu button and closes it after a pick", async () => {
+    renderAt("/agents/local/alice/chat");
+
+    expect(screen.queryByTestId("agents-sidebar")).toBeNull();
+    const titlebar = screen.getByTestId("app-titlebar");
+    expect(within(titlebar).queryByRole("button", { name: "Hide agents" })).toBeNull();
+    fireEvent.click(within(titlebar).getByRole("button", { name: "Open menu" }));
+
+    const drawer = await screen.findByRole("dialog", { name: "Agents" });
+    expect(within(drawer).getByTestId("agents-sidebar")).toBeInTheDocument();
+    expect(within(drawer).queryByRole("separator", { name: "resize sidebar" })).toBeNull();
+    fireEvent.click(await within(drawer).findByRole("button", { name: "Open bob" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Agents" })).toBeNull());
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/bob/chat");
+    // The wide layout's saved state is not touched by the drawer.
+    expect(localStorage.getItem("terminals:sidebar:v1")).toBeNull();
+  });
+
+  it("drops the macOS traffic-light gap outside the Desktop app", () => {
+    renderAt("/");
+    expect(screen.queryByTestId("titlebar-window-controls-gap")).toBeNull();
+  });
+});

@@ -197,6 +197,13 @@
   background: color-mix(in oklab, var(--primary) 22%, transparent);
 }
 
+/* A tab strip that scrolls sideways under a finger on a narrow screen and
+   shows no bar for it. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {

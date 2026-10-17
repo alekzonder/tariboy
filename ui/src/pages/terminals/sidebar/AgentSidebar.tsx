@@ -37,7 +37,7 @@ function move(ids: string[], active: string, over: string): string[] {
  * border and no surface of its own, and only the list between the tabs and the
  * foot scrolls.
  */
-export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onUpdateAll, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize }: {
+export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, onSelect, onSelectTeam, onReorder, onClone, onCreate, onAddServer, onEditServer, onUpdateAll, onRemoveServer, daemonViews, appVersion, onConnectHost, attention, width, onResize, drawer = false }: {
   hosts: HostAgents[];
   selectedHostId?: string;
   selected?: { hostId: string; agent: string };
@@ -57,6 +57,8 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
   attention: ReadonlyMap<string, number>;
   width: number;
   onResize: (px: number) => void;
+  /** Inside the compact drawer: fills it and has no resize handle. */
+  drawer?: boolean;
 }) {
   const asideRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
@@ -164,8 +166,8 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
       ref={asideRef}
       aria-label="Agents"
       data-testid="agents-sidebar"
-      style={{ width }}
-      className="flex min-h-0 shrink-0 flex-col px-0.5"
+      style={drawer ? undefined : { width }}
+      className={drawer ? "flex min-h-0 min-w-0 flex-1 flex-col" : "flex min-h-0 shrink-0 flex-col px-0.5"}
     >
       <div className="shrink-0 px-1.5 pt-0.5 pb-2">
         <SidebarSearch query={query} onQuery={setQuery} />
@@ -204,7 +206,7 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
         onAddServer={onAddServer}
       />
     </aside>
-    <div
+    {!drawer && <div
       role="separator"
       aria-orientation="vertical"
       aria-label="resize sidebar"
@@ -216,7 +218,7 @@ export function AgentSidebar({ hosts, selectedHostId, selected, onSelectHost, on
       onKeyDown={onKeyDown}
       onDoubleClick={() => onResize(DEFAULT_SIDEBAR_WIDTH)}
       className="w-2 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-primary/30 focus-visible:bg-primary/30 focus-visible:outline-none"
-    />
+    />}
     </DndContext>
   );
 }
