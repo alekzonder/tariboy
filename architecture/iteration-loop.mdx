@@ -49,8 +49,8 @@ never starts an iteration directly. An unprocessed Goal delivery outside the DLQ
 blocks another publication. Dead-lettered deliveries are retained but do not
 block a new Goal generation; the positive per-agent delivery cooldown
 (60 seconds by default) still blocks rapid repeats. A wait within its grace
-period remains the goal but sends no continuation wake. Disabled agents or
-disabled Autopilot loops neither select nor receive a goal wake, but preserve a
+period remains the goal but sends no continuation wake. Disabled agents and
+agents on `bare:latest` neither select nor receive a goal wake, but preserve a
 valid sticky key; only disabling Goal clears it.
 
 Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing

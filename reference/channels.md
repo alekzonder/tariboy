@@ -199,12 +199,12 @@ unacked, non-DLQ delivery rows for subscriptions owned by that agent.
 
 The daemon wires the publish hook to wake affected agent loops. A wake is only a
 nudge: the engine checks `HasPending(agent)` and starts a message-triggered
-iteration only when the agent's loop is enabled and pending deliveries exist.
+iteration only when the agent is started and pending deliveries exist.
 Native Task assignment and mention notifications use this same path; they do
-not call a Tasks-specific runner or poller. A disabled loop keeps the delivery
-pending until it is enabled or started manually. The per-agent Goal reconciler
-uses it too: it publishes `task.goal` only while the agent and Autopilot are
-enabled. An unprocessed Goal delivery outside the DLQ suppresses another
+not call a Tasks-specific runner or poller. A stopped or halted agent keeps the
+delivery pending until it is started or an iteration is started manually. The per-agent Goal reconciler
+uses it too: it publishes `task.goal` only while the agent is
+enabled and does not use `bare:latest`. An unprocessed Goal delivery outside the DLQ suppresses another
 publication. Dead-lettered deliveries are retained but do not block a new Goal
 generation; a positive per-agent cooldown still suppresses rapid repeats (60
 seconds by default). That message is a durable wake hint, not a task mutation or a direct
@@ -494,10 +494,12 @@ The agent row contains these message-related fields:
   for new agents.
   A publish beyond the limit is retained in that agent's DLQ with result
   `queue_limit`; it is not added to the runnable pending queue.
-- `loop_enabled`: if false, publish can create pending deliveries but the agent
-  will not run automatically to consume them.
+- `enabled`: the agent's one on/off switch, set by `agent start` and cleared by
+  `agent stop`. If false, publish can create pending deliveries but the agent
+  will not run automatically to consume them. A stop-policy halt
+  (`error_reason`) has the same effect until the next start.
 - `interval_s`: timer-based loop interval. Message-triggered iterations do not
-  require a positive interval; they require loop enabled and pending messages.
+  require a positive interval; they require a started agent and pending messages.
 - `group`: group membership. This controls automatic group/broadcast/inbox
   subscriptions and shared group behavior.
 - `plugins`: every agent has core `messages` capability through plugin
@@ -507,7 +509,7 @@ The agent row contains these message-related fields:
 Creation-time options that matter:
 
 ```bash
-tariboy agent run image:tag --name worker --group dev-team --loop=true
+tariboy agent run image:tag --name worker --group dev-team
 ```
 
 Loop/runtime controls:
@@ -528,7 +530,7 @@ scripts/messages.sh channel unsubscribe <subscription-id>
 ```
 
 Both fields are editable as positive whole numbers in Agent
-**Configuration → Messages & Channels**. Existing persisted values and values
+**Configuration → Messages**. Existing persisted values and values
 copied by Clone are not rewritten when the default changes.
 
 ## Common workflows

@@ -18,10 +18,10 @@ scripts/status.sh
 scripts/status.sh set "running the focused regression test"
 ```
 
-`scripts/status.sh` returns the agent's live state, loop-enabled flag, current
+`scripts/status.sh` returns the agent's live state, `enabled` flag, current
 iteration, message, and update timestamp. `status set` replaces only the
-one-line message and timestamp. It does not finish the iteration, enable or
-disable the loop, or change an error reason.
+one-line message and timestamp. It does not finish the iteration, start or
+stop the agent, or change an error reason.
 
 ## State and history
 

@@ -28,6 +28,14 @@ persisted `otlp_endpoint` daemon setting.
   `::1` through its network security config, and its WebView has no Tauri IPC
   permissions. It keeps server tokens in WebView session storage, not a
   keystore.
+- The Android app's native navigation guard decides every top-level WebView
+  navigation. Only the app's fixed origin `tauri.localhost` (and, in a debug
+  build, its configured dev server) loads inside the WebView. The page that is
+  shown now never widens that. Any other
+  `http` or `https` address is cancelled and given to the system browser
+  through the opener plugin; every other scheme (`javascript:`, `file:`,
+  `intent:`, and the rest) is cancelled and opens nothing. The guard never logs
+  the address, because its query can carry a token.
 
 ## Credentials
 
@@ -51,8 +59,8 @@ adoption revokes the remaining lease when its shim finishes.
 
 ## Runtime controls
 
-- Interactive enablement and Autopilot enablement are independent.
-- Disabling Autopilot prevents new iterations.
+- Start and Stop are the one on/off switch of an agent.
+- Stopping an agent prevents new iterations.
 - Kill terminates current work without stopping unrelated agents.
 - Soft and hard timeouts bound an iteration.
 - Budgets constrain spend.
@@ -223,7 +231,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.84.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.85.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

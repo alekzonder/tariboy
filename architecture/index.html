@@ -284,8 +284,11 @@ generation remains unchanged and the next startup reconciles the valid cache.
 See <a href="/tariboy/docs/architecture/ai-proxy#pricing-catalog-and-request-costs">AI proxy and audit</a>
 for source precedence, request accounting, and diagnostics.</p>
 <h2 id="agent-iteration-and-durable-delivery"><a class="blume-heading-anchor" href="#agent-iteration-and-durable-delivery">Agent iteration and durable delivery</a></h2>
-<p>An agent’s <strong>enabled</strong>, <strong>loop enabled</strong>, and <strong>interactive</strong> controls are
-independent. Its loop engine serializes work: a timer, explicit trigger,
+<p>An agent has one on/off switch, <strong>enabled</strong>, set by Start and cleared by Stop;
+<strong>interactive</strong> is a separate setting for the Terminal session. The loop engine
+launches autonomous iterations only while the agent is enabled, carries no stop
+policy <code>error_reason</code>, and does not use the terminal-only <code>bare:latest</code> image.
+Its loop engine serializes work: a timer, explicit trigger,
 or message delivery may request work, but only one iteration
 runs at a time.</p>
 <blume-mermaid class="not-prose my-6 flex justify-center overflow-x-auto" data-source="sequenceDiagram

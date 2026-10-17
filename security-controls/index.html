@@ -21,6 +21,14 @@ check is unchanged.</li>
 <code>::1</code> through its network security config, and its WebView has no Tauri IPC
 permissions. It keeps server tokens in WebView session storage, not a
 keystore.</li>
+<li>The Android app’s native navigation guard decides every top-level WebView
+navigation. Only the app’s fixed origin <code>tauri.localhost</code> (and, in a debug
+build, its configured dev server) loads inside the WebView. The page that is
+shown now never widens that. Any other
+<code>http</code> or <code>https</code> address is cancelled and given to the system browser
+through the opener plugin; every other scheme (<code>javascript:</code>, <code>file:</code>,
+<code>intent:</code>, and the rest) is cancelled and opens nothing. The guard never logs
+the address, because its query can carry a token.</li>
 </ul>
 <h2 id="credentials"><a class="blume-heading-anchor" href="#credentials">Credentials</a></h2>
 <p>SSH private keys remain with OpenSSH and are never copied. Interactive prompt
@@ -40,8 +48,8 @@ bundles. Startup prunes leases that no longer map to a <code>running</code> iter
 adoption revokes the remaining lease when its shim finishes.</p>
 <h2 id="runtime-controls"><a class="blume-heading-anchor" href="#runtime-controls">Runtime controls</a></h2>
 <ul>
-<li>Interactive enablement and Autopilot enablement are independent.</li>
-<li>Disabling Autopilot prevents new iterations.</li>
+<li>Start and Stop are the one on/off switch of an agent.</li>
+<li>Stopping an agent prevents new iterations.</li>
 <li>Kill terminates current work without stopping unrelated agents.</li>
 <li>Soft and hard timeouts bound an iteration.</li>
 <li>Budgets constrain spend.</li>
@@ -196,7 +204,7 @@ any other support-bundle exclusion. See <a href="/tariboy/docs/architecture/ai-p
 audit</a> for its
 runtime lifecycle.</p>
 <h2 id="alpha-signing-and-gatekeeper"><a class="blume-heading-anchor" href="#alpha-signing-and-gatekeeper">Alpha signing and Gatekeeper</a></h2>
-<p><code>0.84.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
+<p><code>0.85.0</code> is ad-hoc signed, not Developer ID signed or notarized. Verify
 <code>SHA256SUMS</code> before opening it. If Gatekeeper blocks it, Control-click only the
 named <code>/Applications/Tariboy.app</code>, choose <strong>Open</strong>, and confirm.
 If Control-click Open is unavailable, use <strong>System Settings → Privacy &amp;

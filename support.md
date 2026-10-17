@@ -15,7 +15,7 @@ sidebar:
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.84.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.85.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -96,7 +96,7 @@ Repository owner and alpha incident lead: GitHub user
 
 ## Roll back the desktop
 
-1. Disable Autopilot for affected agents.
+1. Stop affected agents.
 2. Quit Tariboy from its menu-bar item.
 3. Move the current app out of Applications without deleting its support data.
 4. Reinstall the previously verified DMG.

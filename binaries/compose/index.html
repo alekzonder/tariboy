@@ -15,7 +15,9 @@ purge path.</p>
 <p>Compose owns agent runtime choices: harness, model, effort, interactive and loop
 settings, CWD, and environment. An agent is interactive only when its
 <code>harness.interactive</code> is <code>true</code>; compose always sends the value explicitly, so
-the create endpoint’s interactive default does not apply. Schema-v2 image manifests supply none of those
+the create endpoint’s interactive default does not apply. <code>loop.enabled</code>
+(default <code>true</code>) is the agent’s on/off switch: <code>compose up</code> starts an agent
+whose value is <code>true</code> and stops one whose value is <code>false</code>. Schema-v2 image manifests supply none of those
 defaults; they contain only plugins and the ordered prompt template. Compose
 may build an image from an original relative context, but portable runnable
 image artifacts do not replace that source directory for later rebuilds.</p>

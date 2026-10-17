@@ -23,7 +23,9 @@ use the browser registry (`localStorage` metadata, `sessionStorage` tokens) and
 no native command is called. The implicit same-origin "This daemon (local)"
 host is absent, the router is `HashRouter`, the daemon banner is hidden, an
 empty start screen offers **Add server**, and the server dialog accepts
-`https://` or plain `http://` to a loopback port only. See
+`https://` or plain `http://` to a loopback port only. A web link navigates the
+WebView, and the Android host's navigation guard cancels that and opens the
+system browser (see [Security and controls](/docs/security-controls)). See
 [Remote hosts](/docs/remote-hosts#android-app).
 
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
@@ -53,7 +55,7 @@ default, or **Expert**. The choice persists in WebView localStorage under
 `app:ui-mode:v1` and applies at once; any other stored value, or unavailable
 storage, means Simple. Simple changes only what the agent workspace shows: its
 tabs are **Chat**, **Tasks**, **Terminal**, and **Configuration**, an agent
-opens on Chat, and a route to a hidden tab (Autopilot, Activity, Advanced) is
+opens on Chat, and a route to a hidden tab (Activity, Advanced) is
 redirected to Chat. Its Chat tab is the personal conversation alone, with the toolbar
 starting at message search: there is no **Chat**/**Channels**/**Queue** switch,
 no chat tablist, and no **New chat**; a `?view=channels` or `?view=queue` link
@@ -63,11 +65,13 @@ the complete workspace described below. The mode hides interface only; it is
 not an access control, and the API and CLI are unchanged.
 
 The primary agent dialog has **Target**, **Identity**, **Runtime**,
-**Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
+**Loop**, and **Lifecycle** sections. Ordinary creation starts with the
 documented defaults and submits one complete create request; the daemon writes
 one complete stopped agent row. Environment is a string-valued JSON object,
 schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
-read-only. Bare images force Interactive on and Autopilot off. Interactive
+read-only. Bare images force Interactive on. The Loop section holds interval
+and timeouts; there is no separate loop switch, and **Start now** in Lifecycle
+decides whether the new agent starts. Interactive
 starts on for every new agent and selecting an image does not change it; the
 manifest's `harness.interactive` is not applied. Clone mode copies the source
 agent's value.
@@ -82,7 +86,7 @@ an enabled-by-default switch, a positive whole-second customer-wait timeout
 default). Configuration shows the daemon-selected goal key read-only.
 The agent header links that key to its task detail, or shows **No current goal**
 when none is selected. A question-mark action in both the header and the
-Configuration Goal section explains the sticky selection and release rules.
+Configuration Goal block explains the sticky selection and release rules.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
@@ -312,11 +316,13 @@ Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
 
 **Settings → General** edits the selected host's **Global Agent Shell Script**;
-an agent's **Configuration** edits its **Agent Shell Script**. Both controls use
-the route's explicit host target, retain an invalid draft and accessible Bash
-error after rejection, and keep drafts only in React memory. Save and Discard
-remain unavailable until loading succeeds and while a save is pending, so saves
-cannot overlap. Edits made during a save remain an unsaved draft.
+an agent's **Configuration** edits its **Agent Shell Script** in the
+Environment block. Both controls use the route's explicit host target, retain
+an invalid draft and accessible Bash error after rejection, and keep drafts
+only in React memory. The global editor keeps its own Save and Discard, which
+stay unavailable until loading succeeds and while a save is pending, so saves
+cannot overlap; the agent script is saved with the Configuration page's single
+Save. Edits made during a save remain an unsaved draft.
 
 **Settings → General** also carries **Backup & data retention** for the same
 explicit host: the nightly switch and time, retention days, chat history days,
@@ -599,7 +605,7 @@ side to record message consumption.
 
 **Channels** is the same section's second view, under the same 48px toolbar,
 which names the selected channel and its number of provider watches. On the
-left is the agent's subscription list — its Autopilot event triggers: protected
+left is the agent's subscription list — its event triggers: protected
 rows (its own inbox, `group:*`) are read-only, ad-hoc rows have
 **Unsubscribe**, and a combobox picks an existing channel or validates a typed
 one before **Subscribe**. On the right is the selected channel: its tail polled
@@ -616,9 +622,7 @@ to, DLQ rows requeued, Archive rows show their result, and any row expands its
 
 **Advanced** opens on Prompt and no longer holds Channels or Messages; a saved
 `advanced?view=channels` or `advanced?view=messages` link is replaced with
-`chat?view=channels` or `chat?view=queue`. **Autopilot** no longer edits
-subscriptions either: its card shows `Event triggers: N channels` (just
-`Event triggers` when the count cannot be loaded) and links to Chat → Channels.
+`chat?view=channels` or `chat?view=queue`.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
@@ -632,7 +636,7 @@ a message lands rather than on the next poll.
 
 Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
 frames `{agent, type, ts}` say that an iteration event or a state change
-(start, stop, Autopilot switch, status line, halt, idle stop) happened for
+(start, stop, status line, halt, idle stop) happened for
 that agent. The sidebar refetches its agents at most once a second
 on these hints, and the agent header refetches its status on a hint for its own
 agent. While every host's state socket is open, the sidebar polls every 15
@@ -713,7 +717,8 @@ REST API, and the UI does not infer phases from title prefixes or assignee. Oper
 The navigation hierarchy is **Server → Agent**.
 A selected server owns Tasks, Images, Workflow images, Stores, and Settings, and its
 context row remains visible above the selected agent's Chat, Tasks, Terminal,
-Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
+Activity, Configuration, and Advanced tabs. There is no Autopilot tab: an old
+`/autopilot` route is treated as an unknown tab. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
 ### Host workspaces
@@ -835,51 +840,71 @@ still reports its failure. Its draft stays in the form, ready to send again
 once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
-For a stopped agent, Configuration offers a working-directory editor backed by
-the selected host's directory autocomplete. Saving changes the CWD used by the
-next launch; it does not move files or start, stop, or restart the agent. Active
-agents show the current CWD read-only until they are stopped. Remote agent
-reads, directory suggestions, and saves all use the host identified by the
-agent route rather than whichever daemon was previously active.
-Refreshing live agent or host status does not replace an unsaved CWD draft;
-the field is synchronized from the daemon only when its agent or effective host
-descriptor actually changes, or after a successful save.
+Configuration is one column of blocks in a fixed order: **General** (agent
+image, image digest, working directory), **Runtime** (harness, model, effort,
+Interactive), **Loop and timeouts** (the scheduling and timeout
+fields; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+shell script and secrets), and **Retention and cleanup**. Start, Stop and
+Restart are actions, not settings: they sit in the page header next to the
+master-switch state and apply immediately.
 
-Configuration commits its remaining editable fields per section rather than per
-control. The Loop section's scheduling fields and the Runtime section's model
-and effort save as one batch each (model and effort use the same grouped
-suggestions as agent creation, for the agent's host and harness), while the working directory, secrets,
-retention, the Loop enable and disable actions, the harness, and Interactive
-keep their own separate immediate operations. A section is dirty when a
-normalized draft differs from the value it last loaded or saved, and only a
-dirty section shows its footer with an unsaved-changes status, a discard
-action, and a single save button. Saving submits just the changed fields,
-serially in a stable order, and stops at the first failure without sending the
-fields after it: acknowledged fields adopt the daemon's canonical values, while
-the failed field and the ones never attempted stay dirty drafts. The agent view
-is reloaded to reconcile those canonical values without overwriting any draft
-that is still unsaved. Harness and Interactive remain separate immediate
-operations: each selection is persisted without confirmation or an automatic
-restart, takes effect the next time the agent starts, and leaves the timing of
-any restart under the operator's control.
+Every editable field of every block belongs to one page-wide draft with one
+save mechanic. A field is dirty when its normalized draft differs from the
+value last loaded; the field shows **Changed**, its block counts its unsaved
+changes, and a sticky bar at the bottom of the page lists the count and the
+blocks and offers **Reset** and **Save**. No block has its own save button.
+**Reset** drops every draft. **Save** first validates every changed field in
+the browser and sends nothing while any is invalid: it shows the field (clearing
+a search that hid it) and focuses it. Then it sends only the changed fields,
+serially in page order (harness before model and effort), using the existing
+per-field endpoints; the four budget limits and the two retention limits are
+sent as one request each, as before. It stops at the first failure without
+sending the fields after it: acknowledged fields adopt the daemon's canonical
+values after a reload, while the failed field (with the server's reason beside
+it) and the ones never attempted stay dirty drafts, so the next Save sends only
+them. There is no batch endpoint, so a Save is not atomic. Harness and
+Interactive are saved with the page like every other field; they take effect the
+next time the agent starts and never restart it.
+
+A search box above the blocks filters by block: a case-insensitive match of
+every query word against a block's title, description, field labels, helpers
+and keywords (for example `cwd`, `tmux`, `dlq`, `usd`) shows that whole block
+and highlights the matching fields. **Changed only** shows just the blocks with
+unsaved changes. Block chips jump to a block and show its change count. Search
+only hides blocks; drafts in hidden blocks are kept and are still saved.
+
+For a stopped agent, the working directory is edited with the selected host's
+directory autocomplete. Saving changes the CWD used by the next launch; it does
+not move files or start, stop, or restart the agent. Active agents show the
+current CWD read-only until they are stopped. Remote agent reads, directory
+suggestions, and saves all use the host identified by the agent route rather
+than whichever daemon was previously active. Refreshing live agent, image or
+host status does not replace an unsaved draft; the draft is discarded only when
+the agent or the host changes. The agent image is a draft field too; **Copy
+digest**, **Cancel pending** and **Retry** of a failed pending assignment stay
+immediate actions in an actions row that says they are not part of Save.
+
+Model and effort use the same grouped suggestions as agent creation, for the
+agent's host and the selected harness.
 
 The Loop section also exposes the positive **AI inactivity timeout** in seconds,
 defaulting to 1800 (30 minutes) per agent. When a running iteration exceeds it without an
-attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
-card shows the informational reason. The controls remain enabled because this
+attributed AI-proxy request, the daemon reports `state=error`, which the agent header
+shows. The controls remain enabled because this
 signal does not stop the loop or iteration; the next request restores
 `state=running`. Ordinary creation starts at 1800 seconds, while Clone preserves
 the source agent's configured value.
 
-The **Messages & Channels** section uses that same draft contract for the
+The **Messages** block uses that same draft contract for the
 positive whole-number `messages_batch` and `messages_max_queue` fields.
 New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent's configured value.
 
 Configuration also renders the daemon-authoritative per-agent USD budget
 projection. Its four calendar rows pair each current spend with one editable
-limit (`spent / limit`), label zero as Unlimited, and save atomically against
-the explicit agent-route host. The agent header and sidebar use the same
+limit (spent beside the limit), label zero as Unlimited, and save in one
+request against the explicit agent-route host. Older daemons that omit the
+projection get no Budgets block. The agent header and sidebar use the same
 projection; they show an explicit Out of budget state and every exhausted
 period rather than recomputing spend in the browser. Older daemons simply omit
 the additive projection.
@@ -892,12 +917,10 @@ removes the indicator after processing or clearing lowers the queue.
 
 When the daemon reports a halt reason for the agent, the workspace header shows
 it under the identity line, so a loop that stopped before any iteration existed
-— a failed image activation, for example — is visible on every tab rather than
-only on Autopilot. It is toned as an error for an `error` halt and neutrally for
-an `idle_limit` one, and falls back to `error_reason` when the daemon reports one
-without a halt. The Autopilot card shows the same reason
-under the Running/Stopped line, toned the same way. Neither line is gated on
-whether Autopilot is currently enabled, because a stop-policy, idle-limit or
+— a failed image activation, for example — is visible on every tab. It is toned
+as an error for an `error` halt and neutrally for an `idle_limit` one, and falls
+back to `error_reason` when the daemon reports one without a halt. The line is
+not gated on whether the agent is started, because a stop-policy, idle-limit or
 launch-failure reason matters exactly when the loop is off. When there is no reason, nothing
 extra is rendered at all — no empty element and no placeholder.
 
@@ -910,7 +933,47 @@ below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Its
 width and hidden state persist in the WebView localStorage record
 `terminals:sidebar:v1`; the first read after upgrading adopts the sidebar saved by
-the removed terminal canvas under `terminals:workspace:v1`.
+the removed terminal canvas under `terminals:workspace:v1`. The 72px gap kept
+for the traffic lights exists only in the Desktop app.
+
+### Compact screens
+
+Below 1024 CSS pixels (Tailwind's `lg`, the `COMPACT_QUERY` of
+`useMediaQuery`) the window is compact: phones and most tablets. The agent list
+then takes no room beside the island. The titlebar's sidebar toggle becomes a
+**Open menu** button that opens the same list as a drawer from the left, at
+most 85% of the width. Picking an agent, a server or a team, **New agent**,
+**Add server**, editing a server or cloning an agent closes it, and so do a tap
+outside, Escape, and any route change, Back included: the drawer belongs to the
+history entry it opened on. A window that grows past the threshold drops it, so
+it does not come back when the tablet turns again. It has no resize handle and
+is never stored:
+the wide layout's width and hidden state in `terminals:sidebar:v1` stay as
+they were.
+
+Other compact rules:
+
+- The agent header wraps instead of overflowing. The image and runtime badges
+  truncate with the full value in their tooltip, and the Exec / Start or Stop /
+  Kill / menu cluster takes a row of its own under the identity, so it never
+  covers it.
+- The agent tabs, the server context bar and the Settings navigation scroll
+  sideways with no visible bar, and the current tab scrolls into view. The
+  Settings navigation is a strip above the page instead of a column.
+- Below 640 CSS pixels (`sm`) the workspace switcher shows its icon only, the
+  task table shows only `Key`, `Task` and `Status` at fixed widths, and the
+  Columns menu, the column move grips and the resize handles are hidden. The
+  saved column
+  layout `tasks:columns:v1` is not changed; priority stays in the task's
+  detail.
+- Dialogs keep a 16px margin on each side, and two-column dialogs and editors
+  (the workspace manager, the image source editor) stack.
+
+`ui/tests/responsive.pw.ts` checks these at 360×800, 390×844, 820×1180 and
+1180×820 against an isolated daemon: no visible element may end past the right
+edge of the window unless it is inside its own horizontal scroller, the header
+controls must not cover the agent's details, and the agent list must be a
+drawer exactly when the window is compact.
 
 **Send files**, Attach, and terminal file drops all upload through the selected
 server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
@@ -928,7 +991,8 @@ session.
 
 In the Terminal tab, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`
-modifier); this is a Desktop capability and does nothing in a plain browser. An
+modifier); this is a Desktop capability and does nothing in a plain browser.
+The Android app has no Command key, so there a tap on the link opens it. An
 ordinary click never opens anything and keeps xterm's own focus, selection and
 mouse behaviour untouched. Nothing else is actionable: file paths, `file://`,
 `javascript:`, `data:`, custom schemes, protocol-relative and bare-host text are
@@ -967,7 +1031,7 @@ The agent header exposes manual **Exec** before Start/Stop, only while the
 agent is enabled and not `bare:latest`, for interactive and non-interactive
 agents alike. It opens a dialog whose optional, memory-only one-shot text is
 sent to the route-selected host and affects only the newly requested iteration.
-Exec does not enable Autopilot or persist the draft. A successful request closes
+Exec does not start the agent or persist the draft. A successful request closes
 the dialog and, when the Terminal tab shows an interactive terminal, reconnects its
 startup handling; a rejected request keeps the dialog and the draft for retry.
 
@@ -980,11 +1044,18 @@ and reports the error so the operator can retry. **Kill session** remains a
 separate action with its existing browser confirmation and does not delete the
 agent or its durable data.
 
-An agent's **Retention and cleanup** card edits that agent's override of the
-server-wide iteration defaults: each field shows `0 = server default (N)`, and
-the card lists the effective limits and that pruned iterations are archived
-with their database rows first.
+An agent's **Retention and cleanup** block edits that agent's override of the
+server-wide iteration defaults with the page Save: each field shows
+`0 = server default (N)`, and the block lists the effective limits and that
+pruned iterations are archived with their database rows first.
 
+Secrets in the Environment block are write-only. The block lists key names
+only. Removing a key and adding a key and value are page drafts applied by
+Save: a removal is shown as **Will be removed** until then, and a new value
+lives only in tab memory, is sent in a POST body and never in a URL, is never
+rendered, and is cleared once the daemon acknowledges it.
+
+**Preview cleanup** and **Prune now** stay immediate actions outside Save.
 The in-app retention prune is guarded by a confirmation dialog that names
 the operation as permanently destructive and bounds it to the current
 retention policy. Confirming dismisses the dialog and issues the real,

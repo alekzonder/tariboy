@@ -45,7 +45,12 @@ for the operator-visible consequences.</p>
 <p>The loop can be turned off automatically as well as by hand: a stop policy
 (<code>on_error</code> or <code>on_timeout</code> set to <code>stop</code>) halts it after a failed or timed-out
 iteration, and the idle limit halts it after enough consecutive self-declared
-idle iterations. The reason is already persisted in two existing columns — a
+idle iterations. An agent has one on/off column, <code>enabled</code>; migration
+<code>0064_agent_drop_loop_enabled.sql</code> removed the former <code>loop_enabled</code> column and
+turned off every agent that was enabled with that loop flag off, unless it was
+halted or used <code>bare:latest</code>. A policy halt leaves <code>enabled</code> set: the non-empty
+<code>error_reason</code> alone keeps the engine from launching iterations, and Start
+clears it. An idle stop clears <code>enabled</code>. The reason is already persisted in two existing columns — a
 policy halt in <code>error_reason</code>, an idle stop as a <code>status_message</code> carrying the
 shared <code>idle_limit</code> prefix — so no new column and no migration stand behind it.
 A derived accessor computes a halt kind and reason from those two fields,
@@ -380,8 +385,8 @@ therefore continue to reach the original shim before the normal loop engine is
 created. Start remains idempotent during this window, direct Exec cannot bypass
 the adoption barrier, and post-adoption startup reloads the current persisted
 Enabled value instead of using a pre-restart snapshot. Restart records one
-replacement interactive-run intent until handoff completes, even when
-Autopilot is disabled; the engine consumes that intent through a launch gate
+replacement interactive-run intent until handoff completes, even for an agent
+that runs no autonomous iterations; the engine consumes that intent through a launch gate
 shared with Stop, so a later Stop can cancel work that has not started. The gate
 is acquired after external tmux checks and covers the durable launch or
 manual-collision outcome. If Stop then races detached process creation, the

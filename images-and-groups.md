@@ -68,7 +68,7 @@ lead changed in **Advanced → Groups**.
 
 The creation wizard creates custom teams directly. Each member independently
 selects its name, image, harness, model, effort, cwd, interactive mode,
-Autopilot setting, environment, and external plugins.
+environment, and external plugins.
 
 **Copy YAML** emits `tariboy-compose.yaml` for text-only transfer. **Import
 YAML** recreates the group and agents when referenced images already exist.

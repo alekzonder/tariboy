@@ -83,9 +83,9 @@ Open **Terminal** for a live session with the selected harness. Give
 instructions, follow the work as it happens, and return to the same session
 after switching away.
 
-Interactive and Autopilot are independent: enable either or both.
+Start and Stop turn the whole agent on and off.
 For an ordinary terminal session without image instructions, choose
-`bare:latest`, which keeps Autopilot off.
+`bare:latest`, which runs no autonomous iterations.
 
 [Open Terminal →](/quickstart#5-use-terminal)
 
@@ -104,8 +104,7 @@ Run **bounded iterations on a timer or in response to durable messages**.
 The host daemon manages the loop, so closing the desktop app does not stop it.
 
 Inspect triggers, outcomes, usage, and cost in Activity. Set budgets and
-deadlines, pause new iterations, or kill current work when needed.
-Pausing Autopilot leaves the interactive session alone.
+deadlines, stop the agent, or kill current work when needed.
 
 [Configure Autopilot →](/autopilot) ·
 [Understand the controls →](/security-controls)
@@ -415,8 +414,11 @@ for source precedence, request accounting, and diagnostics.
 
 ## Agent iteration and durable delivery
 
-An agent's **enabled**, **loop enabled**, and **interactive** controls are
-independent. Its loop engine serializes work: a timer, explicit trigger,
+An agent has one on/off switch, **enabled**, set by Start and cleared by Stop;
+**interactive** is a separate setting for the Terminal session. The loop engine
+launches autonomous iterations only while the agent is enabled, carries no stop
+policy `error_reason`, and does not use the terminal-only `bare:latest` image.
+Its loop engine serializes work: a timer, explicit trigger,
 or message delivery may request work, but only one iteration
 runs at a time.
 
@@ -802,8 +804,8 @@ never starts an iteration directly. An unprocessed Goal delivery outside the DLQ
 blocks another publication. Dead-lettered deliveries are retained but do not
 block a new Goal generation; the positive per-agent delivery cooldown
 (60 seconds by default) still blocks rapid repeats. A wait within its grace
-period remains the goal but sends no continuation wake. Disabled agents or
-disabled Autopilot loops neither select nor receive a goal wake, but preserve a
+period remains the goal but sends no continuation wake. Disabled agents and
+agents on `bare:latest` neither select nor receive a goal wake, but preserve a
 valid sticky key; only disabling Goal clears it.
 
 Every non-bare agent receives daemon-owned Goal guidance inside **Task Processing
@@ -1217,8 +1219,8 @@ because a client refetches on connect and on every reconnect.
 `GET /api/agent-states/ws` uses the same hint loop for agent state. It sends
 `{agent, type, ts}` for every `iteration` and `state` event of any agent on
 the host, so the UI refetches the agents list and the agent status. The loop
-manager emits `state` when an agent is started or stopped, when its Autopilot
-switch or status line changes, and when its loop halts or stops for idleness. The route
+manager emits `state` when an agent is started or stopped, when its status line
+changes, and when its loop halts or stops for idleness. The route
 is not under `/api/agents/` because an agent may be named `ws`.
 
 The bundled Telegram process remains outside the daemon. It authorizes and
@@ -1445,7 +1447,12 @@ for the operator-visible consequences.
 The loop can be turned off automatically as well as by hand: a stop policy
 (`on_error` or `on_timeout` set to `stop`) halts it after a failed or timed-out
 iteration, and the idle limit halts it after enough consecutive self-declared
-idle iterations. The reason is already persisted in two existing columns — a
+idle iterations. An agent has one on/off column, `enabled`; migration
+`0064_agent_drop_loop_enabled.sql` removed the former `loop_enabled` column and
+turned off every agent that was enabled with that loop flag off, unless it was
+halted or used `bare:latest`. A policy halt leaves `enabled` set: the non-empty
+`error_reason` alone keeps the engine from launching iterations, and Start
+clears it. An idle stop clears `enabled`. The reason is already persisted in two existing columns — a
 policy halt in `error_reason`, an idle stop as a `status_message` carrying the
 shared `idle_limit` prefix — so no new column and no migration stand behind it.
 A derived accessor computes a halt kind and reason from those two fields,
@@ -1825,8 +1832,8 @@ therefore continue to reach the original shim before the normal loop engine is
 created. Start remains idempotent during this window, direct Exec cannot bypass
 the adoption barrier, and post-adoption startup reloads the current persisted
 Enabled value instead of using a pre-restart snapshot. Restart records one
-replacement interactive-run intent until handoff completes, even when
-Autopilot is disabled; the engine consumes that intent through a launch gate
+replacement interactive-run intent until handoff completes, even for an agent
+that runs no autonomous iterations; the engine consumes that intent through a launch gate
 shared with Stop, so a later Stop can cancel work that has not started. The gate
 is acquired after external tmux checks and covers the durable launch or
 manual-collision outcome. If Stop then races detached process creation, the
@@ -1882,7 +1889,9 @@ use the browser registry (`localStorage` metadata, `sessionStorage` tokens) and
 no native command is called. The implicit same-origin "This daemon (local)"
 host is absent, the router is `HashRouter`, the daemon banner is hidden, an
 empty start screen offers **Add server**, and the server dialog accepts
-`https://` or plain `http://` to a loopback port only. See
+`https://` or plain `http://` to a loopback port only. A web link navigates the
+WebView, and the Android host's navigation guard cancels that and opens the
+system browser (see [Security and controls](/docs/security-controls)). See
 [Remote hosts](/docs/remote-hosts#android-app).
 
 Linux native UI verification uses `make desktop-e2e`: Playwright specs speak a
@@ -1912,7 +1921,7 @@ default, or **Expert**. The choice persists in WebView localStorage under
 `app:ui-mode:v1` and applies at once; any other stored value, or unavailable
 storage, means Simple. Simple changes only what the agent workspace shows: its
 tabs are **Chat**, **Tasks**, **Terminal**, and **Configuration**, an agent
-opens on Chat, and a route to a hidden tab (Autopilot, Activity, Advanced) is
+opens on Chat, and a route to a hidden tab (Activity, Advanced) is
 redirected to Chat. Its Chat tab is the personal conversation alone, with the toolbar
 starting at message search: there is no **Chat**/**Channels**/**Queue** switch,
 no chat tablist, and no **New chat**; a `?view=channels` or `?view=queue` link
@@ -1922,11 +1931,13 @@ the complete workspace described below. The mode hides interface only; it is
 not an access control, and the API and CLI are unchanged.
 
 The primary agent dialog has **Target**, **Identity**, **Runtime**,
-**Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
+**Loop**, and **Lifecycle** sections. Ordinary creation starts with the
 documented defaults and submits one complete create request; the daemon writes
 one complete stopped agent row. Environment is a string-valued JSON object,
 schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
-read-only. Bare images force Interactive on and Autopilot off. Interactive
+read-only. Bare images force Interactive on. The Loop section holds interval
+and timeouts; there is no separate loop switch, and **Start now** in Lifecycle
+decides whether the new agent starts. Interactive
 starts on for every new agent and selecting an image does not change it; the
 manifest's `harness.interactive` is not applied. Clone mode copies the source
 agent's value.
@@ -1941,7 +1952,7 @@ an enabled-by-default switch, a positive whole-second customer-wait timeout
 default). Configuration shows the daemon-selected goal key read-only.
 The agent header links that key to its task detail, or shows **No current goal**
 when none is selected. A question-mark action in both the header and the
-Configuration Goal section explains the sticky selection and release rules.
+Configuration Goal block explains the sticky selection and release rules.
 The former server-global policy screen is not part of Settings.
 
 Right-clicking any grouped or individual sidebar agent exposes **Clone**.
@@ -2171,11 +2182,13 @@ Password controls are write-only and status responses contain only the safe
 projection selected by the plugin contract.
 
 **Settings → General** edits the selected host's **Global Agent Shell Script**;
-an agent's **Configuration** edits its **Agent Shell Script**. Both controls use
-the route's explicit host target, retain an invalid draft and accessible Bash
-error after rejection, and keep drafts only in React memory. Save and Discard
-remain unavailable until loading succeeds and while a save is pending, so saves
-cannot overlap. Edits made during a save remain an unsaved draft.
+an agent's **Configuration** edits its **Agent Shell Script** in the
+Environment block. Both controls use the route's explicit host target, retain
+an invalid draft and accessible Bash error after rejection, and keep drafts
+only in React memory. The global editor keeps its own Save and Discard, which
+stay unavailable until loading succeeds and while a save is pending, so saves
+cannot overlap; the agent script is saved with the Configuration page's single
+Save. Edits made during a save remain an unsaved draft.
 
 **Settings → General** also carries **Backup & data retention** for the same
 explicit host: the nightly switch and time, retention days, chat history days,
@@ -2458,7 +2471,7 @@ side to record message consumption.
 
 **Channels** is the same section's second view, under the same 48px toolbar,
 which names the selected channel and its number of provider watches. On the
-left is the agent's subscription list — its Autopilot event triggers: protected
+left is the agent's subscription list — its event triggers: protected
 rows (its own inbox, `group:*`) are read-only, ad-hoc rows have
 **Unsubscribe**, and a combobox picks an existing channel or validates a typed
 one before **Subscribe**. On the right is the selected channel: its tail polled
@@ -2475,9 +2488,7 @@ to, DLQ rows requeued, Archive rows show their result, and any row expands its
 
 **Advanced** opens on Prompt and no longer holds Channels or Messages; a saved
 `advanced?view=channels` or `advanced?view=messages` link is replaced with
-`chat?view=channels` or `chat?view=queue`. **Autopilot** no longer edits
-subscriptions either: its card shows `Event triggers: N channels` (just
-`Event triggers` when the count cannot be loaded) and links to Chat → Channels.
+`chat?view=channels` or `chat?view=queue`.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
@@ -2491,7 +2502,7 @@ a message lands rather than on the next poll.
 
 Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
 frames `{agent, type, ts}` say that an iteration event or a state change
-(start, stop, Autopilot switch, status line, halt, idle stop) happened for
+(start, stop, status line, halt, idle stop) happened for
 that agent. The sidebar refetches its agents at most once a second
 on these hints, and the agent header refetches its status on a hint for its own
 agent. While every host's state socket is open, the sidebar polls every 15
@@ -2572,7 +2583,8 @@ REST API, and the UI does not infer phases from title prefixes or assignee. Oper
 The navigation hierarchy is **Server → Agent**.
 A selected server owns Tasks, Images, Workflow images, Stores, and Settings, and its
 context row remains visible above the selected agent's Chat, Tasks, Terminal,
-Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
+Activity, Configuration, and Advanced tabs. There is no Autopilot tab: an old
+`/autopilot` route is treated as an unknown tab. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
 ### Host workspaces
@@ -2694,51 +2706,71 @@ still reports its failure. Its draft stays in the form, ready to send again
 once the host is back. Drafts live in tab memory only and are not queued for
 later delivery.
 
-For a stopped agent, Configuration offers a working-directory editor backed by
-the selected host's directory autocomplete. Saving changes the CWD used by the
-next launch; it does not move files or start, stop, or restart the agent. Active
-agents show the current CWD read-only until they are stopped. Remote agent
-reads, directory suggestions, and saves all use the host identified by the
-agent route rather than whichever daemon was previously active.
-Refreshing live agent or host status does not replace an unsaved CWD draft;
-the field is synchronized from the daemon only when its agent or effective host
-descriptor actually changes, or after a successful save.
+Configuration is one column of blocks in a fixed order: **General** (agent
+image, image digest, working directory), **Runtime** (harness, model, effort,
+Interactive), **Loop and timeouts** (the scheduling and timeout
+fields; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+shell script and secrets), and **Retention and cleanup**. Start, Stop and
+Restart are actions, not settings: they sit in the page header next to the
+master-switch state and apply immediately.
 
-Configuration commits its remaining editable fields per section rather than per
-control. The Loop section's scheduling fields and the Runtime section's model
-and effort save as one batch each (model and effort use the same grouped
-suggestions as agent creation, for the agent's host and harness), while the working directory, secrets,
-retention, the Loop enable and disable actions, the harness, and Interactive
-keep their own separate immediate operations. A section is dirty when a
-normalized draft differs from the value it last loaded or saved, and only a
-dirty section shows its footer with an unsaved-changes status, a discard
-action, and a single save button. Saving submits just the changed fields,
-serially in a stable order, and stops at the first failure without sending the
-fields after it: acknowledged fields adopt the daemon's canonical values, while
-the failed field and the ones never attempted stay dirty drafts. The agent view
-is reloaded to reconcile those canonical values without overwriting any draft
-that is still unsaved. Harness and Interactive remain separate immediate
-operations: each selection is persisted without confirmation or an automatic
-restart, takes effect the next time the agent starts, and leaves the timing of
-any restart under the operator's control.
+Every editable field of every block belongs to one page-wide draft with one
+save mechanic. A field is dirty when its normalized draft differs from the
+value last loaded; the field shows **Changed**, its block counts its unsaved
+changes, and a sticky bar at the bottom of the page lists the count and the
+blocks and offers **Reset** and **Save**. No block has its own save button.
+**Reset** drops every draft. **Save** first validates every changed field in
+the browser and sends nothing while any is invalid: it shows the field (clearing
+a search that hid it) and focuses it. Then it sends only the changed fields,
+serially in page order (harness before model and effort), using the existing
+per-field endpoints; the four budget limits and the two retention limits are
+sent as one request each, as before. It stops at the first failure without
+sending the fields after it: acknowledged fields adopt the daemon's canonical
+values after a reload, while the failed field (with the server's reason beside
+it) and the ones never attempted stay dirty drafts, so the next Save sends only
+them. There is no batch endpoint, so a Save is not atomic. Harness and
+Interactive are saved with the page like every other field; they take effect the
+next time the agent starts and never restart it.
+
+A search box above the blocks filters by block: a case-insensitive match of
+every query word against a block's title, description, field labels, helpers
+and keywords (for example `cwd`, `tmux`, `dlq`, `usd`) shows that whole block
+and highlights the matching fields. **Changed only** shows just the blocks with
+unsaved changes. Block chips jump to a block and show its change count. Search
+only hides blocks; drafts in hidden blocks are kept and are still saved.
+
+For a stopped agent, the working directory is edited with the selected host's
+directory autocomplete. Saving changes the CWD used by the next launch; it does
+not move files or start, stop, or restart the agent. Active agents show the
+current CWD read-only until they are stopped. Remote agent reads, directory
+suggestions, and saves all use the host identified by the agent route rather
+than whichever daemon was previously active. Refreshing live agent, image or
+host status does not replace an unsaved draft; the draft is discarded only when
+the agent or the host changes. The agent image is a draft field too; **Copy
+digest**, **Cancel pending** and **Retry** of a failed pending assignment stay
+immediate actions in an actions row that says they are not part of Save.
+
+Model and effort use the same grouped suggestions as agent creation, for the
+agent's host and the selected harness.
 
 The Loop section also exposes the positive **AI inactivity timeout** in seconds,
 defaulting to 1800 (30 minutes) per agent. When a running iteration exceeds it without an
-attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
-card shows the informational reason. The controls remain enabled because this
+attributed AI-proxy request, the daemon reports `state=error`, which the agent header
+shows. The controls remain enabled because this
 signal does not stop the loop or iteration; the next request restores
 `state=running`. Ordinary creation starts at 1800 seconds, while Clone preserves
 the source agent's configured value.
 
-The **Messages & Channels** section uses that same draft contract for the
+The **Messages** block uses that same draft contract for the
 positive whole-number `messages_batch` and `messages_max_queue` fields.
 New-agent drafts use a maximum queue of 100, while Clone keeps the source
 agent's configured value.
 
 Configuration also renders the daemon-authoritative per-agent USD budget
 projection. Its four calendar rows pair each current spend with one editable
-limit (`spent / limit`), label zero as Unlimited, and save atomically against
-the explicit agent-route host. The agent header and sidebar use the same
+limit (spent beside the limit), label zero as Unlimited, and save in one
+request against the explicit agent-route host. Older daemons that omit the
+projection get no Budgets block. The agent header and sidebar use the same
 projection; they show an explicit Out of budget state and every exhausted
 period rather than recomputing spend in the browser. Older daemons simply omit
 the additive projection.
@@ -2751,12 +2783,10 @@ removes the indicator after processing or clearing lowers the queue.
 
 When the daemon reports a halt reason for the agent, the workspace header shows
 it under the identity line, so a loop that stopped before any iteration existed
-— a failed image activation, for example — is visible on every tab rather than
-only on Autopilot. It is toned as an error for an `error` halt and neutrally for
-an `idle_limit` one, and falls back to `error_reason` when the daemon reports one
-without a halt. The Autopilot card shows the same reason
-under the Running/Stopped line, toned the same way. Neither line is gated on
-whether Autopilot is currently enabled, because a stop-policy, idle-limit or
+— a failed image activation, for example — is visible on every tab. It is toned
+as an error for an `error` halt and neutrally for an `idle_limit` one, and falls
+back to `error_reason` when the daemon reports one without a halt. The line is
+not gated on whether the agent is started, because a stop-policy, idle-limit or
 launch-failure reason matters exactly when the loop is off. When there is no reason, nothing
 extra is rendered at all — no empty element and no placeholder.
 
@@ -2769,7 +2799,47 @@ below the titlebar so they never cover the native controls. The shared
 persisted sidebar state drives both that control and the server/agent shell. Its
 width and hidden state persist in the WebView localStorage record
 `terminals:sidebar:v1`; the first read after upgrading adopts the sidebar saved by
-the removed terminal canvas under `terminals:workspace:v1`.
+the removed terminal canvas under `terminals:workspace:v1`. The 72px gap kept
+for the traffic lights exists only in the Desktop app.
+
+### Compact screens
+
+Below 1024 CSS pixels (Tailwind's `lg`, the `COMPACT_QUERY` of
+`useMediaQuery`) the window is compact: phones and most tablets. The agent list
+then takes no room beside the island. The titlebar's sidebar toggle becomes a
+**Open menu** button that opens the same list as a drawer from the left, at
+most 85% of the width. Picking an agent, a server or a team, **New agent**,
+**Add server**, editing a server or cloning an agent closes it, and so do a tap
+outside, Escape, and any route change, Back included: the drawer belongs to the
+history entry it opened on. A window that grows past the threshold drops it, so
+it does not come back when the tablet turns again. It has no resize handle and
+is never stored:
+the wide layout's width and hidden state in `terminals:sidebar:v1` stay as
+they were.
+
+Other compact rules:
+
+- The agent header wraps instead of overflowing. The image and runtime badges
+  truncate with the full value in their tooltip, and the Exec / Start or Stop /
+  Kill / menu cluster takes a row of its own under the identity, so it never
+  covers it.
+- The agent tabs, the server context bar and the Settings navigation scroll
+  sideways with no visible bar, and the current tab scrolls into view. The
+  Settings navigation is a strip above the page instead of a column.
+- Below 640 CSS pixels (`sm`) the workspace switcher shows its icon only, the
+  task table shows only `Key`, `Task` and `Status` at fixed widths, and the
+  Columns menu, the column move grips and the resize handles are hidden. The
+  saved column
+  layout `tasks:columns:v1` is not changed; priority stays in the task's
+  detail.
+- Dialogs keep a 16px margin on each side, and two-column dialogs and editors
+  (the workspace manager, the image source editor) stack.
+
+`ui/tests/responsive.pw.ts` checks these at 360×800, 390×844, 820×1180 and
+1180×820 against an isolated daemon: no visible element may end past the right
+edge of the window unless it is inside its own horizontal scroller, the header
+controls must not cover the agent's details, and the agent list must be a
+drawer exactly when the window is compact.
 
 **Send files**, Attach, and terminal file drops all upload through the selected
 server's streaming `PUT /api/files/raw` endpoint, with a 1 GiB per-file limit.
@@ -2787,7 +2857,8 @@ session.
 
 In the Terminal tab, explicit `http://` and `https://` text in terminal
 output opens in the operator's default browser on **Command-click** (the `Meta`
-modifier); this is a Desktop capability and does nothing in a plain browser. An
+modifier); this is a Desktop capability and does nothing in a plain browser.
+The Android app has no Command key, so there a tap on the link opens it. An
 ordinary click never opens anything and keeps xterm's own focus, selection and
 mouse behaviour untouched. Nothing else is actionable: file paths, `file://`,
 `javascript:`, `data:`, custom schemes, protocol-relative and bare-host text are
@@ -2826,7 +2897,7 @@ The agent header exposes manual **Exec** before Start/Stop, only while the
 agent is enabled and not `bare:latest`, for interactive and non-interactive
 agents alike. It opens a dialog whose optional, memory-only one-shot text is
 sent to the route-selected host and affects only the newly requested iteration.
-Exec does not enable Autopilot or persist the draft. A successful request closes
+Exec does not start the agent or persist the draft. A successful request closes
 the dialog and, when the Terminal tab shows an interactive terminal, reconnects its
 startup handling; a rejected request keeps the dialog and the draft for retry.
 
@@ -2839,11 +2910,18 @@ and reports the error so the operator can retry. **Kill session** remains a
 separate action with its existing browser confirmation and does not delete the
 agent or its durable data.
 
-An agent's **Retention and cleanup** card edits that agent's override of the
-server-wide iteration defaults: each field shows `0 = server default (N)`, and
-the card lists the effective limits and that pruned iterations are archived
-with their database rows first.
+An agent's **Retention and cleanup** block edits that agent's override of the
+server-wide iteration defaults with the page Save: each field shows
+`0 = server default (N)`, and the block lists the effective limits and that
+pruned iterations are archived with their database rows first.
 
+Secrets in the Environment block are write-only. The block lists key names
+only. Removing a key and adding a key and value are page drafts applied by
+Save: a removal is shown as **Will be removed** until then, and a new value
+lives only in tab memory, is sent in a POST body and never in a URL, is never
+rendered, and is cleared once the daemon acknowledges it.
+
+**Preview cleanup** and **Prune now** stay immediate actions outside Save.
 The in-app retention prune is guarded by a confirmation dialog that names
 the operation as permanently destructive and bounds it to the current
 retention policy. Confirming dismisses the dialog and issues the real,
@@ -2884,24 +2962,33 @@ verification.
 # Autopilot
 Source: https://alekzonder.github.io/tariboy/autopilot
 
-Autopilot is the daemon-controlled iteration loop. It is independent from an
-interactive terminal: either can run alone, both can be enabled, and stopping
-one does not silently change the other.
+Autopilot is the daemon-controlled iteration loop of a started agent. An agent
+has one on/off switch: **Start** turns the whole agent on (iterations, messages,
+Goal, and the interactive Terminal), and **Stop** turns all of it off. There is
+no separate Autopilot switch.
+
+Agents from the terminal-only `bare:latest` image never run autonomous
+iterations. To keep a non-bare agent from iterating on a timer, set its
+interval to 0; it then iterates only for messages, including Goal tasks.
 
 ## Trigger model
 
-With Autopilot enabled, an iteration can start from:
+While the agent is started, an iteration can start from:
 
 - a configured timer interval; or
-- a matching pending message delivery.
+- a matching pending message delivery, including a `task.goal` delivery.
 
 Messages are durable. Publishing creates a delivery for each matching
 subscription and nudges the loop. The runner includes pending deliveries in the
 next prompt. Normal completion acknowledges them; harness errors, timeouts, and
 kills preserve them for bounded redelivery.
 
-Disabling Autopilot prevents new scheduled and message-triggered iterations. It
-does not delete pending messages and does not terminate an interactive Terminal.
+Stopping the agent prevents new scheduled and message-triggered iterations. It
+does not delete pending messages.
+
+A stop policy (`on_timeout=stop` or `on_error=stop`) halts the loop with an
+error reason. The agent stays started and shows the `error` state. Start it
+again to clear the reason and resume the loop.
 
 ## Configure conservatively
 
@@ -2914,7 +3001,8 @@ Start with:
 - a low cost budget;
 - no external subscriptions until the timer path is understood.
 
-The Autopilot tab shows live enablement and policy. Activity shows trigger,
+Set the interval and timeouts in **Configuration → Loop and timeouts**, or in
+the **Loop** section of the create dialog. Activity shows trigger,
 iteration state, result, deadlines, audit, usage, and cost. For Claude and
 Codex harnesses, the audit is presented as a readable timeline of messages,
 reasoning, commands, skills, tool calls, and results; model and token metadata
@@ -2923,12 +3011,12 @@ before timeout enforcement starts.
 
 ## Controls
 
+- **Start / Stop** (agent header) — turn the agent on or off. From the CLI use
+  `tariboy agent start NAME` and `tariboy agent stop NAME`.
 - **Exec** (agent header, shown while the agent is enabled) — start one manual
-  iteration immediately, whether Autopilot is enabled or paused. It is
-  available for both interactive and non-interactive agents; optional one-shot
-  text, entered in its dialog, is appended only to that iteration's assembled
-  prompt.
-- **Pause / Disable Autopilot** — prevent new autonomous iterations.
+  iteration immediately. It is available for both interactive and
+  non-interactive agents; optional one-shot text, entered in its dialog, is
+  appended only to that iteration's assembled prompt.
 - **Kill** — immediately stop current iteration or session; use when work is
   unsafe or stuck.
 - **Budget** — reject AI calls once the configured spend limit is reached.
@@ -2938,8 +3026,8 @@ before timeout enforcement starts.
   downloading them.
 
 After a kill, verify the Activity outcome and pending message state before
-re-enabling. A killed or failed iteration may leave a message eligible for
-redelivery.
+starting the agent again. A killed or failed iteration may leave a message
+eligible for redelivery.
 
 ## Event-driven progression
 
@@ -2948,9 +3036,8 @@ allow agents and plugins to wake work without polling. Begin with one explicit
 subscription and one observable publisher, then add fan-out and groups after
 the single-agent delivery lifecycle is understood.
 
-In Desktop an agent's event triggers are managed in **Chat → Channels**; the
-Autopilot card shows how many there are and links there. The delivery queue,
-with its Archive and DLQ, is **Chat → Queue**.
+In Desktop an agent's event triggers are managed in **Chat → Channels**. The
+delivery queue, with its Archive and DLQ, is **Chat → Queue**.
 
 See [Messaging architecture](/docs/architecture/messaging) and [Channel
 reference](/docs/reference/channels) for the complete contract.
@@ -3164,7 +3251,9 @@ purge path.
 Compose owns agent runtime choices: harness, model, effort, interactive and loop
 settings, CWD, and environment. An agent is interactive only when its
 `harness.interactive` is `true`; compose always sends the value explicitly, so
-the create endpoint's interactive default does not apply. Schema-v2 image manifests supply none of those
+the create endpoint's interactive default does not apply. `loop.enabled`
+(default `true`) is the agent's on/off switch: `compose up` starts an agent
+whose value is `true` and stops one whose value is `false`. Schema-v2 image manifests supply none of those
 defaults; they contain only plugins and the ordered prompt template. Compose
 may build an image from an original relative context, but portable runnable
 image artifacts do not replace that source directory for later rebuilds.
@@ -3728,6 +3817,18 @@ Images workspace layout changes also run `test:images-browser`: it starts a
 test-only Vite fixture with fake image data and never connects to or starts a
 daemon.
 
+Layout changes also run `test:responsive-browser`. It starts the same isolated
+daemon as the Tasks suite, serves the production SPA through the Tasks
+fixture on `127.0.0.1:4177`, and checks every main route at two phone and two
+tablet sizes (see [Compact screens](/docs/architecture/web-ui#compact-screens)).
+Set `RESPONSIVE_SHOTS` to a directory to keep a screenshot of each page:
+
+```bash
+cd ui
+npm run test:responsive-browser
+RESPONSIVE_SHOTS=/tmp/shots npm run test:responsive-browser -- --project phone-360
+```
+
 ### Rust desktop host
 
 Neither entry point runs the Rust tests or clippy — `full-check` compiles this
@@ -3901,8 +4002,13 @@ never exercise it against the user's live daemon.
 
 The Android app is the same SPA in a Tauri WebView, built in Android mode
 (`npm run build:android`, `VITE_TARIBOY_SHELL=android`). Its Rust side is the
-mobile entry point in `desktop/src-tauri/src/lib.rs`: no commands, plugins,
-daemon, SSH, tunnels, or bundled Go binaries. `tauri.android.conf.json` swaps
+mobile entry point in `desktop/src-tauri/src/lib.rs`: no commands, daemon, SSH,
+tunnels, or bundled Go binaries. Its only plugins are a navigation guard and
+`tauri-plugin-opener` (a mobile-only dependency, pinned to the release line
+that matches the locked `tauri`), which keep web links out of the WebView. The
+guard's decision, `navigation_for`, is a plain function with unit tests that
+`cargo test` runs on the host; `cargo check --lib --target aarch64-linux-android`
+compiles the entry point without the Android SDK. `tauri.android.conf.json` swaps
 in that SPA build and drops the bundled resources. The Gradle project under
 `desktop/src-tauri/gen/android` is generated by `cargo tauri android init` and
 committed; it adds `res/xml/network_security_config.xml` (plain http only to
@@ -4761,7 +4867,7 @@ lead changed in **Advanced → Groups**.
 
 The creation wizard creates custom teams directly. Each member independently
 selects its name, image, harness, model, effort, cwd, interactive mode,
-Autopilot setting, environment, and external plugins.
+environment, and external plugins.
 
 **Copy YAML** emits `tariboy-compose.yaml` for text-only transfer. **Import
 YAML** recreates the group and agents when referenced images already exist.
@@ -5400,7 +5506,7 @@ agent implied:
 
 `/help` prints the complete list for its topic. `/agent set` permits only
 alias, image, harness, model, effort, working directory, interactive mode, and
-Autopilot settings; it cannot set environment variables or secrets. Ordinary
+loop interval, timeout, and policy settings; it cannot set environment variables or secrets. Ordinary
 text in a live agent topic travels through `chat:telegram:<agent>` and the
 existing channel/message delivery and acknowledgement path; its Telegram update
 is marked read only after the mapped agent has a non-DLQ delivery. A message
@@ -5901,8 +6007,8 @@ therefore does not discard future wake-ups. Removing an agent's durable data
 removes its schedule records.
 
 The scheduler publishes on the daemon's bus. If a schedule targets the agent's
-inbox while its loop is disabled, the delivery remains pending until the loop
-can consume it.
+inbox while the agent is stopped or halted, the delivery remains pending until
+the loop can consume it.
 
 ## Prompt integration
 
@@ -6127,10 +6233,10 @@ scripts/status.sh
 scripts/status.sh set "running the focused regression test"
 ```
 
-`scripts/status.sh` returns the agent's live state, loop-enabled flag, current
+`scripts/status.sh` returns the agent's live state, `enabled` flag, current
 iteration, message, and update timestamp. `status set` replaces only the
-one-line message and timestamp. It does not finish the iteration, enable or
-disable the loop, or change an error reason.
+one-line message and timestamp. It does not finish the iteration, start or
+stop the agent, or change an error reason.
 
 ## State and history
 
@@ -6419,13 +6525,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.84.0` alpha on an Apple Silicon Mac.
+This path is for the `0.85.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.84.0_aarch64.dmg`;
+- a verified `Tariboy_0.85.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -6506,14 +6612,13 @@ what the harness CLI on the selected host reports, and **Saved** lists values
 entered earlier for that harness. They are runtime settings, not schema-v2
 image content. A successful create remembers the model and effort locally for
 that harness.
-Interactive and Autopilot are independent:
+An agent has one on/off switch. **Start now** in the Lifecycle section, or
+**Start** in the agent header later, turns on the whole agent: Terminal and
+timer/message-triggered iterations. **Interactive** is on by default and
+enables Terminal; turn it off for a headless agent.
 
-- **Interactive** is on by default and enables Terminal; turn it off for a
-  headless agent;
-- enable **Autopilot** to allow timer/message-triggered iterations.
-
-For the first walkthrough, keep Interactive on and enable Autopilot on a
-non-bare image. From the CLI, `tariboy agent run IMAGE:TAG` creates an
+For the first walkthrough, keep Interactive on and use a non-bare image. From
+the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
 
 ## 5. Use Terminal
@@ -6525,24 +6630,22 @@ hide or stop the session, and returning attaches a new terminal client to the
 same tmux session.
 
 To try an ordinary terminal with no image instructions, create a separate agent
-from `bare:latest`. Bare requires Interactive and keeps Autopilot off.
+from `bare:latest`. Bare requires Interactive and runs no autonomous
+iterations.
 
-## 6. Turn on Autopilot
+## 6. Let Autopilot run
 
-Open **Autopilot**. Set a conservative interval and timeout, then enable it.
-The status card shows whether new autonomous iterations may start.
-
-Autopilot reacts only when enabled. A matching message creates durable pending
-delivery and nudges the loop; a timer can also trigger it.
+Open **Configuration → Loop and timeouts**. Set a conservative interval and
+timeout, then save. While the agent is started, a matching message creates a
+durable pending delivery and nudges the loop; a timer can also trigger it.
 
 ## 7. Inspect and stop safely
 
 Open **Activity** to see trigger, current/previous iterations, outcome, usage,
 cost, messages, and audit. Then:
 
-- disable Autopilot to pause new iterations;
-- use **Kill** to terminate only current work;
-- stop the interactive session independently from Autopilot.
+- use **Stop** to turn the agent off and prevent new iterations;
+- use **Kill** to terminate only current work.
 
 Quitting Tariboy leaves daemons and remote data running. Removing a host
 stops its local tunnel and removes local metadata, but does not delete the
@@ -6751,12 +6854,12 @@ unacked, non-DLQ delivery rows for subscriptions owned by that agent.
 
 The daemon wires the publish hook to wake affected agent loops. A wake is only a
 nudge: the engine checks `HasPending(agent)` and starts a message-triggered
-iteration only when the agent's loop is enabled and pending deliveries exist.
+iteration only when the agent is started and pending deliveries exist.
 Native Task assignment and mention notifications use this same path; they do
-not call a Tasks-specific runner or poller. A disabled loop keeps the delivery
-pending until it is enabled or started manually. The per-agent Goal reconciler
-uses it too: it publishes `task.goal` only while the agent and Autopilot are
-enabled. An unprocessed Goal delivery outside the DLQ suppresses another
+not call a Tasks-specific runner or poller. A stopped or halted agent keeps the
+delivery pending until it is started or an iteration is started manually. The per-agent Goal reconciler
+uses it too: it publishes `task.goal` only while the agent is
+enabled and does not use `bare:latest`. An unprocessed Goal delivery outside the DLQ suppresses another
 publication. Dead-lettered deliveries are retained but do not block a new Goal
 generation; a positive per-agent cooldown still suppresses rapid repeats (60
 seconds by default). That message is a durable wake hint, not a task mutation or a direct
@@ -7046,10 +7149,12 @@ The agent row contains these message-related fields:
   for new agents.
   A publish beyond the limit is retained in that agent's DLQ with result
   `queue_limit`; it is not added to the runnable pending queue.
-- `loop_enabled`: if false, publish can create pending deliveries but the agent
-  will not run automatically to consume them.
+- `enabled`: the agent's one on/off switch, set by `agent start` and cleared by
+  `agent stop`. If false, publish can create pending deliveries but the agent
+  will not run automatically to consume them. A stop-policy halt
+  (`error_reason`) has the same effect until the next start.
 - `interval_s`: timer-based loop interval. Message-triggered iterations do not
-  require a positive interval; they require loop enabled and pending messages.
+  require a positive interval; they require a started agent and pending messages.
 - `group`: group membership. This controls automatic group/broadcast/inbox
   subscriptions and shared group behavior.
 - `plugins`: every agent has core `messages` capability through plugin
@@ -7059,7 +7164,7 @@ The agent row contains these message-related fields:
 Creation-time options that matter:
 
 ```bash
-tariboy agent run image:tag --name worker --group dev-team --loop=true
+tariboy agent run image:tag --name worker --group dev-team
 ```
 
 Loop/runtime controls:
@@ -7080,7 +7185,7 @@ scripts/messages.sh channel unsubscribe <subscription-id>
 ```
 
 Both fields are editable as positive whole numbers in Agent
-**Configuration → Messages & Channels**. Existing persisted values and values
+**Configuration → Messages**. Existing persisted values and values
 copied by Clone are not rewritten when the default changes.
 
 ## Common workflows
@@ -7218,8 +7323,6 @@ tariboy has three command surfaces:
 | `tariboy iteration tag rm` | Remove tags from one or more iterations |
 | `tariboy iteration tag set` | Replace the tags of one or more iterations |
 | `tariboy logs` | Stream or print an agent's events (-f to follow) |
-| `tariboy loop disable` | Turn the agent loop disable |
-| `tariboy loop enable` | Turn the agent loop enable |
 | `tariboy loop hard-timeout` | Get or set loop hard-timeout (seconds); omit value to read |
 | `tariboy loop interval` | Get or set loop interval (seconds); omit value to read |
 | `tariboy loop on-error` | Get or set loop on-error policy; omit value to read |
@@ -7754,6 +7857,17 @@ instead. Any app on the phone can reach a forwarded tokenless port while the
 forward is up. A token lives in WebView session storage and must be entered
 again after Android stops the app; the server list is kept.
 
+Web links open in the phone's default browser, never inside the app: links in
+chat messages and task descriptions on a tap, and `http://` or `https://` text
+in the Terminal tab on a tap (there is no Command key). Other link schemes open
+nothing. If no browser can open the address, nothing opens and the app shows no
+message.
+
+On a phone or a tablet narrower than 1024 CSS pixels the agent list is a
+drawer: the menu button at the left of the titlebar opens it, and picking an
+agent, a server or a team closes it. See
+[Web UI](/docs/architecture/web-ui#compact-screens).
+
 ---
 
 # Security and controls
@@ -7781,6 +7895,14 @@ persisted `otlp_endpoint` daemon setting.
   `::1` through its network security config, and its WebView has no Tauri IPC
   permissions. It keeps server tokens in WebView session storage, not a
   keystore.
+- The Android app's native navigation guard decides every top-level WebView
+  navigation. Only the app's fixed origin `tauri.localhost` (and, in a debug
+  build, its configured dev server) loads inside the WebView. The page that is
+  shown now never widens that. Any other
+  `http` or `https` address is cancelled and given to the system browser
+  through the opener plugin; every other scheme (`javascript:`, `file:`,
+  `intent:`, and the rest) is cancelled and opens nothing. The guard never logs
+  the address, because its query can carry a token.
 
 ## Credentials
 
@@ -7804,8 +7926,8 @@ adoption revokes the remaining lease when its shim finishes.
 
 ## Runtime controls
 
-- Interactive enablement and Autopilot enablement are independent.
-- Disabling Autopilot prevents new iterations.
+- Start and Stop are the one on/off switch of an agent.
+- Stopping an agent prevents new iterations.
 - Kill terminates current work without stopping unrelated agents.
 - Soft and hard timeouts bound an iteration.
 - Budgets constrain spend.
@@ -7976,7 +8098,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.84.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.85.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -8076,7 +8198,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.84.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.85.0`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -8157,7 +8279,7 @@ Repository owner and alpha incident lead: GitHub user
 
 ## Roll back the desktop
 
-1. Disable Autopilot for affected agents.
+1. Stop affected agents.
 2. Quit Tariboy from its menu-bar item.
 3. Move the current app out of Applications without deleting its support data.
 4. Reinstall the previously verified DMG.

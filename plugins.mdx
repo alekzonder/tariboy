@@ -191,7 +191,7 @@ agent implied:
 
 `/help` prints the complete list for its topic. `/agent set` permits only
 alias, image, harness, model, effort, working directory, interactive mode, and
-Autopilot settings; it cannot set environment variables or secrets. Ordinary
+loop interval, timeout, and policy settings; it cannot set environment variables or secrets. Ordinary
 text in a live agent topic travels through `chat:telegram:<agent>` and the
 existing channel/message delivery and acknowledgement path; its Telegram update
 is marked read only after the mapped agent has a non-DLQ delivery. A message

@@ -6,13 +6,13 @@ sidebar:
   icon: rocket
 ---
 
-This path is for the `0.84.0` alpha on an Apple Silicon Mac.
+This path is for the `0.85.0` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.84.0_aarch64.dmg`;
+- a verified `Tariboy_0.85.0_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -93,14 +93,13 @@ what the harness CLI on the selected host reports, and **Saved** lists values
 entered earlier for that harness. They are runtime settings, not schema-v2
 image content. A successful create remembers the model and effort locally for
 that harness.
-Interactive and Autopilot are independent:
+An agent has one on/off switch. **Start now** in the Lifecycle section, or
+**Start** in the agent header later, turns on the whole agent: Terminal and
+timer/message-triggered iterations. **Interactive** is on by default and
+enables Terminal; turn it off for a headless agent.
 
-- **Interactive** is on by default and enables Terminal; turn it off for a
-  headless agent;
-- enable **Autopilot** to allow timer/message-triggered iterations.
-
-For the first walkthrough, keep Interactive on and enable Autopilot on a
-non-bare image. From the CLI, `tariboy agent run IMAGE:TAG` creates an
+For the first walkthrough, keep Interactive on and use a non-bare image. From
+the CLI, `tariboy agent run IMAGE:TAG` creates an
 interactive agent too; pass `--interactive=false` for a headless one.
 
 ## 5. Use Terminal
@@ -112,24 +111,22 @@ hide or stop the session, and returning attaches a new terminal client to the
 same tmux session.
 
 To try an ordinary terminal with no image instructions, create a separate agent
-from `bare:latest`. Bare requires Interactive and keeps Autopilot off.
+from `bare:latest`. Bare requires Interactive and runs no autonomous
+iterations.
 
-## 6. Turn on Autopilot
+## 6. Let Autopilot run
 
-Open **Autopilot**. Set a conservative interval and timeout, then enable it.
-The status card shows whether new autonomous iterations may start.
-
-Autopilot reacts only when enabled. A matching message creates durable pending
-delivery and nudges the loop; a timer can also trigger it.
+Open **Configuration → Loop and timeouts**. Set a conservative interval and
+timeout, then save. While the agent is started, a matching message creates a
+durable pending delivery and nudges the loop; a timer can also trigger it.
 
 ## 7. Inspect and stop safely
 
 Open **Activity** to see trigger, current/previous iterations, outcome, usage,
 cost, messages, and audit. Then:
 
-- disable Autopilot to pause new iterations;
-- use **Kill** to terminate only current work;
-- stop the interactive session independently from Autopilot.
+- use **Stop** to turn the agent off and prevent new iterations;
+- use **Kill** to terminate only current work.
 
 Quitting Tariboy leaves daemons and remote data running. Removing a host
 stops its local tunnel and removes local metadata, but does not delete the

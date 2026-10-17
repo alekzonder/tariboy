@@ -61,7 +61,12 @@ for the operator-visible consequences.
 The loop can be turned off automatically as well as by hand: a stop policy
 (`on_error` or `on_timeout` set to `stop`) halts it after a failed or timed-out
 iteration, and the idle limit halts it after enough consecutive self-declared
-idle iterations. The reason is already persisted in two existing columns — a
+idle iterations. An agent has one on/off column, `enabled`; migration
+`0064_agent_drop_loop_enabled.sql` removed the former `loop_enabled` column and
+turned off every agent that was enabled with that loop flag off, unless it was
+halted or used `bare:latest`. A policy halt leaves `enabled` set: the non-empty
+`error_reason` alone keeps the engine from launching iterations, and Start
+clears it. An idle stop clears `enabled`. The reason is already persisted in two existing columns — a
 policy halt in `error_reason`, an idle stop as a `status_message` carrying the
 shared `idle_limit` prefix — so no new column and no migration stand behind it.
 A derived accessor computes a halt kind and reason from those two fields,
@@ -441,8 +446,8 @@ therefore continue to reach the original shim before the normal loop engine is
 created. Start remains idempotent during this window, direct Exec cannot bypass
 the adoption barrier, and post-adoption startup reloads the current persisted
 Enabled value instead of using a pre-restart snapshot. Restart records one
-replacement interactive-run intent until handoff completes, even when
-Autopilot is disabled; the engine consumes that intent through a launch gate
+replacement interactive-run intent until handoff completes, even for an agent
+that runs no autonomous iterations; the engine consumes that intent through a launch gate
 shared with Stop, so a later Stop can cancel work that has not started. The gate
 is acquired after external tmux checks and covers the durable launch or
 manual-collision outcome. If Stop then races detached process creation, the

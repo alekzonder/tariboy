@@ -26,8 +26,8 @@ message template, next firing time, and enabled state in SQLite. Daemon restart
 therefore does not discard future wake-ups. Removing an agent’s durable data
 removes its schedule records.</p>
 <p>The scheduler publishes on the daemon’s bus. If a schedule targets the agent’s
-inbox while its loop is disabled, the delivery remains pending until the loop
-can consume it.</p>
+inbox while the agent is stopped or halted, the delivery remains pending until
+the loop can consume it.</p>
 <h2 id="prompt-integration"><a class="blume-heading-anchor" href="#prompt-integration">Prompt integration</a></h2>
 <pre class="astro-code astro-code-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;overflow-x:auto" tabindex="0" data-language="yaml" data-icon data-title="Tariboyfile.yaml"><svg aria-hidden="true" class="blume-lang-icon" fill="currentColor" height="14" viewBox="0 0 24 24" width="14"><path d="m0 .97 4.111 6.453v4.09h2.638v-4.09L11.053.969H8.214L5.58 5.125 2.965.969Zm12.093.024-4.47 10.544h2.114l.97-2.345h4.775l.804 2.345h2.26L14.255.994Zm1.133 2.225 1.463 3.87h-3.096zm3.06 9.475v10.29H24v-2.199h-5.454v-8.091zm-12.175.002v10.335h2.217v-7.129l2.32 4.792h1.746l2.4-4.96v7.295h2.127V12.696h-2.904L9.44 17.37l-2.455-4.674Z"></path></svg><code><span class="line"><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">plugins</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">:</span></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">  - </span><span style="--shiki-light:#22863A;--shiki-dark:#85E89D">name</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8">: </span><span style="--shiki-light:#032F62;--shiki-dark:#9ECBFF">schedule</span></span>
