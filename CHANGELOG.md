@@ -1,3 +1,46 @@
+## [0.85.0] - 2026-10-17
+
+### Added
+
+- The agent Configuration tab is one column of blocks (General, Runtime,
+  Loop and timeouts, Goal, Messages, Budgets, Environment, Retention) with a
+  search box and a **Changed only** filter. A sticky bar resets or saves all
+  changes at once; Save validates every changed field first and stops at the
+  first failure, keeping unsent drafts. Start, Stop and Restart move to the
+  page header.
+- On compact screens the agent list opens as a drawer.
+
+### Changed
+
+- An agent has one on/off switch. An enabled agent runs autonomous
+  iterations unless a stop policy halted it or it uses the terminal-only bare
+  image; Start clears a stop-policy error, so a halted agent resumes.
+- Task tables, settings and editors fit phone widths; phone task headers and
+  the drawer no longer change the saved column layout or sidebar state.
+- The Android app opens web links in the system browser.
+
+### Removed
+
+- `tariboy loop enable|disable`, `POST /api/agents/{name}/loop/enable` and
+  `/loop/disable`, the `loop` field of agent create, `loop` in Telegram
+  `/agent set`, and `loop_enabled` in agent, status, tools and support-bundle
+  responses. Use Start/Stop (`enabled`) instead. Compose keeps `loop.enabled`
+  and converges it through start and stop.
+- The Autopilot tab and the Loop/Autopilot switches in Configuration, the
+  create dialog and the group wizard.
+
+### Fixed
+
+- After a stop policy halted an agent, Start left it idle forever.
+
+### Upgrade notes
+
+- Migration `0064` drops the `loop_enabled` column. Agents that were
+  enabled with the loop off (and not halted or bare) are turned off first,
+  so they do not start spending AI budget after the upgrade.
+
+[0.85.0]: https://github.com/alekzonder/tariboy/compare/v0.84.0...v0.85.0
+
 ## [0.84.0] - 2026-10-16
 
 ### Added
