@@ -84,9 +84,9 @@ Open **Terminal** for a live session with the selected harness. Give
 instructions, follow the work as it happens, and return to the same session
 after switching away.
 
-Interactive and Autopilot are independent: enable either or both.
+Start and Stop turn the whole agent on and off.
 For an ordinary terminal session without image instructions, choose
-`bare:latest`, which keeps Autopilot off.
+`bare:latest`, which runs no autonomous iterations.
 
 [Open Terminal →](/quickstart#5-use-terminal)
 
@@ -105,8 +105,7 @@ Run **bounded iterations on a timer or in response to durable messages**.
 The host daemon manages the loop, so closing the desktop app does not stop it.
 
 Inspect triggers, outcomes, usage, and cost in Activity. Set budgets and
-deadlines, pause new iterations, or kill current work when needed.
-Pausing Autopilot leaves the interactive session alone.
+deadlines, stop the agent, or kill current work when needed.
 
 [Configure Autopilot →](/autopilot) ·
 [Understand the controls →](/security-controls)

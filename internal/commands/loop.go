@@ -8,32 +8,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
-func loopToggle(path, verb string, enable bool) registry.Command {
-	return registry.Command{
-		Path:    path,
-		Summary: "Turn the agent loop " + verb,
-		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
-		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/loop/" + verb},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
-			if err != nil {
-				return nil, err
-			}
-			if control, ok := c.Control.(registry.LoopConfigControl); ok {
-				if err := control.SetLoopEnabled(a.Name, enable); err != nil {
-					return nil, err
-				}
-			} else {
-				a.LoopEnabled = enable
-				if err := agentStore(c).Update(a); err != nil {
-					return nil, err
-				}
-			}
-			return map[string]any{"name": a.Name, "loop_enabled": enable}, nil
-		},
-	}
-}
-
 func loopIntSetting(path, field string) registry.Command {
 	return registry.Command{
 		Path:    path,

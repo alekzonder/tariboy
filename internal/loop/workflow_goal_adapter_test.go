@@ -44,7 +44,7 @@ func workflowGoalFixture(t *testing.T) (*tasks.Service, *workflowimage.Store, ta
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	svc := tasks.NewService(st.DB, "customer", func() time.Time { return time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC) })
-	if _, err := st.DB.Exec(`INSERT INTO agents(name, image_ref, image_digest, enabled, loop_enabled, goal_enabled) VALUES ('dev-1', 'basic:latest', 'sha', 1, 1, 1)`); err != nil {
+	if _, err := st.DB.Exec(`INSERT INTO agents(name, image_ref, image_digest, enabled, goal_enabled) VALUES ('dev-1', 'basic:latest', 'sha', 1, 1)`); err != nil {
 		t.Fatal(err)
 	}
 	src := t.TempDir()

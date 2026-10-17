@@ -38,7 +38,7 @@ const target = { id: "remote", label: "Remote", baseURL: "https://remote.test", 
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
   return {
     name: "worker", image: "basic:latest", state: "stopped", harness: "stub",
-    loop_enabled: false, group: null, interactive: false, ...overrides,
+    group: null, interactive: false, ...overrides,
   };
 }
 

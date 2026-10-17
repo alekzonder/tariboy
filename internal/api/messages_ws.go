@@ -29,7 +29,7 @@ func (s *Server) serveMessages(w http.ResponseWriter, r *http.Request) {
 
 // serveAgentStates streams a hint naming the agent whenever something that can
 // change its state happens: an iteration event, or a "state" event from start,
-// stop, the Autopilot switch, a status line, a halt or an idle stop. The agents
+// stop, a status line, a halt or an idle stop. The agents
 // list and the agent status refetch on a hint, so they can poll slowly.
 func (s *Server) serveAgentStates(w http.ResponseWriter, r *http.Request) {
 	s.serveHints(w, r, []string{"iteration", "state"}, func(event events.Event) map[string]any {

@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { hostToParam, targetFor } from "@/lib/terminalsHost";
 import type { AgentStatus, AgentSummary, AgentView } from "@/lib/types";
 import AgentConsoleTab from "./AgentConsoleTab";
-import AgentAutopilotTab from "./AgentAutopilotTab";
 import AgentActivityTab from "./AgentActivityTab";
 import AgentConfigurationTab from "./AgentConfigurationTab";
 import AgentAdvancedTab from "./AgentAdvancedTab";
@@ -34,7 +33,6 @@ const TABS = [
   ["chat", "Chat"],
   ["tasks", "Tasks"],
   ["console", "Terminal"],
-  ["autopilot", "Autopilot"],
   ["activity", "Activity"],
   ["configuration", "Configuration"],
   ["advanced", "Advanced"],
@@ -152,7 +150,6 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
   const questionTasks = attention.get(customerQuestionAttentionKey(hostId, agent.name)) ?? 0;
   const content =
     tab === "console" ? <AgentConsoleTab hostId={hostId} agent={agent} refresh={refresh} execCount={execCount} />
-    : tab === "autopilot" ? <AgentAutopilotTab />
     : tab === "activity" ? <AgentActivityTab />
     : tab === "tasks" ? <TasksWorkspace
       scopeAgent={agent.name}
@@ -254,8 +251,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
               />
             </div>
             {/* Why the loop is off: a halted loop (including a failed iteration
-                launch, which never creates an iteration row) is otherwise only
-                visible on the Autopilot tab. */}
+                launch, which never creates an iteration row). */}
             {(status?.halt_reason || status?.error_reason) && (
               <p
                 data-testid="agent-halt-reason"

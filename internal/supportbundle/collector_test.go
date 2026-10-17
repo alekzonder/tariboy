@@ -44,7 +44,7 @@ func collectorFixture(t *testing.T, iterations int) (Collector, string) {
 			Name: name, ImageRef: "bare:latest", HarnessType: "codex",
 			Cwd: "/private/customer", UserPrompt: "PROMPT_DB_SENTINEL",
 			Env:         map[string]string{"API_TOKEN": "ENV_DB_SENTINEL"},
-			Interactive: true, LoopEnabled: true, Enabled: true,
+			Interactive: true, Enabled: true,
 		}); err != nil {
 			t.Fatal(err)
 		}

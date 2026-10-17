@@ -262,8 +262,8 @@ describe("compact screens", () => {
     vi.mocked(fetchAllAgents).mockResolvedValue([{
       host: { id: "", label: "This daemon (local)" },
       agents: [
-        { name: "alice", image: "bare:latest", state: "idle", harness: "claude", loop_enabled: false, group: null, interactive: true },
-        { name: "bob", image: "bare:latest", state: "idle", harness: "claude", loop_enabled: false, group: null, interactive: true },
+        { name: "alice", image: "bare:latest", state: "idle", harness: "claude", group: null, interactive: true },
+        { name: "bob", image: "bare:latest", state: "idle", harness: "claude", group: null, interactive: true },
       ],
     }] as never);
   });

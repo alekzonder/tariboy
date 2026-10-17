@@ -43,7 +43,7 @@ the Cursor CLI installed on that host, and keep each agent independently configu
 ### 3. Interactive — work with the agent directly
 
 Open Terminal to guide the agent in a live session. Provide instructions and
-follow the work as it runs. Interactive and Autopilot are independent controls.
+follow the work as it runs. Start and Stop turn the whole agent on and off.
 
 For an ordinary terminal session without image instructions, choose
 `bare:latest`. It does not support Autopilot.
@@ -53,8 +53,8 @@ For an ordinary terminal session without image instructions, choose
 ### 4. Autopilot — let work continue
 
 Run bounded iterations on a timer or in response to durable messages. Inspect
-triggers, outcomes, usage, and cost; set budgets and deadlines; pause new
-iterations or kill current work when needed.
+triggers, outcomes, usage, and cost; set budgets and deadlines; stop the agent
+or kill current work when needed.
 
 Autopilot is managed by the host daemon. Closing the desktop app does not stop
 it or delete the agent's data.
@@ -87,7 +87,7 @@ reachable through your existing SSH configuration.
    register `git@github.com:alekzonder/tariboy-store.git`, refresh it, and
    build `official/basic` (or another Store image).
 3. **Create an agent.** Pick its harness and model, enable Interactive, and open
-   Terminal. Add Autopilot when you are ready, then grow into a team.
+   Terminal. Set its loop interval when you are ready, then grow into a team.
 
 [Follow the ten-minute quickstart →](https://alekzonder.github.io/tariboy/quickstart)
 

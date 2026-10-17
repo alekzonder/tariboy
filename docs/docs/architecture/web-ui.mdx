@@ -55,7 +55,7 @@ default, or **Expert**. The choice persists in WebView localStorage under
 `app:ui-mode:v1` and applies at once; any other stored value, or unavailable
 storage, means Simple. Simple changes only what the agent workspace shows: its
 tabs are **Chat**, **Tasks**, **Terminal**, and **Configuration**, an agent
-opens on Chat, and a route to a hidden tab (Autopilot, Activity, Advanced) is
+opens on Chat, and a route to a hidden tab (Activity, Advanced) is
 redirected to Chat. Its Chat tab is the personal conversation alone, with the toolbar
 starting at message search: there is no **Chat**/**Channels**/**Queue** switch,
 no chat tablist, and no **New chat**; a `?view=channels` or `?view=queue` link
@@ -65,11 +65,13 @@ the complete workspace described below. The mode hides interface only; it is
 not an access control, and the API and CLI are unchanged.
 
 The primary agent dialog has **Target**, **Identity**, **Runtime**,
-**Autopilot**, and **Lifecycle** sections. Ordinary creation starts with the
+**Loop**, and **Lifecycle** sections. Ordinary creation starts with the
 documented defaults and submits one complete create request; the daemon writes
 one complete stopped agent row. Environment is a string-valued JSON object,
 schema-v1 plugins remain editable, and schema-v2 plugins are image-owned and
-read-only. Bare images force Interactive on and Autopilot off. Interactive
+read-only. Bare images force Interactive on. The Loop section holds interval
+and timeouts; there is no separate loop switch, and **Start now** in Lifecycle
+decides whether the new agent starts. Interactive
 starts on for every new agent and selecting an image does not change it; the
 manifest's `harness.interactive` is not applied. Clone mode copies the source
 agent's value.
@@ -603,7 +605,7 @@ side to record message consumption.
 
 **Channels** is the same section's second view, under the same 48px toolbar,
 which names the selected channel and its number of provider watches. On the
-left is the agent's subscription list — its Autopilot event triggers: protected
+left is the agent's subscription list — its event triggers: protected
 rows (its own inbox, `group:*`) are read-only, ad-hoc rows have
 **Unsubscribe**, and a combobox picks an existing channel or validates a typed
 one before **Subscribe**. On the right is the selected channel: its tail polled
@@ -620,9 +622,7 @@ to, DLQ rows requeued, Archive rows show their result, and any row expands its
 
 **Advanced** opens on Prompt and no longer holds Channels or Messages; a saved
 `advanced?view=channels` or `advanced?view=messages` link is replaced with
-`chat?view=channels` or `chat?view=queue`. **Autopilot** no longer edits
-subscriptions either: its card shows `Event triggers: N channels` (just
-`Event triggers` when the count cannot be loaded) and links to Chat → Channels.
+`chat?view=channels` or `chat?view=queue`.
 
 Live updates ride one `/api/messages/ws` socket per server. Its frames are
 refetch hints, never authority: a hint reloads the typed HTTP response, and a
@@ -636,7 +636,7 @@ a message lands rather than on the next poll.
 
 Beside it, the sidebar mounts one `/api/agent-states/ws` socket per host. Its
 frames `{agent, type, ts}` say that an iteration event or a state change
-(start, stop, Autopilot switch, status line, halt, idle stop) happened for
+(start, stop, status line, halt, idle stop) happened for
 that agent. The sidebar refetches its agents at most once a second
 on these hints, and the agent header refetches its status on a hint for its own
 agent. While every host's state socket is open, the sidebar polls every 15
@@ -717,7 +717,8 @@ REST API, and the UI does not infer phases from title prefixes or assignee. Oper
 The navigation hierarchy is **Server → Agent**.
 A selected server owns Tasks, Images, Workflow images, Stores, and Settings, and its
 context row remains visible above the selected agent's Chat, Tasks, Terminal,
-Autopilot, Activity, Configuration, and Advanced tabs. Server-owned routes include
+Activity, Configuration, and Advanced tabs. There is no Autopilot tab: an old
+`/autopilot` route is treated as an unknown tab. Server-owned routes include
 the explicit host id and fail closed rather than silently falling back to local.
 
 ### Host workspaces
@@ -841,8 +842,8 @@ later delivery.
 
 Configuration is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory), **Runtime** (harness, model, effort,
-Interactive), **Loop and timeouts** (the Loop switch and the scheduling
-fields), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+Interactive), **Loop and timeouts** (the scheduling and timeout
+fields; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
 shell script and secrets), and **Retention and cleanup**. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.
@@ -888,8 +889,8 @@ agent's host and the selected harness.
 
 The Loop section also exposes the positive **AI inactivity timeout** in seconds,
 defaulting to 1800 (30 minutes) per agent. When a running iteration exceeds it without an
-attributed AI-proxy request, the daemon reports `state=error` and the Autopilot
-card shows the informational reason. The controls remain enabled because this
+attributed AI-proxy request, the daemon reports `state=error`, which the agent header
+shows. The controls remain enabled because this
 signal does not stop the loop or iteration; the next request restores
 `state=running`. Ordinary creation starts at 1800 seconds, while Clone preserves
 the source agent's configured value.
@@ -916,12 +917,10 @@ removes the indicator after processing or clearing lowers the queue.
 
 When the daemon reports a halt reason for the agent, the workspace header shows
 it under the identity line, so a loop that stopped before any iteration existed
-— a failed image activation, for example — is visible on every tab rather than
-only on Autopilot. It is toned as an error for an `error` halt and neutrally for
-an `idle_limit` one, and falls back to `error_reason` when the daemon reports one
-without a halt. The Autopilot card shows the same reason
-under the Running/Stopped line, toned the same way. Neither line is gated on
-whether Autopilot is currently enabled, because a stop-policy, idle-limit or
+— a failed image activation, for example — is visible on every tab. It is toned
+as an error for an `error` halt and neutrally for an `idle_limit` one, and falls
+back to `error_reason` when the daemon reports one without a halt. The line is
+not gated on whether the agent is started, because a stop-policy, idle-limit or
 launch-failure reason matters exactly when the loop is off. When there is no reason, nothing
 extra is rendered at all — no empty element and no placeholder.
 
@@ -1032,7 +1031,7 @@ The agent header exposes manual **Exec** before Start/Stop, only while the
 agent is enabled and not `bare:latest`, for interactive and non-interactive
 agents alike. It opens a dialog whose optional, memory-only one-shot text is
 sent to the route-selected host and affects only the newly requested iteration.
-Exec does not enable Autopilot or persist the draft. A successful request closes
+Exec does not start the agent or persist the draft. A successful request closes
 the dialog and, when the Terminal tab shows an interactive terminal, reconnects its
 startup handling; a rejected request keeps the dialog and the draft for retry.
 

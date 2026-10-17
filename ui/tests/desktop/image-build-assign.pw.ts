@@ -12,7 +12,7 @@ test("builds a transparent image from its original directory and assigns it to a
     window.__TAURI_INTERNALS__.invoke("daemon_status").then(async (status) => {
       const response = await fetch(status.base_url + "/api/agents", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ image: "basic:latest", name: "image-select-e2e", harness: "stub", loop: false }),
+        body: JSON.stringify({ image: "basic:latest", name: "image-select-e2e", harness: "stub" }),
       });
       const payload = await response.json();
       if (!response.ok || !payload.ok) throw new Error(payload?.error?.message || "agent create failed");

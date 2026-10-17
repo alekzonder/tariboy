@@ -32,7 +32,6 @@ type fakeControl struct {
 	extendID      string
 	live          string // LiveState return; defaults to "idle"
 	liveByName    int    // LiveState calls, which read the agent row again
-	loopUpdates   []bool
 	refreshed     []string
 }
 
@@ -86,15 +85,6 @@ func (f *fakeControl) ExtendIterationTimeout(name, id string) (registry.Iteratio
 	f.extendName, f.extendID = name, id
 	return f.extendResult, f.extendErr
 }
-func (f *fakeControl) SetLoopEnabled(name string, enabled bool) error {
-	f.loopUpdates = append(f.loopUpdates, enabled)
-	a, err := f.agents.Get(name)
-	if err != nil {
-		return err
-	}
-	a.LoopEnabled = enabled
-	return f.agents.Update(a)
-}
 func (f *fakeControl) RefreshLoopConfig(name string) { f.refreshed = append(f.refreshed, name) }
 
 func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
@@ -122,7 +112,7 @@ func TestAgentRunAndPs(t *testing.T) {
 	c, as, fc := ctxWithStore(t)
 	res, err := h(t, "agent.run")(c, registry.Params{
 		"image": "basic:latest", "name": "smoke", "harness": "stub",
-		"env": "A=1,B=2", "plugins": "context,status", "loop": true, "interactive": false,
+		"env": "A=1,B=2", "plugins": "context,status", "interactive": false,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +120,7 @@ func TestAgentRunAndPs(t *testing.T) {
 	if res.(map[string]any)["name"] != "smoke" {
 		t.Fatalf("run result: %v", res)
 	}
-	if fc.ran.Env["A"] != "1" || len(fc.ran.Plugins) != 2 || !fc.ran.Loop {
+	if fc.ran.Env["A"] != "1" || len(fc.ran.Plugins) != 2 {
 		t.Fatalf("spec not parsed: %+v", fc.ran)
 	}
 	// seed for ps
@@ -166,8 +156,8 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 	_, err := h(t, "agent.run")(c, registry.Params{
 		"image": "basic:latest", "name": "clone", "cwd": cwd,
 		"harness": "codex", "model": "gpt-5", "effort": "high",
-		"interactive": true, "loop": false,
-		"interval_s": float64(12), "timeout_s": float64(34), "hard_timeout_s": float64(56),
+		"interactive": true,
+		"interval_s":  float64(12), "timeout_s": float64(34), "hard_timeout_s": float64(56),
 		"on_timeout": "stop", "on_error": "restart", "max_idle_iterations": float64(7),
 		"ai_stall_timeout_s": float64(420),
 		"user_prompt":        "keep commas, equals=a=b, and\nnewlines",
@@ -183,8 +173,8 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 	want := registry.RunSpec{
 		ImageRef: "basic:latest", Name: "clone", Cwd: cwd,
 		Harness: "codex", Model: "gpt-5", Effort: "high", Interactive: true,
-		Env:     map[string]string{"CSV": "a,b", "EQ": "a=b", "LINES": "one\ntwo"},
-		Plugins: []string{"context", "custom"}, Loop: false,
+		Env:       map[string]string{"CSV": "a,b", "EQ": "a=b", "LINES": "one\ntwo"},
+		Plugins:   []string{"context", "custom"},
 		IntervalS: 12, TimeoutS: 34, HardTimeoutS: 56,
 		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7, AIStallTimeoutS: 420,
 		UserPrompt:    "keep commas, equals=a=b, and\nnewlines",

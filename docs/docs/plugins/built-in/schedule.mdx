@@ -43,8 +43,8 @@ therefore does not discard future wake-ups. Removing an agent's durable data
 removes its schedule records.
 
 The scheduler publishes on the daemon's bus. If a schedule targets the agent's
-inbox while its loop is disabled, the delivery remains pending until the loop
-can consume it.
+inbox while the agent is stopped or halted, the delivery remains pending until
+the loop can consume it.
 
 ## Prompt integration
 

@@ -14,7 +14,6 @@ const agent = (name: string, group: string | null = null): AgentSummary => ({
   image: "img:latest",
   state: "running",
   harness: "claude",
-  loop_enabled: false,
   group,
 });
 

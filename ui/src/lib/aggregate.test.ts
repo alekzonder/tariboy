@@ -33,10 +33,10 @@ describe("fetchAllAgents", () => {
       "fetch",
       routedFetch(
         {
-          "/api/agents": { status: 200, body: { ok: true, result: { agents: [{ name: "local-a", image: "i", state: "running", harness: "claude", loop_enabled: true, group: null }], count: 1 } } },
+          "/api/agents": { status: 200, body: { ok: true, result: { agents: [{ name: "local-a", image: "i", state: "running", harness: "claude", group: null }], count: 1 } } },
           "/api/groups": { status: 200, body: { ok: true, result: { groups: [{ name: "empty-team", lead: "", members: 0 }], count: 1 } } },
           "/api/daemon/config": { status: 200, body: { ok: true, result: { sidebar_order_v1: "{\"version\":1,\"groups\":[\"empty-team\"],\"agents\":[\"local-a\"]}" } } },
-          "https://prod:8765/api/agents": { status: 200, body: { ok: true, result: { agents: [{ name: "prod-a", image: "i", state: "running", harness: "claude", loop_enabled: false, group: null }], count: 1 } } },
+          "https://prod:8765/api/agents": { status: 200, body: { ok: true, result: { agents: [{ name: "prod-a", image: "i", state: "running", harness: "claude", group: null }], count: 1 } } },
           "https://prod:8765/api/groups": { status: 200, body: { ok: true, result: { groups: [], count: 0 } } },
           "https://prod:8765/api/daemon/config": { status: 200, body: { ok: true, result: {} } },
           "https://stage:8765/api/agents": { status: 401, body: { ok: false, error: { code: "unauthorized", message: "nope" } } },

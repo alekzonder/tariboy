@@ -235,9 +235,9 @@ func TestUpReprovisionsStoppedAgent(t *testing.T) {
 	fc := newFake()
 	fc.groups["research-team"] = map[string]any{"name": "research-team", "lead": "scout"}
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "stopped",
-		"group": "research-team", "image": "analyst:latest", "loop_enabled": false}
+		"group": "research-team", "image": "analyst:latest", "enabled": false}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "stopped",
-		"group": "research-team", "image": "analyst:latest", "loop_enabled": false}
+		"group": "research-team", "image": "analyst:latest", "enabled": false}
 	r := NewRunner(fc, "", "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)
@@ -258,8 +258,8 @@ func TestUpReprovisionsStoppedAgent(t *testing.T) {
 	// after reprovision-by-up both must be loop-enabled (not left disabled from
 	// the stopped row, nor forced/converged to anything else).
 	for _, name := range []string{"scout", "writer"} {
-		if got := fc.agents[name]["loop_enabled"]; got != true {
-			t.Fatalf("agent %s loop_enabled = %v after up, want true (== create default)", name, got)
+		if got := fc.agents[name]["enabled"]; got != true {
+			t.Fatalf("agent %s enabled = %v after up, want true (== create default)", name, got)
 		}
 	}
 }
@@ -270,9 +270,9 @@ func TestUpDoesNotReprovisionRunningAgent(t *testing.T) {
 	fc := newFake()
 	fc.groups["research-team"] = map[string]any{"name": "research-team", "lead": "scout"}
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running",
-		"group": "research-team", "image": "analyst:latest", "loop_enabled": true}
+		"group": "research-team", "image": "analyst:latest", "enabled": true}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running",
-		"group": "research-team", "image": "analyst:latest", "loop_enabled": true}
+		"group": "research-team", "image": "analyst:latest", "enabled": true}
 	r := NewRunner(fc, "", "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)

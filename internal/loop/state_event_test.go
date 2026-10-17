@@ -24,15 +24,12 @@ func TestManagerEmitsStateEvents(t *testing.T) {
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetLoopEnabled("smoke", true); err != nil {
-		t.Fatal(err)
-	}
 	if err := m.Stop("smoke"); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) != 2 || got[0] != "smoke" || got[1] != "smoke" {
+	if len(got) != 1 || got[0] != "smoke" {
 		t.Fatalf("state events = %v, want one for each change", got)
 	}
 }

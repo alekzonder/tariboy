@@ -191,6 +191,41 @@ func TestHolderUnavailableSinceMigrationDefaultsToEmpty(t *testing.T) {
 	}
 }
 
+func TestDropLoopEnabledMigrationTurnsOffAgentsWithoutLoop(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "drop-loop-enabled.db")
+	legacy := openBeforeMigration(t, path, "0064_agent_drop_loop_enabled.sql")
+	if _, err := legacy.DB.Exec(`
+		INSERT INTO agents(name, image_ref, loop_enabled, enabled, error_reason) VALUES
+			('running', 'basic:latest', 1, 1, ''),
+			('terminal', 'basic:latest', 0, 1, ''),
+			('halted', 'basic:latest', 0, 1, 'halted: timeout'),
+			('bare', 'bare:latest', 0, 1, ''),
+			('stopped', 'basic:latest', 1, 0, '');`); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('agents') WHERE name = 'loop_enabled'`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("loop_enabled columns = %d, %v; want 0", n, err)
+	}
+	// Only an agent that was on with its loop off would start iterating after
+	// the upgrade, so only that one is turned off.
+	want := map[string]int{"running": 1, "terminal": 0, "halted": 1, "bare": 1, "stopped": 0}
+	for name, enabled := range want {
+		var got int
+		if err := s.DB.QueryRow(`SELECT enabled FROM agents WHERE name = ?`, name).Scan(&got); err != nil || got != enabled {
+			t.Fatalf("%s enabled = %d, %v; want %d", name, got, err, enabled)
+		}
+	}
+}
+
 func TestVisitResumedAtMigration(t *testing.T) {
 	db := open(t).DB
 	requireColumn(t, db, "task_status_visits", "resumed_at")

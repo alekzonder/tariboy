@@ -91,7 +91,7 @@ ttasks list --text "OPERATOR UPDATED" --sort updated | grep -q "$OPS_KEY" || fai
 ttasks list --limit 1 | grep -q '^next: ttasks list --limit 1 --after ' || fail "list did not print the next page command"
 
 echo "--- agent mode is identity-bound to its real tools socket"
-"$BIN/tariboy" --socket "$SOCK" agent run tasks-test:latest --name worker --harness stub --interactive false --loop false \
+"$BIN/tariboy" --socket "$SOCK" agent run tasks-test:latest --name worker --harness stub --interactive false \
   --env "STUB_SLEEP=300,STUB_CALL_DONE=0,STUB_TASKS_MINE=$RUNTIME/agent-tasks.json" >/dev/null
 ttasks assign "$AGT_KEY" worker >/dev/null
 "$BIN/tariboy" --socket "$SOCK" agent exec worker >/dev/null

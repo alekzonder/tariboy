@@ -91,7 +91,6 @@ type agentDiagnostic struct {
 	Harness     string `json:"harness"`
 	State       string `json:"state"`
 	Interactive bool   `json:"interactive"`
-	LoopEnabled bool   `json:"loop_enabled"`
 	Enabled     bool   `json:"enabled"`
 }
 
@@ -193,7 +192,7 @@ func (c Collector) collectAgents(ctx context.Context, limit int, environ []strin
 		meta := agentDiagnostic{
 			Name: record.Name, Image: record.ImageRef, Harness: record.HarnessType,
 			State: state, Interactive: record.Interactive,
-			LoopEnabled: record.LoopEnabled, Enabled: record.Enabled,
+			Enabled: record.Enabled,
 		}
 		index = append(index, meta)
 		segment := archiveSegment(record.Name, segments)

@@ -73,7 +73,7 @@ func engineFixture(t *testing.T) (*Service, Actor, string) {
 	if err := svc.EnsureDefaultQueue(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, loop_enabled = 1, goal_enabled = 1`); err != nil {
+	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, goal_enabled = 1`); err != nil {
 		t.Fatal(err)
 	}
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)
@@ -301,7 +301,7 @@ func TestEnterPoolStatusReassignsPreviousHolderEvenWithAnotherGoal(t *testing.T)
 func TestEnterPoolStatusSkipsIneligibleMembers(t *testing.T) {
 	for name, assignments := range map[string]string{
 		"disabled":      `enabled = 0`,
-		"loop disabled": `loop_enabled = 0`,
+		"bare image":    `image_ref = 'bare:latest'`,
 		"goal disabled": `goal_enabled = 0`,
 		"error halt":    `error_reason = 'harness crashed'`,
 		"idle stop":     `status_message = 'idle_limit: 3 idle iterations'`,

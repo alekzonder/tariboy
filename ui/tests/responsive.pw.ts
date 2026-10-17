@@ -10,7 +10,7 @@ async function ensureAgent(request: APIRequestContext) {
   const existing = await request.get(`${daemonURL}/api/agents/${AGENT}`);
   if (existing.ok()) return;
   const response = await request.post(`${daemonURL}/api/agents`, {
-    data: { name: AGENT, image: "bare:latest", cwd: "/tmp", loop: false },
+    data: { name: AGENT, image: "bare:latest", cwd: "/tmp" },
   });
   const envelope = await response.json();
   expect(envelope.ok, JSON.stringify(envelope)).toBe(true);
@@ -105,7 +105,7 @@ for (const route of [
   });
 }
 
-for (const tab of ["chat", "tasks", "autopilot", "activity", "configuration", "advanced"]) {
+for (const tab of ["chat", "tasks", "activity", "configuration", "advanced"]) {
   test(`agent ${tab} tab fits the window`, async ({ page }) => {
     await expectFits(page, `/agents/local/${AGENT}/${tab}`);
     await expect(page.getByRole("heading", { name: AGENT })).toBeVisible();

@@ -22,11 +22,11 @@ func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 
 	stale := agent.Agent{
 		Name: "stale", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: false, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
+		Enabled: false, Plugins: []string{"loop", "tasks"},
 	}
 	healthy := agent.Agent{
 		Name: "healthy", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: false, LoopEnabled: false, Plugins: []string{"tasks"},
+		Enabled: false, Plugins: []string{"tasks"},
 	}
 	for _, a := range []agent.Agent{stale, healthy} {
 		if err := as.Create(a); err != nil {
@@ -101,7 +101,7 @@ func TestRefreshShimsRewritesShimsWithDirectScripts(t *testing.T) {
 	t.Cleanup(m.Shutdown)
 	a := agent.Agent{
 		Name: "stale", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: false, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
+		Enabled: false, Plugins: []string{"loop", "tasks"},
 	}
 	if err := as.Create(a); err != nil {
 		t.Fatal(err)

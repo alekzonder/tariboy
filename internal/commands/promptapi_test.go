@@ -122,7 +122,7 @@ func TestPromptPreviewBareHasNoTaskProcessingOrder(t *testing.T) {
 
 func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T) {
 	c, as, _ := ctxWithStore(t)
-	as.Create(agent.Agent{Name: "v2", UserPrompt: "USER", Enabled: true, LoopEnabled: true, OnTimeout: "restart", OnError: "restart"})
+	as.Create(agent.Agent{Name: "v2", UserPrompt: "USER", Enabled: true, OnTimeout: "restart", OnError: "restart"})
 	taskService := tasks.NewService(c.Store.DB, "customer", time.Now)
 	if _, err := taskService.CreateQueue(context.Background(), tasks.CustomerActor("customer"), tasks.CreateQueueInput{Prefix: "NOGL", Name: "No goal runtime"}); err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T)
 func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{
-		Name: "v2", Enabled: true, LoopEnabled: true,
+		Name: "v2", Enabled: true,
 		OnTimeout: "restart", OnError: "restart",
 	}); err != nil {
 		t.Fatal(err)

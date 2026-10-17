@@ -5,7 +5,7 @@ import {
   imageFilesListOn, imageFileReadOn, startAgent,
 } from "./api";
 import { subscribeAgentEvents, serverUploadFile, setAgentInteractive } from "./api";
-import { setAlias, getStatusHistory, loopEnable } from "./api";
+import { setAlias, getStatusHistory } from "./api";
 import type { Daemon } from "./daemons";
 
 function mockFetch(status: number, body: unknown, capture?: (url: string, init: RequestInit) => void) {
@@ -64,13 +64,6 @@ describe("overview api helpers", () => {
     const r = await getStatusHistory("a1");
     expect(url).toContain("/api/agents/a1/status/history");
     expect(r.count).toBe(0);
-  });
-
-  it("loopEnable posts to the loop/enable route", async () => {
-    let url = "";
-    vi.stubGlobal("fetch", mockFetch(200, { ok: true, result: { loop_enabled: true } }, (u) => { url = u; }));
-    await loopEnable("a1");
-    expect(url).toContain("/api/agents/a1/loop/enable");
   });
 });
 

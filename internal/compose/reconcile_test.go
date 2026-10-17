@@ -140,12 +140,9 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 	case method == "POST" && route == "/api/agents":
 		m := body.(map[string]any)
 		name := m["name"].(string)
-		enabled := true
-		if v, ok := m["loop"].(bool); ok {
-			enabled = v
-		}
-		f.agents[name] = map[string]any{"name": name, "state": "running",
-			"group": m["group"], "image": m["image"], "cwd": m["cwd"], "loop_enabled": enabled}
+		// The daemon creates every agent stopped; compose starts it after.
+		f.agents[name] = map[string]any{"name": name, "state": "stopped",
+			"group": m["group"], "image": m["image"], "cwd": m["cwd"], "enabled": false}
 		return mustJSON(map[string]any{"name": name}), nil
 	case method == "POST" && strings.HasSuffix(route, "/subscriptions"):
 		name := route[len("/api/agents/") : len(route)-len("/subscriptions")]
@@ -222,15 +219,16 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 			a["goal_delivery_cooldown_s"] = body.(map[string]any)["seconds"]
 		}
 		return mustJSON(map[string]any{"name": name}), nil
-	case method == "POST" && (strings.HasSuffix(route, "/loop/enable") || strings.HasSuffix(route, "/loop/disable")):
-		on := strings.HasSuffix(route, "/loop/enable")
-		suffix := "/loop/disable"
+	case method == "POST" && (strings.HasSuffix(route, "/start") || strings.HasSuffix(route, "/stop")):
+		on := strings.HasSuffix(route, "/start")
+		suffix, state := "/stop", "stopped"
 		if on {
-			suffix = "/loop/enable"
+			suffix, state = "/start", "running"
 		}
 		name := route[len("/api/agents/") : len(route)-len(suffix)]
 		if a := f.agents[name]; a != nil {
-			a["loop_enabled"] = on
+			a["enabled"] = on
+			a["state"] = state
 		}
 		return mustJSON(map[string]any{"name": name}), nil
 	case method == "POST" && route == "/api/budgets":
@@ -264,7 +262,7 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 				}
 			}
 			a["state"] = "running"
-			a["loop_enabled"] = true
+			a["enabled"] = true
 		}
 		return mustJSON(map[string]any{"name": name, "state": "running"}), nil
 	case method == "POST" && len(route) > 6 && route[len(route)-5:] == "/exec":
@@ -771,8 +769,11 @@ func TestUpCreatesWithLoopDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := bodyFor(fc, "POST /api/agents").(map[string]any)
-	if b["loop"] != false {
-		t.Errorf("create body loop = %v, want false", b["loop"])
+	if _, ok := b["loop"]; ok {
+		t.Errorf("create body sends removed loop field: %v", b)
+	}
+	if got := fc.agents["a"]["enabled"]; got != false {
+		t.Errorf("enabled after up = %v, want false", got)
 	}
 }
 
@@ -810,9 +811,9 @@ func TestUpDoesNotStartFreshCreateWhenLoopDisabled(t *testing.T) {
 // TestUpReprovisionLoopStateMatchesCreate is the gaa.7 regression guard: a
 // stopped agent re-provisioned by `up` must end in the SAME loop-enabled state
 // a first-ever create would produce for the same file. Reprovision blanket-
-// forces loop_enabled=true (to honour the standalone /reprovision restart
+// forces enabled=true (to honour the standalone /reprovision restart
 // contract), so unless compose Up re-reads the post-reprovision row the converge
-// step would diff the file against the stale pre-reprovision row (loop_enabled
+// step would diff the file against the stale pre-reprovision row (enabled
 // =false, as a preserving `down` leaves it) and, for loop.enabled:false, see no
 // drift and leave the loop wrongly running. Each case starts from a stopped,
 // loop-disabled row and asserts the final live loop-enabled state after `up`
@@ -823,7 +824,7 @@ func TestUpReprovisionLoopStateMatchesCreate(t *testing.T) {
 	cases := []struct {
 		name string
 		loop *LoopSpec
-		want bool // final loop_enabled after up, == first-ever create for this file
+		want bool // final enabled after up, == first-ever create for this file
 	}{
 		{"no-loop-block", nil, true},                       // create defaults loop:true
 		{"enabled-false", &LoopSpec{Enabled: &off}, false}, // the bug this fixes
@@ -833,7 +834,7 @@ func TestUpReprovisionLoopStateMatchesCreate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fc := newFake()
 			fc.agents["a"] = map[string]any{"name": "a", "state": "stopped",
-				"image": "i:latest", "group": "", "cwd": "", "loop_enabled": false}
+				"image": "i:latest", "group": "", "cwd": "", "enabled": false}
 			f := File{Version: 1, Agents: map[string]AgentSpec{
 				"a": {Image: "i:latest", Loop: tc.loop},
 			}}
@@ -847,8 +848,8 @@ func TestUpReprovisionLoopStateMatchesCreate(t *testing.T) {
 			if countCalls(fc, "POST /api/agents") != 0 {
 				t.Fatalf("stopped agent was recreated instead of reprovisioned: %v", fc.calls)
 			}
-			if got := fc.agents["a"]["loop_enabled"]; got != tc.want {
-				t.Fatalf("final loop_enabled = %v, want %v (calls: %v)", got, tc.want, fc.calls)
+			if got := fc.agents["a"]["enabled"]; got != tc.want {
+				t.Fatalf("final enabled = %v, want %v (calls: %v)", got, tc.want, fc.calls)
 			}
 		})
 	}

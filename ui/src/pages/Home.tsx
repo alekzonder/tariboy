@@ -37,7 +37,6 @@ export default function Home() {
                 <div className="truncate">{a.image}</div>
                 <div className="mt-1 flex gap-2 text-xs">
                   <span>{a.harness}</span>
-                  {a.loop_enabled && <span>loop</span>}
                   {a.group && <span>· {a.group}</span>}
                 </div>
               </CardContent>

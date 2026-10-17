@@ -663,8 +663,8 @@ func TestGroupToolsInfoStatusMessagingLoopAndObserve(t *testing.T) {
 		},
 		GroupStatus: func(member string) (map[string]any, error) {
 			rows := []map[string]any{
-				{"name": "manager", "role": "lead", "state": "running", "loop_enabled": true, "status_message": "coordinating"},
-				{"name": "worker", "role": "member", "state": "idle", "loop_enabled": false, "status_message": "waiting"},
+				{"name": "manager", "role": "lead", "state": "running", "enabled": true, "status_message": "coordinating"},
+				{"name": "worker", "role": "member", "state": "idle", "enabled": true, "status_message": "waiting"},
 			}
 			if member != "" {
 				if member != "worker" {

@@ -23,7 +23,7 @@ test("agent deletion requires confirmation in the production Desktop", async ({ 
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             image: "basic:latest", name: "delete-confirmation-e2e", harness: "stub",
-            interactive: false, loop: false,
+            interactive: false,
           }),
         });
         const envelope = await response.json();

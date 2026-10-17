@@ -264,7 +264,7 @@ assert any(x["name"] == "bare" and x["tag"] == "latest" and x.get("bare") is Tru
 
 echo "--- built image selection creates a stopped agent"
 api POST /api/agents \
-  '{"image":"alpha-smoke:latest","name":"built-smoke","harness":"stub","interactive":false,"loop":false}' >/dev/null
+  '{"image":"alpha-smoke:latest","name":"built-smoke","harness":"stub","interactive":false}' >/dev/null
 BUILT_AGENT="$(api GET /api/agents/built-smoke)"
 printf '%s' "$BUILT_AGENT" | python3 -c '
 import json,sys
@@ -274,7 +274,7 @@ assert r["image"] == "alpha-smoke:latest" and r["state"] == "stopped"
 
 echo "--- bare:latest starts an ordinary interactive terminal"
 api POST /api/agents \
-  '{"image":"bare:latest","name":"bare-smoke","harness":"stub","interactive":true,"loop":false,"env":"STUB_SLEEP=30"}' >/dev/null
+  '{"image":"bare:latest","name":"bare-smoke","harness":"stub","interactive":true,"env":"STUB_SLEEP=30"}' >/dev/null
 api POST /api/agents/bare-smoke/start '{}' >/dev/null
 SCREEN=""
 for _ in $(seq 1 100); do
@@ -290,10 +290,10 @@ printf '%s' "$BARE_AGENT" | python3 -c '
 import json,sys
 r=json.load(sys.stdin)["result"]
 assert r["image"] == "bare:latest" and r["interactive"] is True
-assert r["loop_enabled"] is False and r["state"] == "running"
+assert "loop_enabled" not in r and r["state"] == "running"
 '
 api POST /api/agents/bare-smoke/stop '{}' >/dev/null
-echo "ok: bare terminal is interactive and Autopilot is disabled"
+echo "ok: bare terminal is interactive"
 
 echo "--- quitting Desktop leaves its daemon alive"
 quit_app

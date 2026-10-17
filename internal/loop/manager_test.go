@@ -683,7 +683,7 @@ func TestStartFailsLoudlyWhenToolsSocketUnbindable(t *testing.T) {
 	// Sockets would land in a directory that does not exist, so net.Listen fails.
 	m.cfg.RuntimeDir = filepath.Join(t.TempDir(), "does", "not", "exist")
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
-		Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+		Harness: "stub", Plugins: []string{"context"}}); err != nil {
 		t.Fatalf("run: unexpected error creating disabled agent: %v", err)
 	}
 	// Run() creates the agent disabled (Task 4); the master switch (LiveState
@@ -788,27 +788,6 @@ func TestStartSignalsGoalReconcilerWhileIterationIsAdopting(t *testing.T) {
 	}
 }
 
-func TestSetLoopEnabledSignalsGoalReconcilerAfterPersistence(t *testing.T) {
-	m, as, _, _ := newManager(t, &fakeRunner{})
-	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
-		t.Fatal(err)
-	}
-	var enabled []bool
-	m.cfg.GoalSignal = func() {
-		ag, err := as.Get("worker")
-		if err == nil {
-			enabled = append(enabled, ag.LoopEnabled)
-		}
-	}
-
-	if err := m.SetLoopEnabled("worker", true); err != nil {
-		t.Fatal(err)
-	}
-	if len(enabled) != 1 || !enabled[0] {
-		t.Fatalf("loop-enabled states at goal signals = %v, want [true]", enabled)
-	}
-}
-
 func TestRestartSignalsGoalReconcilerAfterReenableDuringAdoption(t *testing.T) {
 	m, as, _, _ := newManager(t, &fakeRunner{})
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true}); err != nil {
@@ -839,7 +818,7 @@ func TestRunSubscribesStandaloneAgentToOwnInbox(t *testing.T) {
 	bs := bus.New(raw, time.Now)
 	m.cfg.Bus = bs
 
-	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo", Loop: false})
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -859,7 +838,7 @@ func TestRunSubscribesStandaloneAgentToOwnInbox(t *testing.T) {
 
 func TestRunDoesNotInjectRetiredCapabilityEnvironment(t *testing.T) {
 	m, as, _, _ := newManager(t, &fakeRunner{})
-	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo", Loop: false}); err != nil {
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo"}); err != nil {
 		t.Fatal(err)
 	}
 	ag, err := as.Get("solo")
@@ -879,8 +858,8 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 	spec := registry.RunSpec{
 		ImageRef: "basic:latest", Name: "clone", Cwd: cwd,
 		Harness: "codex", Model: "gpt-5", Effort: "high",
-		Interactive: true, Loop: false,
-		IntervalS: 12, TimeoutS: 34, HardTimeoutS: 56,
+		Interactive: true,
+		IntervalS:   12, TimeoutS: 34, HardTimeoutS: 56,
 		OnTimeout: "stop", OnError: "restart", MaxIdleIterations: 7, AIStallTimeoutS: 420,
 		UserPrompt: "standing prompt", Env: map[string]string{"CSV": "a,b"},
 		Plugins: []string{"context"}, MessagesBatch: 8, MessagesMaxQueue: 900,
@@ -898,7 +877,7 @@ func TestRunPersistsCompleteConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.Cwd != cwd || got.HarnessType != "codex" || got.Model != "gpt-5" ||
-		got.Effort != "high" || !got.Interactive || got.LoopEnabled || got.Enabled ||
+		got.Effort != "high" || !got.Interactive || got.Enabled ||
 		got.IntervalS != 12 || got.TimeoutS != 34 || got.HardTimeoutS != 56 ||
 		got.OnTimeout != "stop" || got.OnError != "restart" || got.MaxIdleIterations != 7 || got.AIStallTimeoutS != 420 ||
 		got.UserPrompt != "standing prompt" || got.Env["CSV"] != "a,b" ||
@@ -966,7 +945,7 @@ func (s killRecordingShim) Report() shim.ReportResult          { return shim.Rep
 func TestManagerKillForwardsToLiveShim(t *testing.T) {
 	r := &killBlockingRunner{started: make(chan string, 1)}
 	m, _, agentsDir, _ := newManager(t, r)
-	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Shutdown)
@@ -1050,7 +1029,7 @@ func startPendingAdoption(
 	t.Helper()
 	ag := agent.Agent{
 		Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: true, LoopEnabled: true, Interactive: true,
+		Enabled: true, Interactive: true,
 		Plugins: []string{"context"},
 	}
 	pinBasicImage(t, m, &ag)
@@ -1206,7 +1185,7 @@ func TestManagerRestartDuringAdoptionLaunchesInteractiveIteration(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	ag.LoopEnabled = false
+	ag.IntervalS = 0
 	if err := as.Update(ag); err != nil {
 		t.Fatal(err)
 	}
@@ -1239,7 +1218,7 @@ func TestManagerStopCancelsConsumedAdoptionRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ag.LoopEnabled = false
+	ag.IntervalS = 0
 	if err := as.Update(ag); err != nil {
 		t.Fatal(err)
 	}
@@ -1343,7 +1322,7 @@ func TestManagerAdoptedControlCannotCrossSocketReuse(t *testing.T) {
 func TestManagerAttachAndResizeForwardToLiveShim(t *testing.T) {
 	r := &killBlockingRunner{started: make(chan string, 1)}
 	m, _, agentsDir, _ := newManager(t, r)
-	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Shutdown)
@@ -1415,7 +1394,7 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 		}
 		completed <- agentName + "/" + iterationID + "/" + it.Status
 	}
-	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, Loop: true, OnTimeout: "stop"}); err != nil {
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}, OnTimeout: "stop"}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(m.Shutdown)
@@ -1518,7 +1497,7 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 		}
 	}
 	stored, err := as.Get("smoke")
-	if err != nil || finishEvents.Load() != 0 || finishedAudits != 0 || closes.Load() != 1 || !stored.LoopEnabled || stored.ErrorReason != "" {
+	if err != nil || finishEvents.Load() != 0 || finishedAudits != 0 || closes.Load() != 1 || stored.ErrorReason != "" {
 		t.Fatalf("losing engine side effects: finish_events=%d finish_audits=%d closes=%d agent=%#v err=%v",
 			finishEvents.Load(), finishedAudits, closes.Load(), stored, err)
 	}
@@ -1569,7 +1548,7 @@ func TestManagerRunProvisionsAndStops(t *testing.T) {
 	defer cancel()
 
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
-		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+		Harness: "stub", Plugins: []string{"context"}})
 	if err != nil || name != "smoke" {
 		t.Fatalf("run: name=%q err=%v", name, err)
 	}
@@ -1579,9 +1558,6 @@ func TestManagerRunProvisionsAndStops(t *testing.T) {
 		t.Fatalf("agent dir not provisioned: %v", err)
 	}
 	got, _ := as.Get("smoke")
-	if !got.LoopEnabled {
-		t.Fatalf("loop intent not recorded: %+v", got)
-	}
 	if got.Enabled {
 		t.Fatalf("freshly created agent should be disabled: %+v", got)
 	}
@@ -1690,7 +1666,7 @@ func TestStartEnablesStopDisables(t *testing.T) {
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, _, _ := newManager(t, r)
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
-		Harness: "stub", Plugins: []string{"context"}, Loop: false}); err != nil {
+		Harness: "stub", Plugins: []string{"context"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.Start("smoke"); err != nil {
@@ -1700,14 +1676,8 @@ func TestStartEnablesStopDisables(t *testing.T) {
 	if !got.Enabled {
 		t.Fatalf("after Start Enabled=false, want true")
 	}
-	if got.LoopEnabled {
-		t.Fatalf("after direct Start LoopEnabled=true, want unchanged false")
-	}
 	if st, _ := m.LiveState("smoke"); st == "stopped" {
 		t.Fatalf("after Start state=stopped, want idle/running")
-	}
-	if err := m.SetLoopEnabled("smoke", true); err != nil {
-		t.Fatal(err)
 	}
 	if err := m.Stop("smoke"); err != nil {
 		t.Fatal(err)
@@ -1716,21 +1686,18 @@ func TestStartEnablesStopDisables(t *testing.T) {
 	if got.Enabled {
 		t.Fatalf("after Stop Enabled=true, want false")
 	}
-	if !got.LoopEnabled {
-		t.Fatalf("after direct Stop LoopEnabled=false, want unchanged true")
-	}
 	if st, _ := m.LiveState("smoke"); st != "stopped" {
 		t.Fatalf("after Stop state=%q, want stopped", st)
 	}
 	m.Shutdown()
 }
 
-func TestToolsLoopControlPersistsBothFlagsAndReturnsStoredState(t *testing.T) {
+func TestToolsLoopControlStartsStopsAndReturnsStoredState(t *testing.T) {
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	defer m.Shutdown()
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "self",
-		Harness: "stub", Plugins: []string{"context"}, Loop: false}); err != nil {
+		Harness: "stub", Plugins: []string{"context"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.Start("self"); err != nil {
@@ -1746,11 +1713,11 @@ func TestToolsLoopControlPersistsBothFlagsAndReturnsStoredState(t *testing.T) {
 	if err := json.Unmarshal(raw, &start); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := as.Get("self"); !got.Enabled || !got.LoopEnabled {
-		t.Fatalf("after tools loop start = %+v, want both flags true", got)
+	if got, _ := as.Get("self"); !got.Enabled {
+		t.Fatalf("after tools loop start = %+v, want enabled", got)
 	}
-	if start["enabled"] != true || start["loop_enabled"] != true {
-		t.Fatalf("tools loop start payload = %v, want persisted flags true", start)
+	if start["enabled"] != true {
+		t.Fatalf("tools loop start payload = %v, want enabled true", start)
 	}
 
 	raw, err = c.Call("POST", "/tools/loop/control", map[string]any{"action": "stop"})
@@ -1761,50 +1728,12 @@ func TestToolsLoopControlPersistsBothFlagsAndReturnsStoredState(t *testing.T) {
 	if err := json.Unmarshal(raw, &stop); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := as.Get("self"); got.Enabled || got.LoopEnabled {
-		t.Fatalf("after tools loop stop = %+v, want both flags false", got)
+	if got, _ := as.Get("self"); got.Enabled {
+		t.Fatalf("after tools loop stop = %+v, want disabled", got)
 	}
-	if stop["enabled"] != false || stop["loop_enabled"] != false {
-		t.Fatalf("tools loop stop payload = %v, want persisted flags false", stop)
+	if stop["enabled"] != false {
+		t.Fatalf("tools loop stop payload = %v, want enabled false", stop)
 	}
-}
-
-func TestSetLoopEnabledWakesParkedRuntime(t *testing.T) {
-	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
-	m, as, _, _ := newManager(t, r)
-	t.Cleanup(m.Shutdown)
-	if _, err := m.Run(registry.RunSpec{
-		ImageRef: "basic:latest",
-		Name:     "smoke",
-		Harness:  "stub",
-		Plugins:  []string{"context"},
-		Loop:     false,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	ag, err := as.Get("smoke")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ag.IntervalS = 1
-	if err := as.Update(ag); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.Start("smoke"); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.SetLoopEnabled("smoke", true); err != nil {
-		t.Fatal(err)
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if iterations, _ := as.ListIterations("smoke"); len(iterations) > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("enabling Autopilot did not wake the parked runtime")
 }
 
 func TestRunRejectsTraversalName(t *testing.T) {
@@ -1857,7 +1786,7 @@ func TestReattachAdoptsLiveIteration(t *testing.T) {
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	// Persist a running agent with a running iteration and a result.json waiting.
-	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: false, Plugins: []string{"context"}}
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"context"}}
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
 	}
@@ -1890,15 +1819,14 @@ func TestReattachAdoptsLiveIteration(t *testing.T) {
 }
 
 // TestReattachOnlyStartsEnabledAgents proves the boot reconcile gate keys on
-// the master Enabled flag, not LoopEnabled: an agent with LoopEnabled=true but
-// Enabled=false must NOT come up on daemon boot.
+// the Enabled flag: an agent with Enabled=false must NOT come up on daemon boot.
 func TestReattachOnlyStartsEnabledAgents(t *testing.T) {
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
-	if err := as.Create(agent.Agent{Name: "on", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: true, Enabled: true, IntervalS: 0}); err != nil {
+	if err := as.Create(agent.Agent{Name: "on", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, IntervalS: 0}); err != nil {
 		t.Fatal(err)
 	}
-	if err := as.Create(agent.Agent{Name: "off", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: true, Enabled: false, IntervalS: 0}); err != nil {
+	if err := as.Create(agent.Agent{Name: "off", ImageRef: "basic:latest", HarnessType: "stub", Enabled: false, IntervalS: 0}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2145,12 +2073,47 @@ func serveStubShim(t *testing.T, sock string) {
 
 // Finding 1: Start after Stop must restore state=running even though the engine
 // runtime already exists, and a fresh manager's StartAll must then pick it up.
+// A stop policy halts the agent with error_reason. Start alone must bring the
+// iterations back: there is no second switch left off by the halt.
+func TestStartAfterStopPolicyHaltResumesIterations(t *testing.T) {
+	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+	m, as, _, _ := newManager(t, r)
+	t.Cleanup(m.Shutdown)
+	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
+		Harness: "stub", Plugins: []string{"context"}}); err != nil {
+		t.Fatal(err)
+	}
+	ag, err := as.Get("smoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.IntervalS = 1
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	if err := as.SetError("smoke", "halted: harness_error"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Start("smoke"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if its, _ := as.ListIterations("smoke"); len(its) > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	st, _ := m.LiveState("smoke")
+	t.Fatalf("Start after a stop-policy halt ran no iteration (state %q)", st)
+}
+
 func TestStartAfterStopRestoresRunningState(t *testing.T) {
 	r := &fakeRunner{outcomes: []Outcome{{Status: "no_i_am_done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
 
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
-		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+		Harness: "stub", Plugins: []string{"context"}})
 	if err != nil || name != "smoke" {
 		t.Fatalf("run: name=%q err=%v", name, err)
 	}
@@ -2207,7 +2170,7 @@ func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, _ := newManager(t, r)
 
-	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, LoopEnabled: true, IntervalS: 60,
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, IntervalS: 60,
 		OnTimeout: "restart", OnError: "restart", Plugins: []string{"context"}}
 	pinBasicImage(t, m, &ag)
 	if err := as.Create(ag); err != nil {
@@ -2269,7 +2232,7 @@ func TestReattachStaleShimClassifiesHarnessError(t *testing.T) {
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
 
-	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: false, Plugins: []string{"context"}}
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"context"}}
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
 	}
@@ -2321,7 +2284,7 @@ func TestManagerWakesOnPublish(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
-		Harness: "stub", Plugins: []string{"context"}, Loop: true}); err != nil {
+		Harness: "stub", Plugins: []string{"context"}}); err != nil {
 		t.Fatal(err)
 	}
 	// Run() creates the agent disabled (Task 4); enable it in the store so
@@ -2371,7 +2334,7 @@ func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
 
 	ag := agent.Agent{
 		Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: true, LoopEnabled: true, Interactive: true, IntervalS: 0,
+		Enabled: true, Interactive: true, IntervalS: 0,
 		OnTimeout: "restart", OnError: "restart", Plugins: []string{"context"},
 	}
 	pinBasicImage(t, m, &ag)
@@ -2459,11 +2422,11 @@ func TestManagerWiresGroupTools(t *testing.T) {
 	}
 
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "manager",
-		Harness: "stub", Plugins: []string{"status"}, Loop: false, Group: "dev-team"}); err != nil {
+		Harness: "stub", Plugins: []string{"status"}, Group: "dev-team"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "worker",
-		Harness: "stub", Plugins: []string{"status"}, Loop: false, Group: "dev-team"}); err != nil {
+		Harness: "stub", Plugins: []string{"status"}, Group: "dev-team"}); err != nil {
 		t.Fatal(err)
 	}
 	// Run() no longer auto-starts (Task 4); this test only needs the tools
@@ -2572,11 +2535,11 @@ func TestManagerWiresGroupTools(t *testing.T) {
 	if err := json.Unmarshal(raw, &groupStart); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := as.Get("worker"); !got.Enabled || !got.LoopEnabled {
-		t.Fatalf("worker after group start = %+v, want both flags true", got)
+	if got, _ := as.Get("worker"); !got.Enabled {
+		t.Fatalf("worker after group start = %+v, want enabled", got)
 	}
-	if groupStart["enabled"] != true || groupStart["loop_enabled"] != true {
-		t.Fatalf("group loop start payload = %v, want persisted flags true", groupStart)
+	if groupStart["enabled"] != true {
+		t.Fatalf("group loop start payload = %v, want enabled true", groupStart)
 	}
 	raw, err = c.Call("POST", "/tools/group/loop", map[string]any{"member": "worker", "action": "stop"})
 	if err != nil {
@@ -2586,11 +2549,11 @@ func TestManagerWiresGroupTools(t *testing.T) {
 	if err := json.Unmarshal(raw, &groupStop); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := as.Get("worker"); got.Enabled || got.LoopEnabled {
-		t.Fatalf("worker after group stop = %+v, want both flags false", got)
+	if got, _ := as.Get("worker"); got.Enabled {
+		t.Fatalf("worker after group stop = %+v, want disabled", got)
 	}
-	if groupStop["enabled"] != false || groupStop["loop_enabled"] != false {
-		t.Fatalf("group loop stop payload = %v, want persisted flags false", groupStop)
+	if groupStop["enabled"] != false {
+		t.Fatalf("group loop stop payload = %v, want enabled false", groupStop)
 	}
 	if _, err := c.Call("POST", "/tools/group/loop", map[string]any{"member": "outsider", "action": "start"}); err == nil {
 		t.Fatal("group loop allowed outsider")
@@ -2613,7 +2576,7 @@ func TestReattachWakesEventOnlyAgentWithPending(t *testing.T) {
 	// Event-only agent: no interval timer, message-triggered only. Persisted as
 	// already running (as it would be across a daemon restart), but its engine
 	// has not started yet.
-	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, LoopEnabled: true, IntervalS: 0,
+	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, IntervalS: 0,
 		OnTimeout: "restart", OnError: "restart", Plugins: []string{"context"}}
 	pinBasicImage(t, m, &ag)
 	if err := as.Create(ag); err != nil {
@@ -2991,22 +2954,13 @@ func TestReapOrphanSessions(t *testing.T) {
 func TestLiveState(t *testing.T) {
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
-	a := agent.Agent{Name: "ls", ImageRef: "basic:latest", Enabled: true, LoopEnabled: true,
+	a := agent.Agent{Name: "ls", ImageRef: "basic:latest", Enabled: true,
 		HarnessType: "stub", Plugins: []string{"context"}}
 	if err := as.Create(a); err != nil {
 		t.Fatal(err)
 	}
 
-	assertLiveState(t, m, "ls", "idle") // loop_enabled, no engine
-
-	a2, _ := as.Get("ls")
-	a2.LoopEnabled = false
-	if err := as.Update(a2); err != nil {
-		t.Fatal(err)
-	}
-	// Master switch (Enabled) is still true; loop_enabled off alone reports
-	// idle, not stopped — that's what TestLiveStateGatesOnEnabled locks in.
-	assertLiveState(t, m, "ls", "idle") // loop off, master still enabled
+	assertLiveState(t, m, "ls", "idle") // enabled, no engine
 
 	if err := as.SetError("ls", "boom"); err != nil {
 		t.Fatal(err)
@@ -3019,7 +2973,7 @@ func TestLiveStateReportsAndClearsAIStall(t *testing.T) {
 	m, as, _, _ := newManager(t, r)
 	now := time.Date(2026, 9, 10, 2, 10, 0, 0, time.UTC)
 	m.cfg.Clock = func() time.Time { return now }
-	a := agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true, LoopEnabled: true,
+	a := agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true,
 		HarnessType: "stub", AIStallTimeoutS: 300}
 	if err := as.Create(a); err != nil {
 		t.Fatal(err)
@@ -3038,8 +2992,8 @@ func TestLiveStateReportsAndClearsAIStall(t *testing.T) {
 	}
 	assertLiveState(t, m, "worker", "running")
 	stored, _ := as.Get("worker")
-	if !stored.LoopEnabled {
-		t.Fatal("informational AI stall disabled the loop")
+	if !stored.Enabled || stored.ErrorReason != "" {
+		t.Fatal("informational AI stall halted the agent")
 	}
 }
 
@@ -3057,15 +3011,15 @@ func assertLiveState(t *testing.T, m *Manager, name, want string) {
 func TestLiveStateGatesOnEnabled(t *testing.T) {
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
-	// Enabled=false with loop_enabled=true must still be "stopped".
-	if err := as.Create(agent.Agent{Name: "a", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: true, Enabled: false}); err != nil {
+	// Enabled=false must be "stopped".
+	if err := as.Create(agent.Agent{Name: "a", ImageRef: "basic:latest", HarnessType: "stub", Enabled: false}); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := m.LiveState("a"); st != "stopped" {
 		t.Fatalf("disabled agent LiveState = %q, want stopped", st)
 	}
 	// Enabled=true, no live iteration → idle (even with loop off).
-	if err := as.Create(agent.Agent{Name: "b", ImageRef: "basic:latest", HarnessType: "stub", LoopEnabled: false, Enabled: true}); err != nil {
+	if err := as.Create(agent.Agent{Name: "b", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := m.LiveState("b"); st != "idle" {
@@ -3155,7 +3109,7 @@ func TestRemovePreserveThenPurge(t *testing.T) {
 	defer m.Shutdown()
 
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "keep",
-		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+		Harness: "stub", Plugins: []string{"context"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3181,8 +3135,8 @@ func TestRemovePreserveThenPurge(t *testing.T) {
 	if ok, _ := as.Exists(name); !ok {
 		t.Fatal("preserve remove dropped the agents row")
 	}
-	if got, _ := as.Get(name); got.LoopEnabled {
-		t.Fatal("preserve remove left loop enabled; want stopped")
+	if got, _ := as.Get(name); got.Enabled {
+		t.Fatal("preserve remove left the agent enabled; want stopped")
 	}
 	if st, _ := m.LiveState(name); st != "stopped" {
 		t.Fatalf("after preserve remove LiveState = %q, want stopped", st)
@@ -3231,7 +3185,7 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	defer m.Shutdown()
 
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "keep",
-		Harness: "stub", Plugins: []string{"context"}, Loop: true})
+		Harness: "stub", Plugins: []string{"context"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3265,15 +3219,15 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 	m.cfg.GoalSignal = func() {
 		ag, err := as.Get(name)
 		if err == nil {
-			goalStates = append(goalStates, fmt.Sprintf("enabled=%v loop=%v", ag.Enabled, ag.LoopEnabled))
+			goalStates = append(goalStates, fmt.Sprintf("enabled=%v", ag.Enabled))
 		}
 	}
 
 	if err := m.Reprovision(name, "basic2:latest"); err != nil {
 		t.Fatalf("reprovision: %v", err)
 	}
-	if len(goalStates) != 1 || goalStates[0] != "enabled=true loop=true" {
-		t.Fatalf("states at reprovision goal signals = %v, want [enabled=true loop=true]", goalStates)
+	if len(goalStates) != 1 || goalStates[0] != "enabled=true" {
+		t.Fatalf("states at reprovision goal signals = %v, want [enabled=true]", goalStates)
 	}
 	// Tree re-unpacked, shims rewritten.
 	if _, err := os.Stat(filepath.Join(l.ImageDir(), "prompt", "template.json")); err != nil {

@@ -34,7 +34,6 @@ export default function AgentCreate() {
   const [harness, setHarness] = useState("");
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState("");
-  const [loop, setLoop] = useState(true);
   const [interactive, setInteractive] = useState(true);
   const [envRows, setEnvRows] = useState<EnvRow[]>([]);
   const [plugins, setPlugins] = useState<string[]>([]);
@@ -108,7 +107,6 @@ export default function AgentCreate() {
       model: model.trim()&&model.trim()!==defaultModel?model.trim():undefined,
       effort: effort.trim()&&effort.trim()!==defaultEffort?effort.trim():undefined,
       interactive,
-      loop,
       env: serializeEnv(envRows) || undefined,
       plugins: allowsPluginOverrides ? plugins.join(",") || undefined : undefined,
       group: group || undefined,
@@ -213,10 +211,6 @@ export default function AgentCreate() {
                   {groups.map((g) => <SelectItem key={g.name} value={g.name}>{g.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-end gap-2">
-              <Switch id="loop" checked={loop} onCheckedChange={setLoop} />
-              <Label htmlFor="loop">start loop</Label>
             </div>
           </div>
 

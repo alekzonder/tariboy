@@ -393,7 +393,7 @@ func TestCheckHoldersWithAZeroGracePausesAtOnce(t *testing.T) {
 	def := requestDefinition()
 	def.Statuses[0].Limits = &workflowfile.Limits{UnavailableGrace: "0s"}
 	rewriteDefinition(t, svc, task, def)
-	setAgent(t, svc, "dev-1", `loop_enabled = 0`)
+	setAgent(t, svc, "dev-1", `enabled = 0`)
 	if n := checkHolders(t, svc, stallStart); n != 1 {
 		t.Fatalf("paused %d", n)
 	}
@@ -417,7 +417,7 @@ func TestCheckHoldersCauses(t *testing.T) {
 			}
 		}},
 		{"disabled", "agent dev-1 is disabled", func(t *testing.T, svc *Service) { setAgent(t, svc, "dev-1", `enabled = 0`) }},
-		{"loop disabled", "the loop of agent dev-1 is disabled", func(t *testing.T, svc *Service) { setAgent(t, svc, "dev-1", `loop_enabled = 0`) }},
+		{"bare image", "agent dev-1 uses the bare image and runs no iterations", func(t *testing.T, svc *Service) { setAgent(t, svc, "dev-1", `image_ref = 'bare:latest'`) }},
 		{"halted on error", "agent dev-1 is halted", func(t *testing.T, svc *Service) { setAgent(t, svc, "dev-1", `error_reason = 'boom'`) }},
 		{"halted idle", "agent dev-1 is halted", func(t *testing.T, svc *Service) {
 			setAgent(t, svc, "dev-1", `status_message = 'idle_limit (3 idle iterations)'`)

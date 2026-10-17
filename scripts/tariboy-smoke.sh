@@ -150,7 +150,7 @@ run_stub_case() {
   echo "--- fake harness: recreate ${agent} interactive=${interactive}"
   CREATED_AGENTS+=("$agent")
   sa agent rm "$agent" --force >/dev/null 2>&1 || true
-  sa agent run "$IMAGE" --name "$agent" --harness stub --interactive "$interactive" --env "STUB_STDOUT=${hello}" --loop false | grep -q "name: ${agent}" \
+  sa agent run "$IMAGE" --name "$agent" --harness stub --interactive "$interactive" --env "STUB_STDOUT=${hello}" | grep -q "name: ${agent}" \
     || { echo "FAIL: agent run ${agent}" >&2; exit 1; }
 
   run_iteration_and_check_logs "$agent" "$hello" "fake harness smoke" "$interactive"
@@ -164,7 +164,7 @@ run_codex_case() {
   echo "--- agent: recreate ${agent} with harness codex interactive=${interactive}"
   CREATED_AGENTS+=("$agent")
   sa agent rm "$agent" --force >/dev/null 2>&1 || true
-  sa agent run "$IMAGE" --name "$agent" --harness codex --interactive "$interactive" --loop false | grep -q "name: ${agent}" \
+  sa agent run "$IMAGE" --name "$agent" --harness codex --interactive "$interactive" | grep -q "name: ${agent}" \
     || { echo "FAIL: agent run ${agent}" >&2; exit 1; }
 
   if [ "$interactive" = "true" ]; then
@@ -495,7 +495,7 @@ run_enabled_lifecycle_case() {
   local agent="${AGENT}-enabled"
   CREATED_AGENTS+=("$agent")
   sa agent rm "$agent" --force >/dev/null 2>&1 || true
-  sa agent run "$IMAGE" --name "$agent" --harness stub --interactive false --loop false | grep -q "name: ${agent}" \
+  sa agent run "$IMAGE" --name "$agent" --harness stub --interactive false | grep -q "name: ${agent}" \
     || { echo "FAIL: agent run ${agent}" >&2; exit 1; }
 
   local state
@@ -581,7 +581,7 @@ YAML
 
   # (1) create the stub agent on v1 (out of band), then one manual iteration so it
   # has real history + audit.
-  sa agent run smoke-compose-v1:latest --name "$agent" --harness stub --interactive false --loop false \
+  sa agent run smoke-compose-v1:latest --name "$agent" --harness stub --interactive false \
     | grep -q "name: ${agent}" || { echo "FAIL: agent run ${agent}" >&2; exit 1; }
   sa agent exec "$agent" "stub run" >/dev/null \
     || { echo "FAIL: agent exec ${agent}" >&2; exit 1; }

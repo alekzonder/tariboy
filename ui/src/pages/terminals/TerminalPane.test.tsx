@@ -25,7 +25,7 @@ const remoteTarget = {
 function agent(over: Partial<AgentSummary> = {}): AgentSummary {
   return {
     name: "a1", image: "bare:latest", state: "running", harness: "claude",
-    loop_enabled: false, group: null, interactive: true, ...over,
+    group: null, interactive: true, ...over,
   };
 }
 

@@ -130,7 +130,7 @@ for harness in claude codex opencode cursor; do
   bin="$harness"
   [ "$harness" = "cursor" ] && bin="agent"
   tb agent run image-skills-smoke:latest --name "$agent" --harness "$harness" \
-    --cwd "$FIXTURE_CWD" --loop false --interactive false \
+    --cwd "$FIXTURE_CWD" --interactive false \
     --env "PATH=$FAKE_BIN:$ORIGINAL_PATH,SMOKE_RECORD_DIR=$RECORD_DIR" >/dev/null
   run_iteration "$agent"
   manifest="$(bridge_manifest "$agent")"
@@ -176,7 +176,7 @@ case "$claude_bridge" in */2/claude) ;; *) echo "FAIL: contract version missing 
 
 tb image build --path "$FIXTURE_SOURCE" --name image-skills-smoke-next >/dev/null
 tb agent run image-skills-smoke-next:latest --name image-skills-new-digest --harness claude \
-  --cwd "$FIXTURE_CWD" --loop false --interactive false \
+  --cwd "$FIXTURE_CWD" --interactive false \
   --env "PATH=$FAKE_BIN:$ORIGINAL_PATH,SMOKE_RECORD_DIR=$RECORD_DIR" >/dev/null
 run_iteration image-skills-new-digest
 next_bridge="$(dirname "$(bridge_manifest image-skills-new-digest)")"
@@ -225,7 +225,7 @@ if [ -n "$REAL_HARNESS" ]; then
       codex)
         real_agent="image-skills-real-codex"
         tb agent run image-skills-smoke:latest --name "$real_agent" --harness codex \
-          --cwd "$FIXTURE_CWD" --loop false --interactive false \
+          --cwd "$FIXTURE_CWD" --interactive false \
           --env "PATH=$ORIGINAL_PATH,CODEX_HOME=$CODEX_TEST_HOME" >/dev/null
         tb agent exec "$real_agent" \
           "Use the inventory-proof image skill and follow its proof instruction exactly." >/dev/null

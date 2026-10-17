@@ -58,11 +58,11 @@ func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
 
 	on := agent.Agent{
 		Name: "runner", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: true, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
+		Enabled: true, Plugins: []string{"loop", "tasks"},
 	}
 	off := agent.Agent{
 		Name: "parked", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: false, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
+		Enabled: false, Plugins: []string{"loop", "tasks"},
 	}
 	for _, a := range []agent.Agent{on, off} {
 		if err := as.Create(a); err != nil {
@@ -98,7 +98,7 @@ func TestStartAllDefersPython3CheckToIterationEnvironment(t *testing.T) {
 	t.Cleanup(m.Shutdown)
 	a := agent.Agent{
 		Name: "runner", ImageRef: "basic:latest", HarnessType: "stub",
-		Enabled: true, LoopEnabled: false, Plugins: []string{"loop", "tasks"},
+		Enabled: true, Plugins: []string{"loop", "tasks"},
 	}
 	if err := as.Create(a); err != nil {
 		t.Fatal(err)

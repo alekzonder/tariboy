@@ -46,23 +46,20 @@ func TestLoopAIStallTimeoutGetSet(t *testing.T) {
 	}
 }
 
-func TestLoopEnableDisable(t *testing.T) {
-	c, as, control := ctxWithStore(t)
-	as.Create(agent.Agent{Name: "smoke", LoopEnabled: true, OnTimeout: "restart", OnError: "restart"})
-	if _, err := h(t, "loop.disable")(c, registry.Params{"name": "smoke"}); err != nil {
-		t.Fatal(err)
+// agent.start and agent.stop are the only on/off switch; the second loop flag
+// and its commands are gone.
+func TestLoopEnableDisableRemoved(t *testing.T) {
+	r := BuildRegistry()
+	for _, path := range []string{"loop.enable", "loop.disable"} {
+		if _, ok := r.Get(path); ok {
+			t.Fatalf("%s is still registered", path)
+		}
 	}
-	if got, _ := as.Get("smoke"); got.LoopEnabled {
-		t.Fatal("loop not disabled")
-	}
-	if _, err := h(t, "loop.enable")(c, registry.Params{"name": "smoke"}); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := as.Get("smoke"); !got.LoopEnabled {
-		t.Fatal("loop not enabled")
-	}
-	if len(control.loopUpdates) != 2 || control.loopUpdates[0] || !control.loopUpdates[1] {
-		t.Fatalf("runtime loop updates = %v, want [false true]", control.loopUpdates)
+	cmd, _ := r.Get("agent.run")
+	for _, arg := range cmd.Args {
+		if arg.Name == "loop" {
+			t.Fatal("agent.run still takes a loop argument")
+		}
 	}
 }
 

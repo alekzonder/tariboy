@@ -168,12 +168,13 @@ func (s *Store) MarkGoalDelivered(agent string, now time.Time) error {
 }
 
 func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, error) {
-	var enabled, loopEnabled, goalEnabled bool
+	var enabled, bare, goalEnabled bool
 	var timeoutS int
 	var current string
-	if err := tx.QueryRow(`SELECT enabled, loop_enabled, goal_enabled,
+	// The terminal-only bare image runs no iterations, so it never takes a Goal.
+	if err := tx.QueryRow(`SELECT enabled, image_ref = 'bare:latest', goal_enabled,
 		goal_wait_customer_timeout_s, current_goal_task_key
-		FROM agents WHERE name=?`, agent).Scan(&enabled, &loopEnabled, &goalEnabled, &timeoutS, &current); err != nil {
+		FROM agents WHERE name=?`, agent).Scan(&enabled, &bare, &goalEnabled, &timeoutS, &current); err != nil {
 		return Goal{}, tasks.Task{}, err
 	}
 	if !goalEnabled {
@@ -182,7 +183,7 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 		}
 		return Goal{}, tasks.Task{}, nil
 	}
-	if !enabled || !loopEnabled {
+	if !enabled || bare {
 		return Goal{}, tasks.Task{}, nil
 	}
 

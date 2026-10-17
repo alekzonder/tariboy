@@ -26,7 +26,7 @@ test("opens an agent customer question from the production Desktop notification 
         const principals = await call("GET", "/api/task-principals");
         await call("POST", "/api/agents", {
           image: "basic:latest", name: "question-requester", harness: "stub",
-          interactive: true, loop: false, env: "STUB_SLEEP=300,STUB_CALL_DONE=0",
+          interactive: true, env: "STUB_SLEEP=300,STUB_CALL_DONE=0",
         });
         await call("POST", "/api/agents/question-requester/start", {});
         await call("POST", "/api/task-queues", {

@@ -429,7 +429,6 @@ export interface CreateAgentSpec {
   model?: string;
   effort?: string;
   interactive?: boolean;
-  loop?: boolean;
   env?: string | Record<string, string>;
   plugins?: string | string[];
   timeout?: string;
@@ -580,7 +579,7 @@ export const setAgentInteractive = (name: string, value: boolean) =>
 export const setAgentHarness = (name: string, value: string) =>
   agentPost(name, "harness", { value });
 
-// ---- Alias / notes / status-history / loop-flag toggle (Overview page) ----
+// ---- Alias / notes / status-history ----
 export const getAlias = (name: string) =>
   agentGet<{ name: string; alias: string }>(name, "alias");
 export const setAlias = (name: string, value: string) =>
@@ -600,8 +599,6 @@ export const getStatusHistory = (name: string) =>
     name,
     "status/history",
   );
-export const loopEnable = (name: string) => agentPost(name, "loop/enable");
-export const loopDisable = (name: string) => agentPost(name, "loop/disable");
 
 // ---- Durable agent scripts ----
 export type ScriptMode = "once" | "every";

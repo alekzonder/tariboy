@@ -7,7 +7,7 @@ import { useUiMode } from "@/lib/uiMode";
 // The one section for everything an agent's messaging holds: the conversation
 // the customer has with it, the channels it is subscribed to (its event
 // triggers), and its delivery queue. They share a section because they are the
-// same bus read three ways; Autopilot and Advanced link here instead.
+// same bus read three ways; Advanced links here instead.
 const VIEWS = [
   ["chat", "Chat"],
   ["channels", "Channels"],

@@ -55,7 +55,7 @@ test("clones complete agent configuration through the production Desktop", async
         body: JSON.stringify({
           image: "basic:latest", name: "clone-source", cwd: "",
           harness: "codex", model: "gpt-5", effort: "high",
-          interactive: false, loop: false,
+          interactive: false,
           interval_s: 12, timeout_s: 34, hard_timeout_s: 56,
           on_timeout: "stop", on_error: "restart", max_idle_iterations: 7,
           user_prompt: "desktop clone prompt",
@@ -143,9 +143,6 @@ test("clones complete agent configuration through the production Desktop", async
     return document.querySelector('#create-agent-interactive')?.getAttribute('aria-checked') || "";
   `)).resolves.toBe("false");
   await expect(desktop.execute<string>(`
-    return document.querySelector('#create-agent-autopilot')?.getAttribute('aria-checked') || "";
-  `)).resolves.toBe("false");
-  await expect(desktop.execute<string>(`
     return document.querySelector('#create-agent-start')?.getAttribute('aria-checked') || "";
   `)).resolves.toBe("false");
 
@@ -180,7 +177,6 @@ test("clones complete agent configuration through the production Desktop", async
     model: "gpt-5",
     effort: "high",
     interactive: false,
-    loop_enabled: false,
     enabled: false,
     interval_s: 12,
     timeout_s: 34,

@@ -501,7 +501,6 @@ function CreateAgentDialogForm({
       model: draft.model.trim(),
       effort: draft.effort.trim(),
       interactive: bare ? true : draft.interactive,
-      loop: bare ? false : draft.loop,
       env,
       interval_s: intervalS,
       timeout_s: timeoutS,
@@ -583,7 +582,7 @@ function CreateAgentDialogForm({
           <DialogDescription>
             {cloneSource
               ? `Copy configuration from ${cloneSource.agentName} on ${cloneSource.hostLabel}. Choose a unique name and review every field.`
-              : "Choose a target and image, then configure identity, runtime, Autopilot, and lifecycle settings."}
+              : "Choose a target and image, then configure identity, runtime, loop, and lifecycle settings."}
           </DialogDescription>
         </DialogHeader>
 
@@ -797,7 +796,11 @@ function CreateAgentDialogForm({
               checked={bare ? true : draft.interactive}
               onCheckedChange={(value) => updateDraft("interactive", value)}
               disabled={formDisabled || loadingManifest || bare}
-              help="Attach a terminal console."
+              help={
+                bare
+                  ? "A terminal-only image does not contain agent instructions or tools."
+                  : "Attach a terminal console."
+              }
             />
             <Field label="environment JSON" id="create-agent-env">
               <Textarea
@@ -869,24 +872,12 @@ function CreateAgentDialogForm({
           </section>
 
           <section
-            aria-labelledby="create-agent-autopilot-section"
+            aria-labelledby="create-agent-loop-section"
             className="space-y-3 rounded border p-3"
           >
-            <h3 id="create-agent-autopilot-section" className="font-medium">
-              Autopilot
+            <h3 id="create-agent-loop-section" className="font-medium">
+              Loop
             </h3>
-            <SwitchRow
-              label="Autopilot"
-              id="create-agent-autopilot"
-              checked={bare ? false : draft.loop}
-              onCheckedChange={(value) => updateDraft("loop", value)}
-              disabled={formDisabled || loadingManifest || bare}
-              help={
-                bare
-                  ? "A terminal-only image does not contain agent instructions or tools."
-                  : "Enable loop and event-driven work."
-              }
-            />
             <div className="grid gap-3 sm:grid-cols-2">
               <NumberField
                 label="interval seconds"

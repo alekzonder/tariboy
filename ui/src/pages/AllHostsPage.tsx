@@ -29,7 +29,6 @@ export default function AllHostsPage() {
                   <div className="truncate">{a.image}</div>
                   <div className="mt-1 flex gap-2 text-xs">
                     <span>{a.harness}</span>
-                    {a.loop_enabled && <span>loop</span>}
                   </div>
                 </CardContent>
               </Card>

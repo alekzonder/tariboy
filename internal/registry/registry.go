@@ -178,7 +178,6 @@ type RunSpec struct {
 	Interactive              bool
 	Env                      map[string]string
 	Plugins                  []string
-	Loop                     bool
 	IntervalS                int
 	TimeoutS                 int
 	HardTimeoutS             int
@@ -253,11 +252,10 @@ type AgentStateControl interface {
 	LiveStateOf(a agent.Agent) string
 }
 
-// LoopConfigControl is the live-runtime half of persisted Autopilot settings.
+// LoopConfigControl is the live-runtime half of persisted loop settings.
 // Command handlers use it when a daemon manager is present so parked engines
 // re-read configuration immediately and armed timers are canceled promptly.
 type LoopConfigControl interface {
-	SetLoopEnabled(name string, enabled bool) error
 	RefreshLoopConfig(name string)
 }
 

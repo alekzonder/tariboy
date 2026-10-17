@@ -17,11 +17,10 @@ test("configures an agent goal and task release fields", async ({ desktop, deskt
           if (!response.ok || !envelope.ok) throw new Error(path + ": " + JSON.stringify(envelope.error));
           return envelope.result;
         };
-        await call("POST", "/api/agents", { name: "worker", image: "basic:latest", harness: "stub", loop: false });
+        await call("POST", "/api/agents", { name: "worker", image: "basic:latest", harness: "stub" });
         await call("POST", "/api/task-queues", { prefix: "TARI", name: "Goals" });
         await call("POST", "/api/tasks", { queue: "TARI", title: "Goal one", assignee: "agent:worker" });
         await call("POST", "/api/agents/worker/start");
-        await call("POST", "/api/agents/worker/loop/enable");
         window.location.hash = "#/agents/local/worker/configuration";
         window.__agentGoalSetup = "ready";
       })

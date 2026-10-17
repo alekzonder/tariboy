@@ -110,7 +110,7 @@ func (f *fakeTimerFactory) lastDelay() time.Duration {
 }
 
 func baseAgent() agent.Agent {
-	return agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, LoopEnabled: true, IntervalS: 60, TimeoutS: 30,
+	return agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, IntervalS: 60, TimeoutS: 30,
 		OnTimeout: "restart", OnError: "restart", Plugins: []string{"whoami", "loop", "messages"}}
 }
 
@@ -151,8 +151,8 @@ func TestRunOnceHarnessErrorStopHalts(t *testing.T) {
 		t.Fatalf("res = %q, want error_halt", res)
 	}
 	got, _ := as.Get("smoke")
-	if got.LoopEnabled {
-		t.Fatal("on_error=stop must disable the loop")
+	if got.ErrorReason == "" {
+		t.Fatal("on_error=stop must halt the loop")
 	}
 }
 
@@ -191,7 +191,7 @@ func TestEngineDetachedIterationRemainsRunning(t *testing.T) {
 	if terminalEvents != 0 {
 		t.Fatalf("terminal events = %d, want 0", terminalEvents)
 	}
-	if got, err := as.Get(ag.Name); err != nil || !got.LoopEnabled {
+	if got, err := as.Get(ag.Name); err != nil || got.ErrorReason != "" {
 		t.Fatalf("detached iteration applied on_error policy: agent=%+v err=%v", got, err)
 	}
 }
@@ -205,8 +205,8 @@ func TestRunOnceTimeoutStop(t *testing.T) {
 		t.Fatalf("res = %q", res)
 	}
 	got, _ := as.Get("smoke")
-	if got.LoopEnabled {
-		t.Fatal("on_timeout=stop must disable the loop")
+	if got.ErrorReason == "" {
+		t.Fatal("on_timeout=stop must halt the loop")
 	}
 }
 
@@ -232,8 +232,8 @@ func TestIdleAutostopDisabled(t *testing.T) {
 		}
 	}
 	got, _ := as.Get("smoke")
-	if !got.LoopEnabled {
-		t.Fatal("MaxIdleIterations=0 must never disable the loop")
+	if !got.Enabled {
+		t.Fatal("MaxIdleIterations=0 must never disable the agent")
 	}
 }
 
@@ -257,8 +257,8 @@ func TestIdleAutostopFiresAtThreshold(t *testing.T) {
 	}
 
 	got, _ := as.Get("smoke")
-	if got.LoopEnabled {
-		t.Fatal("idle-stop must disable the loop")
+	if got.Enabled {
+		t.Fatal("idle-stop must disable the agent")
 	}
 	if got.Enabled {
 		t.Fatal("idle-stop must clear master enabled")
@@ -339,7 +339,7 @@ func TestIdleAutostopProductiveResets(t *testing.T) {
 	if res := e.runOnce(context.Background(), "interval", ""); res != TickIdleStop {
 		t.Fatalf("iter 4 (idle, streak=2): res = %q, want idle_stop", res)
 	}
-	if got, _ := as.Get("smoke"); got.LoopEnabled {
+	if got, _ := as.Get("smoke"); got.Enabled {
 		t.Fatal("streak should have reached threshold and stopped")
 	}
 }
@@ -371,7 +371,7 @@ func TestIdleAutostopTimeoutDoesNotCount(t *testing.T) {
 	if res := e.runOnce(context.Background(), "interval", ""); res != TickCompletedWaiting {
 		t.Fatalf("iter 4 (idle after break, streak=1): res = %q, want completed_waiting", res)
 	}
-	if got, _ := as.Get("smoke"); !got.LoopEnabled {
+	if got, _ := as.Get("smoke"); !got.Enabled {
 		t.Fatal("timeout in the middle must not push the streak over threshold")
 	}
 }
@@ -463,7 +463,7 @@ func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
 		t.Fatalf("iteration after rejected terminal status = %#v", it)
 	}
 	stored, err := as.Get(ag.Name)
-	if err != nil || !stored.LoopEnabled || stored.ErrorReason != "" {
+	if err != nil || !stored.Enabled || stored.ErrorReason != "" {
 		t.Fatalf("agent after rejected terminal status = %#v, %v", stored, err)
 	}
 }
@@ -528,7 +528,7 @@ func (erroringRunner) Run(_ context.Context, _ agent.Agent, _, _, _ string) (Out
 
 func TestRunLoopManualTrigger(t *testing.T) {
 	ag := baseAgent()
-	ag.LoopEnabled = false // pure manual
+	ag.IntervalS = 0 // pure manual
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
 
@@ -641,7 +641,7 @@ func TestWakeStartsParkedEngine(t *testing.T) {
 	// A disabled interval agent parks (no timer, blocked on select). A later
 	// enable + Wake(WakeStart) must run an iteration.
 	ag := baseAgent()
-	ag.LoopEnabled = false
+	ag.Enabled = false
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
 
@@ -656,7 +656,7 @@ func TestWakeStartsParkedEngine(t *testing.T) {
 	}
 	// Enable in the store, then wake.
 	got, _ := as.Get("smoke")
-	got.LoopEnabled = true
+	got.Enabled = true
 	got.IntervalS = 60
 	if err := as.Update(got); err != nil {
 		t.Fatal(err)
@@ -693,7 +693,7 @@ func TestIntervalTimerReloadsPersistedPauseBeforeRunning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stored.LoopEnabled = false
+	stored.Enabled = false
 	if err := as.Update(stored); err != nil {
 		t.Fatal(err)
 	}
@@ -711,7 +711,6 @@ func TestIntervalTimerReloadsPersistedPauseBeforeRunning(t *testing.T) {
 
 func TestWakeMessageRunsIterationWhenPending(t *testing.T) {
 	ag := baseAgent()
-	ag.LoopEnabled = true
 	ag.IntervalS = 0 // event-only
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
@@ -1024,7 +1023,7 @@ func TestWakeMessageRetryCancelsWhenStoppedOrPendingClears(t *testing.T) {
 		retry := factory.lastTimer()
 
 		stored, _ := as.Get("smoke")
-		stored.LoopEnabled = false
+		stored.Enabled = false
 		if err := as.Update(stored); err != nil {
 			t.Fatal(err)
 		}
@@ -1323,15 +1322,13 @@ func asStr(v any) string {
 }
 
 // TestEngineSkipsIterationWhenDisabled verifies the interval gate requires
-// the master Enabled flag, not just LoopEnabled: a disabled agent must not
-// fire any interval iteration even when LoopEnabled=true and IntervalS>0.
+// the Enabled flag: a disabled agent must not fire any interval iteration
+// even when IntervalS>0.
 // Mirrors TestWakeStartsParkedEngine's "parked engine" shape (real timer,
-// real sleep, assert ListIterations stays empty), but parks via Enabled=false
-// instead of LoopEnabled=false.
+// real sleep, assert ListIterations stays empty).
 func TestEngineSkipsIterationWhenDisabled(t *testing.T) {
 	ag := baseAgent()
 	ag.Enabled = false
-	ag.LoopEnabled = true
 	ag.IntervalS = 1 // short enough to fire well within the test's wait window
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
@@ -1355,16 +1352,59 @@ func TestEngineSkipsIterationWhenDisabled(t *testing.T) {
 	}
 }
 
+// TestEngineIntervalGate pins the one switch: an enabled agent runs interval
+// iterations unless it is halted or uses the terminal-only bare image.
+func TestEngineIntervalGate(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		edit  func(*agent.Agent)
+		wantN bool
+	}{
+		{name: "enabled", edit: func(*agent.Agent) {}, wantN: true},
+		{name: "bare", edit: func(a *agent.Agent) { a.ImageRef = "bare:latest" }},
+		{name: "halted", edit: func(a *agent.Agent) { a.ErrorReason = "halted: timeout" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ag := baseAgent()
+			ag.IntervalS = 1
+			tc.edit(&ag)
+			r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
+			e, as := newEngine(t, ag, r)
+			if ag.ErrorReason != "" {
+				if err := as.SetError(ag.Name, ag.ErrorReason); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() { e.Run(ctx); close(done) }()
+			deadline := time.Now().Add(1500 * time.Millisecond)
+			for time.Now().Before(deadline) {
+				if its, _ := as.ListIterations("smoke"); len(its) > 0 {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			cancel()
+			<-done
+			its, _ := as.ListIterations("smoke")
+			if got := len(its) > 0; got != tc.wantN {
+				t.Fatalf("ran %d iteration(s), want any=%v", len(its), tc.wantN)
+			}
+		})
+	}
+}
+
 func TestDisableLoopSetsError(t *testing.T) {
-	ag := agent.Agent{Name: "eh", ImageRef: "i:latest", OnError: "stop", LoopEnabled: true}
+	ag := agent.Agent{Name: "eh", ImageRef: "i:latest", OnError: "stop", Enabled: true}
 	e, st := newEngine(t, ag, &fakeRunner{outcomes: []Outcome{{Status: "harness_error"}}})
 	e.applyPolicy(Outcome{Status: "harness_error"})
 	a, err := st.Get("eh")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.ErrorReason == "" || a.LoopEnabled {
-		t.Fatalf("after error-stop halt: reason=%q loop=%v, want set/false", a.ErrorReason, a.LoopEnabled)
+	if a.ErrorReason == "" {
+		t.Fatalf("after error-stop halt: reason=%q, want set", a.ErrorReason)
 	}
 }
 
@@ -1391,9 +1431,6 @@ func TestRunOnceBeforeLaunchErrorSurfacesReason(t *testing.T) {
 	}
 	if !strings.Contains(got.ErrorReason, "image manifest verify: digest mismatch") {
 		t.Fatalf("error_reason = %q, want the activation error text", got.ErrorReason)
-	}
-	if got.LoopEnabled {
-		t.Fatal("a pre-launch failure must halt the loop instead of repeating every tick")
 	}
 	want := "iteration_failed:image_activation_failed:image manifest verify: digest mismatch"
 	if len(events) != 1 || events[0] != want {
