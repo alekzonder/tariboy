@@ -12,6 +12,7 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4177",
     headless: true,
     hasTouch: true,
+    screenshot: "only-on-failure",
   },
   projects: [
     { name: "phone-360", use: { viewport: { width: 360, height: 800 } } },

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ArrowLeftRight, Check, ChevronDown, Plus, Settings } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, Layers, Plus, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -61,7 +61,9 @@ export function WorkspaceSwitcher({ hosts, onSelect, onManage }: {
           aria-label={`Workspace: ${current.name}`}
           className="flex h-[26px] min-w-0 shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[13px] hover:bg-accent"
         >
-          <span className="max-w-40 truncate font-medium max-sm:max-w-20">{current.name}</span>
+          {/* A phone's titlebar has room for the icon only. */}
+          <Layers aria-hidden="true" className="size-4 sm:hidden" />
+          <span className="max-w-40 truncate font-medium max-sm:hidden">{current.name}</span>
           <ChevronDown aria-hidden="true" className="size-2.5 shrink-0 opacity-45" />
         </button>
       </DropdownMenuTrigger>
@@ -169,8 +171,8 @@ function ManagerBody({ hosts, initialId, focusNew }: {
           New hosts join Default.
         </DialogDescription>
       </div>
-      <div className="flex min-h-0 flex-1">
-        <div className="flex w-[220px] shrink-0 flex-col border-r">
+      <div className="flex min-h-0 flex-1 max-sm:flex-col">
+        <div className="flex w-[220px] shrink-0 flex-col border-r max-sm:max-h-40 max-sm:w-auto max-sm:border-r-0 max-sm:border-b">
           <div className="grid min-h-0 flex-1 content-start gap-px overflow-auto px-1.5 py-2">
             {state.workspaces.map((workspace) => (
               <button

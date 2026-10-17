@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core"
 import { ChevronRight, GripVertical, Plus } from "lucide-react"
 import { useState } from "react"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 import {
   DropdownMenu,
   DropdownMenuCheckItem,
@@ -27,6 +28,7 @@ import type { VisibleTaskRow } from "@/lib/taskTree"
 import TaskColumnResizeHandle from "./TaskColumnResizeHandle"
 import {
   moveTaskColumn,
+  PHONE_TASK_QUERY,
   TASK_COLUMN_LABELS,
   useTaskColumns,
   type TaskColumn,
@@ -309,6 +311,9 @@ const horizontalOnly: Modifier = ({ transform }) => ({ ...transform, y: 0 })
  *  apart from the row drags under it. */
 export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; sticky?: boolean }) {
   const columns = useTaskColumns(mode)
+  // A phone's widths are fixed, so dragging one would only rewrite the layout
+  // the wider screens use.
+  const resizable = !useMediaQuery(PHONE_TASK_QUERY)
   const sensors = useSensors(
     useSensor(MouseSensor, headerSensorOptions.mouse),
     useSensor(TouchSensor, headerSensorOptions.touch),
@@ -326,14 +331,14 @@ export function TaskTableHeader({ mode, sticky = false }: { mode: TaskRowMode; s
           sticky && "sticky top-0 z-2 bg-card",
         )}
       >
-        {columns.map((column) => <TaskHeaderCell key={column.id} column={column} />)}
+        {columns.map((column) => <TaskHeaderCell key={column.id} column={column} resizable={resizable} />)}
         {mode !== "servers" && <span aria-hidden="true" style={{ width: TASK_COLUMNS.add }} className="shrink-0" />}
       </div>
     </DndContext>
   )
 }
 
-function TaskHeaderCell({ column }: { column: TaskColumn }) {
+function TaskHeaderCell({ column, resizable }: { column: TaskColumn; resizable: boolean }) {
   const drag = useDraggable({ id: column.id })
   const drop = useDroppable({ id: column.id })
   const label = TASK_COLUMN_LABELS[column.id]
@@ -367,7 +372,7 @@ function TaskHeaderCell({ column }: { column: TaskColumn }) {
       >
         {label}
       </button>
-      {column.id !== "task" && column.width !== undefined && (
+      {resizable && column.id !== "task" && column.width !== undefined && (
         <TaskColumnResizeHandle id={column.id} label={label} width={column.width} />
       )}
     </span>

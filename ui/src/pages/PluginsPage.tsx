@@ -29,7 +29,7 @@ export default function PluginsPage() {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Install plugin</CardTitle></CardHeader>
         <CardContent className="flex items-end gap-2">
-          <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="daemon-accessible plugin dir" className="h-8 w-96" />
+          <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="daemon-accessible plugin dir" className="h-8 w-96 min-w-0" />
           <Button size="sm" onClick={() => guard("install", () => apiPost("/api/plugins", { path }), { verb: "ok", after: () => { setPath(""); void load(); } })}>Install</Button>
         </CardContent>
       </Card>

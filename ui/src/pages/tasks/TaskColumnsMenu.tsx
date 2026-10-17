@@ -37,7 +37,7 @@ export default function TaskColumnsMenu({ mode }: { mode: TaskRowMode }) {
         <button
           type="button"
           aria-label="Columns"
-          className="flex h-7 shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex h-7 shrink-0 items-center gap-[7px] rounded-[8px] bg-muted px-[9px] text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground max-sm:hidden"
         >
           <Columns3 aria-hidden="true" className="size-3" />
           Columns

@@ -231,8 +231,8 @@ export default function ImageSourceEditor() {
           )}
         </div>
       )}
-      <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="overflow-auto border-r p-2">
+      <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] max-sm:grid-cols-1 max-sm:grid-rows-[minmax(0,10rem)_minmax(0,1fr)]">
+        <aside className="overflow-auto border-r p-2 max-sm:border-r-0 max-sm:border-b">
           <div className="mb-2 px-2 text-xs font-medium text-muted-foreground">Source files</div>
           {files.map((file) => (
             <button
