@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   defaultTaskColumnLayout,
   moveTaskColumn,
+  PHONE_TASK_QUERY,
   readTaskColumnLayout,
   resetTaskColumns,
   setTaskColumnWidth,
@@ -115,5 +116,26 @@ describe("useTaskColumns", () => {
     act(() => moveTaskColumn("status", "priority"))
     expect(ids(result.current)).toEqual(["status", "priority", "key", "task", "agent", "updated"])
     expect(result.current.find((column) => column.id === "task")?.width).toBeUndefined()
+  })
+
+  it("shows a phone only the columns that name a task, without touching the saved layout", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === PHONE_TASK_QUERY,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+    act(() => setTaskColumnWidth("key", 300))
+    act(() => moveTaskColumn("status", "priority"))
+    const saved = localStorage.getItem(TASK_COLUMN_LAYOUT_KEY)
+
+    const { result } = renderHook(() => useTaskColumns("all"))
+    expect(result.current).toEqual([
+      { id: "status", width: 84 },
+      { id: "key", width: 96 },
+      { id: "task", width: undefined },
+    ])
+    expect(localStorage.getItem(TASK_COLUMN_LAYOUT_KEY)).toBe(saved)
+    vi.unstubAllGlobals()
   })
 })

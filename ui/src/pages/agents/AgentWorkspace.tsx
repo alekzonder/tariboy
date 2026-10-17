@@ -202,7 +202,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                       <span className="truncate">{runtime}</span>
                     </span>
                   )}
-                  <span className="flex min-w-0 flex-1 items-center gap-[5px] overflow-hidden text-[12.5px] whitespace-nowrap text-muted-foreground">
+                  <span className="flex min-w-0 flex-1 items-center gap-[5px] overflow-hidden text-[12.5px] whitespace-nowrap text-muted-foreground max-lg:flex-none">
                     <span className="shrink-0">Goal:</span>
                     {agent.current_goal_task_key ? (
                       <Link

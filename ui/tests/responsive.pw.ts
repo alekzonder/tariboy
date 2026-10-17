@@ -37,7 +37,7 @@ async function overflowing(page: Page) {
       if (scrollsX(element)) continue;
       const label = `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}`
         + `[${(element.getAttribute("data-testid") ?? element.className?.toString() ?? "").slice(0, 60)}]`
-        + ` right=${Math.round(rect.right)} "${(element.textContent ?? "").trim().slice(0, 40)}"`;
+        + ` right=${Math.round(rect.right)} "${(element.getAttribute("aria-label") ?? element.textContent ?? "").trim().slice(0, 40)}"`;
       found.push(label);
     }
     return found.slice(0, 10);
@@ -47,17 +47,48 @@ async function overflowing(page: Page) {
 async function expectFits(page: Page, route: string) {
   await page.goto(`${fixture}${route}`);
   await page.waitForLoadState("networkidle");
+  // RESPONSIVE_SHOTS=dir keeps a picture of each page for a person to look at.
+  if (process.env.RESPONSIVE_SHOTS) {
+    await page.screenshot({ path: `${process.env.RESPONSIVE_SHOTS}/${test.info().project.name}${route.replace(/[^a-z0-9]+/gi, "_")}.png` });
+  }
   expect(await overflowing(page), `overflow at ${route}`).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
+// A task with a long title, so the task table and the task detail have rows.
+async function ensureTask(request: APIRequestContext) {
+  // An existing queue answers with an error; the task create below is the check.
+  await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "MOB", name: "Mobile layout" } });
+  const response = await request.post(`${daemonURL}/api/tasks`, {
+    data: {
+      queue: "MOB",
+      idempotency_key: "responsive-task",
+      priority: "P1",
+      title: "Check that the whole interface works on phones and tablets without sideways scrolling",
+      description: "A [link](https://example.com) and a long line: " + "word ".repeat(80),
+      assignee: `agent:${AGENT}`,
+    },
+  });
+  const envelope = await response.json();
+  expect(envelope.ok, JSON.stringify(envelope)).toBe(true);
+  return envelope.result.key as string;
+}
+
+let taskKey = "";
 test.beforeEach(async ({ request }) => {
   await ensureAgent(request);
+  taskKey = await ensureTask(request);
+});
+
+test("task detail fits the window", async ({ page }) => {
+  await expectFits(page, `/servers/local/tasks?task=${taskKey}`);
+  await expect(page.getByText(taskKey).first()).toBeVisible();
 });
 
 for (const route of [
   "/",
   "/?view=all",
+  "/?new=1",
   "/servers/local/tasks",
   "/servers/local/images",
   "/servers/local/workflows",
@@ -65,6 +96,8 @@ for (const route of [
   "/servers/local/settings",
   "/servers/local/settings/hosts",
   "/servers/local/settings/advanced",
+  ...["usage", "budgets", "plugins", "ops", "daemons", "groups", "channels"]
+    .map((page) => `/servers/local/settings/advanced/${page}`),
   "/app-settings",
 ]) {
   test(`${route} fits the window`, async ({ page }) => {
@@ -108,8 +141,9 @@ test("the agent list is a drawer on compact screens and a column on wide ones", 
   await page.getByRole("button", { name: "Open menu" }).click();
   const drawer = page.getByRole("dialog", { name: "Agents" });
   await expect(drawer).toBeVisible();
+  // It slides in; measure where it settles.
+  await expect.poll(async () => (await drawer.boundingBox())?.x).toBe(0);
   const box = await drawer.boundingBox();
-  expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(width);
   await drawer.getByRole("tab", { name: "Agents" }).click();
   await drawer.getByText(AGENT, { exact: true }).click();

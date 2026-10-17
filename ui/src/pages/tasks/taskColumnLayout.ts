@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { TASK_COLUMNS, type TaskRowMode } from "./taskColumns"
 
 export const TASK_COLUMN_LAYOUT_KEY = "tasks:columns:v1"
@@ -148,7 +149,21 @@ export function useTaskColumnLayout(): TaskColumnLayout {
   return useSyncExternalStore(subscribe, snapshot)
 }
 
+/** Below Tailwind's `sm` a task table keeps only what names a task. */
+export const PHONE_TASK_QUERY = "(max-width: 639.98px)"
+// Priority stays in the task's detail: with it the title got about 40px.
+const PHONE_WIDTHS: Partial<Record<TaskColumnId, number>> = { key: 96, status: 84 }
+
+/** The phone's columns at narrow fixed widths, in the saved order. The saved
+ *  layout itself stays for wider screens. */
+export function phoneColumns(columns: TaskColumn[]): TaskColumn[] {
+  return columns
+    .filter((column) => column.id === "task" || column.id in PHONE_WIDTHS)
+    .map((column) => ({ id: column.id, width: PHONE_WIDTHS[column.id] }))
+}
+
 /** The columns one table shows, in the shared order, with their widths. */
 export function useTaskColumns(mode: TaskRowMode): TaskColumn[] {
-  return columnsOf(useTaskColumnLayout(), mode)
+  const columns = columnsOf(useTaskColumnLayout(), mode)
+  return useMediaQuery(PHONE_TASK_QUERY) ? phoneColumns(columns) : columns
 }

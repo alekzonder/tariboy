@@ -22,7 +22,7 @@ export default function OpsPage() {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Restore</CardTitle></CardHeader>
         <CardContent className="flex items-end gap-2">
-          <Input value={file} onChange={(e) => setFile(e.target.value)} placeholder="daemon-accessible archive path" className="h-8 w-96" />
+          <Input value={file} onChange={(e) => setFile(e.target.value)} placeholder="daemon-accessible archive path" className="h-8 w-96 min-w-0" />
           <Button size="sm" onClick={() => void guard("restore", () => apiPost("/api/restore", { file }), { verb: "ok" })}>Restore</Button>
         </CardContent>
       </Card>
