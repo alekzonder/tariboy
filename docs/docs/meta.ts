@@ -17,5 +17,6 @@ export default defineMeta({
     "images-and-groups",
     "reference",
     "development",
+    "android-release",
   ],
 });
