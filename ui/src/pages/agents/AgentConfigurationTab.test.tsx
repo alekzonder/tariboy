@@ -316,6 +316,23 @@ it("shows only blocks with unsaved changes when Changed only is on", async () =>
   expect(queryBlock("Runtime")).not.toBeInTheDocument();
 });
 
+// Layout classes are the only signal jsdom has for the page's padding and the
+// search bar matching the white workspace panel, as in the reported screenshot.
+it("pads the page and keeps the search bar flush with the cards on the panel color", async () => {
+  fakeServer();
+  const { container } = render(tree());
+  await ready();
+  expect(container.firstElementChild).toHaveClass("px-4", "pt-4", "pb-6");
+  const bar = screen.getByRole("navigation", { name: "Configuration blocks" }).parentElement!;
+  expect(bar).toHaveClass("bg-card/95");
+  expect(bar).not.toHaveClass("bg-background/95", "-mx-1");
+  const result = within(bar).getByRole("status");
+  expect(result).toHaveClass("sr-only");
+  search("interval");
+  expect(result).not.toHaveClass("sr-only");
+  expect(result).toHaveTextContent(/blocks match/);
+});
+
 // --- Run actions -------------------------------------------------------------
 
 it("keeps Start, Stop and Restart as immediate actions in the page header", async () => {
