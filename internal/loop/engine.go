@@ -1,6 +1,7 @@
 // Package loop runs one iteration scheduler per agent (spec §5.2). The state
-// machine wakes on interval cadence or a manual trigger, runs a single
-// iteration to completion, records it, and applies on_timeout/on_error policy.
+// machine wakes on interval cadence, the RRULE schedule, a message or a manual
+// trigger, runs a single iteration to completion, records it, and applies
+// on_timeout/on_error policy.
 package loop
 
 import (
@@ -20,6 +21,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/telemetry"
 )
 
@@ -374,13 +376,14 @@ func (e *Engine) Run(ctx context.Context) {
 
 	for {
 		e.reload()
-		// Event-only agents (IntervalS <= 0) create no timer at all: a nil
-		// channel blocks forever in select, so we never allocate a runtime
-		// timer that a manual trigger would then abandon and leak.
+		// Event-only agents (IntervalS <= 0, no schedule) create no timer at
+		// all: a nil channel blocks forever in select, so we never allocate a
+		// runtime timer that a manual trigger would then abandon and leak.
 		var timer loopTimer
 		var timerC <-chan time.Time
-		if e.iterates() && e.ag.IntervalS > 0 {
-			timer = e.newTimer(e.nextWait())
+		wait, armedRule, armed := e.nextTimer()
+		if armed {
+			timer = e.newTimer(wait)
 			timerC = timer.C()
 		}
 		select {
@@ -451,7 +454,11 @@ func (e *Engine) Run(ctx context.Context) {
 			// Re-read persisted intent at the last responsible moment so stale
 			// state cannot launch one extra billable iteration.
 			e.reload()
-			if e.iterates() && e.ag.IntervalS > 0 {
+			switch {
+			case !e.iterates():
+			case armedRule != "" && armedRule == e.ag.ScheduleRRule:
+				e.runOnce(ctx, "schedule", "")
+			case armedRule == "" && e.ag.IntervalS > 0:
 				e.runOnce(ctx, "interval", "")
 			}
 		case <-messageRetryC:
@@ -479,6 +486,28 @@ func (e *Engine) hasPending() bool {
 		return false
 	}
 	return ok
+}
+
+// nextTimer picks the nearer of the interval firing and the next schedule
+// occurrence. armedRule is the schedule rule when the schedule won (a tie goes
+// to the schedule) and "" when the interval won; armed is false when neither
+// applies. Occurrences missed while an iteration ran are not replayed: the next
+// one is strictly after now.
+func (e *Engine) nextTimer() (wait time.Duration, armedRule string, armed bool) {
+	if !e.iterates() {
+		return 0, "", false
+	}
+	if e.ag.IntervalS > 0 {
+		wait, armed = e.nextWait(), true
+	}
+	now := e.clock()
+	if at, ok := schedule.NextRRule(e.ag.ScheduleRRule, now, time.Local); ok {
+		d := at.Sub(now)
+		if !armed || d <= wait {
+			wait, armedRule, armed = d, e.ag.ScheduleRRule, true
+		}
+	}
+	return wait, armedRule, armed
 }
 
 // nextWait returns the delay until the next interval firing, measured from the

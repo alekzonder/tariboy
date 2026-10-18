@@ -146,7 +146,8 @@ function fakeServer(opts: {
       return response({ keys: state.secrets, count: state.secrets.length });
     }
     if (method === "POST") {
-      if (agentRest === "budget") state.view = { ...state.view, budget: { ...state.view.budget!, hour_usd: Number(body.hour_usd), day_usd: Number(body.day_usd), week_usd: Number(body.week_usd), month_usd: Number(body.month_usd) } };
+      if (agentRest === "loop/schedule") state.view = { ...state.view, schedule: body.clear ? "" : body.value, schedule_next_at: body.clear ? "" : "2026-10-26T08:00:00Z" };
+      else if (agentRest === "budget") state.view = { ...state.view, budget: { ...state.view.budget!, hour_usd: Number(body.hour_usd), day_usd: Number(body.day_usd), week_usd: Number(body.week_usd), month_usd: Number(body.month_usd) } };
       else if (VIEW_FIELD[agentRest]) {
         const [field, key] = VIEW_FIELD[agentRest];
         state.view = { ...state.view, [field]: body[key] };
@@ -690,4 +691,28 @@ it("mounts no prune dialog buttons while its confirmation is closed", async () =
   await ready();
   expect(screen.queryByRole("button", { name: "Prune retained data" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+});
+
+// --- Schedule ----------------------------------------------------------------
+
+it("shows the next scheduled run and saves or clears the RRULE schedule", async () => {
+  const rule = "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0";
+  const nextAt = "2026-10-19T09:30:00+03:00";
+  const server = fakeServer({ view: { schedule: rule, schedule_next_at: nextAt } });
+  render(tree());
+  await ready();
+  const loop = block("Loop and timeouts");
+  expect(within(loop).getByLabelText("Schedule (RRULE)")).toHaveValue(rule);
+  expect(within(loop).getByTestId("schedule-next-run")).toHaveTextContent(`Next run: ${new Date(nextAt).toLocaleString()}`);
+
+  fireEvent.change(within(loop).getByLabelText("Schedule (RRULE)"), { target: { value: " RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0 " } });
+  save();
+  await waitFor(() => expect(saveBar()).toHaveTextContent("All changes saved"));
+  expect(server.calls.find((c) => c.path.endsWith("/loop/schedule"))?.body).toEqual({ value: "RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=0" });
+
+  fireEvent.change(screen.getByLabelText("Schedule (RRULE)"), { target: { value: "" } });
+  save();
+  await waitFor(() => expect(server.calls.filter((c) => c.path.endsWith("/loop/schedule"))).toHaveLength(2));
+  expect(server.calls.filter((c) => c.path.endsWith("/loop/schedule"))[1].body).toEqual({ clear: true });
+  await waitFor(() => expect(screen.getByTestId("schedule-next-run")).toHaveTextContent("No scheduled run"));
 });

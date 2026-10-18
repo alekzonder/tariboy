@@ -918,7 +918,9 @@ later delivery.
 Configuration is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
-fields; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+fields, including **Schedule (RRULE)** with the daemon's next scheduled start
+under it, which follows Save, and an emptied field clears the schedule; there
+is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
 shell script and secrets), and **Retention and cleanup**. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.

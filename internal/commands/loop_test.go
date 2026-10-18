@@ -1,9 +1,12 @@
 package commands
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
 )
 
@@ -94,5 +97,55 @@ func TestAgentExec(t *testing.T) {
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 	if _, err := h(t, "agent.exec")(c, registry.Params{"name": "smoke", "prompt": "do it now"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLoopScheduleSetReadClear(t *testing.T) {
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := h(t, "loop.schedule")
+	res, err := cmd(c, registry.Params{"name": "smoke", "value": "RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := as.Get("smoke")
+	if !strings.HasPrefix(got.ScheduleRRule, "DTSTART:") ||
+		!strings.HasSuffix(got.ScheduleRRule, "\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0") {
+		t.Fatalf("stored schedule = %q", got.ScheduleRRule)
+	}
+	view := res.(map[string]any)
+	if view["schedule"] != got.ScheduleRRule {
+		t.Fatalf("set result = %v", view)
+	}
+	next, err := time.Parse(time.RFC3339, view["schedule_next_at"].(string))
+	if err != nil || !next.After(time.Now()) || next.In(time.Local).Hour() != 9 || next.In(time.Local).Minute() != 30 {
+		t.Fatalf("schedule_next_at = %v (%v)", view["schedule_next_at"], err)
+	}
+
+	if _, err := cmd(c, registry.Params{"name": "smoke", "value": "FREQ=SECONDLY"}); err == nil {
+		t.Fatal("second-precision schedule accepted")
+	} else if ue, ok := err.(api.UserError); !ok || ue.Code != "bad_schedule" {
+		t.Fatalf("err = %#v, want bad_schedule", err)
+	}
+	if after, _ := as.Get("smoke"); after.ScheduleRRule != got.ScheduleRRule {
+		t.Fatalf("rejected rule changed the schedule to %q", after.ScheduleRRule)
+	}
+
+	read, err := cmd(c, registry.Params{"name": "smoke"})
+	if err != nil || read.(map[string]any)["schedule"] != got.ScheduleRRule {
+		t.Fatalf("read = %v, %v", read, err)
+	}
+
+	cleared, err := cmd(c, registry.Params{"name": "smoke", "clear": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := cleared.(map[string]any); v["schedule"] != "" || v["schedule_next_at"] != "" {
+		t.Fatalf("clear result = %v", v)
+	}
+	if after, _ := as.Get("smoke"); after.ScheduleRRule != "" {
+		t.Fatalf("schedule after clear = %q", after.ScheduleRRule)
 	}
 }

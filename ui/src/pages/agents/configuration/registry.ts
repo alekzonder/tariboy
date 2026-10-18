@@ -73,6 +73,7 @@ export const BLOCKS: readonly ConfigBlock[] = [
     keywords: "schedule iteration",
     fields: [
       { key: "interval", label: "Interval", kind: "text", helper: `Seconds. ${NEXT_ITERATION}`, keywords: "period seconds" },
+      { key: "schedule", label: "Schedule (RRULE)", kind: "textarea", helper: "RFC 5545 RRULE, whole minutes, in the daemon host's time zone unless DTSTART names one. Works together with Interval. Empty means no schedule.", keywords: "rrule cron calendar time weekday day month dtstart" },
       { key: "timeout", label: "Timeout", kind: "text", helper: `Seconds. ${NEXT_ITERATION}`, keywords: "seconds" },
       { key: "hard-timeout", label: "Hard timeout", kind: "text", helper: `Seconds. ${NEXT_ITERATION}`, keywords: "kill seconds" },
       { key: "on-timeout", label: "On timeout", kind: "select", options: ["restart", "stop"], helper: NEXT_ITERATION, keywords: "policy" },

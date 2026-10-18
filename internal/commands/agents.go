@@ -59,6 +59,7 @@ func agentView(c *registry.Ctx, a agent.Agent, state string) (map[string]any, er
 		"group":                 a.Group, "alias": a.Alias, "notes": a.Notes, "color": a.Color,
 		"max_idle_iterations": a.MaxIdleIterations,
 		"ai_stall_timeout_s":  a.AIStallTimeoutS,
+		"schedule":            a.ScheduleRRule, "schedule_next_at": scheduleNextAt(a),
 	}
 	budget, err := agentBudgetView(c, a.Name)
 	if err != nil {
@@ -513,6 +514,7 @@ func agentPs() registry.Command {
 					"interactive":         a.Interactive,
 					"goal_enabled":        a.GoalEnabled, "goal_wait_customer_timeout_s": a.GoalWaitCustomerTimeoutS, "goal_delivery_cooldown_s": a.GoalDeliveryCooldownS,
 					"current_goal_task_key": a.CurrentGoalTaskKey,
+					"schedule":              a.ScheduleRRule, "schedule_next_at": scheduleNextAt(a),
 				}
 				row["budget"] = budgetView(budgets[a.Name])
 				addErrorReason(row, a, state)
