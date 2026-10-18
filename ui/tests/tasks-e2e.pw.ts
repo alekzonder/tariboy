@@ -174,9 +174,9 @@ test("Tasks production workspace lists the agent pools of a queue",async ({ page
   await page.goto("/tests/tasks-fixture.html#/servers/local/tasks")
   await page.getByRole("button", { name: "Queue: all" }).click()
   await page.getByRole("menuitem", { name: "Manage queues…" }).click()
-  await page.getByRole("button", { name: "Agent pools FLOW" }).click()
-  await expect(page.getByLabel("Agent pools FLOW").getByRole("heading", { name: "Agent pools" })).toBeVisible()
-  await expect(page.getByLabel("Pool name FLOW")).toBeVisible()
+  await page.getByRole("button", { name: /^Queue FLOW/ }).click()
+  await page.getByRole("tab", { name: "Pools" }).click()
+  await expect(page.getByRole("region", { name: "Agent pools FLOW" }).getByRole("button", { name: "Add pool" })).toBeVisible()
   await assertNoLoadFailedToast(page)
 })
 
@@ -196,7 +196,6 @@ test("Tasks production workspace persists PATCH saves, release fields, and the f
   await page.getByRole("button", { name: "Add queue" }).click();
   await expect(page.getByRole("heading", { name: "Tasks E2E" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Rename TEST" }).click();
   await page.getByLabel("Queue name TEST").fill("Tasks E2E updated");
   await page.getByLabel("Queue description TEST").fill("Saved through PATCH from a browser origin");
   await page.getByRole("button", { name: "Save TEST" }).click();
@@ -430,7 +429,8 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   await page.getByRole("button", { name: "Queue: all" }).click();
   await page.getByRole("menuitem", { name: "Manage queues…" }).click();
-  await page.getByRole("button", { name: "Workflow WFUI" }).click();
+  await page.getByRole("button", { name: /^Queue WFUI/ }).click();
+  await page.getByRole("tab", { name: "Workflow" }).click();
   const settings = page.getByRole("region", { name: "Workflow WFUI" });
   await expect(settings.getByText("No workflow")).toBeVisible();
   await settings.getByLabel("Workflow image").selectOption("wfui:latest");
@@ -503,10 +503,12 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   // Step 6: queue settings show the binding and manage secrets.
   await page.getByRole("button", { name: "Queue: all" }).click();
   await page.getByRole("menuitem", { name: "Manage queues…" }).click();
-  await page.getByRole("button", { name: "Workflow WFUI" }).click();
+  await page.getByRole("button", { name: /^Queue WFUI/ }).click();
+  await page.getByRole("tab", { name: "Workflow" }).click();
   const queueSettings = page.getByRole("region", { name: "Workflow WFUI" });
   await expect(queueSettings.getByTestId("binding")).toContainText(/wfui\s+0\.1\.0\s+[0-9a-f]{12}/);
-  const secrets = queueSettings.getByRole("region", { name: "Secrets WFUI" });
+  await page.getByRole("tab", { name: "Secrets" }).click();
+  const secrets = page.getByRole("region", { name: "Secrets WFUI" });
   await expect(secrets.getByText("No secrets.")).toBeVisible();
   await secrets.getByLabel("Secret key").fill("GH_TOKEN");
   await secrets.getByLabel("Secret value").fill("ghp_browser-secret-value");
@@ -519,8 +521,9 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await expect(page.getByLabel("Search tasks")).toBeVisible();
   await page.getByRole("button", { name: "Queue: all" }).click();
   await page.getByRole("menuitem", { name: "Manage queues…" }).click();
-  await page.getByRole("button", { name: "Workflow WFUI" }).click();
-  const reloaded = page.getByRole("region", { name: "Workflow WFUI" }).getByRole("region", { name: "Secrets WFUI" });
+  await page.getByRole("button", { name: /^Queue WFUI/ }).click();
+  await page.getByRole("tab", { name: "Secrets" }).click();
+  const reloaded = page.getByRole("region", { name: "Secrets WFUI" });
   await expect(reloaded.getByText("GH_TOKEN", { exact: true }), "step 6: the key is listed after a reload").toBeVisible();
   expect(await page.content(), "step 6: no value in the reloaded page").not.toContain("ghp_browser-secret-value");
   await reloaded.getByRole("button", { name: "Remove GH_TOKEN" }).click();

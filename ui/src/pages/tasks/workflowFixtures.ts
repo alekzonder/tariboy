@@ -1,5 +1,5 @@
 import type { Daemon } from "@/lib/daemons"
-import type { ScriptRun, Task, WorkflowView } from "@/lib/tasks"
+import type { AgentPool, ScriptRun, Task, WorkflowManifest, WorkflowView } from "@/lib/tasks"
 
 /** Test fixtures for the workflow panel and its sections. */
 
@@ -106,3 +106,28 @@ export const poolView: WorkflowView = {
     { on: "drafted", to: "review", requires: ["notes", "summary"], missing: ["summary"], checks: ["./checks/notes.sh"] },
   ],
 }
+
+/** A development workflow: two pools, a customer approval, and a terminal status. */
+export const developmentManifest: WorkflowManifest = {
+  schema_version: 1,
+  name: "development",
+  version: "0.3.0",
+  digest: "9232ab7783af091984a1e2f57292bbb2",
+  built_at: "",
+  files: [],
+  definition: {
+    schema_version: 1,
+    name: "development",
+    workflow_version: "0.3.0",
+    initial_status: "plan",
+    statuses: [
+      { id: "plan", owner: { kind: "pool", pool: "developers" }, transitions: [{ on: "planned", to: "approval" }] },
+      { id: "approval", owner: { kind: "customer" }, transitions: [{ on: "approved", to: "review" }, { on: "changes_requested", to: "plan" }] },
+      { id: "review", owner: { kind: "pool", pool: "reviewers" }, transitions: [{ on: "merged", to: "done" }] },
+      { id: "done", owner: { kind: "" }, terminal: true },
+    ],
+  },
+}
+
+export const agentPool = (name: string, agents: string[], revision = 1, queue = "DEV"): AgentPool =>
+  ({ id: revision, queue, name, agents, revision, created_at: "", updated_at: "" })

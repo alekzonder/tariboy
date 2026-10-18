@@ -45,17 +45,13 @@
   .task-column-resize-handle:hover::before, .task-column-resize-handle:focus-visible::before { left: 6.5px; }
 }
 
-/* Queue settings still stacks its captions over their controls; the task panel
-   left this rule when its own fields became fills. */
-.task-queues label { display: grid; gap: 5px; font-size: 11px; color: var(--muted-foreground); }
-.task-inline-form input, .task-inline-form select,
-.task-queues input {
+.task-inline-form input, .task-inline-form select {
   min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--background-base);
   padding: 7px 9px; color: var(--foreground); font-size: 13px;
 }
 
 .tasks-center { min-width: 0; min-height: 0; overflow: auto; }
-.task-primary-action, .task-inline-form button, .task-queues form button {
+.task-primary-action, .task-inline-form button {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--border);
   border-radius: 7px; padding: 7px 10px; background: var(--background-base); font-size: 12px; font-weight: 560;
 }
@@ -126,32 +122,6 @@
 /* The copy action is revealed by the comment it belongs to. */
 .task-comment-copy { opacity: 0; transition: opacity 120ms ease; }
 .task-comment-list article:hover .task-comment-copy, .task-comment-list article:focus-within .task-comment-copy { opacity: 1; }
-
-/* The queue panel is the 340px sheet: one column of cards, its own scroll, and
-   the new-queue form pinned under them. */
-.task-queues { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.task-queues > footer { display: grid; gap: 8px; border-top: 1px solid var(--border); padding: 12px 14px; }
-.task-queues > footer form { display: grid; gap: 8px; }
-.task-queues > footer form > div { display: flex; gap: 6px; }
-.task-queue-list { display: grid; min-height: 0; flex: 1; align-content: start; gap: 8px; overflow: auto; padding: 0 14px 14px; }
-.task-queue-list article { display: grid; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; }
-.task-queue-card-head { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
-.task-queue-list strong { font-family: ui-monospace, monospace; font-size: 12px; font-weight: 500; color: var(--foreground); }
-.task-queue-list h3 { min-width: 0; overflow: hidden; font-size: 11.5px; font-weight: 400; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.task-queue-card-agents { min-width: 0; overflow: hidden; font-size: 11.5px; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.task-queue-card-agents span { font-family: ui-monospace, monospace; font-size: 11px; }
-.task-queue-card-actions { display: flex; gap: 6px; }
-.task-queue-list p, .task-queue-list span { font-size: 11px; color: var(--muted-foreground); }
-.task-queue-pools { display: grid; gap: 9px; margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
-.task-queue-pools h4 { font-size: 12px; font-weight: 650; }
-.task-queue-pools form { display: grid; gap: 7px; }
-.task-queue-pools fieldset { display: grid; gap: 9px; min-width: 0; border: 0; padding: 0; }
-.task-pool-list h3 { display: flex; justify-content: space-between; font-size: 11px; font-weight: 650; }
-.task-pool-list h3 span { color: var(--muted-foreground); }
-.task-pool-list ul { display: grid; gap: 5px; margin-top: 5px; }
-.task-pool-list li { display: grid; gap: 2px; border-radius: 6px; background: var(--muted); padding: 7px; }
-.task-pool-list li strong { color: var(--foreground); font-size: 11px; }
-.task-pool-list li span, .task-pool-list > p { overflow-wrap: anywhere; font-size: 10px; color: var(--muted-foreground); }
 
 @media (max-width: 1000px) {
   /* Too narrow for an island: the panel takes the window and drops the inset,

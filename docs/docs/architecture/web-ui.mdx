@@ -477,13 +477,30 @@ artifact values render through `MarkdownContent`, or as React text when an
 artifact is switched to **Text**. Every call passes the `ApiTarget` of the surrounding
 component. After a drawer action `TasksWorkspace` reloads the tree as well as
 the detail, so the row agrees with the drawer before the socket reports the
-change. In queue settings, `QueueWorkflowSettings` (`getQueueWorkflow`,
-`setQueueWorkflow`, `clearQueueWorkflow`, `listWorkflowImages`) shows the
-binding and renders the pools editor, which reports each saved pool so a
-**Pools needed** list shrinks as pools gain members, and `QueueSecrets` (`listQueueSecrets`,
-`setQueueSecret`, `removeQueueSecret`) lists keys only: the value lives in a
-password input until it is sent and is never read back. For a bound queue,
-`QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
+change. Queue settings are `QueueSettingsDialog`: a large `Dialog` (full
+screen on a phone) with the queue list on the left and the selected queue in
+tabs on the right. When it opens it reads each queue's binding
+(`getQueueWorkflow`), the bound manifest (`getWorkflowImage` by digest), and
+its pools (`listAgentPools`), so each list row can show the workflow and a dot
+for a required pool without agents; a queue that fails to load shows an error
+with **Retry** instead of a guess. `listTaskPrincipals` supplies the agent
+suggestions. The dialog keeps the pools as the one source the tabs share. The
+**Workflow** tab, `QueueWorkflowSettings` (`getQueueWorkflow`,
+`setQueueWorkflow`, `clearQueueWorkflow`, `listWorkflowImages`,
+`getWorkflowImage`), shows the binding and `WorkflowStatusMap`: the statuses of
+the bound image, or of the image chosen in the select before **Bind**, with
+their owners and outcomes; a pool chip opens the **Pools** tab. A refused bind
+lists the empty pools, which shrink as pools gain agents, or the missing
+secrets, each with a button to its tab. The **Pools** tab, `QueuePools`
+(`rebindAgentPool`), lists the required pools, the pools a refused bind named,
+and the queue's pools as rows of
+agent chips and saves a row's full list with its revision; a
+`revision_conflict` reloads the queue. The Workflow and Pools tabs stay mounted
+while hidden, so a refusal and unsaved pool edits survive a tab switch; closing
+the dialog drops them. The **Secrets** tab, `QueueSecrets` (`listQueueSecrets`,
+`setQueueSecret`, `removeQueueSecret`), lists keys only: the value lives in a
+password input until it is sent and is never read back. The **Sources** tab of a
+bound queue, `QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
 the workflow with their schedule, failures in a row, and newest 20 runs; it
 loads once and on **Reload**, without polling. Its run rows and the task's
 `WorkflowRuns` share `RunRow`, which reads a log only on **Log**, renders it as
@@ -496,9 +513,10 @@ the `Active | Closed | All` segment, the queue control, the `My tasks` and
 `waiting_for` filters — the agent chip in an Agent tab, refresh, and
 **New task**. The queue control opens a menu of `All queues` and every queue
 with the number of tasks it contributes to the current list, and
-`Manage queues…` under a separator opens queue settings as a 340px right sheet:
-one card per queue with its agents, a `Rename` section over the existing
-`PATCH`, a `Pools` section, and a footer that creates a queue. The queue
+`Manage queues…` under a separator opens the queue settings dialog: the queue
+list with **New queue**, and the selected queue in **General** (the existing
+`PATCH`), **Workflow**, **Pools**, **Secrets**, and, for a bound queue,
+**Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
 already performs; `scope_agent`, `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. A new task is created in the selected queue,
@@ -757,9 +775,9 @@ token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 
 Queue settings expose explicit pool membership, edited with the revisioned
-pool route. The UI has no workflow controls yet: binding a workflow image,
-queue secrets, outcomes, and script runs are driven through `ttasks` and the
-REST API, and the UI does not infer phases from title prefixes or assignee. Operator history remains available after completion. See
+pool route, the workflow binding with the statuses of the image, and queue
+secrets. The UI does not edit a workflow definition, and it does not infer
+phases from title prefixes or assignee. Operator history remains available after completion. See
 [Task workflows](/docs/task-workflows).
 
 The navigation hierarchy is **Server → Agent**.

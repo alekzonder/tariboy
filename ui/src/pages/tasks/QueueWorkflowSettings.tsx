@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { ApiError, type ApiTarget } from "@/lib/api"
 import {
-  clearQueueWorkflow, getQueueWorkflow, listWorkflowImages, setQueueWorkflow,
-  type AgentPool, type QueueWorkflow, type WorkflowImage,
+  clearQueueWorkflow, getQueueWorkflow, getWorkflowImage, listWorkflowImages, setQueueWorkflow,
+  type AgentPool, type QueueWorkflow, type WorkflowDefinition, type WorkflowImage,
 } from "@/lib/tasks"
 import { EMPTY, LABEL, MONO, SelectShell } from "./panelStyles"
-import QueueSecrets from "./QueueSecrets"
-import QueueSources from "./QueueSources"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
+import WorkflowStatusMap from "./WorkflowStatusMap"
 import { errorText } from "./workflowShared"
 
 function detailList(error: ApiError, name: string): string[] {
@@ -30,17 +29,23 @@ function bindingRef(binding: QueueWorkflow, images: WorkflowImage[]): string {
 }
 
 /**
- * The Workflow section of a queue: the bound image, a select to bind another,
- * the pools control (the existing editor, rendered by `pools`), secrets, and
- * the bound workflow's sources with their runs. A
- * bind refused for empty pools or missing secrets lists them beside the
- * control that fixes them, until that control has fixed them.
+ * The Workflow tab of a queue: the bound image, a select to bind another, and
+ * the statuses of the bound or the chosen image with the pool that owns each.
+ * A bind refused for empty pools or missing secrets lists them with a way to
+ * the tab that fixes them; the pools list shrinks as `pools` gains agents.
  */
-export default function QueueWorkflowSettings({ queue, target, pools }: {
+export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab, onPoolsMissing, onSecretsMissing, onChanged }: {
   queue: string
   target?: ApiTarget
-  /** Renders the pools editor, which reports every pool it saves. */
-  pools: (onPoolSaved: (pool: AgentPool) => void) => ReactNode
+  /** The queue's pools, kept current by the Pools tab. */
+  pools: AgentPool[]
+  onOpenTab: (tab: "pools" | "secrets") => void
+  /** Told of the pools a refused bind named, and of null when a new attempt starts. */
+  onPoolsMissing: (names: string[] | null) => void
+  /** Told of the secrets a refused bind named, and of null when a new attempt starts. */
+  onSecretsMissing: (missing: { names: string[]; message: string } | null) => void
+  /** Told after the binding changed here. */
+  onChanged: () => void
 }) {
   const [binding, setBinding] = useState<QueueWorkflow | null>(null)
   // True only after a load succeeded: until then the binding is unknown.
@@ -51,9 +56,8 @@ export default function QueueWorkflowSettings({ queue, target, pools }: {
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
   const [emptyPools, setEmptyPools] = useState<{ names: string[]; message: string } | null>(null)
-  // Pools the editor saved with members since the refusal.
-  const [filledPools, setFilledPools] = useState<string[]>([])
   const [missingSecrets, setMissingSecrets] = useState<{ names: string[]; message: string } | null>(null)
+  const [definition, setDefinition] = useState<{ key: string; value: WorkflowDefinition | null; error: string }>({ key: "", value: null, error: "" })
   const [busy, setBusy] = useState(false)
   const { confirm, dialog } = useWorkflowConfirm()
 
@@ -79,17 +83,29 @@ export default function QueueWorkflowSettings({ queue, target, pools }: {
       setNotice("The binding changed elsewhere. It was reloaded; review and retry.")
     } else if (err instanceof ApiError && err.code === "workflow_pool_empty") {
       setEmptyPools({ names: detailList(err, "pools"), message: err.message })
-      setFilledPools([])
+      onPoolsMissing(detailList(err, "pools"))
     } else if (err instanceof ApiError && err.code === "workflow_secret_missing") {
-      setMissingSecrets({ names: detailList(err, "secrets"), message: err.message })
+      const missing = { names: detailList(err, "secrets"), message: err.message }
+      setMissingSecrets(missing)
+      onSecretsMissing(missing)
     } else setError(errorText(err))
   }
 
-  const reset = () => { setError(""); setNotice(""); setEmptyPools(null); setMissingSecrets(null) }
-  const poolSaved = useCallback((pool: AgentPool) => setFilledPools((current) => pool.agents.length > 0
-    ? [...current.filter((name) => name !== pool.name), pool.name]
-    : current.filter((name) => name !== pool.name)), [])
-  const stillEmpty = emptyPools?.names.filter((name) => !filledPools.includes(name)) ?? []
+  const reset = () => { setError(""); setNotice(""); setEmptyPools(null); setMissingSecrets(null); onPoolsMissing(null); onSecretsMissing(null) }
+  const stillEmpty = emptyPools?.names.filter((name) => !pools.find((pool) => pool.name === name)?.agents.length) ?? []
+
+  // The chosen image previews its statuses; otherwise the bound one shows, as NAME:DIGEST.
+  const shownKey = ref || (binding ? `${binding.name}:${binding.digest}` : "")
+  useEffect(() => {
+    if (!shownKey) return
+    let alive = true
+    const colon = shownKey.lastIndexOf(":")
+    getWorkflowImage(shownKey.slice(0, colon), shownKey.slice(colon + 1), target).then(
+      (manifest) => { if (alive) setDefinition({ key: shownKey, value: manifest.definition, error: "" }) },
+      (err) => { if (alive) setDefinition({ key: shownKey, value: null, error: errorText(err) }) },
+    )
+    return () => { alive = false }
+  }, [shownKey, target])
 
   const bind = async () => {
     reset()
@@ -97,6 +113,7 @@ export default function QueueWorkflowSettings({ queue, target, pools }: {
     try {
       setBinding(await setQueueWorkflow(queue, ref, binding?.revision ?? 0, target))
       setRef("")
+      onChanged()
     } catch (err) { await refused(err) } finally { setBusy(false) }
   }
 
@@ -109,7 +126,7 @@ export default function QueueWorkflowSettings({ queue, target, pools }: {
       run: () => {
         reset()
         setBusy(true)
-        clearQueueWorkflow(queue, binding.revision, target).then(() => setBinding(null), refused).finally(() => setBusy(false))
+        clearQueueWorkflow(queue, binding.revision, target).then(() => { setBinding(null); onChanged() }, refused).finally(() => setBusy(false))
       },
     })
   }
@@ -145,14 +162,25 @@ export default function QueueWorkflowSettings({ queue, target, pools }: {
       {notice && <p role="status" className="text-[12px] text-muted-foreground">{notice}</p>}
       {error && <p role="alert" className="text-[12px] text-destructive">{error}</p>}
       {emptyPools && stillEmpty.length > 0 && (
-        <div role="alert" aria-label="Pools needed" className="text-[12px] text-destructive">
+        <div role="alert" aria-label="Pools needed" className="flex flex-col gap-1 text-[12px] text-destructive">
           <p>{emptyPools.message}</p>
           <p className="font-mono">{stillEmpty.join(", ")}</p>
+          <Button type="button" size="sm" variant="secondary" className="h-[26px] self-start" onClick={() => onOpenTab("pools")}>Open Pools</Button>
         </div>
       )}
-      {pools(poolSaved)}
-      <QueueSecrets key={`secrets:${binding?.digest ?? ""}`} queue={queue} target={target} missing={missingSecrets?.names} missingMessage={missingSecrets?.message} />
-      {binding && <QueueSources key={`sources:${binding.digest}`} queue={queue} target={target} />}
+      {missingSecrets && (
+        <div role="alert" aria-label="Secrets needed" className="flex flex-col gap-1 text-[12px] text-destructive">
+          <p>{missingSecrets.message}</p>
+          <p className="font-mono">{missingSecrets.names.join(", ")}</p>
+          <Button type="button" size="sm" variant="secondary" className="h-[26px] self-start" onClick={() => onOpenTab("secrets")}>Open Secrets</Button>
+        </div>
+      )}
+      {shownKey && <section className="flex min-w-0 flex-col gap-1.5">
+        <span className={LABEL}>{ref ? `Statuses of ${ref}` : "Statuses"}</span>
+        {definition.key !== shownKey ? <span className={EMPTY}>Loading statuses…</span>
+          : definition.value ? <WorkflowStatusMap definition={definition.value} pools={pools} onPool={() => onOpenTab("pools")} />
+            : <p role="alert" className="text-[12px] text-destructive">{definition.error}</p>}
+      </section>}
       {dialog}
     </section>
   )

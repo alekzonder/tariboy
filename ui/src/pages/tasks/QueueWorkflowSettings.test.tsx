@@ -1,13 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, expect, it, vi } from "vitest"
 import { ApiError } from "@/lib/api"
 import QueueWorkflowSettings from "./QueueWorkflowSettings"
-import { remoteTarget } from "./workflowFixtures"
+import type { AgentPool } from "@/lib/tasks"
+import { agentPool, developmentManifest, remoteTarget } from "./workflowFixtures"
 
 const api = vi.hoisted(() => ({
   getQueueWorkflow: vi.fn(), setQueueWorkflow: vi.fn(), clearQueueWorkflow: vi.fn(),
-  listWorkflowImages: vi.fn(), listQueueSecrets: vi.fn(), setQueueSecret: vi.fn(), removeQueueSecret: vi.fn(), listQueueSources: vi.fn(),
+  listWorkflowImages: vi.fn(), getWorkflowImage: vi.fn(),
 }))
 vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
 
@@ -18,20 +19,15 @@ const images = [
   { name: "release", tag: "latest", version: "1.2.0", digest, built_at: "" },
   { name: "audit", tag: "2", version: "2", digest: "ff", built_at: "" },
 ]
-const pool = (name: string, agents: string[]) => ({ id: 1, queue: "REL", name, agents, revision: 1, created_at: "", updated_at: "" })
-/** A stand-in for the pools editor: each button reports one saved pool. */
-const renderIt = () => render(<MemoryRouter initialEntries={["/servers/h1/tasks"]}><Routes><Route path="/servers/:hostId/tasks" element={<QueueWorkflowSettings queue="REL" target={remoteTarget} pools={(onPoolSaved) => <div>
-  pools editor
-  <button type="button" onClick={() => onPoolSaved(pool("dev", ["dev-a"]))}>save dev</button>
-  <button type="button" onClick={() => onPoolSaved(pool("qa", []))}>empty qa</button>
-  <button type="button" onClick={() => onPoolSaved(pool("qa", ["qa-a"]))}>save qa</button>
-</div>} />} /></Routes></MemoryRouter>)
+const handlers = { onOpenTab: vi.fn(), onPoolsMissing: vi.fn(), onSecretsMissing: vi.fn(), onChanged: vi.fn() }
+const view = (pools: AgentPool[] = []) => <MemoryRouter initialEntries={["/servers/h1/tasks"]}><Routes><Route path="/servers/:hostId/tasks"
+  element={<QueueWorkflowSettings queue="REL" target={remoteTarget} pools={pools} {...handlers} />} /></Routes></MemoryRouter>
+const renderIt = (pools: AgentPool[] = []) => render(view(pools))
 
 beforeEach(() => {
   vi.resetAllMocks()
   api.listWorkflowImages.mockResolvedValue(images)
-  api.listQueueSecrets.mockResolvedValue({ secrets: [], global_env: [] })
-  api.listQueueSources.mockResolvedValue([])
+  api.getWorkflowImage.mockResolvedValue(developmentManifest)
 })
 
 it("renders No workflow when unbound and lists images sorted with latest first", async () => {
@@ -53,19 +49,6 @@ it("renders a binding with a short digest and the full digest in a title", async
   expect(screen.getByTestId("binding")).toHaveTextContent("release 1.2.0")
 })
 
-it("shows the sources only for a bound queue", async () => {
-  api.getQueueWorkflow.mockResolvedValue(null)
-  const { unmount } = renderIt()
-  await screen.findByText("No workflow")
-  expect(screen.queryByRole("region", { name: "Sources REL" })).not.toBeInTheDocument()
-  expect(api.listQueueSources).not.toHaveBeenCalled()
-  unmount()
-  api.getQueueWorkflow.mockResolvedValue(binding)
-  renderIt()
-  expect(await screen.findByRole("region", { name: "Sources REL" })).toBeInTheDocument()
-  expect(api.listQueueSources).toHaveBeenCalledWith("REL", remoteTarget)
-})
-
 it("binds NAME:TAG with revision 0 when unbound", async () => {
   api.getQueueWorkflow.mockResolvedValue(null)
   api.setQueueWorkflow.mockResolvedValue(binding)
@@ -76,8 +59,7 @@ it("binds NAME:TAG with revision 0 when unbound", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Bind" }))
   await waitFor(() => expect(api.setQueueWorkflow).toHaveBeenCalledWith("REL", "release:latest", 0, remoteTarget))
   expect(await screen.findByText(digest.slice(0, 12))).toBeInTheDocument()
-  // The new workflow requires other secrets, so the global env names are read again.
-  await waitFor(() => expect(api.listQueueSecrets).toHaveBeenCalledTimes(2))
+  expect(handlers.onChanged).toHaveBeenCalled()
 })
 
 it("sends the current revision and reloads on a revision conflict", async () => {
@@ -94,7 +76,7 @@ it("sends the current revision and reloads on a revision conflict", async () => 
   expect(screen.getByTestId("binding")).toHaveTextContent("audit")
 })
 
-it("lists empty pools next to the pools control", async () => {
+it("lists empty pools with a way to the Pools tab", async () => {
   api.getQueueWorkflow.mockResolvedValue(null)
   api.setQueueWorkflow.mockRejectedValue(new ApiError(409, "workflow_pool_empty", "workflow pools are missing or have no agents: dev, qa", { pools: ["dev", "qa"] }))
   renderIt()
@@ -105,27 +87,28 @@ it("lists empty pools next to the pools control", async () => {
   expect(alert).toHaveTextContent("dev")
   expect(alert).toHaveTextContent("qa")
   expect(alert).toHaveTextContent("workflow pools are missing or have no agents")
-  expect(screen.getByText("pools editor")).toBeInTheDocument()
+  expect(handlers.onPoolsMissing).toHaveBeenCalledWith(["dev", "qa"])
+  fireEvent.click(within(alert).getByRole("button", { name: "Open Pools" }))
+  expect(handlers.onOpenTab).toHaveBeenCalledWith("pools")
 })
 
-it("clears Pools needed once the editor saved members for every listed pool", async () => {
+it("names only the listed pools that still have no agents", async () => {
   api.getQueueWorkflow.mockResolvedValue(null)
   api.setQueueWorkflow.mockRejectedValue(new ApiError(409, "workflow_pool_empty", "workflow pools are missing or have no agents: dev, qa", { pools: ["dev", "qa"] }))
-  renderIt()
+  const { rerender } = renderIt()
   await screen.findByRole("option", { name: "audit:2" })
   fireEvent.change(screen.getByLabelText("Workflow image"), { target: { value: "audit:2" } })
   fireEvent.click(screen.getByRole("button", { name: "Bind" }))
   await screen.findByRole("alert", { name: "Pools needed" })
-  fireEvent.click(screen.getByRole("button", { name: "save dev" }))
+  rerender(view([agentPool("dev", ["dev-a"])]))
   // The daemon's message stays; the list names only what is still empty.
   expect(screen.getByRole("alert", { name: "Pools needed" }).querySelector(".font-mono")).toHaveTextContent(/^qa$/)
-  fireEvent.click(screen.getByRole("button", { name: "empty qa" }))
+  rerender(view([agentPool("dev", ["dev-a"]), agentPool("qa", [])]))
   expect(screen.getByRole("alert", { name: "Pools needed" })).toBeInTheDocument()
-  fireEvent.click(screen.getByRole("button", { name: "save qa" }))
+  rerender(view([agentPool("dev", ["dev-a"]), agentPool("qa", ["qa-a"])]))
   expect(screen.queryByRole("alert", { name: "Pools needed" })).not.toBeInTheDocument()
 })
-
-it("lists missing secrets next to the secrets control", async () => {
+it("lists missing secrets with a way to the Secrets tab", async () => {
   api.getQueueWorkflow.mockResolvedValue(null)
   api.setQueueWorkflow.mockRejectedValue(new ApiError(409, "workflow_secret_missing", "workflow secrets have no value: TOKEN", { secrets: ["TOKEN"] }))
   renderIt()
@@ -134,6 +117,9 @@ it("lists missing secrets next to the secrets control", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Bind" }))
   const alert = await screen.findByRole("alert", { name: "Secrets needed" })
   expect(alert).toHaveTextContent("TOKEN")
+  expect(handlers.onSecretsMissing).toHaveBeenCalledWith({ names: ["TOKEN"], message: "workflow secrets have no value: TOKEN" })
+  fireEvent.click(within(alert).getByRole("button", { name: "Open Secrets" }))
+  expect(handlers.onOpenTab).toHaveBeenCalledWith("secrets")
 })
 
 it("asks before clearing and does nothing when declined", async () => {
@@ -203,18 +189,23 @@ it("links the bound image to its detail page by its version tag, else by digest"
     .toHaveAttribute("href", `/servers/h1/workflows/release/${digest}`))
 })
 
-it("keeps one Secrets and one Sources section for a bound queue across re-renders", async () => {
-  const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+
+it("shows the statuses of the bound workflow with its pools", async () => {
   api.getQueueWorkflow.mockResolvedValue(binding)
-  api.listQueueSecrets.mockResolvedValue({ secrets: [{ key: "GH_TOKEN" }], global_env: [] })
+  renderIt([agentPool("developers", ["dev-a"])])
+  expect(await screen.findByRole("table", { name: "Statuses" })).toBeInTheDocument()
+  expect(api.getWorkflowImage).toHaveBeenCalledWith("release", digest, remoteTarget)
+  expect(screen.getByRole("button", { name: "Pool developers, 1 agent" })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole("button", { name: "Pool reviewers, no agents" }))
+  expect(handlers.onOpenTab).toHaveBeenCalledWith("pools")
+})
+
+it("previews the statuses of a chosen image before it is bound", async () => {
+  api.getQueueWorkflow.mockResolvedValue(null)
   renderIt()
-  await screen.findByRole("region", { name: "Sources REL" })
   await screen.findByRole("option", { name: "audit:2" })
-  fireEvent.click(screen.getByRole("button", { name: "save dev" }))
-  fireEvent.click(screen.getByRole("button", { name: "save qa" }))
-  await waitFor(() => expect(api.listQueueSources).toHaveBeenCalled())
-  expect(screen.getAllByRole("region", { name: "Secrets REL" })).toHaveLength(1)
-  expect(screen.getAllByRole("region", { name: "Sources REL" })).toHaveLength(1)
-  expect(errors.mock.calls.flat().join(" ")).not.toMatch(/two children with the same key/)
-  errors.mockRestore()
+  expect(screen.queryByRole("table", { name: "Statuses" })).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText("Workflow image"), { target: { value: "audit:2" } })
+  expect(await screen.findByRole("table", { name: "Statuses" })).toBeInTheDocument()
+  expect(api.getWorkflowImage).toHaveBeenCalledWith("audit", "2", remoteTarget)
 })
