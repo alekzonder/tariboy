@@ -116,6 +116,7 @@ type TaskControl interface {
 	AddRelation(context.Context, tasks.Actor, string, tasks.RelationInput) (tasks.Relation, error)
 	DeleteRelation(context.Context, tasks.Actor, string, tasks.DeleteRelationInput) error
 	ListEvents(context.Context, tasks.Actor, string, int64, int) ([]tasks.Event, error)
+	TaskActivity(context.Context, tasks.Actor, tasks.ActivityFilter) ([]tasks.TaskActivity, error)
 	ListNotifications(context.Context, tasks.Actor, bool) ([]tasks.Notification, error)
 	MarkNotification(context.Context, tasks.Actor, string, string) (tasks.Notification, error)
 	Principals(context.Context, tasks.Actor) (tasks.PrincipalInfo, error)
