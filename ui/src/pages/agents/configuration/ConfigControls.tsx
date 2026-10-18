@@ -32,8 +32,10 @@ export function ConfigBlockCard({
   action?: ReactNode;
   children: ReactNode;
 }) {
+  // overflow-visible: Card clips by default, which hid the in-place pop-up lists
+  // (preset combobox, path suggestions) behind the card's bottom edge.
   return (
-    <Card id={`config-block-${block.id}`} role="region" aria-labelledby={`config-block-${block.id}-title`} className="scroll-mt-32">
+    <Card id={`config-block-${block.id}`} role="region" aria-labelledby={`config-block-${block.id}-title`} className="scroll-mt-32 overflow-visible">
       <CardHeader>
         <CardTitle id={`config-block-${block.id}-title`} className="text-base">{block.title}</CardTitle>
         <CardDescription>{block.description}</CardDescription>

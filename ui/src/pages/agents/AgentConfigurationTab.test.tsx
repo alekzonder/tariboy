@@ -215,6 +215,19 @@ it("has no save buttons inside the blocks", async () => {
   }
 });
 
+it("lets pop-up lists such as Model, Effort and Working directory overflow every block", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  const blocks = document.querySelectorAll('[id^="config-block-"][role="region"]');
+  expect(blocks.length).toBeGreaterThan(1);
+  // The shared Card clips with overflow-hidden; jsdom has no layout, so check the class.
+  for (const card of blocks) {
+    expect(card).toHaveClass("overflow-visible");
+    expect(card).not.toHaveClass("overflow-hidden");
+  }
+});
+
 it("marks the changed field and counts changes on its block", async () => {
   fakeServer();
   render(tree());
