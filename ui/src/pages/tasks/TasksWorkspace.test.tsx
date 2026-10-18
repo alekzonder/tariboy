@@ -1226,6 +1226,66 @@ describe("TasksWorkspace", () => {
     )
   })
 
+  it("preselects the queue of the last created root task, per server", async () => {
+    const ops = { ...queue, prefix: "OPS", name: "Operations" }
+    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 })
+    localStorage.setItem("tasks:new-task-queue:v1", JSON.stringify({ local: "OPS", remote: "GONE" }))
+    const first = render(<TasksWorkspace />)
+    await screen.findByText("Ship native tasks")
+    await userEvent.click(screen.getByRole("button", { name: "New task" }))
+    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS")
+    fireEvent.change(screen.getByLabelText("Task queue"), { target: { value: "TEST" } })
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } })
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
+    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ queue: "TEST" }), undefined)
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("tasks:new-task-queue:v1") ?? "{}"))
+      .toEqual({ local: "TEST", remote: "GONE" }))
+    first.unmount()
+
+    const target = { id: "remote", label: "Remote", baseURL: "https://remote.example", token: "test" }
+    render(<TasksWorkspace target={target} />)
+    await screen.findByText("Ship native tasks")
+    await userEvent.click(screen.getByRole("button", { name: "New task" }))
+    // The remembered queue no longer exists on this server.
+    expect(screen.getByLabelText("Task queue")).toHaveValue("TEST")
+  })
+
+  it("keys the remembered queue by the active server and lets the toolbar filter win", async () => {
+    const ops = { ...queue, prefix: "OPS", name: "Operations" }
+    api.listTaskQueues.mockResolvedValue({ queues: [queue, ops], count: 2 })
+    daemonContext.activeId = "mac-mini"
+    localStorage.setItem("tasks:new-task-queue:v1", JSON.stringify({ local: "TEST", "mac-mini": "OPS" }))
+    sessionStorage.setItem("tasks:queue-filter:v1", "TEST")
+    const filtered = render(<TasksWorkspace />)
+    await screen.findByText("Ship native tasks")
+    await userEvent.click(screen.getByRole("button", { name: "New task" }))
+    expect(screen.getByLabelText("Task queue")).toHaveValue("TEST")
+    filtered.unmount()
+
+    sessionStorage.clear()
+    render(<TasksWorkspace />)
+    await screen.findByText("Ship native tasks")
+    await userEvent.click(screen.getByRole("button", { name: "New task" }))
+    expect(screen.getByLabelText("Task queue")).toHaveValue("OPS")
+  })
+
+  it("does not remember the queue of a child task or a failed create", async () => {
+    render(<TasksWorkspace />)
+    await screen.findByText("Ship native tasks")
+    await userEvent.click(screen.getByRole("button", { name: "Add child to TEST-1" }))
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "Child work" } })
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
+    await waitFor(() => expect(api.createTask).toHaveBeenCalled())
+    await userEvent.click(await screen.findByRole("button", { name: "Close task detail" }))
+
+    api.createTask.mockRejectedValueOnce(new Error("nope"))
+    await userEvent.click(screen.getByRole("button", { name: "New task" }))
+    fireEvent.change(screen.getByLabelText("Task title"), { target: { value: "New root" } })
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }))
+    await waitFor(() => expect(api.createTask).toHaveBeenCalledTimes(2))
+    expect(localStorage.getItem("tasks:new-task-queue:v1")).toBeNull()
+  })
+
   it("accepts a suggested or arbitrary assignee and posts questions as mentions", async () => {
     render(<TasksWorkspace />)
     await userEvent.click(await screen.findByRole("button", { name: /Ship native tasks/ }))

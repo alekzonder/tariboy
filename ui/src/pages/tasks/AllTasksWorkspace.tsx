@@ -10,6 +10,7 @@ import { TaskFilterBar } from "./TaskFilterBar"
 import TaskDrawer, { type AssigneeChoice } from "./TaskDrawer"
 import TaskRow, { TaskTableHeader } from "./TaskRow"
 import { readTaskQueueFilter, persistTaskQueueFilter } from "./taskFilterStorage"
+import { readRememberedQueue, rememberQueue } from "./taskQueueMemory"
 import { useAllServersTasks, type ServerTask } from "./useAllServersTasks"
 import "./tasks.css"
 
@@ -272,8 +273,11 @@ function NewTaskForm({
     listTaskQueues(targetFor(hostId))
       .then((page) => {
         if (!alive) return
-        setQueues(page.queues ?? [])
-        setQueue((current) => page.queues?.some((item) => item.prefix === current) ? current : page.queues?.[0]?.prefix ?? "")
+        const queues = page.queues ?? []
+        const has = (prefix: string) => queues.some((item) => item.prefix === prefix)
+        const remembered = readRememberedQueue(hostToParam(hostId))
+        setQueues(queues)
+        setQueue((current) => has(remembered) ? remembered : has(current) ? current : queues[0]?.prefix ?? "")
       })
       .catch((error: unknown) => {
         // The previous agent's queues do not exist on this server.
@@ -295,6 +299,7 @@ function NewTaskForm({
         { queue, title: title.trim(), assignee: `agent:${picked.name}` },
         targetFor(picked.hostId),
       )
+      rememberQueue(hostToParam(picked.hostId), queue)
       onCreated(picked.hostId, created.key)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
