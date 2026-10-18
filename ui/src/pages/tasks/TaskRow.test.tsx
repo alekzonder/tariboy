@@ -352,6 +352,55 @@ describe("task row priority", () => {
   })
 })
 
+function renderClicks() {
+  const handlers = { onSelect: vi.fn(), onToggle: vi.fn(), onAddChild: vi.fn() }
+  render(
+    <TaskRow
+      row={{ task, depth: 0, hasChildren: true, orphaned: false }}
+      mode="agent"
+      hasActiveQuestion={false}
+      expanded={false}
+      selected={false}
+      {...handlers}
+      onPriorityChange={vi.fn()}
+    />,
+  )
+  return handlers
+}
+
+describe("task row opening", () => {
+  it("opens the task from any cell and from the empty row", async () => {
+    const { onSelect } = renderClicks()
+    const row = screen.getByTestId(`task-row-${task.key}`)
+
+    await userEvent.click(within(row).getByText("In progress"))
+    await userEvent.click(within(row).getByText(task.key))
+    await userEvent.click(row)
+
+    expect(onSelect).toHaveBeenCalledTimes(3)
+  })
+
+  it("opens the task once from its title", async () => {
+    const { onSelect } = renderClicks()
+
+    await userEvent.click(screen.getByText(task.title))
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the row's own buttons from opening the task", async () => {
+    const { onSelect, onToggle, onAddChild } = renderClicks()
+
+    await userEvent.click(screen.getByRole("button", { name: `Expand ${task.key}` }))
+    await userEvent.click(screen.getByRole("button", { name: `Add child to ${task.key}` }))
+    await userEvent.click(screen.getByRole("button", { name: "P1 High" }))
+
+    expect(onToggle).toHaveBeenCalledTimes(1)
+    expect(onAddChild).toHaveBeenCalledTimes(1)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+})
+
 describe("task duration", () => {
   it("measures a closed task from its first start to completion and an open one until now", () => {
     expect(formatTaskDuration(task)).toBe("18m")

@@ -366,7 +366,10 @@ inside a task reparents it without changing priority. Compact priority markers
 appear in the tree; on a task the viewer can edit, clicking the marker opens a
 P0-P3 menu that saves only the new priority with the row's revision, without
 opening the task. A revision conflict reloads the tree and shows the error.
-Read-only (`context` or `respond`) tasks keep a plain marker. Selecting a task opens its detail in a right-side sheet over
+Read-only (`context` or `respond`) tasks keep a plain marker. A click anywhere on
+a row selects its task, except on the row's own controls: the priority marker and
+its menu, the expand chevron, the drag grip, and the add-child button. From the
+keyboard, the title button selects the task. Selecting a task opens its detail in a right-side sheet over
 the still-mounted tree, with priority, other task fields, comments, mentions,
 and answer waits. The sheet starts at half the viewport width. Its keyboard- and
 pointer-accessible left separator resizes it, and the pixel width persists in
