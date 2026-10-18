@@ -89,6 +89,27 @@ it("switches grouping and requests the new group_by", async () => {
   expect(paths.some((p) => p.includes("group_by=epic"))).toBe(true);
 });
 
+it("links a task or epic key to the agent's Tasks tab", async () => {
+  stubFetch();
+  renderPage();
+  await waitFor(() => expect(screen.getByText("iter-123")).toBeInTheDocument());
+  fireEvent.click(screen.getByText("Epics"));
+  expect(await screen.findByRole("link", { name: "dev-t-3e1" })).toHaveAttribute("href", "/agents/local/alice/tasks?task=dev-t-3e1");
+});
+
+it("uses the Activity period instead of its own presets", async () => {
+  const paths = stubFetch();
+  render(
+    <MemoryRouter>
+      <AgentNameContext.Provider value="alice">
+        <AgentUsagePage period={{ since: "2026-10-01T00:00:00.000Z", until: "2026-10-08T00:00:00.000Z" }} />
+      </AgentNameContext.Provider>
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(paths.some((p) => p.includes("since=2026-10-01") && p.includes("bucket=1d"))).toBe(true));
+  expect(screen.queryByText("Custom")).not.toBeInTheDocument();
+});
+
 it("sends a since bound for the default preset window", async () => {
   const paths = stubFetch();
   renderPage();
