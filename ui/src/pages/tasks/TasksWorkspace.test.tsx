@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   advanceTask: vi.fn(),
   getTask: vi.fn(),
   getTaskWorkflow: vi.fn(),
+  getQueueWorkflow: vi.fn(),
   listAgentPools: vi.fn(),
   rebindAgentPool: vi.fn(),
   listTaskNotifications: vi.fn(),
@@ -154,6 +155,7 @@ beforeEach(() => {
   api.listTasks.mockResolvedValue({ tasks: [root, child], sequence: 10 })
   api.getTask.mockResolvedValue(detail)
   api.listAgentPools.mockResolvedValue({ items: [], count: 0 })
+  api.getQueueWorkflow.mockResolvedValue(null)
   api.listTaskNotifications.mockResolvedValue({ notifications: [notification], count: 1 })
   api.listTaskEvents.mockResolvedValue({
     events: [{
@@ -606,46 +608,50 @@ describe("TasksWorkspace", () => {
     expect(await screen.findByRole("heading", { name: "TEST-2" })).toBeInTheDocument()
   })
 
-  it("edits explicit pools", async () => {
+  it("edits explicit pools in the queue dialog", async () => {
     api.listAgentPools.mockResolvedValue({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 2, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
     api.rebindAgentPool.mockResolvedValue({ id: 4, queue: "TEST", name: "developers", agents: ["dev-a", "dev-b"], revision: 3, created_at: root.created_at, updated_at: root.updated_at })
 
     render(<TasksWorkspace />)
     await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
     await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
-    await userEvent.click(await screen.findByRole("button", { name: "Agent pools TEST" }))
-    await screen.findByText("developers")
+    expect(await screen.findByRole("dialog", { name: "Queues" })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("tab", { name: "Pools" }))
+    const developers = await screen.findByRole("group", { name: "Pool developers" })
 
-    fireEvent.change(screen.getByLabelText("Pool name TEST"), { target: { value: "developers" } })
-    fireEvent.change(screen.getByLabelText("Pool agents TEST"), { target: { value: "dev-a, dev-b" } })
-    await userEvent.click(screen.getByRole("button", { name: "Save pool" }))
+    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
+    await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
+    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
     expect(api.rebindAgentPool).toHaveBeenCalledWith("TEST", "developers", ["dev-a", "dev-b"], 2, expect.any(String), undefined)
   })
 
-  it("fails queue pool state closed and refreshes revisions after a conflict", async () => {
+  it("retries a queue whose pools failed to load and refreshes revisions after a conflict", async () => {
     api.listAgentPools
       .mockRejectedValueOnce(Object.assign(new Error("permission denied"), { status: 403 }))
       .mockResolvedValueOnce({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 6, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
-      .mockResolvedValueOnce({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 6, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
+      .mockResolvedValueOnce({ items: [{ id: 4, queue: "TEST", name: "developers", agents: ["dev-a"], revision: 7, created_at: root.created_at, updated_at: root.updated_at }], count: 1 })
 
     render(<TasksWorkspace />)
     await userEvent.click(screen.getByRole("button", { name: "Queue: all" }))
     await userEvent.click(await screen.findByRole("menuitem", { name: "Manage queues…" }))
-    await userEvent.click(await screen.findByRole("button", { name: "Agent pools TEST" }))
-    expect(await screen.findByRole("alert", { name: "Agent pools TEST error" })).toHaveTextContent("permission denied")
-    await userEvent.click(screen.getByRole("button", { name: "Retry agent pools TEST" }))
-    expect(await screen.findByText("developers")).toBeInTheDocument()
+    expect(await screen.findByRole("alert", { name: "Queue TEST error" })).toHaveTextContent("permission denied")
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }))
+    await userEvent.click(screen.getByRole("tab", { name: "Pools" }))
+    let developers = await screen.findByRole("group", { name: "Pool developers" })
 
     api.rebindAgentPool
-      .mockRejectedValueOnce(Object.assign(new Error("revision conflict"), { status: 409 }))
-      .mockResolvedValueOnce({ id: 4, queue: "TEST", name: "developers", agents: ["dev-a", "dev-b"], revision: 7, created_at: root.created_at, updated_at: root.updated_at })
-    fireEvent.change(screen.getByLabelText("Pool name TEST"), { target: { value: "developers" } })
-    fireEvent.change(screen.getByLabelText("Pool agents TEST"), { target: { value: "dev-a, dev-b" } })
-    await userEvent.click(screen.getByRole("button", { name: "Save pool" }))
+      .mockRejectedValueOnce(new ApiError(409, "revision_conflict", "agent pool was changed by another actor"))
+      .mockResolvedValueOnce({ id: 4, queue: "TEST", name: "developers", agents: ["dev-a", "dev-b"], revision: 8, created_at: root.created_at, updated_at: root.updated_at })
+    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
+    await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
+    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
     expect(await screen.findByText(/Configuration changed elsewhere/)).toBeInTheDocument()
     expect(api.listAgentPools).toHaveBeenCalledTimes(3)
-    await userEvent.click(screen.getByRole("button", { name: "Save pool" }))
-    expect(api.rebindAgentPool).toHaveBeenLastCalledWith("TEST", "developers", ["dev-a", "dev-b"], 6, expect.any(String), undefined)
+    developers = await screen.findByRole("group", { name: "Pool developers" })
+    fireEvent.change(within(developers).getByLabelText("Add agent to developers"), { target: { value: "dev-b" } })
+    await userEvent.click(within(developers).getByRole("button", { name: "Add" }))
+    await userEvent.click(within(developers).getByRole("button", { name: "Save pool developers" }))
+    expect(api.rebindAgentPool).toHaveBeenLastCalledWith("TEST", "developers", ["dev-a", "dev-b"], 7, expect.any(String), undefined)
   })
 
   it("names a dependency by its title and status, and the parent only once", async () => {
@@ -1380,7 +1386,7 @@ describe("TasksWorkspace", () => {
       undefined,
     )
 
-    await userEvent.click(screen.getByRole("button", { name: "Rename TEST" }))
+    await userEvent.click(screen.getByRole("button", { name: /^Queue TEST/ }))
     fireEvent.change(screen.getByLabelText("Queue name TEST"), { target: { value: "Tests updated" } })
     await userEvent.click(screen.getByRole("button", { name: "Save TEST" }))
     expect(api.updateTaskQueue).toHaveBeenCalledWith(

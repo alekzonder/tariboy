@@ -34,8 +34,7 @@ import {
   type TaskStatus,
   type TaskStatusView,
 } from "@/lib/tasks"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import QueueSettings from "./QueueSettings"
+import QueueSettingsDialog from "./QueueSettingsDialog"
 import { TaskFilterBar, type TaskPrincipalFilter } from "./TaskFilterBar"
 import TaskDetail, { TaskDetailLoading } from "./TaskDetail"
 import TaskForm from "./TaskForm"
@@ -604,17 +603,8 @@ function TasksWorkspaceContent({
           />
         )}
       </main>
-      <Sheet open={queuesOpen} onOpenChange={setQueuesOpen}>
-        <SheetContent style={{ width: 340, maxWidth: 340 }} className="gap-0 p-0">
-          <SheetHeader className="px-4 pt-4 pb-2">
-            <SheetTitle className="text-[14px] font-semibold">Queues</SheetTitle>
-            <SheetDescription className="sr-only">
-              Create a queue, rename one, or manage its agent pools.
-            </SheetDescription>
-          </SheetHeader>
-          <QueueSettings queues={queues} onCreate={createQueue} onUpdate={updateQueue} target={target} />
-        </SheetContent>
-      </Sheet>
+      <QueueSettingsDialog open={queuesOpen} onOpenChange={setQueuesOpen} queues={queues}
+        onCreate={createQueue} onUpdate={updateQueue} target={target} />
       {loadingKey && detail?.task.key !== loadingKey ? (
         <TaskDetailLoading
           taskKey={loadingKey}
