@@ -91,7 +91,9 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		RunsOn      string            `yaml:"runs-on"`
 		Needs       []string          `yaml:"needs"`
 		Permissions map[string]string `yaml:"permissions"`
+		Outputs     map[string]string `yaml:"outputs"`
 		Steps       []struct {
+			ID   string            `yaml:"id"`
 			Uses string            `yaml:"uses"`
 			With map[string]any    `yaml:"with"`
 			Run  string            `yaml:"run"`
@@ -176,16 +178,53 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		t.Fatal("release workflow has no pinned Cargo cache for the desktop target")
 	}
 
-	// The Android job is paused until its signing Secrets are configured: no
-	// release may wait on it or upload an APK.
-	if _, ok := jobs.Jobs["android"]; ok {
-		t.Fatal("release workflow has an android job, want it paused")
+	// Android checks the same tag, fails closed without its signing Secrets, and
+	// ships only an APK signed by the release certificate the repository pins.
+	androidCommands, androidEnv, android := inspect("android", "keystore.properties", "make desktop-android")
+	if android.RunsOn != "ubuntu-latest" {
+		t.Fatalf("android runner = %q, want ubuntu-latest", android.RunsOn)
+	}
+	if len(android.Permissions) != 1 || android.Permissions["contents"] != "read" {
+		t.Fatalf("android job permissions = %v, want only contents: read", android.Permissions)
+	}
+	requireAll("android", androidCommands,
+		`GITHUB_REF_NAME#v`,
+		`internal/version/version.go`,
+		`scripts/release-version.txt`,
+		`is required`,
+		`make desktop-android`,
+		`*-unsigned.apk) echo "release APK is unsigned"`,
+		`verify --print-certs`,
+		`CN=Android Debug`,
+		`release APK is signed with a debug certificate`,
+		`ANDROID_CERT_SHA256 is required`,
+		`does not match ANDROID_CERT_SHA256`,
+		`cert_sha256=`,
+		`Tariboy_${version}_android-arm64.apk`,
+		`sha256sum`,
+	)
+	if got := androidEnv["make desktop-android"]["ANDROID_CERT_SHA256"]; got != "${{ vars.ANDROID_CERT_SHA256 }}" {
+		t.Fatalf("android build ANDROID_CERT_SHA256 = %q, want the repository variable", got)
+	}
+	buildStep := ""
+	for _, step := range android.Steps {
+		if strings.Contains(step.Run, "make desktop-android") {
+			buildStep = step.ID
+		}
+	}
+	if buildStep == "" || android.Outputs["cert_sha256"] != "${{ steps."+buildStep+".outputs.cert_sha256 }}" {
+		t.Fatalf("android outputs = %v, want cert_sha256 from the build step %q", android.Outputs, buildStep)
+	}
+	for _, name := range []string{"ANDROID_KEYSTORE_BASE64", "ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD"} {
+		if androidEnv["keystore.properties"][name] != "${{ secrets."+name+" }}" {
+			t.Fatalf("android signing environment = %v, want %s on the keystore step", androidEnv["keystore.properties"], name)
+		}
 	}
 
-	// One job publishes, only after the build, as a draft made public last.
+	// One job publishes, only after both builds, as a draft made public last.
 	publishCommands, publishEnv, publish := inspect("publish", "gh release create")
-	if len(publish.Needs) != 1 || publish.Needs[0] != "release" {
-		t.Fatalf("publish needs = %v, want [release]", publish.Needs)
+	if len(publish.Needs) != 2 || publish.Needs[0] != "release" || publish.Needs[1] != "android" {
+		t.Fatalf("publish needs = %v, want [release android]", publish.Needs)
 	}
 	if len(publish.Permissions) != 1 || publish.Permissions["contents"] != "write" {
 		t.Fatalf("publish job permissions = %v, want only contents: write", publish.Permissions)
@@ -196,15 +235,17 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`--generate-notes`,
 		`This build is not notarized by Apple.`,
 		`If macOS blocks the DMG: **System Settings → Privacy & Security → Open Anyway**`,
-		`gh release upload "$GITHUB_REF_NAME" "$release_dir"/*`,
+		`**Android note:**`,
+		`$ANDROID_CERT_SHA256`,
+		`gh release upload "$GITHUB_REF_NAME" "$release_dir"/* dist/android/*`,
 		`gh release edit "$GITHUB_REF_NAME" --draft=false`,
 	)
-	if strings.Contains(publishCommands, "dist/android") {
-		t.Fatal("publish job uploads Android files while the android job is paused")
-	}
 	env := publishEnv["gh release create"]
 	if env["GH_TOKEN"] != "${{ github.token }}" {
 		t.Fatalf("release GH_TOKEN = %q, want github.token", env["GH_TOKEN"])
+	}
+	if env["ANDROID_CERT_SHA256"] != "${{ needs.android.outputs.cert_sha256 }}" {
+		t.Fatalf("release ANDROID_CERT_SHA256 = %q, want the android job output", env["ANDROID_CERT_SHA256"])
 	}
 	for key, value := range env {
 		if strings.Contains(value, "secrets.") {

@@ -160,11 +160,14 @@ git push origin v0.85.0
 
 `.github/workflows/desktop-release.yml` validates the tag against
 `internal/version/version.go` and `scripts/release-version.txt`, runs `make
-desktop-mac` on `macos-15`, and then, only when it succeeds, creates the
-matching GitHub Release as a draft with generated notes. The Android job is
-paused until the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` Secrets exist, so releases do
-not attach `Tariboy_X.Y.Z_android-arm64.apk`. A fixed macOS note precedes the generated notes: the build
+desktop-mac` on `macos-15` and `make desktop-android` on `ubuntu-latest` in
+parallel, and then, only when both succeed, creates the matching GitHub Release
+as a draft with generated notes. The Android job requires the
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
+`ANDROID_KEY_PASSWORD` Secrets and the `ANDROID_CERT_SHA256` variable (see
+[Android release APK](docs/android-release.mdx)), verifies the APK signature and
+certificate fingerprint, and adds `Tariboy_X.Y.Z_android-arm64.apk` with its
+`.sha256`. A fixed macOS note precedes the generated notes: the build
 is not notarized by Apple, and a blocked DMG is allowed through **System
 Settings → Privacy & Security → Open Anyway**. Remove that note from the
 workflow once releases are notarized. Repository checks are completed before the release tag is
@@ -176,7 +179,9 @@ never becomes the latest public release. The signing Secrets are available only
 to the build step.
 
 After publication, a reviewer downloads the six macOS files into a new directory,
-verifies `SHA256SUMS`, confirms that `latest.json` names the versioned archive
+verifies `SHA256SUMS` and the APK's `.sha256`, checks that `apksigner verify
+--print-certs` on the APK shows the certificate fingerprint from the release
+notes, confirms that `latest.json` names the versioned archive
 and `darwin-aarch64`, and confirms that the `release.json` commit SHA is the
 tagged, reviewed commit before invitations are sent. New users install this
 first updater-enabled version from the DMG; updater installation begins only
