@@ -117,6 +117,7 @@ tariboy has three command surfaces:
 | `tariboy workflow version get [--path FILE_OR_DIR]` | Print the local workflow_version; defaults to the current directory; no daemon required |
 | `tariboy workflow version update <major\|minor\|patch> [--path FILE_OR_DIR]` | Increment the local SemVer, reset lower components and remove suffixes; no daemon required |
 | `ttasks queue create` | Create a task queue |
+| `tariboy tasks activity` | Summarize work on tasks in a time window (`--since`, `--until` RFC3339; `--agent` for one agent) |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
 | `tariboy user-prompt get` | Read the agent's standing user-prompt |
 | `tariboy user-prompt set` | Set the agent's standing user-prompt |
