@@ -89,8 +89,16 @@ export default function TaskRow({
       ref={drag.setNodeRef}
       data-testid={`task-row-${row.task.key}`}
       style={{ opacity: drag.isDragging ? 0.45 : undefined }}
+      // A mouse or finger opens the task anywhere on the row; the keyboard keeps
+      // the title button. The row's own buttons, and clicks React bubbles up
+      // from the priority menu's portal, keep their own action.
+      onClick={(event) => {
+        const target = event.target as Element
+        if (!event.currentTarget.contains(target) || target.closest("button, a, input")) return
+        onSelect()
+      }}
       className={cn(
-        "group/row relative flex min-h-[30px] items-center gap-2.5 px-4 text-[13px]",
+        "group/row relative flex min-h-[30px] cursor-pointer items-center gap-2.5 px-4 text-[13px]",
         selected ? "bg-accent" : "hover:bg-muted",
         dropInside.isOver && "ring-1 ring-primary ring-inset",
         row.task.access === "context" && "opacity-60",
