@@ -838,8 +838,8 @@ newest 20 runs, newest first, in `runs`; their ids are what `queue source log`
 takes. Only the newest 20 quiet runs of a source are kept, with their files.
 `queue source log` prints the redacted log tail like `workflow log`, also for a
 run still going: the worker records the log path when the script starts. Both
-are operator-only. In the app, the Workflow section of the queue settings shows
-the same list under **Sources**, with a **Log** button on each run and
+are operator-only. In the app, the **Sources** tab of a bound queue in the queue
+settings shows the same list, with a **Log** button on each run and
 **Refresh** on the open log of a running run.
 
 Sources poll; for events pushed by a plugin, use a
@@ -1437,8 +1437,8 @@ ttasks queue pool get DEV developers
 | `GET` | `/api/task-queues/{queue}/pools` | list the queue's pools |
 | `GET` | `/api/task-queues/{queue}/pools/{pool}` | read one pool |
 
-The Tasks page offers the same control: open **Manage queues** and choose
-**Pools** on a queue.
+The Tasks page offers the same control: open **Manage queues…**, choose the
+queue, and open its **Pools** tab.
 
 ## Queue triggers
 
@@ -1545,27 +1545,53 @@ so its row agrees with the sheet.
 
 ### Queue settings
 
-`Manage queues…` has a **Workflow** section on each queue card:
+`Manage queues…` opens a large dialog; on a phone it fills the screen. The
+left side lists the queues. Each row shows the queue prefix and name, the bound
+workflow as `name@version` (or **flexible**), and a red dot when a pool that the
+bound workflow uses has no agents. **New queue** opens the create form on the
+right. Choose a queue to open it on the right, in tabs. On a phone the list and
+the queue take turns, and **Back to queues** returns to the list. Closing the
+dialog drops every unsaved edit.
 
-- **Binding.** The bound image's name, version, and the first 12 characters of
+- **General.** The queue name, description, owner agents, and responsible
+  agent, saved with **Save** and the queue revision.
+- **Workflow.** The bound image's name, version, and the first 12 characters of
   its digest, or **No workflow**. The name links to the image's page in
   **Workflow images**, by its version tag when one names the bound content and
   by digest otherwise. Choose an image as `name:tag` and press
   **Bind**; **Clear** asks for confirmation and unbinds. A binding changed
   elsewhere (`revision_conflict`) is reloaded with a notice so you can retry.
-- **Pools.** The queue's agent pools editor sits in the same section. A bind
-  refused with `workflow_pool_empty` lists the pools the image names above
-  it; a pool leaves the list once the editor saves it with members.
+  Below the binding, **Statuses** lists every status of the bound image in
+  manifest order: its owner and its outcomes as `outcome → status`. A pool
+  owner shows its number of agents; a pool without agents is red. Click a pool
+  to open the **Pools** tab. When you choose an image in the select, the list
+  shows that image's statuses before you bind it, so you can see which pools it
+  needs. A bind refused with `workflow_pool_empty` or `workflow_secret_missing`
+  lists the names with **Open Pools** or **Open Secrets**; a pool leaves the
+  list once it has agents.
+- **Pools.** One row per pool: first the pools the bound workflow uses, also
+  before they exist, and the pools a refused bind named, then the queue's other
+  pools. A row shows the statuses
+  that use the pool and its agents. Remove an agent with its **×**, type a name
+  (the server's agents are suggested) and press **Add**, then **Save**. Save
+  sends the complete list with the pool revision. **Add pool** adds a row for
+  a pool by name. A pool changed elsewhere is reloaded with a notice; any other
+  refusal, for example emptying a pool the workflow uses, shows on the row and
+  keeps your edit.
 - **Secrets.** The secret keys with their update time, a form to **Set** one,
   and **Remove** with confirmation. A value is write-only: it is cleared from
   the form when sent and is never read back or shown. A bind refused with
   `workflow_secret_missing` lists the missing names here. Each secret the bound
   image requires that the global env holds shows as `NAME present in global
   env`, with `overridden by the queue secret` when the queue sets it too.
+- **Sources.** Only for a bound queue: the sources of the workflow and their
+  runs; see [Sources](#sources).
 
 ### What Desktop does not do
 
 - There is no filter by workflow status. The Active, Closed, and All segment
   uses the daemon's categories.
-- It does not list the pools an image needs when a bind succeeds; they appear
-  only when a bind is refused for an empty pool.
+- It does not edit a workflow. The statuses in queue settings are read from the
+  image; change the `Workflowfile.yaml` and build a new image instead.
+- It does not delete a pool. **Save** with no agents empties it, and the daemon
+  refuses that while the bound workflow uses the pool.

@@ -164,7 +164,7 @@ The top-level **Tasks** tab is global. Each Agent workspace includes the same
 component with `scope_agent` fixed to that agent. The layout is Tree-first:
 
 - one toolbar: search, the Active/Closed/All segment, the queue filter with its
-  `Manage queues…` sheet, and the optional `My tasks` and `Waiting for me`
+  `Manage queues…` dialog, and the optional `My tasks` and `Waiting for me`
   chips;
 - full width: dense expandable tree ordered by priority at every depth,
   with inline task/child creation and same-queue drag reparenting; manual before/after drag
@@ -203,7 +203,8 @@ export a workflow task); it shows the **Workflow** panel instead, where the cust
 chooses outcomes, edits artifacts, reads script runs and logs, decides a pause,
 and moves or cancels the task. See [Desktop](/docs/task-workflows#desktop) in
 the workflow guide. Binding a queue to a workflow, its pools, and its secrets
-are in `Manage queues…`, section **Workflow**.
+are in the `Manage queues…` dialog, in the queue's **Workflow**, **Pools**, and
+**Secrets** tabs.
 
 Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.

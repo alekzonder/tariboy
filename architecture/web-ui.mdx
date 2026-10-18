@@ -158,20 +158,65 @@ the cross-host order, including the implicit local host, in
 `terminals:server-order:v1`. Failed daemon writes restore the previous order
 and report the failure. Server headings are selectable and open an explicit
 `/servers/:hostId/tasks` route. The persistent right-pane server row keeps
-**Tasks**, **Images**, **Workflow images**, **Stores**, and **Settings** scoped to that host even while an agent
+**Tasks**, **Activity**, **Images**, **Workflow images**, **Stores**, and **Settings** scoped to that host even while an agent
 is selected. The Groups workspace owns team creation and editing: arbitrary custom
 members, per-member runtime fields, rename/lead and membership controls,
 compose clipboard transfer, and portable archive
 import/export. All requests retain the active explicit host, including raw
 archive uploads and downloads.
 
+## Activity
+
+An agent's **Activity** tab and the server's **Activity** section
+(`/servers/:hostId/activity`) share one period: **Hour**, **Day** (the
+default), **Week**, or **Custom**. Hour, Day, and Week are rolling windows that
+end now and move once a minute. Custom takes a start and an optional end as
+local times; without an end it runs to now, and a missing or reversed range
+shows an error in the period bar. The period and the selected view live in the
+URL query (`?period=hour|day|week|custom`, `?since=`/`?until=` for Custom,
+`?view=`), so a view is shareable and survives a reload; a change replaces the
+history entry.
+
+Under the period bar, cards total the work on tasks in the period: tasks,
+completed tasks, status changes, comments, iterations, and cost. They come from
+one `GET /api/task-activity?since=&until=[&agent=]` response
+(`tariboy tasks activity`), polled every 10 seconds; a response for an older
+period or host never replaces the current one. The daemon builds it from AI
+requests tagged with a task and from task events in the window: per task the
+iterations, requests, tokens, and cost, the comments, the outcomes an agent
+declared, the workflow statuses the task entered, whether it completed, and the
+first and last activity. With `agent` only that agent's requests and events
+count; without it the response also breaks the period down per agent. AI
+requests without a task do not appear here; they stay visible under Iterations
+and Usage. Tasks the caller cannot see, and tasks removed by maintenance, are
+left out. One response lists at most 500 tasks, most recent first, and says so;
+the totals still count every task.
+
+The agent tab has four views:
+
+- **Tasks** (default): one row per task, newest activity first. The task key
+  opens the task in the agent's Tasks tab
+  (`/agents/:hostId/:agent/tasks?task=<key>`).
+- **Iterations**: the iteration list and log, limited to iterations that
+  started in the period, with the tag filter below.
+- **Usage**: the agent's AI usage over the period; task and epic keys open the
+  task.
+- **Status history**: only the status messages from the period.
+
+An old `?iteration=` link opens the Iterations view. The server section has a
+**Tasks** view with an Agents column, whose keys open
+`/servers/:hostId/tasks?task=<key>`, and an **Agents** view, whose names open
+that agent's Activity tab with the same period. All its requests go to the
+selected host.
+
 ## Iteration tags in Activity
 
-The Activity tab filters its iteration list by tag and by iteration start date.
-Both filters and the selected iteration live in the URL query, so a filtered
-view is shareable and survives a reload; a filter change replaces the history
-entry instead of adding one per keystroke. Matching is the daemon's: an
-iteration matches any of the listed tags, and both date bounds are inclusive.
+The Iterations view filters its iteration list by tag. The tag filter and the
+selected iteration live in the URL query beside the period, and a filter change
+replaces the history entry instead of adding one per keystroke. Matching is the
+daemon's: an iteration matches any of the listed tags. Under **Advanced → Full
+audit** the same list keeps its own started-at date filters, where both date
+bounds are inclusive, and **Advanced → Raw usage** keeps its own window presets.
 
 Each row shows its tags beside its status. The selected iteration has a tag
 editor above its log that adds one tag or removes one, each saved as a complete
@@ -366,7 +411,10 @@ inside a task reparents it without changing priority. Compact priority markers
 appear in the tree; on a task the viewer can edit, clicking the marker opens a
 P0-P3 menu that saves only the new priority with the row's revision, without
 opening the task. A revision conflict reloads the tree and shows the error.
-Read-only (`context` or `respond`) tasks keep a plain marker. Selecting a task opens its detail in a right-side sheet over
+Read-only (`context` or `respond`) tasks keep a plain marker. A click anywhere on
+a row selects its task, except on the row's own controls: the priority marker and
+its menu, the expand chevron, the drag grip, and the add-child button. From the
+keyboard, the title button selects the task. Selecting a task opens its detail in a right-side sheet over
 the still-mounted tree, with priority, other task fields, comments, mentions,
 and answer waits. The sheet starts at half the viewport width. Its keyboard- and
 pointer-accessible left separator resizes it, and the pixel width persists in
@@ -429,13 +477,30 @@ artifact values render through `MarkdownContent`, or as React text when an
 artifact is switched to **Text**. Every call passes the `ApiTarget` of the surrounding
 component. After a drawer action `TasksWorkspace` reloads the tree as well as
 the detail, so the row agrees with the drawer before the socket reports the
-change. In queue settings, `QueueWorkflowSettings` (`getQueueWorkflow`,
-`setQueueWorkflow`, `clearQueueWorkflow`, `listWorkflowImages`) shows the
-binding and renders the pools editor, which reports each saved pool so a
-**Pools needed** list shrinks as pools gain members, and `QueueSecrets` (`listQueueSecrets`,
-`setQueueSecret`, `removeQueueSecret`) lists keys only: the value lives in a
-password input until it is sent and is never read back. For a bound queue,
-`QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
+change. Queue settings are `QueueSettingsDialog`: a large `Dialog` (full
+screen on a phone) with the queue list on the left and the selected queue in
+tabs on the right. When it opens it reads each queue's binding
+(`getQueueWorkflow`), the bound manifest (`getWorkflowImage` by digest), and
+its pools (`listAgentPools`), so each list row can show the workflow and a dot
+for a required pool without agents; a queue that fails to load shows an error
+with **Retry** instead of a guess. `listTaskPrincipals` supplies the agent
+suggestions. The dialog keeps the pools as the one source the tabs share. The
+**Workflow** tab, `QueueWorkflowSettings` (`getQueueWorkflow`,
+`setQueueWorkflow`, `clearQueueWorkflow`, `listWorkflowImages`,
+`getWorkflowImage`), shows the binding and `WorkflowStatusMap`: the statuses of
+the bound image, or of the image chosen in the select before **Bind**, with
+their owners and outcomes; a pool chip opens the **Pools** tab. A refused bind
+lists the empty pools, which shrink as pools gain agents, or the missing
+secrets, each with a button to its tab. The **Pools** tab, `QueuePools`
+(`rebindAgentPool`), lists the required pools, the pools a refused bind named,
+and the queue's pools as rows of
+agent chips and saves a row's full list with its revision; a
+`revision_conflict` reloads the queue. The Workflow and Pools tabs stay mounted
+while hidden, so a refusal and unsaved pool edits survive a tab switch; closing
+the dialog drops them. The **Secrets** tab, `QueueSecrets` (`listQueueSecrets`,
+`setQueueSecret`, `removeQueueSecret`), lists keys only: the value lives in a
+password input until it is sent and is never read back. The **Sources** tab of a
+bound queue, `QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
 the workflow with their schedule, failures in a row, and newest 20 runs; it
 loads once and on **Reload**, without polling. Its run rows and the task's
 `WorkflowRuns` share `RunRow`, which reads a log only on **Log**, renders it as
@@ -448,9 +513,10 @@ the `Active | Closed | All` segment, the queue control, the `My tasks` and
 `waiting_for` filters — the agent chip in an Agent tab, refresh, and
 **New task**. The queue control opens a menu of `All queues` and every queue
 with the number of tasks it contributes to the current list, and
-`Manage queues…` under a separator opens queue settings as a 340px right sheet:
-one card per queue with its agents, a `Rename` section over the existing
-`PATCH`, a `Pools` section, and a footer that creates a queue. The queue
+`Manage queues…` under a separator opens the queue settings dialog: the queue
+list with **New queue**, and the selected queue in **General** (the existing
+`PATCH`), **Workflow**, **Pools**, **Secrets**, and, for a bound queue,
+**Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
 already performs; `scope_agent`, `status_view`, the text search, `assignee` and
 `waiting_for` stay daemon-side. A new task is created in the selected queue,
@@ -709,13 +775,13 @@ token in the WebSocket query because browser sockets cannot set an
 Authorization header.
 
 Queue settings expose explicit pool membership, edited with the revisioned
-pool route. The UI has no workflow controls yet: binding a workflow image,
-queue secrets, outcomes, and script runs are driven through `ttasks` and the
-REST API, and the UI does not infer phases from title prefixes or assignee. Operator history remains available after completion. See
+pool route, the workflow binding with the statuses of the image, and queue
+secrets. The UI does not edit a workflow definition, and it does not infer
+phases from title prefixes or assignee. Operator history remains available after completion. See
 [Task workflows](/docs/task-workflows).
 
 The navigation hierarchy is **Server → Agent**.
-A selected server owns Tasks, Images, Workflow images, Stores, and Settings, and its
+A selected server owns Tasks, Activity, Images, Workflow images, Stores, and Settings, and its
 context row remains visible above the selected agent's Chat, Tasks, Terminal,
 Activity, Configuration, and Advanced tabs. There is no Autopilot tab: an old
 `/autopilot` route is treated as an unknown tab. Server-owned routes include
