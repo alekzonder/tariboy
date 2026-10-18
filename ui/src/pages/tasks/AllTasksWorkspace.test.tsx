@@ -57,6 +57,7 @@ const serverOf = (target: { id: string } | null | undefined) => target?.id ?? ""
 
 beforeEach(() => {
   sessionStorage.clear()
+  localStorage.clear()
   for (const fn of [...Object.values(api), ...Object.values(toast)]) fn.mockReset()
   api.listTasks.mockImplementation(async (_query: unknown, target: { id: string } | null) =>
     ({ tasks: tasksByServer[serverOf(target)] ?? [], sequence: 1 }))
@@ -222,6 +223,32 @@ it("creates a task for the chosen agent on that agent's server", async () => {
   await waitFor(() => expect(api.createTask).toHaveBeenCalledWith(
     { queue: "IMPROVE", title: "Ship it", assignee: "agent:builder" }, expect.objectContaining({ id: "h2" }),
   ))
+})
+
+it("preselects each server's remembered queue and remembers the queue a task was created in", async () => {
+  api.listTaskQueues.mockImplementation(async (target: { id: string } | null) => ({
+    queues: serverOf(target) === "" ? [{ prefix: "IMPROVE" }, { prefix: "DEV" }] : [{ prefix: "IMPROVE" }, { prefix: "OPS" }],
+    count: 2,
+  }))
+  localStorage.setItem("tasks:new-task-queue:v1", JSON.stringify({ local: "DEV", h2: "OPS" }))
+  api.createTask.mockResolvedValue(task("IMPROVE-new"))
+  api.getTask.mockResolvedValue({ task: task("IMPROVE-new"), comments: [], waiting_for: [], relations: [] })
+  render(<AllTasksWorkspace hosts={hosts} />)
+  await waitFor(() => expect(rowKeys().length).toBeGreaterThan(0))
+  await userEvent.click(screen.getByRole("button", { name: "New task" }))
+  const agentPicker = screen.getByRole("combobox", { name: "Task agent" })
+  const queuePicker = () => screen.getByRole("combobox", { name: "Task queue" })
+
+  await userEvent.selectOptions(agentPicker, "jack · local")
+  await waitFor(() => expect(queuePicker()).toHaveDisplayValue("DEV"))
+  await userEvent.selectOptions(agentPicker, "builder · hetzner-02")
+  await waitFor(() => expect(queuePicker()).toHaveDisplayValue("OPS"))
+
+  await userEvent.selectOptions(queuePicker(), "IMPROVE")
+  await userEvent.type(screen.getByRole("textbox", { name: "Task title" }), "Ship it")
+  await userEvent.click(screen.getByRole("button", { name: "Create task" }))
+  await waitFor(() => expect(JSON.parse(localStorage.getItem("tasks:new-task-queue:v1") ?? "{}"))
+    .toEqual({ local: "DEV", h2: "IMPROVE" }))
 })
 
 it("saves a priority on the row server and reloads only that server", async () => {

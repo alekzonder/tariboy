@@ -5,6 +5,7 @@ import { useTasksSocket } from "@/hooks/useTasksSocket"
 import { ApiError, isConnectionError, targetReady, type ApiTarget } from "@/lib/api"
 import { buildTaskForest, canDropTaskInside } from "@/lib/taskTree"
 import { resolveDaemon } from "@/lib/daemons"
+import { hostToParam } from "@/lib/terminalsHost"
 import {
   addTaskComment,
   addTaskRelation,
@@ -42,6 +43,7 @@ import TaskTree from "./TaskTree"
 import TaskPanelResizeHandle from "./TaskPanelResizeHandle"
 import { listAllTasks } from "./useAllServersTasks"
 import { persistTaskQueueFilter, readTaskQueueFilter } from "./taskFilterStorage"
+import { readRememberedQueue, rememberQueue } from "./taskQueueMemory"
 import { MIN_TASK_DETAIL_WIDTH, useTaskPanelWidths } from "./useTaskPanelWidths"
 import "./tasks.css"
 
@@ -69,7 +71,8 @@ function TasksWorkspaceContent({
   target,
   initialTaskKey,
   onNotificationsChanged,
-}: TasksWorkspaceProps) {
+  server,
+}: TasksWorkspaceProps & { server: string }) {
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const { detailWidth, setDetailWidth } = useTaskPanelWidths()
   const [workspaceWidth, setWorkspaceWidth] = useState(0)
@@ -337,6 +340,7 @@ function TasksWorkspaceContent({
   const create = async (input: { queue: string; parent_key: string; title: string }) => {
     try {
       const created = await createTask(input, target)
+      if (!input.parent_key) rememberQueue(server, input.queue)
       setCreatingParent(null)
       if (input.parent_key) {
         setExpanded((current) => new Set(current).add(input.parent_key))
@@ -570,7 +574,13 @@ function TasksWorkspaceContent({
           onCreate={startCreate}
         />
         {creatingParent === "" && (
-          <TaskForm queues={queues} initialQueue={queue} onCreate={create} onCancel={() => setCreatingParent(null)} />
+          <TaskForm
+            queues={queues}
+            // A toolbar filter is the explicit context; otherwise the queue of the last task made here.
+            initialQueue={queue || queues.find((item) => item.prefix === readRememberedQueue(server))?.prefix || ""}
+            onCreate={create}
+            onCancel={() => setCreatingParent(null)}
+          />
         )}
         {principalMetadataError && !principalFilter
           ? <div className="tasks-empty" role="alert">{principalMetadataError}</div>
@@ -648,11 +658,12 @@ function TasksWorkspaceContent({
 
 export default function TasksWorkspace(props: TasksWorkspaceProps) {
   const activeId = useOptionalDaemons()?.activeId ?? ""
-  const targetKey = props.target === undefined
-    ? `active:${activeId || "local"}`
+  const server = props.target === undefined
+    ? hostToParam(activeId)
     : props.target === null
-      ? "explicit:local"
+      ? hostToParam("")
       // Not the endpoint: a reconnect moves it and must keep the open state.
-      : `explicit:${props.target.id}`
-  return <TasksWorkspaceContent key={`${targetKey}:${props.scopeAgent ?? ""}`} {...props} />
+      : props.target.id
+  const targetKey = `${props.target === undefined ? "active" : "explicit"}:${server}`
+  return <TasksWorkspaceContent key={`${targetKey}:${props.scopeAgent ?? ""}`} {...props} server={server} />
 }
