@@ -2,6 +2,7 @@ package commands
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -651,6 +652,31 @@ func TestAgentPsReadsStateAndBudgetWithoutPerAgentQueries(t *testing.T) {
 		}
 		if got := row["budget"].(map[string]any)["day_usd"]; got != want {
 			t.Fatalf("row %v day_usd = %v, want %v", row["name"], got, want)
+		}
+	}
+}
+
+func TestAgentScheduleInspectAndListProjection(t *testing.T) {
+	c, agents, _ := ctxWithStore(t)
+	if err := agents.Create(agent.Agent{Name: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	rule := "DTSTART:20261018T000000\nRRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=30;BYSECOND=0"
+	if err := agents.SetSchedule("worker", rule); err != nil {
+		t.Fatal(err)
+	}
+	inspect, err := h(t, "agent.inspect")(c, registry.Params{"name": "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps, err := h(t, "agent.ps")(c, registry.Params{})
+	for _, got := range []map[string]any{
+		inspect.(map[string]any),
+		mustAgentRows(t, ps, err)[0],
+	} {
+		next, perr := time.Parse(time.RFC3339, fmt.Sprint(got["schedule_next_at"]))
+		if got["schedule"] != rule || perr != nil || next.In(time.Local).Hour() != 9 {
+			t.Fatalf("schedule projection = %#v", got)
 		}
 	}
 }

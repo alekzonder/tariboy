@@ -64,6 +64,10 @@ export interface AgentView {
   on_error: string;
   max_idle_iterations: number;
   ai_stall_timeout_s?: number;
+  // RFC 5545 DTSTART + RRULE loop schedule; empty when unset. schedule_next_at
+  // is the next start in RFC 3339, empty when there is none.
+  schedule?: string;
+  schedule_next_at?: string;
   user_prompt: string;
   env: Record<string, string>;
   plugins: string[];

@@ -105,12 +105,16 @@ type Agent struct {
 	// column is loaded read-only.
 	MaxIdleIterations int
 	AIStallTimeoutS   int
+	// ScheduleRRule is the normalized RFC 5545 DTSTART + RRULE that starts loop
+	// iterations at whole minutes; empty means no schedule. Owned by
+	// SetSchedule (Update never touches it).
+	ScheduleRRule string
 }
 
 type Iteration struct {
 	ID        string
 	Agent     string
-	Trigger   string // interval | manual
+	Trigger   string // interval | schedule | message | manual
 	Status    string // running | done | no_i_am_done | harness_error | timeout | killed
 	StartedAt string
 	EndedAt   string
@@ -525,6 +529,17 @@ func (s *Store) SetNotes(name, notes string) error {
 	return affected(res)
 }
 
+// SetSchedule sets (or clears with "") an agent's loop schedule. The caller
+// stores the normalized rule (schedule.NormalizeRRule). Owned solely by this
+// setter — Update never touches the schedule.
+func (s *Store) SetSchedule(name, rule string) error {
+	res, err := s.db.Exec(`UPDATE agents SET schedule_rrule=? WHERE name=?`, rule, name)
+	if err != nil {
+		return err
+	}
+	return affected(res)
+}
+
 // SetColor sets (or clears with "") an agent's accent color. Owned solely by
 // this setter — Update never touches color, mirroring SetAlias/SetNotes.
 func (s *Store) SetColor(name, color string) error {
@@ -540,7 +555,7 @@ func (s *Store) Get(name string) (Agent, error) {
 		harness_type, model, effort, interactive, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule
 		FROM agents WHERE name=?`, name)
 	return scanAgent(row)
 }
@@ -550,7 +565,7 @@ func (s *Store) List() ([]Agent, error) {
 		harness_type, model, effort, interactive, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule
 		FROM agents ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -646,7 +661,7 @@ func (s *Store) ListByGroup(group string) ([]Agent, error) {
 		harness_type, model, effort, interactive, enabled, interval_s, timeout_s,
 		hard_timeout_s, on_timeout, on_error, user_prompt, env, plugins,
 		messages_batch, messages_max_queue, "group", status_message, status_updated, alias, notes, color, max_idle_iterations,
-		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key
+		goal_enabled, goal_wait_customer_timeout_s, goal_delivery_cooldown_s, ai_stall_timeout_s, last_goal_delivery_at, current_goal_task_key, schedule_rrule
 		FROM agents WHERE "group"=? ORDER BY name`, group)
 	if err != nil {
 		return nil, err
@@ -953,7 +968,8 @@ func scanAgent(row scanner) (Agent, error) {
 		&a.HarnessType, &a.Model, &a.Effort, &interactive, &enabled, &a.IntervalS,
 		&a.TimeoutS, &a.HardTimeoutS, &a.OnTimeout, &a.OnError, &a.UserPrompt, &env, &plugins,
 		&a.MessagesBatch, &a.MessagesMaxQueue, &a.Group, &a.StatusMessage, &a.StatusUpdated, &a.Alias, &a.Notes, &a.Color,
-		&a.MaxIdleIterations, &goalEnabled, &a.GoalWaitCustomerTimeoutS, &a.GoalDeliveryCooldownS, &a.AIStallTimeoutS, &a.LastGoalDeliveryAt, &a.CurrentGoalTaskKey)
+		&a.MaxIdleIterations, &goalEnabled, &a.GoalWaitCustomerTimeoutS, &a.GoalDeliveryCooldownS, &a.AIStallTimeoutS, &a.LastGoalDeliveryAt, &a.CurrentGoalTaskKey,
+		&a.ScheduleRRule)
 	if err == sql.ErrNoRows {
 		return Agent{}, ErrNotFound
 	}

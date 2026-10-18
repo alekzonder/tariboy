@@ -20,15 +20,49 @@ directory and its own loop. It does not run continuously — it runs a series of
 
 ## What drives the loop
 
-The loop is driven two ways, both requiring the loop to be **enabled**:
+The loop is driven three ways, all requiring the agent to be **enabled**:
 
 - **Timer** — `interval_s`: wake every N seconds.
+- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule`: start
+  an iteration at each occurrence, with the trigger `schedule`. See
+  [Schedule](#schedule).
 - **Message** — a publish that matches one of the agent's subscriptions nudges
   the loop to start an iteration now (only if pending deliveries exist).
 
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline.
+
+### Schedule
+
+The schedule is an optional `RRULE` with an optional `DTSTART` line before it,
+for example:
+
+| Run | Schedule |
+| --- | --- |
+| Every weekday at 09:30 | `RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=30` |
+| The 15th of each month at 08:00 | `RRULE:FREQ=MONTHLY;BYMONTHDAY=15;BYHOUR=8;BYMINUTE=0` |
+| The last day of each month at 23:45 | `RRULE:FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=23;BYMINUTE=45` |
+| Once, on 20 October 2026 at 09:30 | `DTSTART:20261020T093000` then `RRULE:FREQ=DAILY;COUNT=1` |
+| Every 2 hours | `RRULE:FREQ=HOURLY;INTERVAL=2` |
+
+The two lines can be separated by a newline or a space. Schedules run at whole
+minutes: the daemon rejects `FREQ=SECONDLY` and any `BYSECOND` other than `0`.
+When the daemon saves a schedule, it stores a normalized form: it adds
+`BYSECOND=0` and, when there is no `DTSTART`, it adds `DTSTART` as the current
+minute. A `DTSTART` without `TZID` or `Z` is in the time zone of the daemon
+host, also for a remote host. Name another zone with
+`DTSTART;TZID=Europe/Moscow:20261018T000000`. An invalid rule is rejected with
+`bad_schedule` and the previous schedule stays.
+
+The engine arms one timer for the nearer of the next `interval_s` firing and
+the next occurrence. The two sources work independently; set `interval_s` to 0
+to start the agent only on its schedule. An occurrence never starts a second
+iteration while one runs, and missed occurrences are not replayed: after an
+iteration, or after the daemon or the agent was off, the next start is the
+first occurrence after the current time. A finished rule (`COUNT` or `UNTIL`)
+stays saved but starts nothing. The agent view reports `schedule` and
+`schedule_next_at` (RFC 3339, empty when there is no next start).
 
 ### Agent Goals
 
@@ -224,8 +258,9 @@ external repository CWD. Rendering the path grants no new filesystem access;
 the harness already runs with the daemon account's permissions.
 
 :::note
-Loop policy is set with the `tariboy loop …` subcommands — `enable`,
-`disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error`. See
+Loop policy is set with the `tariboy loop …` subcommands — `interval`,
+`schedule`, `timeout`, `hard-timeout`, `on-timeout`, `on-error`, `max-idle`,
+`ai-stall-timeout`. See
 [the command reference](/docs/reference/commands#operator-commands).
 :::
 

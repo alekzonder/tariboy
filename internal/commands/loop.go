@@ -2,10 +2,12 @@ package commands
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/schedule"
 )
 
 func loopIntSetting(path, field string) registry.Command {
@@ -74,6 +76,55 @@ func loopStrSetting(path, field string, allowed []string) registry.Command {
 			return map[string]any{"name": a.Name, key: getStrField(a, field)}, nil
 		},
 	}
+}
+
+func loopSchedule() registry.Command {
+	return registry.Command{
+		Path:    "loop.schedule",
+		Summary: "Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read",
+		Args: []registry.Arg{
+			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
+			{Name: "value", Type: registry.String, Help: "RRULE, optionally after a DTSTART line (omit to read)"},
+			{Name: "clear", Flag: "clear", Type: registry.Bool, Help: "remove the schedule"},
+		},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/loop/schedule"},
+		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			a, err := getAgent(c, str(p, "name"))
+			if err != nil {
+				return nil, err
+			}
+			rule, set := a.ScheduleRRule, false
+			if toBool(p["clear"]) {
+				rule, set = "", true
+			} else if v := str(p, "value"); v != "" {
+				rule, err = schedule.NormalizeRRule(v, time.Now(), time.Local)
+				if err != nil {
+					return nil, api.UserError{Code: "bad_schedule", Msg: err.Error()}
+				}
+				set = true
+			}
+			if set {
+				if err := agentStore(c).SetSchedule(a.Name, rule); err != nil {
+					return nil, err
+				}
+				a.ScheduleRRule = rule
+				if control, ok := c.Control.(registry.LoopConfigControl); ok {
+					control.RefreshLoopConfig(a.Name)
+				}
+			}
+			return map[string]any{"name": a.Name, "schedule": a.ScheduleRRule, "schedule_next_at": scheduleNextAt(a)}, nil
+		},
+	}
+}
+
+// scheduleNextAt is the next scheduled start in RFC 3339, or "" when the agent
+// has no schedule or its rule has finished.
+func scheduleNextAt(a agent.Agent) string {
+	next, ok := schedule.NextRRule(a.ScheduleRRule, time.Now(), time.Local)
+	if !ok {
+		return ""
+	}
+	return next.Format(time.RFC3339)
 }
 
 func userPromptGet() registry.Command {

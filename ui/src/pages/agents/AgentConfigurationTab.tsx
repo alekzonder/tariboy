@@ -225,6 +225,10 @@ function BlockView(props: BlockProps) {
     case "loop":
       body = <>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{plain("interval")}{plain("timeout")}{plain("hard-timeout")}</div>
+        <div className="space-y-1">
+          {plain("schedule")}
+          <ScheduleNextRun nextAt={props.sources.view?.schedule_next_at} />
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{plain("on-timeout")}{plain("on-error")}</div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{plain("max-idle")}{plain("ai-stall-timeout")}</div>
       </>;
@@ -250,6 +254,16 @@ function BlockView(props: BlockProps) {
     <ConfigBlockCard block={block} dirtyCount={dirty} action={block.id === "goal" ? <GoalHelp /> : undefined}>
       {body}
     </ConfigBlockCard>
+  );
+}
+
+// The daemon computes the next start from the saved rule, so this line
+// follows Save, not the unsaved draft.
+function ScheduleNextRun({ nextAt }: { nextAt?: string }) {
+  return (
+    <p data-testid="schedule-next-run" className="text-xs text-muted-foreground">
+      {nextAt ? `Next run: ${new Date(nextAt).toLocaleString()}` : "No scheduled run"}
+    </p>
   );
 }
 
