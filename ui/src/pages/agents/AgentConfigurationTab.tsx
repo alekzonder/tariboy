@@ -142,7 +142,7 @@ function ConfigurationPage({
     : view?.enabled === false || (view?.enabled === undefined && view?.state === "stopped");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="mx-auto max-w-5xl space-y-4 px-4 pt-4 pb-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="font-semibold">Configuration</h2>

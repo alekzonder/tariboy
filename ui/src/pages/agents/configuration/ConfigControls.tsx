@@ -178,7 +178,7 @@ export function ConfigSearch({
   resultText: string;
 }) {
   return (
-    <div className="sticky top-0 z-10 -mx-1 space-y-2 bg-background/95 px-1 pt-1 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div className="sticky top-0 z-10 flex flex-col gap-2 bg-card/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="search"
@@ -212,7 +212,7 @@ export function ConfigSearch({
           </Button>
         ))}
       </nav>
-      <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{resultText}</p>
+      <p role="status" aria-live="polite" className={resultText ? "text-xs text-muted-foreground" : "sr-only"}>{resultText}</p>
     </div>
   );
 }
@@ -226,7 +226,7 @@ export function ConfigSaveBar({ draft, blockTitles }: { draft: ConfigDraft; bloc
     <div
       role="region"
       aria-label="Unsaved changes"
-      className="sticky bottom-0 z-10 rounded-lg border bg-background/95 p-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/80"
+      className="sticky bottom-0 z-10 rounded-lg border bg-card/95 p-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/80"
     >
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1 space-y-0.5">
