@@ -463,6 +463,52 @@ func series(q rowQueryer, f UsageFilter, bucket string) ([]SeriesRow, error) {
 	return out, rows.Err()
 }
 
+// TaskUsageRow is one task's AI work by one agent: distinct iterations,
+// request count, all four token kinds summed, cost, and the first and last
+// request time as fixed-width UTC milliseconds.
+type TaskUsageRow struct {
+	TaskKey    string
+	Agent      string
+	Iterations int
+	Requests   int
+	Tokens     int
+	CostUSD    float64
+	FirstTS    string
+	LastTS     string
+}
+
+// TaskUsage groups the filtered, task-tagged ai_requests by task and agent.
+// Untagged requests have no task to report on and are left out.
+func (s *Store) TaskUsage(f UsageFilter) ([]TaskUsageRow, error) {
+	where, args := f.where()
+	if where == "" {
+		where = " WHERE task_id<>''"
+	} else {
+		where += " AND task_id<>''"
+	}
+	const tsNorm = "strftime('%Y-%m-%dT%H:%M:%fZ',ts)"
+	rows, err := s.db.Query(`SELECT task_id, agent, COUNT(DISTINCT iteration), COUNT(*),
+		COALESCE(SUM(input_tokens+output_tokens+cache_write_tokens+cache_read_tokens),0),
+		COALESCE(SUM(cost_usd),0), MIN(`+tsNorm+`), MAX(`+tsNorm+`)
+		FROM ai_requests`+where+`
+		GROUP BY task_id, agent ORDER BY task_id, agent`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TaskUsageRow
+	for rows.Next() {
+		var r TaskUsageRow
+		if err := rows.Scan(&r.TaskKey, &r.Agent, &r.Iterations, &r.Requests, &r.Tokens,
+			&r.CostUSD, &r.FirstTS, &r.LastTS); err != nil {
+			return nil, err
+		}
+		r.CostUSD = roundCost(r.CostUSD)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // IterationUsage sums the tokens and cost recorded for one iteration. Used
 // best-effort as OTel span attributes (spec §14); the authoritative accounting
 // view is Aggregate/usage.

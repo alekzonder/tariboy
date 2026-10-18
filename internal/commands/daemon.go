@@ -161,6 +161,7 @@ func BuildRegistry() *registry.Registry {
 	mustRegister(r, transcriptCommand())
 	mustRegister(r, usageCommand())
 	mustRegister(r, agentUsage())
+	mustRegister(r, taskActivity())
 	mustRegister(r, harnessModels())
 	mustRegister(r, harnessCodexApprovalGet())
 	mustRegister(r, harnessCodexApprovalSet())
