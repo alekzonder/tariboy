@@ -19,6 +19,7 @@ import { ServerContextBar } from "./ServerContextBar";
 import { RouteHostBoundary } from "./RouteHostBoundary";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
 import AllTasksWorkspace from "@/pages/tasks/AllTasksWorkspace";
+import ServerActivityPage from "@/pages/activity/ServerActivityPage";
 import ImagesPage from "@/pages/ImagesPage";
 import ImageTags from "@/pages/images/ImageTags";
 import StoresPage from "@/pages/StoresPage";
@@ -39,7 +40,7 @@ type CreateDialogState = {
   imageRef?: string;
   cloneSource?: CloneAgentSource;
 };
-export type ServerView = "tasks" | "images" | "image-tags" | "image-detail" | "workflows" | "workflow-detail" | "stores" | "store-detail" | "settings";
+export type ServerView = "tasks" | "activity" | "images" | "image-tags" | "image-detail" | "workflows" | "workflow-detail" | "stores" | "store-detail" | "settings";
 
 export default function TerminalsPage({ serverView }: { serverView?: ServerView }) {
   const { hostId: hostParam, agent: agentName, tab: agentTab, team: teamName, name: storeName, tag: routeTag } = useParams();
@@ -394,6 +395,10 @@ export default function TerminalsPage({ serverView }: { serverView?: ServerView 
               initialTaskKey={searchParams.get("task") ?? undefined}
               onNotificationsChanged={() => void refreshHost(hostId)}
             />
+          </RouteHostBoundary>
+        ) : serverView === "activity" && hostId !== undefined ? (
+          <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>
+            {(target) => <ServerActivityPage key={hostId} hostId={hostId} target={target} />}
           </RouteHostBoundary>
         ) : serverView === "images" && hostId !== undefined ? (
           <RouteHostBoundary hostId={hostId} unavailable={routeUnavailable}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { usePolling } from "@/hooks/usePolling";
+import { closestBucket } from "@/lib/activityPeriod";
 import { useAgentName } from "@/lib/agent";
 import { getAgentUsage } from "@/lib/api";
 import { fmtTokens } from "@/lib/audit";
@@ -25,20 +26,15 @@ const GROUPINGS: { key: "iteration" | "task" | "epic" | "model"; label: string }
   { key: "model", label: "Models" },
 ];
 
-// Pick the closest bucket to a custom span so the chart bar count stays sane.
-function closestBucket(spanMs: number): string {
-  if (spanMs <= 2 * 3600e3) return "5m";
-  if (spanMs <= 8 * 3600e3) return "15m";
-  if (spanMs <= 36 * 3600e3) return "1h";
-  return "1d";
-}
-
 function fmtCost(usd: number): string {
   return `$${usd.toFixed(4)}`;
 }
 
-export default function AgentUsagePage() {
+// period, when given, is the Activity tab's shared window: it replaces the
+// page's own window presets.
+export default function AgentUsagePage({ period }: { period?: { since: string; until: string } } = {}) {
   const name = useAgentName();
+  const { hostId: hostParam = "local" } = useParams();
   const [preset, setPreset] = useState<Preset>("24h");
   // datetime-local strings (local wall-clock), only used when preset==='custom'.
   const [customSince, setCustomSince] = useState("");
@@ -48,7 +44,14 @@ export default function AgentUsagePage() {
   // Build the query params. Recomputed on every poll tick so preset windows
   // slide with the wall clock (since=now-Δ), and custom ranges convert their
   // local datetime-local values to RFC3339 (UTC) for the backend.
+  const managed = period !== undefined;
+  const periodSince = period?.since ?? "";
+  const periodUntil = period?.until ?? "";
   const buildParams = useCallback((): Record<string, string> => {
+    if (managed) {
+      const span = periodSince ? Date.parse(periodUntil || new Date().toISOString()) - Date.parse(periodSince) : 0;
+      return { since: periodSince, until: periodUntil, group_by: groupBy, bucket: span ? closestBucket(span) : "1h" };
+    }
     if (preset === "custom") {
       const since = customSince ? new Date(customSince).toISOString() : "";
       const until = customUntil ? new Date(customUntil).toISOString() : "";
@@ -65,7 +68,7 @@ export default function AgentUsagePage() {
     }
     const { ms, bucket } = PRESETS[preset];
     return { since: new Date(Date.now() - ms).toISOString(), group_by: groupBy, bucket };
-  }, [preset, customSince, customUntil, groupBy]);
+  }, [managed, periodSince, periodUntil, preset, customSince, customUntil, groupBy]);
 
   const { data, refresh } = usePolling(() => getAgentUsage(name, buildParams()), 10000);
 
@@ -73,7 +76,7 @@ export default function AgentUsagePage() {
   // for the next poll tick.
   useEffect(() => {
     void refresh();
-  }, [preset, customSince, customUntil, groupBy, refresh]);
+  }, [periodSince, periodUntil, preset, customSince, customUntil, groupBy, refresh]);
 
   const totals = data?.totals;
   const rows = data?.rows ?? [];
@@ -82,7 +85,7 @@ export default function AgentUsagePage() {
   return (
     <div className="flex flex-col gap-4">
       {/* (1) Window selector */}
-      <div className="flex flex-wrap items-center gap-2">
+      {!period && <div className="flex flex-wrap items-center gap-2">
         {PRESET_ORDER.map((p) => (
           <button
             key={p}
@@ -117,7 +120,7 @@ export default function AgentUsagePage() {
             </label>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* (2) Totals cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -167,7 +170,7 @@ export default function AgentUsagePage() {
             {rows.map((r, i) => (
               <tr key={i} className="border-t">
                 <td className="px-3 py-1.5">
-                  <RowKey name={name} groupBy={groupBy} rowKey={r.key} title={r.title} />
+                  <RowKey name={name} hostParam={hostParam} groupBy={groupBy} rowKey={r.key} title={r.title} />
                 </td>
                 <td className="px-3 py-1.5 text-right">{r.requests}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{r.input_tokens}</td>
@@ -200,15 +203,18 @@ function TotalCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Iteration rows link to that iteration's Audit Log view; other groupings show
-// the human title (task/epic) or the bare key (model), with 'untagged' plain.
+// Iteration rows link to that iteration's Audit Log view; task/epic rows link
+// the task key to the agent's Tasks tab beside its title; model rows show the
+// bare key, with 'untagged' plain.
 function RowKey({
   name,
+  hostParam,
   groupBy,
   rowKey,
   title,
 }: {
   name: string;
+  hostParam: string;
   groupBy: string;
   rowKey: string;
   title?: string;
@@ -222,6 +228,19 @@ function RowKey({
       >
         {rowKey}
       </Link>
+    );
+  }
+  if ((groupBy === "task" || groupBy === "epic") && rowKey !== "untagged") {
+    return (
+      <span className="flex flex-wrap items-baseline gap-2">
+        <Link
+          to={`/agents/${encodeURIComponent(hostParam)}/${encodeURIComponent(name)}/tasks?task=${encodeURIComponent(rowKey)}`}
+          className="font-mono text-xs text-primary hover:underline"
+        >
+          {rowKey}
+        </Link>
+        {title && title !== rowKey && <span>{title}</span>}
+      </span>
     );
   }
   const label = title ?? rowKey;

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 const SECTIONS: Array<{ section: ServerSection; label: string }> = [
   { section: "tasks", label: "Tasks" },
+  { section: "activity", label: "Activity" },
   { section: "images", label: "Images" },
   { section: "workflows", label: "Workflow images" },
   { section: "stores", label: "Stores" },

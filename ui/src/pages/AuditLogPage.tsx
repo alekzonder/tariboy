@@ -28,7 +28,9 @@ function statusVariant(
 // AuditLogPage is the merged Iterations + Audit Log view: one tab, a left column
 // listing "Full log" plus every iteration (newest first), and a right pane that
 // shows the full cross-iteration stream (default) or a single iteration's log.
-export default function AuditLogPage() {
+// period, when given, is the Activity tab's shared window: it replaces the
+// page's own started-at date filters.
+export default function AuditLogPage({ period }: { period?: { since: string; until: string } } = {}) {
   const name = useAgentName();
   const { hostId: hostParam = "local" } = useParams();
   const hostId = paramToHost(hostParam);
@@ -42,10 +44,14 @@ export default function AuditLogPage() {
   const beforeFilter = searchParams.get("started_before") ?? "";
   const query = new URLSearchParams();
   if (tagFilter) query.set("tag", tagFilter);
-  if (afterFilter) query.set("started_after", afterFilter);
-  if (beforeFilter) query.set("started_before", beforeFilter);
+  const after = period ? period.since : afterFilter;
+  const before = period ? period.until : beforeFilter;
+  if (after) query.set("started_after", after);
+  if (before) query.set("started_before", before);
   const queryString = query.toString();
-  const listKey = `${hostId}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}\0${queryString}`;
+  // A rolling period moves every minute; the list keeps its rows while the
+  // moved window reloads instead of blanking, so the period is not in the key.
+  const listKey = `${hostId}\0${descriptor?.baseURL ?? ""}\0${descriptor?.token ?? ""}\0${name}\0${period ? tagFilter : queryString}`;
   const [listState, setListState] = useState<{ key: string; items: IterationSummary[] } | null>(null);
   const items = listState?.key === listKey ? listState.items : [];
   const loaded = listState?.key === listKey;
@@ -128,7 +134,7 @@ export default function AuditLogPage() {
             value={tagFilter}
             onChange={(e) => setFilter("tag", e.target.value)}
           />
-          <div className="flex gap-1">
+          {!period && <div className="flex gap-1">
             <Input
               aria-label="Started after"
               type="date"
@@ -141,7 +147,7 @@ export default function AuditLogPage() {
               value={beforeFilter}
               onChange={(e) => setFilter("started_before", e.target.value)}
             />
-          </div>
+          </div>}
         </div>
         <button
           onClick={() => select(null)}

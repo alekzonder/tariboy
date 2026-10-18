@@ -245,6 +245,57 @@ export interface AgentUsageReport {
   series: AgentUsagePoint[];
 }
 
+// GET /api/task-activity (internal/commands/task_activity.go).
+export interface TaskActivityRow {
+  key: string;
+  title: string;
+  queue: string;
+  status: string;
+  category: string;
+  assignee: string;
+  completed: boolean;
+  iterations: number;
+  requests: number;
+  tokens: number;
+  cost_usd: number;
+  comments: number;
+  outcomes: string[];
+  entered_statuses: string[];
+  agents: string[];
+  first_at: string;
+  last_at: string;
+}
+
+export interface TaskActivityTotals {
+  tasks: number;
+  completed: number;
+  transitions: number;
+  comments: number;
+  iterations: number;
+  requests: number;
+  tokens: number;
+  cost_usd: number;
+}
+
+export interface TaskActivityAgent {
+  agent: string;
+  tasks: number;
+  completed: number;
+  iterations: number;
+  requests: number;
+  cost_usd: number;
+}
+
+export interface TaskActivityReport {
+  since: string;
+  until: string;
+  agent?: string;
+  truncated: boolean;
+  totals: TaskActivityTotals;
+  tasks: TaskActivityRow[];
+  agents?: TaskActivityAgent[];
+}
+
 // SSE event (internal/events/hub.go).
 export interface AgentEvent {
   agent: string;

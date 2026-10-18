@@ -8,6 +8,7 @@ import type {
   IterationLogs,
   UsageReport,
   AgentUsageReport,
+  TaskActivityReport,
   AgentEvent,
   StatusHistoryEvent,
   AgentLifecycleResult,
@@ -540,6 +541,17 @@ export const getAgentUsage = (
   for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
   const s = q.toString();
   return agentGet<AgentUsageReport>(name, `usage${s ? `?${s}` : ""}`);
+};
+
+// Work on tasks in a window on one explicit host; without agent, server-wide.
+export const getTaskActivityOn = (
+  target: ApiTarget,
+  params: { since: string; until: string; agent?: string },
+  signal?: AbortSignal,
+) => {
+  const q = new URLSearchParams({ since: params.since, until: params.until });
+  if (params.agent) q.set("agent", params.agent);
+  return apiOn<TaskActivityReport>(resolveTarget(target), "GET", `/api/task-activity?${q}`, undefined, signal);
 };
 
 // ---- Shared server file upload ----
