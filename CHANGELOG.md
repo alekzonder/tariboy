@@ -1,3 +1,36 @@
+## [0.86.0] - 2026-10-18
+
+### Added
+
+- `tariboy tasks activity` and `GET /api/task-activity` summarize work on
+  tasks in a time window: per task AI iterations, requests, tokens and cost
+  together with comments, outcomes, entered statuses and completion, for one
+  agent or broken down per agent server-wide.
+- The agent Activity tab has one Hour/Day/Week/Custom period kept in the
+  URL, summary cards and a Tasks view whose keys open the task; Iterations,
+  Usage and Status history follow the same period. Servers get an Activity
+  section with Tasks and Agents views.
+- Manage queues opens a two-column dialog with General, Workflow, Pools,
+  Secrets and Sources tabs. The Workflow tab lists the statuses of the bound
+  image, or of the image chosen before Bind, with each owner and outcome;
+  the Pools tab shows one row per pool, including required pools that do not
+  exist yet, with agent chips, suggestions and a per-row Save. On a phone the
+  dialog fills the screen.
+
+### Changed
+
+- A click anywhere on a task row opens the task; the row's own controls keep
+  their action.
+- The agent Configuration tab has page margins, and its sticky search and
+  save bars use the panel color and align with the cards.
+
+### Fixed
+
+- Pop-up lists in agent configuration blocks (Model and Effort presets,
+  working directory suggestions) are no longer cut off at the block's edge.
+
+[0.86.0]: https://github.com/alekzonder/tariboy/compare/v0.85.0...v0.86.0
+
 ## [0.85.0] - 2026-10-17
 
 ### Added
