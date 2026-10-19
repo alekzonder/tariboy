@@ -6,16 +6,7 @@ import { listQueueSecrets, removeQueueSecret, setQueueSecret, type QueueSecretIn
 import { COUNT, EMPTY, FIELD, LABEL, QUIET_ACTION } from "./panelStyles"
 import { formatTaskTime } from "./taskTime"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
-import { errorText } from "./workflowShared"
-
-// The daemon's rule (internal/tasks/workflow_secrets.go).
-const KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
-
-function keyProblem(key: string): string {
-  if (!KEY_PATTERN.test(key)) return "A secret key starts with a letter or underscore and holds letters, digits, and underscores."
-  if (key.startsWith("TARIBOY_")) return "A secret key must not start with TARIBOY_."
-  return ""
-}
+import { errorText, keyProblem } from "./workflowShared"
 
 /**
  * A queue's secrets: keys with their time, Set and Remove, and the required
@@ -23,12 +14,19 @@ function keyProblem(key: string): string {
  * write-only: it lives in the password input until submit, then is cleared,
  * and nothing here ever reads or renders one.
  */
-export default function QueueSecrets({ queue, target, missing = [], missingMessage = "" }: {
+export default function QueueSecrets({ queue, target, missing = [], missingMessage = "", revision = 0, envKeys = [], onKeys, onChanged }: {
   queue: string
   target?: ApiTarget
   /** Names a failed bind reported without a value. */
   missing?: string[]
   missingMessage?: string
+  /** A change reloads the list: the Env block moved a key. */
+  revision?: number
+  /** Keys of the queue's plain env vars: one also answers a needed name, and setting one here moves it. */
+  envKeys?: string[]
+  onKeys?: (keys: string[]) => void
+  /** Told of a change instead of reloading only this list. */
+  onChanged?: () => void
 }) {
   const [secrets, setSecrets] = useState<QueueSecretInfo[]>([])
   const [globalEnv, setGlobalEnv] = useState<string[]>([])
@@ -45,10 +43,12 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
       const list = await listQueueSecrets(queue, target)
       setSecrets(list.secrets)
       setGlobalEnv(list.global_env)
+      onKeys?.(list.secrets.map((secret) => secret.key))
       setLoaded(true)
     } catch (err) { setError(errorText(err)) }
-  }, [queue, target])
-  useEffect(() => { void Promise.resolve().then(load) }, [load])
+  }, [queue, target, onKeys])
+  useEffect(() => { void Promise.resolve().then(load) }, [load, revision])
+  const reload = onChanged ?? load
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -56,14 +56,23 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
     const problem = keyProblem(name)
     if (problem) { setError(problem); return }
     const secret = value
-    setValue("")
-    setError("")
-    setBusy(true)
-    try {
-      await setQueueSecret(queue, name, secret, target)
-      setKey("")
-      await load()
-    } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+    const store = async () => {
+      setValue("")
+      setError("")
+      setBusy(true)
+      try {
+        await setQueueSecret(queue, name, secret, target)
+        setKey("")
+        await reload()
+      } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+    }
+    if (!envKeys.includes(name)) { await store(); return }
+    confirm({
+      title: `Move ${name} to secrets?`,
+      description: "The env var is removed and the key holds this secret value instead.",
+      action: "Move to secrets",
+      run: () => void store(),
+    })
   }
 
   const remove = (name: string) => confirm({
@@ -73,10 +82,10 @@ export default function QueueSecrets({ queue, target, missing = [], missingMessa
     run: () => {
       setError("")
       setBusy(true)
-      removeQueueSecret(queue, name, target).then(load, (err) => setError(errorText(err))).finally(() => setBusy(false))
+      removeQueueSecret(queue, name, target).then(reload, (err) => setError(errorText(err))).finally(() => setBusy(false))
     },
   })
-  const stillMissing = missing.filter((name) => !secrets.some((secret) => secret.key === name))
+  const stillMissing = missing.filter((name) => !envKeys.includes(name) && !secrets.some((secret) => secret.key === name))
 
   return (
     <section className="flex min-w-0 flex-col gap-1.5" aria-label={`Secrets ${queue}`}>

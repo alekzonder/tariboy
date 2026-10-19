@@ -19,6 +19,7 @@ import {
   getTransitionRequest,
   isActiveCategory,
   isWorkflowTask,
+  listQueueEnv,
   listQueueSecrets,
   listQueueSources,
   getQueueSourceRunLog,
@@ -29,8 +30,10 @@ import {
   validateWorkflowDirectory,
   buildWorkflowDirectory,
   moveTaskWorkflow,
+  removeQueueEnv,
   removeQueueSecret,
   resumeTaskWorkflow,
+  setQueueEnv,
   setQueueSecret,
   setQueueWorkflow,
   setTaskArtifact,
@@ -160,6 +163,17 @@ describe("workflow task client", () => {
     expect(lastCall()).toEqual([remote, "PUT", "/api/task-queues/DEV/secrets/A%20B", { value: "s3cret" }])
     await removeQueueSecret("DEV", "A B", remote)
     expect(lastCall()).toEqual([remote, "DELETE", "/api/task-queues/DEV/secrets/A%20B", undefined])
+  })
+
+  it("lists, sets, and removes plain queue env vars with their values", async () => {
+    apiOn.mockResolvedValue({ env: [{ key: "LOG_LEVEL", value: "debug", updated_at: "t" }], count: 1 })
+    expect(await listQueueEnv("DEV", remote)).toEqual([{ key: "LOG_LEVEL", value: "debug", updated_at: "t" }])
+    expect(lastCall()).toEqual([remote, "GET", "/api/task-queues/DEV/env", undefined])
+    apiOn.mockResolvedValue({ queue: "DEV", key: "A B", value: "v", updated_at: "t" })
+    await setQueueEnv("DEV", "A B", "v", remote)
+    expect(lastCall()).toEqual([remote, "PUT", "/api/task-queues/DEV/env/A%20B", { value: "v" }])
+    await removeQueueEnv("DEV", "A B", remote)
+    expect(lastCall()).toEqual([remote, "DELETE", "/api/task-queues/DEV/env/A%20B", undefined])
   })
 
   it("lists queue sources and reads a source run's log", async () => {

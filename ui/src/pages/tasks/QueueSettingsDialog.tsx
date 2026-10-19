@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils"
 import { EMPTY, LABEL, MONO } from "./panelStyles"
 import QueuePools from "./QueuePools"
-import QueueSecrets from "./QueueSecrets"
+import QueueEnvironment from "./QueueEnvironment"
 import QueueSources from "./QueueSources"
 import QueueWorkflowSettings from "./QueueWorkflowSettings"
 import { emptyPools, requiredPools } from "./workflowPools"
@@ -21,8 +21,8 @@ import { errorText } from "./workflowShared"
 
 interface QueueState { binding: QueueWorkflow | null; definition: WorkflowDefinition | null; pools: AgentPool[] }
 type Entry = { state: QueueState; error?: undefined } | { state?: undefined; error: string }
-type Tab = "general" | "workflow" | "pools" | "secrets" | "sources"
-const TAB_LABELS: Record<Tab, string> = { general: "General", workflow: "Workflow", pools: "Pools", secrets: "Secrets", sources: "Sources" }
+type Tab = "general" | "workflow" | "pools" | "environment" | "sources"
+const TAB_LABELS: Record<Tab, string> = { general: "General", workflow: "Workflow", pools: "Pools", environment: "Environment", sources: "Sources" }
 
 async function loadQueue(prefix: string, target?: ApiTarget): Promise<QueueState> {
   const [binding, pools] = await Promise.all([getQueueWorkflow(prefix, target), listAgentPools(prefix, target)])
@@ -51,7 +51,7 @@ export default function QueueSettingsDialog({ open, onOpenChange, ...props }: {
     <DialogContent className="flex h-[min(760px,calc(100dvh-2rem))] w-[min(1100px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none max-sm:h-dvh max-sm:w-screen max-sm:rounded-none">
       <div className="border-b px-4 py-3 pr-12">
         <DialogTitle className="text-[15px] font-semibold">Queues</DialogTitle>
-        <DialogDescription className="sr-only">Create and rename queues, bind a workflow, and fill its agent pools and secrets.</DialogDescription>
+        <DialogDescription className="sr-only">Create and rename queues, bind a workflow, and fill its agent pools and environment.</DialogDescription>
       </div>
       <QueueSettings {...props} />
     </DialogContent>
@@ -164,7 +164,7 @@ function QueueSettings({ queues, onCreate, onUpdate, target }: {
         </div>}
         <Tabs value={activeTab} onValueChange={(value) => setTab(value as Tab)} className="min-h-0 flex-1 gap-0">
           <TabsList className="mx-5 mt-2 h-auto w-auto justify-start gap-0.5 overflow-x-auto rounded-none border-b bg-transparent p-0">
-            {(["general", "workflow", "pools", "secrets", ...(state?.binding ? ["sources"] : [])] as Tab[]).map((value) =>
+            {(["general", "workflow", "pools", "environment", ...(state?.binding ? ["sources"] : [])] as Tab[]).map((value) =>
               <TabsTrigger key={value} value={value}
                 className="rounded-none px-3 py-2 text-[12.5px] data-[state=active]:font-semibold data-[state=active]:shadow-[inset_0_-2px_0_var(--primary)]">
                 {TAB_LABELS[value]}{value === "pools" && empty.length > 0 && <span aria-label="needs agents" className="size-1.5 rounded-full bg-status-failed" />}
@@ -187,8 +187,8 @@ function QueueSettings({ queues, onCreate, onUpdate, target }: {
                 onSaved={(pool) => savePool(queue.prefix, pool)} onReload={() => void load(queue.prefix)} />
                 : !loadError && <span className={EMPTY}>Loading agent pools…</span>}
             </TabsContent>
-            <TabsContent value="secrets">
-              <QueueSecrets key={`${queue.prefix}:${state?.binding?.digest ?? ""}`} queue={queue.prefix} target={target}
+            <TabsContent value="environment">
+              <QueueEnvironment key={`${queue.prefix}:${state?.binding?.digest ?? ""}`} queue={queue.prefix} target={target}
                 missing={secretsMissing?.queue === queue.prefix ? secretsMissing.names : undefined}
                 missingMessage={secretsMissing?.queue === queue.prefix ? secretsMissing.message : undefined} />
             </TabsContent>

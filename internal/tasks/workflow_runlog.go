@@ -132,7 +132,7 @@ func (s *Service) redactedLogTail(ctx context.Context, queue, path string, id in
 	if err != nil {
 		return "", false, runLogInvalid(id)
 	}
-	secrets, err := s.queueSecrets(ctx, queue)
+	_, secrets, err := s.queueEnvironment(ctx, queue)
 	if err != nil {
 		return "", false, err
 	}

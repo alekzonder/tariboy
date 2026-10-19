@@ -68,7 +68,7 @@ func TestQueueSecretsSetListRemove(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(keys, []string{"GH_TOKEN", "ZED_TOKEN"}) {
 		t.Fatalf("keys = %v, %v; want sorted keys", keys, err)
 	}
-	values, err := svc.queueSecrets(ctx, "DEV")
+	_, values, err := svc.queueEnvironment(ctx, "DEV")
 	if err != nil || !reflect.DeepEqual(values, map[string]string{"GH_TOKEN": "s3cr3t-value", "ZED_TOKEN": "second"}) {
 		t.Fatalf("queueSecrets = %v, %v", values, err)
 	}

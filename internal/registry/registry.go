@@ -148,6 +148,9 @@ type TaskControl interface {
 	ListQueueSecrets(context.Context, tasks.Actor, string) ([]tasks.QueueSecretInfo, error)
 	QueueSecretsInGlobalEnv(context.Context, tasks.Actor, string) ([]string, error)
 	RemoveQueueSecret(context.Context, tasks.Actor, string, string) error
+	SetQueueEnvInfo(context.Context, tasks.Actor, string, string, string) (tasks.QueueEnvVar, error)
+	ListQueueEnv(context.Context, tasks.Actor, string) ([]tasks.QueueEnvVar, error)
+	RemoveQueueEnv(context.Context, tasks.Actor, string, string) error
 	ListQueueSources(context.Context, tasks.Actor, string) ([]tasks.QueueSource, error)
 	QueueSourceRunLog(context.Context, tasks.Actor, string, int64, int) (string, bool, error)
 }

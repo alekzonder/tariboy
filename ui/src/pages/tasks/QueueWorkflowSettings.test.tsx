@@ -108,7 +108,7 @@ it("names only the listed pools that still have no agents", async () => {
   rerender(view([agentPool("dev", ["dev-a"]), agentPool("qa", ["qa-a"])]))
   expect(screen.queryByRole("alert", { name: "Pools needed" })).not.toBeInTheDocument()
 })
-it("lists missing secrets with a way to the Secrets tab", async () => {
+it("lists missing secrets with a way to the Environment tab", async () => {
   api.getQueueWorkflow.mockResolvedValue(null)
   api.setQueueWorkflow.mockRejectedValue(new ApiError(409, "workflow_secret_missing", "workflow secrets have no value: TOKEN", { secrets: ["TOKEN"] }))
   renderIt()
@@ -118,8 +118,8 @@ it("lists missing secrets with a way to the Secrets tab", async () => {
   const alert = await screen.findByRole("alert", { name: "Secrets needed" })
   expect(alert).toHaveTextContent("TOKEN")
   expect(handlers.onSecretsMissing).toHaveBeenCalledWith({ names: ["TOKEN"], message: "workflow secrets have no value: TOKEN" })
-  fireEvent.click(within(alert).getByRole("button", { name: "Open Secrets" }))
-  expect(handlers.onOpenTab).toHaveBeenCalledWith("secrets")
+  fireEvent.click(within(alert).getByRole("button", { name: "Open Environment" }))
+  expect(handlers.onOpenTab).toHaveBeenCalledWith("environment")
 })
 
 it("asks before clearing and does nothing when declined", async () => {

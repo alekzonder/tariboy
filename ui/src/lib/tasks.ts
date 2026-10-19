@@ -633,6 +633,16 @@ export const removeQueueSecret = async (queue: string, key: string, target?: Api
   await call(target, "DELETE", `${queuePath(queue)}/secrets/${encodeURIComponent(key)}`)
 }
 
+// A plain env var is not secret: the daemon returns its value.
+export interface QueueEnvVar { key: string; value: string; updated_at: string }
+export const listQueueEnv = async (queue: string, target?: ApiTarget): Promise<QueueEnvVar[]> =>
+  (await call<{ env: QueueEnvVar[]; count: number }>(target, "GET", `${queuePath(queue)}/env`)).env
+export const setQueueEnv = (queue: string, key: string, value: string, target?: ApiTarget) =>
+  call<QueueEnvVar & { queue: string }>(target, "PUT", `${queuePath(queue)}/env/${encodeURIComponent(key)}`, { value })
+export const removeQueueEnv = async (queue: string, key: string, target?: ApiTarget): Promise<void> => {
+  await call(target, "DELETE", `${queuePath(queue)}/env/${encodeURIComponent(key)}`)
+}
+
 export const listQueueSources = async (queue: string, target?: ApiTarget) =>
   (await call<{ sources: QueueSource[]; count: number }>(target, "GET", `${queuePath(queue)}/sources`)).sources
 export const getQueueSourceRunLog = async (

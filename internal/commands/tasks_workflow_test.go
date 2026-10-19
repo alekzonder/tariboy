@@ -112,6 +112,18 @@ func (s *workflowStub) ListQueueSecrets(_ context.Context, a tasks.Actor, queue 
 func (s *workflowStub) QueueSecretsInGlobalEnv(context.Context, tasks.Actor, string) ([]string, error) {
 	return []string{"GH_TOKEN"}, s.err
 }
+func (s *workflowStub) SetQueueEnvInfo(_ context.Context, a tasks.Actor, queue, key, value string) (tasks.QueueEnvVar, error) {
+	s.record(a, "queue_env_set %s %s %q", queue, key, value)
+	return tasks.QueueEnvVar{Key: key, Value: value, UpdatedAt: "2026-10-02T00:00:01Z"}, s.err
+}
+func (s *workflowStub) ListQueueEnv(_ context.Context, a tasks.Actor, queue string) ([]tasks.QueueEnvVar, error) {
+	s.record(a, "queue_env_ls %s", queue)
+	return []tasks.QueueEnvVar{{Key: "LOG_LEVEL", Value: "debug", UpdatedAt: "2026-10-02T00:00:00Z"}}, s.err
+}
+func (s *workflowStub) RemoveQueueEnv(_ context.Context, a tasks.Actor, queue, key string) error {
+	s.record(a, "queue_env_rm %s %s", queue, key)
+	return s.err
+}
 func (s *workflowStub) RemoveQueueSecret(_ context.Context, a tasks.Actor, queue, key string) error {
 	s.record(a, "queue_secret_rm %s %s", queue, key)
 	return s.err
@@ -176,6 +188,12 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 		{"queue source log", "GET", "/api/task-queues/DEV/source-runs/5/log?max_bytes=10", nil, `queue_source_log DEV 5 max=10`,
 			`"run_id":5,"text":"source log\n","truncated":false`},
 		{"queue secret rm", "DELETE", "/api/task-queues/DEV/secrets/GH_TOKEN", nil, `queue_secret_rm DEV GH_TOKEN`,
+			`"removed":true`},
+		{"queue env set keeps the value as given", "PUT", "/api/task-queues/DEV/env/LOG_LEVEL", map[string]any{"value": " debug\n"},
+			`queue_env_set DEV LOG_LEVEL " debug\n"`, `"key":"LOG_LEVEL","queue":"DEV","updated_at":"2026-10-02T00:00:01Z","value":" debug\n"`},
+		{"queue env ls", "GET", "/api/task-queues/DEV/env", nil, `queue_env_ls DEV`,
+			`"count":1,"env":[{"key":"LOG_LEVEL","value":"debug","updated_at":"2026-10-02T00:00:00Z"}]`},
+		{"queue env rm", "DELETE", "/api/task-queues/DEV/env/LOG_LEVEL", nil, `queue_env_rm DEV LOG_LEVEL`,
 			`"removed":true`},
 	}
 	for _, tc := range cases {

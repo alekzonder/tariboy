@@ -297,7 +297,7 @@ A bind checks pools first, then secrets:
 | Error | Meaning |
 | --- | --- |
 | `workflow_pool_empty` | A pool the image names is missing or has no agents. The error lists the pools. Emptying a pool that the bound image uses, or that the pinned version of an unfinished task in the queue uses, is refused with the same code. |
-| `workflow_secret_missing` | A secret the image lists in `requires_secrets` has no value in the queue and is not set in the global env. The error lists the names in `details.secrets`. |
+| `workflow_secret_missing` | A secret the image lists in `requires_secrets` has no value in the queue, as a secret or an env var, and is not set in the global env. The error lists the names in `details.secrets`. |
 | `revision_conflict` | The revision is not the current one; read the binding again and retry. |
 | `not_found` | No published image matches the reference. |
 | `invalid_workflow_ref` | The reference is malformed. |
@@ -352,6 +352,34 @@ ttasks queue secret rm DEV GH_TOKEN
 
 A queue secret and an agent secret of the same name are independent values. In
 a `run_as: agent` check the queue value wins.
+
+### Queue env vars
+
+A queue can also hold plain env vars: values that are not secret, such as a
+base URL or a log level. They reach the queue's workflow scripts in the same
+layer as the queue secrets, under the same key and value rules.
+
+```bash
+ttasks queue env set DEV LOG_LEVEL debug
+printf '%s' "$URL" | ttasks queue env set DEV BASE_URL
+ttasks queue env ls DEV
+ttasks queue env rm DEV LOG_LEVEL
+```
+
+- The value is the third argument, `--value`, or stdin with one trailing
+  newline stripped.
+- A key is either an env var or a secret. Setting a secret's key with
+  `queue env set` makes it an env var with the new value, and setting an env
+  var's key with `queue secret set` makes it a secret. The old value is
+  replaced, never shown.
+- `ls` and `GET /api/task-queues/{queue}/env` return the values. Run logs do
+  not redact them. Keep a token in a queue secret.
+- An env var answers a name in `requires_secrets` like a secret does, so a bind
+  and a remove are checked against both kinds.
+- The `queue.env_set` and `queue.env_removed` events carry only the key.
+
+In the Web UI both kinds are on the **Environment** tab of the queue settings,
+in an **Env** block and a **Secrets** block.
 
 ### Creating a task in a bound queue
 
@@ -635,8 +663,8 @@ and report the outcome again.
 
 | `run_as` | Working directory | Environment, later entries winning |
 | --- | --- | --- |
-| `queue` (default) | `TARIBOY_TASK_DIR` | the global env (the daemon's own environment and the exports of `<base-dir>/global-agent-shell.sh`), then the image's `env`, then the queue secrets; `PATH=/usr/bin:/bin` when none of them sets `PATH` |
-| `agent` | the holder's effective working directory | the daemon's own environment, the holder's environment and agent secrets, and the exports of the global and agent shell scripts (as its own background scripts get them), then the image's `env`, then the queue secrets |
+| `queue` (default) | `TARIBOY_TASK_DIR` | the global env (the daemon's own environment and the exports of `<base-dir>/global-agent-shell.sh`), then the image's `env`, then the queue env vars and secrets; `PATH=/usr/bin:/bin` when none of them sets `PATH` |
+| `agent` | the holder's effective working directory | the daemon's own environment, the holder's environment and agent secrets, and the exports of the global and agent shell scripts (as its own background scripts get them), then the image's `env`, then the queue env vars and secrets |
 
 Watch scripts always run as `queue`, so they do not depend on which agent held
 the task. `run_as: agent` is for checks that inspect a worktree or a local
@@ -1215,6 +1243,9 @@ and what it may do next. Agents and the operator can read it.
 | `ttasks queue secret set QUEUE KEY [--value V]` | operator | Set a secret; stdin when `--value` is absent. |
 | `ttasks queue secret ls QUEUE` | operator | List secret keys. |
 | `ttasks queue secret rm QUEUE KEY` | operator | Remove a secret. |
+| `ttasks queue env set QUEUE KEY [VALUE \| --value V]` | operator | Set a plain env var; stdin when no value. |
+| `ttasks queue env ls QUEUE` | operator | List env vars with their values. |
+| `ttasks queue env rm QUEUE KEY` | operator | Remove an env var. |
 | `ttasks queue source ls QUEUE` | operator | List the sources of the bound image and their newest runs. |
 | `ttasks queue source log QUEUE RUN [--max-bytes N]` | operator | Read a source run log. |
 | `ttasks workflow get KEY` | agent, operator | The task view. |
@@ -1245,6 +1276,9 @@ generated OpenAPI document is the authority for request and response schemas.
 | `PUT` | `/api/task-queues/{queue}/secrets/{key}` | set a secret (`value`, body at most 512 KiB); returns `queue`, `key`, and the stored `updated_at` | operator |
 | `GET` | `/api/task-queues/{queue}/secrets` | list `secrets` (`key`, `updated_at`) | operator |
 | `DELETE` | `/api/task-queues/{queue}/secrets/{key}` | remove a secret | operator |
+| `PUT` | `/api/task-queues/{queue}/env/{key}` | set a plain env var (`value`, body at most 512 KiB); returns `queue`, `key`, `value`, and `updated_at` | operator |
+| `GET` | `/api/task-queues/{queue}/env` | list `env` (`key`, `value`, `updated_at`) | operator |
+| `DELETE` | `/api/task-queues/{queue}/env/{key}` | remove a plain env var | operator |
 | `GET` | `/api/task-queues/{queue}/sources` | list `sources` with `next_run_at`, `failures`, `last_run`, and `runs` (the newest 20, newest first) | operator |
 | `GET` | `/api/task-queues/{queue}/source-runs/{id}/log` | the redacted log tail of a source run (`max_bytes`); returns `run_id`, `text`, `truncated` | operator |
 | `POST` | `/api/tasks/{key}/advance` | declare an outcome (`outcome`, `message`, `from`); returns the request | agent, operator |
@@ -1567,7 +1601,7 @@ dialog drops every unsaved edit.
   to open the **Pools** tab. When you choose an image in the select, the list
   shows that image's statuses before you bind it, so you can see which pools it
   needs. A bind refused with `workflow_pool_empty` or `workflow_secret_missing`
-  lists the names with **Open Pools** or **Open Secrets**; a pool leaves the
+  lists the names with **Open Pools** or **Open Environment**; a pool leaves the
   list once it has agents.
 - **Pools.** One row per pool: first the pools the bound workflow uses, also
   before they exist, and the pools a refused bind named, then the queue's other
@@ -1578,12 +1612,16 @@ dialog drops every unsaved edit.
   a pool by name. A pool changed elsewhere is reloaded with a notice; any other
   refusal, for example emptying a pool the workflow uses, shows on the row and
   keeps your edit.
-- **Secrets.** The secret keys with their update time, a form to **Set** one,
-  and **Remove** with confirmation. A value is write-only: it is cleared from
-  the form when sent and is never read back or shown. A bind refused with
-  `workflow_secret_missing` lists the missing names here. Each secret the bound
-  image requires that the global env holds shows as `NAME present in global
-  env`, with `overridden by the queue secret` when the queue sets it too.
+- **Environment.** Two blocks. **Env** lists the plain env vars with their
+  values and update time, a form to **Set** one, and **Remove** with
+  confirmation. **Secrets** lists the secret keys with their update time, a
+  form to **Set** one, and **Remove** with confirmation. A secret value is
+  write-only: it is cleared from the form when sent and is never read back or
+  shown. Setting a key that the other block holds asks first, then moves the
+  key. A bind refused with `workflow_secret_missing` lists the missing names in
+  the Secrets block until either block sets them. Each secret the bound image
+  requires that the global env holds shows as `NAME present in global env`,
+  with `overridden by the queue secret` when the queue sets it too.
 - **Sources.** Only for a bound queue: the sources of the workflow and their
   runs; see [Sources](#sources).
 

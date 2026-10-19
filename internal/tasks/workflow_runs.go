@@ -73,9 +73,10 @@ type RunJob struct {
 	Outcome         string // requested outcome; checks only
 	Timeout         time.Duration
 	Holder          string // agent name for run_as agent, else ""
-	// WorkflowEnv and QueueSecrets reach the process environment only; they are
-	// never marshalled.
+	// WorkflowEnv, QueueEnv, and QueueSecrets reach the process environment
+	// only; they are never marshalled. Only QueueSecrets is redacted.
 	WorkflowEnv  map[string]string `json:"-"`
+	QueueEnv     map[string]string `json:"-"`
 	QueueSecrets map[string]string `json:"-"`
 	Snapshot     []byte            // task.json content, no secrets
 	Outcomes     []string          // declared outcomes of the status
@@ -338,7 +339,7 @@ func (s *Service) runJob(ctx context.Context, run scriptRunRecord) (RunJob, erro
 	if job.Snapshot, err = taskSnapshotJSON(ctx, s.db, task, manifest, run.visitID, job.Outcome, message); err != nil {
 		return RunJob{}, err
 	}
-	if job.QueueSecrets, err = s.queueSecrets(ctx, task.Queue); err != nil {
+	if job.QueueEnv, job.QueueSecrets, err = s.queueEnvironment(ctx, task.Queue); err != nil {
 		return RunJob{}, err
 	}
 	return job, nil

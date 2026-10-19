@@ -106,6 +106,7 @@ func sourceJob(h *harness, script string) tasks.SourceJob {
 		WorkflowName: h.image.Name, WorkflowVersion: h.image.Version, WorkflowDigest: h.image.Digest,
 		Timeout: 10 * time.Second, Due: true, Artifacts: []string{},
 		WorkflowEnv:  map[string]string{"REPO": "org/repo"},
+		QueueEnv:     map[string]string{"Q_ENV": "qe"},
 		QueueSecrets: map[string]string{"LONG_SECRET": "long-secret-value"},
 	}
 }
@@ -151,7 +152,7 @@ func TestSupervisorRunsASourceAndReportsItsItems(t *testing.T) {
 	for name, want := range map[string]string{
 		"TARIBOY_TASK_QUEUE": "DEV", "TARIBOY_SOURCE_NAME": "pull-requests", "TARIBOY_SOURCE_DIR": filepath.Join(dir, "state"),
 		"TARIBOY_RESULT_FILE": filepath.Join(dir, "runs", "1", "result.json"), "TARIBOY_WORKFLOW_NAME": h.image.Name,
-		"TARIBOY_QUIET_EXIT": "111", "REPO": "org/repo", "LONG_SECRET": "long-secret-value", "BASE_ONLY": "base",
+		"TARIBOY_QUIET_EXIT": "111", "REPO": "org/repo", "Q_ENV": "qe", "LONG_SECRET": "long-secret-value", "BASE_ONLY": "base",
 	} {
 		if env[name] != want {
 			t.Errorf("%s = %q, want %q", name, env[name], want)

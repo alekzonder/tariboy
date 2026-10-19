@@ -85,17 +85,19 @@ func readText(source io.Reader, name, command, noun string, stderr io.Writer) (s
 // secretSetPositionals is "queue secret set QUEUE KEY".
 const secretSetPositionals = 2
 
-// resolveQueueSecretValue completes "queue secret set QUEUE KEY" when no
-// --value is given by reading the value from stdin and adding it to args, which
-// stay in this process. One trailing newline is stripped, because a token piped
-// in almost always carries one. A value is never accepted as a positional
-// argument, so it cannot land in a shell history by accident. Other commands
-// pass through unchanged.
+// resolveQueueSecretValue completes "queue secret set QUEUE KEY" and "queue
+// env set QUEUE KEY" when no --value is given by reading the value from stdin
+// and adding it to args, which stay in this process. One trailing newline is
+// stripped, because a token piped in almost always carries one. A secret value
+// is never accepted as a positional argument, so it cannot land in a shell
+// history by accident; a plain env value is not secret and may be the third
+// positional argument. Other commands pass through unchanged.
 func resolveQueueSecretValue(args []string, stderr io.Writer) ([]string, int) {
-	if len(args) < 3 || args[0] != "queue" || args[1] != "secret" || args[2] != "set" {
+	if len(args) < 3 || args[0] != "queue" || (args[1] != "secret" && args[1] != "env") || args[2] != "set" {
 		return args, 0
 	}
-	positionals := 0
+	command := "tasks queue " + args[1] + " set"
+	positionals, valueAt := 0, -1
 	for i := 3; i < len(args); i++ {
 		switch {
 		case args[i] == "--value" || strings.HasPrefix(args[i], "--value="):
@@ -103,21 +105,27 @@ func resolveQueueSecretValue(args []string, stderr io.Writer) ([]string, int) {
 		case args[i] == "--json":
 		case strings.HasPrefix(args[i], "-"):
 		default:
-			positionals++
+			if positionals++; positionals == secretSetPositionals+1 {
+				valueAt = i
+			}
 		}
 	}
+	if args[1] == "env" && positionals == secretSetPositionals+1 {
+		resolved := append(append([]string{}, args[:valueAt]...), args[valueAt+1:]...)
+		return append(resolved, "--value", args[valueAt]), 0
+	}
 	if positionals > secretSetPositionals {
-		fmt.Fprintln(stderr, "tasks queue secret set: pass the value with --value or on stdin, not as an argument")
+		fmt.Fprintln(stderr, command+": pass the value with --value or on stdin, not as an argument")
 		return nil, 2
 	}
 	if positionals < secretSetPositionals {
 		return args, 0 // the command reports the missing QUEUE or KEY
 	}
 	if isTerminal(stdin) {
-		fmt.Fprintln(stderr, "tasks queue secret set: pass --value VALUE or pipe the value on stdin")
+		fmt.Fprintln(stderr, command+": pass --value VALUE or pipe the value on stdin")
 		return nil, 2
 	}
-	value, ok := readText(stdin, "stdin", "tasks queue secret set", "secrets", stderr)
+	value, ok := readText(stdin, "stdin", command, "values", stderr)
 	if !ok {
 		return nil, 2
 	}
@@ -127,7 +135,7 @@ func resolveQueueSecretValue(args []string, stderr io.Writer) ([]string, int) {
 		value = strings.TrimSuffix(value, "\n")
 	}
 	if value == "" {
-		fmt.Fprintln(stderr, "tasks queue secret set: the value is empty; pass --value VALUE or pipe it on stdin")
+		fmt.Fprintln(stderr, command+": the value is empty; pass --value VALUE or pipe it on stdin")
 		return nil, 2
 	}
 	return append(append([]string{}, args...), "--value", value), 0
