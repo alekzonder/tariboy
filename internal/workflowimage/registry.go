@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -31,10 +32,13 @@ func (r *Registry) insert(m Manifest) error {
 	if err != nil {
 		return err
 	}
+	// A manifest built by an older version carries another RFC 3339 form; the
+	// manifest JSON keeps it, because the digest does not cover built_at.
+	builtAt, _ := store.NormalizeTimeValue(m.BuiltAt)
 	_, err = r.DB.Exec(
 		`INSERT INTO task_workflow_images (digest, name, version, manifest, built_at) VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(digest) DO NOTHING`,
-		m.Digest, m.Name, m.Version, string(data), m.BuiltAt)
+		m.Digest, m.Name, m.Version, string(data), builtAt)
 	return err
 }
 

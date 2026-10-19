@@ -3,6 +3,8 @@ package imageprovenance
 import (
 	"database/sql"
 	"os"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 type Record struct {
@@ -28,8 +30,10 @@ type executor interface {
 }
 
 func upsert(exec executor, record Record) error {
+	// An image built or imported by an older version carries another RFC 3339 form.
+	builtAt, _ := store.NormalizeTimeValue(record.BuiltAt)
 	_, err := exec.Exec(`INSERT INTO image_provenance(ref,digest,source_cwd,built_at) VALUES(?,?,?,?)
-		ON CONFLICT(ref) DO UPDATE SET digest=excluded.digest, source_cwd=excluded.source_cwd, built_at=excluded.built_at`, record.Ref, record.Digest, record.SourceCWD, record.BuiltAt)
+		ON CONFLICT(ref) DO UPDATE SET digest=excluded.digest, source_cwd=excluded.source_cwd, built_at=excluded.built_at`, record.Ref, record.Digest, record.SourceCWD, builtAt)
 	return err
 }
 

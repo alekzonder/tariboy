@@ -586,3 +586,18 @@ func TestRegistryRemoveWithoutEngineTables(t *testing.T) {
 		t.Fatalf("Remove last tag without the table = %v, %v", removed, err)
 	}
 }
+
+func TestRegistryStoresBuiltAtCanonical(t *testing.T) {
+	r, db := newRegistry(t)
+	m := Manifest{SchemaVersion: 1, Name: "old", Version: "0.1.0", Digest: "d1", BuiltAt: "2026-01-02T05:04:05+03:00"}
+	if err := r.insert(m); err != nil {
+		t.Fatal(err)
+	}
+	var builtAt string
+	if err := db.QueryRow(`SELECT built_at FROM task_workflow_images WHERE digest = ?`, m.Digest).Scan(&builtAt); err != nil {
+		t.Fatal(err)
+	}
+	if builtAt != "2026-01-02T02:04:05.000000000Z" {
+		t.Fatalf("built_at = %q; want canonical UTC", builtAt)
+	}
+}

@@ -119,7 +119,7 @@ func TestTimeColumnsCoverSchema(t *testing.T) {
 			t.Fatal(err)
 		}
 		schema[table+"."+column] = true
-		if typ == "TEXT" && looksLikeTimeColumn(column) && !IsTimeColumn(table, column) {
+		if typ == "TEXT" && looksLikeTimeColumn(column) && !IsTimeColumn(table, column) && !notTimeColumns[table+"."+column] {
 			t.Errorf("time column %s.%s is not in timeColumns", table, column)
 		}
 	}
@@ -133,6 +133,11 @@ func TestTimeColumnsCoverSchema(t *testing.T) {
 			}
 		}
 	}
+}
+
+// notTimeColumns have a time-like name but hold something else.
+var notTimeColumns = map[string]bool{
+	"messages.deadline": true, // a Go duration such as 5m
 }
 
 func looksLikeTimeColumn(name string) bool {
