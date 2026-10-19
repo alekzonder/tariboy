@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -357,7 +358,7 @@ func (s *Store) publishLocked(src *workflowfile.File, want string, now time.Time
 			Name:          name,
 			Version:       version,
 			Digest:        digest,
-			BuiltAt:       now.UTC().Format(time.RFC3339),
+			BuiltAt:       store.FormatTime(now),
 			Definition:    def,
 			Files:         entries,
 		}

@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"slices"
 	"sort"
-	"time"
 
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -75,8 +75,8 @@ func taskActivity() registry.Command {
 		Path:    "tasks.activity",
 		Summary: "Summarize work on tasks in a time window",
 		Args: []registry.Arg{
-			{Name: "since", Flag: "since", Short: "s", Type: registry.String, Help: "RFC3339 lower bound (inclusive)"},
-			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC3339 upper bound (exclusive)"},
+			{Name: "since", Flag: "since", Short: "s", Type: registry.String, Help: "RFC 3339 time (inclusive lower bound)"},
+			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC 3339 time (exclusive upper bound)"},
 			{Name: "agent", Flag: "agent", Short: "a", Type: registry.String, Help: "only this agent's work"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/task-activity"},
@@ -201,14 +201,15 @@ func taskActivity() registry.Command {
 	}
 }
 
-// activityBound validates an optional RFC3339 bound and returns it in UTC.
+// activityBound validates an optional RFC 3339 bound with any offset and
+// returns it in the stored time format.
 func activityBound(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
-	t, err := time.Parse(time.RFC3339Nano, value)
+	t, err := store.ParseInputTime(value)
 	if err != nil {
-		return "", api.UserError{Code: "bad_time", Msg: "since and until must be RFC3339 times"}
+		return "", api.UserError{Code: "bad_time", Msg: "since and until must be RFC 3339 times"}
 	}
-	return t.UTC().Format(time.RFC3339Nano), nil
+	return store.FormatTime(t), nil
 }

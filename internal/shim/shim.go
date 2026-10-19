@@ -64,7 +64,7 @@ type Options struct {
 	Agent        string
 	IterationID  string
 	HardTimeoutS int
-	// HardDeadline is an absolute RFC3339 deadline. It supersedes
+	// HardDeadline is an absolute RFC 3339 deadline. It supersedes
 	// HardTimeoutS when supplied and is used by restart/adoption resync.
 	HardDeadline string
 	TmuxSession  string
@@ -199,7 +199,7 @@ func runProcessWithStop(
 	pid := cmd.Process.Pid
 	logShim(o.IterationDir, "started pid=%d", pid)
 
-	s := &procShim{pid: pid, startedAt: time.Now().UTC().Format(time.RFC3339), cmd: cmd}
+	s := &procShim{pid: pid, startedAt: formatTime(time.Now()), cmd: cmd}
 	sockPath := o.sockPath()
 	stopRPC := serveRPC(o.IterationDir, sockPath, s)
 	defer stopRPC()
@@ -270,7 +270,7 @@ func runProcessWithStop(
 
 	res := &IterationResult{
 		ExitCode:  exitCode(waitErr),
-		EndedAt:   time.Now().UTC().Format(time.RFC3339),
+		EndedAt:   formatTime(time.Now()),
 		CPUMs:     lastCPUms,
 		MemPeakKB: peakRSS,
 		OOM:       false,
@@ -329,7 +329,7 @@ func runTmux(o Options, sample time.Duration) error {
 	s := &tmuxShim{
 		session:      o.TmuxSession,
 		iterationDir: o.IterationDir,
-		startedAt:    time.Now().UTC().Format(time.RFC3339),
+		startedAt:    formatTime(time.Now()),
 	}
 	sockPath := o.sockPath()
 	stopRPC := serveRPC(o.IterationDir, sockPath, s)
@@ -357,7 +357,7 @@ func runTmux(o Options, sample time.Duration) error {
 	if err := os.Remove(statusPath); err != nil && !os.IsNotExist(err) {
 		logShim(o.IterationDir, "ERROR tmux exit status category=cleanup_failed")
 	}
-	res := &IterationResult{ExitCode: exitCode, EndedAt: time.Now().UTC().Format(time.RFC3339)}
+	res := &IterationResult{ExitCode: exitCode, EndedAt: formatTime(time.Now())}
 	s.mu.Lock()
 	res.TerminationReason = s.terminationReason
 	s.finished = true
@@ -430,7 +430,7 @@ type deadlineWatchdog struct {
 
 func initialDeadline(o Options) time.Time {
 	if o.HardDeadline != "" {
-		if d, err := time.Parse(time.RFC3339Nano, o.HardDeadline); err == nil {
+		if d, err := parseInputTime(o.HardDeadline); err == nil {
 			return d
 		}
 	}
@@ -449,7 +449,7 @@ func initialDeadline(o Options) time.Time {
 // deadline, which newDeadlineWatchdog treats as "never fire").
 func tmuxDeadline(o Options) time.Time {
 	if o.HardDeadline != "" {
-		if d, err := time.Parse(time.RFC3339Nano, o.HardDeadline); err == nil {
+		if d, err := parseInputTime(o.HardDeadline); err == nil {
 			return d
 		}
 	}
@@ -501,7 +501,7 @@ func newDeadlineWatchdog(deadline time.Time, fire func()) *deadlineWatchdog {
 }
 
 func (w *deadlineWatchdog) Set(deadline string) error {
-	d, err := time.Parse(time.RFC3339Nano, deadline)
+	d, err := parseInputTime(deadline)
 	if err != nil {
 		return fmt.Errorf("parse hard deadline: %w", err)
 	}
@@ -986,7 +986,7 @@ func logShim(iterDir, format string, args ...any) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "%s "+format+"\n", append([]any{time.Now().UTC().Format(time.RFC3339)}, args...)...)
+	fmt.Fprintf(f, "%s "+format+"\n", append([]any{formatTime(time.Now())}, args...)...)
 }
 
 func writeResult(dir string, res *IterationResult) error {

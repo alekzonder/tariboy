@@ -29,6 +29,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
 )
@@ -200,7 +201,7 @@ func (m *Manager) ExtendIterationTimeout(name, id string) (registry.IterationTim
 	}
 	if m.cfg.Emit != nil {
 		m.cfg.Emit(events.Event{Agent: name, Type: "iteration_timeout_extended",
-			Time: now.UTC().Format(time.RFC3339Nano), Data: map[string]any{"id": id, "shim_sync": result.ShimSync}})
+			Time: store.FormatTime(now), Data: map[string]any{"id": id, "shim_sync": result.ShimSync}})
 	}
 	return result, nil
 }
@@ -675,7 +676,7 @@ func (m *Manager) finalizeIteration(
 func (m *Manager) terminalHarnessError(it *agent.Iteration) {
 	ec := -1
 	it.Status = "harness_error"
-	it.EndedAt = m.cfg.Clock().Format(time.RFC3339)
+	it.EndedAt = store.FormatTime(m.cfg.Clock())
 	it.ExitCode = &ec
 }
 
@@ -685,7 +686,7 @@ func (m *Manager) recordAdopted(l agentdir.Layout, li agentdir.LiveIteration, re
 	committed, _, err := m.finalizeIteration(l, li.Agent, li.ID, func(it *agent.Iteration) {
 		ec, cpu, mem := res.ExitCode, res.CPUMs, res.MemPeakKB
 		it.Status = Classify(res.ExitCode, it.DoneFlag, it.TimeoutTriggeredAt != nil, res.TerminationReason == "hard_timeout")
-		it.EndedAt = m.cfg.Clock().Format(time.RFC3339)
+		it.EndedAt = store.FormatTime(m.cfg.Clock())
 		it.ExitCode, it.CPUMs, it.MemPeakKB = &ec, &cpu, &mem
 		status = it.Status
 	})
@@ -1016,7 +1017,7 @@ func (m *Manager) start(ag agent.Agent) error {
 // may have changed, so the UI refetches it instead of polling often.
 func (m *Manager) emitState(name string) {
 	if m.cfg.Emit != nil {
-		m.cfg.Emit(events.Event{Agent: name, Type: "state", Time: m.cfg.Clock().UTC().Format(time.RFC3339)})
+		m.cfg.Emit(events.Event{Agent: name, Type: "state", Time: store.FormatTime(m.cfg.Clock())})
 	}
 }
 
@@ -1432,7 +1433,7 @@ func (m *Manager) LiveStateOf(a agent.Agent) string {
 			if it.LastAIRequestAt != "" {
 				last = it.LastAIRequestAt
 			}
-			if at, err := time.Parse(time.RFC3339Nano, last); err == nil &&
+			if at, err := store.ParseTime(last); err == nil &&
 				m.cfg.Clock().Sub(at) >= time.Duration(a.AIStallTimeoutS)*time.Second {
 				return "error"
 			}

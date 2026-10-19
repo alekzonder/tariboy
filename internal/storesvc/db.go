@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	_ "modernc.org/sqlite"
 )
 
@@ -39,7 +40,7 @@ func (d *DB) Close() error { return d.sql.Close() }
 func (d *DB) migrate() error {
 	if _, err := d.sql.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		name TEXT PRIMARY KEY,
-		applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`); err != nil {
+		applied_at TEXT NOT NULL DEFAULT (` + store.SQLNow + `))`); err != nil {
 		return err
 	}
 	entries, err := migrationsFS.ReadDir("migrations")
@@ -71,6 +72,12 @@ func (d *DB) migrate() error {
 			tx.Rollback()
 			return fmt.Errorf("migration %s: %w", name, err)
 		}
+		if name == canonicalTimestampsMigration {
+			if err := canonicalizeTimestamps(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %s: %w", name, err)
+			}
+		}
 		if _, err := tx.Exec(`INSERT INTO schema_migrations(name) VALUES (?)`, name); err != nil {
 			tx.Rollback()
 			return err
@@ -92,10 +99,13 @@ type PushRow struct {
 
 // RecordPush appends a (name,tag,digest) history row. Re-pushing an existing
 // digest refreshes its timestamp rather than duplicating (idempotent).
+// builtAt comes from the pushed manifest; an RFC 3339 value is stored in
+// store.TimeLayout and any other value as given.
 func (d *DB) RecordPush(name, tag, digest, builtAt string) error {
+	builtAt, _ = store.NormalizeTimeValue(builtAt)
 	_, err := d.sql.Exec(`INSERT INTO blobs(name, tag, digest, built_at) VALUES (?,?,?,?)
 		ON CONFLICT(name, tag, digest) DO UPDATE SET
-			pushed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+			pushed_at = `+store.SQLNow+`,
 			built_at  = excluded.built_at`, name, tag, digest, builtAt)
 	return err
 }

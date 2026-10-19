@@ -21,6 +21,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/schedule"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/telemetry"
 )
 
@@ -208,7 +209,7 @@ func (e *Engine) SetIterationCompleted(fn func(agent, iterationID string)) {
 // iteration event: a halt or an idle stop.
 func (e *Engine) emitState() {
 	if e.emit != nil {
-		e.emit(events.Event{Agent: e.ag.Name, Type: "state", Time: e.clock().UTC().Format(time.RFC3339)})
+		e.emit(events.Event{Agent: e.ag.Name, Type: "state", Time: store.FormatTime(e.clock())})
 	}
 }
 
@@ -216,7 +217,7 @@ func (e *Engine) emitIteration(id, trigger, status, phase string) {
 	if e.emit == nil {
 		return
 	}
-	e.emit(events.Event{Agent: e.ag.Name, Type: "iteration", Time: e.clock().UTC().Format(time.RFC3339),
+	e.emit(events.Event{Agent: e.ag.Name, Type: "iteration", Time: store.FormatTime(e.clock()),
 		Data: map[string]any{"id": id, "trigger": trigger, "status": status, "phase": phase}})
 }
 
@@ -526,7 +527,7 @@ func (e *Engine) failManualCollision(trigger string, guard *launchGuard) TickRes
 		e.log.Error("next iteration id", "agent", e.ag.Name, "err", err)
 		return TickError
 	}
-	ts := now.Format(time.RFC3339)
+	ts := store.FormatTime(now)
 	it := agent.Iteration{
 		ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "failed",
 		StartedAt: ts, EndedAt: ts,
@@ -580,7 +581,7 @@ func (e *Engine) prepareLaunch(trigger string, guard *launchGuard) (launch, Tick
 	}
 	it := agent.Iteration{
 		ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "running",
-		StartedAt: now.Format(time.RFC3339), ImageRef: e.ag.ImageRef,
+		StartedAt: store.FormatTime(now), ImageRef: e.ag.ImageRef,
 		ImageVersion: activated.ImageVersion, ImageDigest: e.ag.ImageDigest, PromptTemplateSHA256: activated.PromptTemplateSHA256,
 	}
 	if err := e.store.CreateIteration(it); err != nil {
@@ -645,7 +646,7 @@ func (e *Engine) runIteration(ctx context.Context, trigger, oneShot string, l la
 	e.currentCancel = nil
 	e.mu.Unlock()
 
-	end := e.clock().Format(time.RFC3339)
+	end := store.FormatTime(e.clock())
 	if errors.Is(runErr, ErrIterationDetached) {
 		detached = true
 		e.log.Info("iteration detached for daemon handoff", "agent", e.ag.Name, "id", id)
@@ -838,7 +839,7 @@ func (e *Engine) maybeIdleStop() (TickResult, bool) {
 // manual trigger or a Start re-enables it.
 func (e *Engine) idleStop(reason string) {
 	e.ag.Enabled = false
-	updated := e.clock().UTC().Format(time.RFC3339)
+	updated := store.FormatTime(e.clock())
 	if err := e.store.SetIdleStopped(e.ag.Name, reason, updated); err != nil {
 		e.log.Error("idle stop", "agent", e.ag.Name, "err", err)
 	}

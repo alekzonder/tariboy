@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -87,7 +88,7 @@ func (s *Service) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Task, man
 	// A script status runs its watch at once after it is entered.
 	nextWatch := ""
 	if !next.Terminal && next.Owner.Kind == workflowfile.OwnerScript && next.Watch != nil {
-		nextWatch = watchTime(s.clock())
+		nextWatch = store.FormatTime(s.clock())
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO task_status_visits(task_id, sequence, status_id, entered_at, entered_by, next_watch_at)

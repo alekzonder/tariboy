@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -246,7 +247,7 @@ func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision
 		if status.Watch != nil {
 			if _, err := tx.ExecContext(ctx, `
 				UPDATE task_status_visits SET next_watch_at = ? WHERE task_id = ? AND left_at = ''`,
-				watchTime(s.clock()), task.ID); err != nil {
+				store.FormatTime(s.clock()), task.ID); err != nil {
 				return Task{}, err
 			}
 		}

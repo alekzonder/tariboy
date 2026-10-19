@@ -136,3 +136,45 @@ func TestFailedPublishIsRetriedAfterBackoff(t *testing.T) {
 		t.Fatalf("attempts after backoff = %d; want 2", len(fake.messages))
 	}
 }
+
+// A retry due 11ns after a second is not due 10ns after it, although the
+// RFC 3339 text of the two times has different widths.
+func TestRetryIsNotPublishedBeforeItIsDueWithinOneSecond(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	second := time.Date(2026, 7, 31, 13, 0, 0, 0, time.UTC)
+	now := second
+	svc := tasks.NewService(st.DB, "customer", func() time.Time { return now })
+	ctx := context.Background()
+	customer := tasks.CustomerActor("customer")
+	_, _ = svc.CreateQueue(ctx, customer, tasks.CreateQueueInput{
+		Prefix: "RETRY", Name: "Retry", ResponsibleAgent: "triager",
+	})
+	_, _ = svc.CreateTask(ctx, customer, tasks.CreateTaskInput{
+		Queue: "RETRY", Title: "retry me",
+	})
+	if _, err := st.DB.Exec("UPDATE task_notification_outbox SET next_attempt_at = ?",
+		store.FormatTime(second.Add(11*time.Nanosecond))); err != nil {
+		t.Fatal(err)
+	}
+	fake := &fakeBus{}
+	publisher := New(st.DB, fake, func() time.Time { return now },
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	now = second.Add(10 * time.Nanosecond)
+	if err := publisher.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.messages) != 0 {
+		t.Fatalf("published %d messages before they were due", len(fake.messages))
+	}
+	now = second.Add(11 * time.Nanosecond)
+	if err := publisher.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.messages) != 1 {
+		t.Fatalf("published %d messages when due; want 1", len(fake.messages))
+	}
+}

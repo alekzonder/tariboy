@@ -65,7 +65,7 @@ func TestSchedulerFiresOneshotAndCron(t *testing.T) {
 	if byID[one.ID].Enabled {
 		t.Fatal("oneshot not disabled after firing")
 	}
-	if !byID[cron.ID].Enabled || byID[cron.ID].NextFireAt <= now.Add(5*time.Minute).UTC().Format(time.RFC3339) {
+	if !byID[cron.ID].Enabled || byID[cron.ID].NextFireAt <= basestore.FormatTime(now.Add(5*time.Minute)) {
 		t.Fatalf("cron not re-armed: %+v", byID[cron.ID])
 	}
 }

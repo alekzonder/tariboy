@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/alekzonder/tariboy/internal/client"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -205,11 +206,11 @@ func dash(value string) string {
 // runDuration is how long a finished run took; "-" for one that has not both
 // started and finished.
 func runDuration(run tasks.ScriptRun) string {
-	started, err := time.Parse(time.RFC3339Nano, run.StartedAt)
+	started, err := store.ParseInputTime(run.StartedAt)
 	if err != nil {
 		return "-"
 	}
-	finished, err := time.Parse(time.RFC3339Nano, run.FinishedAt)
+	finished, err := store.ParseInputTime(run.FinishedAt)
 	if err != nil || finished.Before(started) {
 		return "-"
 	}

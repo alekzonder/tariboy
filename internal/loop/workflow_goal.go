@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -255,8 +255,8 @@ func inCurrentVisit(view tasks.WorkflowView, createdAt string) bool {
 		return false
 	}
 	entered := view.Visits[len(view.Visits)-1].EnteredAt
-	a, errA := time.Parse(time.RFC3339Nano, createdAt)
-	b, errB := time.Parse(time.RFC3339Nano, entered)
+	a, errA := store.ParseInputTime(createdAt)
+	b, errB := store.ParseInputTime(entered)
 	if errA != nil || errB != nil {
 		return createdAt >= entered
 	}

@@ -8,7 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 var channelSegmentRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -339,9 +340,11 @@ func (s *Service) ApplyWorkflowObservation(ctx context.Context, in ApplyWorkflow
 	if in.EventAt == "" {
 		in.EventAt = s.now()
 	}
-	if _, err := time.Parse(time.RFC3339Nano, in.EventAt); err != nil {
-		return domainError(http.StatusBadRequest, "invalid_observation", "event_at must be RFC3339")
+	eventAt, err := store.ParseInputTime(in.EventAt)
+	if err != nil {
+		return domainError(http.StatusBadRequest, "invalid_observation", "event_at must be an RFC 3339 time")
 	}
+	in.EventAt = store.FormatTime(eventAt)
 	return s.applyQueueWorkflowTriggers(ctx, in)
 }
 
@@ -375,8 +378,8 @@ func channelPatternMatches(pattern, channel string) bool {
 }
 
 func timestampNotBefore(eventAt, createdAt string) bool {
-	eventTime, eventErr := time.Parse(time.RFC3339Nano, eventAt)
-	createdTime, createdErr := time.Parse(time.RFC3339Nano, createdAt)
+	eventTime, eventErr := store.ParseTime(eventAt)
+	createdTime, createdErr := store.ParseTime(createdAt)
 	return eventErr == nil && createdErr == nil && !eventTime.Before(createdTime)
 }
 

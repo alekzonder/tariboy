@@ -98,7 +98,7 @@ func TestPublishAndInspect(t *testing.T) {
 	if len(m.Digest) != 64 || m.Name != "demo" || m.Version != "0.1.0" || m.SchemaVersion != 1 {
 		t.Fatalf("manifest = %+v", m)
 	}
-	if m.BuiltAt != "2026-10-02T12:00:00Z" {
+	if m.BuiltAt != "2026-10-02T12:00:00.000000000Z" {
 		t.Fatalf("BuiltAt = %q", m.BuiltAt)
 	}
 	for _, tag := range []string{"0.1.0", "latest", m.Digest} {

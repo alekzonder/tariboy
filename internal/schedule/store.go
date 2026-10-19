@@ -29,7 +29,7 @@ type Schedule struct {
 	Spec            string
 	Channel         string
 	MessageTemplate string // JSON: {type, subject, text, data}
-	NextFireAt      string // RFC3339
+	NextFireAt      string // store.TimeLayout
 	Enabled         bool
 	CreatedAt       string
 	// CorrelationID tags a request-deadline one-shot (spec §4.2) with the
@@ -85,7 +85,7 @@ func add(tx *sql.Tx, sch Schedule, now time.Time) (Schedule, error) {
 	}
 	sch.NextFireAt = next
 	sch.Enabled = true
-	sch.CreatedAt = now.Format(time.RFC3339)
+	sch.CreatedAt = store.FormatTime(now)
 	sch.ID, err = nextScheduleID(tx, sch.Agent, now)
 	if err != nil {
 		return Schedule{}, err
@@ -163,7 +163,7 @@ func (s *Store) Cancel(agent, id string) error {
 func (s *Store) DueBefore(t time.Time) ([]Schedule, error) {
 	rows, err := s.db.Query(`SELECT id, agent, kind, spec, channel, message_template, next_fire_at, enabled, created_at
 		FROM schedules WHERE enabled=1 AND next_fire_at<=? ORDER BY next_fire_at, id`,
-		t.UTC().Format(time.RFC3339))
+		store.FormatTime(t))
 	if err != nil {
 		return nil, err
 	}
@@ -182,11 +182,11 @@ func (s *Store) MarkFired(sch Schedule) error {
 func computeNext(kind, spec string, now time.Time) (string, error) {
 	switch kind {
 	case "oneshot":
-		t, err := time.Parse(time.RFC3339, spec)
+		t, err := store.ParseInputTime(spec)
 		if err != nil {
-			return "", fmt.Errorf("oneshot spec must be RFC3339: %w", err)
+			return "", fmt.Errorf("oneshot spec must be RFC 3339: %w", err)
 		}
-		return t.UTC().Format(time.RFC3339), nil
+		return store.FormatTime(t), nil
 	case "cron":
 		cr, err := Parse(spec)
 		if err != nil {
@@ -196,7 +196,7 @@ func computeNext(kind, spec string, now time.Time) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("cron %q never fires", spec)
 		}
-		return next.UTC().Format(time.RFC3339), nil
+		return store.FormatTime(next), nil
 	default:
 		return "", fmt.Errorf("schedule kind must be oneshot|cron, got %q", kind)
 	}
@@ -212,7 +212,7 @@ func NextAfter(spec string, after time.Time) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return next.UTC().Format(time.RFC3339), true
+	return store.FormatTime(next), true
 }
 
 func scanSchedules(rows *sql.Rows) ([]Schedule, error) {

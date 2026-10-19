@@ -434,7 +434,7 @@ func TestRepeatedCustomerQuestionKeepsOldestWaitGraceBoundary(t *testing.T) {
 		t.Fatalf("second question = %#v, %v", second, err)
 	}
 	wait := second.CreatedWaits[0]
-	if wait.ID != first.CreatedWaits[0].ID || wait.RequestedAt != askedAt.Format(time.RFC3339Nano) || wait.RequestingCommentID == first.CreatedWaits[0].RequestingCommentID {
+	if wait.ID != first.CreatedWaits[0].ID || wait.RequestedAt != basestore.FormatTime(askedAt) || wait.RequestingCommentID == first.CreatedWaits[0].RequestingCommentID {
 		t.Fatalf("updated wait = %#v, first = %#v", wait, first.CreatedWaits[0])
 	}
 
@@ -512,7 +512,7 @@ func goalStore(t *testing.T, now time.Time) *Store {
 func seedAgent(t *testing.T, s *Store, name string, createdAt time.Time) {
 	t.Helper()
 	if _, err := s.db.Exec(`INSERT INTO agents(name,image_ref,created_at,enabled,goal_enabled,goal_wait_customer_timeout_s) VALUES (?,?,?,?,?,?)`,
-		name, "basic:latest", createdAt.Format(time.RFC3339Nano), true, true, 300); err != nil {
+		name, "basic:latest", basestore.FormatTime(createdAt), true, true, 300); err != nil {
 		t.Fatalf("insert agent %s: %v", name, err)
 	}
 }
@@ -541,7 +541,7 @@ func seedCustomerWaitBy(t *testing.T, s *Store, key, requester string, requested
 		t.Fatal(err)
 	}
 	result, err := s.db.Exec(`INSERT INTO task_comments(task_id,author,body,created_at,updated_at) VALUES (?,?,?,?,?)`,
-		taskID, requester, "question", requestedAt.Format(time.RFC3339Nano), requestedAt.Format(time.RFC3339Nano))
+		taskID, requester, "question", basestore.FormatTime(requestedAt), basestore.FormatTime(requestedAt))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -552,11 +552,11 @@ func seedCustomerWaitBy(t *testing.T, s *Store, key, requester string, requested
 	resolvedAt := ""
 	var resolvingCommentID any
 	if answered {
-		resolvedAt = goalNow.Format(time.RFC3339Nano)
+		resolvedAt = basestore.FormatTime(goalNow)
 		resolvingCommentID = commentID
 	}
 	if _, err := s.db.Exec(`INSERT INTO task_waiting_for(task_id,expected_principal,requesting_principal,requesting_comment_id,requested_at,resolving_comment_id,resolved_at) VALUES (?,?,?,?,?,?,?)`,
-		taskID, "user:customer", requester, commentID, requestedAt.Format(time.RFC3339Nano), resolvingCommentID, resolvedAt); err != nil {
+		taskID, "user:customer", requester, commentID, basestore.FormatTime(requestedAt), resolvingCommentID, resolvedAt); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -565,7 +565,7 @@ func seedBlockingRelation(t *testing.T, s *Store, source, target string) {
 	t.Helper()
 	if _, err := s.db.Exec(`INSERT INTO task_relations(source_id,target_id,type,created_by,created_at)
 		SELECT source.id,target.id,'blocks','user:customer',? FROM tasks source,tasks target
-		WHERE source.task_key=? AND target.task_key=?`, goalNow.Format(time.RFC3339Nano), source, target); err != nil {
+		WHERE source.task_key=? AND target.task_key=?`, basestore.FormatTime(goalNow), source, target); err != nil {
 		t.Fatal(err)
 	}
 }

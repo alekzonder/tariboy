@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // Chat is a conversation as an entity: an identity, a kind, a title and exactly
@@ -360,6 +361,6 @@ func (b *Bus) upsertParticipant(chatID, principal, role string) error {
 	// against message timestamps: the unanswered queue starts at the join.
 	_, err := b.db.Exec(`INSERT INTO chat_participants(chat_id, principal, role, joined_at)
 		VALUES (?, ?, ?, ?) ON CONFLICT(chat_id, principal) DO NOTHING`,
-		chatID, principal, role, b.clock().UTC().Format(time.RFC3339Nano))
+		chatID, principal, role, store.FormatTime(b.clock()))
 	return err
 }

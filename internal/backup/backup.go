@@ -86,7 +86,7 @@ func Build(w io.Writer, s *store.Store, agentsDir, agentName string, opts Option
 	}
 	man := Manifest{
 		FormatVersion: FormatVersion, SchemaVersion: sv, Agent: agentName,
-		CreatedAt: clock().UTC().Format(time.RFC3339),
+		CreatedAt: store.FormatTime(clock()),
 	}
 	tables, err := dumpTables(s.DB, agentName, opts)
 	if err != nil {

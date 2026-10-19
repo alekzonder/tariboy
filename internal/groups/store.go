@@ -53,7 +53,9 @@ func (s *Store) Upsert(g Group) error {
 	}
 	created := g.CreatedAt
 	if created == "" {
-		created = s.clock().UTC().Format(time.RFC3339Nano)
+		created = store.FormatTime(s.clock())
+	} else {
+		created, _ = store.NormalizeTimeValue(created)
 	}
 	_, err := s.db.Exec(`INSERT INTO groups(name, lead, created_at, settings)
 		VALUES (?,?,?,?)

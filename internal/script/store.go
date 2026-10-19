@@ -65,7 +65,7 @@ func validateCommon(name, description, command string) error {
 }
 
 func (s *Store) create(agent, name, description, command, mode string, interval int) (Definition, Run, error) {
-	now := s.clock().UTC().Format(time.RFC3339)
+	now := basestore.FormatTime(s.clock())
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Definition{}, Run{}, err
@@ -104,8 +104,8 @@ func nullInterval(value int) any {
 
 func nextID(x dbtx, table, prefix, agent, at string) (string, error) {
 	timestamp := at
-	if parsed, err := time.Parse(time.RFC3339, at); err == nil {
-		timestamp = parsed.UTC().Format("20060102150405")
+	if parsed, err := basestore.ParseInputTime(at); err == nil {
+		timestamp = parsed.Format("20060102150405")
 	}
 	fullPrefix := prefix + timestamp + "-"
 	query := fmt.Sprintf(`SELECT COALESCE(MAX(CAST(substr(id, ?) AS INTEGER)), 0) FROM %s WHERE agent=? AND substr(id,1,?)=?`, table)
@@ -219,7 +219,15 @@ func (s *Store) ListRuns(agent, scriptID string) ([]Run, error) {
 	return runs, rows.Err()
 }
 
+// storedTime converts a caller-supplied RFC 3339 time to the stored format
+// so text comparisons and ordering on the column follow time order.
+func storedTime(v string) string {
+	normalized, _ := basestore.NormalizeTimeValue(v)
+	return normalized
+}
+
 func (s *Store) ClaimRun(agent, runID, startedAt, logPath string) (bool, error) {
+	startedAt = storedTime(startedAt)
 	result, err := s.db.Exec(`UPDATE script_runs SET status=?,started_at=?,log_path=? WHERE agent=? AND id=? AND status=?`, RunRunning, startedAt, logPath, agent, runID, RunPending)
 	if err != nil {
 		return false, err
@@ -271,8 +279,9 @@ func (s *Store) CompleteRun(agent, runID string, completion Completion) (Run, er
 		return Run{}, fmt.Errorf("invalid terminal run status %q", completion.Status)
 	}
 	if completion.FinishedAt == "" {
-		completion.FinishedAt = s.clock().UTC().Format(time.RFC3339)
+		completion.FinishedAt = basestore.FormatTime(s.clock())
 	}
+	completion.FinishedAt = storedTime(completion.FinishedAt)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return Run{}, err
@@ -312,11 +321,11 @@ func (s *Store) CompleteRun(agent, runID string, completion Completion) (Run, er
 	var nextRun any
 	if definition.Mode == ModeEvery && definition.State == StateActive && quiet {
 		state = StateActive
-		finished, err := time.Parse(time.RFC3339, completion.FinishedAt)
+		finished, err := basestore.ParseTime(completion.FinishedAt)
 		if err != nil {
 			return Run{}, err
 		}
-		nextRun = finished.Add(time.Duration(definition.IntervalSeconds) * time.Second).UTC().Format(time.RFC3339)
+		nextRun = basestore.FormatTime(finished.Add(time.Duration(definition.IntervalSeconds) * time.Second))
 	} else if definition.State == StateCancelled {
 		state = StateCancelled
 	}
@@ -428,7 +437,7 @@ func (s *Store) ScheduleNext(agent, scriptID string) (Run, error) {
 }
 
 func (s *Store) newPendingRun(tx *sql.Tx, definition Definition) (Run, error) {
-	now := s.clock().UTC().Format(time.RFC3339)
+	now := basestore.FormatTime(s.clock())
 	runID, err := nextID(tx, "script_runs", "srun-"+definition.Agent+"-", definition.Agent, now)
 	if err != nil {
 		return Run{}, err
@@ -441,7 +450,7 @@ func (s *Store) newPendingRun(tx *sql.Tx, definition Definition) (Run, error) {
 }
 
 func (s *Store) DueDefinitions(at string) ([]Definition, error) {
-	rows, err := s.db.Query(selectDefinition+` WHERE mode=? AND state=? AND next_run_at IS NOT NULL AND julianday(next_run_at)<=julianday(?) ORDER BY next_run_at,id`, ModeEvery, StateActive, at)
+	rows, err := s.db.Query(selectDefinition+` WHERE mode=? AND state=? AND next_run_at IS NOT NULL AND next_run_at<=? ORDER BY next_run_at,id`, ModeEvery, StateActive, storedTime(at))
 	if err != nil {
 		return nil, err
 	}
@@ -475,6 +484,7 @@ func (s *Store) PendingRuns() ([]Run, error) {
 }
 
 func (s *Store) CancelDefinition(agent, scriptID, at string) error {
+	at = storedTime(at)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -532,6 +542,7 @@ func (s *Store) CancelDefinition(agent, scriptID, at string) error {
 }
 
 func (s *Store) CancelRun(agent, runID, at string) error {
+	at = storedTime(at)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -627,7 +638,7 @@ func (s *Store) RemoveDefinition(agent, scriptID string) error {
 }
 
 func (s *Store) RecoverRunning() error {
-	now := s.clock().UTC().Format(time.RFC3339)
+	now := basestore.FormatTime(s.clock())
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err

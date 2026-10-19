@@ -587,3 +587,38 @@ func TestBuildV2RejectsUnassembledExtends(t *testing.T) {
 		t.Fatalf("BuildV2 error = %v, want an extends error", err)
 	}
 }
+
+func TestPortableV2ArchiveBuiltAtIsCanonicalAndOldFormsValidate(t *testing.T) {
+	store := &Store{Dir: t.TempDir()}
+	ref := Ref{Name: "timed", Tag: "latest"}
+	clock := func() time.Time { return time.Date(2026, 7, 5, 3, 0, 0, 5, time.FixedZone("x", 3*3600)) }
+	man, err := BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, store, clock, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if man.BuiltAt != "2026-07-05T00:00:00.000000005Z" {
+		t.Fatalf("BuiltAt = %q, want canonical UTC", man.BuiltAt)
+	}
+	archive, err := store.ArchiveBytes(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := []byte(`"built_at": "` + man.BuiltAt + `"`)
+	for value, ok := range map[string]bool{
+		man.BuiltAt:                 true,
+		"2026-07-05T00:00:00Z":      true,
+		"2026-07-05T03:00:00+03:00": true,
+		"yesterday":                 false,
+	} {
+		rewritten := rewriteArchiveMember(t, archive, "manifest.json", func(body []byte) []byte {
+			if !bytes.Contains(body, current) {
+				t.Fatalf("manifest lacks %s: %s", current, body)
+			}
+			return bytes.Replace(body, current, []byte(`"built_at": "`+value+`"`), 1)
+		})
+		_, err := ValidatePortableArchive(rewritten, ref)
+		if (err == nil) != ok {
+			t.Errorf("built_at %q: err = %v, want ok=%v", value, err, ok)
+		}
+	}
+}

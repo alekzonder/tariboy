@@ -44,7 +44,7 @@ func (f *fakeSources) QueueSourceJobs(context.Context, time.Time) ([]tasks.Sourc
 	return append([]tasks.SourceJob(nil), f.jobs...), nil
 }
 
-func (f *fakeSources) StartSourceRun(_ context.Context, job tasks.SourceJob, _ string) (int64, error) {
+func (f *fakeSources) StartSourceRun(_ context.Context, job tasks.SourceJob, _ time.Time) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.early = f.early || !f.recovered

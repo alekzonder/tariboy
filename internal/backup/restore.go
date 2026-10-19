@@ -362,7 +362,9 @@ func remapID(s, oldName, newName string) string {
 // insertRow builds a parameterized INSERT from the row's column map (column
 // names captured from the dump, so it survives added columns — they take their
 // SQL defaults). Columns are sorted for deterministic statements and quoted so
-// a reserved word (e.g. agents."group") is never emitted bare.
+// a reserved word (e.g. agents."group") is never emitted bare. A registered
+// time column is written in store.TimeLayout, so an older backup restores
+// canonical values; a value that is not a time is kept as it is.
 func insertRow(tx *sql.Tx, table string, row map[string]any) error {
 	cols := make([]string, 0, len(row))
 	for c := range row {
@@ -376,6 +378,9 @@ func insertRow(tx *sql.Tx, table string, row map[string]any) error {
 		quoted[i] = `"` + c + `"`
 		ph[i] = "?"
 		args[i] = row[c]
+		if v, ok := row[c].(string); ok && store.IsTimeColumn(table, c) {
+			args[i], _ = store.NormalizeTimeValue(v)
+		}
 	}
 	q := "INSERT INTO " + table + " (" + strings.Join(quoted, ",") + ") VALUES (" + strings.Join(ph, ",") + ")"
 	_, err := tx.Exec(q, args...)

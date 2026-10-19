@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
-	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // ActivityFilter selects task events in [Since, Until). Both bounds are
-// RFC3339 and optional. Agent keeps only that agent's own events; Keys adds
-// tasks the caller already knows had work in the window, such as AI requests.
+// optional store.TimeLayout text; another RFC 3339 form is normalized. Agent
+// keeps only that agent's own events; Keys adds tasks the caller already knows
+// had work in the window, such as AI requests.
 type ActivityFilter struct {
 	Since string
 	Until string
@@ -19,7 +21,7 @@ type ActivityFilter struct {
 }
 
 // TaskActivity is what happened to one task in an activity window. FirstAt and
-// LastAt bound the selected events as fixed-width UTC milliseconds and stay
+// LastAt bound the selected events as store.TimeLayout text and stay
 // empty for a task listed only through ActivityFilter.Keys.
 type TaskActivity struct {
 	Task            Task
@@ -32,20 +34,17 @@ type TaskActivity struct {
 	LastAt          string
 }
 
-const activityTimeNorm = "strftime('%Y-%m-%dT%H:%M:%f',%s)"
-
-// activityWindow returns the SQL condition bounding col to the window.
-// Columns and bounds compare in one fixed-width UTC form because stored times
-// are RFC3339Nano text of variable width.
+// activityWindow returns the SQL condition bounding col to the window. The
+// column and the bounds are store.TimeLayout text, so they compare in time
+// order as strings.
 func activityWindow(col string, f ActivityFilter) (string, []any) {
-	norm := func(expr string) string { return strings.Replace(activityTimeNorm, "%s", expr, 1) }
 	conds, args := []string{"1=1"}, []any{}
 	if f.Since != "" {
-		conds = append(conds, norm(col)+">="+norm("?"))
+		conds = append(conds, col+" >= ?")
 		args = append(args, f.Since)
 	}
 	if f.Until != "" {
-		conds = append(conds, norm(col)+"<"+norm("?"))
+		conds = append(conds, col+" < ?")
 		args = append(args, f.Until)
 	}
 	return strings.Join(conds, " AND "), args
@@ -56,6 +55,10 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 	if err := validateActor(actor); err != nil {
 		return nil, err
 	}
+	// The command layer passes canonical bounds; older RFC 3339 forms are
+	// normalized so they still compare in time order.
+	f.Since, _ = store.NormalizeTimeValue(f.Since)
+	f.Until, _ = store.NormalizeTimeValue(f.Until)
 	q := s.reader()
 	visible, err := visibleTaskIDs(ctx, q, actor)
 	if err != nil {
@@ -75,7 +78,7 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 		args = append(args, agentPrincipal(f.Agent))
 	}
 	events, err := q.QueryContext(ctx, `
-		SELECT task_id, kind, actor, payload, strftime('%Y-%m-%dT%H:%M:%fZ', created_at)
+		SELECT task_id, kind, actor, payload, created_at
 		FROM task_events WHERE task_id IS NOT NULL AND `+where+` ORDER BY sequence`, args...)
 	if err != nil {
 		return nil, err
@@ -191,16 +194,10 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 	return out, rows.Err()
 }
 
+// inActivityWindow reports whether the stored time at is in the window.
 func inActivityWindow(at string, f ActivityFilter) bool {
-	t, err := time.Parse(time.RFC3339Nano, at)
-	if err != nil {
+	if at == "" {
 		return false
 	}
-	if since, err := time.Parse(time.RFC3339Nano, f.Since); err == nil && t.Before(since) {
-		return false
-	}
-	if until, err := time.Parse(time.RFC3339Nano, f.Until); err == nil && !t.Before(until) {
-		return false
-	}
-	return true
+	return (f.Since == "" || at >= f.Since) && (f.Until == "" || at < f.Until)
 }

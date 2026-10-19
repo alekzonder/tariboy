@@ -7,7 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"text/tabwriter"
-	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // printTasks prints a list page as a table, then the command for the next
@@ -45,7 +46,7 @@ func printTasks(parsed request, raw json.RawMessage, stdout io.Writer) bool {
 			status += " (" + task.Category + ")"
 		}
 		updated := task.UpdatedAt
-		if at, err := time.Parse(time.RFC3339Nano, updated); err == nil {
+		if at, err := store.ParseInputTime(updated); err == nil {
 			updated = at.UTC().Format("2006-01-02 15:04")
 		}
 		fmt.Fprintf(table, "%s %s\t%s\t%s\t%s\t%s\t%s\n", mark, task.Key, task.Priority, status, dash(task.Assignee), dash(updated), cutTitle(task.Title))

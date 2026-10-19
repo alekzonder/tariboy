@@ -43,9 +43,9 @@ func TestPruneKeepsNewestByCount(t *testing.T) {
 	}
 	agentsDir := filepath.Join(dir, "agents")
 	// Three iterations oldest->newest.
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00.000000000Z")
 
 	ps := NewStore(s)
 	ps.Set("bot", Policy{KeepIterations: 1})
@@ -92,11 +92,11 @@ func TestPruneNeverRemovesRunning(t *testing.T) {
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
 	// Mark a second one running (old but active).
-	as.CreateIteration(agent.Iteration{ID: "bot-1-2", Agent: "bot", Trigger: "manual", Status: "running", StartedAt: "2026-07-01T11:00:00Z"})
+	as.CreateIteration(agent.Iteration{ID: "bot-1-2", Agent: "bot", Trigger: "manual", Status: "running", StartedAt: "2026-07-01T11:00:00.000000000Z"})
 	agentdir.New(agentsDir, "bot").EnsureIteration("bot-1-2")
-	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00.000000000Z")
 
 	ps := NewStore(s)
 	ps.Set("bot", Policy{KeepIterations: 1})
@@ -155,8 +155,8 @@ func TestArchiveRoundTrips(t *testing.T) {
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00.000000000Z")
 	// Write an extra nested log file into the victim to exercise dir capture.
 	l := agentdir.New(agentsDir, "bot")
 	if err := os.WriteFile(l.HarnessStdout("bot-1-1"), []byte("hello-log"), 0o600); err != nil {
@@ -192,9 +192,9 @@ func TestArchiveCarriesDBRows(t *testing.T) {
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
-	if _, err := s.DB.Exec(`INSERT INTO ai_requests(id, ts, agent, iteration, model) VALUES('r1','2026-07-01T10:00:00Z','bot','bot-1-1','m')`); err != nil {
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00.000000000Z")
+	if _, err := s.DB.Exec(`INSERT INTO ai_requests(id, ts, agent, iteration, model) VALUES('r1','2026-07-01T10:00:00.000000000Z','bot','bot-1-1','m')`); err != nil {
 		t.Fatal(err)
 	}
 	ps := NewStore(s)
@@ -211,7 +211,7 @@ func TestArchiveCarriesDBRows(t *testing.T) {
 	if err := json.Unmarshal([]byte(got["db-rows.json"]), &rows); err != nil {
 		t.Fatalf("db-rows.json = %q: %v", got["db-rows.json"], err)
 	}
-	if len(rows.Iterations) != 1 || rows.Iterations[0]["id"] != "bot-1-1" || rows.Iterations[0]["started_at"] != "2026-07-01T10:00:00Z" {
+	if len(rows.Iterations) != 1 || rows.Iterations[0]["id"] != "bot-1-1" || rows.Iterations[0]["started_at"] != "2026-07-01T10:00:00.000000000Z" {
 		t.Fatalf("iterations rows = %+v", rows.Iterations)
 	}
 	if len(rows.AIRequests) != 1 || rows.AIRequests[0]["id"] != "r1" || rows.AIRequests[0]["model"] != "m" {
@@ -230,8 +230,8 @@ func TestPruneKeepsIterationWhenArchiveFails(t *testing.T) {
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00.000000000Z")
 	// A regular file where the archive directory should be fails the archive.
 	if err := os.WriteFile(filepath.Join(agentsDir, "bot", "archive"), nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -266,8 +266,8 @@ func TestPruneArchivesIterationWithoutDir(t *testing.T) {
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00.000000000Z")
 	if err := os.RemoveAll(agentdir.New(agentsDir, "bot").IterationDir("bot-1-1")); err != nil {
 		t.Fatal(err)
 	}
@@ -299,12 +299,12 @@ func TestPruneDeletesAIRequestRowsConsistently(t *testing.T) {
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00.000000000Z")
 	// One ai_requests row per iteration.
 	for _, r := range []struct{ id, iter string }{{"r1", "bot-1-1"}, {"r2", "bot-1-2"}} {
 		if _, err := s.DB.Exec(`INSERT INTO ai_requests(id, ts, agent, iteration) VALUES(?,?,?,?)`,
-			r.id, "2026-07-01T10:00:00Z", "bot", r.iter); err != nil {
+			r.id, "2026-07-01T10:00:00.000000000Z", "bot", r.iter); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -343,9 +343,9 @@ func TestPruneKeepDays(t *testing.T) {
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-06-01T10:00:00Z") // old
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-04T10:00:00Z") // within 7d
-	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-05T10:00:00Z") // newest
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-06-01T10:00:00.000000000Z") // old
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-04T10:00:00.000000000Z") // within 7d
+	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-05T10:00:00.000000000Z") // newest
 
 	ps := NewStore(s)
 	ps.Set("bot", Policy{KeepDays: 7})
@@ -373,9 +373,9 @@ func TestPruneMaxBytes(t *testing.T) {
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
 	// Each mkIter writes result.json = 15 bytes.
-	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00Z")
-	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-1", "2026-07-01T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-2", "2026-07-02T10:00:00.000000000Z")
+	mkIter(t, as, agentsDir, "bot", "bot-1-3", "2026-07-03T10:00:00.000000000Z")
 
 	ps := NewStore(s)
 	// Budget 10 bytes over prunable (non-protected) iterations: the newest is

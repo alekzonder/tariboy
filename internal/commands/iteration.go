@@ -51,8 +51,8 @@ func iterationLs() registry.Command {
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
 			{Name: "tag", Flag: "tag", Type: registry.String, Help: "keep only iterations carrying any of these tags (comma-separated)"},
-			{Name: "started-after", Flag: "started-after", Type: registry.String, Help: "keep iterations started at or after this RFC3339 time or YYYY-MM-DD day"},
-			{Name: "started-before", Flag: "started-before", Type: registry.String, Help: "keep iterations started at or before this RFC3339 time or YYYY-MM-DD day"},
+			{Name: "started-after", Flag: "started-after", Type: registry.String, Help: "keep iterations started at or after this RFC 3339 time or YYYY-MM-DD day"},
+			{Name: "started-before", Flag: "started-before", Type: registry.String, Help: "keep iterations started at or before this RFC 3339 time or YYYY-MM-DD day"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {

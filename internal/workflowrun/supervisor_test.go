@@ -185,14 +185,14 @@ func (f *fakeJobs) PendingRunJobs(context.Context) ([]tasks.RunJob, error) {
 	return out, nil
 }
 
-func (f *fakeJobs) ClaimScriptRun(_ context.Context, id int64, startedAt, logPath string) (bool, error) {
+func (f *fakeJobs) ClaimScriptRun(_ context.Context, id int64, startedAt time.Time, logPath string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.refuse[id] {
 		return false, nil
 	}
-	if _, err := time.Parse(time.RFC3339Nano, startedAt); err != nil {
-		return false, err
+	if startedAt.IsZero() {
+		return false, errors.New("claimed without a start time")
 	}
 	if _, ok := f.claimed[id]; ok {
 		return false, nil
@@ -450,8 +450,8 @@ func TestSupervisorRunsACheckAndCompletesIt(t *testing.T) {
 	if _, err := os.Stat(want); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := time.Parse(time.RFC3339Nano, done.FinishedAt); err != nil {
-		t.Fatalf("finished at %q: %v", done.FinishedAt, err)
+	if done.FinishedAt.IsZero() {
+		t.Fatal("completed without a finish time")
 	}
 	if _, err := os.Stat(filepath.Join(h.marks, "pass-DEV-1")); err != nil {
 		t.Fatalf("the script did not run: %v", err)

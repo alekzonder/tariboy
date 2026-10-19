@@ -45,14 +45,14 @@ func TestAIStallSettingsAndActivityPersist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.LastAIRequestAt != want.Format(time.RFC3339Nano) {
-		t.Fatalf("last AI request = %q, want %q", got.LastAIRequestAt, want.Format(time.RFC3339Nano))
+	if got.LastAIRequestAt != store.FormatTime(want) {
+		t.Fatalf("last AI request = %q, want %q", got.LastAIRequestAt, store.FormatTime(want))
 	}
 	if err := s.RecordAIRequest("worker", "worker-1", want.Add(-time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.GetIteration("worker", "worker-1")
-	if got.LastAIRequestAt != want.Format(time.RFC3339Nano) {
+	if got.LastAIRequestAt != store.FormatTime(want) {
 		t.Fatalf("older request moved activity backwards to %q", got.LastAIRequestAt)
 	}
 
@@ -60,7 +60,7 @@ func TestAIStallSettingsAndActivityPersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ = s.GetIteration("worker", "worker-1")
-	if got.LastAIRequestAt != want.Format(time.RFC3339Nano) {
+	if got.LastAIRequestAt != store.FormatTime(want) {
 		t.Fatalf("mismatched iteration changed activity to %q", got.LastAIRequestAt)
 	}
 }
@@ -175,8 +175,8 @@ func TestIterationTimeoutSnapshotAndExtensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.TimeoutPeriodS == nil || *got.TimeoutPeriodS != 30 || got.TimeoutDeadline == nil || got.HardTimeoutDeadline == nil ||
-		*got.TimeoutDeadline != now.Add(30*time.Second).Format(time.RFC3339Nano) ||
-		*got.HardTimeoutDeadline != now.Add(90*time.Second).Format(time.RFC3339Nano) {
+		*got.TimeoutDeadline != store.FormatTime(now.Add(30*time.Second)) ||
+		*got.HardTimeoutDeadline != store.FormatTime(now.Add(90*time.Second)) {
 		t.Fatalf("snapshot = %+v", got)
 	}
 
@@ -188,8 +188,8 @@ func TestIterationTimeoutSnapshotAndExtensions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got.TimeoutExtensions != 2 || *got.TimeoutDeadline != now.Add(90*time.Second).Format(time.RFC3339Nano) ||
-		*got.HardTimeoutDeadline != now.Add(150*time.Second).Format(time.RFC3339Nano) {
+	if got.TimeoutExtensions != 2 || *got.TimeoutDeadline != store.FormatTime(now.Add(90*time.Second)) ||
+		*got.HardTimeoutDeadline != store.FormatTime(now.Add(150*time.Second)) {
 		t.Fatalf("repeated extension = %+v", got)
 	}
 
@@ -214,14 +214,14 @@ func TestIterationTimeoutSnapshotAndExtensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.TimeoutExtensions != 10 || *got.TimeoutDeadline != now.Add(330*time.Second).Format(time.RFC3339Nano) ||
-		*got.HardTimeoutDeadline != now.Add(390*time.Second).Format(time.RFC3339Nano) {
+	if got.TimeoutExtensions != 10 || *got.TimeoutDeadline != store.FormatTime(now.Add(330*time.Second)) ||
+		*got.HardTimeoutDeadline != store.FormatTime(now.Add(390*time.Second)) {
 		t.Fatalf("concurrent extensions lost an update: %+v", got)
 	}
 	if _, err := st.ExtendIterationTimeout("smoke", "live", now.Add(331*time.Second)); !errors.Is(err, ErrTimeoutNotExtendable) {
 		t.Fatalf("expired extension = %v, want ErrTimeoutNotExtendable", err)
 	}
-	if ok, err := st.MarkIterationTimeoutTriggered("smoke", "live", *got.TimeoutDeadline, now.Add(330*time.Second).Format(time.RFC3339Nano)); !ok || err != nil {
+	if ok, err := st.MarkIterationTimeoutTriggered("smoke", "live", *got.TimeoutDeadline, store.FormatTime(now.Add(330*time.Second))); !ok || err != nil {
 		t.Fatalf("mark timeout = ok:%v err:%v", ok, err)
 	}
 	if _, err := st.ExtendIterationTimeout("smoke", "live", now.Add(time.Second)); !errors.Is(err, ErrTimeoutNotExtendable) {
@@ -280,7 +280,7 @@ func TestTimeoutMarkerDoesNotBeatCommittedExtension(t *testing.T) {
 	if _, err := st.ExtendIterationTimeout("smoke", "live", now.Add(29*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	marked, err := st.MarkIterationTimeoutTriggered("smoke", "live", *snapshot.TimeoutDeadline, now.Add(30*time.Second).Format(time.RFC3339Nano))
+	marked, err := st.MarkIterationTimeoutTriggered("smoke", "live", *snapshot.TimeoutDeadline, store.FormatTime(now.Add(30*time.Second)))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // ErrInvalidTag is returned for a tag that is empty, too long, or contains a
@@ -14,7 +16,7 @@ import (
 // list filter passes tags as one comma-separated query parameter.
 var ErrInvalidTag = errors.New("invalid_tag")
 
-// ErrInvalidTime is returned for a started-at bound that is neither RFC3339 nor
+// ErrInvalidTime is returned for a started-at bound that is neither RFC 3339 nor
 // a bare YYYY-MM-DD date.
 var ErrInvalidTime = errors.New("invalid_time")
 
@@ -31,7 +33,7 @@ const (
 )
 
 // IterationFilter narrows a list of iterations. Tags match ANY of the listed
-// tags; the started-at bounds are inclusive and accept RFC3339 or YYYY-MM-DD.
+// tags; the started-at bounds are inclusive and accept RFC 3339 or YYYY-MM-DD.
 type IterationFilter struct {
 	Tags          []string
 	StartedAfter  string
@@ -150,26 +152,26 @@ func queryIterationTags(q querier, ids []string) (map[string][]string, error) {
 func placeholders(n int) string { return strings.TrimSuffix(strings.Repeat("?,", n), ",") }
 
 // startedBound normalizes one started-at filter bound into an SQL comparison.
-// started_at is stored as RFC3339 written by one daemon, so a lexical string
-// comparison orders it exactly like the existing ORDER BY started_at. A bare
-// date covers the whole named day: the lower bound opens it, and the upper
-// bound becomes an exclusive "< next day" so any time-of-day and offset on that
-// day still compares inside it.
+// started_at is stored in the canonical format, so the bound is converted to
+// it and a text comparison orders it exactly like ORDER BY started_at. A bare
+// date covers the whole named UTC day: the lower bound opens it, and the upper
+// bound becomes an exclusive "< next day".
 func startedBound(value string, upper bool) (op string, bound string, err error) {
 	value = strings.TrimSpace(value)
 	if day, dayErr := time.Parse("2006-01-02", value); dayErr == nil {
 		if upper {
-			return "<", day.AddDate(0, 0, 1).Format("2006-01-02") + "T00:00:00", nil
+			return "<", store.FormatTime(day.AddDate(0, 0, 1)), nil
 		}
-		return ">=", value + "T00:00:00", nil
+		return ">=", store.FormatTime(day), nil
 	}
-	if _, rfcErr := time.Parse(time.RFC3339, value); rfcErr != nil {
+	at, rfcErr := store.ParseInputTime(value)
+	if rfcErr != nil {
 		return "", "", fmt.Errorf("%w: %q", ErrInvalidTime, value)
 	}
 	if upper {
-		return "<=", value, nil
+		return "<=", store.FormatTime(at), nil
 	}
-	return ">=", value, nil
+	return ">=", store.FormatTime(at), nil
 }
 
 // FindIterations lists one agent's iterations, oldest first, narrowed by f.

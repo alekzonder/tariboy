@@ -235,7 +235,7 @@ func TestFormatMessagesEmpty(t *testing.T) {
 
 func TestFormatAwaitingReplies(t *testing.T) {
 	now := time.Date(2026, 7, 12, 12, 0, 30, 0, time.UTC)
-	sent := now.Add(-90 * time.Second).Format(time.RFC3339Nano)
+	sent := store.FormatTime(now.Add(-90 * time.Second))
 	out := FormatAwaitingReplies([]bus.Message{
 		{ID: "req-1", Channel: "ops:deploys", TS: sent, Deadline: "2026-07-12T12:05:00Z"},
 	}, now)
@@ -990,8 +990,8 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 		t.Fatal(err)
 	}
 	if calls < 2 || got.TimeoutDeadline == nil || got.HardTimeoutDeadline == nil ||
-		*got.TimeoutDeadline != t1.Add(30*time.Second).Format(time.RFC3339Nano) ||
-		*got.HardTimeoutDeadline != t1.Add(90*time.Second).Format(time.RFC3339Nano) {
+		*got.TimeoutDeadline != store.FormatTime(t1.Add(30*time.Second)) ||
+		*got.HardTimeoutDeadline != store.FormatTime(t1.Add(90*time.Second)) {
 		t.Fatalf("clock calls=%d snapshot=%+v, want deadlines based on sole pre-spawn sample %s", calls, got, t1)
 	}
 	separator := slices.Index(spawner.argv, "--")

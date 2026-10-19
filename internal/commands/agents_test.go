@@ -437,7 +437,7 @@ func TestAgentStatusIncludesActiveIterationDeadlines(t *testing.T) {
 	if err := as.InitializeIterationTimeout("smoke-1", 60, 120, now); err != nil {
 		t.Fatal(err)
 	}
-	soft := now.Add(time.Minute).Format(time.RFC3339Nano)
+	soft := store.FormatTime(now.Add(time.Minute))
 	res, err := h(t, "agent.status.show")(c, registry.Params{"name": "smoke"})
 	if err != nil {
 		t.Fatal(err)

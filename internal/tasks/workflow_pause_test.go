@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // pause pauses the task through pauseTx in its own transaction, signals the
@@ -105,7 +107,7 @@ func TestPauseStopsTheVisitAndAsksTheCustomer(t *testing.T) {
 	svc, actor, task, goals := runFixture(t)
 	ctx := context.Background()
 	request, run := advanceApprove(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, run.ID, "2026-07-31T12:00:01Z", "/runs/1/run.log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/runs/1/run.log"); err != nil || !ok {
 		t.Fatalf("claim = %v, %v", ok, err)
 	}
 	before := goals.Load()
@@ -310,7 +312,7 @@ func TestCheckThatPassesAfterThePauseChangesNothing(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	request, run := advanceApprove(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, run.ID, "2026-07-31T12:00:01Z", "/runs/1/run.log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/runs/1/run.log"); err != nil || !ok {
 		t.Fatalf("claim = %v, %v", ok, err)
 	}
 	paused := pause(t, svc, task.Key, PauseRejectedRequests, "")
@@ -419,7 +421,7 @@ func TestResumeContinueInAScriptStatusRestartsTheWatch(t *testing.T) {
 		resumed.WorkflowPausedReason != "" {
 		t.Fatalf("resumed = %#v", resumed)
 	}
-	if _, _, _, next := openVisit(t, svc, task); next != svc.clock().UTC().Format(dispatchedAtLayout) {
+	if _, _, _, next := openVisit(t, svc, task); next != store.FormatTime(svc.clock().UTC()) {
 		t.Fatalf("next_watch_at = %q", next)
 	}
 	if c := visitCounters(t, svc, task); c != [3]int{} {

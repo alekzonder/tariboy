@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -54,7 +56,7 @@ func sourceJobs(t *testing.T, svc *Service, now time.Time) []SourceJob {
 
 func startSource(t *testing.T, svc *Service, job SourceJob, at time.Time) int64 {
 	t.Helper()
-	id, err := svc.StartSourceRun(context.Background(), job, at.UTC().Format(time.RFC3339Nano))
+	id, err := svc.StartSourceRun(context.Background(), job, at)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +71,7 @@ func completeSource(t *testing.T, svc *Service, id int64, done SourceCompletion)
 }
 
 func itemsDone(at time.Time, items ...SourceItem) SourceCompletion {
-	return SourceCompletion{Verdict: verdictItems, Items: items, FinishedAt: at.UTC().Format(time.RFC3339Nano)}
+	return SourceCompletion{Verdict: verdictItems, Items: items, FinishedAt: at}
 }
 
 func devTasks(t *testing.T, svc *Service) []Task {
@@ -105,6 +107,23 @@ func sourceRunRow(t *testing.T, svc *Service, id int64) (state, verdict, message
 	return
 }
 
+func TestCompleteSourceRunRefusesAMissingFinishTime(t *testing.T) {
+	svc, _ := sourceFixture(t)
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	id := startSource(t, svc, sourceJobs(t, svc, now)[0], now)
+	err := svc.CompleteSourceRun(context.Background(), id, SourceCompletion{Verdict: verdictItems,
+		Items: []SourceItem{{Key: "pr-1", Title: "PR 1"}}})
+	if ErrorCode(err) != "invalid_completion" || ErrorStatus(err) != http.StatusBadRequest {
+		t.Fatalf("complete without a finish time: %v", err)
+	}
+	if state, verdict, _, created := sourceRunRow(t, svc, id); state != "running" || verdict != "" || created != 0 {
+		t.Fatalf("run = %s %s %d; want it unchanged", state, verdict, created)
+	}
+	if got := devTasks(t, svc); len(got) != 0 {
+		t.Fatalf("tasks = %d; want none", len(got))
+	}
+}
+
 func TestSourceJobsScheduleOneRunAtATime(t *testing.T) {
 	svc, _ := sourceFixture(t)
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
@@ -121,10 +140,10 @@ func TestSourceJobsScheduleOneRunAtATime(t *testing.T) {
 	if jobs := sourceJobs(t, svc, now.Add(time.Hour)); len(jobs) != 1 || jobs[0].Due {
 		t.Fatalf("a running source is due again: %+v", jobs)
 	}
-	if _, err := svc.StartSourceRun(context.Background(), job, now.Format(time.RFC3339Nano)); err == nil {
+	if _, err := svc.StartSourceRun(context.Background(), job, now); err == nil {
 		t.Fatal("a second run of a running source started")
 	}
-	completeSource(t, svc, id, SourceCompletion{Verdict: verdictQuiet, FinishedAt: now.Add(time.Second).Format(time.RFC3339Nano)})
+	completeSource(t, svc, id, SourceCompletion{Verdict: verdictQuiet, FinishedAt: now.Add(time.Second)})
 	if jobs := sourceJobs(t, svc, now.Add(2*time.Minute)); jobs[0].Due {
 		t.Fatal("due before every has passed since the run finished")
 	}
@@ -277,7 +296,7 @@ func TestSourceKeepsOnlyTheNewestQuietRuns(t *testing.T) {
 	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	for i := 0; i < workflowViewRuns+5; i++ {
 		id := startSource(t, svc, sourceJobs(t, svc, at)[0], at)
-		completeSource(t, svc, id, SourceCompletion{Verdict: verdictQuiet, FinishedAt: at.Format(time.RFC3339Nano)})
+		completeSource(t, svc, id, SourceCompletion{Verdict: verdictQuiet, FinishedAt: at})
 		at = at.Add(time.Hour)
 	}
 	var n int
@@ -307,7 +326,7 @@ func TestListQueueSourcesAndLog(t *testing.T) {
 			t.Fatal(err)
 		}
 		completeSource(t, svc, id, SourceCompletion{Verdict: verdictFailure, Message: "boom " + strconv.Itoa(i),
-			LogPath: logPath, FinishedAt: at.Format(time.RFC3339Nano)})
+			LogPath: logPath, FinishedAt: at})
 	}
 	if _, err := svc.ListQueueSources(context.Background(), AgentActor("dev-1"), "DEV"); ErrorCode(err) != "forbidden" {
 		t.Fatalf("agent list error = %v", err)
@@ -321,7 +340,7 @@ func TestListQueueSourcesAndLog(t *testing.T) {
 	}
 	src := sources[0]
 	if src.Name != "pull-requests" || src.Script != sourceScript || src.Every != "2m" || src.Failures != 2 ||
-		src.LastRun == nil || src.LastRun.Message != "boom 1" || src.NextRunAt != now.Add(time.Hour+2*time.Minute).Format(time.RFC3339Nano) {
+		src.LastRun == nil || src.LastRun.Message != "boom 1" || src.NextRunAt != store.FormatTime(now.Add(time.Hour+2*time.Minute)) {
 		t.Fatalf("source = %+v (last %+v)", src, src.LastRun)
 	}
 	if len(src.Runs) != 2 || src.Runs[0].ID != src.LastRun.ID || src.Runs[1].Message != "boom 0" || src.Runs[0].ID <= src.Runs[1].ID {

@@ -89,7 +89,7 @@ type Agent struct {
 	Group            string
 	// StatusMessage is the agent-authored "what I'm doing now" line, written via
 	// Store.SetStatus (daemon is the single writer, like ErrorReason). Distinct
-	// from the computed live state. StatusUpdated is its RFC3339-ish timestamp.
+	// from the computed live state. StatusUpdated is its stored-format timestamp.
 	StatusMessage string
 	StatusUpdated string
 	// Alias is a user-set friendly display name; Notes is user scratch text.
@@ -705,10 +705,10 @@ func (s *Store) CreateIteration(it Iteration) error {
 // RecordAIRequest updates only the matching live iteration. Requests arriving
 // after completion or with stale attribution are intentionally ignored.
 func (s *Store) RecordAIRequest(agentName, iterationID string, at time.Time) error {
-	ts := at.UTC().Format(time.RFC3339Nano)
+	ts := store.FormatTime(at)
 	_, err := s.db.Exec(`UPDATE iterations SET last_ai_request_at=?
 		WHERE agent=? AND id=? AND status='running'
-		AND (last_ai_request_at='' OR julianday(last_ai_request_at) < julianday(?))`,
+		AND (last_ai_request_at='' OR last_ai_request_at < ?)`,
 		ts, agentName, iterationID, ts)
 	return err
 }
@@ -719,10 +719,10 @@ func (s *Store) RecordAIRequest(agentName, iterationID string, at time.Time) err
 func (s *Store) InitializeIterationTimeout(id string, periodS, hardPeriodS int, now time.Time) error {
 	var softDeadline, hardDeadline any
 	if periodS > 0 {
-		softDeadline = now.Add(time.Duration(periodS) * time.Second).UTC().Format(time.RFC3339Nano)
+		softDeadline = store.FormatTime(now.Add(time.Duration(periodS) * time.Second))
 	}
 	if hardPeriodS > 0 {
-		hardDeadline = now.Add(time.Duration(hardPeriodS) * time.Second).UTC().Format(time.RFC3339Nano)
+		hardDeadline = store.FormatTime(now.Add(time.Duration(hardPeriodS) * time.Second))
 	}
 	res, err := s.db.Exec(`UPDATE iterations SET timeout_period_s=?, timeout_deadline=?,
 		hard_timeout_deadline=?, timeout_extensions=0, timeout_triggered_at=NULL WHERE id=?`,
@@ -764,11 +764,11 @@ func (s *Store) ExtendIterationTimeout(agentName, id string, now time.Time) (Ite
 	if it.TimeoutDeadline == nil || it.HardTimeoutDeadline == nil {
 		return Iteration{}, ErrTimeoutNotExtendable
 	}
-	soft, err := time.Parse(time.RFC3339Nano, *it.TimeoutDeadline)
+	soft, err := store.ParseTime(*it.TimeoutDeadline)
 	if err != nil {
 		return Iteration{}, fmt.Errorf("parse timeout deadline: %w", err)
 	}
-	hard, err := time.Parse(time.RFC3339Nano, *it.HardTimeoutDeadline)
+	hard, err := store.ParseTime(*it.HardTimeoutDeadline)
 	if err != nil {
 		return Iteration{}, fmt.Errorf("parse hard timeout deadline: %w", err)
 	}
@@ -776,8 +776,8 @@ func (s *Store) ExtendIterationTimeout(agentName, id string, now time.Time) (Ite
 		return Iteration{}, ErrTimeoutNotExtendable
 	}
 	period := time.Duration(*it.TimeoutPeriodS) * time.Second
-	newSoft := soft.Add(period).UTC().Format(time.RFC3339Nano)
-	newHard := hard.Add(period).UTC().Format(time.RFC3339Nano)
+	newSoft := store.FormatTime(soft.Add(period))
+	newHard := store.FormatTime(hard.Add(period))
 	res, err := tx.Exec(`UPDATE iterations SET timeout_deadline=?, hard_timeout_deadline=?,
 		timeout_extensions=timeout_extensions+1
 		WHERE id=? AND agent=? AND status='running' AND timeout_triggered_at IS NULL`,

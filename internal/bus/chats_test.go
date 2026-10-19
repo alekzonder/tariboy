@@ -91,7 +91,7 @@ func TestReconcileChatsCarriesLegacyReadMarks(t *testing.T) {
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
 	}
-	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:05Z" {
+	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:05.000000000Z" {
 		t.Fatalf("legacy read mark not carried, got %q", got)
 	}
 	if err := b.SetReadTS("dm:worker", "user:customer", "2026-07-06T10:00:07Z", false); err != nil {
@@ -100,13 +100,13 @@ func TestReconcileChatsCarriesLegacyReadMarks(t *testing.T) {
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
 	}
-	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:07Z" {
+	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:07.000000000Z" {
 		t.Fatalf("read mark moved backwards to %q", got)
 	}
 	if err := b.SetReadTS("dm:worker", "user:customer", "2026-07-06T10:00:06Z", false); err != nil {
 		t.Fatal(err)
 	}
-	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:07Z" {
+	if got := readTS(t, b, "dm:worker", "user:customer"); got != "2026-07-06T10:00:07.000000000Z" {
 		t.Fatalf("SetReadTS is forward-only, got %q", got)
 	}
 }

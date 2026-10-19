@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -103,7 +104,7 @@ func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) erro
 		task.ID).Scan(&visitID, &enteredAt, &resumedAt, &idle); err != nil {
 		return err
 	}
-	entered, err := time.Parse(time.RFC3339Nano, enteredAt)
+	entered, err := store.ParseTime(enteredAt)
 	if err != nil {
 		return fmt.Errorf("visit %d entered_at: %w", visitID, err)
 	}
@@ -113,7 +114,7 @@ func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) erro
 	// An iteration that started while the task was paused belongs to the
 	// pause, not to the resumed visit.
 	if resumedAt != "" {
-		resumed, err := time.Parse(time.RFC3339Nano, resumedAt)
+		resumed, err := store.ParseTime(resumedAt)
 		if err != nil {
 			return fmt.Errorf("visit %d resumed_at: %w", visitID, err)
 		}
@@ -147,92 +148,34 @@ func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) erro
 	return nil
 }
 
-// The service stores times as RFC3339Nano in UTC, which does not order as a
-// string within one second. secondOf and secondAfter are the whole-second
-// prefixes SQL narrows rows with: every time in t's second or later sorts at
-// or after secondOf(t), and every time up to t's second sorts before
-// secondAfter(t). The exact comparison is then made on parsed times.
-func secondOf(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05") }
-
-func secondAfter(t time.Time) string {
-	return t.UTC().Truncate(time.Second).Add(time.Second).Format("2006-01-02T15:04:05")
-}
-
 // requestedDuringTx reports whether a transition request of the visit kept
 // the iteration from start to finish (both included) busy: a request was made
 // during it, was still pending at its finish, or was cancelled or applied
-// during it.
+// during it. Stored times are store.TimeLayout text, so they compare in time
+// order as strings.
 func requestedDuringTx(ctx context.Context, tx *sql.Tx, visitID int64, start, finish time.Time) (bool, error) {
-	rows, err := tx.QueryContext(ctx, `
-		SELECT created_at, state, finished_at FROM task_transition_requests
-		WHERE visit_id = ? AND created_at < ? AND (created_at >= ? OR state = 'pending' OR finished_at >= ?)`,
-		visitID, secondAfter(finish), secondOf(start), secondOf(start))
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var createdAt, state, finishedAt string
-		if err := rows.Scan(&createdAt, &state, &finishedAt); err != nil {
-			return false, err
-		}
-		created, err := time.Parse(time.RFC3339Nano, createdAt)
-		if err != nil {
-			return false, fmt.Errorf("transition request of visit %d created_at: %w", visitID, err)
-		}
-		if created.After(finish) {
-			continue
-		}
-		if !created.Before(start) || state == "pending" {
-			return true, nil
-		}
-		finished, err := time.Parse(time.RFC3339Nano, finishedAt)
-		if err != nil {
-			return false, fmt.Errorf("transition request of visit %d finished_at: %w", visitID, err)
-		}
-		if finished.After(finish) || ((state == "cancelled" || state == "applied") && !finished.Before(start)) {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
+	from, to := store.FormatTime(start), store.FormatTime(finish)
+	var busy bool
+	err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(SELECT 1 FROM task_transition_requests
+		WHERE visit_id = ? AND created_at <= ? AND (created_at >= ? OR state = 'pending' OR finished_at > ?
+			OR (state IN ('cancelled', 'applied') AND finished_at >= ?)))`,
+		visitID, to, from, to, from).Scan(&busy)
+	return busy, err
 }
 
 // askedCustomerDuringTx reports whether the task's assignee asked the
 // customer a question, or had such a question answered, from start to finish,
 // both included.
 func askedCustomerDuringTx(ctx context.Context, tx *sql.Tx, task Task, start, finish time.Time) (bool, error) {
-	from, to := secondOf(start), secondAfter(finish)
-	rows, err := tx.QueryContext(ctx, `
-		SELECT requested_at, resolved_at FROM task_waiting_for
+	from, to := store.FormatTime(start), store.FormatTime(finish)
+	var asked bool
+	err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(SELECT 1 FROM task_waiting_for
 		WHERE expected_principal = ? AND task_id = ? AND requesting_principal = ?
-		  AND ((requested_at >= ? AND requested_at < ?) OR (resolved_at >= ? AND resolved_at < ?))`,
-		task.Customer, task.ID, task.Assignee, from, to, from, to)
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	within := func(field, value string) (bool, error) {
-		if value == "" {
-			return false, nil
-		}
-		t, err := time.Parse(time.RFC3339Nano, value)
-		if err != nil {
-			return false, fmt.Errorf("wait of task %s %s: %w", task.Key, field, err)
-		}
-		return !t.Before(start) && !t.After(finish), nil
-	}
-	for rows.Next() {
-		var requestedAt, resolvedAt string
-		if err := rows.Scan(&requestedAt, &resolvedAt); err != nil {
-			return false, err
-		}
-		for _, f := range [][2]string{{"requested_at", requestedAt}, {"resolved_at", resolvedAt}} {
-			if ok, err := within(f[0], f[1]); err != nil || ok {
-				return ok, err
-			}
-		}
-	}
-	return false, rows.Err()
+		  AND ((requested_at >= ? AND requested_at <= ?) OR (resolved_at >= ? AND resolved_at <= ?)))`,
+		task.Customer, task.ID, task.Assignee, from, to, from, to).Scan(&asked)
+	return asked, err
 }
 
 // holderUnavailableText says why agent cannot work on pool work, for the
@@ -406,11 +349,11 @@ func (s *Service) checkHolder(ctx context.Context, id int64, now time.Time) (boo
 	}
 	start := now
 	if since == "" {
-		since = watchTime(now)
+		since = store.FormatTime(now)
 		if _, err := tx.ExecContext(ctx, setSince, since, task.ID, status.Owner.Pool); err != nil {
 			return false, err
 		}
-	} else if start, err = time.Parse(time.RFC3339Nano, since); err != nil {
+	} else if start, err = store.ParseTime(since); err != nil {
 		return false, fmt.Errorf("holder unavailable_since: %w", err)
 	}
 	if now.Sub(start) >= manifest.Definition.StatusLimits(status.ID).UnavailableGrace {

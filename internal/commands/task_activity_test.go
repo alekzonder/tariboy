@@ -64,7 +64,7 @@ func TestTaskActivityMergesUsageAndEventsPerTaskAndAgent(t *testing.T) {
 	}
 	row := report.Tasks[1]
 	if row.Title != "First" || row.Iterations != 1 || row.Requests != 2 || row.CostUSD != 0.2 || row.Comments != 1 ||
-		len(row.Agents) != 1 || row.Agents[0] != "alice" || row.LastAt != "2026-07-06T09:30:00.000Z" {
+		len(row.Agents) != 1 || row.Agents[0] != "alice" || row.LastAt != "2026-07-06T09:30:00.000000000Z" {
 		t.Fatalf("first row = %#v", row)
 	}
 	if report.Totals.Tasks != 2 || report.Totals.Iterations != 2 || report.Totals.Comments != 1 || report.Totals.CostUSD != 0.5 {

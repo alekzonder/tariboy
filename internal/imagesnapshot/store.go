@@ -20,6 +20,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesource"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 type Snapshot struct {
@@ -244,7 +245,7 @@ func (s Store) captureFrozen(ctx context.Context, exec executor, ref, imageDiges
 	if s.Clock != nil {
 		now = s.Clock()
 	}
-	snapshot := Snapshot{Ref: ref, ImageDigest: imageDigest, SourceName: sourceName, SourceDigest: frozen.SourceDigest, RelativeDir: frozen.RelativeDir, CreatedAt: now.UTC().Format(time.RFC3339Nano), RepositoryID: provenance.RepositoryID, GitCommit: provenance.GitCommit, LockDigest: provenance.LockDigest}
+	snapshot := Snapshot{Ref: ref, ImageDigest: imageDigest, SourceName: sourceName, SourceDigest: frozen.SourceDigest, RelativeDir: frozen.RelativeDir, CreatedAt: store.FormatTime(now), RepositoryID: provenance.RepositoryID, GitCommit: provenance.GitCommit, LockDigest: provenance.LockDigest}
 	_, err := exec.ExecContext(ctx, `INSERT INTO image_source_snapshots(image_ref,image_digest,source_name,source_digest,relative_dir,created_at,repository_id,git_commit,lock_digest) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(image_ref) DO UPDATE SET image_digest=excluded.image_digest,source_name=excluded.source_name,source_digest=excluded.source_digest,relative_dir=excluded.relative_dir,created_at=excluded.created_at,repository_id=excluded.repository_id,git_commit=excluded.git_commit,lock_digest=excluded.lock_digest`, snapshot.Ref, snapshot.ImageDigest, snapshot.SourceName, snapshot.SourceDigest, snapshot.RelativeDir, snapshot.CreatedAt, snapshot.RepositoryID, snapshot.GitCommit, snapshot.LockDigest)
 	if err != nil {
 		return Snapshot{}, err

@@ -857,7 +857,7 @@ func TestStartedAtRecordsTheFirstMoveToInProgress(t *testing.T) {
 		return updated
 	}
 	first := set(StatusInProgress)
-	if want := "2026-07-31T13:00:00Z"; first.StartedAt != want {
+	if want := "2026-07-31T13:00:00.000000000Z"; first.StartedAt != want {
 		t.Fatalf("started_at = %q; want %q", first.StartedAt, want)
 	}
 	set(StatusOpen)

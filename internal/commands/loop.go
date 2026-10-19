@@ -8,6 +8,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/schedule"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 func loopIntSetting(path, field string) registry.Command {
@@ -117,14 +118,14 @@ func loopSchedule() registry.Command {
 	}
 }
 
-// scheduleNextAt is the next scheduled start in RFC 3339, or "" when the agent
-// has no schedule or its rule has finished.
+// scheduleNextAt is the next scheduled start in the stored time format, or ""
+// when the agent has no schedule or its rule has finished.
 func scheduleNextAt(a agent.Agent) string {
 	next, ok := schedule.NextRRule(a.ScheduleRRule, time.Now(), time.Local)
 	if !ok {
 		return ""
 	}
-	return next.Format(time.RFC3339)
+	return store.FormatTime(next)
 }
 
 func userPromptGet() registry.Command {

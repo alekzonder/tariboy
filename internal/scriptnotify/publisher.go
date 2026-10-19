@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 type MessagePublisher interface {
@@ -55,9 +56,9 @@ func (p *Publisher) Flush(ctx context.Context) error {
 	rows, err := p.db.QueryContext(ctx, `
 		SELECT idempotency_key,run_id,agent,payload,attempts
 		FROM script_result_outbox
-		WHERE published_at='' AND julianday(next_attempt_at)<=julianday(?)
+		WHERE published_at='' AND next_attempt_at<=?
 		ORDER BY next_attempt_at,idempotency_key
-		LIMIT 100`, now.Format(time.RFC3339Nano))
+		LIMIT 100`, store.FormatTime(now))
 	if err != nil {
 		return err
 	}
@@ -90,14 +91,14 @@ func (p *Publisher) Flush(ctx context.Context) error {
 		if publishErr != nil {
 			attempts := row.attempts + 1
 			delay := time.Second * time.Duration(1<<min(attempts, 8))
-			next := now.Add(delay).Format(time.RFC3339Nano)
+			next := store.FormatTime(now.Add(delay))
 			if _, err := p.db.ExecContext(ctx, `UPDATE script_result_outbox SET attempts=?,next_attempt_at=?,last_error=? WHERE idempotency_key=? AND published_at=''`, attempts, next, publishErr.Error(), row.idempotencyKey); err != nil {
 				return err
 			}
 			p.log.Warn("script result publish failed", "run", row.runID, "attempts", attempts, "err", publishErr)
 			continue
 		}
-		if _, err := p.db.ExecContext(ctx, `UPDATE script_result_outbox SET attempts=attempts+1,published_at=?,message_id=?,last_error='' WHERE idempotency_key=? AND published_at=''`, now.Format(time.RFC3339Nano), message.ID, row.idempotencyKey); err != nil {
+		if _, err := p.db.ExecContext(ctx, `UPDATE script_result_outbox SET attempts=attempts+1,published_at=?,message_id=?,last_error='' WHERE idempotency_key=? AND published_at=''`, store.FormatTime(now), message.ID, row.idempotencyKey); err != nil {
 			return err
 		}
 	}

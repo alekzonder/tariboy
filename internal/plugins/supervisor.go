@@ -13,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // SpawnSpec is everything the runner needs to launch one plugin process.
@@ -241,7 +243,7 @@ func NewSupervisor(cfg SupervisorConfig) *Supervisor {
 func (s *Supervisor) state(state string, detail string) {
 	if s.cfg.OnState != nil {
 		s.cfg.OnState(state, map[string]any{
-			"checked_at": s.cfg.Clock().UTC().Format(time.RFC3339),
+			"checked_at": store.FormatTime(s.cfg.Clock()),
 			"detail":     detail,
 		})
 	}

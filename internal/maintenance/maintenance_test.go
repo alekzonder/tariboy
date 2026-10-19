@@ -46,7 +46,7 @@ func count(t *testing.T, db *sql.DB, q string, args ...any) int {
 }
 
 func ts(daysAgo int) string {
-	return testNow.AddDate(0, 0, -daysAgo).Format(time.RFC3339Nano)
+	return store.FormatTime(testNow.AddDate(0, 0, -daysAgo))
 }
 
 // addTask inserts a task with one comment, an answered wait, an event with a
@@ -651,16 +651,16 @@ func TestLoopFiresOnWallClockAndSkipsLateWakes(t *testing.T) {
 		t.Fatalf("ran before 03:00: %s", got)
 	}
 	step(day(24, 3, 1))
-	if got := started(); got != "2026-09-24T03:01:00Z" {
+	if got := started(); got != "2026-09-24T03:01:00.000000000Z" {
 		t.Fatalf("scheduled run = %q", got)
 	}
 	// Woken hours after the slot (a sleeping laptop): skipped, not caught up.
 	step(day(25, 9, 0))
-	if got := started(); got != "2026-09-24T03:01:00Z" {
+	if got := started(); got != "2026-09-24T03:01:00.000000000Z" {
 		t.Fatalf("late wake ran: %q", got)
 	}
 	step(day(26, 3, 0))
-	if got := started(); got != "2026-09-26T03:00:00Z" {
+	if got := started(); got != "2026-09-26T03:00:00.000000000Z" {
 		t.Fatalf("next night = %q", got)
 	}
 	// Disabled: the slot passes without a run.
@@ -668,7 +668,7 @@ func TestLoopFiresOnWallClockAndSkipsLateWakes(t *testing.T) {
 		t.Fatal(err)
 	}
 	step(day(27, 3, 0))
-	if got := started(); got != "2026-09-26T03:00:00Z" {
+	if got := started(); got != "2026-09-26T03:00:00.000000000Z" {
 		t.Fatalf("disabled run = %q", got)
 	}
 	cancel()

@@ -162,13 +162,13 @@ func (s *Service) run(trigger string) (Result, error) {
 		return Result{}, ErrBusy
 	}
 	defer s.mu.Unlock()
-	res := Result{StartedAt: s.now().UTC().Format(time.RFC3339), Trigger: trigger, Deleted: map[string]int64{}}
+	res := Result{StartedAt: store.FormatTime(s.now()), Trigger: trigger, Deleted: map[string]int64{}}
 	err := s.runLocked(&res)
 	if err != nil {
 		res.Error = err.Error()
 		s.log.Warn("maintenance run", "err", err)
 	}
-	res.FinishedAt = s.now().UTC().Format(time.RFC3339)
+	res.FinishedAt = store.FormatTime(s.now())
 	if b, jerr := json.Marshal(res); jerr == nil {
 		if cerr := s.st.ConfigSet(resultKey, string(b)); cerr != nil && err == nil {
 			err = cerr
@@ -279,17 +279,12 @@ func (s *Service) backup(keep int) (string, error) {
 	return final, nil
 }
 
-// older compares variable-width RFC3339 text through SQLite's time parser.
-func older(col string) string {
-	return `strftime('%Y-%m-%dT%H:%M:%f',` + col + `) < strftime('%Y-%m-%dT%H:%M:%f',?)`
-}
-
 // cleanup deletes each category in its own transaction, so one failure rolls
 // back only that category. Messages use msgCutoff; a zero cutoff deletes
 // nothing else.
 func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]int64) error {
 	var errs []error
-	cutoff, msgCutoff := cutoffAt.Format(time.RFC3339Nano), msgCutoffAt.Format(time.RFC3339Nano)
+	cutoff, msgCutoff := store.FormatTime(cutoffAt), store.FormatTime(msgCutoffAt)
 	step := func(name string, fn func(tx *sql.Tx) (int64, error)) bool {
 		tx, err := s.st.DB.Begin()
 		if err != nil {
@@ -337,18 +332,18 @@ func (s *Service) cleanup(cutoffAt, msgCutoffAt time.Time, deleted map[string]in
 		if err := tx.QueryRow(`SELECT COALESCE(MAX(period_s),0) FROM budgets`).Scan(&longest); err != nil {
 			return 0, err
 		}
-		if c := s.now().UTC().Add(-time.Duration(longest) * time.Second).Format(time.RFC3339Nano); longest > 0 && c < aiCutoff {
+		if c := store.FormatTime(s.now().Add(-time.Duration(longest) * time.Second)); longest > 0 && c < aiCutoff {
 			aiCutoff = c
 		}
-		r, err := tx.Exec(`DELETE FROM ai_requests WHERE `+older("ts"), aiCutoff)
+		r, err := tx.Exec(`DELETE FROM ai_requests WHERE ts < ?`, aiCutoff)
 		if err != nil {
 			return 0, err
 		}
 		return r.RowsAffected()
 	})
 	step("messages", func(tx *sql.Tx) (int64, error) { return purgeMessages(tx, msgCutoff) })
-	step("events", simple(`DELETE FROM events WHERE `+older("ts")))
-	step("task_idempotency", simple(`DELETE FROM task_idempotency WHERE `+older("created_at")))
+	step("events", simple(`DELETE FROM events WHERE ts < ?`))
+	step("task_idempotency", simple(`DELETE FROM task_idempotency WHERE created_at < ?`))
 	return errors.Join(errs...)
 }
 
@@ -366,7 +361,7 @@ func purgeTasks(tx *sql.Tx, cutoff string) (int64, []string, error) {
 		   UNION ALL SELECT t.id, tree.root FROM tasks t JOIN tree ON t.parent_id = tree.id)
 		 SELECT tree.id, tree.root FROM tree WHERE tree.root NOT IN (
 		   SELECT tree.root FROM tree JOIN tasks t ON t.id = tree.id
-		   WHERE t.status NOT IN ('done','cancelled') OR t.completed_at = '' OR NOT ` + older("t.completed_at") + `)`,
+		   WHERE t.status NOT IN ('done','cancelled') OR t.completed_at = '' OR t.completed_at >= ?)`,
 	}
 	for _, q := range stmts {
 		args := []any{}
@@ -462,7 +457,7 @@ func (s *Service) removeTaskFiles(keys []string) error {
 // dead-lettered, with those deliveries. Unacknowledged work and messages
 // workflow ingress has not consumed yet are never deleted.
 func purgeMessages(tx *sql.Tx, cutoff string) (int64, error) {
-	victims := `(SELECT id FROM messages m WHERE ` + older("m.ts") + ` AND NOT EXISTS (
+	victims := `(SELECT id FROM messages m WHERE m.ts < ? AND NOT EXISTS (
 		SELECT 1 FROM deliveries d WHERE d.message_id = m.id AND d.acked_at IS NULL AND d.dlq = 0)
 		AND NOT EXISTS (SELECT 1 FROM task_workflow_message_sequence q
 		  JOIN task_workflow_ingress_state i ON i.singleton = 1

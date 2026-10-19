@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // providerKeyEnv lists the real upstream provider API keys the daemon holds in
@@ -378,7 +379,7 @@ func (h *Host) Start(rec Record) error {
 		h.cfg.Log.Warn("plugin exec failed containment check; refusing to start",
 			"plugin", name, "exec", rec.Exec, "err", err)
 		h.onState(name, "error", map[string]any{
-			"checked_at": h.cfg.Clock().UTC().Format(time.RFC3339),
+			"checked_at": store.FormatTime(h.cfg.Clock()),
 			"detail":     "exec containment: " + err.Error(),
 		})
 		return fail(err)
@@ -468,7 +469,7 @@ func (h *Host) Start(rec Record) error {
 			if r := recover(); r != nil {
 				h.cfg.Log.Warn("plugin supervisor goroutine panicked", "plugin", name, "panic", r)
 				h.onState(name, "error", map[string]any{
-					"checked_at": h.cfg.Clock().UTC().Format(time.RFC3339),
+					"checked_at": store.FormatTime(h.cfg.Clock()),
 					"detail":     fmt.Sprintf("supervisor panic: %v", r),
 				})
 			}
