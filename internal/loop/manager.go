@@ -1317,103 +1317,13 @@ func (m *Manager) reprovision(name, imageRef string) error {
 	if err != nil {
 		return err
 	}
-	if imageRef == "" {
-		imageRef = ag.ImageRef
-	}
-	ref, err := image.ParseRef(imageRef)
+	candidate, ref, man, err := m.reprovisionCandidate(ag, imageRef)
 	if err != nil {
 		return err
 	}
-	archive, err := m.cfg.ImgStore.ArchiveBytes(ref)
-	if err != nil {
-		return fmt.Errorf("image %s: %w", ref.String(), err)
-	}
-	man, err := image.ValidatePortableArchiveContract(archive, ref, m.imagePluginResolver())
-	if err != nil {
-		return fmt.Errorf("image %s: %w", ref.String(), err)
-	}
-	candidate := ag
-	candidate.Enabled = true
-	candidate.ImageRef = ref.String()
-	candidate.ImageDigest = man.Digest
-	if man.SchemaVersion == 2 {
-		candidate.Plugins = make([]string, 0, len(man.Plugins))
-		for _, plugin := range man.Plugins {
-			candidate.Plugins = append(candidate.Plugins, plugin.Name)
-		}
-	}
-	l := agentdir.New(m.cfg.AgentsDir, name)
-	if err := os.MkdirAll(l.Root, 0o700); err != nil {
+	if err := m.installReprovisionedImage(ag, candidate, ref, man); err != nil {
 		return err
 	}
-	stageRoot, err := os.MkdirTemp(l.Root, ".reprovision-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(stageRoot)
-	stage := agentdir.Layout{Root: stageRoot, Name: name}
-	if err := agentdir.Provision(stage, candidate, m.cfg.ImgStore, ref); err != nil {
-		return err
-	}
-	if _, err := m.prepareImageSkillBridge(candidate, man, stage.ImageDir()); err != nil {
-		return err
-	}
-	imageBackup, binBackup := filepath.Join(l.Root, ".image-backup"), filepath.Join(l.Root, ".bin-backup")
-	_ = os.RemoveAll(imageBackup)
-	_ = os.RemoveAll(binBackup)
-	hadImage, hadBin := false, false
-	if err := os.Rename(l.ImageDir(), imageBackup); err == nil {
-		hadImage = true
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	if err := os.Rename(l.BinDir(), binBackup); err == nil {
-		hadBin = true
-	} else if !os.IsNotExist(err) {
-		if hadImage {
-			_ = os.Rename(imageBackup, l.ImageDir())
-		}
-		return err
-	}
-	rollback := func() {
-		_ = os.RemoveAll(l.ImageDir())
-		_ = os.RemoveAll(l.BinDir())
-		if hadImage {
-			_ = os.Rename(imageBackup, l.ImageDir())
-		}
-		if hadBin {
-			_ = os.Rename(binBackup, l.BinDir())
-		}
-	}
-	if err := os.Rename(stage.ImageDir(), l.ImageDir()); err != nil {
-		rollback()
-		return err
-	}
-	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
-		rollback()
-		return err
-	}
-	if err := agentdir.WriteShims(l, candidate); err != nil {
-		rollback()
-		return err
-	}
-	for _, dir := range []string{l.Workdir(), l.IterationsDir()} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			rollback()
-			return err
-		}
-	}
-	if err := m.cfg.Store.SetImageIdentity(ag.Name, candidate.ImageRef, candidate.ImageDigest); err != nil {
-		rollback()
-		return err
-	}
-	if err := m.cfg.Store.Update(candidate); err != nil {
-		_ = m.cfg.Store.SetImageIdentity(ag.Name, ag.ImageRef, ag.ImageDigest)
-		rollback()
-		return err
-	}
-	_ = os.RemoveAll(imageBackup)
-	_ = os.RemoveAll(binBackup)
 	m.signalGoals()
 	return m.start(candidate)
 }

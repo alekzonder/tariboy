@@ -44,83 +44,16 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 	if err != nil {
 		return activatedImage{}, err
 	}
-	pending, err := m.cfg.Store.PendingImage(ag.Name)
+	pending, current, err := m.resolvePendingImage(ag)
 	if err != nil {
 		return activatedImage{}, err
 	}
-	var current image.Manifest
 	if pending.Ref == "" {
-		activeRef, err := image.ParseRef(ag.ImageRef)
-		if err != nil {
-			return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
-		}
-		current, err = m.cfg.ImgStore.Inspect(activeRef)
-		if err != nil {
-			recorded, recordErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
-			if recordErr != nil {
-				return activatedImage{}, recordErr
-			}
-			if recorded {
-				return activatedImage{}, err
-			}
-			pending, err = m.cfg.Store.PendingImage(ag.Name)
-			if err != nil {
-				return activatedImage{}, err
-			}
-		} else if current.Digest != ag.ImageDigest {
-			won, err := m.cfg.Store.SetPendingImageIfEmpty(ag.Name, activeRef.String(), current.Digest)
-			if err != nil {
-				return activatedImage{}, err
-			}
-			if won {
-				pending = agent.ImageAssignment{Ref: activeRef.String(), Digest: current.Digest}
-			} else {
-				pending, err = m.cfg.Store.PendingImage(ag.Name)
-				if err != nil {
-					return activatedImage{}, err
-				}
-			}
-		}
-		if pending.Ref == "" && pending.Error != "" {
-			cleared, err := m.cfg.Store.ClearPendingImageErrorIfEmpty(ag.Name)
-			if err != nil {
-				return activatedImage{}, err
-			}
-			if !cleared {
-				pending, err = m.cfg.Store.PendingImage(ag.Name)
-				if err != nil {
-					return activatedImage{}, err
-				}
-			}
-		}
+		return m.activateCurrentImage(ag, l, current, recoveredSwap)
 	}
 	fail := func(cause error) (activatedImage, error) {
 		_ = m.cfg.Store.SetPendingImageErrorIf(ag.Name, pending.Ref, pending.Digest, cause.Error())
 		return activatedImage{}, cause
-	}
-	if pending.Ref == "" {
-		activeRef, err := image.ParseRef(ag.ImageRef)
-		if err != nil {
-			return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
-		}
-		manifest := current
-		if manifest.Digest == "" {
-			manifest, err = m.cfg.ImgStore.InspectPinned(activeRef, ag.ImageDigest)
-			if err != nil {
-				return activatedImage{}, err
-			}
-		}
-		skills, err := m.prepareImageSkillBridge(*ag, manifest, l.ImageDir())
-		if err != nil {
-			return activatedImage{}, err
-		}
-		if recoveredSwap {
-			if err := agentdir.WriteShims(l, *ag); err != nil {
-				_, _ = m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
-				return activatedImage{}, err
-			}
-		}
-		return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, ImageVersion: manifest.ImageVersion, Skills: skills}, nil
 	}
 	// A crash can occur after candidate shims are written but before the
 	// candidate identity is promoted in the database. The database remains
@@ -132,38 +65,126 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 			return fail(err)
 		}
 	}
+	staged, err := m.stagePendingImage(*ag, l, pending)
+	if staged.dir != "" {
+		defer os.RemoveAll(staged.dir)
+	}
+	if err != nil {
+		return fail(err)
+	}
+	return m.swapPendingImage(ag, l, pending, staged, fail)
+}
+
+// resolvePendingImage returns the agent's pending assignment. With no explicit
+// pending image it inspects the active ref: a moved mutable ref stages its new
+// digest, an inspection failure is recorded as a retryable pending error, and a
+// stale error on an empty assignment is cleared. current is the inspected
+// active manifest when that inspection succeeded.
+func (m *Manager) resolvePendingImage(ag *agent.Agent) (pending agent.ImageAssignment, current image.Manifest, err error) {
+	pending, err = m.cfg.Store.PendingImage(ag.Name)
+	if err != nil || pending.Ref != "" {
+		return pending, current, err
+	}
+	activeRef, err := image.ParseRef(ag.ImageRef)
+	if err != nil {
+		return pending, current, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
+	}
+	current, err = m.cfg.ImgStore.Inspect(activeRef)
+	if err != nil {
+		recorded, recordErr := m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
+		if recordErr != nil {
+			return pending, current, recordErr
+		}
+		if recorded {
+			return pending, current, err
+		}
+		pending, err = m.cfg.Store.PendingImage(ag.Name)
+		if err != nil {
+			return pending, current, err
+		}
+	} else if current.Digest != ag.ImageDigest {
+		won, err := m.cfg.Store.SetPendingImageIfEmpty(ag.Name, activeRef.String(), current.Digest)
+		if err != nil {
+			return pending, current, err
+		}
+		if won {
+			pending = agent.ImageAssignment{Ref: activeRef.String(), Digest: current.Digest}
+		} else if pending, err = m.cfg.Store.PendingImage(ag.Name); err != nil {
+			return pending, current, err
+		}
+	}
+	if pending.Ref == "" && pending.Error != "" {
+		cleared, err := m.cfg.Store.ClearPendingImageErrorIfEmpty(ag.Name)
+		if err != nil {
+			return pending, current, err
+		}
+		if !cleared {
+			if pending, err = m.cfg.Store.PendingImage(ag.Name); err != nil {
+				return pending, current, err
+			}
+		}
+	}
+	return pending, current, nil
+}
+
+// activateCurrentImage launches on the already active image when nothing is
+// pending, re-deriving shims if a crashed swap was just recovered.
+func (m *Manager) activateCurrentImage(ag *agent.Agent, l agentdir.Layout, current image.Manifest, recoveredSwap bool) (activatedImage, error) {
+	activeRef, err := image.ParseRef(ag.ImageRef)
+	if err != nil {
+		return activatedImage{}, fmt.Errorf("invalid active image ref %q: %w", ag.ImageRef, err)
+	}
+	manifest := current
+	if manifest.Digest == "" {
+		manifest, err = m.cfg.ImgStore.InspectPinned(activeRef, ag.ImageDigest)
+		if err != nil {
+			return activatedImage{}, err
+		}
+	}
+	skills, err := m.prepareImageSkillBridge(*ag, manifest, l.ImageDir())
+	if err != nil {
+		return activatedImage{}, err
+	}
+	if recoveredSwap {
+		if err := agentdir.WriteShims(l, *ag); err != nil {
+			_, _ = m.cfg.Store.SetPendingImageErrorIfEmpty(ag.Name, err.Error())
+			return activatedImage{}, err
+		}
+	}
+	return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, ImageVersion: manifest.ImageVersion, Skills: skills}, nil
+}
+
+// stagedImage is a pending image unpacked and validated beside image/.
+type stagedImage struct {
+	dir      string
+	manifest image.Manifest
+	skills   harness.SkillLaunchConfig
+	plugins  []string
+}
+
+// stagePendingImage unpacks the pending image into a fresh staging dir under
+// l.Root and validates it. dir is set as soon as the staging dir exists, even
+// on error, so the caller owns its removal.
+func (m *Manager) stagePendingImage(ag agent.Agent, l agentdir.Layout, pending agent.ImageAssignment) (stagedImage, error) {
+	var st stagedImage
 	ref, err := image.ParseRef(pending.Ref)
 	if err != nil {
-		return fail(err)
+		return st, err
 	}
-	manifest, err := m.cfg.ImgStore.InspectPinned(ref, pending.Digest)
+	st.manifest, err = m.cfg.ImgStore.InspectPinned(ref, pending.Digest)
 	if err != nil {
-		return fail(err)
+		return st, err
 	}
-	stage, err := os.MkdirTemp(l.Root, ".image-stage-")
+	st.dir, err = os.MkdirTemp(l.Root, ".image-stage-")
 	if err != nil {
-		return fail(err)
+		return st, err
 	}
-	defer os.RemoveAll(stage)
-	if err := m.cfg.ImgStore.UnpackPinned(ref, pending.Digest, stage); err != nil {
-		return fail(err)
+	if err := m.cfg.ImgStore.UnpackPinned(ref, pending.Digest, st.dir); err != nil {
+		return st, err
 	}
-	data, err := os.ReadFile(filepath.Join(stage, "manifest.json"))
+	staged, err := readStagedManifest(st.dir, ref, pending.Digest)
 	if err != nil {
-		return fail(err)
-	}
-	var staged image.Manifest
-	if err := json.Unmarshal(data, &staged); err != nil {
-		return fail(err)
-	}
-	if staged.Name != ref.Name {
-		return fail(fmt.Errorf("staged image ref mismatch"))
-	}
-	staged.Digest = pending.Digest
-	if staged.SchemaVersion == 2 {
-		if _, err := os.Stat(filepath.Join(stage, "prompt", "template.json")); err != nil {
-			return fail(fmt.Errorf("staged prompt template: %w", err))
-		}
+		return st, err
 	}
 	requested := make([]string, 0, len(staged.Plugins))
 	for _, plugin := range staged.Plugins {
@@ -174,46 +195,64 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 	if m.cfg.ExternalPlugins != nil {
 		resolver = m.cfg.ExternalPlugins
 	}
-	if err := image.ValidateUnpackedContract(staged, stage, resolver); err != nil {
-		return fail(err)
+	if err := image.ValidateUnpackedContract(staged, st.dir, resolver); err != nil {
+		return st, err
 	}
-	skillLaunch, err := m.prepareImageSkillBridge(*ag, staged, stage)
+	st.skills, err = m.prepareImageSkillBridge(ag, staged, st.dir)
 	if err != nil {
-		return fail(err)
+		return st, err
 	}
-	var nextPlugins []string
-	if manifest.SchemaVersion == 2 {
-		nextPlugins = requested
-	} else {
-		nextPlugins, err = plugincaps.ResolveWithExternal(requested, resolver)
+	if st.manifest.SchemaVersion == 2 {
+		st.plugins = requested
+	} else if st.plugins, err = plugincaps.ResolveWithExternal(requested, resolver); err != nil {
+		return st, err
 	}
+	return st, nil
+}
+
+// readStagedManifest loads the unpacked manifest and checks it belongs to ref.
+func readStagedManifest(stage string, ref image.Ref, digest string) (image.Manifest, error) {
+	var staged image.Manifest
+	data, err := os.ReadFile(filepath.Join(stage, "manifest.json"))
 	if err != nil {
-		return fail(err)
+		return staged, err
 	}
-	backup := filepath.Join(l.Root, ".image-backup")
-	_ = os.RemoveAll(backup)
-	if err := os.Rename(l.ImageDir(), backup); err != nil && !os.IsNotExist(err) {
-		return fail(err)
+	if err := json.Unmarshal(data, &staged); err != nil {
+		return staged, err
 	}
-	if err := os.Rename(stage, l.ImageDir()); err != nil {
-		_ = os.Rename(backup, l.ImageDir())
+	if staged.Name != ref.Name {
+		return staged, fmt.Errorf("staged image ref mismatch")
+	}
+	staged.Digest = digest
+	if staged.SchemaVersion == 2 {
+		if _, err := os.Stat(filepath.Join(stage, "prompt", "template.json")); err != nil {
+			return staged, fmt.Errorf("staged prompt template: %w", err)
+		}
+	}
+	return staged, nil
+}
+
+// swapPendingImage moves the staged image into place, rewrites shims for the
+// candidate plugin set and promotes the pending identity. Any failure restores
+// the previous image and its shims before reporting through fail.
+func (m *Manager) swapPendingImage(ag *agent.Agent, l agentdir.Layout, pending agent.ImageAssignment, st stagedImage, fail func(error) (activatedImage, error)) (activatedImage, error) {
+	commit, rollback, err := agentdir.SwapImage(l, st.dir)
+	if err != nil {
 		return fail(err)
 	}
 	nextAgent := *ag
-	nextAgent.Plugins = nextPlugins
+	nextAgent.Plugins = st.plugins
 	if err := agentdir.WriteShims(l, nextAgent); err != nil {
-		_ = os.RemoveAll(l.ImageDir())
-		_ = os.Rename(backup, l.ImageDir())
+		rollback()
 		_ = agentdir.WriteShims(l, *ag)
 		return fail(err)
 	}
-	if err := m.cfg.Store.PromotePendingImageWithPlugins(ag.Name, pending.Ref, pending.Digest, nextPlugins); err != nil {
-		_ = os.RemoveAll(l.ImageDir())
-		_ = os.Rename(backup, l.ImageDir())
+	if err := m.cfg.Store.PromotePendingImageWithPlugins(ag.Name, pending.Ref, pending.Digest, st.plugins); err != nil {
+		rollback()
 		_ = agentdir.WriteShims(l, *ag)
 		return fail(err)
 	}
-	_ = os.RemoveAll(backup)
+	commit()
 	if m.cfg.AuditFor != nil {
 		if rec := m.cfg.AuditFor(ag.Name); rec != nil {
 			rec.Record("agent_image_activated", "system", "", map[string]any{
@@ -227,7 +266,105 @@ func (m *Manager) activatePendingImageLocked(ag *agent.Agent) (activatedImage, e
 		return activatedImage{}, err
 	}
 	*ag = updated
-	return activatedImage{PromptTemplateSHA256: manifest.PromptTemplateSHA256, ImageVersion: manifest.ImageVersion, Skills: skillLaunch}, nil
+	return activatedImage{PromptTemplateSHA256: st.manifest.PromptTemplateSHA256, ImageVersion: st.manifest.ImageVersion, Skills: st.skills}, nil
+}
+
+// reprovisionCandidate validates imageRef (empty keeps the current image) and
+// returns ag re-pointed at it, enabled, with the image's declared plugins.
+func (m *Manager) reprovisionCandidate(ag agent.Agent, imageRef string) (agent.Agent, image.Ref, image.Manifest, error) {
+	if imageRef == "" {
+		imageRef = ag.ImageRef
+	}
+	ref, err := image.ParseRef(imageRef)
+	if err != nil {
+		return ag, ref, image.Manifest{}, err
+	}
+	archive, err := m.cfg.ImgStore.ArchiveBytes(ref)
+	if err != nil {
+		return ag, ref, image.Manifest{}, fmt.Errorf("image %s: %w", ref.String(), err)
+	}
+	man, err := image.ValidatePortableArchiveContract(archive, ref, m.imagePluginResolver())
+	if err != nil {
+		return ag, ref, man, fmt.Errorf("image %s: %w", ref.String(), err)
+	}
+	candidate := ag
+	candidate.Enabled = true
+	candidate.ImageRef = ref.String()
+	candidate.ImageDigest = man.Digest
+	if man.SchemaVersion == 2 {
+		candidate.Plugins = make([]string, 0, len(man.Plugins))
+		for _, plugin := range man.Plugins {
+			candidate.Plugins = append(candidate.Plugins, plugin.Name)
+		}
+	}
+	return candidate, ref, man, nil
+}
+
+// installReprovisionedImage provisions candidate into a staging tree, prepares
+// its skill bridge and then swaps it in for ag's image/ and bin/.
+func (m *Manager) installReprovisionedImage(ag, candidate agent.Agent, ref image.Ref, man image.Manifest) error {
+	l := agentdir.New(m.cfg.AgentsDir, ag.Name)
+	if err := os.MkdirAll(l.Root, 0o700); err != nil {
+		return err
+	}
+	stageRoot, err := os.MkdirTemp(l.Root, ".reprovision-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stageRoot)
+	stage := agentdir.Layout{Root: stageRoot, Name: ag.Name}
+	if err := agentdir.Provision(stage, candidate, m.cfg.ImgStore, ref); err != nil {
+		return err
+	}
+	if _, err := m.prepareImageSkillBridge(candidate, man, stage.ImageDir()); err != nil {
+		return err
+	}
+	return m.swapReprovisionedTree(ag, candidate, l, stage.ImageDir())
+}
+
+// swapReprovisionedTree moves bin/ aside and stageImage into image/, rebuilds
+// shims and durable dirs, and records candidate's identity. Any failure
+// restores the previous image/, bin/ and identity.
+func (m *Manager) swapReprovisionedTree(ag, candidate agent.Agent, l agentdir.Layout, stageImage string) error {
+	commitBin, rollbackBin, err := agentdir.SwapDir(l.BinDir(), filepath.Join(l.Root, ".bin-backup"), "")
+	if err != nil {
+		return err
+	}
+	commitImage, rollbackImage, err := agentdir.SwapImage(l, stageImage)
+	if err != nil {
+		rollbackBin()
+		return err
+	}
+	rollback := func() {
+		rollbackImage()
+		rollbackBin()
+	}
+	if err := os.MkdirAll(l.BinDir(), 0o700); err != nil {
+		rollback()
+		return err
+	}
+	if err := agentdir.WriteShims(l, candidate); err != nil {
+		rollback()
+		return err
+	}
+	for _, dir := range []string{l.Workdir(), l.IterationsDir()} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			rollback()
+			return err
+		}
+	}
+	if err := m.cfg.Store.SetImageIdentity(ag.Name, candidate.ImageRef, candidate.ImageDigest); err != nil {
+		rollback()
+		return err
+	}
+	if err := m.cfg.Store.Update(candidate); err != nil {
+		_ = m.cfg.Store.SetImageIdentity(ag.Name, ag.ImageRef, ag.ImageDigest)
+		rollback()
+		return err
+	}
+	commitImage()
+	commitBin()
+	return nil
 }
 
 func (m *Manager) prepareImageSkillBridge(ag agent.Agent, manifest image.Manifest, imageDir string) (harness.SkillLaunchConfig, error) {
@@ -301,7 +438,7 @@ func recoverImageSwap(l agentdir.Layout, activeRef, activeDigest string) (bool, 
 			}
 		}
 	}
-	backup := filepath.Join(l.Root, ".image-backup")
+	backup := filepath.Join(l.Root, agentdir.ImageBackupName)
 	if _, err := os.Stat(backup); os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
