@@ -32,7 +32,7 @@ func TestTaskUsageGroupsTaggedRequestsByTaskAndAgentInWindow(t *testing.T) {
 		alice.CostUSD != 0.60 || alice.Tokens != 3*165 {
 		t.Fatalf("alice = %+v", alice)
 	}
-	if alice.FirstTS != "2026-07-06T09:00:00.000Z" || alice.LastTS != "2026-07-06T09:02:00.000Z" {
+	if alice.FirstTS != "2026-07-06T09:00:00.000000000Z" || alice.LastTS != "2026-07-06T09:02:00.000000000Z" {
 		t.Fatalf("alice bounds = %+v", alice)
 	}
 	if bob.Agent != "bob" || bob.Iterations != 1 || bob.Requests != 1 {

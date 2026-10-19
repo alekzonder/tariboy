@@ -6,6 +6,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // AgentBudget is the four independently configured USD limits for one agent.
@@ -71,18 +73,21 @@ func localCalendarStarts(now time.Time) (hour, day, week, month time.Time) {
 }
 
 // agentWindowSpendQuery sums one agent's hour, day, week and month spend in a
-// single pass. Each window compares offset-aware times at the same millisecond
-// precision as CostSince's strftime, but julianday is several times cheaper
-// per row; LIMIT -1 keeps SQLite from flattening the subquery so it runs once
-// per row, not once per window. The plain ts range only bounds the index seek.
-// It starts a day before the earliest window because ts is RFC3339 text whose
-// offset may differ from Z by up to 14 hours, so its lexical order is exact
-// only across whole days.
+// single pass over the rows since the earliest window start. ts is
+// store.TimeLayout text, so each window compares it directly; LIMIT -1 keeps
+// SQLite from flattening the subquery so the index range is read once.
 func agentWindowSpendQuery(agent string, now time.Time) (string, []any) {
 	query, args := windowSpendQuery(now)
 	query = `SELECT ` + query + ` FROM (
-		SELECT julianday(ts) AS t, cost_usd FROM ai_requests WHERE agent=? AND ts>=? LIMIT -1)`
+		SELECT ts, cost_usd FROM ai_requests WHERE agent=? AND ts>=? LIMIT -1)`
 	return query, append(args[:4:4], agent, args[4])
+}
+
+// allAgentsWindowSpendQuery is agentWindowSpendQuery for every agent at once.
+func allAgentsWindowSpendQuery(now time.Time) (string, []any) {
+	sums, args := windowSpendQuery(now)
+	return `SELECT agent, ` + sums + ` FROM (
+		SELECT agent, ts, cost_usd FROM ai_requests WHERE ts>=? LIMIT -1) GROUP BY agent`, args
 }
 
 // windowSpendQuery returns the four window sums and their arguments: the
@@ -93,12 +98,12 @@ func windowSpendQuery(now time.Time) (string, []any) {
 	if month.Before(earliest) {
 		earliest = month
 	}
-	const sum = `COALESCE(SUM(CASE WHEN t>=julianday(?) THEN cost_usd END),0)`
+	const sum = `COALESCE(SUM(CASE WHEN ts>=? THEN cost_usd END),0)`
 	args := []any{}
 	for _, start := range []time.Time{hour, day, week, month} {
-		args = append(args, start.UTC().Format(time.RFC3339Nano))
+		args = append(args, store.FormatTime(start))
 	}
-	return sum + `,` + sum + `,` + sum + `,` + sum, append(args, earliest.Add(-24*time.Hour).UTC().Format(time.RFC3339Nano))
+	return sum + `,` + sum + `,` + sum + `,` + sum, append(args, store.FormatTime(earliest))
 }
 
 // AgentBudgetStatus returns zero limits for a missing row and derives spending
@@ -141,9 +146,8 @@ func (s *Store) AgentBudgetStatuses(now time.Time) (map[string]AgentBudgetStatus
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	sums, args := windowSpendQuery(now)
-	rows, err = s.read.Query(`SELECT agent, `+sums+` FROM (
-		SELECT agent, julianday(ts) AS t, cost_usd FROM ai_requests WHERE ts>=? LIMIT -1) GROUP BY agent`, args...)
+	query, args := allAgentsWindowSpendQuery(now)
+	rows, err = s.read.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
