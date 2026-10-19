@@ -1,3 +1,28 @@
+## [0.88.0] - 2026-10-19
+
+### Added
+
+- Task queues hold plain env vars beside their secrets. Both reach
+  workflow scripts in the same layer and both satisfy `requires_secrets`;
+  only secret values stay write-only and redacted. Manage them with
+  `ttasks queue env set|ls|rm`, `PUT/GET/DELETE /api/task-queues/{queue}/env`,
+  or the queue settings Environment tab (formerly Secrets), which shows Env
+  and Secrets blocks and confirms before moving a key between them. Store
+  migration 0066 keeps every existing entry as a secret.
+
+### Changed
+
+- Task keys in server and agent Activity, agent Usage task and epic rows,
+  and the agent header Goal link open the task drawer over the current page
+  instead of switching to the Tasks tab.
+- The Desktop icon, web UI favicon and documentation site use the new
+  Tariboy dancer logo on a dark rounded tile, so it stays visible on light
+  docks and tabs.
+- Agent Activity, Advanced and server Activity tabs use the same padding and
+  spacing as the Configuration tab.
+
+[0.88.0]: https://github.com/alekzonder/tariboy/compare/v0.87.2...v0.88.0
+
 ## [0.87.2] - 2026-10-19
 
 ### Fixed
