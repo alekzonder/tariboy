@@ -200,6 +200,7 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`CN=Android Debug`,
 		`release APK is signed with a debug certificate`,
 		`ANDROID_CERT_SHA256 is required`,
+		`scripts/apk-cert-sha256.sh`,
 		`does not match ANDROID_CERT_SHA256`,
 		`cert_sha256=`,
 		`Tariboy_${version}_android-arm64.apk`,
@@ -253,6 +254,52 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		if strings.Contains(value, "secrets.") {
 			t.Fatalf("publication step exposes %s", key)
 		}
+	}
+}
+
+// The release job reads the signing certificate from apksigner, whose wording
+// depends on the build-tools version: older ones print "Signer #1 certificate",
+// current ones one line per signature scheme, such as "V2 Signer: certificate".
+func TestAPKCertSHA256ReadsEveryApksignerFormat(t *testing.T) {
+	root := repositoryRoot(t)
+	const digest = "b7d8825ca24147d58e61d5c081d4fc0f90bba01927a44d574b3c7b3d2b173a8e"
+	const other = "0000000000000000000000000000000000000000000000000000000000000001"
+	for _, testCase := range []struct {
+		name  string
+		certs string
+		want  string
+	}{
+		{
+			name:  "numbered signer",
+			certs: "Signer #1 certificate DN: CN=Tariboy\nSigner #1 certificate SHA-256 digest: " + digest + "\nSigner #1 certificate SHA-1 digest: 1234\n",
+			want:  digest,
+		},
+		{
+			name:  "scheme signers",
+			certs: "Verifies\nV2 Signer: certificate DN: CN=Tariboy\nV2 Signer: certificate SHA-256 digest: " + digest + "\nV3 Signer: certificate SHA-256 digest: " + strings.ToUpper(digest) + "\n",
+			want:  digest,
+		},
+		{name: "no digest", certs: "Verifies\n"},
+		{
+			name:  "two certificates",
+			certs: "Signer #1 certificate SHA-256 digest: " + digest + "\nSigner #2 certificate SHA-256 digest: " + other + "\n",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			cmd := exec.Command("bash", filepath.Join(root, "scripts", "apk-cert-sha256.sh"))
+			cmd.Stdin = strings.NewReader(testCase.certs)
+			output, err := cmd.Output()
+			got := strings.TrimSpace(string(output))
+			if testCase.want == "" {
+				if err == nil {
+					t.Fatalf("apk-cert-sha256.sh accepted %q with output %q", testCase.certs, got)
+				}
+				return
+			}
+			if err != nil || got != testCase.want {
+				t.Fatalf("apk-cert-sha256.sh = %q (err=%v), want %q", got, err, testCase.want)
+			}
+		})
 	}
 }
 

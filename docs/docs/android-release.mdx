@@ -28,8 +28,11 @@ When you push a `vX.Y.Z` tag, `.github/workflows/desktop-release.yml` runs the
    - exactly one APK exists and its name does not end in `-unsigned.apk`;
    - `apksigner verify --print-certs` accepts the signature;
    - the certificate is not the Android debug certificate (`CN=Android Debug`);
-   - the certificate's SHA-256 fingerprint equals the `ANDROID_CERT_SHA256`
-     repository variable.
+   - the APK carries exactly one signing certificate, and its SHA-256
+     fingerprint equals the `ANDROID_CERT_SHA256` repository variable.
+     `scripts/apk-cert-sha256.sh` reads the fingerprint from both `apksigner`
+     formats: `Signer #1 certificate SHA-256 digest:` and the per-scheme
+     `V2 Signer: certificate SHA-256 digest:`.
 6. Renames the APK to `Tariboy_X.Y.Z_android-arm64.apk` and writes its
    `.sha256` file.
 
@@ -161,6 +164,7 @@ text.
 | `ANDROID_... is required` | A Secret is missing. Add it as in step 3. |
 | `ANDROID_CERT_SHA256 is required` | The variable is missing. Add it as in step 3. |
 | `does not match ANDROID_CERT_SHA256` | The keystore and the variable are from different keys. Set the variable to the keystore's fingerprint. |
+| `expected one APK signing certificate SHA-256, found N` | `apksigner` printed no certificate digest, or the APK is signed with more than one certificate. Read the `apksigner` output printed above the message. |
 | `release APK is signed with a debug certificate` | The keystore holds the Android debug key. Use the release keystore. |
 | `make desktop-android` fails in the Gradle signing task | The password or the alias does not match the keystore. Check the Secrets. |
 | `release APK is unsigned` | Gradle did not read `keystore.properties`. Look at the `Restore signing keystore` step output. |

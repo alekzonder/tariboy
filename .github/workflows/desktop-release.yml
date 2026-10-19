@@ -183,7 +183,7 @@ jobs:
           fi
           want="$(printf '%s' "$ANDROID_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
           test -n "$want" || { echo "ANDROID_CERT_SHA256 is required" >&2; exit 1; }
-          got="$(sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: //p' <<<"$certs")"
+          got="$(scripts/apk-cert-sha256.sh <<<"$certs" || true)"
           test "$got" = "$want" || {
             echo "release APK certificate SHA-256 ${got:-<none>} does not match ANDROID_CERT_SHA256" >&2
             exit 1
