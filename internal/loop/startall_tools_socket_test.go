@@ -356,9 +356,9 @@ func TestEngineStartReusesEarlyBoundToolsSocket(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	var rt *runtime
 	for time.Now().Before(deadline) {
-		m.mu.Lock()
-		rt = m.runs["adopted"]
-		m.mu.Unlock()
+		m.runtimes.mu.Lock()
+		rt = m.runtimes.runs["adopted"]
+		m.runtimes.mu.Unlock()
 		if rt != nil {
 			break
 		}
