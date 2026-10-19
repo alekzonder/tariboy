@@ -138,6 +138,10 @@ jobs:
             exit 1
           }
 
+      # desktop-version-check runs rg, which ubuntu-latest does not ship.
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Restore signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

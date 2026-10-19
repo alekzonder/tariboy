@@ -192,6 +192,8 @@ func TestDesktopReleaseWorkflowPublishesCheckedTagArtifacts(t *testing.T) {
 		`internal/version/version.go`,
 		`scripts/release-version.txt`,
 		`is required`,
+		// desktop-version-check runs rg, which ubuntu-latest does not ship.
+		`sudo apt-get install -y ripgrep`,
 		`make desktop-android`,
 		`*-unsigned.apk) echo "release APK is unsigned"`,
 		`verify --print-certs`,
