@@ -845,7 +845,7 @@ func TestWakeMessageCoalescesBeforeDrain(t *testing.T) {
 	for range 9 {
 		e.Wake(WakeMessage)
 	}
-	if got := len(e.messageCh); got != 1 {
+	if got := len(e.msgWake.ch); got != 1 {
 		t.Fatalf("queued message wakes = %d, want one coalesced generation", got)
 	}
 }
