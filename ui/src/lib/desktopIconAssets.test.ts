@@ -6,15 +6,15 @@ import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
 const repoRoot = resolve(process.cwd(), '..')
-const source = resolve(repoRoot, 'desktop/branding/white-pixel-t-source.svg')
+const source = resolve(repoRoot, 'desktop/branding/tariboy-logo-source.svg')
 const iconDir = resolve(repoRoot, 'desktop/src-tauri/icons')
 
 describe('desktop icon assets', () => {
-  it('ships the editable white pixel T icon source', () => {
+  it('ships the editable Tariboy dancer logo source', () => {
     expect(existsSync(source)).toBe(true)
   })
 
-  it('ships transparent white pixel T icons at every generated size', async () => {
+  it('ships the white dancer on a dark rounded tile at every generated size', async () => {
     const sizes = new Map([
       ['icon.png', 512],
       ['32x32.png', 32],
@@ -37,26 +37,26 @@ describe('desktop icon assets', () => {
       }
       const at = (ratio: number) => Math.floor(size * ratio)
 
-      expect(pixel(0, 0)[3]).toBe(0)
-      expect(pixel(at(0.5), at(0.2))[3]).toBeGreaterThanOrEqual(254)
-      expect(pixel(at(0.5), at(0.5))[3]).toBeGreaterThanOrEqual(254)
-      expect(pixel(at(0.2), at(0.5))[3]).toBe(0)
-      expect(pixel(at(0.5), at(0.9))[3]).toBe(0)
-
-      let neutral = true
-      let whiteEnough = true
-      let opaqueWhite = true
-      for (let offset = 0; offset < data.length; offset += info.channels) {
-        const alpha = data[offset + 3]
-        if (alpha === 0) continue
-        neutral &&= data[offset] === data[offset + 1]
-          && data[offset + 1] === data[offset + 2]
-        whiteEnough &&= data[offset] >= 254
-        opaqueWhite &&= alpha !== 255 || data[offset] === 255
+      const isTile = (x: number, y: number) => {
+        const [r, g, b, a] = pixel(x, y)
+        return a >= 254 && r <= 40 && g <= 40 && b <= 40
       }
-      expect(neutral).toBe(true)
-      expect(whiteEnough).toBe(true)
-      expect(opaqueWhite).toBe(true)
+      const isMark = (x: number, y: number) => {
+        const [r, g, b, a] = pixel(x, y)
+        return a >= 254 && r >= 200 && g >= 200 && b >= 200
+      }
+
+      // Rounded tile: transparent corner, dark background around the mark.
+      expect(pixel(0, 0)[3]).toBe(0)
+      expect(isTile(at(0.5), at(0.1))).toBe(true)
+      expect(isTile(at(0.2), at(0.85))).toBe(true)
+      expect(isTile(at(0.5), at(0.95))).toBe(true)
+      // Head dot, arms arc and body of the dancer.
+      expect(isMark(at(0.5), at(0.234))).toBe(true)
+      expect(isMark(at(0.5), at(0.5))).toBe(true)
+      expect(isMark(at(0.5), at(0.7))).toBe(true)
+      // Gap between the head dot and the arms arc.
+      expect(isTile(at(0.5), at(0.33))).toBe(true)
     }
 
     const sourceImage = sharp(source)

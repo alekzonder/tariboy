@@ -7,7 +7,7 @@ import sharp from "sharp";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../..");
 const brandingDir = path.join(repoRoot, "desktop/branding");
-const iconSource = path.join(brandingDir, "white-pixel-t-source.svg");
+const iconSource = path.join(brandingDir, "tariboy-logo-source.svg");
 
 const outputs = {
   icon: path.join(repoRoot, "desktop/src-tauri/icons/icon.png"),
