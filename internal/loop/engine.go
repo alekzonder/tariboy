@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -97,15 +96,6 @@ func (r *realTimer) Stop()               { r.t.Stop() }
 
 func newRealTimer(d time.Duration) loopTimer { return &realTimer{t: time.NewTimer(d)} }
 
-const messageRetryDelay = time.Second
-
-const (
-	messageWakeIdle uint32 = iota
-	messageWakeQueued
-	messageWakeRunning
-	messageWakeRetry
-)
-
 type Engine struct {
 	ag       agent.Agent
 	store    *agent.Store
@@ -120,21 +110,15 @@ type Engine struct {
 
 	manualCh chan manualReq
 	events   chan WakeKind
-	// messageCh is separate from the best-effort config wake queue so a full
-	// burst of config/start/stop nudges cannot discard a pending message
-	// generation. messageWakeState guarantees at most one signal is queued.
-	messageCh chan struct{}
-	// messageWakeState coalesces queued publishes and blocked retries while
-	// messageWakeDeferred preserves one genuinely new generation that arrives
-	// during an already-running message iteration.
-	messageWakeState    atomic.Uint32
-	messageWakeDeferred atomic.Bool
-	peek                func() (bool, error)
-	emit                func(events.Event)
-	audit               func(typ, source, iterationID string, data map[string]any)
-	onClose             func(agent, iterationID string)
-	iterationCompleted  func(agent, iterationID string)
-	beforeLaunch        func(*agent.Agent) (activatedImage, error)
+	// msgWake owns the message-trigger signal, coalescing state and retry
+	// timer (see messageWake).
+	msgWake            *messageWake
+	peek               func() (bool, error)
+	emit               func(events.Event)
+	audit              func(typ, source, iterationID string, data map[string]any)
+	onClose            func(agent, iterationID string)
+	iterationCompleted func(agent, iterationID string)
+	beforeLaunch       func(*agent.Agent) (activatedImage, error)
 
 	mu            sync.Mutex
 	current       string // current iteration id ("" when idle)
@@ -148,9 +132,9 @@ func NewEngine(ag agent.Agent, st *agent.Store, runner IterationRunner, log *slo
 	clock func() time.Time) *Engine {
 	return &Engine{
 		ag: ag, store: st, runner: runner, log: log, clock: clock, newTimer: newRealTimer,
-		manualCh:  make(chan manualReq, 8),
-		events:    make(chan WakeKind, 16),
-		messageCh: make(chan struct{}, 1),
+		manualCh: make(chan manualReq, 8),
+		events:   make(chan WakeKind, 16),
+		msgWake:  newMessageWake(),
 	}
 }
 
@@ -176,46 +160,12 @@ func (e *Engine) queueManual(req manualReq) {
 // undrained or shutting-down engine simply drops the nudge.
 func (e *Engine) Wake(k WakeKind) {
 	if k == WakeMessage {
-		e.queueMessageWake()
+		e.msgWake.queue()
 		return
 	}
 	select {
 	case e.events <- k:
 	default:
-	}
-}
-
-func (e *Engine) queueMessageWake() {
-	for {
-		switch state := e.messageWakeState.Load(); state {
-		case messageWakeIdle:
-			if !e.messageWakeState.CompareAndSwap(messageWakeIdle, messageWakeQueued) {
-				continue
-			}
-			select {
-			case e.messageCh <- struct{}{}:
-			default:
-				// This is only possible when a signal already represents the
-				// pending generation (or after Run has shut down).
-				e.messageWakeState.Store(messageWakeIdle)
-			}
-			return
-		case messageWakeQueued, messageWakeRetry:
-			// One queued wake or retry already represents the pending burst.
-			return
-		case messageWakeRunning:
-			// A publish during the running iteration is a future generation,
-			// not part of the burst that caused the current run. The state
-			// recheck closes the race with finish/park: either that transition
-			// consumes the flag, or this goroutine queues/drops it under the new
-			// state.
-			e.messageWakeDeferred.Store(true)
-			if e.messageWakeState.Load() != messageWakeRunning &&
-				e.messageWakeDeferred.Swap(false) {
-				continue
-			}
-			return
-		}
 	}
 }
 
@@ -305,75 +255,7 @@ func (e *Engine) reload() {
 }
 
 func (e *Engine) Run(ctx context.Context) {
-	// A message retry is independent from the interval cadence. It survives
-	// trips around the outer loop, but there is never more than one armed timer:
-	// publish bursts coalesce while an interactive session owns the harness.
-	var messageRetry loopTimer
-	var messageRetryC <-chan time.Time
-	messageBlocked := false
-	abandonMessage := func() {
-		e.messageWakeState.Store(messageWakeIdle)
-		e.messageWakeDeferred.Store(false)
-	}
-	finishMessage := func() {
-		e.messageWakeState.Store(messageWakeIdle)
-		if e.messageWakeDeferred.Swap(false) {
-			e.queueMessageWake()
-		}
-	}
-	parkMessage := func() {
-		e.messageWakeState.Store(messageWakeRetry)
-		e.messageWakeDeferred.Store(false)
-	}
-	stopMessageRetry := func() {
-		if messageRetry != nil {
-			messageRetry.Stop()
-			messageRetry = nil
-			messageRetryC = nil
-		}
-	}
-	armMessageRetry := func() {
-		parkMessage()
-		if messageRetry != nil {
-			return
-		}
-		messageRetry = e.newTimer(messageRetryDelay)
-		messageRetryC = messageRetry.C()
-	}
-	tryMessage := func() {
-		if ctx.Err() != nil {
-			messageBlocked = false
-			abandonMessage()
-			stopMessageRetry()
-			return
-		}
-		e.reload()
-		if !e.iterates() {
-			if messageBlocked {
-				parkMessage()
-			} else {
-				finishMessage()
-			}
-			stopMessageRetry()
-			return
-		}
-		if !e.hasPending() {
-			messageBlocked = false
-			finishMessage()
-			stopMessageRetry()
-			return
-		}
-		result := e.runOnce(ctx, "message", "")
-		if result == TickSkipped && e.hasPending() {
-			messageBlocked = true
-			armMessageRetry()
-			return
-		}
-		messageBlocked = false
-		finishMessage()
-		stopMessageRetry()
-	}
-
+	w := e.msgWake
 	for {
 		e.reload()
 		// Event-only agents (IntervalS <= 0, no schedule) create no timer at
@@ -386,94 +268,99 @@ func (e *Engine) Run(ctx context.Context) {
 			timer = e.newTimer(wait)
 			timerC = timer.C()
 		}
+		stopTimer := func() {
+			if timer != nil {
+				timer.Stop()
+			}
+		}
 		select {
 		case <-ctx.Done():
-			if timer != nil {
-				timer.Stop()
-			}
-			stopMessageRetry()
-			abandonMessage()
+			stopTimer()
+			w.stopRetry()
+			w.abandon()
 			return
-		case <-e.messageCh:
-			if timer != nil {
-				timer.Stop()
-			}
+		case <-w.ch:
+			stopTimer()
 			// An armed retry already owns this pending condition. Extra
 			// publishes only coalesce; they neither create another timer nor
 			// spin against the still-live interactive session.
-			if messageRetry == nil {
-				e.messageWakeState.Store(messageWakeRunning)
-				tryMessage()
+			if !w.retryArmed() {
+				w.begin()
+				e.tryMessage(ctx)
 			} else {
-				e.reload()
-				if !e.iterates() || !e.hasPending() {
-					if e.iterates() {
-						messageBlocked = false
-						finishMessage()
-					} else if !messageBlocked {
-						finishMessage()
-					}
-					stopMessageRetry()
-				}
+				w.coalesce(e.reloadIterates, e.hasPending)
 			}
 		case <-e.events:
-			if timer != nil {
-				timer.Stop()
-			}
-			if messageRetry != nil || messageBlocked {
-				// A config/start/stop wake invalidates the old delay. Re-read
-				// persisted flags, cancel the old timer, and repark exactly one
-				// retry only when the blocked pending condition still applies.
-				stopMessageRetry()
-				e.reload()
-				if e.iterates() {
-					if e.hasPending() {
-						armMessageRetry()
-					} else {
-						messageBlocked = false
-						finishMessage()
-					}
-				} else if messageBlocked {
-					parkMessage()
-				} else {
-					finishMessage()
-				}
-			}
+			stopTimer()
+			w.onConfigWake(e.newTimer, e.reloadIterates, e.hasPending)
 			// Any wake falls through to the top of the loop, where reload()
 			// re-reads config and recreates or omits the timer. This both wakes
 			// a parked engine (start/re-enable) and cancels a doomed timer
 			// (stop); WakeMessage additionally runs a message iteration above.
 		case m := <-e.manualCh:
-			if timer != nil {
-				timer.Stop()
-			}
+			stopTimer()
 			e.runOnceGuarded(ctx, "manual", m.oneShot, m.launchGate)
 		case <-timerC:
 			// The timer fired and drained its channel; no Stop needed.
-			// Pause/config can race this select with an already-ready timer.
-			// Re-read persisted intent at the last responsible moment so stale
-			// state cannot launch one extra billable iteration.
-			e.reload()
-			switch {
-			case !e.iterates():
-			case armedRule != "" && armedRule == e.ag.ScheduleRRule:
-				e.runOnce(ctx, "schedule", "")
-			case armedRule == "" && e.ag.IntervalS > 0:
-				e.runOnce(ctx, "interval", "")
-			}
-		case <-messageRetryC:
-			if timer != nil {
-				timer.Stop()
-			}
+			e.timerFired(ctx, armedRule)
+		case <-w.retryC:
+			stopTimer()
 			// The retry timer fired and its channel is drained, so detach it
 			// without Stop before attempting. A still-blocked attempt can then
 			// arm the next single retry.
-			messageRetry = nil
-			messageRetryC = nil
-			e.messageWakeState.Store(messageWakeRunning)
-			tryMessage()
+			w.retryFired()
+			w.begin()
+			e.tryMessage(ctx)
 		}
 	}
+}
+
+// reloadIterates re-reads the agent config and reports whether the loop may
+// launch iterations on its own.
+func (e *Engine) reloadIterates() bool {
+	e.reload()
+	return e.iterates()
+}
+
+// timerFired runs the interval or schedule iteration whose timer fired.
+// Pause/config can race the run loop's select with an already-ready timer.
+// Re-read persisted intent at the last responsible moment so stale state
+// cannot launch one extra billable iteration.
+func (e *Engine) timerFired(ctx context.Context, armedRule string) {
+	e.reload()
+	switch {
+	case !e.iterates():
+	case armedRule != "" && armedRule == e.ag.ScheduleRRule:
+		e.runOnce(ctx, "schedule", "")
+	case armedRule == "" && e.ag.IntervalS > 0:
+		e.runOnce(ctx, "interval", "")
+	}
+}
+
+// tryMessage attempts one message-triggered iteration and settles the message
+// wake: a launch blocked by a live interactive session (still pending) arms the
+// single retry; everything else finishes or parks the wake.
+func (e *Engine) tryMessage(ctx context.Context) {
+	w := e.msgWake
+	if ctx.Err() != nil {
+		w.cancel()
+		return
+	}
+	e.reload()
+	if !e.iterates() {
+		w.hold()
+		return
+	}
+	if !e.hasPending() {
+		w.clear()
+		return
+	}
+	result := e.runOnce(ctx, "message", "")
+	if result == TickSkipped && e.hasPending() {
+		w.block(e.newTimer)
+		return
+	}
+	w.clear()
 }
 
 func (e *Engine) hasPending() bool {
@@ -534,93 +421,138 @@ func (e *Engine) runOnce(ctx context.Context, trigger, oneShot string) TickResul
 	return e.runOnceGuarded(ctx, trigger, oneShot, nil)
 }
 
+// launchGuard holds a manual trigger's launch gate. The gate is acquired at
+// most once, held from acquisition through image activation and iteration row
+// creation, and released once the iteration is current (or its failed row
+// exists); runOnceGuarded releases it on every other exit.
+type launchGuard struct {
+	gate     func() (release func(), ok bool)
+	release  func()
+	acquired bool
+}
+
+func (g *launchGuard) acquire() bool {
+	if g.gate == nil || g.acquired {
+		return true
+	}
+	var ok bool
+	g.release, ok = g.gate()
+	g.acquired = ok
+	return ok
+}
+
+func (g *launchGuard) done() {
+	if g.release != nil {
+		g.release()
+		g.release = nil
+	}
+}
+
+// launch is a created iteration row ready to hand to the runner.
+type launch struct {
+	it        agent.Iteration
+	activated activatedImage
+	now       time.Time
+}
+
 func (e *Engine) runOnceGuarded(
 	ctx context.Context,
 	trigger, oneShot string,
 	launchGate func() (release func(), ok bool),
 ) TickResult {
-	var release func()
-	gateAcquired := false
-	releaseLaunch := func() {
-		if release != nil {
-			release()
-			release = nil
-		}
-	}
-	acquireLaunch := func() bool {
-		if launchGate == nil || gateAcquired {
-			return true
-		}
-		var ok bool
-		release, ok = launchGate()
-		gateAcquired = ok
-		return ok
-	}
-	defer releaseLaunch()
+	guard := &launchGuard{gate: launchGate}
+	defer guard.done()
 	if ctx.Err() != nil {
 		return TickDisabled
 	}
-	// Launch guard (spec: tmux session collision). An interactive agent whose tmux
-	// session is already alive must not spawn a second iteration on top: a
-	// loop-triggered tick is skipped, a manual one is failed with a visible reason.
-	if b, ok := e.runner.(interface {
+	if res, blocked := e.launchBlocked(trigger, guard); blocked {
+		return res
+	}
+	l, res, ok := e.prepareLaunch(trigger, guard)
+	if !ok {
+		return res
+	}
+	return e.runIteration(ctx, trigger, oneShot, l, guard)
+}
+
+// launchBlocked applies the launch guard (spec: tmux session collision). An
+// interactive agent whose tmux session is already alive must not spawn a
+// second iteration on top: a loop-triggered tick is skipped, a manual one is
+// failed with a visible reason. It reports true when the launch must not
+// proceed, with the tick result to return.
+func (e *Engine) launchBlocked(trigger string, guard *launchGuard) (TickResult, bool) {
+	b, ok := e.runner.(interface {
 		SessionBlocked(agent.Agent) bool
-	}); ok && b.SessionBlocked(e.ag) {
-		// Self-heal an orphaned session before failing. A tmux session left by a
-		// crashed daemon / failed adoption has no running iteration to own it and
-		// would otherwise block every future iteration forever (on_error=restart
-		// never sees this — it is a pre-launch guard, not an iteration outcome).
-		// Reap it and fall through to launch; a session still owned by a live
-		// iteration is a real conflict and is left untouched.
-		reaped := false
-		if rp, ok := e.runner.(interface {
-			ReapOrphanBlock(agent.Agent) bool
-		}); ok {
-			reaped = rp.ReapOrphanBlock(e.ag)
-		}
-		if !reaped {
-			if trigger == "manual" {
-				if !acquireLaunch() {
-					return TickDisabled
-				}
-				now := e.clock()
-				id, err := e.store.NextIterationID(e.ag.Name, now)
-				if err != nil {
-					e.log.Error("next iteration id", "agent", e.ag.Name, "err", err)
-					return TickError
-				}
-				ts := now.Format(time.RFC3339)
-				it := agent.Iteration{
-					ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "failed",
-					StartedAt: ts, EndedAt: ts,
-				}
-				if err := e.store.CreateIteration(it); err != nil {
-					e.log.Error("create iteration", "agent", e.ag.Name, "err", err)
-					return TickError
-				}
-				releaseLaunch()
-				e.log.Warn("manual iteration failed: tmux session already alive",
-					"agent", e.ag.Name, "id", id)
-				e.recordAudit("iteration_failed", "system", id,
-					map[string]any{"reason": "tmux_session_exists"})
-				e.emitIteration(id, trigger, "failed", "finish")
-				if e.iterationCompleted != nil {
-					e.iterationCompleted(e.ag.Name, id)
-				}
-				return TickError
-			}
-			e.log.Info("loop iteration skipped: tmux session still alive", "agent", e.ag.Name)
-			e.recordAudit("iteration_skipped", "system", "",
-				map[string]any{"reason": "session_alive"})
-			return TickSkipped
-		}
+	})
+	if !ok || !b.SessionBlocked(e.ag) {
+		return "", false
+	}
+	// Self-heal an orphaned session before failing. A tmux session left by a
+	// crashed daemon / failed adoption has no running iteration to own it and
+	// would otherwise block every future iteration forever (on_error=restart
+	// never sees this — it is a pre-launch guard, not an iteration outcome).
+	// Reap it and fall through to launch; a session still owned by a live
+	// iteration is a real conflict and is left untouched.
+	reaped := false
+	if rp, ok := e.runner.(interface {
+		ReapOrphanBlock(agent.Agent) bool
+	}); ok {
+		reaped = rp.ReapOrphanBlock(e.ag)
+	}
+	if reaped {
 		e.log.Info("reaped orphan tmux session before launch", "agent", e.ag.Name)
 		e.recordAudit("session_reaped", "system", "",
 			map[string]any{"reason": "orphan_before_launch"})
+		return "", false
 	}
+	if trigger == "manual" {
+		return e.failManualCollision(trigger, guard), true
+	}
+	e.log.Info("loop iteration skipped: tmux session still alive", "agent", e.ag.Name)
+	e.recordAudit("iteration_skipped", "system", "",
+		map[string]any{"reason": "session_alive"})
+	return TickSkipped, true
+}
 
-	if !acquireLaunch() {
+// failManualCollision records a manual trigger that collided with a live tmux
+// session as a failed iteration row.
+func (e *Engine) failManualCollision(trigger string, guard *launchGuard) TickResult {
+	if !guard.acquire() {
 		return TickDisabled
+	}
+	now := e.clock()
+	id, err := e.store.NextIterationID(e.ag.Name, now)
+	if err != nil {
+		e.log.Error("next iteration id", "agent", e.ag.Name, "err", err)
+		return TickError
+	}
+	ts := now.Format(time.RFC3339)
+	it := agent.Iteration{
+		ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "failed",
+		StartedAt: ts, EndedAt: ts,
+	}
+	if err := e.store.CreateIteration(it); err != nil {
+		e.log.Error("create iteration", "agent", e.ag.Name, "err", err)
+		return TickError
+	}
+	guard.done()
+	e.log.Warn("manual iteration failed: tmux session already alive",
+		"agent", e.ag.Name, "id", id)
+	e.recordAudit("iteration_failed", "system", id,
+		map[string]any{"reason": "tmux_session_exists"})
+	e.emitIteration(id, trigger, "failed", "finish")
+	if e.iterationCompleted != nil {
+		e.iterationCompleted(e.ag.Name, id)
+	}
+	return TickError
+}
+
+// prepareLaunch acquires the launch gate, activates the image and creates the
+// running iteration row. It reports false with the tick result to return when
+// the launch cannot proceed.
+func (e *Engine) prepareLaunch(trigger string, guard *launchGuard) (launch, TickResult, bool) {
+	if !guard.acquire() {
+		return launch{}, TickDisabled, false
 	}
 	activated := activatedImage{}
 	if e.beforeLaunch != nil {
@@ -637,14 +569,14 @@ func (e *Engine) runOnceGuarded(
 			e.recordAudit("iteration_failed", "system", "", map[string]any{
 				"reason": "image_activation_failed", "error": err.Error(),
 			})
-			return TickErrorHalt
+			return launch{}, TickErrorHalt, false
 		}
 	}
 	now := e.clock()
 	id, err := e.store.NextIterationID(e.ag.Name, now)
 	if err != nil {
 		e.log.Error("next iteration id", "agent", e.ag.Name, "err", err)
-		return TickError
+		return launch{}, TickError, false
 	}
 	it := agent.Iteration{
 		ID: id, Agent: e.ag.Name, Trigger: trigger, Status: "running",
@@ -653,8 +585,15 @@ func (e *Engine) runOnceGuarded(
 	}
 	if err := e.store.CreateIteration(it); err != nil {
 		e.log.Error("create iteration", "agent", e.ag.Name, "err", err)
-		return TickError
+		return launch{}, TickError, false
 	}
+	return launch{it: it, activated: activated, now: now}, "", true
+}
+
+// runIteration makes the created row current, releases the launch gate, runs
+// the harness and records the outcome.
+func (e *Engine) runIteration(ctx context.Context, trigger, oneShot string, l launch, guard *launchGuard) TickResult {
+	id, activated := l.it.ID, l.activated
 	// Root iteration span (spec §14). OTel-off installs a no-op tracer, so span
 	// start/end and attribute-setting are free and never alter iteration
 	// behavior. span.End() is deferred so it fires on every exit path
@@ -664,11 +603,11 @@ func (e *Engine) runOnceGuarded(
 	runCtx = context.WithValue(runCtx, activatedImageContextKey{}, activated)
 	e.mu.Lock()
 	e.current = id
-	e.lastRun = now
+	e.lastRun = l.now
 	e.currentCancel = cancel
 	e.mu.Unlock()
 	defer cancel()
-	releaseLaunch()
+	guard.done()
 	e.log.Info("iteration started", "agent", e.ag.Name, "id", id, "trigger", trigger)
 	e.emitIteration(id, trigger, "running", "start")
 	e.recordAudit("iteration_started", "system", id, map[string]any{
@@ -713,27 +652,45 @@ func (e *Engine) runOnceGuarded(
 		return TickDetached
 	}
 	if runErr != nil {
-		e.log.Error("iteration runner failed", "agent", e.ag.Name, "id", id, "err", runErr)
-		// A manager-side stale-shim recovery may have finalized this row while
-		// the runner was unwinding its cancelled context. Do not erase that
-		// durable terminal detail (notably its synthetic exit code).
-		if current, err := e.store.GetIteration(e.ag.Name, id); err == nil {
-			current.Status = "harness_error"
-			current.EndedAt = end
-			if committed, err := e.store.FinalizeRunningIteration(current); err != nil {
-				e.log.Error("update iteration", "agent", e.ag.Name, "id", id, "err", err)
-			} else if committed {
-				e.emitIteration(id, trigger, "harness_error", "finish")
-				e.recordAudit("iteration_finished", "system", id, map[string]any{"status": "harness_error", "error": runErr.Error()})
-				if e.iterationCompleted != nil {
-					e.iterationCompleted(e.ag.Name, id)
-				}
-			}
-		}
+		e.finishHarnessError(id, trigger, end, runErr)
 		e.finishSpan(span, spanStart, id, "harness_error", 0, 0)
 		return TickError
 	}
+	return e.finishOutcome(l.it, trigger, end, outcome, span, spanStart)
+}
 
+// finishHarnessError finalizes the row of an iteration whose runner failed.
+func (e *Engine) finishHarnessError(id, trigger, end string, runErr error) {
+	e.log.Error("iteration runner failed", "agent", e.ag.Name, "id", id, "err", runErr)
+	// A manager-side stale-shim recovery may have finalized this row while
+	// the runner was unwinding its cancelled context. Do not erase that
+	// durable terminal detail (notably its synthetic exit code).
+	current, err := e.store.GetIteration(e.ag.Name, id)
+	if err != nil {
+		return
+	}
+	current.Status = "harness_error"
+	current.EndedAt = end
+	committed, err := e.store.FinalizeRunningIteration(current)
+	if err != nil {
+		e.log.Error("update iteration", "agent", e.ag.Name, "id", id, "err", err)
+		return
+	}
+	if !committed {
+		return
+	}
+	e.emitIteration(id, trigger, "harness_error", "finish")
+	e.recordAudit("iteration_finished", "system", id, map[string]any{"status": "harness_error", "error": runErr.Error()})
+	if e.iterationCompleted != nil {
+		e.iterationCompleted(e.ag.Name, id)
+	}
+}
+
+// finishOutcome persists the runner's outcome, applies the on_timeout/on_error
+// policy and signals completion.
+func (e *Engine) finishOutcome(it agent.Iteration, trigger, end string, outcome Outcome,
+	span oteltrace.Span, spanStart time.Time) TickResult {
+	id := it.ID
 	ec := outcome.ExitCode
 	cpu := outcome.CPUMs
 	mem := outcome.MemPeakKB
