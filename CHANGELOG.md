@@ -1,3 +1,25 @@
+## [0.87.0] - 2026-10-19
+
+### Added
+
+- Agents can start loop iterations on an RFC 5545 RRULE schedule with an
+  optional DTSTART: weekdays at a time, a day of the month, a single date
+  and time, or every N hours or days. Set it with `tariboy loop schedule`,
+  `POST /api/agents/{name}/loop/schedule`, or the Loop and timeouts block of
+  the agent configuration page; agent views report `schedule` and
+  `schedule_next_at`. Missed occurrences are not replayed.
+- Desktop releases attach a signed arm64 Android APK with its SHA-256
+  checksum again; the build rejects debug and unexpected signing
+  certificates. A new Android release APK page documents the signing setup.
+
+### Changed
+
+- The New task forms in an agent Tasks tab and in All tasks preselect the
+  queue of the last root task created on that server; a queue picked in the
+  toolbar filter still wins.
+
+[0.87.0]: https://github.com/alekzonder/tariboy/compare/v0.86.0...v0.87.0
+
 ## [0.86.0] - 2026-10-18
 
 ### Added
