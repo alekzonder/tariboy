@@ -6,7 +6,9 @@ import { useAgentName } from "@/lib/agent";
 import { getAgentUsage } from "@/lib/api";
 import { fmtTokens } from "@/lib/audit";
 import { fmtDateTime } from "@/lib/time";
+import { paramToHost, targetFor } from "@/lib/terminalsHost";
 import { cn } from "@/lib/utils";
+import TaskDrawer from "@/pages/tasks/TaskDrawer";
 
 // Window presets: label → (span in ms, series bucket). The bucket widens with
 // the window so the chart never renders thousands of bars (spec §4).
@@ -40,6 +42,7 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
   const [customSince, setCustomSince] = useState("");
   const [customUntil, setCustomUntil] = useState("");
   const [groupBy, setGroupBy] = useState<"iteration" | "task" | "epic" | "model">("iteration");
+  const [taskKey, setTaskKey] = useState("");
 
   // Build the query params. Recomputed on every poll tick so preset windows
   // slide with the wall clock (since=now-Δ), and custom ranges convert their
@@ -170,7 +173,7 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
             {rows.map((r, i) => (
               <tr key={i} className="border-t">
                 <td className="px-3 py-1.5">
-                  <RowKey name={name} hostParam={hostParam} groupBy={groupBy} rowKey={r.key} title={r.title} />
+                  <RowKey name={name} groupBy={groupBy} rowKey={r.key} title={r.title} onOpenTask={setTaskKey} />
                 </td>
                 <td className="px-3 py-1.5 text-right">{r.requests}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{r.input_tokens}</td>
@@ -190,6 +193,14 @@ export default function AgentUsagePage({ period }: { period?: { since: string; u
           </tbody>
         </table>
       </div>
+      {taskKey && (
+        <TaskDrawer
+          key={taskKey}
+          taskKey={taskKey}
+          target={targetFor(paramToHost(hostParam))}
+          onClose={() => setTaskKey("")}
+        />
+      )}
     </div>
   );
 }
@@ -203,21 +214,21 @@ function TotalCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Iteration rows link to that iteration's Audit Log view; task/epic rows link
-// the task key to the agent's Tasks tab beside its title; model rows show the
-// bare key, with 'untagged' plain.
+// Iteration rows link to that iteration's Audit Log view; task/epic rows open
+// the task key in place beside its title; model rows show the bare key, with
+// 'untagged' plain.
 function RowKey({
   name,
-  hostParam,
   groupBy,
   rowKey,
   title,
+  onOpenTask,
 }: {
   name: string;
-  hostParam: string;
   groupBy: string;
   rowKey: string;
   title?: string;
+  onOpenTask: (key: string) => void;
 }) {
   if (groupBy === "iteration") {
     if (rowKey === "untagged") return <span className="text-muted-foreground">untagged</span>;
@@ -233,12 +244,13 @@ function RowKey({
   if ((groupBy === "task" || groupBy === "epic") && rowKey !== "untagged") {
     return (
       <span className="flex flex-wrap items-baseline gap-2">
-        <Link
-          to={`/agents/${encodeURIComponent(hostParam)}/${encodeURIComponent(name)}/tasks?task=${encodeURIComponent(rowKey)}`}
+        <button
+          type="button"
+          onClick={() => onOpenTask(rowKey)}
           className="font-mono text-xs text-primary hover:underline"
         >
           {rowKey}
-        </Link>
+        </button>
         {title && title !== rowKey && <span>{title}</span>}
       </span>
     );

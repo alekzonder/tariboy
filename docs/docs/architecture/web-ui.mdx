@@ -195,17 +195,17 @@ the totals still count every task.
 The agent tab has four views:
 
 - **Tasks** (default): one row per task, newest activity first. The task key
-  opens the task in the agent's Tasks tab
-  (`/agents/:hostId/:agent/tasks?task=<key>`).
+  opens the task panel in place, over the Activity tab; the tab and the URL
+  do not change.
 - **Iterations**: the iteration list and log, limited to iterations that
   started in the period, with the tag filter below.
 - **Usage**: the agent's AI usage over the period; task and epic keys open the
-  task.
+  task panel in place.
 - **Status history**: only the status messages from the period.
 
 An old `?iteration=` link opens the Iterations view. The server section has a
 **Tasks** view with an Agents column, whose keys open
-`/servers/:hostId/tasks?task=<key>`, and an **Agents** view, whose names open
+the task panel in place on that server, and an **Agents** view, whose names open
 that agent's Activity tab with the same period. All its requests go to the
 selected host.
 
@@ -252,6 +252,8 @@ The Agent workspace header shows the agent's configured runtime as one compact
 `harness · model · effort` chip before **Goal**, omitting the values the
 selected harness does not report. It is read from the agent view alongside the
 header's status poll, so a Configuration change is reflected within one poll.
+The **Goal** task key opens the task panel over the current tab instead of
+switching to the Tasks tab.
 
 Every Agent workspace header shows the agent's complete effective working
 directory. A following **Open in VS Code** action opens local paths as local

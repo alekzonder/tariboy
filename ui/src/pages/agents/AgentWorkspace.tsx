@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { NavLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Container } from "lucide-react";
 import { toast } from "sonner";
 import { useDaemons } from "@/components/DaemonProvider";
@@ -22,6 +22,7 @@ import AgentConfigurationTab from "./AgentConfigurationTab";
 import AgentAdvancedTab from "./AgentAdvancedTab";
 import AgentChatTab from "./AgentChatTab";
 import TasksWorkspace from "@/pages/tasks/TasksWorkspace";
+import TaskDrawer from "@/pages/tasks/TaskDrawer";
 import { useCustomerQuestionNotifications } from "@/components/customerQuestionNotificationsContext";
 import { customerQuestionAttentionKey } from "@/components/customerQuestionNotificationModel";
 import { canOpenAgentCwdInVSCode } from "./agentCwdVSCode";
@@ -65,6 +66,8 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
     .filter(Boolean).join(" · ");
   const target = targetFor(hostId);
   const [execCount, setExecCount] = useState(0);
+  // The Goal task opens over whichever tab is showing, not in Tasks.
+  const [goalTask, setGoalTask] = useState("");
   const { attention, refreshHost } = useCustomerQuestionNotifications();
   // The Chat tab's dot. It is the daemon's own unread count rather than tab
   // state, so it is right while another tab is open and survives a remount.
@@ -202,12 +205,13 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
                   <span className="flex min-w-0 flex-1 items-center gap-[5px] overflow-hidden text-[12.5px] whitespace-nowrap text-muted-foreground max-lg:flex-none">
                     <span className="shrink-0">Goal:</span>
                     {agent.current_goal_task_key ? (
-                      <Link
+                      <button
+                        type="button"
                         className="shrink-0 border-b border-dotted border-border font-mono text-[11.5px] font-medium text-foreground tabular-nums hover:border-foreground"
-                        to={`${base}/tasks?task=${encodeURIComponent(agent.current_goal_task_key)}`}
+                        onClick={() => setGoalTask(agent.current_goal_task_key ?? "")}
                       >
                         {agent.current_goal_task_key}
-                      </Link>
+                      </button>
                     ) : <span className="shrink-0">No current goal</span>}
                     <GoalHelp />
                   </span>
@@ -316,6 +320,7 @@ export default function AgentWorkspace({ hostId, hostLabel, agent, refresh, unav
           >
             {content}
           </section>
+          {goalTask && <TaskDrawer key={goalTask} taskKey={goalTask} target={target} onClose={() => setGoalTask("")} />}
         </div>
       </AgentStatusContext.Provider>
     </AgentNameContext.Provider>

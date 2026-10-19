@@ -21,6 +21,13 @@ vi.mock("@/hooks/useTerminalSocket", () => ({
   })),
 }));
 vi.mock("@/components/TuiScreen", () => ({ TuiScreen: () => <div>terminal</div> }));
+vi.mock("@/pages/tasks/TaskDrawer", () => ({
+  default: ({ taskKey }: { taskKey: string }) => <div data-testid="task-drawer">{taskKey}</div>,
+}));
+
+function Location() {
+  return <output data-testid="location">{useLocation().pathname}</output>;
+}
 
 const agent = {
   name: "worker",
@@ -54,10 +61,11 @@ afterEach(() => {
 });
 
 describe("AgentWorkspace", () => {
-  it("links the current Goal task and explains how Goal is selected", async () => {
+  it("opens the current Goal task in place and explains how Goal is selected", async () => {
     render(
       <DaemonProvider>
         <MemoryRouter initialEntries={["/agents/local/worker/console"]}>
+          <Location />
           <Routes>
             <Route path="/agents/:hostId/:agent/:tab" element={<AgentWorkspace hostId="" hostLabel="Local" agent={agent} refresh={vi.fn()} />} />
           </Routes>
@@ -65,10 +73,9 @@ describe("AgentWorkspace", () => {
       </DaemonProvider>,
     );
 
-    expect(await screen.findByRole("link", { name: "IMPROVE-37" })).toHaveAttribute(
-      "href",
-      "/agents/local/worker/tasks?task=IMPROVE-37",
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "IMPROVE-37" }));
+    expect(screen.getByTestId("task-drawer")).toHaveTextContent("IMPROVE-37");
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/local/worker/console");
     await userEvent.click(screen.getByRole("button", { name: "How Goal is selected" }));
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "Tariboy keeps the selected task until it is released",
@@ -472,7 +479,7 @@ describe("AgentWorkspace in Simple mode", () => {
       "Configuration",
     ]);
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "IMPROVE-37" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "IMPROVE-37" })).toBeInTheDocument();
   });
 
   it("keeps the Terminal tab open", async () => {
