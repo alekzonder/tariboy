@@ -550,66 +550,10 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 	if r.cfg.AuditFor != nil {
 		rec = r.cfg.AuditFor(ag.Name)
 	}
-
-	r.cfg.Logger.Info("launching harness",
-		"agent", ag.Name, "iteration", iterationID, "harness", ag.HarnessType,
-		"cwd", prep.cwd, "argv", prep.maskedArgv)
-	if rec != nil {
-		rec.Record("launching_harness", "system", iterationID,
-			map[string]any{
-				"harness":     ag.HarnessType,
-				"interactive": ag.Interactive,
-				"argv":        prep.maskedArgv,
-				"env":         prep.maskedEnv,
-			})
-	}
-	_, spawn := tr.Start(ctx, "shim.spawn")
-	if err := ctx.Err(); err != nil {
-		spawn.End()
-		return Outcome{}, err
-	}
-	// Snapshot both deadlines from one clock sample directly before the shim is
-	// launched. Preparation time must not consume the configured timeout.
-	now := r.cfg.Clock()
-	if err := r.cfg.Store.InitializeIterationTimeout(iterationID, ag.TimeoutS, hardTimeout(ag), now); err != nil {
-		spawn.End()
-		return Outcome{}, fmt.Errorf("initialize iteration timeout: %w", err)
-	}
-	// The shim starts its watchdog before the runner's first polling
-	// synchronization. Pass the exact persisted deadline at launch so that
-	// initial enforcement is anchored to the pre-spawn snapshot, rather than to
-	// the shim process's later wall-clock read.
-	it, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
+	r.recordLaunch(ag, iterationID, prep, rec)
+	terminate, err := r.spawnShim(ctx, tr, ag, iterationID, &prep, rec)
 	if err != nil {
-		spawn.End()
-		return Outcome{}, fmt.Errorf("read initialized iteration timeout: %w", err)
-	}
-	if it.HardTimeoutDeadline != nil {
-		separator := slices.Index(prep.shimArgv, "--")
-		if separator < 0 {
-			spawn.End()
-			return Outcome{}, fmt.Errorf("shim argv missing harness separator")
-		}
-		prep.shimArgv = slices.Insert(prep.shimArgv, separator, "--hard-deadline", *it.HardTimeoutDeadline)
-		prep.maskedArgv = slices.Insert(prep.maskedArgv, separator, "--hard-deadline", *it.HardTimeoutDeadline)
-	}
-	if err := ctx.Err(); err != nil {
-		spawn.End()
 		return Outcome{}, err
-	}
-	var terminate func() error
-	if managed, ok := r.cfg.Spawner.(ManagedSpawner); ok {
-		terminate, err = managed.StartManaged(prep.shimArgv, prep.env, prep.cwd)
-	} else {
-		err = r.cfg.Spawner.Start(prep.shimArgv, prep.env, prep.cwd)
-	}
-	spawn.End()
-	if err != nil {
-		r.cfg.Logger.Error("spawn shim failed", "agent", ag.Name, "iteration", iterationID, "err", err)
-		if rec != nil {
-			rec.Record("shim_error", "system", iterationID, map[string]any{"error": err.Error()})
-		}
-		return Outcome{}, fmt.Errorf("spawn shim: %w", err)
 	}
 	if ctx.Err() != nil {
 		if it, loadErr := r.cfg.Store.GetIteration(ag.Name, iterationID); loadErr == nil && it.Status != "running" {
@@ -618,22 +562,8 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 		}
 	}
 	r.cfg.Logger.Info("harness spawned", "agent", ag.Name, "iteration", iterationID)
-	var onStdout func(string)
-	if ag.HarnessType == "cursor" && !ag.Interactive && r.cfg.RecordCursorUsage != nil {
-		onStdout = cursorUsageObserver(ag.Model, func(usage CursorResultUsage) {
-			imageName, imageTag := imageNameTag(ag.ImageRef)
-			r.cfg.RecordCursorUsage(ag.Name, iterationID, imageName, imageTag, ag.ImageDigest, usage)
-		})
-	}
-	if rec != nil {
-		rec.Record("harness_spawned", "system", iterationID, nil)
-	}
-	if rec != nil || onStdout != nil {
-		// Tee logs into the audit log for the lifetime of the harness; the final
-		// drain on Stop captures trailing output. Interactive agents tee only
-		// shim.log (their harness output is a tmux TUI capture, not audit-worthy).
-		tailer := startTailer(rec, iterationID, l.LogsDir(iterationID), r.cfg.PollInterval, ag.Interactive, onStdout)
-		defer tailer.Stop()
+	if stop := r.startHarnessTailer(ag, l, iterationID, rec); stop != nil {
+		defer stop()
 	}
 
 	hctx, harnessSpan := tr.Start(ctx, "harness")
@@ -649,6 +579,108 @@ func (r *ShimRunner) Run(ctx context.Context, ag agent.Agent, trigger, iteration
 	// only by an explicit `tools message processed` (bus.MarkProcessed); anything
 	// unprocessed re-renders next iteration and eventually dead-letters.
 	return outcome, err
+}
+
+// recordLaunch logs the masked harness launch and records the
+// launching_harness audit event.
+func (r *ShimRunner) recordLaunch(ag agent.Agent, iterationID string, prep preparedRun, rec Recorder) {
+	r.cfg.Logger.Info("launching harness",
+		"agent", ag.Name, "iteration", iterationID, "harness", ag.HarnessType,
+		"cwd", prep.cwd, "argv", prep.maskedArgv)
+	if rec != nil {
+		rec.Record("launching_harness", "system", iterationID,
+			map[string]any{
+				"harness":     ag.HarnessType,
+				"interactive": ag.Interactive,
+				"argv":        prep.maskedArgv,
+				"env":         prep.maskedEnv,
+			})
+	}
+}
+
+// spawnShim runs the shim.spawn phase: it snapshots the iteration deadlines,
+// starts the shim, and returns the managed termination function when the
+// spawner provides one.
+func (r *ShimRunner) spawnShim(ctx context.Context, tr oteltrace.Tracer, ag agent.Agent, iterationID string, prep *preparedRun, rec Recorder) (func() error, error) {
+	_, spawn := tr.Start(ctx, "shim.spawn")
+	if err := ctx.Err(); err != nil {
+		spawn.End()
+		return nil, err
+	}
+	if err := r.snapshotDeadlines(ag, iterationID, prep); err != nil {
+		spawn.End()
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		spawn.End()
+		return nil, err
+	}
+	var terminate func() error
+	var err error
+	if managed, ok := r.cfg.Spawner.(ManagedSpawner); ok {
+		terminate, err = managed.StartManaged(prep.shimArgv, prep.env, prep.cwd)
+	} else {
+		err = r.cfg.Spawner.Start(prep.shimArgv, prep.env, prep.cwd)
+	}
+	spawn.End()
+	if err != nil {
+		r.cfg.Logger.Error("spawn shim failed", "agent", ag.Name, "iteration", iterationID, "err", err)
+		if rec != nil {
+			rec.Record("shim_error", "system", iterationID, map[string]any{"error": err.Error()})
+		}
+		return nil, fmt.Errorf("spawn shim: %w", err)
+	}
+	return terminate, nil
+}
+
+// snapshotDeadlines persists both deadlines from one clock sample directly
+// before the shim is launched, so preparation time does not consume the
+// configured timeout, and passes the hard deadline to the shim.
+func (r *ShimRunner) snapshotDeadlines(ag agent.Agent, iterationID string, prep *preparedRun) error {
+	now := r.cfg.Clock()
+	if err := r.cfg.Store.InitializeIterationTimeout(iterationID, ag.TimeoutS, hardTimeout(ag), now); err != nil {
+		return fmt.Errorf("initialize iteration timeout: %w", err)
+	}
+	// The shim starts its watchdog before the runner's first polling
+	// synchronization. Pass the exact persisted deadline at launch so that
+	// initial enforcement is anchored to the pre-spawn snapshot, rather than to
+	// the shim process's later wall-clock read.
+	it, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
+	if err != nil {
+		return fmt.Errorf("read initialized iteration timeout: %w", err)
+	}
+	if it.HardTimeoutDeadline != nil {
+		separator := slices.Index(prep.shimArgv, "--")
+		if separator < 0 {
+			return fmt.Errorf("shim argv missing harness separator")
+		}
+		prep.shimArgv = slices.Insert(prep.shimArgv, separator, "--hard-deadline", *it.HardTimeoutDeadline)
+		prep.maskedArgv = slices.Insert(prep.maskedArgv, separator, "--hard-deadline", *it.HardTimeoutDeadline)
+	}
+	return nil
+}
+
+// startHarnessTailer records harness_spawned and tees logs into the audit log
+// for the lifetime of the harness; the final drain on Stop captures trailing
+// output. Interactive agents tee only shim.log (their harness output is a tmux
+// TUI capture, not audit-worthy). It returns the tailer's stop function, or
+// nil when nothing is tailed.
+func (r *ShimRunner) startHarnessTailer(ag agent.Agent, l agentdir.Layout, iterationID string, rec Recorder) func() {
+	var onStdout func(string)
+	if ag.HarnessType == "cursor" && !ag.Interactive && r.cfg.RecordCursorUsage != nil {
+		onStdout = cursorUsageObserver(ag.Model, func(usage CursorResultUsage) {
+			imageName, imageTag := imageNameTag(ag.ImageRef)
+			r.cfg.RecordCursorUsage(ag.Name, iterationID, imageName, imageTag, ag.ImageDigest, usage)
+		})
+	}
+	if rec != nil {
+		rec.Record("harness_spawned", "system", iterationID, nil)
+	}
+	if rec == nil && onStdout == nil {
+		return nil
+	}
+	tailer := startTailer(rec, iterationID, l.LogsDir(iterationID), r.cfg.PollInterval, ag.Interactive, onStdout)
+	return tailer.Stop
 }
 
 // terminateCanceledLaunch first asks the actual shim to stop cooperatively, so
@@ -718,123 +750,121 @@ type activatedImageContextKey struct{}
 // staying open across the later shim.spawn/harness phases. Failed spans are
 // marked with an error status so prepare-phase failures are traceable.
 func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string) (preparedRun, error) {
-	_, prep := tr.Start(ctx, "prepare")
-	defer prep.End()
+	_, span := tr.Start(ctx, "prepare")
+	defer span.End()
 
-	fail := func(err error) (preparedRun, error) {
-		prep.RecordError(err)
-		prep.SetStatus(codes.Error, err.Error())
+	prep, err := r.prepareSteps(ctx, ag, l, iterationID, oneShot)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return preparedRun{}, err
+	}
+	return prep, nil
+}
+
+// prepareInputs is the trusted iteration state the later prepare steps read.
+type prepareInputs struct {
+	iteration agent.Iteration
+	// bare marks an image that gets an instructions-free session: no assembled
+	// prompt, no message drain, no bin shims on PATH (spec
+	// 2026-07-22-terminals-simple-ui §1.3).
+	bare           bool
+	schemaVersion  int
+	currentGoal    tasks.Task
+	hasCurrentGoal bool
+	activated      activatedImage
+}
+
+// prepareSteps runs the prepare steps in order. Once a proxy token is minted
+// prepare owns it until the successful return hands it to Run, so every later
+// failure revokes it exactly once through the deferred revoke below.
+func (r *ShimRunner) prepareSteps(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string) (preparedRun, error) {
+	in, err := r.readPrepareInputs(ag, iterationID)
+	if err != nil {
+		return preparedRun{}, err
+	}
+	in.activated, _ = ctx.Value(activatedImageContextKey{}).(activatedImage)
+	if err := r.writePrompt(ctx, ag, l, iterationID, oneShot, in); err != nil {
+		return preparedRun{}, err
+	}
+	adapter, cwd, secrets, err := r.resolveHarness(ag, l, in)
+	if err != nil {
 		return preparedRun{}, err
 	}
 
-	// A bare image gets an instructions-free session:
-	// no assembled prompt, no message drain, no bin shims on PATH (spec
-	// 2026-07-22-terminals-simple-ui §1.3).
-	bare := ag.ImageRef == image.BareRef.String()
+	proxyURL, proxyToken, err := r.mintProxyToken(ctx, ag, iterationID, in)
+	revoke := proxyToken != ""
+	defer func() {
+		if revoke {
+			r.cfg.Proxy.RevokeToken(proxyToken)
+		}
+	}()
+	if err != nil {
+		return preparedRun{}, err
+	}
+
+	prep, err := r.buildLaunch(ag, l, iterationID, in, adapter, cwd, secrets, proxyURL, proxyToken)
+	if err != nil {
+		return preparedRun{}, err
+	}
+	// Success: the caller takes ownership of the token and defers its revoke
+	// for the rest of the iteration instead.
+	revoke = false
+	return prep, nil
+}
+
+// readPrepareInputs verifies the trusted iteration image identity against the
+// active agent and reads the agent's current Goal.
+func (r *ShimRunner) readPrepareInputs(ag agent.Agent, iterationID string) (prepareInputs, error) {
+	in := prepareInputs{bare: ag.ImageRef == image.BareRef.String(), schemaVersion: 1}
 	iteration, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
 	if err != nil {
-		return fail(fmt.Errorf("read trusted iteration image identity: %w", err))
+		return in, fmt.Errorf("read trusted iteration image identity: %w", err)
 	}
 	if iteration.ImageRef != "" && iteration.ImageRef != ag.ImageRef {
-		return fail(fmt.Errorf("iteration image ref does not match active agent image"))
+		return in, fmt.Errorf("iteration image ref does not match active agent image")
 	}
 	if iteration.ImageDigest != "" && iteration.ImageDigest != ag.ImageDigest {
-		return fail(fmt.Errorf("iteration image digest does not match active agent image"))
+		return in, fmt.Errorf("iteration image digest does not match active agent image")
 	}
-	imageSchemaVersion := 1
+	in.iteration = iteration
 	if iteration.PromptTemplateSHA256 != "" {
-		imageSchemaVersion = 2
+		in.schemaVersion = 2
 	}
-	currentGoal, hasCurrentGoal := tasks.Task{}, false
-	if r.cfg.CurrentGoal != nil && !bare {
+	if r.cfg.CurrentGoal != nil && !in.bare {
 		goalAt := r.cfg.Clock().UTC()
-		currentGoal, hasCurrentGoal, err = r.cfg.CurrentGoal(ag.Name, goalAt)
+		in.currentGoal, in.hasCurrentGoal, err = r.cfg.CurrentGoal(ag.Name, goalAt)
 		if err != nil {
-			return fail(fmt.Errorf("read current agent goal: %w", err))
+			return in, fmt.Errorf("read current agent goal: %w", err)
 		}
 		if r.cfg.GoalRead != nil {
 			key := ""
-			if hasCurrentGoal {
-				key = currentGoal.Key
+			if in.hasCurrentGoal {
+				key = in.currentGoal.Key
 			}
 			r.cfg.GoalRead(ag.Name, iterationID, key, goalAt)
 		}
 	}
+	return in, nil
+}
 
-	// Assemble and write the prompt.
+// writePrompt assembles and writes the prompt, records the iteration_prepared
+// audit event, and stores the prompt path on the iteration row.
+func (r *ShimRunner) writePrompt(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string, in prepareInputs) error {
 	prompt := ""
 	var batch []bus.Message
-	if !bare {
-		contextText := ""
-		if data, err := os.ReadFile(l.ContextPath()); err == nil {
-			contextText = string(data)
-		}
-
-		// Drain a batch of pending messages (spec §5.3). Rendering increments each
-		// delivery's attempts; the batch is no longer acked on success — the agent
-		// drains it explicitly via `tools message processed` (spec §3.2).
-		var awaiting []bus.Message
-		if r.cfg.Bus != nil {
-			n := ag.MessagesBatch
-			if n <= 0 {
-				n = 10
-			}
-			if msgs, err := r.cfg.Bus.Pending(ag.Name, n); err != nil {
-				r.cfg.Logger.Warn("pending messages", "agent", ag.Name, "err", err)
-			} else {
-				batch = msgs
-			}
-			// Derived "# Awaiting replies" section: the agent's own outstanding
-			// requests with no reply yet (spec §3.2, §4.2).
-			if reqs, err := r.cfg.Bus.PendingRequests(ag.Name); err != nil {
-				r.cfg.Logger.Warn("pending requests", "agent", ag.Name, "err", err)
-			} else {
-				awaiting = reqs
-			}
-		}
-
-		goal := ""
-		if hasCurrentGoal {
-			goal = RuntimeGoal(ctx, r.cfg.WorkflowGoals, currentGoal, ag.Name, r.cfg.Logger)
-		}
-		if imageSchemaVersion == 2 {
-			template, err := ReadPromptTemplate(l.ImageDir(), iteration.PromptTemplateSHA256)
-			if err != nil {
-				return fail(err)
-			}
-			workdir, err := FormatRuntimeWorkdir(l.Workdir())
-			if err != nil {
-				return fail(err)
-			}
-			prompt, err = RenderPromptTemplate(template, l.ImageDir(), RuntimePromptValues{
-				Identity: FormatRuntimeIdentity(ag.Name, ag.ImageRef, iteration.ImageVersion, ag.ImageDigest, agentCwd(ag, l), iterationID),
-				Goal:     goal,
-				Workdir:  workdir,
-				Context:  contextText, Messages: FormatMessages(batch), AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()), UserPrompt: ag.UserPrompt, OneShot: oneShot,
-			})
-			if err != nil {
-				return fail(err)
-			}
-		} else {
-			imagePrompt, err := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT.md"))
-			if err != nil {
-				return fail(fmt.Errorf("read image prompt: %w", err))
-			}
-			tail, _ := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT_TAIL.md"))
-			prompt = AssemblePrompt(PromptParts{
-				Agent: ag.Name, Cwd: agentCwd(ag, l), ImagePrompt: string(imagePrompt),
-				Context: contextText, Messages: FormatMessages(batch),
-				AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()),
-				UserPrompt:      ag.UserPrompt, OneShot: oneShot, Goal: goal, Tail: string(tail),
-			})
+	if !in.bare {
+		var err error
+		prompt, batch, err = r.assemblePrompt(ctx, ag, l, iterationID, oneShot, in)
+		if err != nil {
+			return err
 		}
 	}
-	activated, _ := ctx.Value(activatedImageContextKey{}).(activatedImage)
-	if activated.Skills.PromptPrefix != "" {
-		prompt = activated.Skills.PromptPrefix + prompt
+	if in.activated.Skills.PromptPrefix != "" {
+		prompt = in.activated.Skills.PromptPrefix + prompt
 	}
 	if err := os.WriteFile(l.PromptPath(iterationID), []byte(prompt), 0o600); err != nil {
-		return fail(err)
+		return err
 	}
 	// Preserve stable evidence references without leaking prompt or message
 	// bodies into the audit timeline.
@@ -858,136 +888,187 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 	if err := r.cfg.Store.SetIterationPromptPath(iterationID, l.PromptPath(iterationID)); err != nil {
 		r.cfg.Logger.Warn("record prompt path", "agent", ag.Name, "id", iterationID, "err", err)
 	}
+	return nil
+}
 
-	// Build the harness command.
+// pendingMessages drains a batch of pending messages (spec §5.3) and the
+// agent's outstanding requests. Rendering increments each delivery's attempts;
+// the batch is no longer acked on success — the agent drains it explicitly via
+// `tools message processed` (spec §3.2).
+func (r *ShimRunner) pendingMessages(ag agent.Agent) (batch, awaiting []bus.Message) {
+	if r.cfg.Bus == nil {
+		return nil, nil
+	}
+	n := ag.MessagesBatch
+	if n <= 0 {
+		n = 10
+	}
+	if msgs, err := r.cfg.Bus.Pending(ag.Name, n); err != nil {
+		r.cfg.Logger.Warn("pending messages", "agent", ag.Name, "err", err)
+	} else {
+		batch = msgs
+	}
+	// Derived "# Awaiting replies" section: the agent's own outstanding
+	// requests with no reply yet (spec §3.2, §4.2).
+	if reqs, err := r.cfg.Bus.PendingRequests(ag.Name); err != nil {
+		r.cfg.Logger.Warn("pending requests", "agent", ag.Name, "err", err)
+	} else {
+		awaiting = reqs
+	}
+	return batch, awaiting
+}
+
+// assemblePrompt renders the prompt of a non-bare image from its schema-v2
+// template or its schema-v1 PROMPT.md, and returns the rendered message batch.
+func (r *ShimRunner) assemblePrompt(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID, oneShot string, in prepareInputs) (string, []bus.Message, error) {
+	contextText := ""
+	if data, err := os.ReadFile(l.ContextPath()); err == nil {
+		contextText = string(data)
+	}
+	batch, awaiting := r.pendingMessages(ag)
+
+	goal := ""
+	if in.hasCurrentGoal {
+		goal = RuntimeGoal(ctx, r.cfg.WorkflowGoals, in.currentGoal, ag.Name, r.cfg.Logger)
+	}
+	if in.schemaVersion == 2 {
+		template, err := ReadPromptTemplate(l.ImageDir(), in.iteration.PromptTemplateSHA256)
+		if err != nil {
+			return "", nil, err
+		}
+		workdir, err := FormatRuntimeWorkdir(l.Workdir())
+		if err != nil {
+			return "", nil, err
+		}
+		prompt, err := RenderPromptTemplate(template, l.ImageDir(), RuntimePromptValues{
+			Identity: FormatRuntimeIdentity(ag.Name, ag.ImageRef, in.iteration.ImageVersion, ag.ImageDigest, agentCwd(ag, l), iterationID),
+			Goal:     goal,
+			Workdir:  workdir,
+			Context:  contextText, Messages: FormatMessages(batch), AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()), UserPrompt: ag.UserPrompt, OneShot: oneShot,
+		})
+		if err != nil {
+			return "", nil, err
+		}
+		return prompt, batch, nil
+	}
+	imagePrompt, err := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT.md"))
+	if err != nil {
+		return "", nil, fmt.Errorf("read image prompt: %w", err)
+	}
+	tail, _ := os.ReadFile(filepath.Join(l.ImageDir(), "PROMPT_TAIL.md"))
+	prompt := AssemblePrompt(PromptParts{
+		Agent: ag.Name, Cwd: agentCwd(ag, l), ImagePrompt: string(imagePrompt),
+		Context: contextText, Messages: FormatMessages(batch),
+		AwaitingReplies: FormatAwaitingReplies(awaiting, r.cfg.Clock()),
+		UserPrompt:      ag.UserPrompt, OneShot: oneShot, Goal: goal, Tail: string(tail),
+	})
+	return prompt, batch, nil
+}
+
+// resolveHarness resolves the harness adapter and working directory,
+// materializes legacy skills, and reads the injected secrets.
+func (r *ShimRunner) resolveHarness(ag agent.Agent, l agentdir.Layout, in prepareInputs) (harness.Adapter, string, map[string]string, error) {
 	adapter, err := harness.Get(ag.HarnessType)
 	if err != nil {
-		return fail(err)
+		return nil, "", nil, err
 	}
 	cwd := agentCwd(ag, l)
 	if ag.Cwd != "" {
 		if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
-			return fail(fmt.Errorf("agent cwd %s does not exist", cwd))
+			return nil, "", nil, fmt.Errorf("agent cwd %s does not exist", cwd)
 		}
 	}
 
 	// Schema-v1 images retain their legacy CWD-relative skill layout. Schema-v2
 	// skills are attached through the activation-time harness bridge instead.
-	if sub := harness.LegacySkillsSubdir(adapter.Type()); imageSchemaVersion != 2 && sub != "" {
+	if sub := harness.LegacySkillsSubdir(adapter.Type()); in.schemaVersion != 2 && sub != "" {
 		if err := agentdir.MaterializeSkills(l.ImageDir(), cwd, sub); err != nil {
-			return fail(fmt.Errorf("materialize skills: %w", err))
+			return nil, "", nil, fmt.Errorf("materialize skills: %w", err)
 		}
 	}
 
 	// Injected env (spec §10).
 	secrets, err := r.cfg.Store.SecretMap(ag.Name)
 	if err != nil {
-		return fail(err)
+		return nil, "", nil, err
 	}
+	return adapter, cwd, secrets, nil
+}
 
-	// Mint a per-iteration proxy token (spec §9). Revoked when the iteration
-	// ends, on every exit path.
-	//
-	// Fail-closed: when a proxy is configured the harness MUST route through it.
-	// If we cannot obtain a token or the proxy URL is unavailable, running the
-	// iteration would let the harness reach the real upstream API directly with
-	// the operator's key — so we abort instead. The abort surfaces as an error
-	// which the engine records as a failed (harness_error) iteration.
-	proxyEnabled := r.cfg.Proxy != nil
-	proxyURL, proxyToken := "", ""
-	if proxyEnabled {
-		taskID, epicID := "", ""
-		if hasCurrentGoal {
-			taskID, epicID = currentGoal.Key, currentGoal.Key
-			if currentGoal.ParentKey != "" {
-				taskID, epicID, err = resolveNativeTaskAttribution(ctx, r.cfg.Tasks, ag.Name, currentGoal.Key)
-				if err != nil {
-					return fail(fmt.Errorf("resolve current agent goal attribution: %w", err))
-				}
+// mintProxyToken mints a per-iteration proxy token (spec §9) and stamps the
+// current Goal's attribution onto it. Once a token is minted it is returned
+// even alongside an error, so the caller can revoke it; a mint failure
+// returns no token.
+//
+// Fail-closed: when a proxy is configured the harness MUST route through it.
+// If we cannot obtain a token or the proxy URL is unavailable, running the
+// iteration would let the harness reach the real upstream API directly with
+// the operator's key — so we abort instead. The abort surfaces as an error
+// which the engine records as a failed (harness_error) iteration.
+func (r *ShimRunner) mintProxyToken(ctx context.Context, ag agent.Agent, iterationID string, in prepareInputs) (proxyURL, token string, err error) {
+	if r.cfg.Proxy == nil {
+		return "", "", nil
+	}
+	taskID, epicID := "", ""
+	if in.hasCurrentGoal {
+		taskID, epicID = in.currentGoal.Key, in.currentGoal.Key
+		if in.currentGoal.ParentKey != "" {
+			taskID, epicID, err = resolveNativeTaskAttribution(ctx, r.cfg.Tasks, ag.Name, in.currentGoal.Key)
+			if err != nil {
+				return "", "", fmt.Errorf("resolve current agent goal attribution: %w", err)
 			}
 		}
-		name, tag := imageNameTag(ag.ImageRef)
-		tok, mErr := r.cfg.Proxy.MintToken(ag.Name, iterationID, name, tag, ag.ImageDigest)
-		if mErr != nil {
-			// Nothing was minted, so there is no token to revoke.
-			return fail(fmt.Errorf("proxy token unavailable, refusing to run without proxy: %w", mErr))
-		}
-		if taskID != "" {
-			if r.cfg.Proxy.UpdateTask(tok, taskID, epicID) != 1 {
-				r.cfg.Proxy.RevokeToken(tok)
-				return fail(fmt.Errorf("attribute proxy token to current agent goal"))
-			}
-		}
-		// A token exists from here on. If we abort below (ProxyBaseURL empty) it
-		// must still be revoked even though prepare is about to return an error;
-		// on the success path the caller takes ownership and defers the revoke
-		// for the rest of the iteration instead.
-		proxyURL = r.cfg.Proxy.ProxyBaseURL()
-		if u, ok := r.cfg.Proxy.(interface{ ProxyBaseURLForToken(string) string }); ok {
-			proxyURL = u.ProxyBaseURLForToken(tok)
-		}
-		if proxyURL == "" {
-			r.cfg.Proxy.RevokeToken(tok)
-			return fail(fmt.Errorf("proxy base URL unavailable, refusing to run without proxy"))
-		}
-		proxyToken = tok
 	}
+	name, tag := imageNameTag(ag.ImageRef)
+	tok, mErr := r.cfg.Proxy.MintToken(ag.Name, iterationID, name, tag, ag.ImageDigest)
+	if mErr != nil {
+		// Nothing was minted, so there is no token to revoke.
+		return "", "", fmt.Errorf("proxy token unavailable, refusing to run without proxy: %w", mErr)
+	}
+	// A token exists from here on, so every return hands it back.
+	if taskID != "" {
+		if r.cfg.Proxy.UpdateTask(tok, taskID, epicID) != 1 {
+			return "", tok, fmt.Errorf("attribute proxy token to current agent goal")
+		}
+	}
+	proxyURL = r.cfg.Proxy.ProxyBaseURL()
+	if u, ok := r.cfg.Proxy.(interface{ ProxyBaseURLForToken(string) string }); ok {
+		proxyURL = u.ProxyBaseURLForToken(tok)
+	}
+	if proxyURL == "" {
+		return "", tok, fmt.Errorf("proxy base URL unavailable, refusing to run without proxy")
+	}
+	return proxyURL, tok, nil
+}
 
+// buildLaunch builds the harness argv and environment, preflights the
+// executables the iteration needs, and composes the shim command with its
+// masked audit copy.
+func (r *ShimRunner) buildLaunch(ag agent.Agent, l agentdir.Layout, iterationID string, in prepareInputs, adapter harness.Adapter, cwd string, secrets map[string]string, proxyURL, proxyToken string) (preparedRun, error) {
 	codexApproval := ""
 	if r.cfg.CodexApproval != nil {
 		codexApproval = r.cfg.CodexApproval()
 	}
 	hargv, henv, err := adapter.Command(cwd, l.PromptPath(iterationID),
-		harness.Config{Model: ag.Model, Effort: ag.Effort, Interactive: ag.Interactive, SessionID: iterationID, ProxyURL: proxyURL, Bare: bare, CodexApproval: codexApproval})
+		harness.Config{Model: ag.Model, Effort: ag.Effort, Interactive: ag.Interactive, SessionID: iterationID, ProxyURL: proxyURL, Bare: in.bare, CodexApproval: codexApproval})
 	if err != nil {
-		if proxyToken != "" {
-			r.cfg.Proxy.RevokeToken(proxyToken)
-		}
-		return fail(err)
+		return preparedRun{}, err
 	}
-	hargv = append(hargv, activated.Skills.Args...)
+	hargv = append(hargv, in.activated.Skills.Args...)
 
 	base := append(os.Environ(), henv...)
 	binDir := l.BinDir()
-	if bare {
+	if in.bare {
 		binDir = ""
 	}
-	env := BuildEnv(base, binDir, ag.Name, iterationID, l.Sock(), proxyEnabled, proxyURL, proxyToken, ag.Env, secrets)
-	env, err = mergeSkillLaunchEnv(env, activated.Skills.Env)
+	env := BuildEnv(base, binDir, ag.Name, iterationID, l.Sock(), r.cfg.Proxy != nil, proxyURL, proxyToken, ag.Env, secrets)
+	env, err = mergeSkillLaunchEnv(env, in.activated.Skills.Env)
 	if err != nil {
-		if proxyToken != "" {
-			r.cfg.Proxy.RevokeToken(proxyToken)
-		}
-		return fail(err)
+		return preparedRun{}, err
 	}
-	if _, err := harness.FindExecutable(adapter.Executable(), env, cwd); err != nil {
-		if proxyToken != "" {
-			r.cfg.Proxy.RevokeToken(proxyToken)
-		}
-		return fail(fmt.Errorf("harness executable %q not found", adapter.Type()))
-	}
-	if !bare {
-		python3, err := harness.FindExecutable("python3", env, cwd)
-		if err != nil {
-			if proxyToken != "" {
-				r.cfg.Proxy.RevokeToken(proxyToken)
-			}
-			return fail(errors.New("python3 is required in the iteration environment for agent tool scripts"))
-		}
-		env, err = mergeSkillLaunchEnv(env, []string{"TARIBOY_PYTHON3=" + python3})
-		if err != nil {
-			if proxyToken != "" {
-				r.cfg.Proxy.RevokeToken(proxyToken)
-			}
-			return fail(err)
-		}
-	}
-	bash, err := harness.FindExecutable("bash", env, cwd)
+	env, bash, err := preflightExecutables(adapter, env, cwd, in.bare)
 	if err != nil {
-		if proxyToken != "" {
-			r.cfg.Proxy.RevokeToken(proxyToken)
-		}
-		return fail(errors.New("bash is required in the iteration environment for agent shell scripts"))
+		return preparedRun{}, err
 	}
 	hargv = agentShellCommand(bash, filepath.Dir(r.cfg.AgentsDir), l, hargv)
 
@@ -1021,6 +1102,30 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 		maskedArgv: maskedArgv,
 		maskedEnv:  maskedEnv,
 	}, nil
+}
+
+// preflightExecutables checks that the harness, python3 (non-bare images
+// only) and bash resolve against the iteration environment. It returns env
+// with TARIBOY_PYTHON3 set and the resolved bash path.
+func preflightExecutables(adapter harness.Adapter, env []string, cwd string, bare bool) ([]string, string, error) {
+	if _, err := harness.FindExecutable(adapter.Executable(), env, cwd); err != nil {
+		return nil, "", fmt.Errorf("harness executable %q not found", adapter.Type())
+	}
+	if !bare {
+		python3, err := harness.FindExecutable("python3", env, cwd)
+		if err != nil {
+			return nil, "", errors.New("python3 is required in the iteration environment for agent tool scripts")
+		}
+		env, err = mergeSkillLaunchEnv(env, []string{"TARIBOY_PYTHON3=" + python3})
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	bash, err := harness.FindExecutable("bash", env, cwd)
+	if err != nil {
+		return nil, "", errors.New("bash is required in the iteration environment for agent shell scripts")
+	}
+	return env, bash, nil
 }
 
 // await polls result.json (and the shim RPC) until the iteration finishes,
