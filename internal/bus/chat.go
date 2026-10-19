@@ -3,6 +3,8 @@ package bus
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // DefaultChatTypes is the message types a chat shows unless the operator picks
@@ -172,6 +174,11 @@ func chatMessagesQuery(customer, agent string, types []string, limit int, before
 	args = append(args, filterArgs...)
 	page := ""
 	if before != "" {
+		// A client may echo the cursor with any RFC 3339 offset or width;
+		// the stored ts is canonical, so the text comparison needs it too.
+		if v, ok := store.NormalizeTimeValue(before); ok {
+			before = v
+		}
 		page = " AND ts < ?"
 		args = append(args, before)
 	}

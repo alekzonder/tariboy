@@ -4,7 +4,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 const sensitiveKeyPattern = `(?:[a-z][a-z0-9]*[_-])*(?:api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|token|password|passwd|credential)`
@@ -148,7 +149,7 @@ func safeTimestamp(value string) bool {
 	if len(value) < len("2006-01-02T15:04:05Z") || len(value) > 35 {
 		return false
 	}
-	_, err := time.Parse(time.RFC3339Nano, value)
+	_, err := store.ParseInputTime(value)
 	return err == nil
 }
 

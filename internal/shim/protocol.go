@@ -382,7 +382,7 @@ func (c *Client) Report() (ReportResult, error) {
 	return out, err
 }
 
-// SetHardDeadline installs an absolute RFC3339 hard deadline. Repeating the
+// SetHardDeadline installs an absolute RFC 3339 hard deadline. Repeating the
 // same value is intentionally harmless, allowing daemon restart recovery.
 func (c *Client) SetHardDeadline(deadline string) error {
 	return c.call(MethodSetHardDeadline, struct {

@@ -209,12 +209,44 @@ func TestNewTriggerAtSequenceZeroUsesCommitOrderNotExternalTimestamp(t *testing.
 }
 
 func TestLegacyTargetWithoutActivationMarkerUsesTimestampBoundary(t *testing.T) {
-	created := "2026-08-07T12:00:00Z"
-	if workflowTargetEligible(10, 0, false, "2026-08-07T11:59:59Z", created) {
+	created := "2026-08-07T12:00:00.000000000Z"
+	if workflowTargetEligible(10, 0, false, "2026-08-07T11:59:59.000000000Z", created) {
 		t.Fatal("legacy target accepted an event older than its creation time")
 	}
-	if !workflowTargetEligible(10, 0, false, "2026-08-07T12:00:01Z", created) {
+	if !workflowTargetEligible(10, 0, false, "2026-08-07T12:00:01.000000000Z", created) {
 		t.Fatal("legacy target rejected an event newer than its creation time")
+	}
+}
+
+// An observation's event_at comes from outside: any RFC 3339 offset is read
+// as its instant, and a value that is not a time is refused.
+func TestWorkflowObservationEventAtAcceptsAnyOffset(t *testing.T) {
+	svc, operator := triggerFixture(t)
+	created := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	svc.clock = func() time.Time { return created }
+	mustCreateTrigger(t, svc, operator, "issue-provider:*")
+	observe := func(id, eventAt string) error {
+		return svc.ApplyWorkflowObservation(context.Background(), ApplyWorkflowObservationInput{
+			EventID: id, EventAt: eventAt, Channel: "issue-provider:issues", Kind: "issue.created",
+			Payload: map[string]any{"text": id, "source": "plugin:issue-provider"}})
+	}
+	// 13:59:59+02:00 is one second before the trigger was created.
+	if err := observe("before-creation", "2026-08-07T13:59:59+02:00"); err != nil {
+		t.Fatal(err)
+	}
+	// 14:00:00.5+02:00 is half a second after it.
+	if err := observe("after-creation", "2026-08-07T14:00:00.5+02:00"); err != nil {
+		t.Fatal(err)
+	}
+	if n := countTasksMentioning(t, svc, "before-creation"); n != 0 {
+		t.Fatalf("an event before the trigger created %d tasks", n)
+	}
+	if n := countTasksMentioning(t, svc, "after-creation"); n != 1 {
+		t.Fatalf("an event after the trigger created %d tasks; want 1", n)
+	}
+	err := observe("garbage", "yesterday")
+	if ErrorCode(err) != "invalid_observation" || err.Error() != "event_at must be an RFC 3339 time" {
+		t.Fatalf("event_at that is not a time: %v", err)
 	}
 }
 

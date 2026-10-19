@@ -3,6 +3,8 @@ package bus
 import (
 	"sort"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // messageColumns is the message projection scanMessages expects, in its order.
@@ -26,6 +28,11 @@ func (b *Bus) ChatFeed(chat Chat, viewer string, types []string, limit int, befo
 	args = append(args, filterArgs...)
 	page := ""
 	if before != "" {
+		// A client may echo the cursor with any RFC 3339 offset or width;
+		// the stored ts is canonical, so the text comparison needs it too.
+		if v, ok := store.NormalizeTimeValue(before); ok {
+			before = v
+		}
 		page = " AND ts < ?"
 		args = append(args, before)
 	}
@@ -222,6 +229,9 @@ func ChatAgent(chat Chat) string {
 // seen. exact sets the mark even when that moves it backwards, which is how
 // marking a chat unread is expressed.
 func (b *Bus) SetReadTS(chatID, principal, ts string, exact bool) error {
+	if v, ok := store.NormalizeTimeValue(ts); ok {
+		ts = v
+	}
 	query := `UPDATE chat_participants SET read_ts = ? WHERE chat_id = ? AND principal = ? AND read_ts < ?`
 	args := []any{ts, chatID, principal, ts}
 	if exact {

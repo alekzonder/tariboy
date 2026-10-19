@@ -50,7 +50,7 @@ type Message struct {
 	ID                  string
 	IdempotencyKey      string
 	Channel             string
-	TS                  string // RFC3339Nano, assigned by Publish
+	TS                  string // store.TimeLayout, assigned by Publish
 	Source              string
 	Type                string
 	Subject             map[string]any

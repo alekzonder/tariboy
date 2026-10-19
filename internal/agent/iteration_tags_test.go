@@ -15,10 +15,10 @@ func tagStore(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	for _, it := range []Iteration{
-		{ID: "a", Agent: "worker", Status: "done", StartedAt: "2026-09-10T02:00:00Z"},
-		{ID: "b", Agent: "worker", Status: "done", StartedAt: "2026-09-11T02:00:00Z"},
-		{ID: "c", Agent: "worker", Status: "done", StartedAt: "2026-09-12T02:00:00Z"},
-		{ID: "z", Agent: "other", Status: "done", StartedAt: "2026-09-11T02:00:00Z"},
+		{ID: "a", Agent: "worker", Status: "done", StartedAt: "2026-09-10T02:00:00.000000000Z"},
+		{ID: "b", Agent: "worker", Status: "done", StartedAt: "2026-09-11T02:00:00.000000000Z"},
+		{ID: "c", Agent: "worker", Status: "done", StartedAt: "2026-09-12T02:00:00.000000000Z"},
+		{ID: "z", Agent: "other", Status: "done", StartedAt: "2026-09-11T02:00:00.000000000Z"},
 	} {
 		if err := s.CreateIteration(it); err != nil {
 			t.Fatal(err)

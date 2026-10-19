@@ -15,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 var queuePrefixRE = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
@@ -97,7 +99,7 @@ func (s *Service) signal() {
 }
 
 func (s *Service) now() string {
-	return s.clock().UTC().Format(time.RFC3339Nano)
+	return store.FormatTime(s.clock())
 }
 
 func newID(prefix string) string {

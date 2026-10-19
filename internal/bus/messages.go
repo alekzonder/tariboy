@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // messages.go holds the Phase P processed/reply lifecycle (design §3.3, §4) and
@@ -494,7 +496,7 @@ func markProcessed(x dbtx, agent, msgID, result string, now time.Time) (int64, e
 	res, err := x.Exec(`UPDATE deliveries SET processed_at=?, result=?, dlq=0, acked_at=COALESCE(acked_at, ?)
 		WHERE message_id=? AND processed_at IS NULL
 		  AND subscription_id IN (SELECT id FROM subscriptions WHERE agent=?)`,
-		now.UTC().Format(time.RFC3339Nano), result, now.UTC().Format(time.RFC3339Nano), msgID, agent)
+		store.FormatTime(now), result, store.FormatTime(now), msgID, agent)
 	if err != nil {
 		return 0, err
 	}
@@ -599,7 +601,7 @@ func (b *Bus) SubscribeParams(agent, channel string, m Matcher, typeFilter []str
 		return Subscription{}, err
 	}
 	if _, err := b.db.Exec(`INSERT INTO subscriptions(id, agent, channel, matcher, type_filter, created_at, params, watch)
-		VALUES (?,?,?,?,?,?,?,?)`, id, agent, channel, matcher, tf, now.Format(time.RFC3339Nano), paramsJSON, watch); err != nil {
+		VALUES (?,?,?,?,?,?,?,?)`, id, agent, channel, matcher, tf, store.FormatTime(now), paramsJSON, watch); err != nil {
 		return Subscription{}, err
 	}
 	b.emitSubscriptionHook(channel)

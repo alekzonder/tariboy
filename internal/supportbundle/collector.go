@@ -131,7 +131,7 @@ func (c Collector) Prepare(ctx context.Context, opts Options) (Archive, error) {
 		environ = os.Environ
 	}
 	diag := diagnostics{
-		GeneratedAt:      now().UTC().Format(time.RFC3339Nano),
+		GeneratedAt:      store.FormatTime(now()),
 		DaemonVersion:    c.Version,
 		Platform:         runtime.GOOS,
 		Architecture:     runtime.GOARCH,

@@ -14,6 +14,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 func agentStore(c *registry.Ctx) *agent.Store { return agent.NewStore(c.Store) }
@@ -644,7 +645,7 @@ func agentStatus() registry.Command {
 				"status_message": a.StatusMessage, "status_updated": a.StatusUpdated,
 				"messages_pending": messagesPending, "messages_max_queue": a.MessagesMaxQueue,
 				"messages_queue_full": messagesPending >= a.MessagesMaxQueue,
-				"server_now":          time.Now().UTC().Format(time.RFC3339Nano)}
+				"server_now":          store.FormatTime(time.Now())}
 			if budget, err := agentBudgetView(c, a.Name); err != nil {
 				return nil, err
 			} else {
@@ -686,8 +687,8 @@ func effectiveDeadline(soft, hard *string) string {
 	if hard == nil {
 		return *soft
 	}
-	st, serr := time.Parse(time.RFC3339Nano, *soft)
-	ht, herr := time.Parse(time.RFC3339Nano, *hard)
+	st, serr := store.ParseTime(*soft)
+	ht, herr := store.ParseTime(*hard)
 	if serr == nil && herr == nil && ht.Before(st) {
 		return *hard
 	}

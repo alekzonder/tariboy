@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 type OperationStep struct {
@@ -73,7 +75,7 @@ func (s Service) SaveOperation(operation Operation) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	operation.Updated = time.Now().UTC().Format(time.RFC3339Nano)
+	operation.Updated = store.FormatTime(time.Now())
 	data, err := json.Marshal(operation)
 	if err != nil {
 		return err
@@ -125,7 +127,7 @@ func recoverStaleOperation(operation Operation, now time.Time, staleAfter time.D
 	if operation.Status != "running" {
 		return operation
 	}
-	updated, err := time.Parse(time.RFC3339Nano, operation.Updated)
+	updated, err := store.ParseInputTime(operation.Updated)
 	if err == nil && now.Sub(updated) <= staleAfter {
 		return operation
 	}

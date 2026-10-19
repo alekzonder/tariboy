@@ -47,7 +47,9 @@ func (s *Store) Upsert(r Record) error {
 	chans, _ := json.Marshal(r.Channels)
 	installed := r.InstalledAt
 	if installed == "" {
-		installed = s.clock().UTC().Format(time.RFC3339Nano)
+		installed = store.FormatTime(s.clock())
+	} else {
+		installed, _ = store.NormalizeTimeValue(installed)
 	}
 	if r.State == "" {
 		r.State = "installed"

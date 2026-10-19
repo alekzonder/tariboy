@@ -2981,7 +2981,7 @@ func TestLiveStateReportsAndClearsAIStall(t *testing.T) {
 	}
 	if err := as.CreateIteration(agent.Iteration{
 		ID: "worker-1", Agent: "worker", Status: "running",
-		StartedAt: now.Add(-6 * time.Minute).Format(time.RFC3339Nano),
+		StartedAt: store.FormatTime(now.Add(-6 * time.Minute)),
 	}); err != nil {
 		t.Fatal(err)
 	}

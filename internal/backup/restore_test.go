@@ -482,3 +482,50 @@ func symlinkArchive(t *testing.T) []byte {
 		{name: "files/link", typ: tar.TypeSymlink, link: "/etc/passwd"},
 	})
 }
+
+func TestRestoreCanonicalizesLegacyTimes(t *testing.T) {
+	src, agentsDir := seed(t)
+	legacy := []string{
+		"UPDATE schedules SET next_fire_at = \"2026-01-01T00:00:00.123Z\" WHERE id = \"bot-sch-a\"",
+		"UPDATE schedules SET next_fire_at = \"2026-01-01T03:00:00+03:00\" WHERE id = \"bot-sch-b\"",
+		"UPDATE script_runs SET started_at = \"2026-01-01T00:00:01.000000001Z\", finished_at = \"\" WHERE id = \"bot-run-1\"",
+		"UPDATE messages SET ts = \"2026-01-01T00:00:00Z\" WHERE id = \"bot-msg-1\"",
+	}
+	for _, q := range legacy {
+		if _, err := src.DB.Exec(strings.ReplaceAll(q, "\"", "\x27")); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	var arc bytes.Buffer
+	if _, err := Build(&arc, src, agentsDir, "bot", Options{}, clk); err != nil {
+		t.Fatal(err)
+	}
+	dstDir := t.TempDir()
+	dst, err := store.Open(filepath.Join(dstDir, "y.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { dst.Close() })
+	if _, err := Restore(bytes.NewReader(arc.Bytes()), dst, filepath.Join(dstDir, "agents"), RestoreOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	checks := []struct{ query, want string }{
+		{"SELECT next_fire_at FROM schedules WHERE id = \"bot-sch-a\"", "2026-01-01T00:00:00.123000000Z"},
+		{"SELECT next_fire_at FROM schedules WHERE id = \"bot-sch-b\"", "2026-01-01T00:00:00.000000000Z"},
+		{"SELECT started_at FROM script_runs WHERE id = \"bot-run-1\"", "2026-01-01T00:00:01.000000001Z"},
+		{"SELECT finished_at FROM script_runs WHERE id = \"bot-run-1\"", ""},
+		{"SELECT ts FROM messages WHERE id = \"bot-msg-1\"", "2026-01-01T00:00:00.000000000Z"},
+		// A column outside the time registry keeps its text.
+		{"SELECT spec FROM schedules WHERE id = \"bot-sch-a\"", "2026-01-01T00:00:00Z"},
+	}
+	for _, c := range checks {
+		q := strings.ReplaceAll(c.query, "\"", "\x27")
+		var got string
+		if err := dst.DB.QueryRow(q).Scan(&got); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		if got != c.want {
+			t.Errorf("%s = %q, want %q", q, got, c.want)
+		}
+	}
+}

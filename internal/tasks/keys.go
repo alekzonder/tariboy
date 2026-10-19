@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 // taskKeyAlphabet drops 0/1/o/l/i so a key stays unambiguous when it is read
@@ -89,7 +91,7 @@ func MigrateLegacyKeys(db *sql.DB, now func() time.Time) error {
 		return err
 	}
 	defer tx.Rollback()
-	stamp := now().UTC().Format(time.RFC3339Nano)
+	stamp := store.FormatTime(now())
 	if _, err := tx.Exec(`INSERT INTO task_legacy_keys_migrated(id, migrated_at) VALUES (1, ?)`, stamp); err != nil {
 		return err
 	}

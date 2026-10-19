@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -242,5 +243,51 @@ func TestBudgetSetValidation(t *testing.T) {
 	}
 	if got := countBudgets(); got != 2 {
 		t.Fatalf("group scope: expected 2 budgets stored, got %d", got)
+	}
+}
+
+func TestUsageTimeBoundsValidateAndAcceptOffsets(t *testing.T) {
+	c, as, _ := ctxWithStore(t)
+	if err := as.Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
+		t.Fatal(err)
+	}
+	ap := aiproxy.NewStore(c.Store, nil)
+	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
+	for i, id := range []string{"early", "inside", "late"} {
+		if err := ap.Insert(aiproxy.AIRequest{ID: id, TS: base.Add(time.Duration(i) * time.Hour).Format(time.RFC3339Nano),
+			Agent: "alice", Iteration: "alice-1", Model: "m", InputTokens: 1, CostUSD: 0.01, Status: "ok"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 12:30+03:00 is 09:30Z and 13:30+03:00 is 10:30Z: only "inside" (10:00Z) is in the window.
+	window := registry.Params{"since": "2026-07-06T12:30:00+03:00", "until": "2026-07-06T13:30:00+03:00"}
+	for _, path := range []string{"usage", "agent.usage"} {
+		t.Run(path, func(t *testing.T) {
+			params := registry.Params{"name": "alice"}
+			for k, v := range window {
+				params[k] = v
+			}
+			res, err := h(t, path)(c, params)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report := res.(map[string]any)
+			requests := 0
+			if path == "usage" {
+				requests = report["total_requests"].(int)
+			} else {
+				requests = report["totals"].(map[string]any)["requests"].(int)
+			}
+			if requests != 1 {
+				t.Fatalf("requests in +03:00 window = %d, want 1: %+v", requests, report)
+			}
+			for _, bad := range []registry.Params{{"name": "alice", "since": "yesterday"}, {"name": "alice", "until": "2026-07-06 10:00"}} {
+				_, err := h(t, path)(c, bad)
+				var userErr api.UserError
+				if !errors.As(err, &userErr) || userErr.Code != "bad_time" {
+					t.Fatalf("%v: err = %v, want bad_time", bad, err)
+				}
+			}
+		})
 	}
 }

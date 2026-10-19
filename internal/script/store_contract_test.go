@@ -137,7 +137,7 @@ func TestCompleteRunSuppressesOnlyTheQuietExitCode(t *testing.T) {
 		t.Fatalf("quiet outbox count=%d err=%v", outboxCount, err)
 	}
 	got, err := st.GetDefinition("alice", definition.ID)
-	if err != nil || got.State != StateActive || got.NextRunAt != finished.Add(30*time.Second).Format(time.RFC3339) {
+	if err != nil || got.State != StateActive || got.NextRunAt != basestore.FormatTime(finished.Add(30*time.Second)) {
 		t.Fatalf("recurring definition=%#v err=%v", got, err)
 	}
 }
@@ -327,7 +327,7 @@ func TestQuietRecurringRunKeepsItsSchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := st.GetDefinition("alice", definition.ID)
-	if err != nil || got.State != StateActive || got.NextRunAt != finished.Add(30*time.Second).Format(time.RFC3339) {
+	if err != nil || got.State != StateActive || got.NextRunAt != basestore.FormatTime(finished.Add(30*time.Second)) {
 		t.Fatalf("quiet run stopped its schedule: %#v err=%v", got, err)
 	}
 

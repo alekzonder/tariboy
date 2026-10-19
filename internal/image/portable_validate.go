@@ -16,11 +16,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 var portablePluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -189,7 +189,7 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 	if strict.ID != "" && strict.ID != RefID(ref.Name, strict.ImageVersion) {
 		return errors.New("invalid schema-v2 manifest id")
 	}
-	if _, err := time.Parse(time.RFC3339, strict.BuiltAt); err != nil {
+	if _, err := store.ParseInputTime(strict.BuiltAt); err != nil {
 		return errors.New("invalid schema-v2 manifest built_at")
 	}
 	seenPlugins := make(map[string]bool, len(strict.Plugins))

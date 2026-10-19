@@ -9,6 +9,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/toolcheck"
 )
 
@@ -306,7 +307,7 @@ func daemonStatus() registry.Command {
 				"message":        tools.Message,
 				"version":        c.Version,
 				"pid":            os.Getpid(),
-				"started_at":     c.StartedAt.UTC().Format(time.RFC3339),
+				"started_at":     store.FormatTime(c.StartedAt),
 				"uptime_seconds": int64(time.Since(c.StartedAt).Seconds()),
 				"base_dir":       c.BaseDir,
 				"http_addr":      c.HTTPAddr,

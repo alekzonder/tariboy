@@ -445,7 +445,7 @@ func Run(ctx context.Context, o Options) error {
 		Budget:        budgetCache,
 		Emit: func(agent string, data map[string]any) {
 			hub.Emit(events.Event{Agent: agent, Type: "proxy",
-				Time: time.Now().UTC().Format(time.RFC3339), Data: data})
+				Time: store.FormatTime(time.Now()), Data: data})
 			// Record per-request token/cost/latency metrics. The emit closure is
 			// called in-process with native Go types (emitProxyEvent), so int/
 			// float64/string assertions hold; a mismatch yields a zero reading,
@@ -565,7 +565,7 @@ func Run(ctx context.Context, o Options) error {
 			if err != nil {
 				return err
 			}
-			fireAt := time.Now().UTC().Add(dur).Format(time.RFC3339)
+			fireAt := store.FormatTime(time.Now().Add(dur))
 			tmpl, err := json.Marshal(map[string]any{
 				"type": "timeout",
 				"text": "request timed out with no reply",
@@ -621,7 +621,7 @@ func Run(ctx context.Context, o Options) error {
 		RecordCursorUsage: func(agentName, iteration, imageName, imageTag, imageDigest string, usage loop.CursorResultUsage) {
 			groupID, groupName, _ := aiStore.CurrentGroup(agentName)
 			row := aiproxy.AIRequest{
-				ID: aiproxy.NewRequestID(nil), TS: time.Now().UTC().Format(time.RFC3339Nano),
+				ID: aiproxy.NewRequestID(nil), TS: store.FormatTime(time.Now()),
 				Agent: agentName, Iteration: iteration,
 				ImageName: imageName, ImageTag: imageTag, ImageDigest: imageDigest,
 				Provider: "cursor", Model: usage.Model,
@@ -634,7 +634,7 @@ func Run(ctx context.Context, o Options) error {
 				log.Warn("append proxy transcript", "agent", agentName, "iteration", iteration, "err", err)
 			}
 			hub.Emit(events.Event{Agent: agentName, Type: "proxy",
-				Time: time.Now().UTC().Format(time.RFC3339), Data: map[string]any{
+				Time: store.FormatTime(time.Now()), Data: map[string]any{
 					"request_id": row.ID, "iteration_id": row.Iteration,
 					"model": row.Model, "provider": row.Provider,
 					"input_tokens": row.InputTokens, "output_tokens": row.OutputTokens,
@@ -966,7 +966,7 @@ func levelForPricing(kind string) slog.Level {
 func safePricingFields(d pricingcatalog.Diagnostic) map[string]any {
 	fields := map[string]any{
 		"source":          boundedPricingSource(d.Source),
-		"generation_time": d.At.UTC().Format(time.RFC3339Nano),
+		"generation_time": store.FormatTime(d.At),
 	}
 	if d.AcceptedModels > 0 {
 		fields["model_count"] = d.AcceptedModels
@@ -1196,7 +1196,7 @@ func recordEvent(log *slog.Logger, st *store.Store, reg *audit.Registry, hub *ev
 	}
 	// Agent-scoped audit events also stream to any SSE subscribers.
 	if hub != nil && agent != "" {
-		hub.Emit(events.Event{Agent: agent, Type: "audit", Time: time.Now().UTC().Format(time.RFC3339),
+		hub.Emit(events.Event{Agent: agent, Type: "audit", Time: store.FormatTime(time.Now()),
 			Data: map[string]any{"kind": kind, "data": data}})
 	}
 }

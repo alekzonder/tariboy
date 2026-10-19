@@ -16,7 +16,7 @@ import (
 // SourceJobs is the part of the task service that runs workflow sources.
 type SourceJobs interface {
 	QueueSourceJobs(ctx context.Context, now time.Time) ([]tasks.SourceJob, error)
-	StartSourceRun(ctx context.Context, job tasks.SourceJob, startedAt string) (int64, error)
+	StartSourceRun(ctx context.Context, job tasks.SourceJob, startedAt time.Time) (int64, error)
 	SetSourceRunPID(ctx context.Context, id int64, pid int, logPath string) error
 	CompleteSourceRun(ctx context.Context, id int64, done tasks.SourceCompletion) error
 	RunningSourceRuns(ctx context.Context) ([]tasks.SourceRun, error)
@@ -95,7 +95,7 @@ func (w *worker) passSources(ctx context.Context) {
 // startSource records a running run of job and executes it in the background.
 func (w *worker) startSource(ctx context.Context, job tasks.SourceJob) {
 	key := job.Key()
-	id, err := w.s.Sources.StartSourceRun(ctx, job, w.clock().UTC().Format(time.RFC3339Nano))
+	id, err := w.s.Sources.StartSourceRun(ctx, job, w.clock())
 	if err != nil {
 		if ctx.Err() == nil {
 			w.log.Error("start workflow source run", "source", key, "err", err)
@@ -116,7 +116,7 @@ func (w *worker) startSource(ctx context.Context, job tasks.SourceJob) {
 			reason = tasks.RedactSecrets(reason, secretValues(job.QueueSecrets))
 			w.log.Warn("workflow source run failed before it started", "run_id", id, "source", key, "reason", reason)
 			w.finishSource(ctx, id, key, tasks.SourceCompletion{
-				Verdict: VerdictFailure, Message: reason, FinishedAt: w.clock().UTC().Format(time.RFC3339Nano),
+				Verdict: VerdictFailure, Message: reason, FinishedAt: w.clock(),
 			}, "", false)
 			return
 		}
@@ -143,7 +143,7 @@ func (w *worker) startSource(ctx context.Context, job tasks.SourceJob) {
 			"items", len(res.Verdict.Items), "exit_code", exitAttr(res.ExitCode), "log", res.LogPath)
 		done := redactSourceCompletion(tasks.SourceCompletion{
 			Verdict: res.Verdict.Kind, Message: res.Verdict.Message, Items: res.Verdict.Items,
-			ExitCode: res.ExitCode, LogPath: res.LogPath, FinishedAt: w.clock().UTC().Format(time.RFC3339Nano),
+			ExitCode: res.ExitCode, LogPath: res.LogPath, FinishedAt: w.clock(),
 		}, job.QueueSecrets)
 		w.finishSource(ctx, id, key, done, spec.RunDir, active.cancelRequested.Load())
 	}()

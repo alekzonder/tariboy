@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 type MessagePublisher interface {
@@ -50,7 +51,7 @@ func (p *Publisher) Flush(ctx context.Context) error {
 		FROM task_notification_outbox
 		WHERE published_at = '' AND next_attempt_at <= ?
 		ORDER BY event_sequence, notification_id
-		LIMIT 100`, now.Format(time.RFC3339Nano))
+		LIMIT 100`, store.FormatTime(now))
 	if err != nil {
 		return err
 	}
@@ -84,7 +85,7 @@ func (p *Publisher) Flush(ctx context.Context) error {
 		if publishErr != nil {
 			attempts := row.attempt + 1
 			delay := time.Second * time.Duration(1<<min(attempts, 8))
-			next := now.Add(delay).Format(time.RFC3339Nano)
+			next := store.FormatTime(now.Add(delay))
 			if _, err := p.db.ExecContext(ctx, `
 				UPDATE task_notification_outbox
 				SET attempts = ?, next_attempt_at = ?, last_error = ?
@@ -101,7 +102,7 @@ func (p *Publisher) Flush(ctx context.Context) error {
 			SET attempts = attempts + 1, published_message = ?, published_at = ?,
 			    last_error = ''
 			WHERE notification_id = ? AND published_at = ''`,
-			message.ID, now.Format(time.RFC3339Nano), row.id); err != nil {
+			message.ID, store.FormatTime(now), row.id); err != nil {
 			return err
 		}
 	}

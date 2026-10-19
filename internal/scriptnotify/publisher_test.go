@@ -90,7 +90,7 @@ func TestPublisherLeavesFailedRowPendingUntilBackoff(t *testing.T) {
 	if err := db.DB.QueryRow(`SELECT attempts,published_at,next_attempt_at,last_error FROM script_result_outbox WHERE run_id=?`, runID).Scan(&attempts, &publishedAt, &nextAttempt, &lastError); err != nil {
 		t.Fatal(err)
 	}
-	if attempts != 1 || publishedAt != "" || nextAttempt <= now.Format(time.RFC3339) || lastError == "" {
+	if attempts != 1 || publishedAt != "" || nextAttempt <= store.FormatTime(now) || lastError == "" {
 		t.Fatalf("attempts=%d published=%q next=%q error=%q", attempts, publishedAt, nextAttempt, lastError)
 	}
 	fake.fail = false

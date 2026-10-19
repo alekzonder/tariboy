@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/store"
 )
 
 func TestTaskActivitySummarizesEventsInWindow(t *testing.T) {
@@ -42,7 +44,7 @@ func TestTaskActivitySummarizesEventsInWindow(t *testing.T) {
 	}
 
 	window := ActivityFilter{
-		Since: since.Format(time.RFC3339Nano), Until: since.Add(time.Hour).Format(time.RFC3339Nano),
+		Since: store.FormatTime(since), Until: store.FormatTime(since.Add(time.Hour)),
 		Agent: holder, Keys: []string{quiet.Key, hidden.Key},
 	}
 	got, err := svc.TaskActivity(ctx, customer, window)
@@ -59,7 +61,7 @@ func TestTaskActivitySummarizesEventsInWindow(t *testing.T) {
 	row := byKey[worked.Key]
 	if row.Comments != 1 || !reflect.DeepEqual(row.Outcomes, []string{"ready"}) ||
 		!reflect.DeepEqual(row.EnteredStatuses, []string{"review"}) || !reflect.DeepEqual(row.Agents, []string{holder}) ||
-		row.FirstAt != "2026-07-31T10:01:00.000Z" || row.LastAt != "2026-07-31T10:01:00.000Z" || row.Completed {
+		row.FirstAt != "2026-07-31T10:01:00.000000000Z" || row.LastAt != "2026-07-31T10:01:00.000000000Z" || row.Completed {
 		t.Fatalf("worked row = %#v", row)
 	}
 	// A key reported by AI usage appears even without events by the agent.
@@ -109,5 +111,48 @@ func TestTaskActivityMarksTasksCompletedInWindow(t *testing.T) {
 	})
 	if err != nil || len(got) != 1 || !got[0].Completed {
 		t.Fatalf("completed activity = %#v, %v", got, err)
+	}
+}
+
+// Two events 10ns and 11ns after one second have stored text of the same
+// width, so the window bounds split them exactly.
+func TestTaskActivityWindowSplitsEventsWithinOneSecond(t *testing.T) {
+	svc, customer, _ := engineFixture(t)
+	ctx := context.Background()
+	second := time.Date(2026, 7, 31, 10, 0, 0, 0, time.UTC)
+	now := second.Add(-time.Hour)
+	svc.clock = func() time.Time { return now }
+	early := mustCreateDev(t, svc, customer, "early")
+	late := mustCreateDev(t, svc, customer, "late")
+	now = second.Add(10 * time.Nanosecond)
+	if _, err := svc.AddComment(ctx, customer, early.Key, AddCommentInput{Body: "at 10ns"}); err != nil {
+		t.Fatal(err)
+	}
+	now = second.Add(11 * time.Nanosecond)
+	if _, err := svc.AddComment(ctx, customer, late.Key, AddCommentInput{Body: "at 11ns"}); err != nil {
+		t.Fatal(err)
+	}
+	boundary := store.FormatTime(second.Add(11 * time.Nanosecond))
+	keys := func(f ActivityFilter) []string {
+		t.Helper()
+		got, err := svc.TaskActivity(ctx, customer, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := []string{}
+		for _, row := range got {
+			out = append(out, row.Task.Key)
+		}
+		return out
+	}
+	if got := keys(ActivityFilter{Since: boundary}); !reflect.DeepEqual(got, []string{late.Key}) {
+		t.Fatalf("since %s = %v; want only %s", boundary, got, late.Key)
+	}
+	if got := keys(ActivityFilter{Since: store.FormatTime(second), Until: boundary}); !reflect.DeepEqual(got, []string{early.Key}) {
+		t.Fatalf("until %s = %v; want only %s", boundary, got, early.Key)
+	}
+	got, err := svc.TaskActivity(ctx, customer, ActivityFilter{Since: boundary})
+	if err != nil || len(got) != 1 || got[0].FirstAt != boundary || got[0].LastAt != boundary {
+		t.Fatalf("late activity = %#v, %v; want FirstAt and LastAt %s", got, err, boundary)
 	}
 }

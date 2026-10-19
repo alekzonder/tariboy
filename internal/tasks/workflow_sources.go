@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -54,12 +55,14 @@ func (j SourceJob) Key() string { return j.Queue + "/" + j.Source }
 // SourceCompletion is the result of a finished source run as the worker
 // reports it. Verdict is items, quiet, or failure.
 type SourceCompletion struct {
-	Verdict    string
-	Message    string
-	Items      []SourceItem
-	ExitCode   *int
-	LogPath    string
-	FinishedAt string
+	Verdict  string
+	Message  string
+	Items    []SourceItem
+	ExitCode *int
+	LogPath  string
+	// FinishedAt is when the run finished; CompleteSourceRun refuses the zero
+	// time.
+	FinishedAt time.Time
 }
 
 // SourceRun is the durable record of one source run.
@@ -220,7 +223,7 @@ func nextSourceRun(src workflowfile.Source, last SourceRun, found bool, now time
 	if last.State == "running" {
 		return time.Time{}
 	}
-	finished, err := time.Parse(time.RFC3339Nano, last.FinishedAt)
+	finished, err := store.ParseTime(last.FinishedAt)
 	if err != nil {
 		return now
 	}
@@ -267,10 +270,10 @@ func (s *Service) QueueSourceJobs(ctx context.Context, now time.Time) ([]SourceJ
 
 // StartSourceRun records a running run of job and returns its id. A source
 // that already has a running run is refused by the database.
-func (s *Service) StartSourceRun(ctx context.Context, job SourceJob, startedAt string) (int64, error) {
+func (s *Service) StartSourceRun(ctx context.Context, job SourceJob, startedAt time.Time) (int64, error) {
 	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO task_queue_source_runs(queue_prefix, source, script, workflow_digest, state, started_at)
-		VALUES (?, ?, ?, ?, 'running', ?)`, job.Queue, job.Source, job.Script, job.WorkflowDigest, startedAt)
+		VALUES (?, ?, ?, ?, 'running', ?)`, job.Queue, job.Source, job.Script, job.WorkflowDigest, store.FormatTime(startedAt))
 	if err != nil {
 		return 0, err
 	}
@@ -313,6 +316,9 @@ func (s *Service) CompleteSourceRun(ctx context.Context, id int64, done SourceCo
 	default:
 		return fmt.Errorf("source run %d: unknown verdict %q", id, done.Verdict)
 	}
+	if done.FinishedAt.IsZero() {
+		return invalidCompletion("source run", id)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -329,11 +335,7 @@ func (s *Service) CompleteSourceRun(ctx context.Context, id int64, done SourceCo
 	if run.State != "running" {
 		return nil
 	}
-	finished := s.clock()
-	if parsed, err := time.Parse(time.RFC3339Nano, done.FinishedAt); err == nil {
-		finished = parsed
-	}
-	finishedAt := finished.UTC().Format(time.RFC3339Nano)
+	finishedAt := store.FormatTime(done.FinishedAt)
 	var exit any
 	if done.ExitCode != nil {
 		exit = *done.ExitCode
@@ -493,7 +495,7 @@ func (s *Service) ListQueueSources(ctx context.Context, actor Actor, queue strin
 		}
 		item.Runs = append([]SourceRun{}, recent...)
 		if next := nextSourceRun(b.source, last, len(recent) > 0, now); !next.IsZero() {
-			item.NextRunAt = next.UTC().Format(time.RFC3339Nano)
+			item.NextRunAt = store.FormatTime(next)
 		}
 		for _, run := range recent {
 			if run.State == "running" {

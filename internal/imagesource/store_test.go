@@ -71,7 +71,7 @@ func TestStoreCreateListGetDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	if alpha.SchemaVersion != 2 || alpha.Name != "alpha" ||
-		alpha.CreatedAt != "2026-07-29T12:00:00Z" ||
+		alpha.CreatedAt != "2026-07-29T12:00:00.000000000Z" ||
 		alpha.UpdatedAt != alpha.CreatedAt || alpha.LastBuild != nil {
 		t.Fatalf("alpha metadata = %+v", alpha)
 	}

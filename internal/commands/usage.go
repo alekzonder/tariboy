@@ -14,6 +14,18 @@ import (
 
 func parseFloat(s string) (float64, error) { return strconv.ParseFloat(s, 64) }
 
+// usageWindow validates the optional since and until bounds of a usage query
+// and returns them in the stored time format.
+func usageWindow(p registry.Params) (since, until string, err error) {
+	if since, err = activityBound(str(p, "since")); err != nil {
+		return "", "", err
+	}
+	if until, err = activityBound(str(p, "until")); err != nil {
+		return "", "", err
+	}
+	return since, until, nil
+}
+
 func usageCommand() registry.Command {
 	return registry.Command{
 		Path:    "usage",
@@ -21,15 +33,19 @@ func usageCommand() registry.Command {
 		Args: []registry.Arg{
 			{Name: "agent", Flag: "agent", Short: "a", Type: registry.String, Help: "filter by agent"},
 			{Name: "image", Flag: "image", Short: "i", Type: registry.String, Help: "filter by image name"},
-			{Name: "since", Flag: "since", Short: "s", Type: registry.String, Help: "RFC3339 lower bound"},
-			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC3339 upper bound"},
+			{Name: "since", Flag: "since", Short: "s", Type: registry.String, Help: "RFC 3339 time (lower bound)"},
+			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC 3339 time (upper bound)"},
 			{Name: "group", Flag: "group", Short: "g", Type: registry.String, Help: "filter by request-time group snapshot; use __ungrouped__ for no group"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/usage"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			since, until, err := usageWindow(p)
+			if err != nil {
+				return nil, err
+			}
 			usage := aiproxy.NewStore(c.Store, nil)
 			f := aiproxy.UsageFilter{
-				Agent: str(p, "agent"), Image: str(p, "image"), Since: str(p, "since"), Until: str(p, "until"),
+				Agent: str(p, "agent"), Image: str(p, "image"), Since: since, Until: until,
 				Group: str(p, "group"),
 			}
 			rows, series, requests, err := usage.Report(f, "1d", 200)
@@ -79,15 +95,15 @@ func usageCommand() registry.Command {
 
 // agentUsage is the per-agent Usage tab's backend (epic dev-t-3e1 §3): grouped
 // rows + a time-bucketed series over one agent's ai_requests, scoped by an
-// optional RFC3339 window.
+// optional RFC 3339 window.
 func agentUsage() registry.Command {
 	return registry.Command{
 		Path:    "agent.usage",
 		Summary: "Per-agent AI usage: grouped rows + time-bucketed series",
 		Args: []registry.Arg{
 			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
-			{Name: "since", Flag: "since", Short: "s", Type: registry.String, Help: "RFC3339 lower bound (inclusive)"},
-			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC3339 upper bound (exclusive)"},
+			{Name: "since", Flag: "since", Short: "s", Type: registry.String, Help: "RFC 3339 time (inclusive lower bound)"},
+			{Name: "until", Flag: "until", Short: "u", Type: registry.String, Help: "RFC 3339 time (exclusive upper bound)"},
 			{Name: "group_by", Flag: "group-by", Short: "g", Type: registry.String, Help: "iteration|task|epic|model (default iteration)"},
 			{Name: "bucket", Flag: "bucket", Short: "b", Type: registry.String, Help: "series bucket 5m|15m|1h|1d (default 1h)"},
 		},
@@ -106,8 +122,12 @@ func agentUsage() registry.Command {
 				bucket = "1h"
 			}
 
+			since, until, err := usageWindow(p)
+			if err != nil {
+				return nil, err
+			}
 			st := aiproxy.NewStore(c.Store, nil)
-			f := aiproxy.UsageFilter{Agent: a.Name, Since: str(p, "since"), Until: str(p, "until")}
+			f := aiproxy.UsageFilter{Agent: a.Name, Since: since, Until: until}
 			rows, err := st.AggregateBy(f, groupBy)
 			if err != nil {
 				if errors.Is(err, aiproxy.ErrBadGroupBy) {

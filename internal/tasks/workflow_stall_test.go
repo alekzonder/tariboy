@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -259,7 +260,7 @@ func TestScriptFailuresPauseAtTheLimit(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		setFailures(t, svc, task, 2)
 		_, run := advanceApprove(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(context.Background(), run.ID, "2026-07-31T12:00:01Z", "/runs/1/run.log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(context.Background(), run.ID, svc.clock(), "/runs/1/run.log"); err != nil || !ok {
 			t.Fatalf("claim = %v, %v", ok, err)
 		}
 		if err := svc.RecoverScriptRuns(context.Background()); err != nil {
@@ -528,7 +529,7 @@ func TestAPendingCheckKeepsIterationsFromCountingIdle(t *testing.T) {
 	}
 	// The request is cancelled during the next iteration: still not idle.
 	if _, err := svc.db.Exec(`UPDATE task_transition_requests SET state = 'cancelled', finished_at = ? WHERE id = ?`,
-		at(11).Format(time.RFC3339Nano), request.ID); err != nil {
+		store.FormatTime(at(11)), request.ID); err != nil {
 		t.Fatal(err)
 	}
 	recordEnd(t, svc, iterationBetween("reviewer-1", task.Key, 10, 12))
@@ -538,7 +539,7 @@ func TestAPendingCheckKeepsIterationsFromCountingIdle(t *testing.T) {
 	// An iteration reported after the request finished, which ended while it
 	// was still pending, does not count either.
 	if _, err := svc.db.Exec(`UPDATE task_transition_requests SET state = 'rejected', finished_at = ? WHERE id = ?`,
-		at(30).Format(time.RFC3339Nano), request.ID); err != nil {
+		store.FormatTime(at(30)), request.ID); err != nil {
 		t.Fatal(err)
 	}
 	recordEnd(t, svc, iterationBetween("reviewer-1", task.Key, 20, 25))
@@ -647,7 +648,7 @@ func TestAnIterationThatStartedBeforeAResumeIsNotIdle(t *testing.T) {
 	if _, err := svc.ResumeWorkflow(context.Background(), actor, task.Key, ResumeContinue); err != nil {
 		t.Fatal(err)
 	}
-	if got := resumedAt(t, svc, task); got != at(10).Format(time.RFC3339Nano) {
+	if got := resumedAt(t, svc, task); got != store.FormatTime(at(10)) {
 		t.Fatalf("resumed_at = %q", got)
 	}
 	recordEnd(t, svc, iterationBetween("dev-1", task.Key, 5, 15))
@@ -667,7 +668,7 @@ func TestResumeReleaseRecordsResumedAt(t *testing.T) {
 	if _, err := svc.ResumeWorkflow(context.Background(), actor, task.Key, ResumeRelease); err != nil {
 		t.Fatal(err)
 	}
-	if got := resumedAt(t, svc, task); got != at(10).Format(time.RFC3339Nano) {
+	if got := resumedAt(t, svc, task); got != store.FormatTime(at(10)) {
 		t.Fatalf("resumed_at = %q", got)
 	}
 }
@@ -754,5 +755,34 @@ func TestAWatchOutcomeResetsScriptFailures(t *testing.T) {
 	}
 	if got := visitCounters(t, svc, stored); got[2] != 0 {
 		t.Fatalf("counters = %v", got)
+	}
+}
+
+// An answer arriving 11ns after a second is after an iteration that finished
+// 10ns after it and within one that started 11ns after it, although the
+// RFC 3339 text of the two times has different widths.
+func TestAnAnswerWithinOneSecondFallsOnTheRightSideOfTheIteration(t *testing.T) {
+	svc, _, task := requestFixture(t)
+	ctx := context.Background()
+	svc.clock = func() time.Time { return at(1) }
+	if _, err := svc.AddComment(ctx, AgentActor("dev-1"), task.Key, AddCommentInput{Body: "@" + task.Customer + " which database?"}); err != nil {
+		t.Fatal(err)
+	}
+	answered := at(2).Add(11 * time.Nanosecond)
+	svc.clock = func() time.Time { return answered }
+	if _, err := svc.AddComment(ctx, CustomerActor("customer"), task.Key, AddCommentInput{Body: "Postgres."}); err != nil {
+		t.Fatal(err)
+	}
+	before := iterationEnd("dev-1", task.Key)
+	before.StartedAt, before.FinishedAt = at(1).Add(time.Second), at(2).Add(10*time.Nanosecond)
+	recordEnd(t, svc, before)
+	if got := visitCounters(t, svc, task); got[0] != 1 {
+		t.Fatalf("counters = %v; the answer came after the iteration finished", got)
+	}
+	during := iterationEnd("dev-1", task.Key)
+	during.StartedAt, during.FinishedAt = answered, at(3)
+	recordEnd(t, svc, during)
+	if got := visitCounters(t, svc, task); got[0] != 1 {
+		t.Fatalf("counters = %v; the answer came at the start of the iteration", got)
 	}
 }

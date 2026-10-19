@@ -27,7 +27,7 @@ func TestScheduleOneshotFires(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sch.ID == "" || sch.NextFireAt != fireAt || !sch.Enabled {
+	if sch.ID == "" || sch.NextFireAt != store.FormatTime(now.Add(time.Minute)) || !sch.Enabled {
 		t.Fatalf("added = %+v", sch)
 	}
 	// Not due yet.
@@ -89,7 +89,7 @@ func TestScheduleCronRecurs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sch.NextFireAt != "2026-07-06T10:05:00Z" {
+	if sch.NextFireAt != "2026-07-06T10:05:00.000000000Z" {
 		t.Fatalf("initial next_fire_at = %q", sch.NextFireAt)
 	}
 	// List and Cancel.

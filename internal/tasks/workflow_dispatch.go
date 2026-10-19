@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -106,10 +107,6 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 	return "", rows.Err()
 }
 
-// dispatchedAtLayout is fixed width, so dispatch times order correctly as
-// strings; RFC3339Nano trims trailing zeros and misorders times within a second.
-const dispatchedAtLayout = "2006-01-02T15:04:05.000000000Z"
-
 // recordHolderTx records name as the task's holder for pool, dispatched now,
 // replacing a released holder. It is the only writer of
 // task_workflow_holders.dispatched_at; a dispatch starts the holder's
@@ -119,7 +116,7 @@ func (s *Service) recordHolderTx(ctx context.Context, tx *sql.Tx, task Task, poo
 		INSERT INTO task_workflow_holders(task_id, pool, agent, dispatched_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT(task_id, pool) DO UPDATE SET agent = excluded.agent, dispatched_at = excluded.dispatched_at,
 			released = 0, unavailable_since = ''`,
-		task.ID, pool, name, s.clock().UTC().Format(dispatchedAtLayout))
+		task.ID, pool, name, store.FormatTime(s.clock()))
 	return err
 }
 

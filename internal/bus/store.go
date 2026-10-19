@@ -141,7 +141,7 @@ func (b *Bus) emitAudit(agent, kind, dataJSON string) {
 func ensureChannel(x dbtx, name string, now time.Time) error {
 	_, err := x.Exec(`INSERT INTO channels(name, kind, created_at) VALUES (?,?,?)
 		ON CONFLICT(name) DO NOTHING`,
-		name, ChannelKind(name), now.UTC().Format(time.RFC3339Nano))
+		name, ChannelKind(name), store.FormatTime(now))
 	return err
 }
 
@@ -277,14 +277,9 @@ func (b *Bus) publishTx(tx *sql.Tx, msg Message, now time.Time, guard func(*sql.
 	if selfCorrelation {
 		msg.CorrelationID = id
 	}
-	// Fixed-width fractional seconds (always 9 digits) so the stored ts sorts
-	// lexically the same as chronologically. RFC3339Nano strips trailing zeros,
-	// which makes same-second timestamps of differing digit-widths sort wrong:
-	// e.g. 10ns strips to ".00000001" and 11ns strips to ".000000011"; once each
-	// is followed by the trailing "Z", "...011" < "...01Z" lexically (a digit
-	// sorts below 'Z'), so 11ns would sort BEFORE 10ns even though 10ns is
-	// earlier. Pending/Tail order by this column (spec §6: oldest first).
-	msg.TS = now.Format("2006-01-02T15:04:05.000000000Z07:00")
+	// The canonical stored format sorts lexically in time order, which
+	// Pending/Tail rely on (spec §6: oldest first).
+	msg.TS = store.FormatTime(now)
 
 	// kind defaults to "event" (matches the column default) so fire-and-forget
 	// publishes need not set it; the stored row and the returned msg agree.
@@ -477,7 +472,7 @@ func (b *Bus) Subscribe(agent, channel string, m Matcher, typeFilter []string) (
 		return Subscription{}, err
 	}
 	if _, err := b.db.Exec(`INSERT INTO subscriptions(id, agent, channel, matcher, type_filter, created_at)
-		VALUES (?,?,?,?,?,?)`, id, agent, channel, matcher, tf, now.Format(time.RFC3339Nano)); err != nil {
+		VALUES (?,?,?,?,?,?)`, id, agent, channel, matcher, tf, store.FormatTime(now)); err != nil {
 		return Subscription{}, err
 	}
 	// A plain subscription carries no watch, so it can never change any provider's
@@ -530,7 +525,7 @@ func (b *Bus) Unsubscribe(agent, id string) error {
 // does not. Returns the number of rows revoked.
 func (b *Bus) RevokeChannel(agent, channel string) (int, error) {
 	res, err := b.db.Exec(`UPDATE subscriptions SET revoked_at=? WHERE agent=? AND channel=? AND revoked_at=''`,
-		b.clock().UTC().Format(time.RFC3339Nano), agent, channel)
+		store.FormatTime(b.clock()), agent, channel)
 	if err != nil {
 		return 0, err
 	}
@@ -618,7 +613,7 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 	}
 	defer rows.Close()
 
-	now := b.clock().UTC().Format(time.RFC3339Nano)
+	now := store.FormatTime(b.clock())
 	// returned holds ONLY message ids appended to out; marks holds delivery rows
 	// for those same ids (and only those) to be accounted after the read.
 	returned := map[string]bool{}
@@ -695,7 +690,7 @@ func (b *Bus) Ack(agent string, messageIDs []string) error {
 	if len(messageIDs) == 0 {
 		return nil
 	}
-	now := b.clock().UTC().Format(time.RFC3339Nano)
+	now := store.FormatTime(b.clock())
 	for _, id := range messageIDs {
 		if _, err := b.db.Exec(`UPDATE deliveries SET acked_at=?
 			WHERE message_id=? AND acked_at IS NULL AND subscription_id IN

@@ -15,6 +15,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -111,7 +112,7 @@ func (s *Store) Create(req CreateRequest) (Source, error) {
 		return Source{}, fmt.Errorf("marshal Tariboyfile: %w", err)
 	}
 
-	created := s.now().UTC().Format(time.RFC3339)
+	created := store.FormatTime(s.now())
 	src := Source{
 		SchemaVersion: 2,
 		Name:          req.Name,
@@ -281,7 +282,7 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 	if err != nil {
 		return Source{}, err
 	}
-	now := s.now().UTC().Format(time.RFC3339)
+	now := store.FormatTime(s.now())
 	source := Source{SchemaVersion: parsed.SchemaVersion, Name: name, CreatedAt: now, UpdatedAt: now}
 	if err := s.writeMetadataAt(stage, source); err != nil {
 		return Source{}, err
@@ -451,7 +452,7 @@ func (s *Store) RecordBuild(
 	if record.Ref == "" || record.Digest == "" || record.BuiltAt == "" {
 		return BuildRecord{}, errors.New("image source build returned an incomplete record")
 	}
-	src.UpdatedAt = s.now().UTC().Format(time.RFC3339)
+	src.UpdatedAt = store.FormatTime(s.now())
 	src.LastBuild = &record
 	if err := s.writeMetadataAt(dir, src); err != nil {
 		if rollback != nil {

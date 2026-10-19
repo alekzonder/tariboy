@@ -163,7 +163,7 @@ func (s *Store) GoalDeliveryAllowed(agent string, now time.Time) (bool, error) {
 }
 
 func (s *Store) MarkGoalDelivered(agent string, now time.Time) error {
-	_, err := s.db.Exec(`UPDATE agents SET last_goal_delivery_at=? WHERE name=?`, now.UTC().Format(time.RFC3339Nano), agent)
+	_, err := s.db.Exec(`UPDATE agents SET last_goal_delivery_at=? WHERE name=?`, basestore.FormatTime(now), agent)
 	return err
 }
 
@@ -302,5 +302,5 @@ func validGoal(task tasks.Task, waitAt string, timeoutS int, now time.Time) (boo
 }
 
 func parseTimestamp(raw string) (time.Time, error) {
-	return time.Parse(time.RFC3339Nano, raw)
+	return basestore.ParseTime(raw)
 }

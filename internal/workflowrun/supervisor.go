@@ -51,7 +51,7 @@ const defaultPath = "PATH=/usr/bin:/bin"
 // Jobs is the part of the task service the worker uses.
 type Jobs interface {
 	PendingRunJobs(ctx context.Context) ([]tasks.RunJob, error)
-	ClaimScriptRun(ctx context.Context, id int64, startedAt, logPath string) (bool, error)
+	ClaimScriptRun(ctx context.Context, id int64, startedAt time.Time, logPath string) (bool, error)
 	SetScriptRunPID(ctx context.Context, id int64, pid int) error
 	CompleteScriptRun(ctx context.Context, id int64, done tasks.RunCompletion) error
 	ScheduleDueWatches(ctx context.Context, now time.Time) (int, error)
@@ -277,7 +277,7 @@ func (w *worker) start(ctx context.Context, job tasks.RunJob) {
 	if reason == "" {
 		logPath = filepath.Join(spec.RunDir, "run.log")
 	}
-	claimed, err := w.s.Jobs.ClaimScriptRun(ctx, id, w.clock().UTC().Format(time.RFC3339Nano), logPath)
+	claimed, err := w.s.Jobs.ClaimScriptRun(ctx, id, w.clock(), logPath)
 	if err != nil {
 		if ctx.Err() == nil {
 			w.log.Error("claim workflow script run", "run_id", id, "task", job.Run.TaskKey, "err", err)
@@ -312,7 +312,7 @@ func (w *worker) start(ctx context.Context, job tasks.RunJob) {
 				"script", job.Run.Script, "reason", reason)
 			w.finish(ctx, id, job, tasks.RunCompletion{
 				Verdict: VerdictFailure, Message: reason,
-				FinishedAt: w.clock().UTC().Format(time.RFC3339Nano),
+				FinishedAt: w.clock(),
 			}, "", false)
 			return
 		}
@@ -341,7 +341,7 @@ func (w *worker) start(ctx context.Context, job tasks.RunJob) {
 		done := redactCompletion(tasks.RunCompletion{
 			Verdict: res.Verdict.Kind, Outcome: res.Verdict.Outcome, Message: res.Verdict.Message,
 			Artifacts: res.Verdict.Artifacts, ExitCode: res.ExitCode, LogPath: res.LogPath,
-			FinishedAt: w.clock().UTC().Format(time.RFC3339Nano),
+			FinishedAt: w.clock(),
 		}, job.QueueSecrets)
 		w.log.Debug("workflow script message", "run_id", id, "message", done.Message)
 		w.finish(ctx, id, job, done, spec.RunDir, active.cancelRequested.Load())

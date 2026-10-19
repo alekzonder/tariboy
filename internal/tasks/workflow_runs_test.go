@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -115,8 +117,13 @@ func storedTask(t *testing.T, svc *Service, key string) Task {
 	return task
 }
 
+// complete records done; a run without a finish time finished at the service
+// clock.
 func complete(t *testing.T, svc *Service, id int64, done RunCompletion) {
 	t.Helper()
+	if done.FinishedAt.IsZero() {
+		done.FinishedAt = svc.clock()
+	}
 	if err := svc.CompleteScriptRun(context.Background(), id, done); err != nil {
 		t.Fatal(err)
 	}
@@ -187,11 +194,11 @@ func TestCompleteScriptRunPassRunsTheNextCheckThenApplies(t *testing.T) {
 	if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := svc.ClaimScriptRun(ctx, first.ID, "2026-07-31T12:00:01Z", "/runs/1/run.log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/runs/1/run.log"); err != nil || !ok {
 		t.Fatalf("claim = %v, %v", ok, err)
 	}
 	complete(t, svc, first.ID, RunCompletion{Verdict: "pass", Message: "ci green", ExitCode: exitCode(0),
-		Artifacts: map[string]string{"summary": "ci ok"}, FinishedAt: "2026-07-31T12:00:02Z"})
+		Artifacts: map[string]string{"summary": "ci ok"}, FinishedAt: time.Date(2026, 7, 31, 12, 0, 2, 0, time.UTC)})
 
 	state, verdict, _ := runState(t, svc, first.ID)
 	if state != "finished" || verdict != "pass" {
@@ -208,7 +215,7 @@ func TestCompleteScriptRunPassRunsTheNextCheckThenApplies(t *testing.T) {
 		t.Fatalf("runs = %#v", runs)
 	}
 	if runs[1].Message != "ci green" || runs[1].ExitCode == nil || *runs[1].ExitCode != 0 ||
-		runs[1].LogPath != "/runs/1/run.log" || runs[1].StartedAt == "" || runs[1].FinishedAt != "2026-07-31T12:00:02Z" {
+		runs[1].LogPath != "/runs/1/run.log" || runs[1].StartedAt == "" || runs[1].FinishedAt != "2026-07-31T12:00:02.000000000Z" {
 		t.Fatalf("finished run = %#v", runs[1])
 	}
 	scriptRun := eventPayload(t, svc, task, "workflow.script_run")
@@ -403,10 +410,10 @@ func TestClaimScriptRun(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
 	ctx := context.Background()
 	_, first := advanceApprove(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, first.ID, "2026-07-31T12:00:01Z", "/log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, first.ID, time.Date(2026, 7, 31, 14, 0, 1, 0, time.FixedZone("CEST", 2*60*60)), "/log"); err != nil || !ok {
 		t.Fatalf("claim = %v, %v", ok, err)
 	}
-	if ok, err := svc.ClaimScriptRun(ctx, first.ID, "2026-07-31T12:00:01Z", "/log"); err != nil || ok {
+	if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/log"); err != nil || ok {
 		t.Fatalf("second claim = %v, %v", ok, err)
 	}
 	if err := svc.SetScriptRunPID(ctx, first.ID, 4242); err != nil {
@@ -417,7 +424,7 @@ func TestClaimScriptRun(t *testing.T) {
 		t.Fatalf("pid = %d, %v", pid, err)
 	}
 	got, err := svc.GetScriptRun(ctx, actor, task.Key, first.ID)
-	if err != nil || got.State != "running" || got.StartedAt != "2026-07-31T12:00:01Z" || got.LogPath != "/log" {
+	if err != nil || got.State != "running" || got.StartedAt != "2026-07-31T12:00:01.000000000Z" || got.LogPath != "/log" {
 		t.Fatalf("run = %#v, %v", got, err)
 	}
 
@@ -425,7 +432,7 @@ func TestClaimScriptRun(t *testing.T) {
 	if _, err := svc.db.Exec(`UPDATE task_script_runs SET state = 'pending', cancel_requested = 1 WHERE id = ?`, first.ID); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := svc.ClaimScriptRun(ctx, first.ID, "now", "/log"); err != nil || ok {
+	if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/log"); err != nil || ok {
 		t.Fatalf("claim of a cancelled run = %v, %v", ok, err)
 	}
 }
@@ -453,7 +460,7 @@ func TestLeavingTheStatusStopsItsRuns(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		ctx := context.Background()
 		request, first := advanceApprove(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(ctx, first.ID, "t", "/log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "develop", "back"); err != nil {
@@ -486,7 +493,7 @@ func TestLeavingTheStatusStopsItsRuns(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		ctx := context.Background()
 		request, first := advanceApprove(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(ctx, first.ID, "t", "/log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		// Leave the status behind the engine's back, without a cancellation.
@@ -533,7 +540,7 @@ func TestEnteringAScriptStatusSchedulesItsWatch(t *testing.T) {
 	ctx := context.Background()
 	now := svc.clock().UTC()
 	_, _, _, next := openVisit(t, svc, task)
-	if next != now.Format(dispatchedAtLayout) {
+	if next != store.FormatTime(now) {
 		t.Fatalf("next_watch_at = %q", next)
 	}
 	if n, err := svc.ScheduleDueWatches(ctx, now.Add(-time.Second)); err != nil || n != 0 {
@@ -551,7 +558,7 @@ func TestEnteringAScriptStatusSchedulesItsWatch(t *testing.T) {
 	}
 	// Even a due visit gets no second run while one is active.
 	if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = ? WHERE task_id = ? AND left_at = ''`,
-		now.Format(dispatchedAtLayout), task.ID); err != nil {
+		store.FormatTime(now), task.ID); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := svc.ScheduleDueWatches(ctx, now.Add(time.Hour)); err != nil || n != 0 {
@@ -593,9 +600,9 @@ func TestWatchQuietReschedulesAfterEvery(t *testing.T) {
 		t.Fatal(err)
 	}
 	finished := time.Date(2026, 7, 31, 12, 3, 0, 0, time.UTC)
-	complete(t, svc, run.ID, RunCompletion{Verdict: "quiet", ExitCode: exitCode(111), FinishedAt: finished.Format(time.RFC3339Nano)})
+	complete(t, svc, run.ID, RunCompletion{Verdict: "quiet", ExitCode: exitCode(111), FinishedAt: finished})
 	status, _, failures, next := openVisit(t, svc, task)
-	if status != "merge" || failures != 0 || next != finished.Add(5*time.Minute).Format(dispatchedAtLayout) {
+	if status != "merge" || failures != 0 || next != store.FormatTime(finished.Add(5*time.Minute)) {
 		t.Fatalf("visit = %s failures %d next %q", status, failures, next)
 	}
 	if n, err := svc.ScheduleDueWatches(context.Background(), finished.Add(5*time.Minute-time.Nanosecond)); err != nil || n != 0 {
@@ -613,9 +620,9 @@ func TestWatchFailureCountsAndReschedules(t *testing.T) {
 			run := scheduleWatch(t, svc, actor, task)
 			finished := time.Date(2026, 7, 31, 12, 3, 0, 0, time.UTC)
 			complete(t, svc, run.ID, RunCompletion{Verdict: verdict, Message: "boom", ExitCode: exitCode(1),
-				LogPath: "/log", FinishedAt: finished.Format(time.RFC3339Nano)})
+				LogPath: "/log", FinishedAt: finished})
 			status, _, failures, next := openVisit(t, svc, task)
-			if status != "merge" || failures != 1 || next != finished.Add(5*time.Minute).Format(dispatchedAtLayout) {
+			if status != "merge" || failures != 1 || next != store.FormatTime(finished.Add(5*time.Minute)) {
 				t.Fatalf("visit = %s failures %d next %q", status, failures, next)
 			}
 			failed := eventPayload(t, svc, task, "workflow.script_failed")
@@ -694,7 +701,7 @@ func TestLeavingAScriptStatusStopsTheWatch(t *testing.T) {
 		svc, actor, task := watchFixture(t)
 		ctx := context.Background()
 		run := scheduleWatch(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(ctx, run.ID, "t", "/log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = 'x' WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
@@ -723,7 +730,7 @@ func TestAdvanceWithChecksWaitsForAStoppingRun(t *testing.T) {
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	run := scheduleWatch(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, run.ID, "t", "/log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	// The operator returns the task to review while the watch run still dies.
@@ -749,7 +756,7 @@ func TestRecoverScriptRuns(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		ctx := context.Background()
 		request, first := advanceApprove(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(ctx, first.ID, "t", "/log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		if err := svc.RecoverScriptRuns(ctx); err != nil {
@@ -775,7 +782,7 @@ func TestRecoverScriptRuns(t *testing.T) {
 		svc, actor, task := watchFixture(t)
 		ctx := context.Background()
 		run := scheduleWatch(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(ctx, run.ID, "t", "/log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		if err := svc.RecoverScriptRuns(ctx); err != nil {
@@ -787,7 +794,7 @@ func TestRecoverScriptRuns(t *testing.T) {
 		// The next run follows after every, as after any run: an interrupted
 		// run may have been killed by the restart it caused.
 		every := svc.clock().Add(5 * time.Minute)
-		if _, _, _, next := openVisit(t, svc, task); next != every.UTC().Format(dispatchedAtLayout) {
+		if _, _, _, next := openVisit(t, svc, task); next != store.FormatTime(every.UTC()) {
 			t.Fatalf("next_watch_at = %q", next)
 		}
 		if n, err := svc.ScheduleDueWatches(ctx, every); err != nil || n != 1 {
@@ -812,7 +819,7 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 		healthy := enter(t, svc, mustCreateDev(t, svc, actor, "healthy").Key, "merge", "approved")
 		healthyRun := scheduleWatch(t, svc, actor, healthy)
 		for _, id := range []int64{brokenRun.ID, healthyRun.ID} {
-			if ok, err := svc.ClaimScriptRun(ctx, id, "t", "/log"); err != nil || !ok {
+			if ok, err := svc.ClaimScriptRun(ctx, id, svc.clock(), "/log"); err != nil || !ok {
 				t.Fatal(ok, err)
 			}
 		}
@@ -838,7 +845,7 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 		if state, _, _ := runState(t, svc, healthyRun.ID); state != "interrupted" {
 			t.Fatalf("healthy run = %s", state)
 		}
-		if _, _, _, next := openVisit(t, svc, healthy); next != svc.clock().Add(5*time.Minute).UTC().Format(dispatchedAtLayout) {
+		if _, _, _, next := openVisit(t, svc, healthy); next != store.FormatTime(svc.clock().Add(5*time.Minute).UTC()) {
 			t.Fatalf("healthy next_watch_at = %q", next)
 		}
 	})
@@ -846,7 +853,7 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 		svc, actor, task := watchFixture(t)
 		ctx := context.Background()
 		run := scheduleWatch(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(ctx, run.ID, "t", "/log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		if _, err := svc.db.Exec(`UPDATE tasks SET workflow_digest = 'missing' WHERE id = ?`, task.ID); err != nil {
@@ -858,14 +865,14 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 		if state, _, _ := runState(t, svc, run.ID); state != "interrupted" {
 			t.Fatalf("run = %s", state)
 		}
-		if _, _, _, next := openVisit(t, svc, task); next != svc.clock().Add(workflowfile.MinWatchEvery).UTC().Format(dispatchedAtLayout) {
+		if _, _, _, next := openVisit(t, svc, task); next != store.FormatTime(svc.clock().Add(workflowfile.MinWatchEvery).UTC()) {
 			t.Fatalf("next_watch_at = %q", next)
 		}
 	})
 	t.Run("a cancelled context still fails recovery", func(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		_, run := advanceApprove(t, svc, actor, task)
-		if ok, err := svc.ClaimScriptRun(context.Background(), run.ID, "t", "/log"); err != nil || !ok {
+		if ok, err := svc.ClaimScriptRun(context.Background(), run.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		ctx, cancel := context.WithCancel(context.Background())
@@ -880,7 +887,7 @@ func TestForceInterruptReschedulesAWatchOfAnOpenVisit(t *testing.T) {
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	run := scheduleWatch(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, run.ID, "t", "/log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	runs, err := queryScriptRuns(ctx, svc.db, runningRunsWhere)
@@ -893,7 +900,7 @@ func TestForceInterruptReschedulesAWatchOfAnOpenVisit(t *testing.T) {
 	if state, _, _ := runState(t, svc, run.ID); state != "interrupted" {
 		t.Fatalf("run = %s", state)
 	}
-	if _, _, _, next := openVisit(t, svc, task); next != svc.clock().Add(workflowfile.MinWatchEvery).UTC().Format(dispatchedAtLayout) {
+	if _, _, _, next := openVisit(t, svc, task); next != store.FormatTime(svc.clock().Add(workflowfile.MinWatchEvery).UTC()) {
 		t.Fatalf("next_watch_at = %q; the watch must run again", next)
 	}
 }
@@ -902,7 +909,7 @@ func TestForceInterruptLeavesAClosedVisitUnscheduled(t *testing.T) {
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	run := scheduleWatch(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, run.ID, "t", "/log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	runs, err := queryScriptRuns(ctx, svc.db, runningRunsWhere)
@@ -927,7 +934,7 @@ func TestInterruptedCheckWithoutAManifestStillFailsItsRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	request, run := advanceApprove(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, run.ID, "t", "/log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_digest = 'missing' WHERE id = ?`, task.ID); err != nil {
@@ -957,7 +964,7 @@ func TestRunningScriptRunsCarryTheirPID(t *testing.T) {
 	if runs, err := svc.RunningScriptRuns(ctx); err != nil || len(runs) != 0 {
 		t.Fatalf("running before the claim = %#v, %v", runs, err)
 	}
-	if ok, err := svc.ClaimScriptRun(ctx, first.ID, "t", "/log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	runs, err := svc.RunningScriptRuns(ctx)
@@ -1164,7 +1171,7 @@ func TestQuietWatchRunsLeaveNoEventAndOnlyTheNewestAreKept(t *testing.T) {
 			t.Fatalf("scheduled = %d, %v", n, err)
 		}
 		run := listRuns(t, svc, actor, task)[0]
-		complete(t, svc, run.ID, RunCompletion{Verdict: verdict, ExitCode: exitCode(111), FinishedAt: at.Format(time.RFC3339Nano)})
+		complete(t, svc, run.ID, RunCompletion{Verdict: verdict, ExitCode: exitCode(111), FinishedAt: at})
 		at = at.Add(5 * time.Minute)
 		return run
 	}
@@ -1196,7 +1203,7 @@ func TestACancelledQuietWatchRunIsNotTreatedAsQuiet(t *testing.T) {
 	svc, actor, task := watchFixture(t)
 	ctx := context.Background()
 	cancelled := scheduleWatch(t, svc, actor, task)
-	if ok, err := svc.ClaimScriptRun(ctx, cancelled.ID, "t", "/log"); err != nil || !ok {
+	if ok, err := svc.ClaimScriptRun(ctx, cancelled.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
 	if _, err := svc.db.Exec(`UPDATE task_script_runs SET cancel_requested = 1 WHERE id = ?`, cancelled.ID); err != nil {
@@ -1212,14 +1219,14 @@ func TestACancelledQuietWatchRunIsNotTreatedAsQuiet(t *testing.T) {
 	at := svc.clock()
 	for range workflowViewRuns + 1 {
 		if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = ? WHERE task_id = ? AND left_at = ''`,
-			watchTime(at), task.ID); err != nil {
+			store.FormatTime(at), task.ID); err != nil {
 			t.Fatal(err)
 		}
 		if n, err := svc.ScheduleDueWatches(ctx, at); err != nil || n != 1 {
 			t.Fatalf("scheduled = %d, %v", n, err)
 		}
 		run := listRuns(t, svc, actor, task)[0]
-		complete(t, svc, run.ID, RunCompletion{Verdict: "quiet", ExitCode: exitCode(111), FinishedAt: at.Format(time.RFC3339Nano)})
+		complete(t, svc, run.ID, RunCompletion{Verdict: "quiet", ExitCode: exitCode(111), FinishedAt: at})
 		at = at.Add(5 * time.Minute)
 	}
 	if _, err := svc.GetScriptRun(ctx, actor, task.Key, cancelled.ID); err != nil {
@@ -1253,21 +1260,33 @@ func TestPendingRunJobsSkipsARunWhoseJobCannotBeBuilt(t *testing.T) {
 	}
 }
 
-func TestCompleteScriptRunNormalizesFinishedAt(t *testing.T) {
-	for given, want := range map[string]string{
-		"2026-07-31T14:00:02+02:00": "2026-07-31T12:00:02Z",
-		"not a time":                "2026-07-31T12:00:00Z",
-		"":                          "2026-07-31T12:00:00Z",
-	} {
-		t.Run(given, func(t *testing.T) {
-			svc, actor, task, _ := runFixture(t)
-			_, first := advanceApprove(t, svc, actor, task)
-			complete(t, svc, first.ID, RunCompletion{Verdict: "reject", FinishedAt: given})
-			got, err := svc.GetScriptRun(context.Background(), actor, task.Key, first.ID)
-			if err != nil || got.FinishedAt != want {
-				t.Fatalf("finished_at = %q, %v; want %q", got.FinishedAt, err, want)
-			}
-		})
+func TestCompleteScriptRunStoresFinishedAtInUTC(t *testing.T) {
+	svc, actor, task, _ := runFixture(t)
+	_, first := advanceApprove(t, svc, actor, task)
+	finished := time.Date(2026, 7, 31, 14, 0, 2, 10, time.FixedZone("CEST", 2*60*60))
+	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", FinishedAt: finished})
+	got, err := svc.GetScriptRun(context.Background(), actor, task.Key, first.ID)
+	if want := "2026-07-31T12:00:02.000000010Z"; err != nil || got.FinishedAt != want {
+		t.Fatalf("finished_at = %q, %v; want %q", got.FinishedAt, err, want)
+	}
+}
+
+func TestCompleteScriptRunRefusesAMissingFinishTime(t *testing.T) {
+	svc, actor, task, _ := runFixture(t)
+	request, first := advanceApprove(t, svc, actor, task)
+	events := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID)
+	err := svc.CompleteScriptRun(context.Background(), first.ID, RunCompletion{Verdict: "reject", Message: "CI is red"})
+	if ErrorCode(err) != "invalid_completion" || ErrorStatus(err) != http.StatusBadRequest {
+		t.Fatalf("complete without a finish time: %v", err)
+	}
+	if state, verdict, _ := runState(t, svc, first.ID); state != "pending" || verdict != "" {
+		t.Fatalf("run = %s %s; want it unchanged", state, verdict)
+	}
+	if state := requestState(t, svc, request.ID); state != "pending" {
+		t.Fatalf("request = %s; want it unchanged", state)
+	}
+	if got := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID); got != events {
+		t.Fatalf("events = %d; want %d", got, events)
 	}
 }
 

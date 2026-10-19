@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -87,13 +88,21 @@ type RunJob struct {
 type RunCompletion struct {
 	// Verdict is one of pass, reject, outcome, quiet, or failure, the verdict
 	// names of internal/workflowrun. CompleteScriptRun refuses any other value.
-	Verdict    string
-	Outcome    string
-	Message    string
-	Artifacts  map[string]string
-	ExitCode   *int
-	LogPath    string
-	FinishedAt string
+	Verdict   string
+	Outcome   string
+	Message   string
+	Artifacts map[string]string
+	ExitCode  *int
+	LogPath   string
+	// FinishedAt is when the run finished; CompleteScriptRun refuses the zero
+	// time.
+	FinishedAt time.Time
+}
+
+// invalidCompletion refuses a run result without a finish time.
+func invalidCompletion(kind string, id int64) error {
+	return domainError(http.StatusBadRequest, "invalid_completion",
+		fmt.Sprintf("%s %d: the completion has no finish time", kind, id))
 }
 
 // scriptRunRecord is a run with the references the engine follows.
@@ -216,12 +225,6 @@ func stopVisitScriptsTx(ctx context.Context, tx *sql.Tx, task Task, why, now str
 		UPDATE task_script_runs SET cancel_requested = 1
 		WHERE task_id = ? AND state = 'running' AND `+openVisit, taskID, taskID)
 	return err
-}
-
-// watchTime formats a watch schedule time; the layout is fixed width, so
-// next_watch_at compares correctly as a string.
-func watchTime(t time.Time) string {
-	return t.UTC().Format(dispatchedAtLayout)
 }
 
 // scriptTimeout parses a declared timeout, falling back to fallback when it
@@ -347,10 +350,10 @@ func (s *Service) runJob(ctx context.Context, run scriptRunRecord) (RunJob, erro
 
 // ClaimScriptRun moves a pending run to running. It returns false when the run
 // is no longer pending or its cancellation was requested.
-func (s *Service) ClaimScriptRun(ctx context.Context, id int64, startedAt, logPath string) (bool, error) {
+func (s *Service) ClaimScriptRun(ctx context.Context, id int64, startedAt time.Time, logPath string) (bool, error) {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE task_script_runs SET state = 'running', started_at = ?, log_path = ?
-		WHERE id = ? AND state = 'pending' AND cancel_requested = 0`, startedAt, logPath, id)
+		WHERE id = ? AND state = 'pending' AND cancel_requested = 0`, store.FormatTime(startedAt), logPath, id)
 	if err != nil {
 		return false, err
 	}
@@ -430,6 +433,9 @@ func (s *Service) CompleteScriptRun(ctx context.Context, id int64, done RunCompl
 	default:
 		return fmt.Errorf("script run %d: unknown verdict %q", id, done.Verdict)
 	}
+	if done.FinishedAt.IsZero() {
+		return invalidCompletion("script run", id)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -446,13 +452,8 @@ func (s *Service) CompleteScriptRun(ctx context.Context, id int64, done RunCompl
 		return nil
 	}
 	now := s.now()
-	// The stored time is always in the service's format; a time the worker
-	// reports that does not parse is replaced by the service clock.
-	finished := s.clock()
-	if parsed, err := time.Parse(time.RFC3339Nano, done.FinishedAt); err == nil {
-		finished = parsed
-	}
-	finishedAt := finished.UTC().Format(time.RFC3339Nano)
+	finished := done.FinishedAt.UTC()
+	finishedAt := store.FormatTime(finished)
 	logPath := done.LogPath
 	if logPath == "" {
 		logPath = run.LogPath
@@ -737,7 +738,7 @@ func (s *Service) finishWatchTx(ctx context.Context, tx *sql.Tx, task *Task, run
 		return err
 	}
 	status, _ := currentStatus(manifest, task.WorkflowStatus)
-	next := watchTime(finished.Add(watchEvery(status)))
+	next := store.FormatTime(finished.Add(watchEvery(status)))
 	switch done.Verdict {
 	case verdictQuiet:
 		_, err := tx.ExecContext(ctx, `
@@ -881,7 +882,7 @@ func (s *Service) forceInterruptRun(ctx context.Context, run scriptRunRecord, ca
 	// the status is not left without its watch.
 	if run.Kind == "watch" {
 		if _, err := tx.ExecContext(ctx, `UPDATE task_status_visits SET next_watch_at = ? WHERE id = ? AND left_at = ''`,
-			watchTime(s.clock().Add(workflowfile.MinWatchEvery)), run.visitID); err != nil {
+			store.FormatTime(s.clock().Add(workflowfile.MinWatchEvery)), run.visitID); err != nil {
 			return err
 		}
 	}
@@ -961,7 +962,7 @@ func (s *Service) interruptRun(ctx context.Context, id int64) error {
 				s.logger().Warn("reschedule interrupted watch without its manifest", "run_id", run.ID, "task", task.Key, "err", err)
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE task_status_visits SET next_watch_at = ? WHERE id = ?`,
-				watchTime(s.clock().Add(every)), run.visitID); err != nil {
+				store.FormatTime(s.clock().Add(every)), run.visitID); err != nil {
 				return err
 			}
 		}
@@ -982,7 +983,7 @@ const dueWatchVisits = `
 // is due at now and clears its schedule; completing the run sets it again. It
 // returns how many runs it created.
 func (s *Service) ScheduleDueWatches(ctx context.Context, now time.Time) (int, error) {
-	cutoff := watchTime(now)
+	cutoff := store.FormatTime(now)
 	rows, err := s.db.QueryContext(ctx, dueWatchVisits+` ORDER BY v.next_watch_at, v.id`, cutoff)
 	if err != nil {
 		return 0, err

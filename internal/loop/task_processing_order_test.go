@@ -21,7 +21,7 @@ func TestTaskProcessingOrderIndependentOfTemplate(t *testing.T) {
 		got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{
 			OneShot:         "one-shot body\n# literal one-shot heading",
 			Messages:        FormatMessages([]bus.Message{msg}),
-			AwaitingReplies: FormatAwaitingReplies([]bus.Message{{ID: "awaiting-1", Channel: "agent:other:inbox", TS: "2026-09-11T10:00:00Z", Deadline: "2026-09-11T12:00:00Z"}}, time.Date(2026, 9, 11, 10, 1, 0, 0, time.UTC)),
+			AwaitingReplies: FormatAwaitingReplies([]bus.Message{{ID: "awaiting-1", Channel: "agent:other:inbox", TS: "2026-09-11T10:00:00.000000000Z", Deadline: "2026-09-11T12:00:00Z"}}, time.Date(2026, 9, 11, 10, 1, 0, 0, time.UTC)),
 			Goal:            FormatRuntimeGoal(tasks.Task{Key: "TEST-1", Title: "goal title", Priority: tasks.PriorityP1, Status: tasks.StatusWaitCustomer, Description: "goal body\n# literal goal heading"}),
 		})
 		if err != nil {

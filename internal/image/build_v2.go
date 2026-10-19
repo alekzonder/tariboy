@@ -18,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
+	storetime "github.com/alekzonder/tariboy/internal/store"
 )
 
 var archiveBaseCleaner = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
@@ -185,7 +186,7 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 	if err != nil {
 		return Manifest{}, err
 	}
-	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, ID: RefID(ref.Name, src.ImageVersion), Name: ref.Name, Tag: ref.Tag, BuiltAt: clock().UTC().Format(time.RFC3339), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
+	manifest := Manifest{SchemaVersion: 2, ImageVersion: src.ImageVersion, ID: RefID(ref.Name, src.ImageVersion), Name: ref.Name, Tag: ref.Tag, BuiltAt: storetime.FormatTime(clock()), Plugins: prepared.plugins, Skills: manifestSkills(prepared.skills), PromptTemplateSHA256: prepared.template.SHA256}
 	if manifest.Plugins == nil {
 		manifest.Plugins = []ManifestPlugin{}
 	}

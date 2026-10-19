@@ -27,6 +27,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -133,11 +134,11 @@ func FormatAwaitingReplies(msgs []bus.Message, now time.Time) string {
 	return b.String()
 }
 
-// messageAge reports how long ago ts (RFC3339Nano) was relative to now, truncated
+// messageAge reports how long ago the stored ts was relative to now, truncated
 // to whole seconds. ok=false when ts is unparseable, so callers omit the age
 // rather than render a bogus one.
 func messageAge(ts string, now time.Time) (time.Duration, bool) {
-	t, err := time.Parse(time.RFC3339Nano, ts)
+	t, err := store.ParseTime(ts)
 	if err != nil {
 		return 0, false
 	}
@@ -1170,14 +1171,14 @@ func enforceSoftTimeout(st *agent.Store, it agent.Iteration, now time.Time, kill
 	if it.TimeoutDeadline == nil {
 		return false, nil
 	}
-	deadline, err := time.Parse(time.RFC3339Nano, *it.TimeoutDeadline)
+	deadline, err := store.ParseTime(*it.TimeoutDeadline)
 	if err != nil {
 		return false, err
 	}
 	if now.Before(deadline) {
 		return false, nil
 	}
-	marked, err := st.MarkIterationTimeoutTriggered(it.Agent, it.ID, *it.TimeoutDeadline, now.UTC().Format(time.RFC3339Nano))
+	marked, err := st.MarkIterationTimeoutTriggered(it.Agent, it.ID, *it.TimeoutDeadline, store.FormatTime(now))
 	if err != nil || !marked {
 		return false, err
 	}

@@ -163,7 +163,7 @@ func (p *Pruner) selectVictims(name string, its []agent.Iteration, pol Policy) [
 			if protected[it.ID] {
 				continue
 			}
-			if ts, err := time.Parse(time.RFC3339, it.StartedAt); err == nil && ts.Before(cutoff) {
+			if ts, err := store.ParseTime(it.StartedAt); err == nil && ts.Before(cutoff) {
 				victim[it.ID] = true
 			}
 		}
