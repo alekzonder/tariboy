@@ -38,6 +38,7 @@ it("opens on Prompt and no longer lists Channels or Messages", async () => {
   expect(await screen.findByTestId("prompt-view")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Channels" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("tab-page")).toContainElement(screen.getByRole("button", { name: "Prompt" }));
 });
 
 it("sends an old Channels link to Chat → Channels", async () => {

@@ -209,6 +209,12 @@ the task panel in place on that server, and an **Agents** view, whose names open
 that agent's Activity tab with the same period. All its requests go to the
 selected host.
 
+The agent's Configuration, Activity, and Advanced tabs and the server Activity
+page share one frame, `TabPage`: 16 px side and top padding, 24 px bottom
+padding, and 16 px between blocks. Configuration is a centered column of at
+most `max-w-5xl`; the others use the full width. Chat, Tasks, and Terminal fill
+the tab without a frame.
+
 ## Iteration tags in Activity
 
 The Iterations view filters its iteration list by tag. The tag filter and the

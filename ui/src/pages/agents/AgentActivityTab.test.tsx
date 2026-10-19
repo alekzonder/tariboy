@@ -67,6 +67,7 @@ describe("AgentActivityTab", () => {
     expect(request.searchParams.get("agent")).toBe("alice");
     const span = Date.parse(request.searchParams.get("until")!) - Date.parse(request.searchParams.get("since")!);
     expect(span).toBe(24 * 3600e3);
+    expect(screen.getByTestId("tab-page")).toContainElement(screen.getByRole("button", { name: "Day" }));
   });
 
   it("keeps the period in the URL and reloads the summary for it", async () => {

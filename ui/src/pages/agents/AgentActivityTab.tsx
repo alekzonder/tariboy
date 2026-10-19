@@ -17,6 +17,7 @@ import {
   TaskActivityTable,
   TruncatedNote,
 } from "@/pages/activity/ActivityParts";
+import TabPage from "@/components/TabPage";
 
 type View = "tasks" | "iterations" | "usage" | "status";
 const VIEWS: Array<{ view: View; label: string }> = [
@@ -62,7 +63,7 @@ export default function AgentActivityTab() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto">
+    <TabPage className="overflow-auto">
       <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
       <ActivityTotals totals={report?.totals ?? null} />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -93,6 +94,6 @@ export default function AgentActivityTab() {
         )}
       </div>
       {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} target={target} onClose={() => setTaskKey("")} />}
-    </div>
+    </TabPage>
   );
 }

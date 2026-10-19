@@ -25,6 +25,7 @@ import { useConfigDraft, type ConfigDraft } from "./configuration/useConfigDraft
 import { useConfigSources, type ConfigSources } from "./configuration/useConfigSources";
 import { buildUnits, readBaseline, removedSecrets } from "./configuration/commits";
 import { ConfigBlockCard, ConfigSaveBar, ConfigSearch, DraftField, FieldFrame } from "./configuration/ConfigControls";
+import TabPage from "@/components/TabPage";
 
 // Operator-selectable harnesses. This is intentionally a SUBSET of the backend
 // allowlist (internal/harness.Get() = claude | codex | opencode | cursor | stub): 'stub'
@@ -142,7 +143,7 @@ function ConfigurationPage({
     : view?.enabled === false || (view?.enabled === undefined && view?.state === "stopped");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 px-4 pt-4 pb-6">
+    <TabPage narrow>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 className="font-semibold">Configuration</h2>
@@ -199,7 +200,7 @@ function ConfigurationPage({
         draft={draft}
         blockTitles={available.filter((block) => dirtyByBlock.has(block.id)).map((block) => block.title)}
       />
-    </div>
+    </TabPage>
   );
 }
 
