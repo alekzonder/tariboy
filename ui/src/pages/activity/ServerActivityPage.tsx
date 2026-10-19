@@ -13,6 +13,7 @@ import {
   TaskActivityTable,
   TruncatedNote,
 } from "./ActivityParts";
+import TabPage from "@/components/TabPage";
 
 type View = "tasks" | "agents";
 const VIEWS: Array<{ view: View; label: string }> = [
@@ -34,7 +35,7 @@ export default function ServerActivityPage({ hostId, target }: { hostId: string;
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-3">
+    <TabPage className="overflow-auto">
       <ActivityPeriodBar window={window} onPeriod={setPeriod} onCustom={setCustom} />
       <ActivityTotals totals={report?.totals ?? null} />
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -56,6 +57,6 @@ export default function ServerActivityPage({ hostId, target }: { hostId: string;
         />
       )}
       {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} target={target} onClose={() => setTaskKey("")} />}
-    </div>
+    </TabPage>
   );
 }

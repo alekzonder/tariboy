@@ -9,6 +9,7 @@ import AgentUsagePage from "@/pages/AgentUsagePage";
 import { Button } from "@/components/ui/button";
 import { getAgent, getAgentStatus } from "@/lib/api";
 import { useAgentName } from "@/lib/agent";
+import TabPage from "@/components/TabPage";
 
 const VIEWS = [
   ["prompt", "Prompt"],
@@ -55,7 +56,7 @@ export default function AgentAdvancedTab() {
     : view === "usage" ? <AgentUsagePage />
     : <RawSnapshot />;
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <TabPage>
       <div className="flex flex-wrap gap-2">
         {VIEWS.map(([key, label]) => (
           <Button
@@ -69,6 +70,6 @@ export default function AgentAdvancedTab() {
         ))}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">{content}</div>
-    </div>
+    </TabPage>
   );
 }

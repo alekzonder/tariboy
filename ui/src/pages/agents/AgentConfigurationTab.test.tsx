@@ -207,6 +207,15 @@ it("finds one setting, changes it, finds another, changes it, and saves both wit
   expect(screen.getByLabelText("Interval")).toHaveValue("45");
 });
 
+it("lays out in the shared narrow tab page", async () => {
+  fakeServer();
+  render(tree());
+  await ready();
+  const page = screen.getByTestId("tab-page");
+  expect(page).toContainElement(screen.getByRole("searchbox", { name: "Search settings" }));
+  expect(page).toHaveClass("max-w-5xl");
+});
+
 it("has no save buttons inside the blocks", async () => {
   fakeServer();
   render(tree());

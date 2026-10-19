@@ -53,6 +53,7 @@ describe("ServerActivityPage", () => {
     expect(screen.getByText("alice, bob")).toBeInTheDocument();
     expect(screen.getByText(/Showing the 1 most recent tasks/)).toBeInTheDocument();
     expect(new URL(urls[0], "http://x").searchParams.has("agent")).toBe(false);
+    expect(screen.getByTestId("tab-page")).toContainElement(screen.getByRole("button", { name: "Day" }));
   });
 
   it("breaks the period down by agent and opens an agent with the same period", async () => {
