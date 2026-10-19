@@ -85,7 +85,7 @@ var timeColumns = map[string][]string{
 	"image_provenance":             {"built_at"},
 	"image_source_snapshots":       {"created_at"},
 	"iterations":                   {"started_at", "ended_at", "timeout_deadline", "hard_timeout_deadline", "timeout_triggered_at", "last_ai_request_at"},
-	"messages":                     {"ts", "deadline"},
+	"messages":                     {"ts"},
 	"plugins":                      {"installed_at"},
 	"proxy_rules":                  {"created_at"},
 	"schedules":                    {"next_fire_at", "created_at"},

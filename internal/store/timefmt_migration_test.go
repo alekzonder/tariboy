@@ -68,6 +68,38 @@ func TestCanonicalTimestampsMigration(t *testing.T) {
 	}
 }
 
+func TestCanonicalizeColumnCrossesChunkBoundaries(t *testing.T) {
+	defer func(chunk int) { canonicalizeChunk = chunk }(canonicalizeChunk)
+	canonicalizeChunk = 2
+	s := open(t)
+	if _, err := s.DB.Exec(`INSERT INTO events(id, ts, kind) VALUES
+		(1, '2026-10-19T06:33:58Z', 'a'), (2, '', 'b'), (3, 'now', 'c'),
+		(4, '2026-10-19T06:33:59.1Z', 'd'), (5, '2026-10-19T06:34:00.000000000Z', 'e')`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CanonicalizeColumn(tx, "events", "ts"); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	want := map[int]string{
+		1: "2026-10-19T06:33:58.000000000Z", 2: "", 3: "now",
+		4: "2026-10-19T06:33:59.100000000Z", 5: "2026-10-19T06:34:00.000000000Z",
+	}
+	for id, ts := range want {
+		var got string
+		if err := s.DB.QueryRow(`SELECT ts FROM events WHERE id = ?`, id).Scan(&got); err != nil || got != ts {
+			t.Fatalf("event %d ts = %q, %v; want %q", id, got, err, ts)
+		}
+	}
+}
+
 func TestSchemaDefaultsAreCanonical(t *testing.T) {
 	s := open(t)
 	var n int
