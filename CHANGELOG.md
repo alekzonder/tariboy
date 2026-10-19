@@ -1,3 +1,14 @@
+## [0.87.1] - 2026-10-19
+
+### Fixed
+
+- Desktop releases publish again: the Android release build installs
+  ripgrep, which its version check needs, so the signed APK is built and
+  the GitHub release is created. 0.87.0 was tagged but never published as a
+  GitHub release; 0.87.1 ships its changes.
+
+[0.87.1]: https://github.com/alekzonder/tariboy/compare/v0.87.0...v0.87.1
+
 ## [0.87.0] - 2026-10-19
 
 ### Added
