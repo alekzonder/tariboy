@@ -53,7 +53,8 @@ func (w *iterationWatcher) watch(ctx context.Context) (watchResult, error) {
 	lastHardDeadline := ""
 	doneGrace := doneGraceTracker{}
 	kill := cooperativeKill{}
-	killShim := func() error { return kill.send(func() error { return w.client().Kill() }) }
+	// Kill is sent once, so it keeps the client default timeout.
+	killShim := func() error { return kill.send(func() error { return shim.Dial(w.shimSock).Kill() }) }
 	misses := 0
 	lastProbe := time.Time{}
 	for {

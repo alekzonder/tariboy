@@ -1252,12 +1252,15 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 	if err != nil {
 		return err
 	}
-	defer release()
 	ag, err := m.cfg.Store.Get(name)
 	if err != nil {
+		release()
 		return err
 	}
 	servers, err := m.runtimes.remove(name, ag.Enabled, force)
+	// Released before the graceful shutdown: an in-flight tools call of this
+	// agent may itself wait for the gate (loop start/stop).
+	release()
 	if err != nil {
 		return err
 	}

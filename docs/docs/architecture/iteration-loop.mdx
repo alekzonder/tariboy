@@ -353,6 +353,7 @@ A normal iteration launch takes only the publication gate. The agent's handoff
 lock (see [the shim](/docs/architecture/shim)) is taken while no gate is held.
 
 Image activation can take long: it unpacks the image, prepares the skill
-bridge, and probes the harness. While a Restart launch waits in it, only Stop,
-Remove, and Reprovision of that same agent wait for it. Kill, state reads,
-wakes, tools calls, and every other agent continue.
+bridge, and probes the harness. While a Restart launch waits in it, only the
+lifecycle operations of that same agent wait for it: Start, Stop, Restart,
+Remove, Reprovision, and the agent's own `loop start` and `loop stop`. Kill,
+state reads, wakes, other tools calls, and every other agent continue.

@@ -322,17 +322,19 @@ func (m *Manager) installReprovisionedImage(ag, candidate agent.Agent, ref image
 	return m.swapReprovisionedTree(ag, candidate, l, stage.ImageDir())
 }
 
-// swapReprovisionedTree moves bin/ aside and stageImage into image/, rebuilds
+// swapReprovisionedTree moves stageImage into image/ and bin/ aside, rebuilds
 // shims and durable dirs, and records candidate's identity. Any failure
 // restores the previous image/, bin/ and identity.
 func (m *Manager) swapReprovisionedTree(ag, candidate agent.Agent, l agentdir.Layout, stageImage string) error {
-	commitBin, rollbackBin, err := agentdir.SwapDir(l.BinDir(), filepath.Join(l.Root, ".bin-backup"), "")
+	// image/ goes first: its .image-backup is the crash marker that makes
+	// recovery restore the active image and rewrite the shims.
+	commitImage, rollbackImage, err := agentdir.SwapImage(l, stageImage)
 	if err != nil {
 		return err
 	}
-	commitImage, rollbackImage, err := agentdir.SwapImage(l, stageImage)
+	commitBin, rollbackBin, err := agentdir.SwapDir(l.BinDir(), filepath.Join(l.Root, ".bin-backup"), "")
 	if err != nil {
-		rollbackBin()
+		rollbackImage()
 		return err
 	}
 	rollback := func() {
