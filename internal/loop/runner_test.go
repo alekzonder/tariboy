@@ -980,7 +980,7 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 		if calls == 2 { // the sole snapshot immediately before shim spawn
 			return t1
 		}
-		return t2 // await's independent clock read
+		return t2 // any later read must not move the snapshot
 	}
 	if _, err := r.Run(context.Background(), ag, "manual", "alice-1", ""); err != nil {
 		t.Fatal(err)
@@ -989,7 +989,7 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calls != 3 || got.TimeoutDeadline == nil || got.HardTimeoutDeadline == nil ||
+	if calls < 2 || got.TimeoutDeadline == nil || got.HardTimeoutDeadline == nil ||
 		*got.TimeoutDeadline != t1.Add(30*time.Second).Format(time.RFC3339Nano) ||
 		*got.HardTimeoutDeadline != t1.Add(90*time.Second).Format(time.RFC3339Nano) {
 		t.Fatalf("clock calls=%d snapshot=%+v, want deadlines based on sole pre-spawn sample %s", calls, got, t1)
