@@ -471,37 +471,19 @@ func (r *ShimRunner) ReapOrphanBlock(ag agent.Agent) bool {
 	if !r.SessionBlocked(ag) {
 		return false
 	}
-	if r.hasRunningIteration(ag.Name) {
-		return false
-	}
 	kill := r.cfg.KillTmuxSession
 	if kill == nil {
 		kill = tmuxKillSession // engine may hold a runner built without the default
 	}
-	if err := kill(ag.Name); err != nil {
+	killed, err := killOrphanSession(r.cfg.Store, kill, ag.Name)
+	if err != nil {
 		r.cfg.Logger.Warn("reap orphan tmux session before launch", "agent", ag.Name, "err", err)
 		return false
 	}
-	r.cfg.Logger.Info("reaped orphan tmux session before launch", "agent", ag.Name)
-	return true
-}
-
-// hasRunningIteration reports whether the store holds a still-running iteration
-// for name (the owner of a live tmux session).
-func (r *ShimRunner) hasRunningIteration(name string) bool {
-	if r.cfg.Store == nil {
-		return false
+	if killed {
+		r.cfg.Logger.Info("reaped orphan tmux session before launch", "agent", ag.Name)
 	}
-	its, err := r.cfg.Store.ListIterations(name)
-	if err != nil {
-		return false
-	}
-	for _, it := range its {
-		if it.Status == "running" {
-			return true
-		}
-	}
-	return false
+	return killed
 }
 
 type ShimRunner struct{ cfg RunnerConfig }
@@ -1044,66 +1026,32 @@ func (r *ShimRunner) prepare(ctx context.Context, tr oteltrace.Tracer, ag agent.
 // await polls result.json (and the shim RPC) until the iteration finishes,
 // enforcing the soft timeout via the shim kill RPC.
 func (r *ShimRunner) await(ctx context.Context, ag agent.Agent, l agentdir.Layout, iterationID string) (Outcome, error) {
-	start := r.cfg.Clock()
-	_ = start // retained as a clock sample for backward-compatible test seams.
-	softHit := false
-	lastHardDeadline := ""
-	doneGrace := doneGraceTracker{}
-	kill := cooperativeKill{}
-	tk := time.NewTicker(r.cfg.PollInterval)
-	defer tk.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			if res, ok := readResult(l.ResultPath(iterationID)); ok {
-				it, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
-				done, productive := r.doneAndProductive(ag.Name, iterationID)
-				soft := err == nil && it.TimeoutTriggeredAt != nil
-				return Outcome{
-					Status:     Classify(res.ExitCode, done, soft, res.TerminationReason == "hard_timeout"),
-					ExitCode:   res.ExitCode,
-					DoneFlag:   done,
-					Productive: productive,
-					CPUMs:      res.CPUMs,
-					MemPeakKB:  res.MemPeakKB,
-				}, nil
-			}
+	w := iterationWatcher{
+		store: r.cfg.Store, clock: r.cfg.Clock, log: r.cfg.Logger, agent: ag.Name, id: iterationID,
+		resultPath: l.ResultPath(iterationID), shimSock: l.ShimSock(), poll: r.cfg.PollInterval,
+		doneGrace: r.cfg.DoneGrace,
+	}
+	res, err := w.watch(ctx)
+	if err != nil {
+		var ok bool
+		if res.result, ok = readResult(l.ResultPath(iterationID)); !ok {
 			if it, err := r.cfg.Store.GetIteration(ag.Name, iterationID); err == nil && it.Status == "running" {
 				return Outcome{}, ErrIterationDetached
 			}
 			return Outcome{}, ctx.Err()
-		case <-tk.C:
 		}
-		if res, ok := readResult(l.ResultPath(iterationID)); ok {
-			it, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
-			done, productive := r.doneAndProductive(ag.Name, iterationID)
-			soft := softHit || (err == nil && it.TimeoutTriggeredAt != nil)
-			return Outcome{
-				Status:     Classify(res.ExitCode, done, soft, res.TerminationReason == "hard_timeout"),
-				ExitCode:   res.ExitCode,
-				DoneFlag:   done,
-				Productive: productive,
-				CPUMs:      res.CPUMs,
-				MemPeakKB:  res.MemPeakKB,
-			}, nil
-		}
-		it, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
-		if err == nil {
-			if it.HardTimeoutDeadline != nil && *it.HardTimeoutDeadline != lastHardDeadline {
-				if err := shim.Dial(l.ShimSock()).SetHardDeadline(*it.HardTimeoutDeadline); err == nil {
-					lastHardDeadline = *it.HardTimeoutDeadline
-				}
-			}
-			if triggered, err := enforceSoftTimeout(r.cfg.Store, it, r.cfg.Clock(), func() error {
-				return kill.send(func() error { return shim.Dial(l.ShimSock()).Kill() })
-			}); err == nil && triggered {
-				softHit = true
-			}
-		}
-		doneGrace.observe(r.doneFlag(ag.Name, iterationID), r.cfg.Clock(), r.cfg.DoneGrace, func() error {
-			return kill.send(func() error { return shim.Dial(l.ShimSock()).Kill() })
-		})
 	}
+	it, err := r.cfg.Store.GetIteration(ag.Name, iterationID)
+	done, productive := r.doneAndProductive(ag.Name, iterationID)
+	soft := res.softHit || (err == nil && it.TimeoutTriggeredAt != nil)
+	return Outcome{
+		Status:     Classify(res.result.ExitCode, done, soft, res.result.TerminationReason == "hard_timeout"),
+		ExitCode:   res.result.ExitCode,
+		DoneFlag:   done,
+		Productive: productive,
+		CPUMs:      res.result.CPUMs,
+		MemPeakKB:  res.result.MemPeakKB,
+	}, nil
 }
 
 // enforceSoftTimeout gives the durable marker ownership of the kill. This
@@ -1130,11 +1078,6 @@ func enforceSoftTimeout(st *agent.Store, it agent.Iteration, now time.Time, kill
 	}
 	_ = kill()
 	return true, nil
-}
-
-func (r *ShimRunner) doneFlag(agentName, id string) bool {
-	it, err := r.cfg.Store.GetIteration(agentName, id)
-	return err == nil && it.DoneFlag
 }
 
 // doneAndProductive reads both flags in one shot for the final Outcome. On a read

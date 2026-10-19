@@ -2,7 +2,6 @@ package loop
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,12 +10,8 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"slices"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -25,7 +20,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/events"
-	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/paths"
@@ -37,7 +31,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
-	"golang.org/x/sys/unix"
 )
 
 // GroupProvisioner is the subset of groups.Provisioner the manager needs to
@@ -157,33 +150,14 @@ var (
 	adoptProbeTimeout  = time.Second
 	adoptMaxMisses     = 3
 	shutdownWait       = 10 * time.Second
-	scriptPollInterval = 100 * time.Millisecond
-	scriptCancelGrace  = 2 * time.Second
 )
 
 type Manager struct {
-	cfg  ManagerConfig
-	ctx  context.Context
-	stop context.CancelFunc
-	wg   sync.WaitGroup
-	mu   sync.Mutex
-	runs map[string]*runtime
-	// toolsAPI holds per-agent tools servers that are bound and serving but not
-	// (yet) owned by a runtime: the daemon binds them at boot for every agent
-	// with an unfinished iteration, whose engine may start much later or never.
-	// A name lives in exactly one of toolsAPI and runs — start() moves it — so
-	// a socket path always has a single owner and a single listener.
-	toolsAPI   map[string]*agentapi.Server
-	adopting   map[string]agentdir.LiveIteration
-	restarting map[string]bool
-	staleKills map[string]string
-	rng        *rand.Rand
-	// scriptsWake wakes the durable script supervisor after a new record is
-	// created. It is deliberately buffered: callers never wait for a process
-	// to start in order to receive a script ID.
-	scriptsWake   chan struct{}
-	scriptRuns    map[string]*exec.Cmd
-	scriptCancels map[string]bool
+	cfg      ManagerConfig
+	wg       sync.WaitGroup
+	runtimes *agentRuntimes
+	scripts  *scriptSupervisor
+	rng      *rand.Rand
 	// goals holds, per agent, the Goal its latest prepared iteration runs
 	// with, until that iteration is reported finished. It is memory only: an
 	// iteration adopted after a daemon restart reports no Goal.
@@ -254,13 +228,9 @@ func NewManager(cfg ManagerConfig) *Manager {
 	if cfg.ConnectShim == nil {
 		cfg.ConnectShim = shim.Connect
 	}
-	return &Manager{
-		cfg: cfg, runs: map[string]*runtime{}, toolsAPI: map[string]*agentapi.Server{},
-		adopting:   map[string]agentdir.LiveIteration{},
-		restarting: map[string]bool{}, staleKills: map[string]string{},
-		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
-		scriptsWake: make(chan struct{}, 1), scriptRuns: map[string]*exec.Cmd{}, scriptCancels: map[string]bool{},
-	}
+	m := &Manager{cfg: cfg, runtimes: newAgentRuntimes(), rng: rand.New(rand.NewSource(time.Now().UnixNano()))}
+	m.scripts = newScriptSupervisor(&m.cfg, &m.wg)
+	return m
 }
 
 func (m *Manager) signalGoals() {
@@ -362,11 +332,12 @@ func (m *Manager) reapOrphanSessions(agents []agent.Agent, adopting map[string][
 		if !m.cfg.HasTmuxSession(a.Name) {
 			continue
 		}
-		if m.hasRunningIteration(a.Name) {
+		killed, err := killOrphanSession(m.cfg.Store, m.cfg.KillTmuxSession, a.Name)
+		if err != nil {
+			m.cfg.Log.Warn("reap orphan tmux session", "agent", a.Name, "err", err)
 			continue
 		}
-		if err := m.cfg.KillTmuxSession(a.Name); err != nil {
-			m.cfg.Log.Warn("reap orphan tmux session", "agent", a.Name, "err", err)
+		if !killed {
 			continue
 		}
 		m.cfg.Log.Info("reaped orphan tmux session", "agent", a.Name)
@@ -376,19 +347,6 @@ func (m *Manager) reapOrphanSessions(agents []agent.Agent, adopting map[string][
 			}
 		}
 	}
-}
-
-func (m *Manager) hasRunningIteration(name string) bool {
-	its, err := m.cfg.Store.ListIterations(name)
-	if err != nil {
-		return false
-	}
-	for _, it := range its {
-		if it.Status == "running" {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
@@ -429,10 +387,7 @@ func (m *Manager) refreshShims(agents []agent.Agent) map[string]bool {
 // adoption completes, so we never launch a second concurrent shim for it.
 func (m *Manager) StartAll(ctx context.Context) error {
 	cctx, cancel := context.WithCancel(ctx)
-	m.mu.Lock()
-	m.ctx = cctx
-	m.stop = cancel
-	m.mu.Unlock()
+	m.runtimes.setBase(cctx, cancel)
 	agents, err := m.cfg.Store.List()
 	if err != nil {
 		return err
@@ -450,7 +405,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 		if err := m.cfg.Scripts.RecoverRunning(); err != nil {
 			return fmt.Errorf("recover scripts: %w", err)
 		}
-		m.startScriptSupervisor(cctx)
+		m.scripts.startScriptSupervisor(cctx)
 	}
 
 	live, err := agentdir.ListLive(m.cfg.AgentsDir, m.cfg.RuntimeDir)
@@ -484,7 +439,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 		if !a.Enabled {
 			continue
 		}
-		if err := m.start(a); err != nil {
+		if err := m.startAgent(a); err != nil {
 			m.cfg.Log.Error("reattach start", "agent", a.Name, "err", err)
 		}
 	}
@@ -501,9 +456,11 @@ func (m *Manager) bindLiveToolsSockets(agents []agent.Agent, adopting map[string
 			continue
 		}
 		l := agentdir.New(m.cfg.AgentsDir, a.Name).WithRuntime(m.cfg.RuntimeDir)
-		m.mu.Lock()
-		_, err := m.bindToolsSocketLocked(a, l)
-		m.mu.Unlock()
+		release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), a.Name)
+		if err == nil {
+			_, err = m.bindToolsSocketLocked(a, l)
+			release()
+		}
 		if err != nil {
 			m.cfg.Log.Error("bind agent tools socket for live iteration",
 				"agent", a.Name, "sock", l.Sock(), "err", err)
@@ -515,12 +472,10 @@ func (m *Manager) bindLiveToolsSockets(agents []agent.Agent, adopting map[string
 // socket, binding and serving it on first call. Re-binding a path that is
 // already served would unlink the live socket file and leave its listener
 // serving an orphan (agentapi.Listen removes the path before binding), so every
-// caller goes through here instead of calling Listen itself. m.mu must be held.
+// caller goes through here instead of calling Listen itself. The agent's
+// lifecycle gate must be held: it keeps two binds of one path apart.
 func (m *Manager) bindToolsSocketLocked(ag agent.Agent, l agentdir.Layout) (*agentapi.Server, error) {
-	if rt, ok := m.runs[ag.Name]; ok && rt.apiServer != nil {
-		return rt.apiServer, nil
-	}
-	if srv, ok := m.toolsAPI[ag.Name]; ok {
+	if srv := m.runtimes.toolsServer(ag.Name); srv != nil {
 		return srv, nil
 	}
 	srv := m.newToolsAPIServer(ag, l)
@@ -528,7 +483,7 @@ func (m *Manager) bindToolsSocketLocked(ag agent.Agent, l agentdir.Layout) (*age
 	if err != nil {
 		return nil, err
 	}
-	m.toolsAPI[ag.Name] = srv
+	m.runtimes.registerToolsServer(ag.Name, srv)
 	go func() {
 		if err := srv.ServeListener(ln); err != nil {
 			m.cfg.Log.Error("tools socket serve", "agent", ag.Name, "err", err)
@@ -542,17 +497,7 @@ func (m *Manager) bindToolsSocketLocked(ag agent.Agent, l agentdir.Layout) (*age
 // adopted answers, so a harness that outlived a daemon restart is still
 // recognized as the caller of its own iteration and can close it.
 func (m *Manager) currentIterationID(name string) string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if rt := m.runs[name]; rt != nil && rt.engine != nil {
-		if id := rt.engine.CurrentIterationID(); id != "" {
-			return id
-		}
-	}
-	if live, ok := m.adopting[name]; ok {
-		return live.ID
-	}
-	return ""
+	return m.runtimes.currentIterationID(name)
 }
 
 // startAfter starts an agent's engine only once every pending adoption for it
@@ -577,14 +522,11 @@ func (m *Manager) startAfter(ctx context.Context, name string, dones []<-chan st
 		if !ag.Enabled {
 			return
 		}
-		if err := m.start(ag); err != nil {
+		if err := m.startAgent(ag); err != nil {
 			m.cfg.Log.Error("reattach start", "agent", name, "err", err)
 			return
 		}
-		m.mu.Lock()
-		restart := m.restarting[name]
-		rt := m.runs[name]
-		m.mu.Unlock()
+		rt, restart := m.runtimes.pendingRestart(name)
 		if restart && ag.Interactive && rt != nil {
 			rt.engine.triggerGuarded("", func() (func(), bool) {
 				if m.cfg.BeforeRestartLaunch != nil {
@@ -597,25 +539,28 @@ func (m *Manager) startAfter(ctx context.Context, name string, dones []<-chan st
 }
 
 // acquireRestartLaunch linearizes a post-adoption interactive launch with
-// Stop. The caller holds the returned release function until the engine has
-// created the iteration and is ready to enter its runner.
+// Stop through the agent's lifecycle gate. The caller holds the returned
+// release function until the engine has created the iteration and is ready to
+// enter its runner. Image activation runs inside it, so the lifecycle gate is
+// taken before the publication gate, as everywhere else.
 func (m *Manager) acquireRestartLaunch(name string) (func(), bool) {
-	m.mu.Lock()
-	if !m.restarting[name] {
-		m.mu.Unlock()
+	release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), name)
+	if err != nil {
+		return nil, false
+	}
+	if !m.runtimes.takeRestart(name) {
+		release()
 		return nil, false
 	}
 	ag, err := m.cfg.Store.Get(name)
 	if err != nil || !ag.Enabled {
-		delete(m.restarting, name)
-		m.mu.Unlock()
+		release()
 		if err != nil {
 			m.cfg.Log.Error("reattach restart load agent", "agent", name, "err", err)
 		}
 		return nil, false
 	}
-	delete(m.restarting, name)
-	return m.mu.Unlock, true
+	return release, true
 }
 
 // adopt waits for a live iteration's result.json and records the outcome. If the
@@ -625,77 +570,29 @@ func (m *Manager) acquireRestartLaunch(name string) (func(), bool) {
 // channel is closed once adoption finishes.
 func (m *Manager) adopt(ctx context.Context, li agentdir.LiveIteration) <-chan struct{} {
 	done := make(chan struct{})
-	m.mu.Lock()
-	m.adopting[li.Agent] = li
-	m.mu.Unlock()
+	m.runtimes.beginAdoption(li)
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
 		defer func() {
-			m.mu.Lock()
-			if current, ok := m.adopting[li.Agent]; ok && current.ID == li.ID {
-				delete(m.adopting, li.Agent)
-			}
-			m.mu.Unlock()
+			m.runtimes.endAdoption(li)
 			close(done)
 		}()
 		l := agentdir.New(m.cfg.AgentsDir, li.Agent).WithRuntime(m.cfg.RuntimeDir)
-		tk := time.NewTicker(adoptPollInterval)
-		defer tk.Stop()
-		misses := 0
-		lastProbe := time.Time{}
-		doneGrace := doneGraceTracker{}
-		kill := cooperativeKill{}
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-tk.C:
-			}
-			if res, ok := readResult(li.ResultPath); ok {
-				m.recordAdopted(l, li, res)
-				return
-			}
-			it, iterationErr := m.cfg.Store.GetIteration(li.Agent, li.ID)
-			if iterationErr == nil {
-				if _, err := enforceSoftTimeout(m.cfg.Store, it, m.cfg.Clock(), func() error {
-					return kill.send(func() error { return shim.Dial(li.ShimSock).Kill() })
-				}); err != nil {
-					m.cfg.Log.Debug("enforce adopted shim soft deadline", "agent", li.Agent, "id", li.ID, "err", err)
-				}
-				doneGrace.observe(it.DoneFlag, m.cfg.Clock(), m.cfg.DoneGrace, func() error {
-					return kill.send(func() error { return shim.Dial(li.ShimSock).Kill() })
-				})
-			}
-			if time.Since(lastProbe) < adoptProbeInterval {
-				continue
-			}
-			lastProbe = time.Now()
-			c := shim.Dial(li.ShimSock)
-			c.Timeout = adoptProbeTimeout
-			// The DB is authoritative across a daemon restart. Replay the absolute
-			// hard deadline before probing so an extension committed before an RPC
-			// failure is eventually enforced by the surviving shim.
-			if iterationErr == nil && it.HardTimeoutDeadline != nil {
-				if err := c.SetHardDeadline(*it.HardTimeoutDeadline); err != nil {
-					m.cfg.Log.Debug("resync adopted shim deadline", "agent", li.Agent, "id", li.ID, "err", err)
-				}
-			}
-			if _, err := c.Status(); err != nil {
-				misses++
-				if misses >= adoptMaxMisses {
-					// One last check: a result may have landed between the poll
-					// above and the failing probe.
-					if res, ok := readResult(li.ResultPath); ok {
-						m.recordAdopted(l, li, res)
-						return
-					}
-					m.recordStaleAdoption(l, li)
-					return
-				}
-				continue
-			}
-			misses = 0
+		w := iterationWatcher{
+			store: m.cfg.Store, clock: m.cfg.Clock, log: m.cfg.Log, agent: li.Agent, id: li.ID,
+			resultPath: li.ResultPath, shimSock: li.ShimSock, poll: adoptPollInterval,
+			doneGrace: m.cfg.DoneGrace, rpcTimeout: adoptProbeTimeout,
+			probe: &livenessProbe{every: adoptProbeInterval, maxMisses: adoptMaxMisses},
+		}
+		res, err := w.watch(ctx)
+		switch {
+		case err != nil:
+			// Shutdown: the iteration stays running for the next daemon.
+		case res.stale:
+			m.recordStaleAdoption(l, li)
+		default:
+			m.recordAdopted(l, li, res.result)
 		}
 	}()
 	return done
@@ -855,103 +752,20 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("image %s: %w", ref.String(), err)
 	}
-	name := spec.Name
-	if name == "" {
-		name = agent.GenerateName(m.rng)
-	}
-	// Reject a user-supplied --name that could escape AgentsDir before it reaches
-	// agentdir.New/Provision (MkdirAll) or Store.Create. Generated names always
-	// pass, so this only refuses a malicious/malformed operator name such as
-	// "../../evil". This is the M6 plugin path-traversal fix applied to agents.
-	if !agent.ValidName(name) {
-		return "", fmt.Errorf("invalid agent name %q: must match ^[a-z0-9][a-z0-9_-]*$", name)
-	}
-	if ok, _ := m.cfg.Store.Exists(name); ok {
-		return "", fmt.Errorf("agent %q already exists", name)
-	}
-
-	// Schema v2 is exact: plugins are image content, never an implicit core
-	// union or a runtime override. Schema v1 keeps its historical precedence.
-	requested := spec.Plugins
-	if man.SchemaVersion == 2 || len(requested) == 0 {
-		requested = nil
-		for _, p := range man.Plugins {
-			requested = append(requested, p.Name)
-		}
-	}
-	pluginsDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins")
-	resolver := plugins.ResolveInstalled(pluginsDir)
-	var resolvedPlugins []string
-	if man.SchemaVersion == 2 {
-		resolver = m.imagePluginResolver()
-		resolvedPlugins, err = plugincaps.ValidateExplicit(requested, resolver)
-	} else {
-		resolvedPlugins, err = plugincaps.ResolveWithExternal(requested, resolver)
-	}
+	name, err := m.newAgentName(spec.Name)
 	if err != nil {
 		return "", err
 	}
-
-	harnessType, model, effort, env := pick(spec.Harness, "", "claude"), spec.Model, spec.Effort, spec.Env
-	if man.SchemaVersion == 1 {
-		harnessType = pick(spec.Harness, man.Harness.Type, "claude")
-		model = pick(spec.Model, man.Harness.Model, "")
-		effort = pick(spec.Effort, man.Harness.Effort, "")
-		env = mergeEnv(man.Env, spec.Env)
+	resolvedPlugins, err := m.resolveRunPlugins(spec.Plugins, man)
+	if err != nil {
+		return "", err
 	}
-	if env == nil {
-		env = map[string]string{}
-	}
-	onTimeout := pick(spec.OnTimeout, "restart")
-	onError := pick(spec.OnError, "restart")
-	messagesBatch := spec.MessagesBatch
-	if messagesBatch == 0 {
-		messagesBatch = 10
-	}
-	messagesMaxQueue := spec.MessagesMaxQueue
-	if messagesMaxQueue == 0 {
-		messagesMaxQueue = 100
-	}
-	goalEnabled := true
-	if spec.GoalEnabled != nil {
-		goalEnabled = *spec.GoalEnabled
-	}
-	goalWaitCustomerTimeoutS := spec.GoalWaitCustomerTimeoutS
-	if goalWaitCustomerTimeoutS == 0 {
-		goalWaitCustomerTimeoutS = 300
-	}
-	goalDeliveryCooldownS := spec.GoalDeliveryCooldownS
-	if goalDeliveryCooldownS == 0 {
-		goalDeliveryCooldownS = 60
-	}
-	ag := agent.Agent{
-		Name: name, ImageRef: ref.String(), ImageDigest: man.Digest,
-		Cwd: spec.Cwd, HarnessType: harnessType,
-		Model: model, Effort: effort,
-		Interactive: spec.Interactive, Enabled: false,
-		IntervalS: spec.IntervalS, TimeoutS: spec.TimeoutS, HardTimeoutS: spec.HardTimeoutS,
-		OnTimeout: onTimeout, OnError: onError, MaxIdleIterations: spec.MaxIdleIterations,
-		AIStallTimeoutS: spec.AIStallTimeoutS,
-		UserPrompt:      spec.UserPrompt,
-		Env:             env, Plugins: resolvedPlugins,
-		MessagesBatch: messagesBatch, MessagesMaxQueue: messagesMaxQueue,
-		GoalEnabled: goalEnabled, GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS, GoalDeliveryCooldownS: goalDeliveryCooldownS,
-		Alias: spec.Alias, Notes: spec.Notes, Color: spec.Color,
-	}
-	if ref == image.BareRef {
-		ag.Interactive = true
-	}
+	ag := newRunAgent(spec, name, ref, man, resolvedPlugins)
 	// Group membership validates the name and ensures the group entity and shared
 	// directory exist before provisioning. Subscriptions are wired by Reconcile
 	// after Create.
 	if spec.Group != "" {
-		if m.cfg.Groups == nil {
-			return "", fmt.Errorf("group provisioning is not available")
-		}
-		if !agent.ValidName(spec.Group) {
-			return "", fmt.Errorf("invalid group name %q: must match ^[a-z0-9][a-z0-9_-]*$", spec.Group)
-		}
-		if err := m.cfg.Groups.EnsureGroup(spec.Group, ""); err != nil {
+		if err := m.ensureRunGroup(spec.Group); err != nil {
 			return "", err
 		}
 		ag.Group = spec.Group
@@ -971,12 +785,99 @@ func (m *Manager) run(spec registry.RunSpec) (string, error) {
 			return "", err
 		}
 	}
-	if ag.Enabled {
-		if err := m.start(ag); err != nil {
-			return "", err
-		}
+	// The agent is created stopped; Start launches it outside the publication
+	// gate, which is never held while an agent lifecycle gate is taken.
+	return name, nil
+}
+
+// newAgentName returns the requested name, or a generated one, once it is
+// valid and free.
+func (m *Manager) newAgentName(requested string) (string, error) {
+	name := requested
+	if name == "" {
+		name = agent.GenerateName(m.rng)
+	}
+	// Reject a user-supplied --name that could escape AgentsDir before it reaches
+	// agentdir.New/Provision (MkdirAll) or Store.Create. Generated names always
+	// pass, so this only refuses a malicious/malformed operator name such as
+	// "../../evil". This is the M6 plugin path-traversal fix applied to agents.
+	if !agent.ValidName(name) {
+		return "", fmt.Errorf("invalid agent name %q: must match ^[a-z0-9][a-z0-9_-]*$", name)
+	}
+	if ok, _ := m.cfg.Store.Exists(name); ok {
+		return "", fmt.Errorf("agent %q already exists", name)
 	}
 	return name, nil
+}
+
+// resolveRunPlugins returns the plugin set of a new agent. Schema v2 is exact:
+// plugins are image content, never an implicit core union or a runtime
+// override. Schema v1 keeps its historical precedence.
+func (m *Manager) resolveRunPlugins(requested []string, man image.Manifest) ([]string, error) {
+	if man.SchemaVersion == 2 || len(requested) == 0 {
+		requested = nil
+		for _, p := range man.Plugins {
+			requested = append(requested, p.Name)
+		}
+	}
+	if man.SchemaVersion == 2 {
+		return plugincaps.ValidateExplicit(requested, m.imagePluginResolver())
+	}
+	pluginsDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins")
+	return plugincaps.ResolveWithExternal(requested, plugins.ResolveInstalled(pluginsDir))
+}
+
+func (m *Manager) ensureRunGroup(group string) error {
+	if m.cfg.Groups == nil {
+		return fmt.Errorf("group provisioning is not available")
+	}
+	if !agent.ValidName(group) {
+		return fmt.Errorf("invalid group name %q: must match ^[a-z0-9][a-z0-9_-]*$", group)
+	}
+	return m.cfg.Groups.EnsureGroup(group, "")
+}
+
+// newRunAgent is the stopped agent row a run spec creates, with defaults for
+// the settings the spec leaves unset.
+func newRunAgent(spec registry.RunSpec, name string, ref image.Ref, man image.Manifest, resolvedPlugins []string) agent.Agent {
+	harnessType, model, effort, env := pick(spec.Harness, "", "claude"), spec.Model, spec.Effort, spec.Env
+	if man.SchemaVersion == 1 {
+		harnessType = pick(spec.Harness, man.Harness.Type, "claude")
+		model = pick(spec.Model, man.Harness.Model, "")
+		effort = pick(spec.Effort, man.Harness.Effort, "")
+		env = mergeEnv(man.Env, spec.Env)
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	goalEnabled := true
+	if spec.GoalEnabled != nil {
+		goalEnabled = *spec.GoalEnabled
+	}
+	return agent.Agent{
+		Name: name, ImageRef: ref.String(), ImageDigest: man.Digest,
+		Cwd: spec.Cwd, HarnessType: harnessType,
+		Model: model, Effort: effort,
+		Interactive: spec.Interactive || ref == image.BareRef, Enabled: false,
+		IntervalS: spec.IntervalS, TimeoutS: spec.TimeoutS, HardTimeoutS: spec.HardTimeoutS,
+		OnTimeout: pick(spec.OnTimeout, "restart"), OnError: pick(spec.OnError, "restart"),
+		MaxIdleIterations: spec.MaxIdleIterations,
+		AIStallTimeoutS:   spec.AIStallTimeoutS,
+		UserPrompt:        spec.UserPrompt,
+		Env:               env, Plugins: resolvedPlugins,
+		MessagesBatch: orDefault(spec.MessagesBatch, 10), MessagesMaxQueue: orDefault(spec.MessagesMaxQueue, 100),
+		GoalEnabled:              goalEnabled,
+		GoalWaitCustomerTimeoutS: orDefault(spec.GoalWaitCustomerTimeoutS, 300),
+		GoalDeliveryCooldownS:    orDefault(spec.GoalDeliveryCooldownS, 60),
+		Alias:                    spec.Alias, Notes: spec.Notes, Color: spec.Color,
+	}
+}
+
+func orDefault(v, def int) int {
+	if v == 0 {
+		return def
+	}
+	return v
 }
 
 func (m *Manager) ensureOwnInbox(agentName string) error {
@@ -995,272 +896,45 @@ func (m *Manager) ensureOwnInbox(agentName string) error {
 	return nil
 }
 
-// newToolsAPIServer builds the per-agent tools server. It deliberately depends
-// on the manager and the agent name only, never on a loop engine: the same
-// server is bound for an agent whose engine has not started (and may never
-// start) while its iteration is still running, and the current iteration is
-// resolved per request via currentIterationID.
+// newToolsAPIServer builds the per-agent tools server; see toolsFacade.
 func (m *Manager) newToolsAPIServer(ag agent.Agent, l agentdir.Layout) *agentapi.Server {
-	agName := ag.Name
-	return agentapi.NewServer(agentapi.Deps{
-		Agent: ag.Name, Cwd: cwdOf(ag, l), ContextPath: l.ContextPath(), Plugins: ag.Plugins,
-		CurrentPlugins: func() []string {
-			current, err := m.cfg.Store.Get(agName)
-			if err != nil {
-				return nil
-			}
-			return current.Plugins
-		},
-		CurrentIteration: func() string { return m.currentIterationID(agName) },
-		// SetDone reconfirms the caller's iteration is still the current one
-		// before flipping done_flag. The harness reads the id via CurrentIteration
-		// (or TARIBOY_ITERATION) and POSTs loop/done during that same iteration;
-		// if the iteration has already rolled over, the stale id is rejected rather
-		// than marking a finished iteration done. The residual window between the
-		// reconfirm and the DB write is negligible: the engine only advances
-		// current after the runner returns, long after the harness process exits.
-		SetDone: func(id string, productive bool) error {
-			if m.currentIterationID(agName) != id {
-				return fmt.Errorf("iteration %q is no longer running", id)
-			}
-			return m.cfg.Store.SetIterationDone(id, productive)
-		},
-		Status: func() (map[string]any, error) {
-			state, err := m.LiveState(ag.Name)
-			if err != nil {
-				return nil, err
-			}
-			a, err := m.cfg.Store.Get(ag.Name)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"state": state, "enabled": a.Enabled,
-				"current_iteration": m.currentIterationID(agName),
-				"message":           a.StatusMessage, "updated": a.StatusUpdated}, nil
-		},
-		SetStatus: func(message string) (map[string]any, error) {
-			updated := m.cfg.Clock().Format(time.RFC3339)
-			if err := m.cfg.Store.SetStatus(ag.Name, message, updated); err != nil {
-				return nil, err
-			}
-			m.emitState(agName)
-			// Mirror the write into the audit log so `iteration logs`/audit shows
-			// the full status timeline (v1 recorded type="status" per set).
-			if m.cfg.AuditFor != nil {
-				if rec := m.cfg.AuditFor(agName); rec != nil {
-					rec.Record("status", "agent", m.currentIterationID(agName), map[string]any{"message": message})
-				}
-			}
-			return map[string]any{"message": message, "updated": updated}, nil
-		},
-		SetGoal: func(key string) (map[string]any, error) {
-			iteration := m.currentIterationID(agName)
-			if iteration == "" {
-				return nil, fmt.Errorf("no iteration is currently running")
-			}
-			proxy, ok := m.cfg.Proxy.(taskAttributionProxy)
-			if !ok {
-				return nil, fmt.Errorf("goal selection is unavailable")
-			}
-			result, err := setGoal(context.Background(), m.cfg.Tasks, m.cfg.SetGoal, proxy, iteration, agName, key)
-			if err == nil {
-				if taskID, _ := result["task_id"].(string); taskID != "" {
-					m.noteSelectedGoal(agName, iteration, taskID)
-				}
-			}
-			return result, err
-		},
-		Publish: func(msg bus.Message) (bus.Message, error) {
-			if m.cfg.Bus == nil {
-				return bus.Message{}, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.Publish(msg)
-		},
-		Subscribe: func(channel string, matcher bus.Matcher, tf []string) (bus.Subscription, error) {
-			if m.cfg.Bus == nil {
-				return bus.Subscription{}, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.Subscribe(agName, channel, matcher, tf)
-		},
-		Unsubscribe: func(id string) error {
-			if m.cfg.Bus == nil {
-				return fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.Unsubscribe(agName, id)
-		},
-		ListSubscriptions: func() ([]bus.Subscription, error) {
-			if m.cfg.Bus == nil {
-				return nil, nil
-			}
-			return m.cfg.Bus.ListSubscriptions(agName)
-		},
-		Channels: func() ([]bus.Channel, error) {
-			if m.cfg.Bus == nil {
-				return nil, nil
-			}
-			return m.cfg.Bus.Channels()
-		},
-		ProvidedChannels: m.cfg.ProvidedChannels,
-		TaskAction: func(action string, body map[string]any) (any, error) {
-			if m.cfg.Tasks == nil {
-				return nil, fmt.Errorf("native Tasks service is unavailable")
-			}
-			body["iteration_id"] = m.currentIterationID(agName)
-			return m.cfg.Tasks.AgentAction(context.Background(), tasks.AgentActor(agName), action, body)
-		},
-		Inbox: func(status string, limit int, before string) ([]bus.InboxItem, error) {
-			if m.cfg.Bus == nil {
-				return nil, nil
-			}
-			return m.cfg.Bus.Inbox(agName, status, limit, before)
-		},
-		MarkProcessed: func(msgID, result string) (bus.InboxItem, error) {
-			if m.cfg.Bus == nil {
-				return bus.InboxItem{}, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.MarkProcessed(agName, msgID, result)
-		},
-		Reply: func(msgID, text string, data map[string]any, typeOverride string) (bus.Message, error) {
-			if m.cfg.Bus == nil {
-				return bus.Message{}, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.Reply(agName, msgID, text, data, typeOverride)
-		},
-		Request: func(channel, text, deadline string) (bus.Message, error) {
-			if m.cfg.Bus == nil {
-				return bus.Message{}, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.Request(agName, channel, text, deadline)
-		},
-		Requeue: func(msgID string) error {
-			if m.cfg.Bus == nil {
-				return fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.Requeue(agName, msgID)
-		},
-		SubscribeParams: func(channel string, matcher bus.Matcher, tf []string, params map[string]any) (bus.Subscription, error) {
-			if m.cfg.Bus == nil {
-				return bus.Subscription{}, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.SubscribeParams(agName, channel, matcher, tf, params)
-		},
-		UnsubscribeChannel: func(channel string) (int, error) {
-			if m.cfg.Bus == nil {
-				return 0, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.UnsubscribeChannel(agName, channel)
-		},
-		Unanswered: func() (map[string][]bus.Message, error) {
-			if m.cfg.Bus == nil {
-				return nil, fmt.Errorf("bus not configured")
-			}
-			return m.cfg.Bus.UnansweredForPrincipal("agent:" + agName)
-		},
-		AddSchedule: func(kind, spec, channel, tpl string) (map[string]any, error) {
-			if m.cfg.Schedules == nil {
-				return nil, fmt.Errorf("schedule store not configured")
-			}
-			if channel == "" {
-				// A schedule the agent set for itself is service traffic; an
-				// explicit channel still wins, so an existing schedule and a
-				// deliberate chat target both keep working.
-				channel = bus.ChatChannelFor(bus.ChatIDService(agName))
-			}
-			sch, err := m.cfg.Schedules.Add(schedule.Schedule{
-				Agent: agName, Kind: kind, Spec: spec, Channel: channel, MessageTemplate: tpl})
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"id": sch.ID, "kind": sch.Kind, "channel": sch.Channel,
-				"next_fire_at": sch.NextFireAt}, nil
-		},
-		ListSchedules: func() ([]map[string]any, error) {
-			if m.cfg.Schedules == nil {
-				return nil, nil
-			}
-			list, err := m.cfg.Schedules.List(agName)
-			if err != nil {
-				return nil, err
-			}
-			rows := make([]map[string]any, 0, len(list))
-			for _, s := range list {
-				rows = append(rows, map[string]any{"id": s.ID, "kind": s.Kind, "spec": s.Spec,
-					"channel": s.Channel, "next_fire_at": s.NextFireAt, "enabled": s.Enabled})
-			}
-			return rows, nil
-		},
-		CancelSchedule: func(id string) error {
-			if m.cfg.Schedules == nil {
-				return fmt.Errorf("schedule store not configured")
-			}
-			return m.cfg.Schedules.Cancel(agName, id)
-		},
-		RunScriptOnce: func(in script.CreateOnce) (script.Definition, script.Run, error) { return m.RunOnce(agName, in) },
-		ScheduleScript: func(in script.CreateSchedule) (script.Definition, script.Run, error) {
-			return m.ScheduleScript(agName, in)
-		},
-		RerunScript:        func(id string) (script.Run, error) { return m.RerunScript(agName, id) },
-		ListScripts:        func() ([]script.Definition, error) { return m.ListScripts(agName) },
-		ListScriptRuns:     func(id string) ([]script.Run, error) { return m.ListScriptRuns(agName, id) },
-		GetScriptRun:       func(id string) (script.Run, error) { return m.GetScriptRun(agName, id) },
-		LogScriptRun:       func(id string) (string, error) { return m.LogScriptRun(agName, id) },
-		CancelScriptTarget: func(id string) error { return m.CancelScriptTarget(agName, id) },
-		RemoveScript:       func(id string) error { return m.RemoveScript(agName, id) },
-		BuildImage: func(name, tag, path string) (map[string]any, error) {
-			return buildImageForAgent(m.cfg.ImgStore, l.Workdir(), name, tag, path, m.imagePluginResolver())
-		},
-		LoopControl: func(action string) (map[string]any, error) {
-			updated, err := m.toolsLoopControl(agName, action)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"agent": agName, "action": action,
-				"enabled": updated.Enabled}, nil
-		},
-		GroupInfo: func() (map[string]any, error) {
-			return m.groupToolsInfo(agName)
-		},
-		GroupStatus: func(member string) (map[string]any, error) {
-			return m.groupToolsStatus(agName, member)
-		},
-		GroupSend: func(member, typ, text, deadline string) (map[string]any, error) {
-			return m.groupToolsSend(agName, m.currentIterationID(agName), member, typ, text, deadline)
-		},
-		GroupObserve: func(member string, tail int) (map[string]any, error) {
-			return m.groupToolsObserve(agName, member, tail)
-		},
-		GroupLoop: func(member, action string) (map[string]any, error) {
-			return m.groupToolsLoop(agName, member, action)
-		},
-	})
+	return agentapi.NewServer(toolsFacade{
+		agent: ag.Name, cfg: &m.cfg, iterations: m, status: m, goals: m, loop: m, groups: m,
+		scripts: m.scripts, pluginResolver: m.imagePluginResolver,
+	}.deps(ag, l))
 }
 
-func (m *Manager) start(ag agent.Agent) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if live, ok := m.adopting[ag.Name]; ok {
-		return fmt.Errorf("%w %q for agent %q", errIterationAdopting, live.ID, ag.Name)
+// startAgent is start under the agent's lifecycle gate.
+func (m *Manager) startAgent(ag agent.Agent) error {
+	release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), ag.Name)
+	if err != nil {
+		return err
 	}
-	if _, ok := m.runs[ag.Name]; ok {
-		// The runtime is still live (e.g. Start after Stop, where the engine
-		// goroutine survived). Clear any stale halt reason, grant a fresh idle
-		// budget (reset the idle-stop boundary + clear stale idle status), and
-		// wake the parked engine so a re-enable is picked up now, not on some
-		// future timer.
-		if err := m.cfg.Store.ClearError(ag.Name); err != nil {
-			return err
-		}
-		if err := m.cfg.Store.StartResetIdle(ag.Name); err != nil {
-			return err
-		}
-		m.runs[ag.Name].engine.Wake(WakeStart)
-		return nil
+	defer release()
+	return m.start(ag)
+}
+
+// start registers and launches the agent's engine, or wakes the live one. The
+// caller holds the agent's lifecycle gate.
+func (m *Manager) start(ag agent.Agent) error {
+	rt, err := m.runtimes.forStart(ag.Name)
+	if err != nil {
+		return err
 	}
 	if err := m.cfg.Store.ClearError(ag.Name); err != nil {
 		return err
 	}
 	if err := m.cfg.Store.StartResetIdle(ag.Name); err != nil {
 		return err
+	}
+	if rt != nil {
+		// The runtime is still live (e.g. Start after Stop, where the engine
+		// goroutine survived). The stale halt reason is cleared and a fresh idle
+		// budget granted above (reset the idle-stop boundary + clear stale idle
+		// status); wake the parked engine so a re-enable is picked up now, not
+		// on some future timer.
+		rt.engine.Wake(WakeStart)
+		return nil
 	}
 	agName := ag.Name
 	l := agentdir.New(m.cfg.AgentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
@@ -1289,11 +963,7 @@ func (m *Manager) start(ag agent.Agent) error {
 		// unwinding. Once that iteration has closed, retaining its marker would
 		// incorrectly make future Kill calls against an idle or stopped agent
 		// succeed forever.
-		m.mu.Lock()
-		if m.staleKills[agentName] == iterationID {
-			delete(m.staleKills, agentName)
-		}
-		m.mu.Unlock()
+		m.runtimes.clearStaleKill(agentName, iterationID)
 		if m.cfg.OnIterationClose != nil {
 			m.cfg.OnIterationClose(agentName, iterationID)
 		}
@@ -1316,21 +986,13 @@ func (m *Manager) start(ag agent.Agent) error {
 		return fmt.Errorf("bind agent tools socket %s: %w", l.Sock(), err)
 	}
 
-	base := m.ctx
-	if base == nil {
-		base = context.Background()
-	}
-	ectx, cancel := context.WithCancel(base)
+	ectx, cancel := context.WithCancel(m.runtimes.baseContext())
+	m.runtimes.install(ag.Name, &runtime{engine: engine, cancel: cancel, apiServer: apiSrv})
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
 		engine.Run(ectx)
 	}()
-
-	m.runs[ag.Name] = &runtime{engine: engine, cancel: cancel, apiServer: apiSrv}
-	// The runtime now owns the socket; drop the boot-time registration so
-	// teardown closes exactly one server for this agent.
-	delete(m.toolsAPI, ag.Name)
 	if m.cfg.Bus != nil {
 		// Nudge the freshly launched engine so a message-capable agent (peek
 		// installed above) that already has unacked pending deliveries drains
@@ -1369,7 +1031,7 @@ func (m *Manager) Start(name string) error {
 	}
 	m.emitState(name)
 	m.signalGoals()
-	if err := m.start(ag); err != nil {
+	if err := m.startAgent(ag); err != nil {
 		if errors.Is(err, errIterationAdopting) {
 			return nil
 		}
@@ -1389,23 +1051,27 @@ func (m *Manager) Start(name string) error {
 // kills any in-flight iteration / interactive session. Kill is best-effort: an
 // enabled-but-idle agent has nothing to kill.
 func (m *Manager) Stop(name string) error {
-	m.mu.Lock()
+	// The lifecycle gate linearizes Stop with a post-adoption Restart launch:
+	// either Stop cancels the pending launch, or the launch has created its
+	// iteration row and the Kill below finds it.
+	release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), name)
+	if err != nil {
+		return err
+	}
 	ag, err := m.cfg.Store.Get(name)
 	if err != nil {
-		m.mu.Unlock()
+		release()
 		return err
 	}
 	ag.Enabled = false
 	if err := m.cfg.Store.Update(ag); err != nil {
-		m.mu.Unlock()
+		release()
 		return err
 	}
-	rt := m.runs[name]
-	delete(m.restarting, name)
-	if rt != nil {
+	if rt := m.runtimes.stopRuntime(name); rt != nil {
 		rt.engine.Wake(WakeStop)
 	}
-	m.mu.Unlock()
+	release()
 	m.emitState(name)
 	m.signalGoals()
 	_ = m.Kill(name)
@@ -1416,10 +1082,7 @@ func (m *Manager) Stop(name string) error {
 // persisted settings. A stopped or not-yet-started agent has nothing to wake.
 func (m *Manager) RefreshLoopConfig(name string) {
 	m.signalGoals()
-	m.mu.Lock()
-	rt := m.runs[name]
-	m.mu.Unlock()
-	if rt != nil {
+	if rt := m.runtimes.runtime(name); rt != nil {
 		rt.engine.Wake(WakeConfig)
 	}
 }
@@ -1437,16 +1100,10 @@ func (m *Manager) Restart(name string) error {
 		return err
 	}
 	m.signalGoals()
-	m.mu.Lock()
-	if _, ok := m.adopting[name]; ok {
-		if ag.Interactive {
-			m.restarting[name] = true
-		}
-		m.mu.Unlock()
+	if m.runtimes.markRestartIfAdopting(name, ag.Interactive) {
 		return nil
 	}
-	m.mu.Unlock()
-	if err := m.start(ag); err != nil {
+	if err := m.startAgent(ag); err != nil {
 		return err
 	}
 	if ag.Interactive {
@@ -1458,12 +1115,8 @@ func (m *Manager) Restart(name string) error {
 // WakeAgents wakes the named running engines. Used by the bus publish hook, the
 // scheduler and the scripts result path to nudge affected agents.
 func (m *Manager) WakeAgents(agents []string, kind WakeKind) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, name := range agents {
-		if rt := m.runs[name]; rt != nil {
-			rt.engine.Wake(kind)
-		}
+	for _, engine := range m.runtimes.engines(agents) {
+		engine.Wake(kind)
 	}
 }
 
@@ -1474,10 +1127,7 @@ func (m *Manager) Kill(name string) error {
 			l := agentdir.New(m.cfg.AgentsDir, name).WithRuntime(m.cfg.RuntimeDir)
 			return m.recoverStaleKill(name, target.id, target.runtime, l, err)
 		}
-		m.mu.Lock()
-		staleID := m.staleKills[name]
-		m.mu.Unlock()
-		if staleID != "" {
+		if m.runtimes.staleKill(name) != "" {
 			return nil
 		}
 		return err
@@ -1516,31 +1166,22 @@ func (m *Manager) recoverStaleKill(name, id string, rt *runtime, l agentdir.Layo
 	if committed {
 		m.iterationCompleted(name, id)
 	}
-	m.mu.Lock()
-	if m.runs[name] == rt && rt.engine.CurrentIterationID() == id {
-		m.staleKills[name] = id
-		rt.engine.AbortCurrent(id)
-	}
-	m.mu.Unlock()
+	m.runtimes.markStaleKill(name, id, rt)
 	m.cfg.Log.Warn("kill recovered unreachable shim", "agent", name, "id", id, "err", rpcErr)
 	return nil
 }
 
 func (m *Manager) Exec(name, prompt string) (string, error) {
-	m.mu.Lock()
-	rt := m.runs[name]
-	m.mu.Unlock()
+	rt := m.runtimes.runtime(name)
 	if rt == nil {
 		ag, err := m.cfg.Store.Get(name)
 		if err != nil {
 			return "", err
 		}
-		if err := m.start(ag); err != nil {
+		if err := m.startAgent(ag); err != nil {
 			return "", err
 		}
-		m.mu.Lock()
-		rt = m.runs[name]
-		m.mu.Unlock()
+		rt = m.runtimes.runtime(name)
 		if rt == nil {
 			return "", fmt.Errorf("agent %q is not running after start", name)
 		}
@@ -1551,654 +1192,51 @@ func (m *Manager) Exec(name, prompt string) (string, error) {
 
 // RerunScript queues an immediate attempt for an eligible stored definition.
 func (m *Manager) RerunScript(agentName, scriptID string) (script.Run, error) {
-	if m.cfg.Scripts == nil {
-		return script.Run{}, fmt.Errorf("script store not configured")
-	}
-	run, err := m.cfg.Scripts.Rerun(agentName, scriptID)
-	if err == nil {
-		m.wakeScripts()
-	}
-	return run, err
+	return m.scripts.RerunScript(agentName, scriptID)
 }
 
 // RunOnce creates one local command definition and one immediate asynchronous run.
 func (m *Manager) RunOnce(agentName string, in script.CreateOnce) (script.Definition, script.Run, error) {
-	if m.cfg.Scripts == nil {
-		return script.Definition{}, script.Run{}, fmt.Errorf("script store not configured")
-	}
-	if _, err := m.cfg.Store.Get(agentName); err != nil {
-		return script.Definition{}, script.Run{}, err
-	}
-	definition, run, err := m.cfg.Scripts.CreateOnce(agentName, in)
-	if err == nil {
-		m.wakeScripts()
-	}
-	return definition, run, err
+	return m.scripts.RunOnce(agentName, in)
 }
 
 // ScheduleScript creates a fixed-delay recurring local command and its first
 // immediate run. Later runs are queued only after the previous run finishes.
 func (m *Manager) ScheduleScript(agentName string, in script.CreateSchedule) (script.Definition, script.Run, error) {
-	if m.cfg.Scripts == nil {
-		return script.Definition{}, script.Run{}, fmt.Errorf("script store not configured")
-	}
-	if _, err := m.cfg.Store.Get(agentName); err != nil {
-		return script.Definition{}, script.Run{}, err
-	}
-	definition, run, err := m.cfg.Scripts.CreateSchedule(agentName, in)
-	if err == nil {
-		m.wakeScripts()
-	}
-	return definition, run, err
+	return m.scripts.ScheduleScript(agentName, in)
 }
 
 func (m *Manager) ListScripts(agentName string) ([]script.Definition, error) {
-	if m.cfg.Scripts == nil {
-		return nil, fmt.Errorf("script store not configured")
-	}
-	return m.cfg.Scripts.ListDefinitions(agentName)
+	return m.scripts.ListScripts(agentName)
 }
 
 func (m *Manager) ListScriptRuns(agentName, scriptID string) ([]script.Run, error) {
-	if m.cfg.Scripts == nil {
-		return nil, fmt.Errorf("script store not configured")
-	}
-	return m.cfg.Scripts.ListRuns(agentName, scriptID)
+	return m.scripts.ListScriptRuns(agentName, scriptID)
 }
 
 func (m *Manager) GetScriptRun(agentName, runID string) (script.Run, error) {
-	if m.cfg.Scripts == nil {
-		return script.Run{}, fmt.Errorf("script store not configured")
-	}
-	return m.cfg.Scripts.GetRun(agentName, runID)
+	return m.scripts.GetScriptRun(agentName, runID)
 }
 
 // CancelScriptTarget records cancellation intent for a running attempt before
 // terminating its process group. The run remains active until Wait confirms
 // process exit, preserving the per-definition no-overlap invariant.
 func (m *Manager) CancelScriptTarget(agentName, id string) error {
-	if m.cfg.Scripts == nil {
-		return fmt.Errorf("script store not configured")
-	}
-	at := m.cfg.Clock().UTC().Format(time.RFC3339)
-	if run, err := m.cfg.Scripts.GetRun(agentName, id); err == nil {
-		if run.Status == script.RunRunning {
-			run, err = m.cfg.Scripts.RequestRunCancellation(agentName, id)
-			if err != nil {
-				return err
-			}
-			key := run.Agent + "/" + run.ID
-			tracked := m.markScriptCancellation(key)
-			if run.PID != nil {
-				if tracked {
-					m.terminateScriptProcess(key, *run.PID)
-				} else {
-					_ = syscall.Kill(-*run.PID, syscall.SIGTERM)
-				}
-			}
-			return nil
-		}
-		if err := m.cfg.Scripts.CancelRun(agentName, id, at); err != nil {
-			return err
-		}
-		if m.cfg.ScriptResults != nil {
-			m.cfg.ScriptResults.Wake()
-		}
-		return nil
-	} else if !errors.Is(err, script.ErrNotFound) {
-		return err
-	}
-
-	definition, err := m.cfg.Scripts.GetDefinition(agentName, id)
-	if err != nil {
-		return err
-	}
-	var running *script.Run
-	if definition.LatestRun != nil && definition.LatestRun.Status == script.RunRunning {
-		running = definition.LatestRun
-	}
-	if err := m.cfg.Scripts.CancelDefinition(agentName, id, at); err != nil {
-		return err
-	}
-	if running != nil {
-		key := running.Agent + "/" + running.ID
-		tracked := m.markScriptCancellation(key)
-		if running.PID != nil {
-			if tracked {
-				m.terminateScriptProcess(key, *running.PID)
-			} else {
-				_ = syscall.Kill(-*running.PID, syscall.SIGTERM)
-			}
-		}
-	}
-	if m.cfg.ScriptResults != nil {
-		m.cfg.ScriptResults.Wake()
-	}
-	return nil
-}
-
-func (m *Manager) markScriptCancellation(key string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, tracked := m.scriptRuns[key]; !tracked {
-		return false
-	}
-	m.scriptCancels[key] = true
-	return true
-}
-
-func (m *Manager) terminateScriptProcess(key string, pid int) {
-	_ = syscall.Kill(-pid, syscall.SIGTERM)
-	time.AfterFunc(scriptCancelGrace, func() {
-		m.mu.Lock()
-		cancelPending := m.scriptCancels[key]
-		_, stillRunning := m.scriptRuns[key]
-		m.mu.Unlock()
-		if cancelPending && stillRunning {
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
-		}
-	})
+	return m.scripts.CancelScriptTarget(agentName, id)
 }
 
 func (m *Manager) RemoveScript(agentName, id string) error {
-	if m.cfg.Scripts == nil {
-		return fmt.Errorf("script store not configured")
-	}
-	definition, err := m.cfg.Scripts.GetDefinition(agentName, id)
-	if err != nil {
-		return err
-	}
-	if definition.State == script.StateActive {
-		return fmt.Errorf("cannot remove active script %q; cancel it first: %w", id, script.ErrActive)
-	}
-	runs, err := m.cfg.Scripts.ListRuns(agentName, id)
-	if err != nil {
-		return err
-	}
-	logPaths := make([]string, 0, len(runs))
-	for _, run := range runs {
-		if run.Status == script.RunPending || run.Status == script.RunRunning {
-			return fmt.Errorf("cannot remove script %q with an active run: %w", id, script.ErrActive)
-		}
-		if run.LogPath == "" {
-			continue
-		}
-		_, path, err := m.scriptLogLocation(agentName, run.LogPath)
-		if err != nil {
-			return err
-		}
-		logPaths = append(logPaths, path)
-	}
-	type movedLog struct{ from, to string }
-	moved := make([]movedLog, 0, len(logPaths))
-	rollback := func() {
-		for i := len(moved) - 1; i >= 0; i-- {
-			if err := os.Rename(moved[i].to, moved[i].from); err != nil && !os.IsNotExist(err) {
-				m.cfg.Log.Error("restore script log after failed removal", "from", moved[i].to, "to", moved[i].from, "err", err)
-			}
-		}
-	}
-	for index, path := range logPaths {
-		if _, err := os.Lstat(path); os.IsNotExist(err) {
-			continue
-		} else if err != nil {
-			rollback()
-			return err
-		}
-		quarantine := fmt.Sprintf("%s.deleting-%d-%d", path, m.cfg.Clock().UnixNano(), index)
-		if _, err := os.Lstat(quarantine); err == nil {
-			rollback()
-			return fmt.Errorf("script log quarantine path already exists: %s", quarantine)
-		} else if !os.IsNotExist(err) {
-			rollback()
-			return err
-		}
-		if err := os.Rename(path, quarantine); err != nil {
-			rollback()
-			return err
-		}
-		moved = append(moved, movedLog{from: path, to: quarantine})
-	}
-	if err := m.cfg.Scripts.RemoveDefinition(agentName, id); err != nil {
-		rollback()
-		return err
-	}
-	for _, log := range moved {
-		if err := os.Remove(log.to); err != nil && !os.IsNotExist(err) {
-			m.cfg.Log.Error("remove quarantined script log", "path", log.to, "err", err)
-		}
-	}
-	return nil
+	return m.scripts.RemoveScript(agentName, id)
 }
 
 // LogScript returns a bounded tail after confirming the record belongs to the
 // requested agent. Missing logs are represented by an empty string.
 func (m *Manager) LogScriptRun(agentName, id string) (string, error) {
-	file, _, err := m.openScriptLog(agentName, id)
-	if errors.Is(err, script.ErrNotFound) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	const maxLogBytes = 64 * 1024
-	info, err := file.Stat()
-	if err != nil {
-		return "", err
-	}
-	if info.Size() > maxLogBytes {
-		if _, err := file.Seek(info.Size()-maxLogBytes, io.SeekStart); err != nil {
-			return "", err
-		}
-	}
-	b, err := io.ReadAll(io.LimitReader(file, maxLogBytes))
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	return m.scripts.LogScriptRun(agentName, id)
 }
 
 func (m *Manager) OpenScriptLog(agentName, runID string) (io.ReadCloser, string, error) {
-	return m.openScriptLog(agentName, runID)
-}
-
-func (m *Manager) openScriptLog(agentName, runID string) (*os.File, string, error) {
-	run, err := m.GetScriptRun(agentName, runID)
-	if err != nil {
-		return nil, "", err
-	}
-	if run.LogPath == "" {
-		return nil, "", script.ErrNotFound
-	}
-	root, path, err := m.scriptLogLocation(agentName, run.LogPath)
-	if err != nil {
-		return nil, "", err
-	}
-	rootFD, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, "", script.ErrNotFound
-		}
-		return nil, "", err
-	}
-	defer unix.Close(rootFD)
-	filename := filepath.Base(path)
-	fd, err := unix.Openat(rootFD, filename, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, "", script.ErrNotFound
-		}
-		return nil, "", err
-	}
-	file := os.NewFile(uintptr(fd), path)
-	if file == nil {
-		_ = unix.Close(fd)
-		return nil, "", errors.New("open script log")
-	}
-	info, err := file.Stat()
-	if err != nil {
-		file.Close()
-		return nil, "", err
-	}
-	stat, _ := info.Sys().(*syscall.Stat_t)
-	if !info.Mode().IsRegular() || stat == nil || stat.Nlink != 1 {
-		file.Close()
-		return nil, "", errors.New("script log is not a regular owner-only file")
-	}
-	return file, filename, nil
-}
-
-func (m *Manager) scriptLogLocation(agentName, logPath string) (string, string, error) {
-	root, err := filepath.Abs(filepath.Join(agentdir.New(m.cfg.AgentsDir, agentName).Root, "scripts"))
-	if err != nil {
-		return "", "", err
-	}
-	path, err := filepath.Abs(logPath)
-	if err != nil {
-		return "", "", err
-	}
-	if filepath.Dir(path) != root {
-		return "", "", fmt.Errorf("script log path is outside the agent scripts directory")
-	}
-	return root, path, nil
-}
-
-func (m *Manager) wakeScripts() {
-	select {
-	case m.scriptsWake <- struct{}{}:
-	default:
-	}
-}
-
-func (m *Manager) startScriptSupervisor(ctx context.Context) {
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		ticker := time.NewTicker(scriptPollInterval)
-		defer ticker.Stop()
-		for {
-			m.superviseScripts(ctx)
-			select {
-			case <-ctx.Done():
-				return
-			case <-m.scriptsWake:
-			case <-ticker.C:
-			}
-		}
-	}()
-}
-
-func (m *Manager) superviseScripts(ctx context.Context) {
-	agents, err := m.cfg.Store.List()
-	if err != nil {
-		m.cfg.Log.Error("list scripts agents", "err", err)
-		return
-	}
-	now := m.cfg.Clock().UTC().Format(time.RFC3339)
-	due, err := m.cfg.Scripts.DueDefinitions(now)
-	if err != nil {
-		m.cfg.Log.Error("list due scripts", "err", err)
-		return
-	}
-	for _, definition := range due {
-		if _, err := m.cfg.Scripts.ScheduleNext(definition.Agent, definition.ID); err != nil && !errors.Is(err, script.ErrConflict) {
-			m.cfg.Log.Error("schedule next script run", "agent", definition.Agent, "script", definition.ID, "err", err)
-		}
-	}
-	pending, err := m.cfg.Scripts.PendingRuns()
-	if err != nil {
-		m.cfg.Log.Error("list pending script runs", "err", err)
-		return
-	}
-	agentsByName := make(map[string]agent.Agent, len(agents))
-	for _, ag := range agents {
-		agentsByName[ag.Name] = ag
-	}
-	for _, run := range pending {
-		ag, ok := agentsByName[run.Agent]
-		if !ok {
-			continue
-		}
-		m.startScript(ctx, ag, run)
-	}
-}
-
-func (m *Manager) startScript(ctx context.Context, ag agent.Agent, r script.Run) {
-	key := r.Agent + "/" + r.ID
-	m.mu.Lock()
-	if _, running := m.scriptRuns[key]; running {
-		m.mu.Unlock()
-		return
-	}
-	// A placeholder makes concurrent scan passes unable to start this record
-	// twice before its shell has a PID.
-	m.scriptRuns[key] = nil
-	m.mu.Unlock()
-	l := agentdir.New(m.cfg.AgentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
-	definition, err := m.cfg.Scripts.GetDefinition(r.Agent, r.ScriptID)
-	if err != nil {
-		m.finishScript(key, r, -1, fmt.Errorf("load script definition: %w", err), "")
-		return
-	}
-	logPath, err := filepath.Abs(filepath.Join(l.Root, "scripts", r.ID+".log"))
-	if err != nil {
-		m.finishScript(key, r, -1, fmt.Errorf("resolve script log path: %w", err), "")
-		return
-	}
-	claimed, err := m.cfg.Scripts.ClaimRun(r.Agent, r.ID, m.cfg.Clock().UTC().Format(time.RFC3339), logPath)
-	if err != nil {
-		m.finishScript(key, r, -1, err, logPath)
-		return
-	}
-	if !claimed {
-		m.mu.Lock()
-		delete(m.scriptRuns, key)
-		m.mu.Unlock()
-		return
-	}
-
-	secrets, _ := m.cfg.Store.SecretMap(ag.Name)
-	env := agentScriptEnv(ag, l, secrets, l.Sock())
-	// Appended last: os/exec keeps the final value of a duplicated key, so an
-	// agent's own environment cannot redefine the protocol.
-	env = append(env, script.ProtocolEnv()...)
-	runContext := ctx
-	cancelRunContext := func() {}
-	if m.cfg.ScriptTimeout > 0 {
-		runContext, cancelRunContext = context.WithTimeout(ctx, m.cfg.ScriptTimeout)
-	}
-	bash, err := harness.FindExecutable("bash", env, cwdOf(ag, l))
-	if err != nil {
-		cancelRunContext()
-		m.finishScript(key, r, -1, errors.New("bash is required for agent shell scripts"), logPath)
-		return
-	}
-	argv := agentShellCommand(bash, filepath.Dir(m.cfg.AgentsDir), l, []string{"sh", "-c", definition.Command})
-	cmd := exec.CommandContext(runContext, argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = cwdOf(ag, l), env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.WaitDelay = 2 * time.Second
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-	}
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
-		cancelRunContext()
-		m.finishScript(key, r, -1, err, logPath)
-		return
-	}
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		cancelRunContext()
-		m.finishScript(key, r, -1, err, logPath)
-		return
-	}
-	if _, err := fmt.Fprintf(logFile, "cwd: %s\n", cmd.Dir); err != nil {
-		cancelRunContext()
-		_ = logFile.Close()
-		m.finishScript(key, r, -1, err, logPath)
-		return
-	}
-	cmd.Stdout, cmd.Stderr = logFile, logFile
-	if err := cmd.Start(); err != nil {
-		cancelRunContext()
-		_ = logFile.Close()
-		m.finishScript(key, r, -1, err, logPath)
-		return
-	}
-	pidSet, err := m.cfg.Scripts.SetRunPID(r.Agent, r.ID, cmd.Process.Pid)
-	if err != nil || !pidSet {
-		cancelRunContext()
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-		_ = logFile.Close()
-		if err == nil {
-			err = errors.New("script claim was canceled before process startup completed")
-		}
-		m.finishScript(key, r, -1, err, logPath)
-		return
-	}
-	m.mu.Lock()
-	m.scriptRuns[key] = cmd
-	cancelRequested := m.scriptCancels[key]
-	m.mu.Unlock()
-	if cancelRequested {
-		m.terminateScriptProcess(key, cmd.Process.Pid)
-	}
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		defer cancelRunContext()
-		err := cmd.Wait()
-		_ = logFile.Close()
-		code := 0
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				code = exitErr.ExitCode()
-			} else {
-				code = -1
-			}
-		}
-		if runContext.Err() != nil {
-			code, err = -1, runContext.Err()
-		}
-		m.finishScript(key, r, code, err, logPath)
-	}()
-}
-
-// agentScriptEnv is the environment of a script that runs as ag: the daemon
-// baseline, the agent's environment and secrets, and the agent bin directory
-// on PATH. toolsSock is the agent tools socket, or "" for a script that must
-// not reach it.
-func agentScriptEnv(ag agent.Agent, l agentdir.Layout, secrets map[string]string, toolsSock string) []string {
-	env := BuildEnv(os.Environ(), l.BinDir(), ag.Name, "", toolsSock, false, "", "", ag.Env, secrets)
-	if toolsSock != "" {
-		return env
-	}
-	// A script without the tools socket gets none of the variables that reach
-	// the socket or the daemon API.
-	out := env[:0]
-	for _, kv := range env {
-		name, _, _ := strings.Cut(kv, "=")
-		if !slices.Contains(script.DaemonAccessEnv, name) {
-			out = append(out, kv)
-		}
-	}
-	return out
-}
-
-// ScriptRuntime returns the working directory and environment a script run
-// "as the agent" uses: the daemon baseline, the agent's environment and
-// secrets, the agent bin directory on PATH, and no tools socket.
-func (m *Manager) ScriptRuntime(agentName string) (cwd string, env []string, err error) {
-	ag, err := m.cfg.Store.Get(agentName)
-	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, agent.ErrNotFound) {
-		return "", nil, fmt.Errorf("agent %q not found", agentName)
-	}
-	if err != nil {
-		return "", nil, fmt.Errorf("load agent %q: %w", agentName, err)
-	}
-	secrets, err := m.cfg.Store.SecretMap(ag.Name)
-	if err != nil {
-		return "", nil, fmt.Errorf("load secrets of agent %q: %w", agentName, err)
-	}
-	l := agentdir.New(m.cfg.AgentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
-	cwd = cwdOf(ag, l)
-	env, err = agentShellEnv(filepath.Dir(m.cfg.AgentsDir), l.ShellScriptPath(), cwd, agentScriptEnv(ag, l, secrets, ""))
-	if err != nil {
-		return "", nil, fmt.Errorf("agent shell scripts of agent %q: %w", agentName, err)
-	}
-	return cwd, env, nil
-}
-
-// GlobalShellEnv returns the daemon environment as global-agent-shell.sh under
-// baseDir leaves it: the environment of workflow scripts that run as the queue.
-func GlobalShellEnv(baseDir string) ([]string, error) {
-	// The script sees none of the variables that reach the daemon API.
-	base := slices.DeleteFunc(os.Environ(), func(kv string) bool {
-		name, _, _ := strings.Cut(kv, "=")
-		return slices.Contains(script.DaemonAccessEnv, name)
-	})
-	env, err := agentShellEnv(baseDir, "", baseDir, base)
-	if err != nil {
-		return nil, fmt.Errorf("global agent shell script: %w", err)
-	}
-	return env, nil
-}
-
-// shellEnvTimeout bounds sourcing the shell scripts for a script environment:
-// a bind, a secret list, and every workflow run wait for it.
-var shellEnvTimeout = 30 * time.Second
-
-// agentShellEnv returns env as the global and agent shell scripts leave it
-// after they are sourced the way a harness launch sources them. An empty
-// agentScript sources the global script only.
-func agentShellEnv(baseDir, agentScript, cwd string, env []string) ([]string, error) {
-	_, globalErr := os.Stat(filepath.Join(baseDir, "global-agent-shell.sh"))
-	_, agentErr := os.Stat(agentScript)
-	if globalErr != nil && (agentScript == "" || agentErr != nil) {
-		return env, nil
-	}
-	bash, err := harness.FindExecutable("bash", env, cwd)
-	if err != nil {
-		return nil, errors.New("bash is required for agent shell scripts")
-	}
-	argv := []string{bash, "-c", agentShellPrelude, "tariboy-agent-shell", filepath.Join(baseDir, "global-agent-shell.sh"), agentScript,
-		bash, "-c", `for n in $(compgen -e); do printf '%s=%s\0' "$n" "${!n}"; done`}
-	ctx, cancel := context.WithTimeout(context.Background(), shellEnvTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = cwd, env
-	// A timeout kills the scripts' children too, and stops waiting for a pipe
-	// one of them still holds.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = time.Second
-	out, err := cmd.Output()
-	if ctx.Err() != nil {
-		return nil, fmt.Errorf("shell scripts did not finish within %v", shellEnvTimeout)
-	}
-	if err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) && len(exit.Stderr) > 0 {
-			return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exit.Stderr)))
-		}
-		return nil, err
-	}
-	return strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00"), nil
-}
-
-func (m *Manager) finishScript(key string, r script.Run, code int, runErr error, logPath string) {
-	m.mu.Lock()
-	cancelRequested := m.scriptCancels[key]
-	delete(m.scriptRuns, key)
-	delete(m.scriptCancels, key)
-	m.mu.Unlock()
-	current, err := m.cfg.Scripts.GetRun(r.Agent, r.ID)
-	if err != nil {
-		return
-	}
-	if cancelRequested || current.CancelRequested {
-		if err := m.cfg.Scripts.CancelRun(r.Agent, r.ID, m.cfg.Clock().UTC().Format(time.RFC3339)); err != nil && !errors.Is(err, script.ErrConflict) {
-			m.cfg.Log.Error("cancel script run", "agent", r.Agent, "run", r.ID, "err", err)
-			return
-		}
-		if m.cfg.ScriptResults != nil {
-			m.cfg.ScriptResults.Wake()
-		}
-		return
-	}
-	// Cancellation wins over a late Wait result, so a killed recurring script
-	// cannot resurrect itself as waiting.
-	if current.Status == script.RunCancelled {
-		return
-	}
-	if runErr != nil && code == -1 {
-		m.cfg.Log.Error("script start/wait", "agent", r.Agent, "script", r.ID, "err", runErr)
-	}
-	status := script.RunFailed
-	var exitCode *int
-	if errors.Is(runErr, context.DeadlineExceeded) {
-		status = script.RunTimedOut
-	} else if errors.Is(runErr, context.Canceled) {
-		status = script.RunInterrupted
-	} else if code >= 0 {
-		exitCode = &code
-		if code == 0 {
-			status = script.RunSucceeded
-		}
-	}
-	if _, err := m.cfg.Scripts.CompleteRun(r.Agent, r.ID, script.Completion{Status: status, ExitCode: exitCode, FinishedAt: m.cfg.Clock().UTC().Format(time.RFC3339), LogPath: logPath}); err != nil {
-		if !errors.Is(err, script.ErrConflict) {
-			m.cfg.Log.Error("complete script run", "agent", r.Agent, "run", r.ID, "err", err)
-		}
-		return
-	}
-	if m.cfg.ScriptResults != nil {
-		m.cfg.ScriptResults.Wake()
-	}
+	return m.scripts.OpenScriptLog(agentName, runID)
 }
 
 // Remove tears an agent down. force only bypasses the running-guard; it is
@@ -2210,31 +1248,19 @@ func (m *Manager) finishScript(key string, r script.Run, code int, runErr error,
 // history. With purge=true it is a full hard delete that also cleans the
 // agent-keyed side-table rows Store.Delete leaves behind (see PurgeAgentData).
 func (m *Manager) Remove(name string, force, purge bool) error {
+	release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), name)
+	if err != nil {
+		return err
+	}
+	defer release()
 	ag, err := m.cfg.Store.Get(name)
 	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	rt := m.runs[name]
-	// Refuse to nuke an agent whose loop is enabled (intent to run) or that has an
-	// iteration in flight right now — unless forced. This is the reality-derived
-	// equivalent of the old state=="running" guard.
-	iterating := rt != nil && rt.engine.CurrentIterationID() != ""
-	if (ag.Enabled || iterating) && !force {
-		m.mu.Unlock()
-		return fmt.Errorf("agent %q is running; stop it first or use --force", name)
+	servers, err := m.runtimes.remove(name, ag.Enabled, force)
+	if err != nil {
+		return err
 	}
-	servers := map[*agentapi.Server]struct{}{}
-	if rt != nil {
-		rt.cancel()
-		servers[rt.apiServer] = struct{}{}
-		delete(m.runs, name)
-	}
-	if srv, ok := m.toolsAPI[name]; ok {
-		servers[srv] = struct{}{}
-		delete(m.toolsAPI, name)
-	}
-	m.mu.Unlock()
 	shutdownAgentAPIs(servers)
 
 	l := agentdir.New(m.cfg.AgentsDir, name)
@@ -2278,6 +1304,11 @@ func (m *Manager) Remove(name string, force, purge bool) error {
 // are updated to the new image). An empty imageRef keeps the agent's current
 // image.
 func (m *Manager) Reprovision(name, imageRef string) error {
+	release, err := m.runtimes.lockAgent(m.runtimes.baseContext(), name)
+	if err != nil {
+		return err
+	}
+	defer release()
 	return image.WithPublicationGate(func() error { return m.reprovision(name, imageRef) })
 }
 
@@ -2435,13 +1466,16 @@ func (m *Manager) Resize(name string, cols, rows int) error {
 }
 
 // currentShimClient resolves the current iteration and connects to its shim
-// while holding the manager lock. Adoption cleanup uses the same lock before it
-// releases startAfter, so a stable per-agent socket path cannot be rebound to a
-// replacement iteration between resolution and connection.
+// while holding the agent's handoff lock for reading. Adoption cleanup takes
+// that lock for writing before it releases startAfter, so a stable per-agent
+// socket path cannot be rebound to a replacement iteration between resolution
+// and connection.
 func (m *Manager) currentShimClient(name string) (*shim.Client, iterationTarget, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	target, err := m.currentIterationTargetLocked(name)
+	handoff := &m.runtimes.locksFor(name).handoff
+	handoff.RLock()
+	defer handoff.RUnlock()
+	sock := agentdir.New(m.cfg.AgentsDir, name).WithRuntime(m.cfg.RuntimeDir).ShimSock()
+	target, err := m.runtimes.currentTarget(name, sock)
 	if err != nil {
 		return nil, iterationTarget{}, err
 	}
@@ -2450,27 +1484,6 @@ func (m *Manager) currentShimClient(name string) (*shim.Client, iterationTarget,
 		return nil, target, err
 	}
 	return client, target, nil
-}
-
-func (m *Manager) currentIterationTargetLocked(name string) (iterationTarget, error) {
-	rt := m.runs[name]
-	if rt != nil {
-		if id := rt.engine.CurrentIterationID(); id != "" {
-			return iterationTarget{
-				id: id,
-				sock: agentdir.New(m.cfg.AgentsDir, name).
-					WithRuntime(m.cfg.RuntimeDir).ShimSock(),
-				runtime: rt,
-			}, nil
-		}
-	}
-	if live, ok := m.adopting[name]; ok {
-		return iterationTarget{id: live.ID, sock: live.ShimSock}, nil
-	}
-	if rt == nil {
-		return iterationTarget{}, fmt.Errorf("agent %q is not running", name)
-	}
-	return iterationTarget{}, fmt.Errorf("agent %q has no running iteration", name)
 }
 
 // LiveState derives an agent's reported lifecycle state from reality — never
@@ -2499,16 +1512,7 @@ func (m *Manager) LiveStateOf(a agent.Agent) string {
 	if a.ErrorReason != "" {
 		return "error"
 	}
-	m.mu.Lock()
-	iterationID := ""
-	if rt := m.runs[name]; rt != nil {
-		iterationID = rt.engine.CurrentIterationID()
-	}
-	if iterationID == "" {
-		iterationID = m.adopting[name].ID
-	}
-	m.mu.Unlock()
-	if iterationID != "" {
+	if iterationID := m.runtimes.currentIterationID(name); iterationID != "" {
 		it, err := m.cfg.Store.GetIteration(name, iterationID)
 		if err == nil {
 			last := it.StartedAt
@@ -2541,33 +1545,14 @@ func (m *Manager) hasLiveIterationOnDisk(name string) bool {
 // ActiveAgents is the number of running per-agent loop engines — the
 // active-agents gauge for telemetry (spec §14).
 func (m *Manager) ActiveAgents() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.runs)
+	return m.runtimes.count()
 }
 
 // Shutdown cancels every engine and reattach goroutine and waits for them to
 // quiesce (bounded by shutdownWait) so daemon teardown does not race the store
 // Close that follows it.
 func (m *Manager) Shutdown() {
-	m.mu.Lock()
-	servers := map[*agentapi.Server]struct{}{}
-	if m.stop != nil {
-		m.stop() // unblock adopt/startAfter goroutines
-	}
-	for name, rt := range m.runs {
-		rt.cancel()
-		servers[rt.apiServer] = struct{}{}
-		delete(m.runs, name)
-	}
-	// Agents that only ever got the boot-time bind (engine never started) own
-	// their tools server here, not in runs.
-	for name, srv := range m.toolsAPI {
-		servers[srv] = struct{}{}
-		delete(m.toolsAPI, name)
-	}
-	m.mu.Unlock()
-	shutdownAgentAPIs(servers)
+	shutdownAgentAPIs(m.runtimes.shutdown())
 
 	done := make(chan struct{})
 	go func() { m.wg.Wait(); close(done) }()
@@ -2673,11 +1658,9 @@ func (m *Manager) groupStatusRow(a agent.Agent, lead string) map[string]any {
 		"enabled": a.Enabled, "status_message": a.StatusMessage,
 		"status_updated": a.StatusUpdated,
 	}
-	m.mu.Lock()
-	if rt := m.runs[a.Name]; rt != nil {
-		row["current_iteration"] = rt.engine.CurrentIterationID()
+	if m.runtimes.runtime(a.Name) != nil {
+		row["current_iteration"] = m.runtimes.engineIterationID(a.Name)
 	}
-	m.mu.Unlock()
 	return row
 }
 

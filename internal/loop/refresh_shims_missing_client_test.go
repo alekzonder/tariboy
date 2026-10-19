@@ -82,10 +82,10 @@ func TestStartAllSkipsEnabledAgentMissingRequiredDirectScript(t *testing.T) {
 	if err := m.StartAll(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	m.mu.Lock()
-	_, blockedStarted := m.runs[blocked.Name]
-	_, healthyStarted := m.runs[healthy.Name]
-	m.mu.Unlock()
+	m.runtimes.mu.Lock()
+	_, blockedStarted := m.runtimes.runs[blocked.Name]
+	_, healthyStarted := m.runtimes.runs[healthy.Name]
+	m.runtimes.mu.Unlock()
 	if blockedStarted {
 		t.Fatal("enabled agent started without its required direct launcher")
 	}

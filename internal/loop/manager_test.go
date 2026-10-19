@@ -85,9 +85,9 @@ func TestShutdownDoesNotHoldManagerLockWhileDrainingHTTP(t *testing.T) {
 	<-entered
 	m := &Manager{
 		cfg:      ManagerConfig{Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
-		runs:     map[string]*runtime{},
-		toolsAPI: map[string]*agentapi.Server{"worker": srv},
+		runtimes: newAgentRuntimes(),
 	}
+	m.runtimes.toolsAPI["worker"] = srv
 	shutdownDone := make(chan struct{})
 	go func() {
 		m.Shutdown()
@@ -116,8 +116,8 @@ func TestShutdownDoesNotHoldManagerLockWhileDrainingHTTP(t *testing.T) {
 func startScriptTestSupervisor(t *testing.T, m *Manager) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	m.ctx, m.stop = ctx, cancel
-	m.startScriptSupervisor(ctx)
+	m.runtimes.setBase(ctx, cancel)
+	m.scripts.startScriptSupervisor(ctx)
 	t.Cleanup(m.Shutdown)
 }
 
@@ -308,7 +308,7 @@ func TestFinishScriptDoesNotPublishResultWithoutLogPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m.finishScript(r.ID, r, -1, errors.New("log path unavailable"), "")
+	m.scripts.finishScript(r.ID, r, -1, errors.New("log path unavailable"), "")
 
 	messages, err := m.cfg.Bus.MessagesSince(bus.ChatChannelFor(bus.ChatIDService("worker")), "", 10)
 	if err != nil {
@@ -501,7 +501,7 @@ func TestStartScriptDoesNotLaunchCanceledPendingRecord(t *testing.T) {
 	if err := st.CancelRun("worker", r.ID, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		t.Fatal(err)
 	}
-	m.startScript(context.Background(), agent.Agent{Name: "worker", Cwd: workdir}, r)
+	m.scripts.startScript(context.Background(), agent.Agent{Name: "worker", Cwd: workdir}, r)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("canceled pending record started command: stat err=%v", err)
 	}
@@ -776,7 +776,7 @@ func TestStartSignalsGoalReconcilerWhileIterationIsAdopting(t *testing.T) {
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
 	}
-	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
+	m.runtimes.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
 	calls := 0
 	m.cfg.GoalSignal = func() { calls++ }
 
@@ -793,7 +793,7 @@ func TestRestartSignalsGoalReconcilerAfterReenableDuringAdoption(t *testing.T) {
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
+	m.runtimes.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "iter-7"}
 	var enabled []bool
 	m.cfg.GoalSignal = func() {
 		ag, err := as.Get("worker")
@@ -920,9 +920,9 @@ func awaitCurrentIteration(t *testing.T, m *Manager, name string) string {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		m.mu.Lock()
-		rt := m.runs[name]
-		m.mu.Unlock()
+		m.runtimes.mu.Lock()
+		rt := m.runtimes.runs[name]
+		m.runtimes.mu.Unlock()
 		if rt != nil {
 			if id := rt.engine.CurrentIterationID(); id != "" {
 				return id
@@ -1104,9 +1104,9 @@ func TestManagerStartDuringAdoptionDoesNotLaunchDuplicate(t *testing.T) {
 	if err := m.Start("smoke"); err != nil {
 		t.Fatalf("Start adopted agent: %v", err)
 	}
-	m.mu.Lock()
-	_, started := m.runs["smoke"]
-	m.mu.Unlock()
+	m.runtimes.mu.Lock()
+	_, started := m.runtimes.runs["smoke"]
+	m.runtimes.mu.Unlock()
 	if started {
 		t.Fatal("Start created a normal runtime while adoption was pending")
 	}
@@ -1126,9 +1126,9 @@ func TestManagerExecRejectsDuringAdoption(t *testing.T) {
 	if _, err := m.Exec("smoke", "duplicate"); err == nil || !strings.Contains(err.Error(), "adopted running iteration") {
 		t.Fatalf("Exec during adoption error = %v, want adopted running iteration", err)
 	}
-	m.mu.Lock()
-	_, started := m.runs["smoke"]
-	m.mu.Unlock()
+	m.runtimes.mu.Lock()
+	_, started := m.runtimes.runs["smoke"]
+	m.runtimes.mu.Unlock()
 	if started {
 		t.Fatal("Exec created a normal runtime while adoption was pending")
 	}
@@ -1161,9 +1161,9 @@ func TestManagerStopDuringAdoptionDoesNotRestartEngine(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("post-adoption reconciliation did not finish")
 	}
-	m.mu.Lock()
-	_, started := m.runs["smoke"]
-	m.mu.Unlock()
+	m.runtimes.mu.Lock()
+	_, started := m.runtimes.runs["smoke"]
+	m.runtimes.mu.Unlock()
 	if started {
 		t.Fatal("post-adoption reconciliation restarted a stopped agent")
 	}
@@ -1290,9 +1290,10 @@ func TestManagerAdoptedControlCannotCrossSocketReuse(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	handoffUnlocked := m.mu.TryLock()
+	handoff := &m.runtimes.locksFor("smoke").handoff
+	handoffUnlocked := handoff.TryLock()
 	if handoffUnlocked {
-		m.mu.Unlock()
+		handoff.Unlock()
 	}
 	close(proceed)
 	sendErr := <-sendDone
@@ -1463,14 +1464,14 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 	// the normal no-running-iteration error.
 	deadline = time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		m.mu.Lock()
-		rt := m.runs["smoke"]
+		m.runtimes.mu.Lock()
+		rt := m.runtimes.runs["smoke"]
 		current := ""
 		if rt != nil {
 			current = rt.engine.CurrentIterationID()
 		}
-		marker := m.staleKills["smoke"]
-		m.mu.Unlock()
+		marker := m.runtimes.staleKills["smoke"]
+		m.runtimes.mu.Unlock()
 		// Both conditions are needed. The engine clears its current iteration
 		// inside the run body, but drops the stale-kill marker from a deferred
 		// close hook that only fires when that body returns - with a log write
@@ -1837,9 +1838,9 @@ func TestReattachOnlyStartsEnabledAgents(t *testing.T) {
 	if st, _ := m.LiveState("off"); st != "stopped" {
 		t.Fatalf("disabled agent came up on boot: state=%q", st)
 	}
-	m.mu.Lock()
-	_, started := m.runs["off"]
-	m.mu.Unlock()
+	m.runtimes.mu.Lock()
+	_, started := m.runtimes.runs["off"]
+	m.runtimes.mu.Unlock()
 	if started {
 		t.Fatalf("disabled agent's engine was started on boot")
 	}
@@ -2984,7 +2985,7 @@ func TestLiveStateReportsAndClearsAIStall(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	m.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "worker-1"}
+	m.runtimes.adopting["worker"] = agentdir.LiveIteration{Agent: "worker", ID: "worker-1"}
 	assertLiveState(t, m, "worker", "error")
 
 	if err := as.RecordAIRequest("worker", "worker-1", now); err != nil {
@@ -3429,7 +3430,7 @@ func TestStartScriptSourcesAgentShellScripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.startScript(context.Background(), agent.Agent{Name: "worker", Cwd: workdir}, r)
+	m.scripts.startScript(context.Background(), agent.Agent{Name: "worker", Cwd: workdir}, r)
 	m.wg.Wait()
 	got, err := os.ReadFile(out)
 	if err != nil || string(got) != "g agent" {

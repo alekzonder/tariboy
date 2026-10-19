@@ -109,9 +109,9 @@ func TestStartAllDefersPython3CheckToIterationEnvironment(t *testing.T) {
 	if err := m.StartAll(context.Background()); err != nil {
 		t.Fatalf("StartAll used daemon PATH for Python preflight: %v", err)
 	}
-	m.mu.Lock()
-	_, started := m.runs[a.Name]
-	m.mu.Unlock()
+	m.runtimes.mu.Lock()
+	_, started := m.runtimes.runs[a.Name]
+	m.runtimes.mu.Unlock()
 	if !started {
 		t.Fatal("persisted agent did not reach its iteration-time preflight")
 	}
