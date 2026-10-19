@@ -202,9 +202,9 @@ assignee control, and no **Move to another server…** (the daemon refuses to
 export a workflow task); it shows the **Workflow** panel instead, where the customer
 chooses outcomes, edits artifacts, reads script runs and logs, decides a pause,
 and moves or cancels the task. See [Desktop](/docs/task-workflows#desktop) in
-the workflow guide. Binding a queue to a workflow, its pools, and its secrets
-are in the `Manage queues…` dialog, in the queue's **Workflow**, **Pools**, and
-**Secrets** tabs.
+the workflow guide. Binding a queue to a workflow, its pools, and its env vars
+and secrets are in the `Manage queues…` dialog, in the queue's **Workflow**,
+**Pools**, and **Environment** tabs.
 
 Descriptions and comments render as Markdown. Their visual editor supports
 headings, bold, italic, strikethrough, links, lists, checklists, code, and tables.

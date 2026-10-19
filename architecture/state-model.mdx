@@ -319,6 +319,9 @@ Migration `0056` adds `task_queue_secrets`: per-queue secret values for
 workflow scripts, in plaintext like agent secrets, deleted with their queue. No
 read route returns a value; setting and removing a key append
 `queue.secret_set` and `queue.secret_removed` with the key only. Migration
+`0066` adds its `secret` column: a row with `secret = 0` is a plain queue env
+var whose value the env routes return, with `queue.env_set` and
+`queue.env_removed` events; every earlier row stays a secret. Migration
 `0057` adds `task_script_runs`, the durable record of every check and watch run
 (kind, script, mode, state, verdict, exit code, message, process id, times, and
 log path), with a unique partial index that allows one `pending` or `running`

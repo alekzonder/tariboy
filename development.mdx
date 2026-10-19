@@ -695,10 +695,14 @@ reap live sessions. Isolation is a data-safety requirement.
 
 The two UI targets have different Git contracts:
 
-- `desktop/branding/white-pixel-t-source.svg` is the repository-owned icon
-  source. `ui/scripts/generate-desktop-branding.mjs` validates its native
+- `desktop/branding/tariboy-logo-source.svg` is the repository-owned logo
+  source: a white dancer mark on a dark rounded tile.
+  `ui/scripts/generate-desktop-branding.mjs` validates its native
   transparency and generates the Tauri PNG icons and `icon.icns`. Run
   `npm run branding:check` from `ui/`; do not hand-edit generated branding.
+  `ui/public/favicon.svg` and `docs/public/favicon.svg` are copies of the same
+  source; the documentation site uses its copy as the favicon and header logo.
+  Update all three together.
 - `desktop/dist` and `desktop/src-tauri/resources/bin/` are ignored build
   output. `make desktop` and `make desktop-e2e-build` rebuild the Desktop UI and
   platform payloads; do not stage these directories. Rust target output and

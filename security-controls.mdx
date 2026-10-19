@@ -181,7 +181,8 @@ you trust that far.
   log is readable only by the customer.
 
 Queue secrets are stored per queue in `tariboyd.db` in plaintext, like agent
-secrets. They are set only by the operator (`ttasks queue secret set`, value
+secrets. Plain queue env vars share the table but are not secret: their routes
+and `ttasks queue env ls` return the values, and nothing redacts them. They are set only by the operator (`ttasks queue secret set`, value
 from stdin preferred; the route accepts a body of at most 512 KiB). Removing a
 secret is refused while the workflow bound to the queue requires its key; older
 workflow versions still pinned by unfinished tasks are not checked, and a
@@ -231,7 +232,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.87.2` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.88.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &

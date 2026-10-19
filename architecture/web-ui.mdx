@@ -195,19 +195,25 @@ the totals still count every task.
 The agent tab has four views:
 
 - **Tasks** (default): one row per task, newest activity first. The task key
-  opens the task in the agent's Tasks tab
-  (`/agents/:hostId/:agent/tasks?task=<key>`).
+  opens the task panel in place, over the Activity tab; the tab and the URL
+  do not change.
 - **Iterations**: the iteration list and log, limited to iterations that
   started in the period, with the tag filter below.
 - **Usage**: the agent's AI usage over the period; task and epic keys open the
-  task.
+  task panel in place.
 - **Status history**: only the status messages from the period.
 
 An old `?iteration=` link opens the Iterations view. The server section has a
 **Tasks** view with an Agents column, whose keys open
-`/servers/:hostId/tasks?task=<key>`, and an **Agents** view, whose names open
+the task panel in place on that server, and an **Agents** view, whose names open
 that agent's Activity tab with the same period. All its requests go to the
 selected host.
+
+The agent's Configuration, Activity, and Advanced tabs and the server Activity
+page share one frame, `TabPage`: 16 px side and top padding, 24 px bottom
+padding, and 16 px between blocks. Configuration is a centered column of at
+most `max-w-5xl`; the others use the full width. Chat, Tasks, and Terminal fill
+the tab without a frame.
 
 ## Iteration tags in Activity
 
@@ -252,6 +258,8 @@ The Agent workspace header shows the agent's configured runtime as one compact
 `harness · model · effort` chip before **Goal**, omitting the values the
 selected harness does not report. It is read from the agent view alongside the
 header's status poll, so a Configuration change is reflected within one poll.
+The **Goal** task key opens the task panel over the current tab instead of
+switching to the Tasks tab.
 
 Every Agent workspace header shows the agent's complete effective working
 directory. A following **Open in VS Code** action opens local paths as local
@@ -491,15 +499,20 @@ suggestions. The dialog keeps the pools as the one source the tabs share. The
 the bound image, or of the image chosen in the select before **Bind**, with
 their owners and outcomes; a pool chip opens the **Pools** tab. A refused bind
 lists the empty pools, which shrink as pools gain agents, or the missing
-secrets, each with a button to its tab. The **Pools** tab, `QueuePools`
+secrets, each with a button to its tab (**Open Environment** for secrets). The **Pools** tab, `QueuePools`
 (`rebindAgentPool`), lists the required pools, the pools a refused bind named,
 and the queue's pools as rows of
 agent chips and saves a row's full list with its revision; a
 `revision_conflict` reloads the queue. The Workflow and Pools tabs stay mounted
 while hidden, so a refusal and unsaved pool edits survive a tab switch; closing
-the dialog drops them. The **Secrets** tab, `QueueSecrets` (`listQueueSecrets`,
+the dialog drops them. The **Environment** tab, `QueueEnvironment`, holds two blocks. **Env**
+(`listQueueEnv`, `setQueueEnv`, `removeQueueEnv`) lists plain env vars with
+their values. **Secrets**, `QueueSecrets` (`listQueueSecrets`,
 `setQueueSecret`, `removeQueueSecret`), lists keys only: the value lives in a
-password input until it is sent and is never read back. The **Sources** tab of a
+password input until it is sent and is never read back. A key is one kind or
+the other, so setting a key of the other block asks first, and a change in
+either block reloads both. A name a refused bind reported counts as set by
+either block. The **Sources** tab of a
 bound queue, `QueueSources` (`listQueueSources`, `getQueueSourceRunLog`) lists the sources of
 the workflow with their schedule, failures in a row, and newest 20 runs; it
 loads once and on **Reload**, without polling. Its run rows and the task's
@@ -515,7 +528,7 @@ the `Active | Closed | All` segment, the queue control, the `My tasks` and
 with the number of tasks it contributes to the current list, and
 `Manage queues…` under a separator opens the queue settings dialog: the queue
 list with **New queue**, and the selected queue in **General** (the existing
-`PATCH`), **Workflow**, **Pools**, **Secrets**, and, for a bound queue,
+`PATCH`), **Workflow**, **Pools**, **Environment**, and, for a bound queue,
 **Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
 already performs; `scope_agent`, `status_view`, the text search, `assignee` and
