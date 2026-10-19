@@ -13,7 +13,7 @@ var migrationsFS embed.FS
 func (s *Store) migrate() error {
 	if _, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		name TEXT PRIMARY KEY,
-		applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`); err != nil {
+		applied_at TEXT NOT NULL DEFAULT (`+SQLNow+`))`); err != nil {
 		return err
 	}
 	entries, err := migrationsFS.ReadDir("migrations")
@@ -76,6 +76,12 @@ func (s *Store) applyMigration(name, body string) (resultErr error) {
 	}
 	if !skipBody {
 		if _, err := tx.Exec(body); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %s: %w", name, err)
+		}
+	}
+	if name == canonicalTimestampsMigration {
+		if err := canonicalizeTimestamps(tx); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("migration %s: %w", name, err)
 		}

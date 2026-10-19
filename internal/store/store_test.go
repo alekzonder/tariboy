@@ -371,7 +371,7 @@ func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) 
 	if err := upgraded.DB.QueryRow(`SELECT command,mode,interval_seconds,state,COALESCE(next_run_at,'') FROM scripts WHERE id='every'`).Scan(&command, &mode, &interval, &state, &nextRun); err != nil {
 		t.Fatal(err)
 	}
-	if command != "make watch" || mode != "every" || interval != 30 || state != "active" || nextRun != "2026-08-20T06:05:30Z" {
+	if command != "make watch" || mode != "every" || interval != 30 || state != "active" || nextRun != "2026-08-20T06:05:30.000000000Z" {
 		t.Fatalf("migrated recurring definition = %q %q %d %q %q", command, mode, interval, state, nextRun)
 	}
 	var status, startedAt, finishedAt, logPath string
@@ -379,7 +379,7 @@ func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) 
 	if err := upgraded.DB.QueryRow(`SELECT status,exit_code,COALESCE(started_at,''),COALESCE(finished_at,''),log_path FROM script_runs WHERE script_id='every'`).Scan(&status, &exitCode, &startedAt, &finishedAt, &logPath); err != nil {
 		t.Fatal(err)
 	}
-	if status != "failed" || exitCode != 2 || startedAt != "2026-08-20T06:04:00Z" || finishedAt != "2026-08-20T06:05:00Z" || logPath != "/tmp/every.log" {
+	if status != "failed" || exitCode != 2 || startedAt != "2026-08-20T06:04:00.000000000Z" || finishedAt != "2026-08-20T06:05:00.000000000Z" || logPath != "/tmp/every.log" {
 		t.Fatalf("migrated recurring run = %q %d %q %q %q", status, exitCode, startedAt, finishedAt, logPath)
 	}
 	var runningState string
@@ -390,7 +390,7 @@ func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) 
 	if err := upgraded.DB.QueryRow(`SELECT id,status,COALESCE(started_at,''),log_path FROM script_runs WHERE script_id='running'`).Scan(&migratedRunID, &status, &startedAt, &logPath); err != nil {
 		t.Fatal(err)
 	}
-	if migratedRunID[:5] != "srun-" || status != "interrupted" || startedAt != "2026-08-20T06:07:00Z" || logPath != "/tmp/running.log" {
+	if migratedRunID[:5] != "srun-" || status != "interrupted" || startedAt != "2026-08-20T06:07:00.000000000Z" || logPath != "/tmp/running.log" {
 		t.Fatalf("migrated interrupted run = %q %q %q %q", migratedRunID, status, startedAt, logPath)
 	}
 	var outboxRunID, payload string
@@ -404,7 +404,7 @@ func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) 
 	if err := upgraded.DB.QueryRow(`SELECT id||'|'||agent||'|'||kind||'|'||spec||'|'||channel||'|'||message_template||'|'||next_fire_at||'|'||enabled||'|'||created_at||'|'||correlation_id FROM schedules WHERE id='schedule-1'`).Scan(&scheduleSnapshot); err != nil {
 		t.Fatal(err)
 	}
-	if want := `schedule-1|alice|oneshot|2026-08-21T00:00:00Z|inbox:alice|{"text":"wake"}|2026-08-21T00:00:00Z|1|2026-08-20T00:00:00Z|request-1`; scheduleSnapshot != want {
+	if want := `schedule-1|alice|oneshot|2026-08-21T00:00:00Z|inbox:alice|{"text":"wake"}|2026-08-21T00:00:00.000000000Z|1|2026-08-20T00:00:00.000000000Z|request-1`; scheduleSnapshot != want {
 		t.Fatalf("schedule changed: got %q want %q", scheduleSnapshot, want)
 	}
 }
@@ -1145,7 +1145,7 @@ func TestTaskStartedAtMigrationBackfillsTheFirstStartFromEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	want := map[string]string{"T-1": "2026-01-03T00:00:00Z", "T-2": "2026-01-04T00:00:00Z", "T-3": "", "T-4": ""}
+	want := map[string]string{"T-1": "2026-01-03T00:00:00.000000000Z", "T-2": "2026-01-04T00:00:00.000000000Z", "T-3": "", "T-4": ""}
 	for key, started := range want {
 		var got string
 		if err := s.DB.QueryRow(`SELECT started_at FROM tasks WHERE task_key = ?`, key).Scan(&got); err != nil {
@@ -1220,7 +1220,7 @@ func TestScriptQuietExitMigrationWrapsLegacyDefinitions(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT state, COALESCE(next_run_at, '') FROM scripts WHERE id = 'scr-legacy'`).Scan(&state, &next); err != nil {
 		t.Fatal(err)
 	}
-	if state != "active" || next != "2026-09-01T00:01:00Z" {
+	if state != "active" || next != "2026-09-01T00:01:00.000000000Z" {
 		t.Fatalf("legacy schedule state=%q next_run_at=%q, want it untouched", state, next)
 	}
 }
