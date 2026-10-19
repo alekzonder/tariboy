@@ -507,7 +507,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await page.getByRole("tab", { name: "Workflow" }).click();
   const queueSettings = page.getByRole("region", { name: "Workflow WFUI" });
   await expect(queueSettings.getByTestId("binding")).toContainText(/wfui\s+0\.1\.0\s+[0-9a-f]{12}/);
-  await page.getByRole("tab", { name: "Secrets" }).click();
+  await page.getByRole("tab", { name: "Environment" }).click();
   const secrets = page.getByRole("region", { name: "Secrets WFUI" });
   await expect(secrets.getByText("No secrets.")).toBeVisible();
   await secrets.getByLabel("Secret key").fill("GH_TOKEN");
@@ -522,7 +522,7 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await page.getByRole("button", { name: "Queue: all" }).click();
   await page.getByRole("menuitem", { name: "Manage queues…" }).click();
   await page.getByRole("button", { name: /^Queue WFUI/ }).click();
-  await page.getByRole("tab", { name: "Secrets" }).click();
+  await page.getByRole("tab", { name: "Environment" }).click();
   const reloaded = page.getByRole("region", { name: "Secrets WFUI" });
   await expect(reloaded.getByText("GH_TOKEN", { exact: true }), "step 6: the key is listed after a reload").toBeVisible();
   expect(await page.content(), "step 6: no value in the reloaded page").not.toContain("ghp_browser-secret-value");

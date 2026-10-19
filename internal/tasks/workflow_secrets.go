@@ -112,6 +112,63 @@ func (s *Service) SetQueueSecretInfo(ctx context.Context, actor Actor, queue, ke
 
 // setQueueSecret stores a queue secret and returns its stored updated_at.
 func (s *Service) setQueueSecret(ctx context.Context, actor Actor, queue, key, value string) (string, error) {
+	return s.setQueueValue(ctx, actor, queue, key, value, true)
+}
+
+// QueueEnvVar is a plain queue env var. Unlike a secret, its value is returned.
+type QueueEnvVar struct {
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// SetQueueEnvInfo stores a plain env var that the scripts of the queue receive,
+// replacing an earlier value. A key held as a secret becomes an env var.
+func (s *Service) SetQueueEnvInfo(ctx context.Context, actor Actor, queue, key, value string) (QueueEnvVar, error) {
+	updatedAt, err := s.setQueueValue(ctx, actor, queue, key, value, false)
+	if err != nil {
+		return QueueEnvVar{}, err
+	}
+	return QueueEnvVar{Key: key, Value: value, UpdatedAt: updatedAt}, nil
+}
+
+// ListQueueEnv returns the plain env vars of a queue sorted by key, with their
+// values. Secrets are not listed.
+func (s *Service) ListQueueEnv(ctx context.Context, actor Actor, queue string) ([]QueueEnvVar, error) {
+	if err := s.requireWorkflowAdmin(actor); err != nil {
+		return nil, err
+	}
+	queue = strings.ToUpper(strings.TrimSpace(queue))
+	if _, err := queueSecretRevision(ctx, s.db, queue); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT key, value, updated_at FROM task_queue_secrets WHERE queue_prefix = ? AND secret = 0 ORDER BY key`, queue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []QueueEnvVar{}
+	for rows.Next() {
+		var item QueueEnvVar
+		if err := rows.Scan(&item.Key, &item.Value, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// RemoveQueueEnv deletes a plain env var of a queue under the rules of
+// RemoveQueueSecret.
+func (s *Service) RemoveQueueEnv(ctx context.Context, actor Actor, queue, key string) error {
+	return s.removeQueueValue(ctx, actor, queue, key, false)
+}
+
+// setQueueValue stores a secret or a plain env var and returns its stored
+// updated_at. A key is one or the other: storing it as the other kind replaces
+// the value and the kind.
+func (s *Service) setQueueValue(ctx context.Context, actor Actor, queue, key, value string, secret bool) (string, error) {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return "", err
 	}
@@ -130,10 +187,11 @@ func (s *Service) setQueueSecret(ctx context.Context, actor Actor, queue, key, v
 	}
 	now := s.now()
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO task_queue_secrets(queue_prefix, key, value, updated_at)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(queue_prefix, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-		queue, key, value, now); err != nil {
+		INSERT INTO task_queue_secrets(queue_prefix, key, value, updated_at, secret)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(queue_prefix, key) DO UPDATE SET
+			value = excluded.value, updated_at = excluded.updated_at, secret = excluded.secret`,
+		queue, key, value, now, secret); err != nil {
 		return "", err
 	}
 	var updatedAt string
@@ -142,7 +200,7 @@ func (s *Service) setQueueSecret(ctx context.Context, actor Actor, queue, key, v
 		return "", err
 	}
 	if _, err := appendQueueEventTx(ctx, tx, Queue{Prefix: queue, Revision: revision},
-		"queue.secret_set", actor, map[string]any{"key": key}, now); err != nil {
+		queueValueEvent(secret, "set"), actor, map[string]any{"key": key}, now); err != nil {
 		return "", err
 	}
 	return updatedAt, tx.Commit()
@@ -166,7 +224,7 @@ func (s *Service) ListQueueSecrets(ctx context.Context, actor Actor, queue strin
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT key, updated_at FROM task_queue_secrets WHERE queue_prefix = ? ORDER BY key`, queue)
+		SELECT key, updated_at FROM task_queue_secrets WHERE queue_prefix = ? AND secret = 1 ORDER BY key`, queue)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +291,12 @@ func (s *Service) QueueSecretsInGlobalEnv(ctx context.Context, actor Actor, queu
 // Tasks pinned to older workflow versions are not considered: a script that
 // misses its secret fails.
 func (s *Service) RemoveQueueSecret(ctx context.Context, actor Actor, queue, key string) error {
+	return s.removeQueueValue(ctx, actor, queue, key, true)
+}
+
+// removeQueueValue deletes a secret or a plain env var; a key of the other kind
+// is not found.
+func (s *Service) removeQueueValue(ctx context.Context, actor Actor, queue, key string, secret bool) error {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return err
 	}
@@ -263,39 +327,56 @@ func (s *Service) RemoveQueueSecret(ctx context.Context, actor Actor, queue, key
 			return queueSecretsMissingError([]string{key})
 		}
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM task_queue_secrets WHERE queue_prefix = ? AND key = ?`, queue, key)
+	result, err := tx.ExecContext(ctx, `DELETE FROM task_queue_secrets WHERE queue_prefix = ? AND key = ? AND secret = ?`,
+		queue, key, secret)
 	if err != nil {
 		return err
 	}
 	if affected, err := result.RowsAffected(); err != nil {
 		return err
-	} else if affected != 1 {
+	} else if affected != 1 && secret {
 		return domainError(http.StatusNotFound, "not_found", "queue secret not found")
+	} else if affected != 1 {
+		return domainError(http.StatusNotFound, "not_found", "queue env var not found")
 	}
 	if _, err := appendQueueEventTx(ctx, tx, Queue{Prefix: queue, Revision: revision},
-		"queue.secret_removed", actor, map[string]any{"key": key}, s.now()); err != nil {
+		queueValueEvent(secret, "removed"), actor, map[string]any{"key": key}, s.now()); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-// queueSecrets returns every secret value of a queue for a script run's
-// environment. It takes no actor and no route or agent action reaches it.
-func (s *Service) queueSecrets(ctx context.Context, queue string) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM task_queue_secrets WHERE queue_prefix = ?`, queue)
+// queueValueEvent names the audit event of a set or removed queue value.
+func queueValueEvent(secret bool, action string) string {
+	if secret {
+		return "queue.secret_" + action
+	}
+	return "queue.env_" + action
+}
+
+// queueEnvironment returns every plain env var and every secret of a queue for
+// a script run's environment; only the secrets are redacted. It takes no actor
+// and no route or agent action reaches it.
+func (s *Service) queueEnvironment(ctx context.Context, queue string) (env, secrets map[string]string, err error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value, secret FROM task_queue_secrets WHERE queue_prefix = ?`, queue)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
-	values := map[string]string{}
+	env, secrets = map[string]string{}, map[string]string{}
 	for rows.Next() {
 		var key, value string
-		if err := rows.Scan(&key, &value); err != nil {
-			return nil, err
+		var secret bool
+		if err := rows.Scan(&key, &value, &secret); err != nil {
+			return nil, nil, err
 		}
-		values[key] = value
+		if secret {
+			secrets[key] = value
+		} else {
+			env[key] = value
+		}
 	}
-	return values, rows.Err()
+	return env, secrets, rows.Err()
 }
 
 // queueSecretRevision proves the queue exists and returns its revision for the

@@ -7,7 +7,7 @@ import QueueSettingsDialog from "./QueueSettingsDialog"
 import { agentPool, developmentManifest, remoteTarget } from "./workflowFixtures"
 
 const api = vi.hoisted(() => ({
-  getQueueWorkflow: vi.fn(), getWorkflowImage: vi.fn(), listWorkflowImages: vi.fn(), listQueueSecrets: vi.fn(),
+  getQueueWorkflow: vi.fn(), getWorkflowImage: vi.fn(), listWorkflowImages: vi.fn(), listQueueSecrets: vi.fn(), listQueueEnv: vi.fn(),
   listAgentPools: vi.fn(), listTaskPrincipals: vi.fn(), listQueueSources: vi.fn(),
   setQueueWorkflow: vi.fn(), rebindAgentPool: vi.fn(),
 }))
@@ -33,6 +33,7 @@ beforeEach(() => {
   api.getWorkflowImage.mockResolvedValue(developmentManifest)
   api.listWorkflowImages.mockResolvedValue([{ name: "development", tag: "latest", version: "0.3.0", digest: developmentManifest.digest, built_at: "" }])
   api.listQueueSecrets.mockResolvedValue({ secrets: [], global_env: [] })
+  api.listQueueEnv.mockResolvedValue([])
   api.listQueueSources.mockResolvedValue([])
   api.listAgentPools.mockImplementation(async (prefix: string) => ({ items: prefix === "DEV" ? [agentPool("developers", ["dev-a"])] : [] }))
   api.listTaskPrincipals.mockResolvedValue({ customer: "user:owner", agents: ["dev-a", "rev-a"], groups: [] })
@@ -48,6 +49,15 @@ it("lists each queue with its workflow and warns about a required pool without a
   expect(within(ops).queryByLabelText("A pool has no agents")).not.toBeInTheDocument()
   expect(api.getQueueWorkflow).toHaveBeenCalledWith("OPS", remoteTarget)
   expect(api.getWorkflowImage).toHaveBeenCalledWith("development", developmentManifest.digest, remoteTarget)
+})
+
+it("shows Env and Secrets blocks in the Environment tab", async () => {
+  renderIt()
+  expect(screen.queryByRole("tab", { name: "Secrets" })).not.toBeInTheDocument()
+  await userEvent.click(await screen.findByRole("tab", { name: "Environment" }))
+  expect(await screen.findByRole("region", { name: "Env DEV" })).toBeInTheDocument()
+  expect(screen.getByRole("region", { name: "Secrets DEV" })).toBeInTheDocument()
+  expect(api.listQueueEnv).toHaveBeenCalledWith("DEV", remoteTarget)
 })
 
 it("saves General with the queue revision", async () => {

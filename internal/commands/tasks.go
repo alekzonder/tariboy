@@ -352,6 +352,28 @@ func TaskOperatorCommands() []registry.Command {
 				}
 				return map[string]any{"queue": strings.ToUpper(queue), "key": key, "removed": true}, nil
 			}),
+		withMaxBody(taskRoute("tasks.queue.env.set", "PUT", "/api/task-queues/{queue}/env/{key}", "Set a plain queue env var for workflow scripts",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				queue, key := stringParam(p, "queue"), stringParam(p, "key")
+				item, err := control.SetQueueEnvInfo(ctx, actor, queue, key, rawStringParam(p, "value"))
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"queue": strings.ToUpper(queue), "key": key, "value": item.Value, "updated_at": item.UpdatedAt}, nil
+			}), maxQueueSecretBody),
+		taskRoute("tasks.queue.env.ls", "GET", "/api/task-queues/{queue}/env", "List the plain env vars of a queue with their values",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				items, err := control.ListQueueEnv(ctx, actor, stringParam(p, "queue"))
+				return map[string]any{"env": items, "count": len(items)}, err
+			}),
+		taskRoute("tasks.queue.env.rm", "DELETE", "/api/task-queues/{queue}/env/{key}", "Remove a plain queue env var",
+			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
+				queue, key := stringParam(p, "queue"), stringParam(p, "key")
+				if err := control.RemoveQueueEnv(ctx, actor, queue, key); err != nil {
+					return nil, err
+				}
+				return map[string]any{"queue": strings.ToUpper(queue), "key": key, "removed": true}, nil
+			}),
 	}
 }
 
@@ -496,6 +518,8 @@ func taskHTTPArgs(path string) []registry.Arg {
 		return []registry.Arg{{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current binding revision"}}
 	case "tasks.queue.secret.set":
 		return []registry.Arg{{Name: "value", Help: "Secret value, stored as given; the CLI reads stdin when --value is absent"}}
+	case "tasks.queue.env.set":
+		return []registry.Arg{{Name: "value", Help: "Env value, stored as given; the CLI also takes it as the third argument or reads stdin"}}
 	case "tasks.events":
 		return []registry.Arg{{Name: "after", Type: registry.Int, Help: "Resume after sequence"}, {Name: "limit", Type: registry.Int, Help: "Maximum events"}}
 	default:
@@ -539,7 +563,11 @@ func taskHTTPResultSchema(path string) map[string]any {
 		return objectSchema([]string{"queue", "key", "updated_at"}, map[string]any{"queue": map[string]any{"type": "string"}, "key": map[string]any{"type": "string"}, "updated_at": map[string]any{"type": "string"}})
 	case "tasks.queue.secret.ls":
 		return objectSchema([]string{"secrets", "count"}, map[string]any{"secrets": arrayOf("QueueSecret"), "count": map[string]any{"type": "integer"}})
-	case "tasks.queue.secret.rm":
+	case "tasks.queue.env.set":
+		return objectSchema([]string{"queue", "key", "value", "updated_at"}, map[string]any{"queue": map[string]any{"type": "string"}, "key": map[string]any{"type": "string"}, "value": map[string]any{"type": "string"}, "updated_at": map[string]any{"type": "string"}})
+	case "tasks.queue.env.ls":
+		return objectSchema([]string{"env", "count"}, map[string]any{"env": arrayOf("QueueEnvVar"), "count": map[string]any{"type": "integer"}})
+	case "tasks.queue.secret.rm", "tasks.queue.env.rm":
 		return objectSchema([]string{"queue", "key", "removed"}, map[string]any{"queue": map[string]any{"type": "string"}, "key": map[string]any{"type": "string"}, "removed": map[string]any{"type": "boolean"}})
 	case "tasks.queue.workflow.clear":
 		return objectSchema([]string{"queue", "cleared"}, map[string]any{"queue": map[string]any{"type": "string"}, "cleared": map[string]any{"type": "boolean"}})

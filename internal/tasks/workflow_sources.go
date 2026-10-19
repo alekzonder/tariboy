@@ -40,9 +40,11 @@ type SourceJob struct {
 	Timeout         time.Duration
 	Due             bool
 	Artifacts       []string // declared artifact names
-	// WorkflowEnv and QueueSecrets reach the process environment only; they are
-	// never marshalled. QueueSecrets is read for a due job only.
+	// WorkflowEnv, QueueEnv, and QueueSecrets reach the process environment
+	// only; they are never marshalled. QueueEnv and QueueSecrets are read for a
+	// due job only, and only QueueSecrets is redacted.
 	WorkflowEnv  map[string]string `json:"-"`
+	QueueEnv     map[string]string `json:"-"`
 	QueueSecrets map[string]string `json:"-"`
 }
 
@@ -254,7 +256,7 @@ func (s *Service) QueueSourceJobs(ctx context.Context, now time.Time) ([]SourceJ
 			job.Artifacts = append(job.Artifacts, declared.Name)
 		}
 		if job.Due {
-			if job.QueueSecrets, err = s.queueSecrets(ctx, b.queue); err != nil {
+			if job.QueueEnv, job.QueueSecrets, err = s.queueEnvironment(ctx, b.queue); err != nil {
 				return nil, err
 			}
 		}

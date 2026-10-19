@@ -468,6 +468,7 @@ func TestSupervisorQueueModeEnvironmentAndCwd(t *testing.T) {
 	job := checkJob(1, "DEV-1", "scripts/env.sh")
 	job.WorkflowEnv = map[string]string{"SHARED": "workflow", "WF_ONLY": "wf", "TARIBOY_TASK_KEY": "hijack",
 		"TARIBOY_TOOLS_SOCKET": "/wf/tools.sock"}
+	job.QueueEnv = map[string]string{"Q_ENV": "qe", "TARIBOY_TASK_QUEUE": "hijack"}
 	job.QueueSecrets = map[string]string{"SHARED": "queue-secret", "Q_SECRET": "qs", "TARIBOY_WORKFLOW_STATUS": "hijack"}
 	h := newHarness(t, job)
 	h.sup.AgentRuntime = func(string) (string, []string, error) {
@@ -485,7 +486,7 @@ func TestSupervisorQueueModeEnvironmentAndCwd(t *testing.T) {
 	}
 	env := envFile(t, filepath.Join(state, "env.txt"))
 	for name, want := range map[string]string{
-		"BASE_ONLY": "base", "WF_ONLY": "wf", "Q_SECRET": "qs", "SHARED": "queue-secret",
+		"BASE_ONLY": "base", "WF_ONLY": "wf", "Q_ENV": "qe", "Q_SECRET": "qs", "SHARED": "queue-secret",
 		"TARIBOY_TASK_KEY": "DEV-1", "TARIBOY_TASK_QUEUE": "DEV", "TARIBOY_WORKFLOW_STATUS": "work",
 		"TARIBOY_WORKFLOW_OUTCOME": "done", "TARIBOY_TASK_DIR": state,
 		"TARIBOY_WORKFLOW_DIR": h.sup.Images.ContentDir(h.image.Name, h.image.Digest),

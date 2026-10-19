@@ -532,6 +532,7 @@ func (w *worker) prepare(job tasks.RunJob) (Spec, string) {
 	env := mergeEnv(
 		withoutNames(baseline, protocolNames),
 		withoutNames(mapEnv(job.WorkflowEnv), protocolNames),
+		withoutNames(mapEnv(job.QueueEnv), protocolNames),
 		withoutNames(mapEnv(job.QueueSecrets), protocolNames),
 		protocol,
 	)

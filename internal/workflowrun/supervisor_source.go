@@ -233,6 +233,7 @@ func (w *worker) prepareSource(job tasks.SourceJob, id int64) (Spec, string) {
 	env := mergeEnv(
 		withoutNames(baseline, reserved),
 		withoutNames(mapEnv(job.WorkflowEnv), reserved),
+		withoutNames(mapEnv(job.QueueEnv), reserved),
 		withoutNames(mapEnv(job.QueueSecrets), reserved),
 		SourceEnv(job, w.s.Images.ContentDir(job.WorkflowName, job.WorkflowDigest), stateDir, filepath.Join(runDir, "result.json")),
 	)

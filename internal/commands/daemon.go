@@ -255,6 +255,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "tasks.queue.trigger", "Manage task queue workflow triggers")
 	mustGroup(r, "tasks.queue.workflow", "Bind a workflow image to a task queue")
 	mustGroup(r, "tasks.queue.secret", "Manage the secrets workflow scripts of a task queue receive")
+	mustGroup(r, "tasks.queue.env", "Manage the plain env vars workflow scripts of a task queue receive")
 	mustGroup(r, "tasks.queue.source", "Inspect the workflow sources that create tasks in a task queue")
 	mustGroup(r, "tasks.artifacts", "Manage workflow task artifacts")
 	mustGroup(r, "tasks.workflow", "Inspect and move workflow tasks")

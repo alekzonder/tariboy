@@ -39,7 +39,7 @@ export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab,
   target?: ApiTarget
   /** The queue's pools, kept current by the Pools tab. */
   pools: AgentPool[]
-  onOpenTab: (tab: "pools" | "secrets") => void
+  onOpenTab: (tab: "pools" | "environment") => void
   /** Told of the pools a refused bind named, and of null when a new attempt starts. */
   onPoolsMissing: (names: string[] | null) => void
   /** Told of the secrets a refused bind named, and of null when a new attempt starts. */
@@ -172,7 +172,7 @@ export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab,
         <div role="alert" aria-label="Secrets needed" className="flex flex-col gap-1 text-[12px] text-destructive">
           <p>{missingSecrets.message}</p>
           <p className="font-mono">{missingSecrets.names.join(", ")}</p>
-          <Button type="button" size="sm" variant="secondary" className="h-[26px] self-start" onClick={() => onOpenTab("secrets")}>Open Secrets</Button>
+          <Button type="button" size="sm" variant="secondary" className="h-[26px] self-start" onClick={() => onOpenTab("environment")}>Open Environment</Button>
         </div>
       )}
       {shownKey && <section className="flex min-w-0 flex-col gap-1.5">
