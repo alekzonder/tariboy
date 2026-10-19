@@ -1,3 +1,15 @@
+## [0.87.2] - 2026-10-19
+
+### Fixed
+
+- Desktop releases publish again: the Android release build reads the
+  signing certificate fingerprint from the per-scheme output of current
+  `apksigner` versions, so the signed APK passes its certificate check and
+  the GitHub release is created. 0.87.0 and 0.87.1 were tagged but never
+  published as GitHub releases; 0.87.2 ships their changes.
+
+[0.87.2]: https://github.com/alekzonder/tariboy/compare/v0.87.1...v0.87.2
+
 ## [0.87.1] - 2026-10-19
 
 ### Fixed
