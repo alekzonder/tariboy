@@ -231,7 +231,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.86.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.87.2` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -261,9 +261,12 @@ macOS runner. The workflow rejects a tag that differs from either canonical
 version declaration, builds and verifies the release through `make
 desktop-mac`, and publishes the DMG, signed updater archive and catalog,
 `SHA256SUMS`, and `release.json` with the job-scoped `contents: write`
-permission. The Linux job that signs the Android APK with the key from the
-`ANDROID_KEY*` Secrets and verifies it with `apksigner` is paused until those
-Secrets exist, so releases attach no APK. Before staging, the workflow rejects malformed signing packets or a
+permission. A parallel Linux job builds the Android APK, signs it with the key
+from the `ANDROID_KEY*` Secrets, verifies the signature with `apksigner`, rejects
+the Android debug certificate and any certificate whose SHA-256 fingerprint
+differs from the `ANDROID_CERT_SHA256` repository variable, and the release is
+published only when both builds succeed. The keystore Secrets are available only
+to the step that writes `keystore.properties`. Before staging, the workflow rejects malformed signing packets or a
 signature key identifier that differs from the pinned updater public key. This
 catches an accidental wrong signing Secret; cryptographic archive verification
 remains the official updater's responsibility. GitHub publication does not change

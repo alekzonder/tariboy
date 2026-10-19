@@ -85,6 +85,7 @@ tariboy has three command surfaces:
 | `tariboy loop interval` | Get or set loop interval (seconds); omit value to read |
 | `tariboy loop on-error` | Get or set loop on-error policy; omit value to read |
 | `tariboy loop on-timeout` | Get or set loop on-timeout policy; omit value to read |
+| `tariboy loop schedule` | Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read |
 | `tariboy loop timeout` | Get or set loop timeout (seconds); omit value to read |
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |

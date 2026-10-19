@@ -186,6 +186,180 @@ change without notice. [Building from source?](/development#prerequisites)
 
 ---
 
+# Android release APK
+Source: https://alekzonder.github.io/tariboy/android-release
+
+Each GitHub Release attaches `Tariboy_X.Y.Z_android-arm64.apk`, signed with
+the project's release key, and its `.sha256` file. This page tells you how the
+APK is built and signed, how to build it on your computer, and which values you
+must add to GitHub before the next release tag.
+
+## How a release builds the APK
+
+When you push a `vX.Y.Z` tag, `.github/workflows/desktop-release.yml` runs the
+`android` job on `ubuntu-latest` in parallel with the macOS job. The job:
+
+1. Rejects the tag when it differs from `internal/version/version.go` or
+   `scripts/release-version.txt`.
+2. Stops with `NAME is required` when one of the four `ANDROID_*` Secrets is
+   empty.
+3. Decodes the keystore into the runner's temporary directory and writes
+   `desktop/src-tauri/gen/android/keystore.properties`. Only this step can
+   read the Secrets.
+4. Runs `make desktop-android`. Gradle signs the release APK with the key.
+5. Checks the APK and stops the release when any check fails:
+   - exactly one APK exists and its name does not end in `-unsigned.apk`;
+   - `apksigner verify --print-certs` accepts the signature;
+   - the certificate is not the Android debug certificate (`CN=Android Debug`);
+   - the APK carries exactly one signing certificate, and its SHA-256
+     fingerprint equals the `ANDROID_CERT_SHA256` repository variable.
+     `scripts/apk-cert-sha256.sh` reads the fingerprint from both `apksigner`
+     formats: `Signer #1 certificate SHA-256 digest:` and the per-scheme
+     `V2 Signer: certificate SHA-256 digest:`.
+6. Renames the APK to `Tariboy_X.Y.Z_android-arm64.apk` and writes its
+   `.sha256` file.
+
+The `publish` job waits for both the macOS and the Android job. It creates a
+draft release, writes the Android note with the certificate fingerprint into
+the release text, uploads all files, and then makes the release public. When
+the Android job fails, no release is published, also not the macOS files.
+
+## GitHub settings
+
+You do these steps one time, before the next release tag. Without them the
+`android` job fails and the release is not published.
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | Secret | the keystore file, base64-encoded on one line |
+| `ANDROID_KEYSTORE_PASSWORD` | Secret | the keystore password |
+| `ANDROID_KEY_ALIAS` | Secret | the key alias, for example `tariboy` |
+| `ANDROID_KEY_PASSWORD` | Secret | the key password; in a PKCS12 keystore it is the keystore password |
+| `ANDROID_CERT_SHA256` | Variable | the SHA-256 fingerprint of the signing certificate |
+
+The fingerprint is public information, so it is a variable and not a Secret.
+The workflow ignores colons, spaces, and letter case in it.
+
+### 1. Create the signing key
+
+You need a JDK with `keytool`:
+
+```bash
+keytool -genkeypair -v -keystore tariboy-release.jks -storetype PKCS12 \
+  -keyalg RSA -keysize 4096 -validity 10000 -alias tariboy
+```
+
+`keytool` asks for a password and for the owner's name. Keep
+`tariboy-release.jks` and its password in a safe place, for example a password
+manager. Do not commit the file to the repository.
+
+Android does not update an installed APK with an APK signed by a different key.
+If you lose or replace the key, users must uninstall the app and install it
+again.
+
+### 2. Read the fingerprint
+
+```bash
+keytool -list -v -keystore tariboy-release.jks -alias tariboy | grep 'SHA256:'
+```
+
+The output looks like `SHA256: 5F:A1:8B:...:30:A9`. Copy the value after
+`SHA256:`.
+
+### 3. Add the Secrets and the variable
+
+In the browser:
+
+1. Open the repository on GitHub and go to **Settings → Secrets and variables →
+   Actions**.
+2. On the **Secrets** tab, click **New repository secret** one time for each of
+   the four `ANDROID_*` Secrets in the table. For `ANDROID_KEYSTORE_BASE64`,
+   paste the output of `base64 < tariboy-release.jks | tr -d '\n'`.
+3. On the **Variables** tab, click **New repository variable**, enter the name
+   `ANDROID_CERT_SHA256`, and paste the fingerprint from step 2.
+
+Or with the GitHub CLI, from the directory with the keystore. The commands
+without `--body` ask for the value, so the password does not go into your shell
+history:
+
+```bash
+base64 < tariboy-release.jks | tr -d '\n' | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body tariboy
+gh secret set ANDROID_KEY_PASSWORD
+gh variable set ANDROID_CERT_SHA256 --body '5F:A1:8B:...:30:A9'
+```
+
+### 4. Check the settings
+
+```bash
+gh secret list
+gh variable list
+```
+
+`gh secret list` must show the four `ANDROID_*` names. `gh variable list` must
+show `ANDROID_CERT_SHA256`. Nothing else is necessary: the runner has the
+Android SDK, the NDK, and Java, and the workflow sets its own permissions.
+
+When you replace the key, update all four Secrets and `ANDROID_CERT_SHA256`
+together.
+
+## Build the APK locally
+
+You need a JDK 17 or newer, the Android SDK with a platform and build-tools in
+`ANDROID_HOME`, and an NDK in `NDK_HOME`:
+
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+export NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
+make desktop-android
+```
+
+The APK is in
+`desktop/src-tauri/gen/android/app/build/outputs/apk/universal/release/`.
+Without a keystore the file is `*-unsigned.apk`, which is good for local checks
+only. To sign it, write `desktop/src-tauri/gen/android/keystore.properties`
+(the file is ignored by Git):
+
+```properties
+storeFile=/absolute/path/to/tariboy-release.jks
+storePassword=KEYSTORE_PASSWORD
+keyAlias=tariboy
+keyPassword=KEY_PASSWORD
+```
+
+## Verify a released APK
+
+Download the APK and its `.sha256` file into one directory, then:
+
+```bash
+sha256sum -c Tariboy_X.Y.Z_android-arm64.apk.sha256
+apksigner verify --print-certs Tariboy_X.Y.Z_android-arm64.apk
+```
+
+The `certificate SHA-256 digest` line must show the fingerprint in the release
+text.
+
+## When the Android job fails
+
+| Message | Cause and fix |
+| --- | --- |
+| `ANDROID_... is required` | A Secret is missing. Add it as in step 3. |
+| `ANDROID_CERT_SHA256 is required` | The variable is missing. Add it as in step 3. |
+| `does not match ANDROID_CERT_SHA256` | The keystore and the variable are from different keys. Set the variable to the keystore's fingerprint. |
+| `expected one APK signing certificate SHA-256, found N` | `apksigner` printed no certificate digest, or the APK is signed with more than one certificate. Read the `apksigner` output printed above the message. |
+| `release APK is signed with a debug certificate` | The keystore holds the Android debug key. Use the release keystore. |
+| `make desktop-android` fails in the Gradle signing task | The password or the alias does not match the keystore. Check the Secrets. |
+| `release APK is unsigned` | Gradle did not read `keystore.properties`. Look at the `Restore signing keystore` step output. |
+
+After the fix, open the failed run in **Actions** and click **Re-run failed
+jobs**, or push a new release tag.
+
+For how the phone app connects to a daemon, see
+[Remote hosts](/remote-hosts#android-app).
+
+---
+
 # Daemon architecture
 Source: https://alekzonder.github.io/tariboy/architecture
 
@@ -775,15 +949,49 @@ directory and its own loop. It does not run continuously — it runs a series of
 
 ## What drives the loop
 
-The loop is driven two ways, both requiring the loop to be **enabled**:
+The loop is driven three ways, all requiring the agent to be **enabled**:
 
 - **Timer** — `interval_s`: wake every N seconds.
+- **Schedule** — an RFC 5545 `RRULE`, set with `tariboy loop schedule`: start
+  an iteration at each occurrence, with the trigger `schedule`. See
+  [Schedule](#schedule).
 - **Message** — a publish that matches one of the agent's subscriptions nudges
   the loop to start an iteration now (only if pending deliveries exist).
 
 Loop policy is per-agent: `interval`, `timeout` (soft), `hard-timeout`,
 `on_timeout` and `on_error` (e.g. `restart`). An iteration ends when it signals
 completion, exits, or reaches an enforced deadline.
+
+### Schedule
+
+The schedule is an optional `RRULE` with an optional `DTSTART` line before it,
+for example:
+
+| Run | Schedule |
+| --- | --- |
+| Every weekday at 09:30 | `RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=30` |
+| The 15th of each month at 08:00 | `RRULE:FREQ=MONTHLY;BYMONTHDAY=15;BYHOUR=8;BYMINUTE=0` |
+| The last day of each month at 23:45 | `RRULE:FREQ=MONTHLY;BYMONTHDAY=-1;BYHOUR=23;BYMINUTE=45` |
+| Once, on 20 October 2026 at 09:30 | `DTSTART:20261020T093000` then `RRULE:FREQ=DAILY;COUNT=1` |
+| Every 2 hours | `RRULE:FREQ=HOURLY;INTERVAL=2` |
+
+The two lines can be separated by a newline or a space. Schedules run at whole
+minutes: the daemon rejects `FREQ=SECONDLY` and any `BYSECOND` other than `0`.
+When the daemon saves a schedule, it stores a normalized form: it adds
+`BYSECOND=0` and, when there is no `DTSTART`, it adds `DTSTART` as the current
+minute. A `DTSTART` without `TZID` or `Z` is in the time zone of the daemon
+host, also for a remote host. Name another zone with
+`DTSTART;TZID=Europe/Moscow:20261018T000000`. An invalid rule is rejected with
+`bad_schedule` and the previous schedule stays.
+
+The engine arms one timer for the nearer of the next `interval_s` firing and
+the next occurrence. The two sources work independently; set `interval_s` to 0
+to start the agent only on its schedule. An occurrence never starts a second
+iteration while one runs, and missed occurrences are not replayed: after an
+iteration, or after the daemon or the agent was off, the next start is the
+first occurrence after the current time. A finished rule (`COUNT` or `UNTIL`)
+stays saved but starts nothing. The agent view reports `schedule` and
+`schedule_next_at` (RFC 3339, empty when there is no next start).
 
 ### Agent Goals
 
@@ -979,8 +1187,9 @@ external repository CWD. Rendering the path grants no new filesystem access;
 the harness already runs with the daemon account's permissions.
 
 :::note
-Loop policy is set with the `tariboy loop …` subcommands — `enable`,
-`disable`, `interval`, `timeout`, `hard-timeout`, `on-timeout`, `on-error`. See
+Loop policy is set with the `tariboy loop …` subcommands — `interval`,
+`schedule`, `timeout`, `hard-timeout`, `on-timeout`, `on-error`, `max-idle`,
+`ai-stall-timeout`. See
 [the command reference](/docs/reference/commands#operator-commands).
 :::
 
@@ -1408,6 +1617,12 @@ The next attributed request updates the timestamp and live state derives as
 
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
+
+The loop schedule is the `agents.schedule_rrule` column: the normalized
+`DTSTART` and `RRULE` lines, empty when unset (migration
+`0065_agent_schedule.sql`). Only `loop schedule` writes it. The next start is
+computed from it on demand and is not stored, so the daemon does not replay
+occurrences missed while it was off.
 
 ## Filesystem-backed shell scripts
 
@@ -2385,8 +2600,15 @@ list with **New queue**, and the selected queue in **General** (the existing
 **Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
 already performs; `scope_agent`, `status_view`, the text search, `assignee` and
-`waiting_for` stay daemon-side. A new task is created in the selected queue,
-or in the first queue when `All queues` is selected.
+`waiting_for` stay daemon-side. The **New task** form preselects the queue
+selected in the filter. When `All queues` is selected, it preselects the queue
+of the last root task created from a form on that server, or the first queue
+when that queue no longer exists. After a root task is created, its queue is
+saved in `localStorage` under `tasks:new-task-queue:v1`, a JSON object from
+server (`local` for the local daemon, otherwise the Desktop server id) to queue
+prefix. A child task, a cancelled form, or a failed create saves nothing. The
+record survives a restart, stays on one device, and is ignored when it is
+unreadable.
 
 The table header and its rows read one column layout, so a column cannot
 drift from its heading. By default `Pri` comes first in every table, then
@@ -2715,7 +2937,9 @@ status, queue and server are kept per session in `tasks:all-view:v1` and the
 shared `tasks:queue-filter:v1`. An empty result says **No tasks** with
 **Clear filters**. **New task** asks for an agent (labelled with its server)
 and a queue of that agent's server, and creates
-the task there assigned to that agent.
+the task there assigned to that agent. The queue list preselects the queue
+saved for that server in `tasks:new-task-queue:v1` when it exists there, and
+the created task saves its queue for that server.
 
 Selecting a row opens the task in place in the same detail sheet, loaded from
 its own server. There the Assignee field lists every agent on every server as
@@ -2775,7 +2999,9 @@ later delivery.
 Configuration is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
-fields; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+fields, including **Schedule (RRULE)** with the daemon's next scheduled start
+under it, which follows Save, and an emptied field clears the schedule; there
+is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
 shell script and secrets), and **Retention and cleanup**. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.
@@ -4038,10 +4264,10 @@ Before staging, the manifest gate rejects malformed packets or a signature key
 identifier that differs from the public key in `tauri.conf.json`. This identifies
 an accidental wrong signing Secret; cryptographic archive verification remains
 the installed updater's responsibility. A separate `publish` job waits for this
-macOS job, creates a draft GitHub Release, uploads the complete set, and only
+macOS job and the Android job (see [Android app](#android-app)), creates a draft
+GitHub Release, uploads the complete set together with the signed APK, and only
 then makes the release public, so the latest catalog cannot reference missing
-assets. The Android job is paused (see [Android app](#android-app)), so
-releases attach no APK. The first updater-enabled version
+assets and a failed Android build publishes nothing. The first updater-enabled version
 must still be installed from the DMG; only later, higher signed versions can be
 installed by the updater.
 
@@ -4099,24 +4325,14 @@ The target builds an `arm64-v8a` release APK under
 `storePassword`, `keyAlias`, `keyPassword`) the APK is signed; without it the
 output is `*-unsigned.apk` for local checks.
 
-The release workflow's `android` job is paused: it is commented out in
-`.github/workflows/desktop-release.yml`, `publish` needs only the macOS job, and
-releases attach no APK. Build the APK locally with `make desktop-android`. To
-restore the job, uncomment it, make `publish` need `[release, android]` again,
-restore its Android download, note and upload, restore the Android assertions in
-`scripts/desktop_release_workflow_test.go`, and add four repository Secrets:
-`ANDROID_KEYSTORE_BASE64` (the base64-encoded keystore),
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
-The job then builds the APK on `ubuntu-latest` in parallel with the macOS job.
-Create the key once and keep it backed up:
-
-```bash
-keytool -genkeypair -v -keystore tariboy-release.jks -keyalg RSA \
-  -keysize 4096 -validity 10000 -alias tariboy
-```
-
-Android refuses to update an installed APK signed by a different key, so a lost
-or replaced key forces users to uninstall and reinstall.
+The release workflow builds it in a parallel `android` job on `ubuntu-latest`
+and requires four repository Secrets, `ANDROID_KEYSTORE_BASE64` (the
+base64-encoded keystore), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
+`ANDROID_KEY_PASSWORD`, plus the repository variable `ANDROID_CERT_SHA256`. The
+job rejects an unsigned APK, a debug certificate, and any certificate whose
+SHA-256 fingerprint differs from that variable, and `publish` writes the
+fingerprint into the release notes. [Android release APK](/android-release)
+describes the key, the GitHub settings, and the failure messages.
 
 ### Documentation
 
@@ -6591,13 +6807,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.86.0` alpha on an Apple Silicon Mac.
+This path is for the `0.87.2` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.86.0_aarch64.dmg`;
+- a verified `Tariboy_0.87.2_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -7393,6 +7609,7 @@ tariboy has three command surfaces:
 | `tariboy loop interval` | Get or set loop interval (seconds); omit value to read |
 | `tariboy loop on-error` | Get or set loop on-error policy; omit value to read |
 | `tariboy loop on-timeout` | Get or set loop on-timeout policy; omit value to read |
+| `tariboy loop schedule` | Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read |
 | `tariboy loop timeout` | Get or set loop timeout (seconds); omit value to read |
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
@@ -7604,7 +7821,7 @@ by the operator. The desktop does not implement a second SSH stack.
 | Remote CLI links | `~/.local/bin` |
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
-| Android app | arm64 APK built with `make desktop-android`; forwarded loopback port or HTTPS server, no SSH hosts |
+| Android app | signed arm64 APK in each release; forwarded loopback port or HTTPS server, no SSH hosts |
 
 Automatic installation requires a writable `~/.local` and `python3`; Linux
 hosts also need `flock`. The desktop app carries one server build per platform
@@ -7901,10 +8118,9 @@ data removal is intended.
 ## Android app
 
 The Android APK runs the same UI without a local daemon, SSH hosts, tunnels, or
-host provisioning. Releases do not attach the APK yet; build it with
-`make desktop-android` (see the
-[contributor guide](/development#android-app)). It connects to two kinds of
-servers:
+host provisioning. Each release attaches `Tariboy_X.Y.Z_android-arm64.apk`; the
+release notes give its signing certificate fingerprint (see
+[Android release APK](/android-release)). It connects to two kinds of servers:
 
 - **A forwarded loopback port.** You forward a daemon's listener to the phone
   yourself, for example `ssh -L 9990:127.0.0.1:9990 host` in Termux or
@@ -8165,7 +8381,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.86.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.87.2` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -8195,9 +8411,12 @@ macOS runner. The workflow rejects a tag that differs from either canonical
 version declaration, builds and verifies the release through `make
 desktop-mac`, and publishes the DMG, signed updater archive and catalog,
 `SHA256SUMS`, and `release.json` with the job-scoped `contents: write`
-permission. The Linux job that signs the Android APK with the key from the
-`ANDROID_KEY*` Secrets and verifies it with `apksigner` is paused until those
-Secrets exist, so releases attach no APK. Before staging, the workflow rejects malformed signing packets or a
+permission. A parallel Linux job builds the Android APK, signs it with the key
+from the `ANDROID_KEY*` Secrets, verifies the signature with `apksigner`, rejects
+the Android debug certificate and any certificate whose SHA-256 fingerprint
+differs from the `ANDROID_CERT_SHA256` repository variable, and the release is
+published only when both builds succeed. The keystore Secrets are available only
+to the step that writes `keystore.properties`. Before staging, the workflow rejects malformed signing packets or a
 signature key identifier that differs from the pinned updater public key. This
 catches an accidental wrong signing Secret; cryptographic archive verification
 remains the official updater's responsibility. GitHub publication does not change
@@ -8265,7 +8484,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.86.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.87.2`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 

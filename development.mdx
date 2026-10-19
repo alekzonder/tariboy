@@ -520,10 +520,10 @@ Before staging, the manifest gate rejects malformed packets or a signature key
 identifier that differs from the public key in `tauri.conf.json`. This identifies
 an accidental wrong signing Secret; cryptographic archive verification remains
 the installed updater's responsibility. A separate `publish` job waits for this
-macOS job, creates a draft GitHub Release, uploads the complete set, and only
+macOS job and the Android job (see [Android app](#android-app)), creates a draft
+GitHub Release, uploads the complete set together with the signed APK, and only
 then makes the release public, so the latest catalog cannot reference missing
-assets. The Android job is paused (see [Android app](#android-app)), so
-releases attach no APK. The first updater-enabled version
+assets and a failed Android build publishes nothing. The first updater-enabled version
 must still be installed from the DMG; only later, higher signed versions can be
 installed by the updater.
 
@@ -581,24 +581,14 @@ The target builds an `arm64-v8a` release APK under
 `storePassword`, `keyAlias`, `keyPassword`) the APK is signed; without it the
 output is `*-unsigned.apk` for local checks.
 
-The release workflow's `android` job is paused: it is commented out in
-`.github/workflows/desktop-release.yml`, `publish` needs only the macOS job, and
-releases attach no APK. Build the APK locally with `make desktop-android`. To
-restore the job, uncomment it, make `publish` need `[release, android]` again,
-restore its Android download, note and upload, restore the Android assertions in
-`scripts/desktop_release_workflow_test.go`, and add four repository Secrets:
-`ANDROID_KEYSTORE_BASE64` (the base64-encoded keystore),
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
-The job then builds the APK on `ubuntu-latest` in parallel with the macOS job.
-Create the key once and keep it backed up:
-
-```bash
-keytool -genkeypair -v -keystore tariboy-release.jks -keyalg RSA \
-  -keysize 4096 -validity 10000 -alias tariboy
-```
-
-Android refuses to update an installed APK signed by a different key, so a lost
-or replaced key forces users to uninstall and reinstall.
+The release workflow builds it in a parallel `android` job on `ubuntu-latest`
+and requires four repository Secrets, `ANDROID_KEYSTORE_BASE64` (the
+base64-encoded keystore), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
+`ANDROID_KEY_PASSWORD`, plus the repository variable `ANDROID_CERT_SHA256`. The
+job rejects an unsigned APK, a debug certificate, and any certificate whose
+SHA-256 fingerprint differs from that variable, and `publish` writes the
+fingerprint into the release notes. [Android release APK](/android-release)
+describes the key, the GitHub settings, and the failure messages.
 
 ### Documentation
 

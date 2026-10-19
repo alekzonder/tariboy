@@ -20,7 +20,7 @@ by the operator. The desktop does not implement a second SSH stack.
 | Remote CLI links | `~/.local/bin` |
 | Daemon HTTP | remote loopback only |
 | Tunnel | local loopback forwarding over SSH |
-| Android app | arm64 APK built with `make desktop-android`; forwarded loopback port or HTTPS server, no SSH hosts |
+| Android app | signed arm64 APK in each release; forwarded loopback port or HTTPS server, no SSH hosts |
 
 Automatic installation requires a writable `~/.local` and `python3`; Linux
 hosts also need `flock`. The desktop app carries one server build per platform
@@ -317,10 +317,9 @@ data removal is intended.
 ## Android app
 
 The Android APK runs the same UI without a local daemon, SSH hosts, tunnels, or
-host provisioning. Releases do not attach the APK yet; build it with
-`make desktop-android` (see the
-[contributor guide](/development#android-app)). It connects to two kinds of
-servers:
+host provisioning. Each release attaches `Tariboy_X.Y.Z_android-arm64.apk`; the
+release notes give its signing certificate fingerprint (see
+[Android release APK](/android-release)). It connects to two kinds of servers:
 
 - **A forwarded loopback port.** You forward a daemon's listener to the phone
   yourself, for example `ssh -L 9990:127.0.0.1:9990 host` in Termux or

@@ -519,8 +519,15 @@ list with **New queue**, and the selected queue in **General** (the existing
 **Sources** tabs. The queue
 filter is applied in the client so that menu can count from the load the tree
 already performs; `scope_agent`, `status_view`, the text search, `assignee` and
-`waiting_for` stay daemon-side. A new task is created in the selected queue,
-or in the first queue when `All queues` is selected.
+`waiting_for` stay daemon-side. The **New task** form preselects the queue
+selected in the filter. When `All queues` is selected, it preselects the queue
+of the last root task created from a form on that server, or the first queue
+when that queue no longer exists. After a root task is created, its queue is
+saved in `localStorage` under `tasks:new-task-queue:v1`, a JSON object from
+server (`local` for the local daemon, otherwise the Desktop server id) to queue
+prefix. A child task, a cancelled form, or a failed create saves nothing. The
+record survives a restart, stays on one device, and is ignored when it is
+unreadable.
 
 The table header and its rows read one column layout, so a column cannot
 drift from its heading. By default `Pri` comes first in every table, then
@@ -849,7 +856,9 @@ status, queue and server are kept per session in `tasks:all-view:v1` and the
 shared `tasks:queue-filter:v1`. An empty result says **No tasks** with
 **Clear filters**. **New task** asks for an agent (labelled with its server)
 and a queue of that agent's server, and creates
-the task there assigned to that agent.
+the task there assigned to that agent. The queue list preselects the queue
+saved for that server in `tasks:new-task-queue:v1` when it exists there, and
+the created task saves its queue for that server.
 
 Selecting a row opens the task in place in the same detail sheet, loaded from
 its own server. There the Assignee field lists every agent on every server as
@@ -909,7 +918,9 @@ later delivery.
 Configuration is one column of blocks in a fixed order: **General** (agent
 image, image digest, working directory), **Runtime** (harness, model, effort,
 Interactive), **Loop and timeouts** (the scheduling and timeout
-fields; there is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
+fields, including **Schedule (RRULE)** with the daemon's next scheduled start
+under it, which follows Save, and an emptied field clears the schedule; there
+is no Loop switch), **Goal**, **Messages**, **Budgets (USD)**, **Environment** (agent
 shell script and secrets), and **Retention and cleanup**. Start, Stop and
 Restart are actions, not settings: they sit in the page header next to the
 master-switch state and apply immediately.

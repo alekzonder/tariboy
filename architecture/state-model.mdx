@@ -23,6 +23,12 @@ The next attributed request updates the timestamp and live state derives as
 Reconciliation and reaping are therefore flag-independent: the daemon derives
 what *should* be running from the DB and converges to it.
 
+The loop schedule is the `agents.schedule_rrule` column: the normalized
+`DTSTART` and `RRULE` lines, empty when unset (migration
+`0065_agent_schedule.sql`). Only `loop schedule` writes it. The next start is
+computed from it on demand and is not stored, so the daemon does not replay
+occurrences missed while it was off.
+
 ## Filesystem-backed shell scripts
 
 The global pre-iteration script at `<base-dir>/global-agent-shell.sh` and an

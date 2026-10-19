@@ -13,6 +13,7 @@
 - [Security and controls](https://alekzonder.github.io/tariboy/security-controls): Trust boundaries, credential handling, budgets, audit, and operator stop controls.
 - [Support](https://alekzonder.github.io/tariboy/support): Diagnose alpha issues, export safe diagnostics, roll back, and uninstall.
 - [Building, testing & development](https://alekzonder.github.io/tariboy/development): Canonical contributor guide for the Go control plane, React UI, Rust desktop host, documentation, and isolated end-to-end tests.
+- [Android release APK](https://alekzonder.github.io/tariboy/android-release): Build the signed Android APK locally and configure the GitHub Secrets and variable that let each release attach it.
 - [Native Tasks](https://alekzonder.github.io/tariboy/tasks): Queue-owned, infinitely nested work shared by customers and agents, with comments, dependencies, answer tracking, and realtime Desktop updates.
 
 ## Images
