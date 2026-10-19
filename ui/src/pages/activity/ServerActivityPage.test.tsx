@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import ServerActivityPage from "./ServerActivityPage";
+
+vi.mock("@/pages/tasks/TaskDrawer", () => ({
+  default: ({ taskKey, onClose }: { taskKey: string; onClose: () => void }) => (
+    <div data-testid="task-drawer">{taskKey}<button onClick={onClose}>Close drawer</button></div>
+  ),
+}));
+
+function Location() {
+  return <output data-testid="location">{useLocation().pathname}</output>;
+}
 
 const REPORT = {
   since: "", until: "", truncated: true,
@@ -27,14 +37,19 @@ afterEach(() => vi.restoreAllMocks());
 
 const renderPage = () => render(
   <MemoryRouter initialEntries={["/servers/local/activity?period=week"]}>
+    <Location />
     <ServerActivityPage hostId="" target={null} />
   </MemoryRouter>,
 );
 
 describe("ServerActivityPage", () => {
-  it("lists every agent's tasks with the server task link", async () => {
+  it("lists every agent's tasks and opens a task in place", async () => {
     renderPage();
-    expect(await screen.findByRole("link", { name: "DEV-7" })).toHaveAttribute("href", "/servers/local/tasks?task=DEV-7");
+    fireEvent.click(await screen.findByRole("button", { name: "DEV-7" }));
+    expect(screen.getByTestId("task-drawer")).toHaveTextContent("DEV-7");
+    expect(screen.getByTestId("location")).toHaveTextContent("/servers/local/activity");
+    fireEvent.click(screen.getByRole("button", { name: "Close drawer" }));
+    expect(screen.queryByTestId("task-drawer")).not.toBeInTheDocument();
     expect(screen.getByText("alice, bob")).toBeInTheDocument();
     expect(screen.getByText(/Showing the 1 most recent tasks/)).toBeInTheDocument();
     expect(new URL(urls[0], "http://x").searchParams.has("agent")).toBe(false);
@@ -42,7 +57,7 @@ describe("ServerActivityPage", () => {
 
   it("breaks the period down by agent and opens an agent with the same period", async () => {
     renderPage();
-    await screen.findByRole("link", { name: "DEV-7" });
+    await screen.findByRole("button", { name: "DEV-7" });
     fireEvent.click(screen.getByRole("tab", { name: "Agents" }));
     expect(screen.getByRole("link", { name: "alice" })).toHaveAttribute("href", "/agents/local/alice/activity?period=week");
   });

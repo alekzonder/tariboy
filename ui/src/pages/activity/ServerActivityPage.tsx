@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ApiTarget } from "@/lib/api";
 import { periodQuery, useActivityWindow } from "@/lib/activityPeriod";
-import { hostToParam, serverPath } from "@/lib/terminalsHost";
+import { hostToParam } from "@/lib/terminalsHost";
 import { useTaskActivity } from "@/hooks/useTaskActivity";
+import TaskDrawer from "@/pages/tasks/TaskDrawer";
 import {
   ActivityPeriodBar,
   ActivityTabs,
@@ -24,6 +26,7 @@ export default function ServerActivityPage({ hostId, target }: { hostId: string;
   const [searchParams, setSearchParams] = useSearchParams();
   const view: View = searchParams.get("view") === "agents" ? "agents" : "tasks";
   const { report, error } = useTaskActivity(target, window);
+  const [taskKey, setTaskKey] = useState("");
   const selectView = (next: View) => {
     const params = new URLSearchParams(searchParams);
     params.set("view", next);
@@ -41,7 +44,7 @@ export default function ServerActivityPage({ hostId, target }: { hostId: string;
           <TaskActivityTable
             rows={report?.tasks ?? []}
             showAgents
-            taskHref={(key) => `${serverPath(hostId, "tasks")}?task=${encodeURIComponent(key)}`}
+            onOpenTask={setTaskKey}
           />
           {report?.truncated && <TruncatedNote shown={report.tasks.length} />}
         </>
@@ -52,6 +55,7 @@ export default function ServerActivityPage({ hostId, target }: { hostId: string;
             `/agents/${encodeURIComponent(hostToParam(hostId))}/${encodeURIComponent(agent)}/activity?${periodQuery(window)}`}
         />
       )}
+      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} target={target} onClose={() => setTaskKey("")} />}
     </div>
   );
 }

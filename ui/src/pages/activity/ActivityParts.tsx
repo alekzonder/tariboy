@@ -129,11 +129,11 @@ function periodSummary(row: TaskActivityRow): string {
 
 export function TaskActivityTable({
   rows,
-  taskHref,
+  onOpenTask,
   showAgents = false,
 }: {
   rows: TaskActivityRow[];
-  taskHref: (key: string) => string;
+  onOpenTask: (key: string) => void;
   showAgents?: boolean;
 }) {
   return (
@@ -156,9 +156,13 @@ export function TaskActivityTable({
           {rows.map((row) => (
             <tr key={row.key} className="border-t align-top">
               <td className="px-3 py-1.5">
-                <Link to={taskHref(row.key)} className="font-mono text-xs text-primary hover:underline">
+                <button
+                  type="button"
+                  onClick={() => onOpenTask(row.key)}
+                  className="font-mono text-xs text-primary hover:underline"
+                >
                   {row.key}
-                </Link>
+                </button>
               </td>
               <td className="px-3 py-1.5">{row.title}</td>
               <td className="px-3 py-1.5 whitespace-nowrap">{row.status}</td>

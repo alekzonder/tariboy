@@ -9,6 +9,7 @@ import { paramToHost, targetFor } from "@/lib/terminalsHost";
 import type { StatusHistoryEvent } from "@/lib/types";
 import { fmtDateTime } from "@/lib/time";
 import { useTaskActivity } from "@/hooks/useTaskActivity";
+import TaskDrawer from "@/pages/tasks/TaskDrawer";
 import {
   ActivityPeriodBar,
   ActivityTabs,
@@ -38,7 +39,9 @@ export default function AgentActivityTab() {
   const { window, setPeriod, setCustom } = useActivityWindow();
   const [searchParams, setSearchParams] = useSearchParams();
   const view = viewFrom(searchParams);
-  const { report, error } = useTaskActivity(targetFor(paramToHost(hostParam)), window, name);
+  const target = targetFor(paramToHost(hostParam));
+  const { report, error } = useTaskActivity(target, window, name);
+  const [taskKey, setTaskKey] = useState("");
   // An invalid custom range shows its error and leaves the views unbounded.
   const bounds = { since: window.since, until: window.until };
 
@@ -69,8 +72,7 @@ export default function AgentActivityTab() {
           <div className="flex flex-col gap-2">
             <TaskActivityTable
               rows={report?.tasks ?? []}
-              taskHref={(key) =>
-                `/agents/${encodeURIComponent(hostParam)}/${encodeURIComponent(name)}/tasks?task=${encodeURIComponent(key)}`}
+              onOpenTask={setTaskKey}
             />
             {report?.truncated && <TruncatedNote shown={report.tasks.length} />}
           </div>
@@ -90,6 +92,7 @@ export default function AgentActivityTab() {
           </div>
         )}
       </div>
+      {taskKey && <TaskDrawer key={taskKey} taskKey={taskKey} target={target} onClose={() => setTaskKey("")} />}
     </div>
   );
 }

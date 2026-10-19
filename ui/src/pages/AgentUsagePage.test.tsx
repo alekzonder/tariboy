@@ -4,6 +4,10 @@ import { MemoryRouter } from "react-router-dom";
 import { AgentNameContext } from "@/lib/agent";
 import AgentUsagePage from "./AgentUsagePage";
 
+vi.mock("@/pages/tasks/TaskDrawer", () => ({
+  default: ({ taskKey }: { taskKey: string }) => <div data-testid="task-drawer">{taskKey}</div>,
+}));
+
 afterEach(() => vi.restoreAllMocks());
 
 // Capture every GET path so we can assert the window/grouping params reach the
@@ -89,12 +93,13 @@ it("switches grouping and requests the new group_by", async () => {
   expect(paths.some((p) => p.includes("group_by=epic"))).toBe(true);
 });
 
-it("links a task or epic key to the agent's Tasks tab", async () => {
+it("opens a task or epic key in place", async () => {
   stubFetch();
   renderPage();
   await waitFor(() => expect(screen.getByText("iter-123")).toBeInTheDocument());
   fireEvent.click(screen.getByText("Epics"));
-  expect(await screen.findByRole("link", { name: "dev-t-3e1" })).toHaveAttribute("href", "/agents/local/alice/tasks?task=dev-t-3e1");
+  fireEvent.click(await screen.findByRole("button", { name: "dev-t-3e1" }));
+  expect(screen.getByTestId("task-drawer")).toHaveTextContent("dev-t-3e1");
 });
 
 it("uses the Activity period instead of its own presets", async () => {

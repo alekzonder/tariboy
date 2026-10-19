@@ -4,6 +4,10 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AgentNameContext } from "@/lib/agent";
 import AgentActivityTab from "./AgentActivityTab";
 
+vi.mock("@/pages/tasks/TaskDrawer", () => ({
+  default: ({ taskKey }: { taskKey: string }) => <div data-testid="task-drawer">{taskKey}</div>,
+}));
+
 const REPORT = {
   since: "", until: "", agent: "alice", truncated: false,
   totals: { tasks: 1, completed: 1, transitions: 2, comments: 3, iterations: 4, requests: 9, tokens: 900, cost_usd: 1.25 },
@@ -36,7 +40,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 function Location() {
-  return <output data-testid="location">{useLocation().search}</output>;
+  const location = useLocation();
+  return <output data-testid="location" data-path={location.pathname}>{location.search}</output>;
 }
 
 const renderTab = (search = "") => render(
@@ -50,10 +55,11 @@ const renderTab = (search = "") => render(
 );
 
 describe("AgentActivityTab", () => {
-  it("summarizes the agent's tasks for the last day and links each task key", async () => {
+  it("summarizes the agent's tasks for the last day and opens a task key in place", async () => {
     renderTab();
-    const link = await screen.findByRole("link", { name: "DEV-1" });
-    expect(link).toHaveAttribute("href", "/agents/local/alice/tasks?task=DEV-1");
+    fireEvent.click(await screen.findByRole("button", { name: "DEV-1" }));
+    expect(screen.getByTestId("task-drawer")).toHaveTextContent("DEV-1");
+    expect(screen.getByTestId("location")).toHaveAttribute("data-path", "/agents/local/alice/activity");
     expect(screen.getByRole("button", { name: "Day" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Ship the report")).toBeInTheDocument();
     expect(screen.getByText("$1.25", { selector: "[data-total] *" })).toBeInTheDocument();
@@ -65,7 +71,7 @@ describe("AgentActivityTab", () => {
 
   it("keeps the period in the URL and reloads the summary for it", async () => {
     renderTab("?keep=1");
-    await screen.findByRole("link", { name: "DEV-1" });
+    await screen.findByRole("button", { name: "DEV-1" });
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("keep=1&period=week"));
     await waitFor(() => expect(urls.some((u) => {
@@ -80,7 +86,7 @@ describe("AgentActivityTab", () => {
     expect(screen.getByLabelText("From")).toHaveValue("2026-10-02T00:00");
     fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-10-03T00:00" } });
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("until=2026-10-03T00%3A00"));
-    expect(await screen.findByRole("link", { name: "DEV-1" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "DEV-1" })).toBeInTheDocument();
   });
 
   it("opens the Iterations view for an iteration link and filters it by the period", async () => {
