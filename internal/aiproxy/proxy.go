@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/alekzonder/tariboy/internal/store"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -222,7 +223,7 @@ func (ex *Exchange) toRequest(
 	groupSnapshot func(agent string) (id, name string, err error),
 ) (AIRequest, error) {
 	row := AIRequest{
-		ID: id, TS: now.UTC().Format(time.RFC3339Nano), Agent: ex.Attr.Agent, Iteration: ex.Attr.Iteration,
+		ID: id, TS: store.FormatTime(now), Agent: ex.Attr.Agent, Iteration: ex.Attr.Iteration,
 		ImageName: ex.Attr.ImageName, ImageTag: ex.Attr.ImageTag, ImageDigest: ex.Attr.ImageDigest,
 		Provider: ex.Provider, Model: ex.Model,
 		InputTokens: ex.Usage.InputTokens, OutputTokens: ex.Usage.OutputTokens,

@@ -38,7 +38,7 @@ func nullStr(s string) any {
 // here; they live in iterations/<id>/proxy-transcript.jsonl.
 type AIRequest struct {
 	ID               string
-	TS               string // RFC3339Nano
+	TS               string // store.TimeLayout; InsertBatch normalizes other RFC 3339 forms
 	Agent            string
 	Iteration        string
 	ImageName        string
@@ -115,7 +115,9 @@ func (s *Store) InsertBatch(rs []AIRequest) error {
 	}
 	defer stmt.Close()
 	for _, r := range rs {
-		if _, err := stmt.Exec(r.ID, r.TS, r.Agent, r.Iteration, r.ImageName, r.ImageTag,
+		// Reindexed transcripts can carry older RFC 3339 forms.
+		ts, _ := store.NormalizeTimeValue(r.TS)
+		if _, err := stmt.Exec(r.ID, ts, r.Agent, r.Iteration, r.ImageName, r.ImageTag,
 			r.ImageDigest, r.Provider, r.Model, r.InputTokens, r.OutputTokens, r.CacheWriteTokens,
 			r.CacheReadTokens, r.CostUSD, r.LatencyMs, r.Status, r.UpstreamStatus,
 			nullStr(r.TaskID), nullStr(r.EpicID), nullStr(r.GroupID), nullStr(r.GroupName)); err != nil {
@@ -134,8 +136,8 @@ func (s *Store) DeleteAll() error {
 type UsageFilter struct {
 	Agent string
 	Image string
-	Since string // RFC3339 (inclusive lower bound)
-	Until string // RFC3339 (exclusive upper bound)
+	Since string // RFC 3339 time, inclusive lower bound
+	Until string // RFC 3339 time, exclusive upper bound
 	Group string // group snapshot id; UngroupedFilter selects NULL snapshots
 }
 
@@ -171,27 +173,17 @@ func (f UsageFilter) where() (string, []any) {
 		conds = append(conds, "group_id=?")
 		args = append(args, f.Group)
 	}
-	// Window bounds must compare chronologically, not lexically. ts is stored as
-	// RFC3339Nano text whose fractional part is variable-width (trailing zeros
-	// stripped), so a plain string compare against a bound the UI padded to a
-	// different width admits/drops the wrong sub-second rows: '..:00.123456Z'
-	// sorts before the bound '..:00.123Z' because '4' < 'Z', yet is
-	// chronologically later. Normalizing both sides through strftime to a
-	// fixed-width, offset-aware UTC millisecond form ('YYYY-MM-DDTHH:MM:SS.SSS')
-	// makes the text compare equal the time compare — exact for the UI's
-	// millisecond bounds, with no floating-point fuzz. (Series buckets via
-	// strftime('%s', ts) for the same offset-aware reason.)
-	const (
-		tsColNorm = "strftime('%Y-%m-%dT%H:%M:%f',ts)"
-		tsArgNorm = "strftime('%Y-%m-%dT%H:%M:%f',?)"
-	)
+	// ts is store.TimeLayout text, so a bound in the same layout compares in
+	// time order and the ts indexes serve the range.
 	if f.Since != "" {
-		conds = append(conds, tsColNorm+">="+tsArgNorm)
-		args = append(args, f.Since)
+		since, _ := store.NormalizeTimeValue(f.Since)
+		conds = append(conds, "ts>=?")
+		args = append(args, since)
 	}
 	if f.Until != "" {
-		conds = append(conds, tsColNorm+"<"+tsArgNorm)
-		args = append(args, f.Until)
+		until, _ := store.NormalizeTimeValue(f.Until)
+		conds = append(conds, "ts<?")
+		args = append(args, until)
 	}
 	if len(conds) == 0 {
 		return "", nil
@@ -255,9 +247,6 @@ const maxUsageRequests = 200
 
 // Requests returns the newest matching request snapshots. The store owns the
 // cap so every caller remains bounded even if it supplies a larger limit.
-// Proxy and reindex rows use canonical UTC RFC3339Nano. SQLite date functions
-// lose sub-millisecond precision, so the query orders their fixed seconds
-// prefix and a right-zero-padded nanosecond fraction before applying LIMIT.
 func (s *Store) Requests(f UsageFilter, limit int) ([]RequestRow, error) {
 	return requests(s.db, f, limit)
 }
@@ -272,12 +261,7 @@ func requests(q rowQueryer, f UsageFilter, limit int) ([]RequestRow, error) {
 		input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
 		cost_usd, status, COALESCE(group_id,''), COALESCE(group_name,'')
 		FROM ai_requests`+where+`
-		ORDER BY substr(ts,1,19) DESC,
-			CASE WHEN substr(ts,20,1)='.'
-				THEN substr(substr(ts,21,length(ts)-21)||'000000000',1,9)
-				ELSE '000000000'
-			END DESC,
-			id DESC
+		ORDER BY ts DESC, id DESC
 		LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
@@ -401,7 +385,7 @@ func (s *Store) AggregateBy(f UsageFilter, groupBy string) ([]GroupRow, error) {
 	return out, rows.Err()
 }
 
-// SeriesRow is one time bucket: its UTC start (RFC3339), request count, total
+// SeriesRow is one time bucket: its UTC start (RFC 3339), request count, total
 // tokens (all four kinds summed), and cost.
 type SeriesRow struct {
 	BucketStart string
@@ -426,10 +410,9 @@ func bucketSeconds(bucket string) (int, bool) {
 	return 0, false
 }
 
-// Series buckets the filtered ai_requests into fixed UTC time windows. ts is
-// stored as RFC3339Nano text; strftime('%s', ts) parses it (offset-aware) to a
-// unix epoch, which we floor to the bucket width and re-format as a UTC
-// RFC3339 bucket start. Rows come back ordered by bucket start.
+// Series buckets the filtered ai_requests into fixed UTC time windows. The
+// unix epoch of ts is floored to the bucket width and formatted as a UTC
+// RFC 3339 bucket start. Rows come back ordered by bucket start.
 func (s *Store) Series(f UsageFilter, bucket string) ([]SeriesRow, error) {
 	return series(s.db, f, bucket)
 }
@@ -440,7 +423,7 @@ func series(q rowQueryer, f UsageFilter, bucket string) ([]SeriesRow, error) {
 		return nil, ErrBadBucket
 	}
 	where, args := f.where()
-	floor := fmt.Sprintf("(strftime('%%s', ts)/%d)*%d", secs, secs)
+	floor := fmt.Sprintf("(unixepoch(ts)/%d)*%d", secs, secs)
 	rows, err := q.Query(`SELECT strftime('%Y-%m-%dT%H:%M:%SZ', `+floor+`, 'unixepoch'),
 		COUNT(*),
 		COALESCE(SUM(input_tokens+output_tokens+cache_write_tokens+cache_read_tokens),0),
@@ -465,7 +448,7 @@ func series(q rowQueryer, f UsageFilter, bucket string) ([]SeriesRow, error) {
 
 // TaskUsageRow is one task's AI work by one agent: distinct iterations,
 // request count, all four token kinds summed, cost, and the first and last
-// request time as fixed-width UTC milliseconds.
+// request time in store.TimeLayout.
 type TaskUsageRow struct {
 	TaskKey    string
 	Agent      string
@@ -480,18 +463,23 @@ type TaskUsageRow struct {
 // TaskUsage groups the filtered, task-tagged ai_requests by task and agent.
 // Untagged requests have no task to report on and are left out.
 func (s *Store) TaskUsage(f UsageFilter) ([]TaskUsageRow, error) {
+	return taskUsage(s.db, f)
+}
+
+func taskUsage(q rowQueryer, f UsageFilter) ([]TaskUsageRow, error) {
 	where, args := f.where()
 	if where == "" {
 		where = " WHERE task_id<>''"
 	} else {
 		where += " AND task_id<>''"
 	}
-	const tsNorm = "strftime('%Y-%m-%dT%H:%M:%fZ',ts)"
-	rows, err := s.db.Query(`SELECT task_id, agent, COUNT(DISTINCT iteration), COUNT(*),
+	// The unary + keeps SQLite from scanning idx_ai_requests_agent_task whole
+	// to group in index order instead of seeking the ts range.
+	rows, err := q.Query(`SELECT task_id, agent, COUNT(DISTINCT iteration), COUNT(*),
 		COALESCE(SUM(input_tokens+output_tokens+cache_write_tokens+cache_read_tokens),0),
-		COALESCE(SUM(cost_usd),0), MIN(`+tsNorm+`), MAX(`+tsNorm+`)
+		COALESCE(SUM(cost_usd),0), MIN(ts), MAX(ts)
 		FROM ai_requests`+where+`
-		GROUP BY task_id, agent ORDER BY task_id, agent`, args...)
+		GROUP BY +task_id, +agent ORDER BY task_id, agent`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +546,7 @@ func (s *Store) GroupCostSince(members []string, since time.Time) (float64, erro
 		return 0, nil
 	}
 	q := `SELECT COALESCE(SUM(cost_usd),0) FROM ai_requests WHERE ts>=? AND agent IN (`
-	args := []any{since.UTC().Format(time.RFC3339Nano)}
+	args := []any{store.FormatTime(since)}
 	for i, m := range members {
 		if i > 0 {
 			q += ","
@@ -574,18 +562,18 @@ func (s *Store) GroupCostSince(members []string, since time.Time) (float64, erro
 
 // CostSince sums cost_usd for an agent (empty = all agents) since a cutoff.
 func (s *Store) CostSince(agent string, since time.Time) (float64, error) {
-	// ts is variable-width RFC3339Nano text, so comparing it directly to a
-	// whole-second calendar boundary misorders fractional timestamps (the dot
-	// sorts before the boundary's trailing Z). Normalize both sides through
-	// SQLite's offset-aware time parser before comparing.
-	q := `SELECT COALESCE(SUM(cost_usd),0) FROM ai_requests
-		WHERE strftime('%Y-%m-%dT%H:%M:%f',ts)>=strftime('%Y-%m-%dT%H:%M:%f',?)`
-	args := []any{since.UTC().Format(time.RFC3339Nano)}
+	q, args := costSinceQuery(agent, since)
+	var c float64
+	err := s.db.QueryRow(q, args...).Scan(&c)
+	return roundCost(c), err
+}
+
+func costSinceQuery(agent string, since time.Time) (string, []any) {
+	q := `SELECT COALESCE(SUM(cost_usd),0) FROM ai_requests WHERE ts>=?`
+	args := []any{store.FormatTime(since)}
 	if agent != "" {
 		q += ` AND agent=?`
 		args = append(args, agent)
 	}
-	var c float64
-	err := s.db.QueryRow(q, args...).Scan(&c)
-	return roundCost(c), err
+	return q, args
 }
