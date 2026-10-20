@@ -35,7 +35,7 @@ func newFixture(t *testing.T, body string) fixture {
 	if err := os.MkdirAll(filepath.Dir(f.script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(f.script, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+	if err := testutil.WriteExecutable(f.script, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return f
