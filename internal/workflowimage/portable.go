@@ -105,5 +105,5 @@ func (r *Registry) Import(archive io.Reader, size int64, stagingRoot string, now
 	if err != nil {
 		return Manifest{}, false, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	return r.publish(src, meta.Digest, now)
+	return r.published(r.publish(src, meta.Digest, now))
 }

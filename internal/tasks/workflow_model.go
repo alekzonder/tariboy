@@ -55,6 +55,7 @@ type QueueWorkflow struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`
 	Digest    string `json:"digest"`
+	Tag       string `json:"tag"`
 	Revision  int64  `json:"revision"`
 	UpdatedAt string `json:"updated_at"`
 }

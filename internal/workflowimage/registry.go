@@ -23,6 +23,9 @@ var beforeRecord = func() {}
 type Registry struct {
 	Store *Store
 	DB    *sql.DB
+	// OnPublished, when set, runs after a successful Publish or Import with
+	// the image name, outside the package lock: its tags may have moved.
+	OnPublished func(name string)
 }
 
 // insert records m. An existing row for the digest is left as it is; a row
@@ -47,7 +50,15 @@ func (r *Registry) insert(m Manifest) error {
 // under the package lock, so no other publication or removal can interleave
 // with the rollback.
 func (r *Registry) Publish(src *workflowfile.File, now time.Time) (Manifest, bool, error) {
-	return r.publish(src, "", now)
+	return r.published(r.publish(src, "", now))
+}
+
+// published runs OnPublished after a successful publication.
+func (r *Registry) published(m Manifest, created bool, err error) (Manifest, bool, error) {
+	if err == nil && r.OnPublished != nil {
+		r.OnPublished(m.Name)
+	}
+	return m, created, err
 }
 
 // publish is Publish that, with a non-empty want, refuses content whose

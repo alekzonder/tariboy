@@ -40,19 +40,39 @@ func seedBindingImage(t *testing.T, svc *Service, name, version string, pools ..
 		digest, name, version, string(raw), "2026-10-02T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
+	// A snapshot of the seeded images, newest first, so the resolver never
+	// queries the database: like the image store, it is safe inside a task
+	// transaction.
+	type seeded struct{ digest, name, version string }
+	var images []seeded
+	rows, err := svc.db.Query(`SELECT digest, name, version FROM task_workflow_images ORDER BY built_at DESC, rowid DESC`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var img seeded
+		if err := rows.Scan(&img.digest, &img.name, &img.version); err != nil {
+			t.Fatal(err)
+		}
+		images = append(images, img)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
 	svc.SetWorkflowResolver(func(ref string) (string, error) {
 		n, tag := ref, ""
 		if i := strings.LastIndex(ref, ":"); i >= 0 {
 			n, tag = ref[:i], ref[i+1:]
 		}
-		var d string
-		err := svc.db.QueryRow(`SELECT digest FROM task_workflow_images
-			WHERE (name = ? AND (? = '' OR version = ?)) OR digest = ? ORDER BY built_at DESC, rowid DESC LIMIT 1`,
-			n, tag, tag, tag).Scan(&d)
-		if err != nil {
-			return "", fmt.Errorf("%w: %s", workflowimage.ErrNotFound, ref)
+		if tag == "latest" {
+			tag = ""
 		}
-		return d, nil
+		for _, img := range images {
+			if (img.name == n && (tag == "" || img.version == tag)) || img.digest == tag {
+				return img.digest, nil
+			}
+		}
+		return "", fmt.Errorf("%w: %s", workflowimage.ErrNotFound, ref)
 	})
 	return digest
 }
@@ -205,8 +225,8 @@ func TestQueueWorkflowBindingRules(t *testing.T) {
 	if err != nil || got != bound {
 		t.Fatalf("get = %#v, %v; want %#v", got, err, bound)
 	}
-	// The same digest by digest ref is a no-op that keeps the revision.
-	same, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow:"+d1, 1)
+	// The same ref is a no-op that keeps the revision.
+	same, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow:1", 1)
 	if err != nil || same != bound {
 		t.Fatalf("rebind same digest = %#v, %v", same, err)
 	}

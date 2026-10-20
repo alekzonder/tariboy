@@ -298,6 +298,10 @@ func (s *Service) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in 
 		if strings.TrimSpace(in.Assignee) != "" {
 			return Task{}, workflowManagedError()
 		}
+		// A binding made by a tag gives each new task the version the tag names now.
+		if binding, err = s.followQueueWorkflowTx(ctx, tx, binding); err != nil {
+			return Task{}, err
+		}
 		workflowDigest = binding.Digest
 	}
 	// An unassigned root task from an agent that does not run the queue is a filed report:

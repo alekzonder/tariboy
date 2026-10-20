@@ -142,6 +142,7 @@ export default function QueueWorkflowSettings({ queue, target, pools, onOpenTab,
             {binding.name}
           </Link> {binding.version}{" "}
           <span className={MONO} title={binding.digest}>{binding.digest.slice(0, 12)}</span>
+          {binding.tag && <> follows <span className={MONO}>{binding.tag}</span></>}
         </p>
       ) : <span className={EMPTY}>No workflow</span>)}
       {loadError && (

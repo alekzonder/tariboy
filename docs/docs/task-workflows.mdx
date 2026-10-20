@@ -32,8 +32,10 @@ operations.
 2. An operator **binds** the image to a queue, gives every pool the image names
    at least one agent, and stores the **queue secrets** the image requires.
 3. A task created in the bound queue **pins** the image version (its digest)
-   and enters the image's `initial_status`. Moving a tag later changes nothing
-   for existing tasks, and a task is never migrated to another version.
+   and enters the image's `initial_status`. A binding made by a tag, such as
+   `latest`, follows that tag: when a new build moves the tag, tasks created
+   after it pin the new version. Existing tasks keep their version, and a task
+   is never migrated to another version.
 4. Every non-terminal **status** has one owner, who leaves it by naming an
    **outcome**; the status declares a **transition** per outcome.
    - A **pool** status is worked by one agent, the **holder**, which the daemon
@@ -283,14 +285,35 @@ ttasks queue workflow get DEV
 ttasks queue workflow clear DEV --revision 1
 ```
 
-The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>` and is resolved to a
-digest when the binding is set; `NAME` means `latest`. To move a queue to a
-newer version, run `queue workflow set` again with the current binding
-revision: tasks already created keep their version, and only tasks created
-afterwards pin the new one. `--revision` is `0` for a first binding and the
+The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
+`latest`. The binding stores the digest the reference names now and the tag it
+was made by, shown as `tag` by `queue workflow get`:
+
+| Reference | `tag` | When the tag moves |
+| --- | --- | --- |
+| `NAME` or `NAME:latest` | `latest` | The binding follows `latest` to each new build. |
+| `NAME:0.3.0` | `0.3.0` | A version tag names one build, so the binding stays. |
+| `NAME:<digest>` | empty | The binding is pinned to the digest. |
+
+A binding with a tag moves to the digest the tag names after a
+`tariboy workflow build` or a workflow import, when the daemon starts, and when
+a task is created in the queue. Only tasks created afterwards pin the new
+version: tasks already created keep their version. Each move increments the
+revision and emits `queue.workflow_bound` with `followed: true`. The move
+checks pools and secrets like a bind. If a pool of the new version is empty or
+a secret is missing, the binding stays on the old version, new tasks keep
+pinning it, and the queue event `queue.workflow_follow_blocked` gives the
+`reason` (`workflow_pool_empty` or `workflow_secret_missing`) and the `names`.
+The next task, build, or daemon start tries again. A removed tag keeps the
+binding where it is.
+
+To pin a queue to another version, run `queue workflow set` again with the
+current binding revision. `--revision` is `0` for a first binding and the
 revision shown by `queue workflow get` for a rebind or a `clear`. Binding the
-digest that is already bound changes nothing and keeps the revision, whatever
-revision is given, so a retried bind succeeds.
+digest and tag that are already bound changes nothing and keeps the revision,
+whatever revision is given, so a retried bind succeeds. The same digest under
+another tag is a change. Bindings made before this column existed have an empty
+tag and stay pinned: bind them again as `NAME:latest` to follow `latest`.
 
 A bind checks pools first, then secrets:
 
@@ -307,7 +330,8 @@ A bind checks pools first, then secrets:
 | `forbidden` | The caller is not the daemon customer; agents cannot administer workflows. |
 
 A binding emits `queue.workflow_bound` and `queue.workflow_cleared` queue
-events carrying the image name, version, and digest.
+events carrying the image name, version, and digest; `queue.workflow_bound` also
+carries the `tag`.
 
 Removing a workflow image that a queue binds, or that any task pins, open or
 closed, is refused with `workflow_in_use`; nightly task retention removes closed
@@ -1308,7 +1332,7 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `tasks.workflow_digest` | The pinned image digest; `NULL` for a flexible task. |
 | `tasks.workflow_status` | The current workflow status. |
 | `tasks.workflow_paused_reason` | The pause reason; empty unless the task is paused. |
-| `task_queue_workflows` | One binding per queue: digest, revision, update time. |
+| `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
 | `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), and `resumed_at`, when a pause of the visit was last resumed (migration `0062`). |
@@ -1592,8 +1616,10 @@ dialog drops every unsaved edit.
 - **Workflow.** The bound image's name, version, and the first 12 characters of
   its digest, or **No workflow**. The name links to the image's page in
   **Workflow images**, by its version tag when one names the bound content and
-  by digest otherwise. Choose an image as `name:tag` and press
-  **Bind**; **Clear** asks for confirmation and unbinds. A binding changed
+  by digest otherwise. A binding made by a tag ends with **follows** and the
+  tag, for example `follows latest`: new tasks get the version that tag names.
+  Choose an image as `name:tag` and press **Bind**. Choose `name:latest` to
+  follow each new build; **Clear** asks for confirmation and unbinds. A binding changed
   elsewhere (`revision_conflict`) is reloaded with a notice so you can retry.
   Below the binding, **Statuses** lists every status of the bound image in
   manifest order: its owner and its outcomes as `outcome → status`. A pool

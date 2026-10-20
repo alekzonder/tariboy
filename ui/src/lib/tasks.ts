@@ -478,7 +478,8 @@ export interface WorkflowView {
 export interface WorkflowDeclaredArtifact { name: string; description: string }
 /** `owner` is `pool:NAME`, `customer`, `script`, or "" for a terminal status. */
 export interface WorkflowStatusInfo { id: string; owner: string; terminal: boolean }
-export interface QueueWorkflow { queue: string; name: string; version: string; digest: string; revision: number; updated_at: string }
+/** `tag` is the tag the binding follows: new tasks get the version it names. Empty pins the digest. */
+export interface QueueWorkflow { queue: string; name: string; version: string; digest: string; tag: string; revision: number; updated_at: string }
 export interface QueueSecretInfo { key: string; updated_at: string }
 export interface WorkflowImage { name: string; tag: string; version: string; digest: string; built_at: string }
 /** `kind` is "" for a terminal status. */

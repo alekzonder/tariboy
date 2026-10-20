@@ -601,3 +601,28 @@ func TestRegistryStoresBuiltAtCanonical(t *testing.T) {
 		t.Fatalf("built_at = %q; want canonical UTC", builtAt)
 	}
 }
+
+func TestRegistryOnPublishedRunsAfterPublishAndImport(t *testing.T) {
+	src, _ := newRegistry(t)
+	var names []string
+	src.OnPublished = func(name string) { names = append(names, name) }
+	if _, _, err := src.Publish(writeSource(t, "1.0.0"), t0); err != nil {
+		t.Fatal(err)
+	}
+	// Another digest under a published version is refused.
+	if _, _, err := src.Publish(renamedSource(t, "1.0.0", "demo\n# changed"), t0); err == nil {
+		t.Fatal("publish of other content under 1.0.0 succeeded")
+	}
+	if !reflect.DeepEqual(names, []string{"demo"}) {
+		t.Fatalf("OnPublished names after publish = %v; want one call for demo", names)
+	}
+	archive := exportArchive(t, src, "demo", "1.0.0")
+	dst, _ := newRegistry(t)
+	dst.OnPublished = func(name string) { names = append(names, "imported "+name) }
+	if _, _, err := importArchive(dst, archive, filepath.Join(t.TempDir(), "imports")); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(names, []string{"demo", "imported demo"}) {
+		t.Fatalf("OnPublished names after import = %v", names)
+	}
+}
