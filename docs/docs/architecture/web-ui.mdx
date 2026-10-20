@@ -495,7 +495,8 @@ with **Retry** instead of a guess. `listTaskPrincipals` supplies the agent
 suggestions. The dialog keeps the pools as the one source the tabs share. The
 **Workflow** tab, `QueueWorkflowSettings` (`getQueueWorkflow`,
 `setQueueWorkflow`, `clearQueueWorkflow`, `listWorkflowImages`,
-`getWorkflowImage`), shows the binding and `WorkflowStatusMap`: the statuses of
+`getWorkflowImage`), shows the binding, with the tag it follows when it has
+one, and `WorkflowStatusMap`: the statuses of
 the bound image, or of the image chosen in the select before **Bind**, with
 their owners and outcomes; a pool chip opens the **Pools** tab. A refused bind
 lists the empty pools, which shrink as pools gain agents, or the missing

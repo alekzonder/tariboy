@@ -14,8 +14,9 @@ import (
 
 func (s *Server) workflowImageRegistry() *workflowimage.Registry {
 	return &workflowimage.Registry{
-		Store: &workflowimage.Store{Dir: paths.Paths{Base: s.cctx.BaseDir}.WorkflowsDir()},
-		DB:    s.cctx.Store.DB,
+		Store:       &workflowimage.Store{Dir: paths.Paths{Base: s.cctx.BaseDir}.WorkflowsDir()},
+		DB:          s.cctx.Store.DB,
+		OnPublished: s.cctx.FollowQueueWorkflows,
 	}
 }
 

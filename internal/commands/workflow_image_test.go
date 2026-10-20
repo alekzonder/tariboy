@@ -8,9 +8,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -309,5 +311,41 @@ func TestWorkflowBuildErrors(t *testing.T) {
 	ue := userError(t, err, "workflow_invalid", http.StatusBadRequest)
 	if errs, ok := ue.Data["errors"].([]workflowfile.ValidationError); !ok || len(errs) == 0 {
 		t.Fatalf("details = %#v", ue.Data)
+	}
+}
+
+// A build that moves latest moves a queue bound by latest, before any task.
+func TestWorkflowBuildMovesQueueBoundByTag(t *testing.T) {
+	c := workflowCtx(t)
+	svc := tasks.NewService(c.Store.DB, "customer", time.Now)
+	images := workflowImageStore(c)
+	svc.SetWorkflowResolver(func(ref string) (string, error) {
+		name, tag, _ := strings.Cut(ref, ":")
+		return images.Resolve(name, tag)
+	})
+	c.Tasks = svc
+	customer := tasks.CustomerActor("customer")
+	ctx := t.Context()
+	if _, err := svc.CreateQueue(ctx, customer, tasks.CreateQueueInput{Prefix: "DEV", Name: "Dev"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Store.DB.Exec(`INSERT INTO agents(name, image_ref, image_digest) VALUES ('dev-1', 'basic:latest', 'digest')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RebindAgentPool(ctx, customer, "DEV", "devs", []string{"dev-1"}, 0, "devs"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cmdHandler(t, "workflow.build")(c, registry.Params{"path": writeWorkflowSource(t, t.TempDir(), "1.0.0")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetQueueWorkflow(ctx, customer, "DEV", "demo", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cmdHandler(t, "workflow.build")(c, registry.Params{"path": writeWorkflowSource(t, t.TempDir(), "1.0.1")}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.GetQueueWorkflow(ctx, customer, "DEV")
+	if err != nil || got.Version != "1.0.1" || got.Tag != "latest" || got.Revision != 2 {
+		t.Fatalf("binding after build = %#v, %v; want 1.0.1 following latest", got, err)
 	}
 }

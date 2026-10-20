@@ -34,6 +34,9 @@ const (
 
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+// IsDigest reports whether s has the form of an image digest.
+func IsDigest(s string) bool { return digestPattern.MatchString(s) }
+
 // mu serializes publication and removal across every Store in the process.
 var mu sync.Mutex
 

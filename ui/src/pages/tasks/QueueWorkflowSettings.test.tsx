@@ -13,7 +13,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/lib/tasks", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/tasks")>(), ...api }))
 
 const digest = "0123456789abcdef0123456789abcdef"
-const binding = { queue: "REL", name: "release", version: "1.2.0", digest, revision: 3, updated_at: "2026-10-02T10:00:00Z" }
+const binding = { queue: "REL", name: "release", version: "1.2.0", digest, tag: "", revision: 3, updated_at: "2026-10-02T10:00:00Z" }
 const images = [
   { name: "release", tag: "1.2.0", version: "1.2.0", digest, built_at: "" },
   { name: "release", tag: "latest", version: "1.2.0", digest, built_at: "" },
@@ -47,6 +47,13 @@ it("renders a binding with a short digest and the full digest in a title", async
   const short = await screen.findByText(digest.slice(0, 12))
   expect(short).toHaveAttribute("title", digest)
   expect(screen.getByTestId("binding")).toHaveTextContent("release 1.2.0")
+  expect(screen.getByTestId("binding")).not.toHaveTextContent("follows")
+})
+
+it("says which tag a binding made by a tag follows", async () => {
+  api.getQueueWorkflow.mockResolvedValue({ ...binding, tag: "latest" })
+  renderIt()
+  expect(await screen.findByTestId("binding")).toHaveTextContent(`release 1.2.0 ${digest.slice(0, 12)} follows latest`)
 })
 
 it("binds NAME:TAG with revision 0 when unbound", async () => {

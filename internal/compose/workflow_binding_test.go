@@ -134,9 +134,12 @@ func (f *workflowComposeCaller) Call(method, route string, body any) (json.RawMe
 		}
 		ref := body.(map[string]any)["ref"].(string)
 		cur := f.bound[queue]
-		for _, m := range f.images {
-			if m["digest"].(string) == ref[strings.LastIndex(ref, ":")+1:] {
+		suffix := ref[strings.LastIndex(ref, ":")+1:]
+		for key, m := range f.images {
+			if m["digest"].(string) == suffix {
 				cur = tasks.QueueWorkflow{Queue: queue, Name: m["name"].(string), Version: m["version"].(string), Digest: m["digest"].(string), Revision: cur.Revision + 1}
+			} else if key == ref {
+				cur = tasks.QueueWorkflow{Queue: queue, Name: m["name"].(string), Version: m["version"].(string), Digest: m["digest"].(string), Tag: suffix, Revision: cur.Revision + 1}
 			}
 		}
 		f.bound[queue] = cur
@@ -237,6 +240,26 @@ func TestUpPublishedRefBindsWithoutBuild(t *testing.T) {
 		if fc.bound["DEV"].Digest != digestA {
 			t.Fatalf("%s: bound = %+v", tc.value, fc.bound["DEV"])
 		}
+	}
+}
+
+// A published ref binds by its tag, so the queue follows the tag.
+func TestUpPublishedRefBindsTheTag(t *testing.T) {
+	fc := newWorkflowComposeCaller()
+	fc.images["development:latest"] = map[string]any{"name": "development", "version": "0.1.0", "digest": digestA}
+	// Bound to the same digest before, pinned: the tag is a change.
+	fc.bound["DEV"] = tasks.QueueWorkflow{Queue: "DEV", Name: "development", Version: "0.1.0", Digest: digestA, Revision: 1}
+	r := NewRunner(fc, "", "", io.Discard)
+	f := workflowComposeFile("development")
+	upNoBuild(t, r, f)
+	bind := callIndex(fc.calls, "PUT /api/task-queues/DEV/workflow")
+	if bind < 0 || fc.bodies[bind].(map[string]any)["ref"] != "development:latest" || fc.bound["DEV"].Tag != "latest" {
+		t.Fatalf("bind call %d, bound = %+v; want development:latest", bind, fc.bound["DEV"])
+	}
+	before := len(fc.calls)
+	upNoBuild(t, r, f)
+	if n := countCallsSince(fc.calls, before, "PUT /api/task-queues/DEV/workflow"); n != 0 {
+		t.Fatalf("second run bound %d times", n)
 	}
 }
 

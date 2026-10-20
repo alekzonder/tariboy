@@ -93,6 +93,17 @@ type Ctx struct {
 	WorkflowImages *workflowimage.Store
 }
 
+// FollowQueueWorkflows moves the queue bindings that follow a tag of the
+// workflow image name. A workflow build or import runs it after its tags moved.
+func (c *Ctx) FollowQueueWorkflows(name string) {
+	if c.Tasks == nil {
+		return
+	}
+	if err := c.Tasks.FollowQueueWorkflows(context.Background(), name); err != nil && c.Log != nil {
+		c.Log.Warn("follow queue workflows", "workflow", name, "err", err)
+	}
+}
+
 // TaskControl is the daemon-owned native Tasks surface consumed by typed HTTP
 // commands and identity-bound agent adapters.
 type TaskControl interface {
@@ -141,6 +152,7 @@ type TaskControl interface {
 	CancelWorkflowTask(context.Context, tasks.Actor, string) (tasks.Task, error)
 	ResumeWorkflow(context.Context, tasks.Actor, string, string) (tasks.Task, error)
 	SetQueueWorkflow(context.Context, tasks.Actor, string, string, int64) (tasks.QueueWorkflow, error)
+	FollowQueueWorkflows(context.Context, string) error
 	GetQueueWorkflow(context.Context, tasks.Actor, string) (tasks.QueueWorkflow, error)
 	ClearQueueWorkflow(context.Context, tasks.Actor, string, int64) error
 	SetQueueSecret(context.Context, tasks.Actor, string, string, string) error

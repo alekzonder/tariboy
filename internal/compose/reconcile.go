@@ -328,10 +328,14 @@ func (r *Runner) convergeQueueWorkflows(f File) error {
 		if !declared {
 			continue
 		}
-		// A Store workflow without a tag binds what its build returned; every
-		// other form resolves NAME:TAG now (after the builds).
+		// A Store workflow without a tag binds the digest its build returned;
+		// every other form resolves NAME:TAG now (after the builds) and binds
+		// by the tag, so the queue follows it.
 		img := built[ref.Selector()]
+		bindRef, tag := img.Name+":"+img.Digest, ""
 		if ref.Store == "" || ref.Tag != "" {
+			bindRef = ref.Ref()
+			tag = bindRef[strings.LastIndex(bindRef, ":")+1:]
 			var found bool
 			if img, found, err = r.inspectWorkflowImage(ref.Ref()); err != nil {
 				return fmt.Errorf("resolve workflow %s: %w", ref.Ref(), err)
@@ -347,7 +351,7 @@ func (r *Runner) convergeQueueWorkflows(f File) error {
 		if err != nil {
 			return fmt.Errorf("read workflow of task queue %s: %w", prefix, err)
 		}
-		if bound && current.Digest == img.Digest {
+		if bound && current.Digest == img.Digest && current.Tag == tag {
 			r.logf("task queue %s workflow %s:%s unchanged", prefix, img.Name, img.Version)
 			continue
 		}
@@ -356,7 +360,7 @@ func (r *Runner) convergeQueueWorkflows(f File) error {
 			revision = current.Revision
 		}
 		r.logf("binding task queue %s workflow %s:%s", prefix, img.Name, img.Version)
-		if _, err := r.call.Call("PUT", "/api/task-queues/"+prefix+"/workflow", map[string]any{"ref": img.Name + ":" + img.Digest, "revision": revision}); err != nil {
+		if _, err := r.call.Call("PUT", "/api/task-queues/"+prefix+"/workflow", map[string]any{"ref": bindRef, "revision": revision}); err != nil {
 			return bindWorkflowError(prefix, ref, err)
 		}
 	}

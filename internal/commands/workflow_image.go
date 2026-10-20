@@ -18,8 +18,9 @@ func workflowImageRegistry(c *registry.Ctx) (*workflowimage.Registry, error) {
 		return nil, api.UserError{Code: "build_failed", Msg: "workflow image metadata store is unavailable"}
 	}
 	return &workflowimage.Registry{
-		Store: &workflowimage.Store{Dir: paths.Paths{Base: c.BaseDir}.WorkflowsDir()},
-		DB:    c.Store.DB,
+		Store:       &workflowimage.Store{Dir: paths.Paths{Base: c.BaseDir}.WorkflowsDir()},
+		DB:          c.Store.DB,
+		OnPublished: c.FollowQueueWorkflows,
 	}, nil
 }
 

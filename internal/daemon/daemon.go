@@ -352,6 +352,11 @@ func Run(ctx context.Context, o Options) error {
 		}
 		return workflowImages.Store.Resolve(name, tag)
 	})
+	// A queue bound by a tag follows it. Builds and imports move bindings
+	// through registry.Ctx; startup catches a move a crash interrupted.
+	if err := taskService.FollowQueueWorkflows(context.Background(), ""); err != nil {
+		log.Warn("follow queue workflows", "err", err)
+	}
 	exeDir := "."
 	if exe, err := os.Executable(); err == nil {
 		exeDir = filepath.Dir(exe)

@@ -483,7 +483,9 @@ Every agent of the `developers` pool must:
 
 A published image is bound to a queue with `ttasks queue workflow set`, or from
 Compose with `task_queues.<PREFIX>.workflow`; tasks created in that queue pin
-the version and follow its statuses. See [Task workflows](/docs/task-workflows)
+the version and follow its statuses. A queue bound by `NAME` or `NAME:latest`
+follows `latest`: after a new build, new tasks pin the new version, while
+existing tasks keep theirs. See [Task workflows](/docs/task-workflows)
 for binding, queue secrets, the [Desktop](/docs/task-workflows#desktop) panel,
 dispatch, artifacts, outcomes, scripts, and the operator commands, and
 [Compose](/docs/binaries/compose#queue-workflows) for the Compose form.

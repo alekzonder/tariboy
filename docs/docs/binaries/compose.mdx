@@ -96,16 +96,18 @@ task_queues:
 
 | Value | `compose up` |
 | --- | --- |
-| `NAME` | Binds the already built `NAME:latest`. |
-| `NAME:TAG` | Binds the already built `NAME:TAG`. |
-| `STORE/NAME` | Builds the workflow source `NAME` from the registered Store `STORE`, then binds the version that build produced. |
-| `STORE/NAME:TAG` | Builds `STORE/NAME`, then binds `NAME:TAG`. |
+| `NAME` | Binds the already built `NAME:latest`. The queue follows `latest`. |
+| `NAME:TAG` | Binds the already built `NAME:TAG`. The queue follows the tag. |
+| `STORE/NAME` | Builds the workflow source `NAME` from the registered Store `STORE`, then binds the digest that build produced. The binding is pinned. |
+| `STORE/NAME:TAG` | Builds `STORE/NAME`, then binds `NAME:TAG`. The queue follows the tag. |
 
 A tag of `.` or `..` is a validation error.
 
 Each Store workflow is built once per run, before any queue is bound, and a
 bind runs after the queue's pools exist, since a bind needs the pools the
-workflow names. A queue already bound to the resolved digest is left alone. A
+workflow names. A queue already bound to the resolved digest and tag is left
+alone. A queue that follows a tag moves to each new build of that tag; see
+[Binding a queue](/docs/task-workflows#binding-a-queue). A
 form without a Store prefix fails when the image is not built. Rebinding a
 queue to a newer version leaves its existing tasks on the version they pinned.
 

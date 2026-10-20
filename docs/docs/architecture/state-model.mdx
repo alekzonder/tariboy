@@ -341,7 +341,8 @@ Task JSON shows the
 workflow status as `status` and the stored value as `category`; for a task
 without a workflow both are the stored status. New tables: `task_queue_workflows`
 (one binding per queue, with a revision and an `ON DELETE RESTRICT` reference to
-the image), `task_workflow_holders` (the last holder per task and pool),
+the image; migration `0068` adds `workflow_tag`, the tag the binding follows,
+empty for a pinned binding and for every binding made before it), `task_workflow_holders` (the last holder per task and pool),
 `task_status_visits`, `task_transition_requests` (at most one `pending` per
 task), and `task_artifacts`. Workflow mutations append `workflow.transitioned`,
 `workflow.transition_requested`, `workflow.moved`, `workflow.cancelled`, and

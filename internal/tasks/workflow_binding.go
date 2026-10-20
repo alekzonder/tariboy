@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -220,10 +221,10 @@ func errQueueWorkflowNotFound() error {
 func queueWorkflowTx(ctx context.Context, q queryer, queue string) (QueueWorkflow, bool, error) {
 	var b QueueWorkflow
 	err := q.QueryRowContext(ctx, `
-		SELECT qw.queue_prefix, qw.workflow_digest, qw.revision, qw.updated_at, wi.name, wi.version
+		SELECT qw.queue_prefix, qw.workflow_digest, qw.workflow_tag, qw.revision, qw.updated_at, wi.name, wi.version
 		FROM task_queue_workflows qw
 		JOIN task_workflow_images wi ON wi.digest = qw.workflow_digest
-		WHERE qw.queue_prefix = ?`, queue).Scan(&b.Queue, &b.Digest, &b.Revision, &b.UpdatedAt, &b.Name, &b.Version)
+		WHERE qw.queue_prefix = ?`, queue).Scan(&b.Queue, &b.Digest, &b.Tag, &b.Revision, &b.UpdatedAt, &b.Name, &b.Version)
 	if err == sql.ErrNoRows {
 		return QueueWorkflow{}, false, nil
 	}
@@ -329,14 +330,29 @@ func (s *Service) resolveWorkflowRef(ref string) (string, error) {
 	}
 }
 
+// workflowRefTag returns the tag a workflow ref names: "latest" for a bare
+// name, and empty for a digest, which pins the binding.
+func workflowRefTag(ref string) string {
+	i := strings.LastIndex(ref, ":")
+	if i < 0 || ref[i+1:] == "" {
+		return "latest"
+	}
+	if workflowimage.IsDigest(ref[i+1:]) {
+		return ""
+	}
+	return ref[i+1:]
+}
+
 // SetQueueWorkflow binds a queue to the workflow image ref names. revision is
-// the current binding revision, 0 for a first binding. Binding the digest that
-// is already bound changes nothing and keeps the revision.
+// the current binding revision, 0 for a first binding. Binding the digest and
+// tag that are already bound changes nothing and keeps the revision. A binding
+// made by a tag follows it; see FollowQueueWorkflows.
 func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref string, revision int64) (QueueWorkflow, error) {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return QueueWorkflow{}, err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
+	tag := workflowRefTag(strings.TrimSpace(ref))
 	digest, err := s.resolveWorkflowRef(ref)
 	if err != nil {
 		return QueueWorkflow{}, err
@@ -357,9 +373,9 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 	if err != nil {
 		return QueueWorkflow{}, err
 	}
-	// The digest already bound is a no-op whatever the revision, so a retry of
-	// a bind that applied succeeds.
-	if bound && current.Digest == digest {
+	// The binding already in force is a no-op whatever the revision, so a
+	// retry of a bind that applied succeeds.
+	if bound && current.Digest == digest && current.Tag == tag {
 		return current, nil
 	}
 	if revision != current.Revision {
@@ -385,12 +401,12 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 	now := s.now()
 	next := QueueWorkflow{
 		Queue: queue, Name: manifest.Name, Version: manifest.Version,
-		Digest: digest, Revision: current.Revision + 1, UpdatedAt: now,
+		Digest: digest, Tag: tag, Revision: current.Revision + 1, UpdatedAt: now,
 	}
 	if bound {
 		result, err := tx.ExecContext(ctx, `
-			UPDATE task_queue_workflows SET workflow_digest = ?, revision = ?, updated_at = ?
-			WHERE queue_prefix = ? AND revision = ?`, digest, next.Revision, now, queue, current.Revision)
+			UPDATE task_queue_workflows SET workflow_digest = ?, workflow_tag = ?, revision = ?, updated_at = ?
+			WHERE queue_prefix = ? AND revision = ?`, digest, tag, next.Revision, now, queue, current.Revision)
 		if err != nil {
 			return QueueWorkflow{}, err
 		}
@@ -400,13 +416,13 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 			return QueueWorkflow{}, queueWorkflowRevisionConflict(current.Revision)
 		}
 	} else if _, err := tx.ExecContext(ctx, `
-		INSERT INTO task_queue_workflows(queue_prefix, workflow_digest, revision, updated_at)
-		VALUES (?, ?, ?, ?)`, queue, digest, next.Revision, now); err != nil {
+		INSERT INTO task_queue_workflows(queue_prefix, workflow_digest, workflow_tag, revision, updated_at)
+		VALUES (?, ?, ?, ?, ?)`, queue, digest, tag, next.Revision, now); err != nil {
 		return QueueWorkflow{}, err
 	}
 	if _, err := appendQueueEventTx(ctx, tx, Queue{Prefix: queue, Revision: next.Revision},
 		"queue.workflow_bound", actor, map[string]any{
-			"workflow": manifest.Name, "version": manifest.Version, "digest": digest,
+			"workflow": manifest.Name, "version": manifest.Version, "digest": digest, "tag": tag,
 		}, now); err != nil {
 		return QueueWorkflow{}, err
 	}
@@ -414,6 +430,125 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 		return QueueWorkflow{}, err
 	}
 	s.signal()
+	return next, nil
+}
+
+// FollowQueueWorkflows moves every binding made by a tag of the workflow
+// image name, or of any image when name is empty, to the digest its tag names
+// now. Tasks already created keep the digest they are pinned to.
+func (s *Service) FollowQueueWorkflows(ctx context.Context, name string) error {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT qw.queue_prefix FROM task_queue_workflows qw
+		JOIN task_workflow_images wi ON wi.digest = qw.workflow_digest
+		WHERE qw.workflow_tag != '' AND (? = '' OR wi.name = ?)
+		ORDER BY qw.queue_prefix`, name, name)
+	if err != nil {
+		return err
+	}
+	var queues []string
+	for rows.Next() {
+		var queue string
+		if err := rows.Scan(&queue); err != nil {
+			rows.Close()
+			return err
+		}
+		queues = append(queues, queue)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	var errs []error
+	for _, queue := range queues {
+		moved, err := s.followQueueWorkflow(ctx, queue)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("follow workflow of queue %s: %w", queue, err))
+		} else if moved {
+			s.signal()
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (s *Service) followQueueWorkflow(ctx context.Context, queue string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	current, bound, err := queueWorkflowTx(ctx, tx, queue)
+	if err != nil || !bound {
+		return false, err
+	}
+	next, err := s.followQueueWorkflowTx(ctx, tx, current)
+	if err != nil {
+		return false, err
+	}
+	return next.Digest != current.Digest, tx.Commit()
+}
+
+// followQueueWorkflowTx moves a binding made by a tag to the digest the tag
+// names now and returns the binding in force. A tag that no longer resolves
+// keeps the binding. When a pool of the new version is empty or a secret it
+// requires is missing, the binding stays and a queue.workflow_follow_blocked
+// event records why; the next task, publication or daemon start retries.
+func (s *Service) followQueueWorkflowTx(ctx context.Context, tx *sql.Tx, current QueueWorkflow) (QueueWorkflow, error) {
+	if current.Tag == "" || s.workflowResolver == nil {
+		return current, nil
+	}
+	digest, err := s.workflowResolver(current.Name + ":" + current.Tag)
+	if err != nil || digest == current.Digest {
+		return current, nil
+	}
+	manifest, err := loadManifestTx(ctx, tx, digest)
+	if ErrorCode(err) == "workflow_not_found" {
+		// Published but not recorded yet; Reconcile records it.
+		return current, nil
+	} else if err != nil {
+		return QueueWorkflow{}, err
+	}
+	global, err := s.globalEnvNames()
+	if err != nil {
+		return QueueWorkflow{}, err
+	}
+	reason, names := "", []string(nil)
+	if missing, err := emptyPools(ctx, tx, current.Queue, manifest.Definition.Pools()); err != nil {
+		return QueueWorkflow{}, err
+	} else if len(missing) > 0 {
+		reason, names = "workflow_pool_empty", missing
+	} else if missing, err := missingQueueSecrets(ctx, tx, current.Queue, manifest.Definition.RequiresSecrets, global); err != nil {
+		return QueueWorkflow{}, err
+	} else if len(missing) > 0 {
+		reason, names = "workflow_secret_missing", missing
+	}
+	now := s.now()
+	actor := Actor{Principal: workflowActor}
+	payload := map[string]any{
+		"workflow": manifest.Name, "version": manifest.Version, "digest": digest, "tag": current.Tag,
+	}
+	if reason != "" {
+		payload["reason"], payload["names"] = reason, names
+		_, err := appendQueueEventTx(ctx, tx, Queue{Prefix: current.Queue, Revision: current.Revision},
+			"queue.workflow_follow_blocked", actor, payload, now)
+		return current, err
+	}
+	next := current
+	next.Digest, next.Version, next.Revision, next.UpdatedAt = digest, manifest.Version, current.Revision+1, now
+	result, err := tx.ExecContext(ctx, `
+		UPDATE task_queue_workflows SET workflow_digest = ?, revision = ?, updated_at = ?
+		WHERE queue_prefix = ? AND revision = ?`, digest, next.Revision, now, current.Queue, current.Revision)
+	if err != nil {
+		return QueueWorkflow{}, err
+	}
+	if affected, err := result.RowsAffected(); err != nil {
+		return QueueWorkflow{}, err
+	} else if affected != 1 {
+		return QueueWorkflow{}, queueWorkflowRevisionConflict(current.Revision)
+	}
+	payload["followed"] = true
+	if _, err := appendQueueEventTx(ctx, tx, Queue{Prefix: current.Queue, Revision: next.Revision},
+		"queue.workflow_bound", actor, payload, now); err != nil {
+		return QueueWorkflow{}, err
+	}
 	return next, nil
 }
 
