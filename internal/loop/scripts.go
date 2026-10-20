@@ -629,9 +629,9 @@ func (m *Manager) ScriptRuntime(agentName string) (cwd string, env []string, err
 }
 
 // agentScriptEnv is the environment of a script that runs as ag: the daemon
-// baseline (base, nil for the process environment), the agent's environment and secrets, and the agent bin directory
-// on PATH. toolsSock is the agent tools socket, or "" for a script that must
-// not reach it.
+// baseline (base, or the process environment when nil), the agent's
+// environment and secrets, and the agent bin directory on PATH. toolsSock is
+// the agent tools socket, or "" for a script that must not reach it.
 func agentScriptEnv(base []string, ag agent.Agent, l agentdir.Layout, secrets map[string]string, toolsSock string) []string {
 	env := BuildEnv(baseEnv(base), l.BinDir(), ag.Name, "", toolsSock, false, "", "", ag.Env, secrets)
 	if toolsSock != "" {
