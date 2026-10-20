@@ -55,16 +55,21 @@ type ManagerConfig struct {
 	RuntimeDir string
 	// BaseEnv is the baseline environment of iterations and scripts. Nil uses
 	// the daemon process environment.
-	BaseEnv       []string
-	ShimBin       string
-	ImgStore      *image.Store
-	Store         *agent.Store
-	Log           *slog.Logger
-	Clock         func() time.Time
-	DoneGrace     time.Duration
-	Spawner       Spawner
-	RunnerFactory func(agent.Agent) IterationRunner
-	ConnectShim   func(string) (*shim.Client, error)
+	BaseEnv []string
+	// AdoptPollInterval, AdoptProbeInterval and AdoptProbeTimeout tune how an
+	// adopted iteration is watched after a restart. Zero uses the defaults.
+	AdoptPollInterval  time.Duration
+	AdoptProbeInterval time.Duration
+	AdoptProbeTimeout  time.Duration
+	ShimBin            string
+	ImgStore           *image.Store
+	Store              *agent.Store
+	Log                *slog.Logger
+	Clock              func() time.Time
+	DoneGrace          time.Duration
+	Spawner            Spawner
+	RunnerFactory      func(agent.Agent) IterationRunner
+	ConnectShim        func(string) (*shim.Client, error)
 	// BeforeRestartLaunch is a test seam invoked before a post-adoption
 	// interactive Restart attempts to acquire its launch gate.
 	BeforeRestartLaunch func()
@@ -147,15 +152,15 @@ type iterationTarget struct {
 	runtime *runtime
 }
 
-// Reattach liveness tuning. These are package vars (not consts) so tests can
-// shorten them; adopt polls result.json every adoptPollInterval and probes the
-// shim socket every adoptProbeInterval, giving up after adoptMaxMisses probes.
-var (
-	adoptPollInterval  = 200 * time.Millisecond
-	adoptProbeInterval = time.Second
-	adoptProbeTimeout  = time.Second
-	adoptMaxMisses     = 3
-	shutdownWait       = 10 * time.Second
+// Reattach liveness defaults: adopt polls result.json every
+// AdoptPollInterval and probes the shim socket every AdoptProbeInterval,
+// giving up after adoptMaxMisses probes.
+const (
+	defaultAdoptPollInterval  = 200 * time.Millisecond
+	defaultAdoptProbeInterval = time.Second
+	defaultAdoptProbeTimeout  = time.Second
+	adoptMaxMisses            = 3
+	shutdownWait              = 10 * time.Second
 )
 
 type Manager struct {
@@ -220,6 +225,15 @@ func NewManager(cfg ManagerConfig) *Manager {
 	}
 	if cfg.Spawner == nil {
 		cfg.Spawner = ExecSpawner{}
+	}
+	if cfg.AdoptPollInterval <= 0 {
+		cfg.AdoptPollInterval = defaultAdoptPollInterval
+	}
+	if cfg.AdoptProbeInterval <= 0 {
+		cfg.AdoptProbeInterval = defaultAdoptProbeInterval
+	}
+	if cfg.AdoptProbeTimeout <= 0 {
+		cfg.AdoptProbeTimeout = defaultAdoptProbeTimeout
 	}
 	if cfg.HasTmuxSession == nil {
 		cfg.HasTmuxSession = tmuxHasSession
@@ -575,9 +589,9 @@ func (m *Manager) adopt(ctx context.Context, li agentdir.LiveIteration) <-chan s
 		l := agentdir.New(m.cfg.AgentsDir, li.Agent).WithRuntime(m.cfg.RuntimeDir)
 		w := iterationWatcher{
 			store: m.cfg.Store, clock: m.cfg.Clock, log: m.cfg.Log, agent: li.Agent, id: li.ID,
-			resultPath: li.ResultPath, shimSock: li.ShimSock, poll: adoptPollInterval,
-			doneGrace: m.cfg.DoneGrace, rpcTimeout: adoptProbeTimeout,
-			probe: &livenessProbe{every: adoptProbeInterval, maxMisses: adoptMaxMisses},
+			resultPath: li.ResultPath, shimSock: li.ShimSock, poll: m.cfg.AdoptPollInterval,
+			doneGrace: m.cfg.DoneGrace, rpcTimeout: m.cfg.AdoptProbeTimeout,
+			probe: &livenessProbe{every: m.cfg.AdoptProbeInterval, maxMisses: adoptMaxMisses},
 		}
 		res, err := w.watch(ctx)
 		switch {

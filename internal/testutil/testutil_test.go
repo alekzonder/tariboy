@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsolateEnvDropsTariboyVariablesAndMovesHome(t *testing.T) {
@@ -40,5 +41,22 @@ func TestShortDirFitsASocketPath(t *testing.T) {
 	}
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		t.Fatalf("ShortDir %q is not a directory: %v", dir, err)
+	}
+}
+
+func TestWaitForReportsWhetherTheConditionHeld(t *testing.T) {
+	calls := 0
+	if !WaitFor(time.Second, func() bool { calls++; return calls == 3 }) {
+		t.Fatal("WaitFor = false for a condition that became true")
+	}
+	if calls != 3 {
+		t.Fatalf("condition checked %d times, want 3", calls)
+	}
+	start := time.Now()
+	if WaitFor(30*time.Millisecond, func() bool { return false }) {
+		t.Fatal("WaitFor = true for a condition that never held")
+	}
+	if elapsed := time.Since(start); elapsed < 30*time.Millisecond {
+		t.Fatalf("WaitFor gave up after %v, before its timeout", elapsed)
 	}
 }

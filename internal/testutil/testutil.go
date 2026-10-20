@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // IsolateEnv removes every TARIBOY_ variable and points HOME at a new
@@ -36,4 +37,22 @@ func ShortDir(t testing.TB) string {
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	return dir
+}
+
+// WaitFor checks cond until it returns true or timeout passes, and reports
+// whether it returned true. The caller decides how to fail, so its message
+// can show the state it waited for.
+func WaitFor(timeout time.Duration, cond func() bool) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if cond() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		// The one polling interval of the suite: state owned by another
+		// goroutine or process has no event a test could wait on instead.
+		time.Sleep(5 * time.Millisecond)
+	}
 }
