@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, body map[string]any) (any, error) {
+func (s *TaskService) AgentAction(ctx context.Context, actor Actor, action string, body map[string]any) (any, error) {
 	if actor.IsCustomer || !strings.HasPrefix(actor.Principal, "agent:") {
 		return nil, domainError(http.StatusForbidden, "forbidden", "agent identity required")
 	}
@@ -131,28 +131,28 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 			Revision: revision, CompleteAnyway: actionBool(body, "complete_anyway"),
 		})
 	case "advance":
-		return s.Advance(ctx, actor, actionString(body, "key"), AdvanceInput{
+		return s.engine.Advance(ctx, actor, actionString(body, "key"), AdvanceInput{
 			Outcome: actionString(body, "outcome"), Message: actionRawString(body, "message"),
 			From: actionString(body, "from"),
 		})
 	case "artifact_set":
-		return s.SetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"), actionRawString(body, "value"))
+		return s.engine.SetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"), actionRawString(body, "value"))
 	case "artifact_ls":
-		artifacts, err := s.ListArtifacts(ctx, actor, actionString(body, "key"))
+		artifacts, err := s.engine.ListArtifacts(ctx, actor, actionString(body, "key"))
 		return map[string]any{"artifacts": artifacts, "count": len(artifacts)}, err
 	case "artifact_show":
-		artifact, history, err := s.GetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"))
+		artifact, history, err := s.engine.GetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"))
 		return map[string]any{"artifact": artifact, "history": history}, err
 	case "workflow_get":
-		return s.GetWorkflow(ctx, actor, actionString(body, "key"))
+		return s.engine.GetWorkflow(ctx, actor, actionString(body, "key"))
 	case "request_get":
 		id, err := actionID(body)
 		if err != nil {
 			return nil, err
 		}
-		return s.GetTransitionRequest(ctx, actor, actionString(body, "key"), id)
+		return s.engine.GetTransitionRequest(ctx, actor, actionString(body, "key"), id)
 	case "workflow_runs":
-		runs, err := s.ListScriptRuns(ctx, actor, actionString(body, "key"))
+		runs, err := s.runs.ListScriptRuns(ctx, actor, actionString(body, "key"))
 		return map[string]any{"runs": runs, "count": len(runs)}, err
 	case "workflow_run_log":
 		id, err := actionID(body)
@@ -163,7 +163,7 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 		if err != nil {
 			return nil, err
 		}
-		text, truncated, err := s.ScriptRunLog(ctx, actor, actionString(body, "key"), id, maxBytes)
+		text, truncated, err := s.runs.ScriptRunLog(ctx, actor, actionString(body, "key"), id, maxBytes)
 		return map[string]any{"run_id": id, "text": text, "truncated": truncated}, err
 	default:
 		return nil, domainError(http.StatusBadRequest, "invalid_action",
@@ -180,7 +180,7 @@ func actionID(body map[string]any) (int64, error) {
 	return id, nil
 }
 
-func (s *Service) actionRevision(ctx context.Context, actor Actor, key string, body map[string]any) (int64, error) {
+func (s *TaskService) actionRevision(ctx context.Context, actor Actor, key string, body map[string]any) (int64, error) {
 	if revision := int64(actionInt(body, "revision")); revision > 0 {
 		return revision, nil
 	}

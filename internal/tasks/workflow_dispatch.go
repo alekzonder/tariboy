@@ -107,7 +107,7 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 // replacing a released holder. It is the only writer of
 // task_workflow_holders.dispatched_at; a dispatch starts the holder's
 // availability afresh, so it clears unavailable_since.
-func (s *Service) recordHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool, name string) error {
+func (s *WorkflowEngine) recordHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool, name string) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO task_workflow_holders(task_id, pool, agent, dispatched_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT(task_id, pool) DO UPDATE SET agent = excluded.agent, dispatched_at = excluded.dispatched_at,
@@ -118,7 +118,7 @@ func (s *Service) recordHolderTx(ctx context.Context, tx *sql.Tx, task Task, poo
 
 // DispatchPending assigns holders to workflow tasks waiting in a pool status
 // without one. It returns how many tasks it assigned.
-func (s *Service) DispatchPending(ctx context.Context) (int, error) {
+func (s *WorkflowEngine) DispatchPending(ctx context.Context) (int, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT t.id FROM tasks t
 		WHERE t.workflow_digest IS NOT NULL AND t.status = 'open' AND t.workflow_paused_reason = ''
@@ -167,7 +167,7 @@ func (s *Service) DispatchPending(ctx context.Context) (int, error) {
 // dispatchTask assigns one waiting workflow task in its own transaction and
 // returns the agent it assigned, or "" when the task needs nobody or nobody is
 // eligible.
-func (s *Service) dispatchTask(ctx context.Context, id int64, busy map[string]bool) (string, error) {
+func (s *WorkflowEngine) dispatchTask(ctx context.Context, id int64, busy map[string]bool) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err

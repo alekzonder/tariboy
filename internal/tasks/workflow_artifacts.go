@@ -17,7 +17,7 @@ const maxArtifactBytes = 64 << 10
 // SetArtifact stores value as the new current value of the declared artifact
 // name. The customer may set an artifact on any open workflow task; an agent
 // only while it holds the task in a pool-owned status.
-func (s *Service) SetArtifact(ctx context.Context, actor Actor, key, name, value string) (Artifact, error) {
+func (s *WorkflowEngine) SetArtifact(ctx context.Context, actor Actor, key, name, value string) (Artifact, error) {
 	if err := validateActor(actor); err != nil {
 		return Artifact{}, err
 	}
@@ -60,7 +60,7 @@ func (s *Service) SetArtifact(ctx context.Context, actor Actor, key, name, value
 
 // ListArtifacts returns the current value of every artifact set on the task,
 // sorted by name.
-func (s *Service) ListArtifacts(ctx context.Context, actor Actor, key string) ([]Artifact, error) {
+func (s *WorkflowEngine) ListArtifacts(ctx context.Context, actor Actor, key string) ([]Artifact, error) {
 	if err := validateActor(actor); err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func currentArtifactsTx(ctx context.Context, q queryer, taskID int64) ([]Artifac
 
 // GetArtifact returns the current value of a declared artifact and its full
 // history, newest first; the current value is the first history entry.
-func (s *Service) GetArtifact(ctx context.Context, actor Actor, key, name string) (Artifact, []Artifact, error) {
+func (s *WorkflowEngine) GetArtifact(ctx context.Context, actor Actor, key, name string) (Artifact, []Artifact, error) {
 	if err := validateActor(actor); err != nil {
 		return Artifact{}, nil, err
 	}

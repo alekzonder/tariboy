@@ -3,7 +3,6 @@ package tasks
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/alekzonder/tariboy/internal/workflowfile"
@@ -98,7 +97,7 @@ func applyState(task *Task, state taskState) error {
 
 // pickStateHolderTx dispatches the holder of a pool status into state.Holder
 // when the state picks one; it stays "" when no member is eligible.
-func (s *Service) pickStateHolderTx(ctx context.Context, tx *sql.Tx, task Task, state *taskState) error {
+func (s *WorkflowEngine) pickStateHolderTx(ctx context.Context, tx *sql.Tx, task Task, state *taskState) error {
 	if !state.picksHolder() {
 		return nil
 	}
@@ -111,34 +110,4 @@ func (s *Service) pickStateHolderTx(ctx context.Context, tx *sql.Tx, task Task, 
 	}
 	state.Holder = agentPrincipal(agent)
 	return nil
-}
-
-// saveTaskStateTx is the one write of a task's state: status, workflow
-// status, assignee, pause reason, and completed_at as task holds them. It
-// bumps the stored revision into task.Revision and mirrors the first start
-// the tasks_started_at trigger stores. With guard the write applies only while
-// the stored revision is still task.Revision, and saved reports whether it did.
-func saveTaskStateTx(ctx context.Context, tx *sql.Tx, task *Task, previousCategory, now string, guard bool) (saved bool, err error) {
-	query := `
-		UPDATE tasks
-		SET status = ?, workflow_status = NULLIF(?, ''), assignee = ?, workflow_paused_reason = ?,
-		    completed_at = ?, revision = revision + 1, updated_at = ?
-		WHERE id = ?`
-	args := []any{task.Status, task.WorkflowStatus, task.Assignee, task.WorkflowPausedReason, task.CompletedAt, now, task.ID}
-	if guard {
-		query += ` AND revision = ?`
-		args = append(args, task.Revision)
-	}
-	err = tx.QueryRowContext(ctx, query+` RETURNING revision`, args...).Scan(&task.Revision)
-	if guard && errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if task.Status == StatusInProgress && previousCategory != StatusInProgress && task.StartedAt == "" {
-		task.StartedAt = now
-	}
-	task.UpdatedAt = now
-	return true, nil
 }

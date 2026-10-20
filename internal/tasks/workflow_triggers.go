@@ -49,7 +49,7 @@ type ApplyWorkflowObservationInput struct {
 // ReconcileWorkflowObservations durably replays committed bus rows after the
 // last successfully ingested monotonic sequence. Apply is idempotent by message
 // id, so a crash between Apply and cursor advancement is harmless.
-func (s *Service) ReconcileWorkflowObservations(ctx context.Context, limit int) (int, error) {
+func (s *WorkflowEngine) ReconcileWorkflowObservations(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -149,7 +149,7 @@ func workflowIngressMaxSequence(ctx context.Context, tx *sql.Tx) (int64, error) 
 // advanceWorkflowIngressIfNoTargets makes the zero-target check and cursor
 // advance one serialized SQLite write. Trigger creation on another daemon must
 // land wholly before the count or wholly after the cursor move.
-func (s *Service) advanceWorkflowIngressIfNoTargets(ctx context.Context, last int64) (bool, error) {
+func (s *WorkflowEngine) advanceWorkflowIngressIfNoTargets(ctx context.Context, last int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -179,7 +179,7 @@ func (s *Service) advanceWorkflowIngressIfNoTargets(ctx context.Context, last in
 	return true, nil
 }
 
-func (s *Service) applyQueueWorkflowTriggers(ctx context.Context, in ApplyWorkflowObservationInput) error {
+func (s *WorkflowEngine) applyQueueWorkflowTriggers(ctx context.Context, in ApplyWorkflowObservationInput) error {
 	source, _ := in.Payload["source"].(string)
 	if !strings.HasPrefix(source, "plugin:") {
 		return nil
@@ -225,7 +225,7 @@ func (s *Service) applyQueueWorkflowTriggers(ctx context.Context, in ApplyWorkfl
 			return err
 		}
 		actor := Actor{Principal: trigger.createdBy, IsCustomer: true}
-		if _, err := s.CreateTask(ctx, actor, CreateTaskInput{Queue: trigger.queue, Title: title, Description: string(description), IdempotencyKey: "workflow-trigger:" + strconv.FormatInt(trigger.id, 10) + ":" + in.EventID}); err != nil {
+		if _, err := s.taskSvc.CreateTask(ctx, actor, CreateTaskInput{Queue: trigger.queue, Title: title, Description: string(description), IdempotencyKey: "workflow-trigger:" + strconv.FormatInt(trigger.id, 10) + ":" + in.EventID}); err != nil {
 			return err
 		}
 	}
@@ -239,7 +239,7 @@ func workflowTargetEligible(eventSequence, createdAfterSequence int64, activatio
 	return timestampNotBefore(eventAt, createdAt)
 }
 
-func (s *Service) CreateQueueWorkflowTrigger(ctx context.Context, actor Actor, queue string, in CreateQueueWorkflowTriggerInput) (QueueWorkflowTrigger, error) {
+func (s *WorkflowEngine) CreateQueueWorkflowTrigger(ctx context.Context, actor Actor, queue string, in CreateQueueWorkflowTriggerInput) (QueueWorkflowTrigger, error) {
 	if err := requireOperator(actor); err != nil {
 		return QueueWorkflowTrigger{}, err
 	}
@@ -258,7 +258,7 @@ func (s *Service) CreateQueueWorkflowTrigger(ctx context.Context, actor Actor, q
 	if in.Action != "create_task" {
 		return QueueWorkflowTrigger{}, domainError(http.StatusBadRequest, "invalid_trigger_action", "trigger action must be create_task")
 	}
-	if _, err := s.GetQueue(ctx, actor, queue); err != nil {
+	if _, err := s.admin.GetQueue(ctx, actor, queue); err != nil {
 		return QueueWorkflowTrigger{}, err
 	}
 	now := s.now()
@@ -292,7 +292,7 @@ func (s *Service) CreateQueueWorkflowTrigger(ctx context.Context, actor Actor, q
 	return QueueWorkflowTrigger{ID: id, Queue: queue, Pattern: in.Pattern, CorrelationKey: in.CorrelationKey, Action: in.Action, Enabled: true, CreatedBy: actor.Principal, CreatedAt: now, UpdatedAt: now, CreatedAfterSequence: createdAfterSequence, ActivationSequenceSet: true}, nil
 }
 
-func (s *Service) ListQueueWorkflowTriggers(ctx context.Context, actor Actor, queue string) ([]QueueWorkflowTrigger, error) {
+func (s *WorkflowEngine) ListQueueWorkflowTriggers(ctx context.Context, actor Actor, queue string) ([]QueueWorkflowTrigger, error) {
 	if err := requireOperator(actor); err != nil {
 		return nil, err
 	}
@@ -314,7 +314,7 @@ func (s *Service) ListQueueWorkflowTriggers(ctx context.Context, actor Actor, qu
 	return out, rows.Err()
 }
 
-func (s *Service) DeleteQueueWorkflowTrigger(ctx context.Context, actor Actor, queue string, id int64) error {
+func (s *WorkflowEngine) DeleteQueueWorkflowTrigger(ctx context.Context, actor Actor, queue string, id int64) error {
 	if err := requireOperator(actor); err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func (s *Service) DeleteQueueWorkflowTrigger(ctx context.Context, actor Actor, q
 // ApplyWorkflowObservation turns one committed bus message into tasks for every
 // matching queue trigger. Trigger task creation is idempotent per trigger and
 // message id, so replaying a message creates nothing new.
-func (s *Service) ApplyWorkflowObservation(ctx context.Context, in ApplyWorkflowObservationInput) error {
+func (s *WorkflowEngine) ApplyWorkflowObservation(ctx context.Context, in ApplyWorkflowObservationInput) error {
 	in.EventID, in.EventAt, in.Channel, in.Kind, in.CorrelationKey = strings.TrimSpace(in.EventID), strings.TrimSpace(in.EventAt), strings.TrimSpace(in.Channel), strings.TrimSpace(in.Kind), strings.TrimSpace(in.CorrelationKey)
 	if in.EventID == "" || in.Channel == "" {
 		return domainError(http.StatusBadRequest, "invalid_observation", "event id and channel are required")
@@ -391,4 +391,13 @@ func requireOperator(actor Actor) error {
 		return domainError(http.StatusForbidden, "forbidden", "operator access required")
 	}
 	return nil
+}
+
+func (s *WorkflowEngine) WorkflowIngressEnabled() bool { return s.workflowIngressEnabled.Load() }
+
+func (s *WorkflowEngine) refreshWorkflowIngressEnabled(ctx context.Context) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM task_queue_workflow_triggers WHERE enabled=1`).Scan(&count); err == nil {
+		s.workflowIngressEnabled.Store(count > 0)
+	}
 }

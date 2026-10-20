@@ -47,12 +47,12 @@ func queueSecretsMissingError(keys []string) error {
 // SetGlobalEnv sets the environment that workflow scripts running as the
 // queue start from. A required secret it holds with a non-empty value needs no
 // queue secret.
-func (s *Service) SetGlobalEnv(env func() ([]string, error)) { s.globalEnv = env }
+func (s *Admin) SetGlobalEnv(env func() ([]string, error)) { s.globalEnv = env }
 
 // globalEnvNames returns the names the global environment holds with a
 // non-empty value, never a value. It runs a shell script, so a caller reads it
 // before it opens a transaction: the store has a single connection.
-func (s *Service) globalEnvNames() (map[string]bool, error) {
+func (s *Admin) globalEnvNames() (map[string]bool, error) {
 	names := map[string]bool{}
 	if s.globalEnv == nil {
 		return names, nil
@@ -95,14 +95,14 @@ func missingQueueSecrets(ctx context.Context, q queryer, queue string, names []s
 // SetQueueSecret stores the value of a queue secret, replacing an earlier one.
 // The value is written to the database only: not to an event, a log, or an
 // error.
-func (s *Service) SetQueueSecret(ctx context.Context, actor Actor, queue, key, value string) error {
+func (s *Admin) SetQueueSecret(ctx context.Context, actor Actor, queue, key, value string) error {
 	_, err := s.setQueueSecret(ctx, actor, queue, key, value)
 	return err
 }
 
 // SetQueueSecretInfo is SetQueueSecret returning the key and the stored time,
 // read in the transaction that stored the value. It never carries the value.
-func (s *Service) SetQueueSecretInfo(ctx context.Context, actor Actor, queue, key, value string) (QueueSecretInfo, error) {
+func (s *Admin) SetQueueSecretInfo(ctx context.Context, actor Actor, queue, key, value string) (QueueSecretInfo, error) {
 	updatedAt, err := s.setQueueSecret(ctx, actor, queue, key, value)
 	if err != nil {
 		return QueueSecretInfo{}, err
@@ -111,7 +111,7 @@ func (s *Service) SetQueueSecretInfo(ctx context.Context, actor Actor, queue, ke
 }
 
 // setQueueSecret stores a queue secret and returns its stored updated_at.
-func (s *Service) setQueueSecret(ctx context.Context, actor Actor, queue, key, value string) (string, error) {
+func (s *Admin) setQueueSecret(ctx context.Context, actor Actor, queue, key, value string) (string, error) {
 	return s.setQueueValue(ctx, actor, queue, key, value, true)
 }
 
@@ -124,7 +124,7 @@ type QueueEnvVar struct {
 
 // SetQueueEnvInfo stores a plain env var that the scripts of the queue receive,
 // replacing an earlier value. A key held as a secret becomes an env var.
-func (s *Service) SetQueueEnvInfo(ctx context.Context, actor Actor, queue, key, value string) (QueueEnvVar, error) {
+func (s *Admin) SetQueueEnvInfo(ctx context.Context, actor Actor, queue, key, value string) (QueueEnvVar, error) {
 	updatedAt, err := s.setQueueValue(ctx, actor, queue, key, value, false)
 	if err != nil {
 		return QueueEnvVar{}, err
@@ -134,8 +134,8 @@ func (s *Service) SetQueueEnvInfo(ctx context.Context, actor Actor, queue, key, 
 
 // ListQueueEnv returns the plain env vars of a queue sorted by key, with their
 // values. Secrets are not listed.
-func (s *Service) ListQueueEnv(ctx context.Context, actor Actor, queue string) ([]QueueEnvVar, error) {
-	if err := s.requireWorkflowAdmin(actor); err != nil {
+func (s *Admin) ListQueueEnv(ctx context.Context, actor Actor, queue string) ([]QueueEnvVar, error) {
+	if err := s.engine.requireWorkflowAdmin(actor); err != nil {
 		return nil, err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
@@ -161,15 +161,15 @@ func (s *Service) ListQueueEnv(ctx context.Context, actor Actor, queue string) (
 
 // RemoveQueueEnv deletes a plain env var of a queue under the rules of
 // RemoveQueueSecret.
-func (s *Service) RemoveQueueEnv(ctx context.Context, actor Actor, queue, key string) error {
+func (s *Admin) RemoveQueueEnv(ctx context.Context, actor Actor, queue, key string) error {
 	return s.removeQueueValue(ctx, actor, queue, key, false)
 }
 
 // setQueueValue stores a secret or a plain env var and returns its stored
 // updated_at. A key is one or the other: storing it as the other kind replaces
 // the value and the kind.
-func (s *Service) setQueueValue(ctx context.Context, actor Actor, queue, key, value string, secret bool) (string, error) {
-	if err := s.requireWorkflowAdmin(actor); err != nil {
+func (s *Admin) setQueueValue(ctx context.Context, actor Actor, queue, key, value string, secret bool) (string, error) {
+	if err := s.engine.requireWorkflowAdmin(actor); err != nil {
 		return "", err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
@@ -215,8 +215,8 @@ type QueueSecretInfo struct {
 
 // ListQueueSecrets returns the secrets of a queue sorted by key, without
 // their values.
-func (s *Service) ListQueueSecrets(ctx context.Context, actor Actor, queue string) ([]QueueSecretInfo, error) {
-	if err := s.requireWorkflowAdmin(actor); err != nil {
+func (s *Admin) ListQueueSecrets(ctx context.Context, actor Actor, queue string) ([]QueueSecretInfo, error) {
+	if err := s.engine.requireWorkflowAdmin(actor); err != nil {
 		return nil, err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
@@ -242,7 +242,7 @@ func (s *Service) ListQueueSecrets(ctx context.Context, actor Actor, queue strin
 
 // ListQueueSecretKeys returns the sorted keys of a queue's secrets, never a
 // value.
-func (s *Service) ListQueueSecretKeys(ctx context.Context, actor Actor, queue string) ([]string, error) {
+func (s *Admin) ListQueueSecretKeys(ctx context.Context, actor Actor, queue string) ([]string, error) {
 	items, err := s.ListQueueSecrets(ctx, actor, queue)
 	if err != nil {
 		return nil, err
@@ -256,8 +256,8 @@ func (s *Service) ListQueueSecretKeys(ctx context.Context, actor Actor, queue st
 
 // QueueSecretsInGlobalEnv returns the sorted secrets required by the workflow
 // bound to the queue that the global environment holds, by name only.
-func (s *Service) QueueSecretsInGlobalEnv(ctx context.Context, actor Actor, queue string) ([]string, error) {
-	if err := s.requireWorkflowAdmin(actor); err != nil {
+func (s *Admin) QueueSecretsInGlobalEnv(ctx context.Context, actor Actor, queue string) ([]string, error) {
+	if err := s.engine.requireWorkflowAdmin(actor); err != nil {
 		return nil, err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
@@ -290,14 +290,14 @@ func (s *Service) QueueSecretsInGlobalEnv(ctx context.Context, actor Actor, queu
 // bound to the queue requires the key and the global environment lacks it.
 // Tasks pinned to older workflow versions are not considered: a script that
 // misses its secret fails.
-func (s *Service) RemoveQueueSecret(ctx context.Context, actor Actor, queue, key string) error {
+func (s *Admin) RemoveQueueSecret(ctx context.Context, actor Actor, queue, key string) error {
 	return s.removeQueueValue(ctx, actor, queue, key, true)
 }
 
 // removeQueueValue deletes a secret or a plain env var; a key of the other kind
 // is not found.
-func (s *Service) removeQueueValue(ctx context.Context, actor Actor, queue, key string, secret bool) error {
-	if err := s.requireWorkflowAdmin(actor); err != nil {
+func (s *Admin) removeQueueValue(ctx context.Context, actor Actor, queue, key string, secret bool) error {
+	if err := s.engine.requireWorkflowAdmin(actor); err != nil {
 		return err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
@@ -357,7 +357,7 @@ func queueValueEvent(secret bool, action string) string {
 // queueEnvironment returns every plain env var and every secret of a queue for
 // a script run's environment; only the secrets are redacted. It takes no actor
 // and no route or agent action reaches it.
-func (s *Service) queueEnvironment(ctx context.Context, queue string) (env, secrets map[string]string, err error) {
+func (s *Admin) queueEnvironment(ctx context.Context, queue string) (env, secrets map[string]string, err error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT key, value, secret FROM task_queue_secrets WHERE queue_prefix = ?`, queue)
 	if err != nil {
 		return nil, nil, err

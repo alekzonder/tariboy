@@ -67,7 +67,7 @@ func statusOwner(status workflowfile.Status) string {
 }
 
 // GetWorkflow returns the workflow view of a task the actor may read.
-func (s *Service) GetWorkflow(ctx context.Context, actor Actor, key string) (WorkflowView, error) {
+func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key string) (WorkflowView, error) {
 	if err := validateActor(actor); err != nil {
 		return WorkflowView{}, err
 	}

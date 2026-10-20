@@ -53,7 +53,7 @@ func pauseReasonText(reason string) string {
 // pending request stop, its category becomes wait_customer, and the customer
 // is asked for a decision through a wait authored by the workflow. The caller
 // commits and then signals.
-func (s *Service) pauseTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, reason, detail string) error {
+func (s *WorkflowEngine) pauseTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, reason, detail string) error {
 	if task.WorkflowPausedReason != "" || task.Status == StatusDone || task.Status == StatusCancelled {
 		return nil
 	}
@@ -158,7 +158,7 @@ func quoteBlock(text string) string {
 // category of the current status with the same holder; release, only in a
 // pool status, marks the holder released and dispatches the task again to
 // another member. Both reset the visit's counters and answer the pause wait.
-func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision string) (Task, error) {
+func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, decision string) (Task, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return Task{}, err
 	}

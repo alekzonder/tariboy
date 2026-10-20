@@ -26,7 +26,7 @@ type IterationEnd struct {
 // pauseAtLimitTx pauses the task with reason when the visit's counter for
 // that reason reached its limit in the visit's status. A limit of 0 or less
 // never pauses. detail is untrusted text for the pause comment.
-func (s *Service) pauseAtLimitTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, visitID int64, reason, detail string) error {
+func (s *WorkflowEngine) pauseAtLimitTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, visitID int64, reason, detail string) error {
 	var statusID string
 	var idle, rejected, failures int
 	if err := tx.QueryRowContext(ctx, `
@@ -56,7 +56,7 @@ func (s *Service) pauseAtLimitTx(ctx context.Context, tx *sql.Tx, task *Task, ma
 // agent is the holder of a pool status it already held when the iteration
 // started, the status did not change, and the agent made no transition
 // request during the iteration. It pauses the task at the limit.
-func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) error {
+func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEnd) error {
 	key := strings.TrimSpace(end.GoalTaskKey)
 	if key == "" || strings.TrimSpace(end.Agent) == "" {
 		return nil
@@ -200,7 +200,7 @@ func holderUnavailableText(name, pool, cause string) string {
 // CheckHolders records since when each holder of an active pool status cannot
 // work and pauses tasks whose holder has been unavailable for the grace.
 // Only the tasks unavailableHolderTasks selects get a transaction of their own.
-func (s *Service) CheckHolders(ctx context.Context, now time.Time) (int, error) {
+func (s *WorkflowEngine) CheckHolders(ctx context.Context, now time.Time) (int, error) {
 	ids, err := s.unavailableHolderTasks(ctx)
 	if err != nil {
 		return 0, err
@@ -233,7 +233,7 @@ func (s *Service) CheckHolders(ctx context.Context, now time.Time) (int, error) 
 // work by holderUnavailableCauseSQL or is marked unavailable_since: the only
 // tasks checkHolder may change. A task whose holder can work and carries no
 // mark is left alone.
-func (s *Service) unavailableHolderTasks(ctx context.Context) ([]int64, error) {
+func (s *WorkflowEngine) unavailableHolderTasks(ctx context.Context) ([]int64, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT t.id FROM tasks t
 		JOIN task_workflow_holders h ON h.task_id = t.id AND t.assignee = 'agent:' || h.agent AND h.released = 0
@@ -269,7 +269,7 @@ func (e manifestLoadError) Unwrap() error { return e.err }
 // firstHolderFailure reports whether err of the holder check of task id
 // should be logged: a manifest that cannot be loaded is logged once per task
 // and error text, every other error every time.
-func (s *Service) firstHolderFailure(id int64, err error) bool {
+func (s *WorkflowEngine) firstHolderFailure(id int64, err error) bool {
 	var load manifestLoadError
 	if !errors.As(err, &load) {
 		return true
@@ -288,7 +288,7 @@ func (s *Service) firstHolderFailure(id int64, err error) bool {
 
 // forgetHolderFailure clears the logged manifest failure of task id after a
 // check that loaded its manifest.
-func (s *Service) forgetHolderFailure(id int64) {
+func (s *WorkflowEngine) forgetHolderFailure(id int64) {
 	s.holderFailuresMu.Lock()
 	defer s.holderFailuresMu.Unlock()
 	delete(s.holderFailures, id)
@@ -296,7 +296,7 @@ func (s *Service) forgetHolderFailure(id int64) {
 
 // checkHolder checks the holder of one task in its own transaction and
 // reports whether it paused the task.
-func (s *Service) checkHolder(ctx context.Context, id int64, now time.Time) (bool, error) {
+func (s *WorkflowEngine) checkHolder(ctx context.Context, id int64, now time.Time) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err

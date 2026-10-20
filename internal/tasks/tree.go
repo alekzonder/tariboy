@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (s *Service) MoveTask(ctx context.Context, actor Actor, key string, in MoveInput) (Task, error) {
+func (s *TaskService) MoveTask(ctx context.Context, actor Actor, key string, in MoveInput) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err
 	}
@@ -223,7 +223,7 @@ func applySiblingOrder(ctx context.Context, tx *sql.Tx, queue string, parentID a
 	return nil
 }
 
-func (s *Service) Ready(ctx context.Context, actor Actor, filter ReadyFilter) ([]Task, error) {
+func (s *TaskService) Ready(ctx context.Context, actor Actor, filter ReadyFilter) ([]Task, error) {
 	if err := validateActor(actor); err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func readyWith(ctx context.Context, q queryer, actor Actor, filter ReadyFilter) 
 	return out, rows.Err()
 }
 
-func (s *Service) ClaimReady(ctx context.Context, actor Actor, filter ReadyFilter, idempotencyKey string) (Task, error) {
+func (s *TaskService) ClaimReady(ctx context.Context, actor Actor, filter ReadyFilter, idempotencyKey string) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err
 	}

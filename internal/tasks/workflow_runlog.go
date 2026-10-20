@@ -79,7 +79,7 @@ func runLogInvalid(id int64) error {
 // that the log is longer than the text returned. The stored path is trusted
 // only when it is exactly <base>/tasks/<KEY>/runs/<id>/run.log for this task
 // and run, with no symlink in it.
-func (s *Service) ScriptRunLog(ctx context.Context, actor Actor, key string, id int64, maxBytes int) (string, bool, error) {
+func (s *RunService) ScriptRunLog(ctx context.Context, actor Actor, key string, id int64, maxBytes int) (string, bool, error) {
 	if err := validateActor(actor); err != nil {
 		return "", false, err
 	}
@@ -120,7 +120,7 @@ func (s *Service) ScriptRunLog(ctx context.Context, actor Actor, key string, id 
 // redactedLogTail reads the last maxBytes bytes of the log at path, cut to a
 // valid UTF-8 boundary, with every secret of queue replaced by "[redacted]". A
 // maxBytes of zero or less means 64 KiB; the largest is 1 MiB.
-func (s *Service) redactedLogTail(ctx context.Context, queue, path string, id int64, maxBytes int) (string, bool, error) {
+func (s *RunService) redactedLogTail(ctx context.Context, queue, path string, id int64, maxBytes int) (string, bool, error) {
 	if maxBytes <= 0 {
 		maxBytes = defaultRunLogBytes
 	}
@@ -132,7 +132,7 @@ func (s *Service) redactedLogTail(ctx context.Context, queue, path string, id in
 	if err != nil {
 		return "", false, runLogInvalid(id)
 	}
-	_, secrets, err := s.queueEnvironment(ctx, queue)
+	_, secrets, err := s.admin.queueEnvironment(ctx, queue)
 	if err != nil {
 		return "", false, err
 	}
@@ -159,7 +159,7 @@ func (s *Service) redactedLogTail(ctx context.Context, queue, path string, id in
 // the task. A run as the agent has that agent's own secrets in its
 // environment, which the queue-secret redaction does not cover; one recorded
 // without an agent is the customer's alone.
-func (s *Service) requireRunLogAccess(ctx context.Context, actor Actor, task Task, run ScriptRun) error {
+func (s *RunService) requireRunLogAccess(ctx context.Context, actor Actor, task Task, run ScriptRun) error {
 	if actor.IsCustomer {
 		return nil
 	}
@@ -195,7 +195,7 @@ func (s *Service) requireRunLogAccess(ctx context.Context, actor Actor, task Tas
 // verifiedLogPath returns the real path of the log of run id, provided logPath
 // names exactly rel under the base directory and no component of it is a
 // symlink.
-func (s *Service) verifiedLogPath(rel string, id int64, logPath string) (string, error) {
+func (s *RunService) verifiedLogPath(rel string, id int64, logPath string) (string, error) {
 	if s.runBaseDir == "" {
 		return "", runLogInvalid(id)
 	}

@@ -53,7 +53,7 @@ func workflowManagedErrorFor(ctx context.Context, q queryer, task Task) error {
 // enterStatusTx closes the current visit, opens a visit for statusID, sets
 // tasks.workflow_status, derives the category and assignee, and records the
 // workflow.transitioned event and notification intents. via is the actor.
-func (s *Service) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, statusID, via, outcome, message string) error {
+func (s *WorkflowEngine) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, statusID, via, outcome, message string) error {
 	next, ok := currentStatus(manifest, statusID)
 	if !ok {
 		return fmt.Errorf("workflow %s:%s has no status %q", manifest.Name, manifest.Version, statusID)
@@ -142,7 +142,7 @@ func resolveWorkflowWaitsTx(ctx context.Context, tx *sql.Tx, task Task, holder, 
 // openStatusWaitTx asks the customer for an outcome the way a comment with a
 // mention does: a comment by the workflow, an open wait, and a question
 // notification.
-func (s *Service) openStatusWaitTx(ctx context.Context, tx *sql.Tx, task Task, status workflowfile.Status, now string) error {
+func (s *WorkflowEngine) openStatusWaitTx(ctx context.Context, tx *sql.Tx, task Task, status workflowfile.Status, now string) error {
 	body := fmt.Sprintf("@%s The task is waiting for you in workflow status %q.\nOutcomes: %s.",
 		task.Customer, status.ID, strings.Join(statusOutcomes(status), ", "))
 	if instructions := strings.TrimSpace(status.Instructions); instructions != "" {
@@ -153,7 +153,7 @@ func (s *Service) openStatusWaitTx(ctx context.Context, tx *sql.Tx, task Task, s
 
 // askCustomerTx posts body as a comment by the workflow and opens the
 // workflow's wait on the customer with a question notification.
-func (s *Service) askCustomerTx(ctx context.Context, tx *sql.Tx, task Task, body, now string) error {
+func (s *WorkflowEngine) askCustomerTx(ctx context.Context, tx *sql.Tx, task Task, body, now string) error {
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO task_comments(task_id, author, body, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)`, task.ID, workflowActor, body, now, now)
