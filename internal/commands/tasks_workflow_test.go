@@ -299,10 +299,24 @@ func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
 			t.Errorf("WorkflowView schema lacks %s", name)
 		}
 	}
-	for _, name := range []string{"DeclaredArtifact", "StatusView"} {
+	for _, name := range []string{"DeclaredArtifact", "StatusView", "CheckView"} {
 		if doc.Components.Schemas[name] == nil {
 			t.Errorf("openapi lacks schema %s", name)
 		}
+	}
+	outcomeProps, _ := doc.Components.Schemas["OutcomeView"]["properties"].(map[string]any)
+	if outcomeProps["check_details"] == nil {
+		t.Errorf("OutcomeView schema lacks check_details")
+	}
+	checkProps, _ := doc.Components.Schemas["CheckView"]["properties"].(map[string]any)
+	for _, name := range []string{"script", "description", "run_as", "timeout"} {
+		if checkProps[name] == nil {
+			t.Errorf("CheckView schema lacks %s", name)
+		}
+	}
+	sourceProps, _ := doc.Components.Schemas["QueueSource"]["properties"].(map[string]any)
+	if sourceProps["description"] == nil {
+		t.Errorf("QueueSource schema lacks description")
 	}
 	props, _ := doc.Components.Schemas["Task"]["properties"].(map[string]any)
 	for _, name := range []string{"category", "waiting_on", "workflow_digest", "workflow_name", "workflow_version", "workflow_paused_reason"} {

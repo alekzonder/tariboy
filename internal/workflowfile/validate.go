@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/internal/imagefile"
 )
@@ -158,6 +160,7 @@ func (v *validator) sources(f *File) {
 			v.add("duration_invalid", p+".every", "every %q must be a duration of at least %s", src.Every, MinSourceEvery)
 		}
 		v.timeout(p+".timeout", src.Timeout, MaxWatchTimeout)
+		v.description(p+".description", src.Description)
 	}
 }
 
@@ -296,6 +299,25 @@ func (v *validator) watch(p string, w *Watch) {
 		v.add("duration_invalid", p+".every", "every %q must be a duration of at least %s", w.Every, MinWatchEvery)
 	}
 	v.timeout(p+".timeout", w.Timeout, MaxWatchTimeout)
+	v.description(p+".description", w.Description)
+}
+
+// MaxDescriptionRunes bounds the description of a check, a watch, or a
+// source: one line the operator reads next to the script's name.
+const MaxDescriptionRunes = 200
+
+// description validates an optional script description at p: at most
+// MaxDescriptionRunes runes of plain text on one line.
+func (v *validator) description(p, value string) {
+	if value == "" {
+		return
+	}
+	switch {
+	case utf8.RuneCountInString(value) > MaxDescriptionRunes:
+		v.add("description_invalid", p, "description exceeds %d characters", MaxDescriptionRunes)
+	case strings.ContainsFunc(value, unicode.IsControl):
+		v.add("description_invalid", p, "description must be one line of plain text")
+	}
 }
 
 // timeout validates an optional script timeout at p against limit.
@@ -317,6 +339,7 @@ func (v *validator) check(p string, c *Check) {
 		v.add("run_as_invalid", p+".run_as", "run_as %q must be %s or %s", c.RunAs, RunAsQueue, RunAsAgent)
 	}
 	v.timeout(p+".timeout", c.Timeout, MaxCheckTimeout)
+	v.description(p+".description", c.Description)
 }
 
 // reachability reports statuses no path from the initial status reaches, and

@@ -29,6 +29,7 @@ statuses:
         to: finished
         checks:
           - script: ./scripts/check.sh
+            description: The work is checked in.
   - id: finished
     terminal: true
 `
@@ -108,6 +109,10 @@ func TestPublishAndInspect(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, m) {
 			t.Fatalf("Inspect(%s) = %+v, want %+v", tag, got, m)
+		}
+		// The description of a check is part of the stored definition.
+		if d := got.Definition.Statuses[0].Transitions[0].Checks[0].Description; d != "The work is checked in." {
+			t.Fatalf("Inspect(%s) check description = %q", tag, d)
 		}
 	}
 	if d, err := s.Resolve("demo", ""); err != nil || d != m.Digest {

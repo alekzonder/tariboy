@@ -15,6 +15,23 @@ type OutcomeView struct {
 	Requires []string `json:"requires,omitempty"`
 	Missing  []string `json:"missing,omitempty"` // required artifacts with no value
 	Checks   []string `json:"checks,omitempty"`  // script paths
+	// CheckDetails describe the same checks, in the same order, with the
+	// manifest's description and the resolved run mode and timeout.
+	CheckDetails []CheckView `json:"check_details,omitempty"`
+}
+
+// CheckView is one check script of a transition with its defaults resolved.
+type CheckView struct {
+	Script      string `json:"script"`
+	Description string `json:"description,omitempty"`
+	RunAs       string `json:"run_as"`  // queue or agent
+	Timeout     string `json:"timeout"` // the effective timeout, as a duration
+}
+
+// checkView resolves a manifest check into the view's shape.
+func checkView(check workflowfile.Check) CheckView {
+	return CheckView{Script: check.Script, Description: check.Description, RunAs: checkRunAs(check),
+		Timeout: scriptTimeout(check.Timeout, workflowfile.DefaultCheckTimeout).String()}
 }
 
 // DeclaredArtifact is one artifact the manifest declares.
@@ -111,6 +128,7 @@ func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key strin
 				Missing: missingArtifacts(transition, present)}
 			for _, check := range transition.Checks {
 				outcome.Checks = append(outcome.Checks, check.Script)
+				outcome.CheckDetails = append(outcome.CheckDetails, checkView(check))
 			}
 			view.Outcomes = append(view.Outcomes, outcome)
 		}

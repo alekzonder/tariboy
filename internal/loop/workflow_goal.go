@@ -199,11 +199,26 @@ func goalOutcomes(view tasks.WorkflowView) string {
 			line += "; missing: " + strings.Join(o.Missing, ", ")
 		}
 		if len(o.Checks) > 0 {
-			line += "; checks: " + strings.Join(o.Checks, ", ")
+			line += "; checks: " + strings.Join(goalChecks(o), ", ")
 		}
 		out = append(out, line)
 	}
 	return strings.Join(out, "\n")
+}
+
+// goalChecks names the checks of an outcome: the script path, followed by its
+// description in parentheses when the manifest gives one. The descriptions
+// come from the image, like the status instructions, but are kept to one line.
+func goalChecks(o tasks.OutcomeView) []string {
+	out := make([]string, 0, len(o.Checks))
+	for i, script := range o.Checks {
+		if i < len(o.CheckDetails) && o.CheckDetails[i].Description != "" {
+			out = append(out, script+" ("+oneLine(o.CheckDetails[i].Description)+")")
+			continue
+		}
+		out = append(out, script)
+	}
+	return out
 }
 
 func goalArtifacts(key string, view tasks.WorkflowView) string {

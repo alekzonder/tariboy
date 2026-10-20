@@ -318,6 +318,18 @@ func TestWorkflowGetTextAndJSON(t *testing.T) {
 	if strings.Contains(out.String(), "paused:") {
 		t.Errorf("an unpaused task prints a paused line:\n%s", &out)
 	}
+
+	// A described check is printed with its description.
+	described := strings.Replace(sampleView, `"checks":["checks/ci.sh"]`,
+		`"checks":["checks/ci.sh"],"check_details":[{"script":"checks/ci.sh","description":"The CI suite passes.","run_as":"queue","timeout":"1m0s"}]`, 1)
+	withCaller(t, &recorder{result: json.RawMessage(described)})
+	out.Reset()
+	if code := Run(context.Background(), []string{"workflow", "get", "DEV-1"}, agentEnv(), &out, io.Discard); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	if want := "checks: checks/ci.sh (The CI suite passes.)"; !strings.Contains(out.String(), want) {
+		t.Errorf("text lacks %q:\n%s", want, &out)
+	}
 	out.Reset()
 	if code := Run(context.Background(), []string{"workflow", "get", "DEV-1", "--json"}, agentEnv(), &out, io.Discard); code != 0 || !strings.Contains(out.String(), `"digest":"d1"`) {
 		t.Fatalf("json code %d: %s", code, &out)

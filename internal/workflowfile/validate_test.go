@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -180,6 +181,11 @@ func TestValidateCodes(t *testing.T) {
 		{"duration_invalid source timeout", func(t *testing.T, f *File) { f.Sources[0].Timeout = "0s" }, "duration_invalid", "sources[0].timeout"},
 		{"timeout_too_long source", func(t *testing.T, f *File) { f.Sources[0].Timeout = "31m" }, "timeout_too_long", "sources[0].timeout"},
 		{"env_name_invalid prefix", func(t *testing.T, f *File) { f.Env = map[string]string{"TARIBOY_X": "x"} }, "env_name_invalid", "env.TARIBOY_X"},
+		{"description_invalid check too long", func(t *testing.T, f *File) {
+			f.Statuses[0].Transitions[0].Checks[0].Description = strings.Repeat("é", 201)
+		}, "description_invalid", "statuses[0].transitions[0].checks[0].description"},
+		{"description_invalid watch newline", func(t *testing.T, f *File) { f.Statuses[2].Watch.Description = "first\nsecond" }, "description_invalid", "statuses[2].watch.description"},
+		{"description_invalid source control", func(t *testing.T, f *File) { f.Sources[0].Description = "tab\there" }, "description_invalid", "sources[0].description"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -190,6 +196,16 @@ func TestValidateCodes(t *testing.T) {
 				t.Fatalf("want %s at %s, got %+v", tc.code, tc.path, errs)
 			}
 		})
+	}
+}
+
+func TestValidateAcceptsDescriptions(t *testing.T) {
+	f := validFixture(t)
+	f.Statuses[0].Transitions[0].Checks[0].Description = strings.Repeat("é", 200)
+	f.Statuses[2].Watch.Description = "Polls the CI until it finishes."
+	f.Sources[0].Description = "Finds new pull requests."
+	if errs := Validate(f); len(errs) != 0 {
+		t.Fatalf("errors = %+v", errs)
 	}
 }
 

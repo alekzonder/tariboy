@@ -69,6 +69,23 @@ func TestWorkflowGoalPoolStatus(t *testing.T) {
 	}
 }
 
+// A described check is named with its description so the agent knows what the
+// gate verifies; a check without one is named by its path alone, as before.
+func TestWorkflowGoalDescribesChecks(t *testing.T) {
+	t.Parallel()
+	g := poolGoal()
+	g.View.Outcomes[0].Checks = []string{"checks/ci.sh", "checks/tree.sh"}
+	g.View.Outcomes[0].CheckDetails = []tasks.CheckView{
+		{Script: "checks/ci.sh", Description: "The CI suite\npasses", RunAs: "queue", Timeout: "1m0s"},
+		{Script: "checks/tree.sh", RunAs: "agent", Timeout: "5m0s"},
+	}
+	got := FormatRuntimeWorkflowGoal(g)
+	want := "- `ready` -> `review`; requires: plan, summary; missing: plan; checks: checks/ci.sh (The CI suite passes), checks/tree.sh\n"
+	if !strings.Contains(got, want) {
+		t.Fatalf("missing %q in\n%s", want, got)
+	}
+}
+
 func TestWorkflowGoalPoolStatusWithoutInstructionsOrHistory(t *testing.T) {
 	t.Parallel()
 	g := poolGoal()

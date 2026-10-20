@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
 
@@ -64,6 +65,45 @@ func TestGetWorkflowInAPoolStatus(t *testing.T) {
 	}
 	if view.Category != StatusWaitCustomer || view.WaitingOn != WaitingOnCustomer || view.Holder != "agent:dev-1" {
 		t.Fatalf("after question = %#v", view)
+	}
+}
+
+// The checks of an outcome are also described: script, description, and the
+// resolved run mode and timeout, so a reader need not know the defaults.
+func TestGetWorkflowExposesCheckDetails(t *testing.T) {
+	svc, actor, task := requestFixture(t)
+	ctx := context.Background()
+	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) {
+		m.Definition.Statuses[0].Transitions[0].Checks = []workflowfile.Check{
+			{Script: "./checks/ci.sh", Description: "The CI suite passes on the branch."},
+			{Script: "./checks/tree.sh", RunAs: workflowfile.RunAsAgent, Timeout: "5m"},
+		}
+	})
+	view, err := svc.GetWorkflow(ctx, actor, task.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(view.Outcomes[0].Checks, []string{"./checks/ci.sh", "./checks/tree.sh"}) {
+		t.Fatalf("checks = %#v", view.Outcomes[0].Checks)
+	}
+	want := []CheckView{
+		{Script: "./checks/ci.sh", Description: "The CI suite passes on the branch.", RunAs: "queue", Timeout: "1m0s"},
+		{Script: "./checks/tree.sh", RunAs: "agent", Timeout: "5m0s"},
+	}
+	if !reflect.DeepEqual(view.Outcomes[0].CheckDetails, want) {
+		t.Fatalf("check_details = %#v", view.Outcomes[0].CheckDetails)
+	}
+	fields := jsonFields(t, view.Outcomes[0])
+	details := fields["check_details"].([]any)
+	first := details[0].(map[string]any)
+	if first["description"] != "The CI suite passes on the branch." || first["run_as"] != "queue" || first["timeout"] != "1m0s" {
+		t.Fatalf("check_details JSON = %v", details)
+	}
+	if _, ok := details[1].(map[string]any)["description"]; ok {
+		t.Fatalf("an empty description is omitted: %v", details[1])
+	}
+	if _, ok := jsonFields(t, view.Outcomes[1])["check_details"]; ok {
+		t.Fatalf("an outcome without checks has no check_details: %v", view.Outcomes[1])
 	}
 }
 

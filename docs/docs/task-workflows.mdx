@@ -890,7 +890,8 @@ ttasks queue source log DEV 12
 ttasks queue source log DEV 12 --max-bytes 4096
 ```
 
-`queue source ls` shows each source of the bound image: script, `every`, when it
+`queue source ls` shows each source of the bound image: script, `every`, its
+`description` when the image gives one, when it
 runs next, the failures in a row, the last run with its verdict (`items`,
 `quiet`, or `failure`), message, and the number of tasks it created, and the
 newest 20 runs, newest first, in `runs`; their ids are what `queue source log`
@@ -996,7 +997,9 @@ The block is rendered in this order:
    image, cut at a fixed byte limit with a marker when longer, and closed by
    the fixed line `End of status instructions.`
 5. `### Outcomes`: each outcome with its target, the artifacts it `requires`, the
-   ones still `missing`, and its `checks`.
+   ones still `missing`, and its `checks`, each named by its script path
+   followed by its manifest `description` in parentheses when the image gives
+   one.
 6. `### Artifacts`: each current artifact with its author.
 7. `### Last transition request`: only when the last request of the current
    visit was `rejected` or `failed`, with the script's message and, for a failure,
@@ -1254,7 +1257,7 @@ and what it may do next. Agents and the operator can read it.
 | `owner` | `pool:<name>`, `customer`, `script`, or empty for a finished task. |
 | `holder` | The assigned `agent:<name>` of a pool status. |
 | `instructions_path` | The status instruction file inside the image. |
-| `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), and `checks` (script paths). A finished task has none. |
+| `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), `checks` (script paths), and `check_details`: the same checks, in order, each with `script`, `description` (when the image gives one), and the resolved `run_as` and `timeout`. A finished task has none. |
 | `artifacts` | The current value of each artifact. |
 | `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message. |
 | `last_request` | The latest transition request: `id`, `outcome`, `message`, `actor`, `state`, `result_message`, times, and `wait_seconds` while pending. |
