@@ -68,6 +68,7 @@ func TestWorkflowVersionLocalCLI(t *testing.T) {
 }
 
 func TestImageBuildLeavesDefaultTagToDaemon(t *testing.T) {
+	t.Parallel()
 	call := &fakeCaller{result: []byte(`{}`)}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), commands.BuildRegistry(), []string{"image", "build", "--name", "test", "--path", "."}, call, nil, &out, &errOut)

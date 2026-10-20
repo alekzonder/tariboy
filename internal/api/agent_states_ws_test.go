@@ -15,6 +15,7 @@ import (
 // list and status refresh at once instead of on a short poll. Terminal output
 // and messages are not state changes and are not forwarded.
 func TestAgentStatesWebSocketStreamsStateHints(t *testing.T) {
+	t.Parallel()
 	httpServer, hub := messagesWSServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

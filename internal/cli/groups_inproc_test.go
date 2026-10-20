@@ -22,6 +22,7 @@ func mustCall(t *testing.T, c *client.Client, method, route string, body any) ma
 }
 
 func TestGroupCommandsProvisionSubscriptions(t *testing.T) {
+	t.Parallel()
 	_, _, c := startDaemon(t)
 	source := t.TempDir()
 	if err := os.WriteFile(source+"/Tariboyfile.yaml", []byte("schema_version: 2\nplugins: []\nskills: []\nprompts: []\n"), 0o600); err != nil {

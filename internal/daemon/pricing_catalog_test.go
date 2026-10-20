@@ -18,14 +18,13 @@ import (
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func TestPricingCatalogRunsWithDaemonLifecycle(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
-	runtimeDir := t.TempDir()
-	t.Setenv("TARIBOY_BASE_DIR", base)
-	t.Setenv("TARIBOY_RUNTIME_DIR", runtimeDir)
 
 	firstRelease := make(chan struct{})
 	requestStarted := make(chan int, 3)
@@ -171,15 +170,13 @@ func TestPricingCatalogRunsWithDaemonLifecycle(t *testing.T) {
 func waitDaemonReady(t *testing.T, base string) {
 	t.Helper()
 	c := client.New(paths.New(base).Socket())
-	deadline := time.Now().Add(10 * time.Second)
 	var err error
-	for time.Now().Before(deadline) {
-		if _, err = c.Call("GET", "/api/daemon/status", nil); err == nil {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	if !testutil.WaitFor(10*time.Second, func() bool {
+		_, err = c.Call("GET", "/api/daemon/status", nil)
+		return err == nil
+	}) {
+		t.Fatalf("daemon never became ready: %v", err)
 	}
-	t.Fatalf("daemon never became ready: %v", err)
 }
 
 func waitPricingRequest(t *testing.T, started <-chan int, want int) {
@@ -218,17 +215,13 @@ func openDaemonReadDB(t *testing.T, path string) *sql.DB {
 
 func waitPricingEventCount(t *testing.T, db *sql.DB, kind string, want int) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		var got int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind=?`, kind).Scan(&got); err == nil && got == want {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 	var got int
-	_ = db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind=?`, kind).Scan(&got)
-	t.Fatalf("%s event count = %d, want %d", kind, got, want)
+	if !testutil.WaitFor(5*time.Second, func() bool {
+		err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind=?`, kind).Scan(&got)
+		return err == nil && got == want
+	}) {
+		t.Fatalf("%s event count = %d, want %d", kind, got, want)
+	}
 }
 
 func assertPricingEventIsBounded(t *testing.T, db *sql.DB, kind, wantSource string) {

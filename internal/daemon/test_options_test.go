@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,6 +33,21 @@ func daemonTestOptions(options Options) Options {
 		})
 	}
 	return options
+}
+
+// freeLoopbackAddr returns a loopback host:port that was free a moment ago, so
+// parallel daemons never contend for one fixed port.
+func freeLoopbackAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return addr
 }
 
 func TestDaemonTestOptionsBypassExternalUserPathProbe(t *testing.T) {

@@ -91,6 +91,7 @@ func runHelp(t *testing.T, r *registry.Registry, argv ...string) (string, string
 }
 
 func TestRootHelpTwoSections(t *testing.T) {
+	t.Parallel()
 	r := testTreeReg(t)
 	out, _, code := runHelp(t, r)
 	if code != 0 {
@@ -112,6 +113,7 @@ func TestRootHelpTwoSections(t *testing.T) {
 }
 
 func TestGroupListing(t *testing.T) {
+	t.Parallel()
 	r := testTreeReg(t)
 	for _, argv := range [][]string{{"agent"}, {"agent", "--help"}, {"agent", "-h"}, {"agent", "help"}} {
 		out, _, code := runHelp(t, r, argv...)
@@ -128,6 +130,7 @@ func TestGroupListing(t *testing.T) {
 }
 
 func TestNestedGroupListing(t *testing.T) {
+	t.Parallel()
 	r := testTreeReg(t)
 	out, _, code := runHelp(t, r, "agent", "status")
 	if code != 0 {
@@ -139,6 +142,7 @@ func TestNestedGroupListing(t *testing.T) {
 }
 
 func TestLeafDetailHelp(t *testing.T) {
+	t.Parallel()
 	r := testTreeReg(t)
 	for _, flag := range []string{"--help", "-h"} {
 		out, _, code := runHelp(t, r, "agent", "stop", flag)
@@ -152,6 +156,7 @@ func TestLeafDetailHelp(t *testing.T) {
 }
 
 func TestUnknownSubcommandUnderGroup(t *testing.T) {
+	t.Parallel()
 	r := testTreeReg(t)
 	out, errOut, code := runHelp(t, r, "agent", "frobnicate")
 	_ = out
@@ -167,6 +172,7 @@ func TestUnknownSubcommandUnderGroup(t *testing.T) {
 }
 
 func TestRunGETCommand(t *testing.T) {
+	t.Parallel()
 	f := &fakeCaller{result: json.RawMessage(`{"version":"2.0.0-dev"}`)}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), testReg(t), []string{"daemon", "status"}, f, nil, &out, &errOut)
@@ -182,6 +188,7 @@ func TestRunGETCommand(t *testing.T) {
 }
 
 func TestRunJSONFlag(t *testing.T) {
+	t.Parallel()
 	f := &fakeCaller{result: json.RawMessage(`{"a":1}`)}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), testReg(t), []string{"--json", "daemon", "status"}, f, nil, &out, &errOut)
@@ -191,6 +198,7 @@ func TestRunJSONFlag(t *testing.T) {
 }
 
 func TestRunCreatesTaskQueue(t *testing.T) {
+	t.Parallel()
 	caller := &fakeCaller{result: json.RawMessage(`{"prefix":"TEST"}`)}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), commands.BuildRegistry(), []string{
@@ -217,6 +225,7 @@ func TestRunCreatesTaskQueue(t *testing.T) {
 // on a `valid: false` result, after printing the whole result, so a script
 // can gate on it; the HTTP result itself is not an error.
 func TestRunValidateExitsNonZeroWhenInvalid(t *testing.T) {
+	t.Parallel()
 	src := t.TempDir()
 	commandArgs := map[string][]string{
 		"workflow validate": {"workflow", "validate", "--path", src},
@@ -287,6 +296,7 @@ func TestRunResolvesImageSourcePathAgainstClientCWD(t *testing.T) {
 }
 
 func TestRunImageBuildRepeatableTags(t *testing.T) {
+	t.Parallel()
 	source := t.TempDir()
 	caller := &fakeCaller{result: json.RawMessage(`{}`)}
 	var out, errOut bytes.Buffer
@@ -304,6 +314,7 @@ func TestRunImageBuildRepeatableTags(t *testing.T) {
 }
 
 func TestRunImageBuildStoreSelectorIsPositional(t *testing.T) {
+	t.Parallel()
 	caller := &fakeCaller{result: json.RawMessage(`{}`)}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), commands.BuildRegistry(), []string{
@@ -319,6 +330,7 @@ func TestRunImageBuildStoreSelectorIsPositional(t *testing.T) {
 }
 
 func TestRunPositionalAndFlagArgs(t *testing.T) {
+	t.Parallel()
 	f := &fakeCaller{result: json.RawMessage(`{}`)}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), testReg(t), []string{"daemon", "config", "set", "log_level", "debug"}, f, nil, &out, &errOut)
@@ -337,6 +349,7 @@ func TestRunPositionalAndFlagArgs(t *testing.T) {
 }
 
 func TestMergePluginCommandsRunsActionAndReadsSecretFile(t *testing.T) {
+	t.Parallel()
 	r := registry.New()
 	caller := &fakeCaller{result: json.RawMessage(`{"configured":true}`)}
 	tokenFile := filepath.Join(t.TempDir(), "token")
@@ -387,6 +400,7 @@ func TestMergePluginCommandsRunsActionAndReadsSecretFile(t *testing.T) {
 }
 
 func TestMergePluginCommandsRejectsCoreNamespaceCollision(t *testing.T) {
+	t.Parallel()
 	r := testTreeReg(t)
 	err := MergePluginCommands(r, []plugins.Contribution{{
 		Name:     "agent",
@@ -398,6 +412,7 @@ func TestMergePluginCommandsRejectsCoreNamespaceCollision(t *testing.T) {
 }
 
 func TestLoadPluginCommandsDiscoversRegistry(t *testing.T) {
+	t.Parallel()
 	caller := &fakeCaller{result: json.RawMessage(`{
   "plugins":[{"name":"telegram","description":"Telegram integration",
     "operator_commands":[{"path":"status","summary":"Show status","action":"status"}]}]
@@ -416,6 +431,7 @@ func TestLoadPluginCommandsDiscoversRegistry(t *testing.T) {
 }
 
 func TestMergePluginCommandsRejectsPermissiveSecretFile(t *testing.T) {
+	t.Parallel()
 	r := registry.New()
 	caller := &fakeCaller{result: json.RawMessage(`{}`)}
 	if err := MergePluginCommands(r, []plugins.Contribution{{
@@ -445,6 +461,7 @@ func TestMergePluginCommandsRejectsPermissiveSecretFile(t *testing.T) {
 }
 
 func TestRunMissingRequiredArg(t *testing.T) {
+	t.Parallel()
 	f := &fakeCaller{result: json.RawMessage(`{}`)}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), testReg(t), []string{"daemon", "config", "set", "onlykey"}, f, nil, &out, &errOut)
@@ -454,6 +471,7 @@ func TestRunMissingRequiredArg(t *testing.T) {
 }
 
 func TestRunUnknownCommand(t *testing.T) {
+	t.Parallel()
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), testReg(t), []string{"bogus"}, &fakeCaller{}, nil, &out, &errOut)
 	if code != 2 {
@@ -462,6 +480,7 @@ func TestRunUnknownCommand(t *testing.T) {
 }
 
 func TestRunCLIHiddenNotResolvable(t *testing.T) {
+	t.Parallel()
 	var gotBody any
 	r := registry.New()
 	r.Register(registry.Command{
@@ -496,6 +515,7 @@ func TestRunCLIHiddenNotResolvable(t *testing.T) {
 }
 
 func TestRunAPIError(t *testing.T) {
+	t.Parallel()
 	f := &fakeCaller{err: &client.APIError{Code: "nope", Msg: "denied"}}
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), testReg(t), []string{"daemon", "status"}, f, nil, &out, &errOut)
@@ -505,6 +525,7 @@ func TestRunAPIError(t *testing.T) {
 }
 
 func TestHelpJSON(t *testing.T) {
+	t.Parallel()
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), testReg(t), []string{"--help-json"}, &fakeCaller{}, nil, &out, &errOut)
 	if code != 0 {
@@ -520,6 +541,7 @@ func TestHelpJSON(t *testing.T) {
 }
 
 func TestRunSubstitutesPathValue(t *testing.T) {
+	t.Parallel()
 	var gotRoute string
 	fc := &captureCaller{route: &gotRoute}
 	r := registry.New()
@@ -537,6 +559,7 @@ func TestRunSubstitutesPathValue(t *testing.T) {
 }
 
 func TestParseArgsShortAlias(t *testing.T) {
+	t.Parallel()
 	cmd := cmdWith(registry.Arg{Name: "harness", Flag: "harness", Short: "a", Type: registry.String})
 	p, err := parseArgs(cmd, []string{"-a", "codex"})
 	if err != nil || p["harness"] != "codex" {
@@ -545,6 +568,7 @@ func TestParseArgsShortAlias(t *testing.T) {
 }
 
 func TestParseArgsBoolSpaceValue(t *testing.T) {
+	t.Parallel()
 	cmd := cmdWith(
 		registry.Arg{Name: "archive", Flag: "archive", Type: registry.Bool},
 		registry.Arg{Name: "keep-days", Flag: "keep-days", Type: registry.Int},
@@ -587,6 +611,7 @@ func cmdWith(args ...registry.Arg) registry.Command {
 }
 
 func TestParseArgsBoolStrict(t *testing.T) {
+	t.Parallel()
 	cmd := cmdWith(registry.Arg{Name: "v", Flag: "v", Type: registry.Bool})
 	if _, err := parseArgs(cmd, []string{"--v=maybe"}); err == nil {
 		t.Fatal("non-boolean value accepted")
@@ -603,6 +628,7 @@ func TestParseArgsBoolStrict(t *testing.T) {
 }
 
 func TestParseArgsExplicitEmptyValue(t *testing.T) {
+	t.Parallel()
 	// `--key=` sets an empty string and must NOT swallow the next token.
 	cmd := cmdWith(
 		registry.Arg{Name: "key", Flag: "key", Type: registry.String},
@@ -621,6 +647,7 @@ func TestParseArgsExplicitEmptyValue(t *testing.T) {
 }
 
 func TestParseArgsShortFlag(t *testing.T) {
+	t.Parallel()
 	cmd := cmdWith(registry.Arg{Name: "tag", Flag: "tag", Type: registry.String, Required: true})
 	p, err := parseArgs(cmd, []string{"-t", "v1"})
 	if err != nil {
@@ -632,6 +659,7 @@ func TestParseArgsShortFlag(t *testing.T) {
 }
 
 func TestRunLocalCommand(t *testing.T) {
+	t.Parallel()
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.ls", Summary: "list",
@@ -647,6 +675,7 @@ func TestRunLocalCommand(t *testing.T) {
 }
 
 func TestRunLocalNoContext(t *testing.T) {
+	t.Parallel()
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.ls", Summary: "list",
@@ -659,6 +688,7 @@ func TestRunLocalNoContext(t *testing.T) {
 }
 
 func TestRunLocalUserError(t *testing.T) {
+	t.Parallel()
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.rm", Summary: "rm",
@@ -674,6 +704,7 @@ func TestRunLocalUserError(t *testing.T) {
 }
 
 func TestRunLocalStringResult(t *testing.T) {
+	t.Parallel()
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.prompt", Summary: "prompt",
@@ -691,6 +722,7 @@ type errLocalCaller struct{ err error }
 func (c *errLocalCaller) Call(string, string, any) (json.RawMessage, error) { return nil, c.err }
 
 func TestPrintHumanNestedMap(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	printHuman(json.RawMessage(`{"agent":"bot","pruned":["a","b"],"policy":{"keep_iterations":3}}`), &buf)
 	out := buf.String()
@@ -707,6 +739,7 @@ func TestPrintHumanNestedMap(t *testing.T) {
 }
 
 func TestLocalHandlerMapsAPIError(t *testing.T) {
+	t.Parallel()
 	// A CLI-local composite whose handler returns a *client.APIError must print
 	// the standard "error (code): msg" line and exit 1.
 	r := registry.New()

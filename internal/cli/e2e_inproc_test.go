@@ -22,6 +22,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 var errInProcessPricingRefreshDisabled = errors.New("pricing refresh disabled in CLI daemon test")
@@ -45,6 +46,7 @@ func inProcessDaemonOptions(options daemon.Options) daemon.Options {
 }
 
 func TestInProcessDaemonOptionsDisablesPricingNetwork(t *testing.T) {
+	t.Parallel()
 	opts := inProcessDaemonOptions(daemon.Options{})
 	if opts.PricingHTTPClient == nil {
 		t.Fatal("PricingHTTPClient = nil, would use the production GitHub client")
@@ -77,15 +79,18 @@ func startDaemon(t *testing.T) (base, sock string, c *client.Client) {
 	}()
 	sock = filepath.Join(base, "tariboyd.sock")
 	c = client.New(sock)
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := c.Call("GET", "/api/daemon/status", nil); err == nil {
-			return base, sock, c
-		}
-		time.Sleep(20 * time.Millisecond)
+	if !daemonReady(c) {
+		t.Fatal("daemon did not become ready")
 	}
-	t.Fatal("daemon did not become ready")
-	return
+	return base, sock, c
+}
+
+// daemonReady reports whether the daemon behind c answers within 15 seconds.
+func daemonReady(c *client.Client) bool {
+	return testutil.WaitFor(15*time.Second, func() bool {
+		_, err := c.Call("GET", "/api/daemon/status", nil)
+		return err == nil
+	})
 }
 
 // syncBuf is a concurrency-safe writer so a follow goroutine can print while the
@@ -112,6 +117,7 @@ func (b *syncBuf) String() string {
 // Store. Before the fix, logs was a CLI-local command and this dereferenced the
 // nil Store in the CLI process; now the non-follow read is remote.
 func TestLogsNonFollowRunsInDaemon(t *testing.T) {
+	t.Parallel()
 	base, sock, c := startDaemon(t)
 
 	// Seed an agent-scoped audit event into the agent's audit.jsonl (the durable
@@ -134,6 +140,7 @@ func TestLogsNonFollowRunsInDaemon(t *testing.T) {
 // TestChannelTailFollow verifies `channel tail <ch> -f` polls and prints newly
 // published messages, then exits cleanly when its context is cancelled.
 func TestChannelTailFollow(t *testing.T) {
+	t.Parallel()
 	_, sock, c := startDaemon(t)
 
 	send := func(text string) {
@@ -174,35 +181,29 @@ func TestChannelTailFollow(t *testing.T) {
 
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(4 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	if !testutil.WaitFor(4*time.Second, cond) {
+		t.Fatal("condition not met before deadline")
 	}
-	t.Fatal("condition not met before deadline")
 }
 
 func TestCLITalksToDaemon(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error"}))
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		<-done // stop the daemon before TempDir removes its base
+	})
+	go func() {
+		defer close(done)
+		_ = daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error"}))
+	}()
 
 	sock := filepath.Join(base, "tariboyd.sock")
 	c := client.New(sock)
-	deadline := time.Now().Add(15 * time.Second)
-	ready := false
-	for time.Now().Before(deadline) {
-		if _, err := c.Call("GET", "/api/daemon/status", nil); err == nil {
-			ready = true
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !ready {
+	if !daemonReady(c) {
 		t.Fatal("daemon did not become ready")
 	}
 

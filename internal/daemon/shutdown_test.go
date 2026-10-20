@@ -13,12 +13,13 @@ import (
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func TestShutdownWaitsForScheduler(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
-	t.Setenv("TARIBOY_RUNTIME_DIR", t.TempDir())
 	started := make(chan struct{})
 	canceled := make(chan struct{})
 	release := make(chan struct{})
@@ -75,10 +76,9 @@ func TestShutdownWaitsForScheduler(t *testing.T) {
 // the drain-before-close ordering regressed, either Run would hang (wg.Wait
 // stuck) or some rows would be missing (lost to "database is closed").
 func TestShutdownDrainsIngesterBeforeStoreClose(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
-	runtimeDir := t.TempDir()
-	t.Setenv("TARIBOY_RUNTIME_DIR", runtimeDir)
 
 	ready := make(chan struct{})
 	var ing *aiproxy.Ingester
@@ -100,15 +100,11 @@ func TestShutdownDrainsIngesterBeforeStoreClose(t *testing.T) {
 
 	sock := paths.New(base).Socket()
 	c := client.New(sock)
-	deadline := time.Now().Add(30 * time.Second)
 	var upErr error
-	for time.Now().Before(deadline) {
-		if _, upErr = c.Call("GET", "/api/daemon/status", nil); upErr == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if upErr != nil {
+	if !testutil.WaitFor(30*time.Second, func() bool {
+		_, upErr = c.Call("GET", "/api/daemon/status", nil)
+		return upErr == nil
+	}) {
 		t.Fatalf("daemon never came up: %v", upErr)
 	}
 

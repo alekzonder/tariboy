@@ -15,6 +15,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/testutil"
 	"github.com/coder/websocket"
 )
 
@@ -78,6 +79,7 @@ func termServer(t *testing.T, ctrl registry.ServiceControl) *httptest.Server {
 func wsURL(base string) string { return "ws" + strings.TrimPrefix(base, "http") }
 
 func TestServeTerminalBridges(t *testing.T) {
+	t.Parallel()
 	shimEnd, handlerEnd := net.Pipe()
 	ctrl := &fakeTermControl{conn: handlerEnd}
 	ts := termServer(t, ctrl)
@@ -119,16 +121,11 @@ func TestServeTerminalBridges(t *testing.T) {
 	if err := ws.Write(ctx, websocket.MessageText, []byte(`{"cols":100,"rows":30}`)); err != nil {
 		t.Fatalf("ws write text: %v", err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(2*time.Second, func() bool {
 		ctrl.mu.Lock()
-		ok := ctrl.resized
-		ctrl.mu.Unlock()
-		if ok {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		defer ctrl.mu.Unlock()
+		return ctrl.resized
+	})
 	ctrl.mu.Lock()
 	if !ctrl.resized || ctrl.resizeCols != 100 || ctrl.resizeRows != 30 {
 		ctrl.mu.Unlock()
@@ -143,6 +140,7 @@ func TestServeTerminalBridges(t *testing.T) {
 // the bearer token, not same-origin, so the upgrade must not be rejected by
 // coder/websocket's default same-origin check.
 func TestServeTerminalCrossOrigin(t *testing.T) {
+	t.Parallel()
 	shimEnd, handlerEnd := net.Pipe()
 	defer shimEnd.Close()
 	ctrl := &fakeTermControl{conn: handlerEnd}
@@ -168,6 +166,7 @@ func statusOf(r *http.Response) int {
 }
 
 func TestServeTerminalNoSession(t *testing.T) {
+	t.Parallel()
 	ctrl := &fakeTermControl{attachErr: errors.New("no interactive iteration")}
 	ts := termServer(t, ctrl)
 
@@ -188,6 +187,7 @@ func TestServeTerminalNoSession(t *testing.T) {
 }
 
 func TestServeTerminalSessionEOF(t *testing.T) {
+	t.Parallel()
 	shimEnd, handlerEnd := net.Pipe()
 	ctrl := &fakeTermControl{conn: handlerEnd}
 	ts := termServer(t, ctrl)

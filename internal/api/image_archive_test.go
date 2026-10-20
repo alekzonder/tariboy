@@ -19,16 +19,13 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/registry"
-	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestImageArchiveExportAndUploadPreview(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	source := filepath.Join(base, "source")
 	if err := os.Mkdir(source, 0o700); err != nil {
 		t.Fatal(err)
@@ -81,12 +78,9 @@ func TestImageArchiveExportAndUploadPreview(t *testing.T) {
 }
 
 func TestTeamArchiveExportAndUploadPreview(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	if err := agent.NewStore(db).Create(agent.Agent{Name: "lead", ImageRef: "demo:v1", Group: "team"}); err != nil {
 		t.Fatal(err)
 	}

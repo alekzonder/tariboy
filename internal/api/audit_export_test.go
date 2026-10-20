@@ -18,6 +18,7 @@ import (
 )
 
 func TestAuditExportRouteDownloadsIterationZIP(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	agentsDir := paths.New(base).AgentsDir()
 	layout := agentdir.New(agentsDir, "alice")
@@ -69,6 +70,7 @@ func TestAuditExportRouteDownloadsIterationZIP(t *testing.T) {
 }
 
 func TestAuditExportRejectsInvalidAgentAndIterationNames(t *testing.T) {
+	t.Parallel()
 	srv := NewServer(registry.New(), &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	for _, path := range []string{
 		"/api/agents/bad$name/audit-export",
@@ -83,6 +85,7 @@ func TestAuditExportRejectsInvalidAgentAndIterationNames(t *testing.T) {
 }
 
 func TestAuditExportReportsFailureBeforeStreamingStarts(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	layout := agentdir.New(paths.New(base).AgentsDir(), "alice")
 	if err := os.MkdirAll(layout.Root, 0o700); err != nil {

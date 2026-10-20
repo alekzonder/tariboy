@@ -16,6 +16,7 @@ import (
 // existing tasks, notification state and customer channel over to the new
 // principal rather than orphaning them.
 func TestResolveCustomerLoginFixesLoginAndReconcilesExistingState(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	service := tasks.NewService(st.DB, "olduser", time.Now)

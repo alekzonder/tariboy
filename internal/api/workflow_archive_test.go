@@ -14,7 +14,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
-	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -38,11 +38,7 @@ statuses:
 func workflowArchiveServer(t *testing.T) (http.Handler, *workflowimage.Registry, string) {
 	t.Helper()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	dir := paths.Paths{Base: base}.WorkflowsDir()
 	// The stored tree is read-only; make it removable for TempDir cleanup.
 	t.Cleanup(func() {
@@ -79,6 +75,7 @@ func decodeEnvelope(t *testing.T, body io.Reader, result any) (ok bool, code str
 }
 
 func TestWorkflowArchiveExportAndImport(t *testing.T) {
+	t.Parallel()
 	srcHandler, srcReg, _ := workflowArchiveServer(t)
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "Workflowfile.yaml"), []byte(workflowArchiveManifest), 0o644); err != nil {
@@ -137,6 +134,7 @@ func TestWorkflowArchiveExportAndImport(t *testing.T) {
 }
 
 func TestWorkflowArchiveErrors(t *testing.T) {
+	t.Parallel()
 	h, _, _ := workflowArchiveServer(t)
 
 	rec := httptest.NewRecorder()

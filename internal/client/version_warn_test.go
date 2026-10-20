@@ -45,6 +45,8 @@ func captureWarnings(t *testing.T) *bytes.Buffer {
 	return buf
 }
 
+// The version-warning tests stay sequential: captureWarnings swaps
+// package-level state that every Call reads.
 func TestCallSilentWhenVersionsMatch(t *testing.T) {
 	warn := captureWarnings(t)
 	sock := startStampedDaemon(t, version.Version)

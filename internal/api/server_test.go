@@ -18,6 +18,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func testServer(t *testing.T) (*Server, *http.Client) {
@@ -63,15 +64,16 @@ func testServer(t *testing.T) (*Server, *http.Client) {
 		},
 	}}
 	// wait for socket
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := client.Get("http://unix/api/help.json"); err == nil {
-			return srv, client
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		resp, err := client.Get("http://unix/api/help.json")
+		if err == nil {
+			resp.Body.Close()
 		}
-		time.Sleep(10 * time.Millisecond)
+		return err == nil
+	}) {
+		t.Fatal("server did not start")
 	}
-	t.Fatal("server did not start")
-	return nil, nil
+	return srv, client
 }
 
 func get(t *testing.T, c *http.Client, url string) (int, map[string]any) {
@@ -89,6 +91,7 @@ func get(t *testing.T, c *http.Client, url string) (int, map[string]any) {
 }
 
 func TestTrailingWildcardRoute(t *testing.T) {
+	t.Parallel()
 	_, c := testServer(t)
 	code, m := get(t, c, "http://unix/api/wild/demo:latest/files/skills/my/helper.md")
 	if code != 200 || m["ok"] != true {
@@ -101,6 +104,7 @@ func TestTrailingWildcardRoute(t *testing.T) {
 }
 
 func TestStatusRoute(t *testing.T) {
+	t.Parallel()
 	_, c := testServer(t)
 	code, m := get(t, c, "http://unix/api/daemon/status")
 	if code != 200 || m["ok"] != true {
@@ -112,6 +116,7 @@ func TestStatusRoute(t *testing.T) {
 }
 
 func TestPostParamsAndErrors(t *testing.T) {
+	t.Parallel()
 	_, c := testServer(t)
 	resp, err := c.Post("http://unix/api/echo", "application/json", strings.NewReader(`{"x":1}`))
 	if err != nil {
@@ -143,6 +148,7 @@ func TestPostParamsAndErrors(t *testing.T) {
 }
 
 func TestUnknownRoute(t *testing.T) {
+	t.Parallel()
 	_, c := testServer(t)
 	code, m := get(t, c, "http://unix/api/nope")
 	if code != 404 || m["ok"] != false {
@@ -151,6 +157,7 @@ func TestUnknownRoute(t *testing.T) {
 }
 
 func TestRawFileUploadStreamsAboveFormerLimit(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	srv := NewServer(registry.New(), &registry.Ctx{BaseDir: base, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	body := bytes.NewReader(make([]byte, 17<<20))
@@ -178,6 +185,7 @@ func TestRawFileUploadStreamsAboveFormerLimit(t *testing.T) {
 }
 
 func TestRawFileUploadRejectsDeclaredOversizeBeforeReading(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	srv := NewServer(registry.New(), &registry.Ctx{BaseDir: base, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	body := strings.NewReader("unread")
@@ -197,6 +205,7 @@ func TestRawFileUploadRejectsDeclaredOversizeBeforeReading(t *testing.T) {
 }
 
 func TestSaveUploadedFileRemovesUnknownLengthOverflow(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	_, err := SaveUploadedFile(base, "large.bin", strings.NewReader("12345"), 4)
 	var userErr UserError
@@ -210,6 +219,7 @@ func TestSaveUploadedFileRemovesUnknownLengthOverflow(t *testing.T) {
 }
 
 func TestHelpAndOpenAPI(t *testing.T) {
+	t.Parallel()
 	_, c := testServer(t)
 	code, m := get(t, c, "http://unix/api/help.json")
 	if code != 200 || m["result"].(map[string]any)["daemon"] == nil {
@@ -222,6 +232,7 @@ func TestHelpAndOpenAPI(t *testing.T) {
 }
 
 func TestOpenAPIRepeatableArgIsArray(t *testing.T) {
+	t.Parallel()
 	schema := openAPIArgSchema(registry.Arg{Name: "tag", Type: registry.String, Repeatable: true, Help: "target tags"})
 	items, _ := schema["items"].(map[string]any)
 	if schema["type"] != "array" || items["type"] != "string" {
@@ -230,6 +241,7 @@ func TestOpenAPIRepeatableArgIsArray(t *testing.T) {
 }
 
 func TestDispatchMergesPathValue(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Register(registry.Command{
 		Path: "agent.status", Summary: "s",
@@ -252,7 +264,10 @@ func (f *fakeEventSource) Subscribe(string, []string) (<-chan events.Event, func
 }
 
 func TestSSEStream(t *testing.T) {
-	src := &fakeEventSource{ch: make(chan events.Event, 1)}
+	t.Parallel()
+	// Unbuffered: the second send returns only once the handler loop has
+	// received it, that is after it wrote and flushed the first event.
+	src := &fakeEventSource{ch: make(chan events.Event)}
 	reg := registry.New()
 	cctx := &registry.Ctx{Version: "t", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	srv := NewServer(reg, cctx)
@@ -266,7 +281,7 @@ func TestSSEStream(t *testing.T) {
 	done := make(chan struct{})
 	go func() { srv.Handler().ServeHTTP(rr, req); close(done) }()
 	src.ch <- events.Event{Agent: "smoke", Type: "message", Data: map[string]any{"id": "m1"}}
-	time.Sleep(30 * time.Millisecond)
+	src.ch <- events.Event{Agent: "smoke", Type: "message", Data: map[string]any{"id": "m2"}}
 	cancel()
 	<-done
 	if !strings.Contains(rr.Body.String(), "data:") || !strings.Contains(rr.Body.String(), "m1") {
@@ -275,6 +290,7 @@ func TestSSEStream(t *testing.T) {
 }
 
 func TestAccessLogRecordsStatus(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	reg := registry.New()
 	cctx := &registry.Ctx{Version: "t", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
@@ -293,6 +309,7 @@ func TestAccessLogRecordsStatus(t *testing.T) {
 // registered here 404s before it runs. GET /api/plugin/watches (the §6.2 pull
 // path providers reconcile from at startup) regressed exactly this way.
 func TestPluginRoutesMounted(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	cctx := &registry.Ctx{Version: "t", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	srv := NewServer(reg, cctx)

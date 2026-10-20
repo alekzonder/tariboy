@@ -11,7 +11,23 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
+
+// waitUp calls get until it returns a response, failing the test after two
+// seconds.
+func waitUp(t *testing.T, get func() (*http.Response, error)) {
+	t.Helper()
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		resp, err := get()
+		if err == nil {
+			_ = resp.Body.Close()
+		}
+		return err == nil
+	}) {
+		t.Fatal("server never came up")
+	}
+}
 
 // tcpServer starts an api.Server on a real loopback TCP port with the given auth
 // token (via ServeTCP) and returns its base URL. Mirrors the ServeTCP wiring the
@@ -39,20 +55,16 @@ func tcpServer(t *testing.T, token string) string {
 	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
 
 	base := "http://" + addr
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	waitUp(t, func() (*http.Response, error) {
 		req, _ := http.NewRequest("GET", base+"/api/daemon/status", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
-		if resp, err := http.DefaultClient.Do(req); err == nil {
-			_ = resp.Body.Close()
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return http.DefaultClient.Do(req)
+	})
 	return base
 }
 
 func TestCORSPreflightNoAuth(t *testing.T) {
+	t.Parallel()
 	base := tcpServer(t, "sekret")
 
 	// A credential-less preflight OPTIONS must be answered 204 (before auth) with
@@ -78,6 +90,7 @@ func TestCORSPreflightNoAuth(t *testing.T) {
 }
 
 func TestCORSPreflightAllowsPatchForTaskSave(t *testing.T) {
+	t.Parallel()
 	base := tcpServer(t, "sekret")
 	req, _ := http.NewRequest(http.MethodOptions, base+"/api/tasks/TEST-1", nil)
 	req.Header.Set("Origin", "http://daemon-a.example")
@@ -97,6 +110,7 @@ func TestCORSPreflightAllowsPatchForTaskSave(t *testing.T) {
 }
 
 func TestCORSHeaderOnAuthedResponse(t *testing.T) {
+	t.Parallel()
 	base := tcpServer(t, "sekret")
 	req, _ := http.NewRequest("GET", base+"/api/daemon/status", nil)
 	req.Header.Set("Authorization", "Bearer sekret")
@@ -118,6 +132,7 @@ func TestCORSHeaderOnAuthedResponse(t *testing.T) {
 // real (non-preflight) request without the bearer is still 401. The middleware
 // order is cors(auth(handler)) — cors only short-circuits OPTIONS.
 func TestCORSRealRequestStillRequiresBearer(t *testing.T) {
+	t.Parallel()
 	base := tcpServer(t, "sekret")
 	req, _ := http.NewRequest("GET", base+"/api/daemon/status", nil)
 	req.Header.Set("Origin", "http://daemon-a.example")
@@ -135,6 +150,7 @@ func TestCORSRealRequestStillRequiresBearer(t *testing.T) {
 // the unix listener (no CORS at all) nor the web listener (loopback-origin echo
 // only, and nothing when the request carries no Origin).
 func TestCORSScopedToTCP(t *testing.T) {
+	t.Parallel()
 	newSrv := func() *Server {
 		reg := registry.New()
 		reg.Register(registry.Command{
@@ -160,16 +176,11 @@ func TestCORSScopedToTCP(t *testing.T) {
 			},
 		}}
 		var resp *http.Response
-		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) {
+		if !testutil.WaitFor(2*time.Second, func() bool {
 			r, err := cl.Get("http://unix/api/daemon/status")
-			if err == nil {
-				resp = r
-				break
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
-		if resp == nil {
+			resp = r
+			return err == nil
+		}) {
 			t.Fatal("unix server never came up")
 		}
 		defer resp.Body.Close()
@@ -191,16 +202,11 @@ func TestCORSScopedToTCP(t *testing.T) {
 		t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
 		base := "http://" + addr
 		var resp *http.Response
-		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) {
+		if !testutil.WaitFor(2*time.Second, func() bool {
 			r, err := http.Get(base + "/api/daemon/status")
-			if err == nil {
-				resp = r
-				break
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
-		if resp == nil {
+			resp = r
+			return err == nil
+		}) {
 			t.Fatal("web server never came up")
 		}
 		defer resp.Body.Close()
@@ -235,18 +241,12 @@ func webServer(t *testing.T) string {
 	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
 
 	base := "http://" + addr
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if resp, err := http.Get(base + "/api/daemon/status"); err == nil {
-			_ = resp.Body.Close()
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	waitUp(t, func() (*http.Response, error) { return http.Get(base + "/api/daemon/status") })
 	return base
 }
 
 func TestServeWebConcurrentShutdown(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name  string
 		serve func(*Server, string) error
@@ -255,7 +255,7 @@ func TestServeWebConcurrentShutdown(t *testing.T) {
 		{"tcp", func(s *Server, addr string) error { return s.ServeTCP(addr, "token") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for range 20 {
+			for i := range 20 {
 				srv := NewServer(registry.New(), &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 				ln, err := net.Listen("tcp", "127.0.0.1:0")
 				if err != nil {
@@ -265,7 +265,17 @@ func TestServeWebConcurrentShutdown(t *testing.T) {
 				_ = ln.Close()
 				done := make(chan error, 1)
 				go func() { done <- tc.serve(srv, addr) }()
-				time.Sleep(100 * time.Microsecond)
+				// Odd rounds stop a server that is already serving; even rounds
+				// race Shutdown against Serve still starting.
+				if i%2 == 1 && !testutil.WaitFor(time.Second, func() bool {
+					c, err := net.Dial("tcp", addr)
+					if err == nil {
+						_ = c.Close()
+					}
+					return err == nil
+				}) {
+					t.Fatal("server did not start")
+				}
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				_ = srv.Shutdown(ctx)
 				cancel()
@@ -283,6 +293,7 @@ func TestServeWebConcurrentShutdown(t *testing.T) {
 // A on http://localhost:9990 fetching daemon B forwarded to another localhost
 // port. The origin is echoed back (never `*`), and a preflight is answered 204.
 func TestWebCORSLoopbackOrigin(t *testing.T) {
+	t.Parallel()
 	base := webServer(t)
 
 	for _, origin := range []string{
@@ -336,6 +347,7 @@ func TestWebCORSLoopbackOrigin(t *testing.T) {
 // unauthenticated, so a page on any non-loopback origin must get NO ACAO and
 // have its read blocked by the browser.
 func TestWebCORSRejectsNonLoopbackOrigin(t *testing.T) {
+	t.Parallel()
 	base := webServer(t)
 
 	for _, origin := range []string{
@@ -363,6 +375,7 @@ func TestWebCORSRejectsNonLoopbackOrigin(t *testing.T) {
 // fetch/EventSource it makes to the daemon's loopback listener is cross-origin
 // and carries that Origin, so the web listener must echo it back.
 func TestWebCORSAllowsDesktopOrigin(t *testing.T) {
+	t.Parallel()
 	base := webServer(t)
 	const origin = "tauri://localhost"
 
@@ -382,6 +395,7 @@ func TestWebCORSAllowsDesktopOrigin(t *testing.T) {
 }
 
 func TestWebCORSDesktopPreflightAllowsPatchForTaskSave(t *testing.T) {
+	t.Parallel()
 	base := webServer(t)
 	req, _ := http.NewRequest(http.MethodOptions, base+"/api/tasks/TEST-1", nil)
 	req.Header.Set("Origin", desktopOrigin)
@@ -406,6 +420,7 @@ func TestWebCORSDesktopPreflightAllowsPatchForTaskSave(t *testing.T) {
 // Only the exact desktop origin is allowed: no other tauri:// host, and no
 // look-alike that merely embeds the string.
 func TestWebCORSRejectsLookalikeDesktopOrigins(t *testing.T) {
+	t.Parallel()
 	base := webServer(t)
 	for _, origin := range []string{
 		"tauri://evil",
@@ -431,6 +446,7 @@ func TestWebCORSRejectsLookalikeDesktopOrigins(t *testing.T) {
 // the user forwards a daemon's loopback listener to the phone, every request
 // the app makes is cross-origin with exactly that Origin.
 func TestWebCORSAllowsAndroidOrigin(t *testing.T) {
+	t.Parallel()
 	base := webServer(t)
 	const origin = "http://tauri.localhost"
 
@@ -464,6 +480,7 @@ func TestWebCORSAllowsAndroidOrigin(t *testing.T) {
 // The websocket handlers share isAllowedWebOrigin, so the exact app origins
 // pass and look-alikes of the Android origin do not.
 func TestIsAllowedWebOriginAndroid(t *testing.T) {
+	t.Parallel()
 	for origin, want := range map[string]bool{
 		"http://tauri.localhost":          true,
 		"tauri://localhost":               true,
