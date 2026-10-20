@@ -304,17 +304,11 @@ func (s *Service) ListEvents(ctx context.Context, actor Actor, key string, after
 		query += ` AND e.task_id = ?`
 		args = append(args, task.ID)
 	} else if !actor.IsCustomer {
-		visible, visibleErr := visibleTaskIDs(ctx, s.db, actor)
-		if visibleErr != nil {
-			return nil, visibleErr
-		}
+		cte, cteArgs := visibleCTE(actor)
+		query = cte + query
+		args = append(cteArgs, args...)
 		agent := strings.TrimPrefix(actor.Principal, "agent:")
-		query += ` AND (`
-		if len(visible) > 0 {
-			query += `e.task_id IN (` + placeholders(len(visible)) + `) OR `
-			args = append(args, idsArgs(visible)...)
-		}
-		query += `(
+		query += ` AND (e.task_id IN (SELECT id FROM visible_access) OR (
 			e.task_id IS NULL AND EXISTS (
 				SELECT 1
 				FROM task_queues q

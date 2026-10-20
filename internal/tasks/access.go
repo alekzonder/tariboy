@@ -3,7 +3,7 @@ package tasks
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 	"strings"
 )
 
@@ -12,27 +12,17 @@ type queryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// visibleTaskIDs returns write-visible tasks plus the read-only ancestor chain
-// required to place them in the tree. The recursive CTE has no depth limit.
-func visibleTaskIDs(ctx context.Context, q queryer, actor Actor) (map[int64]string, error) {
-	out := map[int64]string{}
+// visibleCTE returns a WITH clause defining visible_access(id, access_rank):
+// write-visible tasks (rank 2), tasks waiting on the actor (rank 1), and the
+// read-only ancestor chain required to place them in the tree (rank 0). Its
+// arguments do not depend on the number of tasks, so a query joins it instead
+// of binding a variable per visible id. The recursive CTE has no depth limit.
+func visibleCTE(actor Actor) (string, []any) {
 	if actor.IsCustomer {
-		rows, err := q.QueryContext(ctx, `SELECT id FROM tasks`)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id int64
-			if err := rows.Scan(&id); err != nil {
-				return nil, err
-			}
-			out[id] = "write"
-		}
-		return out, rows.Err()
+		return `WITH visible_access(id, access_rank) AS (SELECT id, 2 FROM tasks) `, nil
 	}
 	agent := strings.TrimPrefix(actor.Principal, "agent:")
-	rows, err := q.QueryContext(ctx, `
+	return `
 		WITH RECURSIVE writeable(id) AS (
 			-- Authorship carries write access inside a tree the agent is already responsible
 			-- for, but not to a root: a root it authored in a queue it does not run is a
@@ -85,31 +75,22 @@ func visibleTaskIDs(ctx context.Context, q queryer, actor Actor) (map[int64]stri
 			FROM visible
 			JOIN tasks parent ON parent.id = visible.id
 			WHERE parent.parent_id IS NOT NULL
-		)
-		SELECT id, MAX(access_rank)
-		FROM visible
-		GROUP BY id`,
-		actor.Principal, actor.Principal, agent, agent, agent, actor.Principal)
-	if err != nil {
-		return nil, err
+		),
+		visible_access(id, access_rank) AS (
+			SELECT id, MAX(access_rank) FROM visible GROUP BY id
+		) `, []any{actor.Principal, actor.Principal, agent, agent, agent, actor.Principal}
+}
+
+// accessName names an access_rank of visible_access.
+func accessName(rank int) string {
+	switch rank {
+	case 2:
+		return "write"
+	case 1:
+		return "respond"
+	default:
+		return "context"
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int64
-		var accessRank int
-		if err := rows.Scan(&id, &accessRank); err != nil {
-			return nil, err
-		}
-		switch accessRank {
-		case 2:
-			out[id] = "write"
-		case 1:
-			out[id] = "respond"
-		default:
-			out[id] = "context"
-		}
-	}
-	return out, rows.Err()
 }
 
 // agentRunsQueue reports whether the actor owns or triages the queue, which is what separates
@@ -132,12 +113,19 @@ func agentRunsQueue(ctx context.Context, q queryer, actor Actor, queue string) (
 	return runs, err
 }
 
+// taskAccess returns the actor's access to one task, or "" when it has none.
 func taskAccess(ctx context.Context, q queryer, actor Actor, taskID int64) (string, error) {
-	visible, err := visibleTaskIDs(ctx, q, actor)
+	cte, args := visibleCTE(actor)
+	var rank int
+	err := q.QueryRowContext(ctx, cte+`SELECT access_rank FROM visible_access WHERE id = ?`,
+		append(args, taskID)...).Scan(&rank)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
 	if err != nil {
 		return "", err
 	}
-	return visible[taskID], nil
+	return accessName(rank), nil
 }
 
 // readAccess is taskAccess for a read. An agent recorded in
@@ -199,17 +187,4 @@ func placeholders(n int) string {
 		return "NULL"
 	}
 	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
-}
-
-func idsArgs(ids map[int64]string) []any {
-	out := make([]any, 0, len(ids))
-	for id := range ids {
-		out = append(out, id)
-	}
-	return out
-}
-
-func addVisibleClause(query string, ids map[int64]string) (string, []any) {
-	args := idsArgs(ids)
-	return query + fmt.Sprintf(" AND t.id IN (%s)", placeholders(len(args))), args
 }

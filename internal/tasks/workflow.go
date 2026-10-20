@@ -451,19 +451,17 @@ func workflowManagedError() error {
 }
 
 func listRelations(ctx context.Context, q queryer, actor Actor, task Task) ([]Relation, error) {
-	visible, err := visibleTaskIDs(ctx, q, actor)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := q.QueryContext(ctx, `
+	cte, args := visibleCTE(actor)
+	rows, err := q.QueryContext(ctx, cte+`
 		SELECT r.id, r.source_id, source.task_key, source.title, source.status,
 		       r.target_id, target.task_key, target.title, target.status,
 		       r.type, r.created_by, r.created_at
 		FROM task_relations r
 		JOIN tasks source ON source.id = r.source_id
 		JOIN tasks target ON target.id = r.target_id
-		WHERE r.source_id = ? OR r.target_id = ?
-		ORDER BY r.id`, task.ID, task.ID)
+		WHERE (r.source_id = ? OR r.target_id = ?)
+		  AND (CASE WHEN r.source_id = ? THEN r.target_id ELSE r.source_id END) IN (SELECT id FROM visible_access)
+		ORDER BY r.id`, append(args, task.ID, task.ID, task.ID)...)
 	if err != nil {
 		return nil, err
 	}
@@ -477,13 +475,6 @@ func listRelations(ctx context.Context, q queryer, actor Actor, task Task) ([]Re
 			&targetID, &relation.TargetKey, &relation.TargetTitle, &relation.TargetStatus,
 			&relation.Type, &relation.CreatedBy, &relation.CreatedAt); err != nil {
 			return nil, err
-		}
-		otherID := sourceID
-		if sourceID == task.ID {
-			otherID = targetID
-		}
-		if visible[otherID] == "" {
-			continue
 		}
 		out = append(out, relation)
 	}

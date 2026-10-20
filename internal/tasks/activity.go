@@ -60,10 +60,7 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 	f.Since, _ = store.NormalizeTimeValue(f.Since)
 	f.Until, _ = store.NormalizeTimeValue(f.Until)
 	q := s.reader()
-	visible, err := visibleTaskIDs(ctx, q, actor)
-	if err != nil {
-		return nil, err
-	}
+	cte, cteArgs := visibleCTE(actor)
 	byID := map[int64]*TaskActivity{}
 	row := func(id int64) *TaskActivity {
 		if byID[id] == nil {
@@ -72,14 +69,15 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 		return byID[id]
 	}
 
-	where, args := activityWindow("created_at", f)
+	where, args := activityWindow("e.created_at", f)
 	if f.Agent != "" {
-		where += " AND actor = ?"
+		where += " AND e.actor = ?"
 		args = append(args, agentPrincipal(f.Agent))
 	}
-	events, err := q.QueryContext(ctx, `
-		SELECT task_id, kind, actor, payload, created_at
-		FROM task_events WHERE task_id IS NOT NULL AND `+where+` ORDER BY sequence`, args...)
+	events, err := q.QueryContext(ctx, cte+`
+		SELECT e.task_id, e.kind, e.actor, e.payload, e.created_at
+		FROM task_events e JOIN visible_access v ON v.id = e.task_id
+		WHERE `+where+` ORDER BY e.sequence`, append(slices.Clone(cteArgs), args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -89,9 +87,6 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 		var kind, principal, payload, at string
 		if err := events.Scan(&id, &kind, &principal, &payload, &at); err != nil {
 			return nil, err
-		}
-		if visible[id] == "" {
-			continue
 		}
 		r := row(id)
 		if r.FirstAt == "" || at < r.FirstAt {
@@ -121,11 +116,13 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 	events.Close()
 
 	if len(f.Keys) > 0 {
-		keyArgs := make([]any, 0, len(f.Keys))
-		for _, key := range f.Keys {
-			keyArgs = append(keyArgs, key)
+		keysJSON, err := json.Marshal(f.Keys)
+		if err != nil {
+			return nil, err
 		}
-		ids, err := q.QueryContext(ctx, `SELECT id FROM tasks WHERE task_key IN (`+placeholders(len(keyArgs))+`)`, keyArgs...)
+		ids, err := q.QueryContext(ctx, cte+`
+			SELECT t.id FROM tasks t JOIN visible_access v ON v.id = t.id
+			WHERE t.task_key IN (SELECT value FROM json_each(?))`, append(slices.Clone(cteArgs), string(keysJSON))...)
 		if err != nil {
 			return nil, err
 		}
@@ -135,9 +132,7 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 				ids.Close()
 				return nil, err
 			}
-			if visible[id] != "" {
-				row(id)
-			}
+			row(id)
 		}
 		if err := ids.Err(); err != nil {
 			ids.Close()
@@ -170,12 +165,16 @@ func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilte
 	}
 	visits.Close()
 
-	ids := make(map[int64]string, len(byID))
+	idList := make([]int64, 0, len(byID))
 	for id := range byID {
-		ids[id] = "read"
+		idList = append(idList, id)
 	}
-	query, taskArgs := addVisibleClause(taskSelect+` WHERE 1=1`, ids)
-	rows, err := q.QueryContext(ctx, query+` ORDER BY t.task_key`, taskArgs...)
+	idsJSON, err := json.Marshal(idList)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.QueryContext(ctx, taskSelect+`
+		WHERE t.id IN (SELECT value FROM json_each(?)) ORDER BY t.task_key`, string(idsJSON))
 	if err != nil {
 		return nil, err
 	}
