@@ -3,56 +3,24 @@ package daemon
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
-	"github.com/alekzonder/tariboy/internal/agentapi"
-	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
-	"github.com/alekzonder/tariboy/internal/api"
-	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/commands"
 	"github.com/alekzonder/tariboy/internal/events"
-	"github.com/alekzonder/tariboy/internal/groups"
-	"github.com/alekzonder/tariboy/internal/harness"
-	"github.com/alekzonder/tariboy/internal/image"
-	"github.com/alekzonder/tariboy/internal/logrotate"
 	"github.com/alekzonder/tariboy/internal/loop"
-	"github.com/alekzonder/tariboy/internal/maintenance"
-	"github.com/alekzonder/tariboy/internal/paths"
-	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/pricingcatalog"
-	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/retention"
 	"github.com/alekzonder/tariboy/internal/schedule"
-	"github.com/alekzonder/tariboy/internal/script"
-	"github.com/alekzonder/tariboy/internal/scriptnotify"
 	"github.com/alekzonder/tariboy/internal/store"
-	"github.com/alekzonder/tariboy/internal/stores"
-	"github.com/alekzonder/tariboy/internal/supportbundle"
-	"github.com/alekzonder/tariboy/internal/taskgoal"
-	"github.com/alekzonder/tariboy/internal/tasknotify"
-	"github.com/alekzonder/tariboy/internal/tasks"
-	"github.com/alekzonder/tariboy/internal/telegramplugin"
-	"github.com/alekzonder/tariboy/internal/telemetry"
 	"github.com/alekzonder/tariboy/internal/userpath"
-	"github.com/alekzonder/tariboy/internal/version"
-	"github.com/alekzonder/tariboy/internal/workflowimage"
-	"github.com/alekzonder/tariboy/internal/workflowrun"
-
-	"go.opentelemetry.io/otel"
 )
 
 type Options struct {
@@ -90,6 +58,17 @@ type Options struct {
 	// and in-process tests may inject a deterministic resolver; nil preserves the
 	// normal production behavior and uses userpath.Resolve.
 	UserPathResolver UserPathResolver
+
+	// Ready, if set, is called once every listener is bound and the workers
+	// run: a client connecting after Ready reaches the API. In-process tests
+	// wait on it instead of polling the socket.
+	Ready func()
+
+	// onShutdownStep and serveHook are test-only seams: onShutdownStep gets the
+	// name of each shutdown step before it runs, and serveHook may wrap the
+	// serve function of a server ("ai-proxy", "api", "web").
+	onShutdownStep func(name string)
+	serveHook      func(name string, serve func() error) func() error
 }
 
 type workflowObservationReconciler interface {
@@ -203,761 +182,38 @@ const (
 	accessLogKeep     = 3
 )
 
+// Run starts tariboyd and serves until ctx ends or a listener fails. Startup is
+// a sequence of phases; each phase pushes the stop of what it creates onto one
+// shutdown stack, which runs last-pushed first on every return path.
 func Run(ctx context.Context, o Options) error {
-	lvl := slog.LevelInfo
-	switch o.LogLevel {
-	case "debug":
-		lvl = slog.LevelDebug
-	case "warn":
-		lvl = slog.LevelWarn
-	case "error":
-		lvl = slog.LevelError
-	}
-	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl}))
-	resolveUserPath := o.UserPathResolver
-	if resolveUserPath == nil {
-		resolveUserPath = userpath.Resolve
-	}
-	applyUserPath(ctx, log, resolveUserPath)
-	if home, err := os.UserHomeDir(); err == nil {
-		ensureLocalBin(home)
-	}
-
-	p := paths.New(o.BaseDir)
-	if o.BaseDir == "" {
-		var err error
-		p, err = paths.Resolve(os.Getenv)
-		if err != nil {
-			return err
-		}
-	}
-	if err := p.EnsureBase(); err != nil {
-		return fmt.Errorf("ensure base dir: %w", err)
-	}
-	// Fail loudly at startup if the layout would produce an unbindable socket,
-	// instead of surfacing an opaque EINVAL later. Sockets live in the short
-	// home-rooted runtime dir, so this only trips on a pathological HOME.
-	if err := paths.BindableSocketPath(p.Socket()); err != nil {
-		return fmt.Errorf("daemon socket: %w", err)
-	}
-
-	// Single-instance guard (approach A): if a live daemon already answers on the
-	// socket, refuse to start rather than stomping its socket file. The probe->bind
-	// window is microseconds and both racers would be our own daemon. Only for the
-	// unix listener; the pidfile (written after the guard passes, removed on clean
-	// exit) is read by `daemon stop`/`status`, not used as the guard.
-	if strings.HasPrefix(o.Listen, "unix") {
-		if c, derr := net.DialTimeout("unix", p.Socket(), 200*time.Millisecond); derr == nil {
-			c.Close()
-			return fmt.Errorf("tariboyd already running (socket %s is live)", p.Socket())
-		}
-		if werr := os.WriteFile(p.PidFile(), []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600); werr != nil {
-			return fmt.Errorf("write pidfile: %w", werr)
-		}
-		defer os.Remove(p.PidFile())
-	}
-
-	listen, err := api.ParseListen(o.Listen, o.AuthTokenFile)
+	var stack shutdownStack
+	var log *slog.Logger
+	defer func() { stack.run(log, o.onShutdownStep) }()
+	proc, err := setupProcess(ctx, o, &stack)
 	if err != nil {
 		return err
 	}
-
-	st, err := store.Open(p.DB())
-	if err != nil {
-		return fmt.Errorf("open store: %w", err)
-	}
-	defer st.Close()
-
-	// Observability (spec §14): OTLP export is off unless an endpoint is set via
-	// OTEL_EXPORTER_OTLP_ENDPOINT or the otlp_endpoint daemon-config key. Off ->
-	// no-op providers, zero overhead. Read once at start (next-start pickup); the
-	// env var wins, the store config key is the fallback. log is guaranteed
-	// non-nil above, which telemetry.Setup relies on (it may log.Warn on flush).
-	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	if otlpEndpoint == "" {
-		if v, ok, cerr := st.ConfigGet("otlp_endpoint"); cerr == nil && ok {
-			otlpEndpoint = v
-		}
-	}
-	tel, err := telemetry.Setup(ctx, telemetry.Config{Endpoint: otlpEndpoint, ServiceName: "tariboy"}, log)
-	if err != nil {
-		return fmt.Errorf("telemetry setup: %w", err)
-	}
-	// Force-flush buffered spans/metrics on the way out. Registered early so it
-	// runs late in the LIFO defer chain, after the span/metric producers (manager,
-	// plugin host, proxy) have stopped. OTLP off -> Shutdown is a cheap no-op.
-	defer func() {
-		fctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = tel.Shutdown(fctx)
-	}()
-	metrics, err := telemetry.NewMetrics(otel.Meter("tariboy"))
-	if err != nil {
-		return fmt.Errorf("telemetry metrics: %w", err)
-	}
-
-	as := agent.NewStore(st)
-	channelBus := bus.New(st, time.Now)
-	if err := reconcileAgentInboxes(as, channelBus); err != nil {
-		return fmt.Errorf("reconcile agent inboxes: %w", err)
-	}
-	customerLogin, err := resolveCustomerLogin(st)
-	if err != nil {
-		return fmt.Errorf("resolve customer login: %w", err)
-	}
-	if err := reconcileAgentChats(as, channelBus, "user:"+customerLogin); err != nil {
-		return fmt.Errorf("reconcile agent chats: %w", err)
-	}
-	if err := tasks.MigrateLegacyKeys(st.DB, time.Now); err != nil {
-		return fmt.Errorf("migrate task keys: %w", err)
-	}
-	taskService := tasks.NewService(st.DB, customerLogin, time.Now)
-	taskService.SetReader(st.Reader())
-	workflowIngress := newWorkflowIngressSignal()
-	taskHub := tasks.NewHub(taskService)
-	taskService.SetHub(taskHub)
-	taskService.SetRunBaseDir(p.Base)
-	globalEnv := func() ([]string, error) { return loop.GlobalShellEnv(p.Base) }
-	taskService.SetGlobalEnv(globalEnv)
-	taskService.SetLogger(log)
-	taskPublisher := tasknotify.New(st.DB, channelBus, time.Now, log)
-	goalReconciler := taskgoal.NewReconciler(taskgoal.ReconcilerConfig{
-		Store: st, Bus: channelBus, Clock: time.Now, Log: log,
-	})
-	goalStore := taskgoal.NewStore(st)
-	currentGoal := goalStore.Current
-	// A task change, an agent change, and a finished iteration wake both the
-	// goal reconciler and the workflow dispatcher.
-	workflowDispatch := newWorkflowIngressSignal()
-	goalSignal, goalIterationCompleted := withWorkflowDispatch(goalReconciler, workflowDispatch.Signal)
-	taskService.SetGoalSignal(goalSignal)
-	if err := taskService.EnsureDefaultQueue(context.Background()); err != nil {
-		log.Error("seed default task queue", "err", err)
-	}
-	imgStore := &image.Store{Dir: p.ImagesDir()}
-	if err := image.WithPublicationGate(imgStore.Migrate); err != nil {
-		return fmt.Errorf("migrate image store: %w", err)
-	}
-	if err := image.EnsureBare(imgStore, time.Now); err != nil {
-		log.Error("seed bare image", "err", err)
-	}
-	workflowImages := &workflowimage.Registry{Store: &workflowimage.Store{Dir: p.WorkflowsDir()}, DB: st.DB}
-	if err := workflowImages.Reconcile(); err != nil {
-		log.Warn("reconcile workflow images", "err", err)
-	}
-	taskService.SetWorkflowResolver(func(ref string) (string, error) {
-		name, tag := ref, ""
-		if i := strings.LastIndex(ref, ":"); i >= 0 {
-			name, tag = ref[:i], ref[i+1:]
-		}
-		return workflowImages.Store.Resolve(name, tag)
-	})
-	// A queue bound by a tag follows it. Builds and imports move bindings
-	// through registry.Ctx; startup catches a move a crash interrupted.
-	if err := taskService.FollowQueueWorkflows(context.Background(), ""); err != nil {
-		log.Warn("follow queue workflows", "err", err)
-	}
-	exeDir := "."
-	if exe, err := os.Executable(); err == nil {
-		exeDir = filepath.Dir(exe)
-	}
-	shimBin := firstNonEmpty(os.Getenv("TARIBOY_SHIM_BIN"), filepath.Join(exeDir, "tariboy-shim"))
-	tasksBinDir, err := installTasksAlias(exeDir, p.RuntimeDir())
-	if err != nil {
-		return fmt.Errorf("prepare bundled Tasks command: %w", err)
-	}
-	if tasksBinDir != "" {
-		if err := os.Setenv("PATH", tasksBinDir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
-			return err
-		}
-	}
-	schedStore := schedule.NewStore(st, time.Now)
-	scriptStore := script.NewStore(st, time.Now)
-	scriptPublisher := scriptnotify.New(st.DB, channelBus, time.Now, log)
-
-	groupProv := groups.NewProvisioner(groups.ProvisionerConfig{
-		Groups:    groups.NewStore(st, time.Now),
-		Agents:    as,
-		Bus:       channelBus,
-		GroupsDir: filepath.Join(p.Base, "groups"),
-		Clock:     time.Now,
-	})
-	var _ loop.GroupProvisioner = groupProv
-
-	hub := events.NewHub()
-
-	// Per-agent audit log (audit.jsonl). One shared *audit.Log per agent backs
-	// recordEvent, the loop engine's lifecycle sink, and the runner's log tailer.
-	auditReg := audit.NewRegistry(
-		func(a string) string { return agentdir.New(p.AgentsDir(), a).AuditLog() },
-		time.Now,
-	)
-
-	// AI proxy (spec §9): load pricing/router, build the token
-	// registry, ingester and budget cache, then the proxy itself.
-	//
-	// Pricing and the router are read once here from the "proxy" daemon-config
-	// key and env. A runtime `daemon config set proxy '<json>'` is therefore
-	// picked up on the next daemon start, not hot-reloaded (hot-reload is a
-	// follow-up; the read path is lock-guarded but reload plumbing is out of M5).
-	if err := aiproxy.SeedDefaults(st); err != nil {
-		return fmt.Errorf("seed pricing: %w", err)
-	}
-	pricing, err := aiproxy.LoadPricing(st, aiproxy.DefaultPricing())
-	if err != nil {
-		return fmt.Errorf("load pricing: %w", err)
-	}
-	pricingCatalog := pricingcatalog.New(pricingcatalog.Config{
-		HTTPClient: o.PricingHTTPClient,
-		Clock:      o.PricingClock,
-		After:      o.PricingAfter,
-		SourceURL:  o.PricingSourceURL,
-		CachePath:  p.PricingCatalogFile(),
-		Store:      st,
-		Pricing:    pricing,
-		Diagnostic: func(d pricingcatalog.Diagnostic) {
-			fields := safePricingFields(d)
-			log.LogAttrs(context.Background(), levelForPricing(d.Kind), d.Kind, safePricingAttrs(fields)...)
-			payload, _ := json.Marshal(fields)
-			recordEvent(log, st, auditReg, hub, "", d.Kind, string(payload))
-		},
-	})
-	// Cache reads are local and strictly size-bounded. A rejected cache is
-	// diagnostic-only: fallback/manual pricing and proxy startup remain live.
-	_ = pricingCatalog.LoadCache(ctx)
-	router, err := aiproxy.LoadRouter(st, os.Getenv)
-	if err != nil {
-		return fmt.Errorf("load router: %w", err)
-	}
-	aiStore := aiproxy.NewStore(st, time.Now)
-	ingester := aiproxy.NewIngester(aiStore, log)
-	budgetCache := aiproxy.NewBudgetCache(aiStore, time.Now)
-	_ = budgetCache.Refresh()
-	if o.wireHook != nil {
-		o.wireHook(ingester, aiStore)
-	}
-
-	proxyTokens, err := aiproxy.OpenTokenRegistry(p.ProxyHandoffFile(), nil)
+	log = proc.log
+	c, err := openStore(ctx, proc, &stack)
 	if err != nil {
 		return err
 	}
-	proxy := aiproxy.New(aiproxy.Config{
-		Tokens: proxyTokens, Pricing: pricing, Store: aiStore, Router: router,
-		AgentsDir: p.AgentsDir(), Clock: time.Now, Log: log,
-		Ingest:        ingester.Enqueue,
-		Activity:      as.RecordAIRequest,
-		GroupSnapshot: aiStore.CurrentGroup,
-		Budget:        budgetCache,
-		Emit: func(agent string, data map[string]any) {
-			hub.Emit(events.Event{Agent: agent, Type: "proxy",
-				Time: store.FormatTime(time.Now()), Data: data})
-			// Record per-request token/cost/latency metrics. The emit closure is
-			// called in-process with native Go types (emitProxyEvent), so int/
-			// float64/string assertions hold; a mismatch yields a zero reading,
-			// never a panic.
-			in, _ := data["input_tokens"].(int)
-			out, _ := data["output_tokens"].(int)
-			cost, _ := data["cost_usd"].(float64)
-			lat, _ := data["latency_ms"].(int)
-			status, _ := data["status"].(string)
-			metrics.RecordProxyRequest(context.Background(), status, float64(lat), in, out, cost)
-		},
-		Warn: func(agent string, d aiproxy.Decision) {
-			_, _ = channelBus.Publish(bus.Message{Channel: bus.InboxChannel(agent), Type: "budget.warn",
-				Source: "proxy", ProducedByAgent: agent,
-				Text: "AI budget warning: spend exceeded limit",
-				Data: map[string]any{"scope": d.Scope, "limit_usd": d.LimitUSD, "spent_usd": d.SpentUSD}})
-			recordEvent(log, st, auditReg, hub, agent, "budget_warn",
-				fmt.Sprintf(`{"scope":%q,"spent_usd":%g}`, d.Scope, d.SpentUSD))
-		},
-		Audit: func(agent, kind, dataJSON string) { recordEvent(log, st, auditReg, hub, agent, kind, dataJSON) },
-	})
-	proxyAddr, err := listenProxyWithHandoff(as, proxy, proxyTokens)
+	tk, err := buildTasks(ctx, proc, c)
 	if err != nil {
-		return fmt.Errorf("proxy listen: %w", err)
-	}
-	log.Info("ai proxy listening", "addr", proxyAddr)
-
-	// Gzip the AI-proxy transcript at iteration close (spec §9/§12). loop stays
-	// free of an aiproxy import (see loop.ProxyBinder), so this is wired here as
-	// a closure over the daemon's AgentsDir. GzipTranscript is a clean no-op when
-	// the plain transcript is missing, so this is harmless for iterations that
-	// never made a proxied AI call; guarded on proxy != nil anyway since with no
-	// proxy configured there is never a transcript to compress.
-	var onIterationClose func(agent, iterationID string)
-	if proxy != nil {
-		onIterationClose = func(agent, iterationID string) {
-			if err := aiproxy.GzipTranscript(p.AgentsDir(), agent, iterationID); err != nil {
-				log.Warn("gzip proxy transcript", "agent", agent, "iteration", iterationID, "err", err)
-			}
-		}
-	}
-
-	// External plugin host (spec §7): the daemon owns plugin lifecycle. One
-	// TokenRegistry is shared between the host (which mints per-plugin tokens)
-	// and the plugin API (which resolves them). Enabled plugins are (re)started
-	// after the manager is up; StopAll drains the sink outbox before the store
-	// closes on the way out.
-	pluginTokens := plugins.NewTokenRegistry(nil)
-	pluginStore := plugins.NewStore(st, time.Now)
-	pluginHost := plugins.NewHost(plugins.HostConfig{
-		Store: pluginStore, Bus: channelBus, Tokens: pluginTokens,
-		PluginsDir: p.PluginsDir(), DaemonSocket: p.Socket(),
-		Clock: time.Now, After: time.After, Log: log,
-	})
-	pluginAPI := plugins.NewAPI(pluginTokens, channelBus, log, func(plugin, action, detail string) {
-		recordEvent(log, st, auditReg, hub, "", "plugin_"+action,
-			fmt.Sprintf(`{"plugin":%q,"detail":%q}`, plugin, detail))
-	})
-
-	// Provider contract (spec §6.1): gate parameterized subscribes on the target
-	// channel's declared params_schema. Records are read fresh per subscribe (an
-	// infrequent op) so newly installed providers take effect without a restart. A
-	// transient store-read failure treats the channel as non-provider and allows
-	// the subscribe (ParamsValidatorFor) rather than failing every subscribe —
-	// core channels never needed the plugin store.
-	channelBus.SetParamsValidator(plugins.ParamsValidatorFor(pluginStore,
-		func(channel string, err error) {
-			log.Warn("params validator: list plugins", "channel", channel, "err", err)
-		}))
-
-	// Provider watch lifecycle (spec §6.2): after any subscribe/unsubscribe, map
-	// the affected channel to its provider plugin and push the channel's full
-	// current watch list to that plugin's socket. Non-provider channels are a
-	// no-op. The push is best-effort (async, capped backoff inside the host); the
-	// plugin's GET /api/plugin/watches pull path guarantees eventual consistency.
-	channelBus.SetSubscriptionHook(func(channel string) {
-		recs, err := pluginStore.List()
-		if err != nil {
-			log.Warn("subscription hook: list plugins", "channel", channel, "err", err)
-			return
-		}
-		owner, _, ok := plugins.ProviderFor(recs, channel)
-		if !ok {
-			return // not a provided channel — no provider to notify
-		}
-		watches, err := channelBus.WatchList(channel)
-		if err != nil {
-			log.Warn("subscription hook: watch list", "channel", channel, "err", err)
-			return
-		}
-		pluginHost.PushWatches(owner, channel, watches)
-	})
-
-	// Request deadlines (spec §4.2): a Request with a --deadline arms a one-shot
-	// schedule that publishes a type=timeout event into the requester's inbox at
-	// the deadline; a reply landing first cancels exactly that entry by its
-	// correlation id. This wires the bus's deadline seam to the schedule
-	// subsystem so cross-agent requests from the Messages skill honour
-	// their deadlines instead of failing ErrDeadlineUnsupported.
-	// parseDeadline is the single source of truth for the deadline format,
-	// shared by the pre-publish validator and the arm hook so both accept exactly
-	// the same strings (Go durations, e.g. 5m/3s/1h).
-	parseDeadline := func(deadline string) (time.Duration, error) {
-		dur, err := time.ParseDuration(deadline)
-		if err != nil {
-			return 0, fmt.Errorf("request deadline %q: %w", deadline, err)
-		}
-		return dur, nil
-	}
-	channelBus.SetDeadlineValidator(func(deadline string) error {
-		_, err := parseDeadline(deadline)
 		return err
-	})
-	channelBus.SetDeadlineHooks(
-		func(tx *sql.Tx, agent, correlationID, deadline string) error {
-			dur, err := parseDeadline(deadline)
-			if err != nil {
-				return err
-			}
-			fireAt := store.FormatTime(time.Now().Add(dur))
-			tmpl, err := json.Marshal(map[string]any{
-				"type": "timeout",
-				"text": "request timed out with no reply",
-				"data": map[string]any{"correlation_id": correlationID},
-			})
-			if err != nil {
-				return err
-			}
-			_, err = schedStore.AddTx(tx, schedule.Schedule{
-				Agent:           agent,
-				Kind:            "oneshot",
-				Spec:            fireAt,
-				Channel:         bus.InboxChannel(agent),
-				MessageTemplate: string(tmpl),
-				CorrelationID:   correlationID,
-			})
-			return err
-		},
-		func(tx *sql.Tx, correlationID string) error {
-			return schedStore.CancelByCorrelationTx(tx, correlationID)
-		},
-	)
-
-	// Retention (spec §12): the nightly maintenance run archives and prunes
-	// every agent's iterations per its policy after the database backup.
-	retPolicies := retention.NewStore(st)
-	retPruner := retention.NewPruner(st, as, retPolicies, p.AgentsDir(), time.Now, log)
-	// Nightly database backup, then iteration pruning, cleanup and
-	// compaction. Drained before st.Close (see the wg block below).
-	maint := maintenance.New(st, filepath.Join(p.Base, "backups", "db"), time.Now, log)
-	maint.TasksDir = filepath.Join(p.Base, "tasks")
-	maint.PruneIterations = func() (int64, error) {
-		reps, err := retPruner.PruneAll(false)
-		var n int64
-		for _, r := range reps {
-			n += int64(len(r.Pruned))
-		}
-		return n, err
 	}
-
-	manager := loop.NewManager(loop.ManagerConfig{
-		AgentsDir: p.AgentsDir(), RuntimeDir: p.RuntimeDir(), ShimBin: shimBin,
-		ImgStore: imgStore, Store: as, Log: log, Clock: time.Now, Bus: channelBus,
-		Schedules: schedStore, Scripts: scriptStore, ScriptResults: scriptPublisher, Emit: hub.Emit, Proxy: proxy,
-		Groups: groupProv,
-		CodexApproval: func() string {
-			v, _, err := st.ConfigGet(harness.CodexApprovalConfigKey)
-			if err != nil {
-				log.Warn("read codex approval mode", "err", err)
-			}
-			return v
-		},
-		RecordCursorUsage: func(agentName, iteration, imageName, imageTag, imageDigest string, usage loop.CursorResultUsage) {
-			groupID, groupName, _ := aiStore.CurrentGroup(agentName)
-			row := aiproxy.AIRequest{
-				ID: aiproxy.NewRequestID(nil), TS: store.FormatTime(time.Now()),
-				Agent: agentName, Iteration: iteration,
-				ImageName: imageName, ImageTag: imageTag, ImageDigest: imageDigest,
-				Provider: "cursor", Model: usage.Model,
-				InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens,
-				CacheReadTokens: usage.CacheReadTokens, CacheWriteTokens: usage.CacheWriteTokens,
-				LatencyMs: usage.DurationMs, Status: "ok",
-				GroupID: groupID, GroupName: groupName,
-			}
-			if err := aiproxy.RecordUsage(p.AgentsDir(), row, ingester.Enqueue); err != nil {
-				log.Warn("append proxy transcript", "agent", agentName, "iteration", iteration, "err", err)
-			}
-			hub.Emit(events.Event{Agent: agentName, Type: "proxy",
-				Time: store.FormatTime(time.Now()), Data: map[string]any{
-					"request_id": row.ID, "iteration_id": row.Iteration,
-					"model": row.Model, "provider": row.Provider,
-					"input_tokens": row.InputTokens, "output_tokens": row.OutputTokens,
-					"cache_write_tokens": row.CacheWriteTokens, "cache_read_tokens": row.CacheReadTokens,
-					"cost_usd": row.CostUSD, "latency_ms": row.LatencyMs, "status": row.Status,
-				}})
-			metrics.RecordProxyRequest(context.Background(), row.Status, float64(row.LatencyMs), row.InputTokens, row.OutputTokens, row.CostUSD)
-		},
-		Tasks:              taskService,
-		ExternalPlugins:    plugins.ResolveEnabledInstalledMetadata(p.PluginsDir(), pluginStore),
-		Spawner:            o.Spawner,
-		OnIterationClose:   onIterationClose,
-		GoalSignal:         goalSignal,
-		IterationCompleted: goalIterationCompleted,
-		RecordIterationEnd: taskService.RecordIterationEnd,
-		CurrentGoal:        currentGoal,
-		WorkflowGoals:      loop.TaskWorkflowGoals{Tasks: taskService, Images: workflowImages.Store, Log: log},
-		SetGoal: func(agent, key string, activate func() (func(), error)) error {
-			_, err := goalStore.Set(agent, key, time.Now().UTC(), activate)
-			return err
-		},
-		// ProvidedChannels feeds the Messages skill provider-declared channels
-		// from installed plugin manifests (spec §6.1), read fresh per call so a
-		// newly installed provider is annotated without a restart.
-		ProvidedChannels: func() ([]agentapi.ProvidedChannel, error) {
-			recs, err := pluginStore.List()
-			if err != nil {
-				return nil, err
-			}
-			infos := plugins.ProvidedChannels(recs)
-			out := make([]agentapi.ProvidedChannel, len(infos))
-			for i, in := range infos {
-				out[i] = agentapi.ProvidedChannel{
-					Channel: in.Channel, Provider: in.Provider,
-					Params: in.Params, Help: in.Help,
-				}
-			}
-			return out, nil
-		},
-		AuditFor: func(a string) loop.Recorder { return auditReg.For(a) },
-		Metrics:  metrics,
-		// UsageLookup adapts aiStore.IterationUsage (which returns an error) into
-		// the error-less accessor the loop expects: swallow the error and return
-		// zeros so a lookup failure never propagates into an iteration.
-		UsageLookup: func(iter string) (int, int, float64) {
-			in, out, cost, _ := aiStore.IterationUsage(iter)
-			return in, out, cost
-		},
-		UsageFlush: func() {
-			if err := ingester.Flush(); err != nil {
-				log.Error("flush terminal iteration usage", "err", err)
-			}
-		},
-	})
-	// Register the observable gauges exactly once (spec §14): bus queue depth,
-	// healthy plugins, active agent loops. No-op instruments when OTel is off.
-	_ = metrics.RegisterGauges(telemetry.GaugeSource{
-		QueueDepth: func(context.Context) int64 {
-			n, _ := channelBus.PendingTotal()
-			return int64(n)
-		},
-		PluginsHealthy: func(context.Context) int64 {
-			list, _ := pluginHost.List()
-			var n int64
-			for _, pl := range list {
-				if s, _ := pl["state"].(string); s == "running" {
-					n++
-				}
-			}
-			return n
-		},
-		ActiveAgents:  func(context.Context) int64 { return int64(manager.ActiveAgents()) },
-		EventsDropped: func(context.Context) int64 { return hub.Dropped() },
-	})
-
-	// A publish wakes exactly the agents that received a delivery and feeds the
-	// SSE hub with per-agent message/stream events.
-	channelBus.SetPublishHook(func(msg bus.Message, agents []string) {
-		manager.WakeAgents(agents, loop.WakeMessage)
-		emitMessageEvent(hub, msg, agents)
-		if taskService.WorkflowIngressEnabled() {
-			workflowIngress.Signal()
-		}
-	})
-
-	// Route bus lifecycle events (message_processed/replied/requeued) to the
-	// per-agent audit.jsonl so the §8.2 operator-vs-agent attribution actually
-	// lands in the audit timeline. recordEvent has the matching signature.
-	channelBus.SetAuditHook(func(agent, kind, dataJSON string) {
-		recordEvent(log, st, auditReg, hub, agent, kind, dataJSON)
-	})
-
-	cctx := &registry.Ctx{
-		Store: st, Log: log, BaseDir: p.Base, Socket: p.Socket(), HTTPAddr: o.HTTPAddr,
-		Version: version.Version, StartedAt: time.Now(), Control: manager, Scripts: manager, Bus: channelBus, Plugins: pluginHost,
-		Groups:         groupProv,
-		Operator:       taskService.CustomerLogin(),
-		Retention:      &retention.RetentionAPI{Policies: retPolicies, Pruner: retPruner},
-		Maintenance:    maint,
-		Tasks:          taskService,
-		WorkflowImages: workflowImages.Store,
-	}
-	reg := commands.BuildRegistry()
-	srv := api.NewServer(reg, cctx)
-	srv.SetEventSource(hub)
-	srv.SetTasks(taskHub, func() tasks.Actor {
-		return tasks.CustomerActor(taskService.CustomerLogin())
-	})
-	srv.SetPluginAPI(pluginAPI)
-	accessLog, err := logrotate.Open(p.AccessLogFile(), accessLogMaxBytes, accessLogKeep)
+	px, err := buildProxy(ctx, o, proc, c)
 	if err != nil {
-		return fmt.Errorf("open access log: %w", err)
-	}
-	defer accessLog.Close()
-	srv.SetAccessLog(slog.New(slog.NewJSONHandler(accessLog, nil)))
-	srv.SetExternalPlugins(plugins.ResolveInstalled(p.PluginsDir()))
-	srv.SetSupportBundleSource(supportbundle.Collector{
-		Store: st, Control: manager, BaseDir: p.Base, LogFile: p.LogFile(),
-		Version: version.Version, Now: time.Now, Environ: os.Environ,
-	})
-
-	if o.HTTPAddr != "" {
-		host, _, err := net.SplitHostPort(o.HTTPAddr)
-		if err != nil {
-			return fmt.Errorf("bad --http-addr %q: %w", o.HTTPAddr, err)
-		}
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			return fmt.Errorf("--http-addr %q must be a loopback address (localhost-only listener)", o.HTTPAddr)
-		}
-	}
-
-	if err := manager.StartAll(ctx); err != nil {
-		log.Error("reattach failed", "err", err)
-	}
-	defer manager.Shutdown()
-
-	if err := pluginHost.StartAll(ctx); err != nil {
-		log.Error("plugin host start", "err", err)
-	}
-	if executable, err := os.Executable(); err == nil {
-		telegramExecutable := filepath.Join(filepath.Dir(executable), "tariboy-plugin-telegram")
-		if _, err := pluginHost.EnsureBundled(telegramExecutable, telegramplugin.Manifest(version.Version)); err != nil {
-			log.Error("install bundled telegram plugin", "err", err)
-		}
-	} else {
-		log.Warn("resolve daemon executable for bundled plugins", "err", err)
-	}
-	// StopAll cancels every supervisor + sink drainer and waits (drain-before-
-	// close): registered after manager.Shutdown so, by LIFO, plugins stop and
-	// their outbox drains before the store closes (spec §13).
-	defer pluginHost.StopAll()
-
-	// Serve the proxy, drain the ingest queue and periodically refresh budget
-	// aggregates on the daemon context. Per-iteration proxy tokens are minted and
-	// revoked by the runner; the daemon only owns the listener's lifecycle.
-	go func() {
-		if err := proxy.Serve(); err != nil {
-			log.Error("ai proxy serve", "err", err)
-		}
-	}()
-	// The ingester and budget-cache refresher both touch the store (InsertBatch /
-	// Refresh reads). They must finish draining before st.Close() runs on the way
-	// out, or the ingester's final flush can race db.Close() and lose the last
-	// buffered batch of ai_requests (spec §13). gctx/cancel is a daemon-owned
-	// derivation of ctx so both goroutines are guaranteed to observe cancellation
-	// and exit on every return path of Run (not just the ctx.Done() shutdown
-	// branch below), and wg lets Run block until they have actually finished
-	// their final flush/refresh before the store closes.
-	gctx, cancel := context.WithCancel(ctx)
-	var wg sync.WaitGroup
-	wg.Add(12)
-	scheduler := schedule.NewScheduler(schedStore, channelBus, log, time.Now, time.After)
-	go func() {
-		defer wg.Done()
-		if o.schedulerRun != nil {
-			o.schedulerRun(gctx, scheduler)
-			return
-		}
-		scheduler.Run(gctx)
-	}()
-	go func() {
-		defer wg.Done()
-		pricingCatalog.Run(gctx)
-	}()
-	go func() {
-		defer wg.Done()
-		ingester.Run(gctx)
-	}()
-	go func() {
-		defer wg.Done()
-		taskPublisher.Run(gctx)
-	}()
-	go func() {
-		defer wg.Done()
-		goalReconciler.Run(gctx)
-	}()
-	go func() {
-		defer wg.Done()
-		scriptPublisher.Run(gctx)
-	}()
-	go func() {
-		defer wg.Done()
-		runWorkflowObservationReconciler(gctx, taskService, workflowIngress.C(), workflowObservationReconcileInterval, log)
-	}()
-	go func() {
-		defer wg.Done()
-		runWorkflowDispatcher(gctx, taskService, workflowDispatch.C(), workflowDispatchInterval, log)
-	}()
-	go func() {
-		defer wg.Done()
-		tk := time.NewTicker(15 * time.Second)
-		defer tk.Stop()
-		for {
-			select {
-			case <-gctx.Done():
-				return
-			case <-tk.C:
-				if err := budgetCache.Refresh(); err != nil {
-					log.Warn("budget cache refresh", "err", err)
-				}
-			}
-		}
-	}()
-	// Maintenance touches the store (backup, iteration pruning, cleanup). It
-	// uses gctx like the goroutines above so an in-flight run finishes before
-	// st.Close() on the way out.
-	go func() {
-		defer wg.Done()
-		maint.Loop(gctx, time.After)
-	}()
-	// Store automatic builds refresh due Stores and rebuild their selected
-	// outdated images through the same registry command the API and CLI use, so
-	// an automatic build is identical to an operator build (image_version plus
-	// latest). It runs on gctx like the goroutines above, so an in-flight build
-	// finishes before st.Close().
-	go func() {
-		defer wg.Done()
-		stores.New(st, p.Base).RunAuto(gctx, func(ctx context.Context, selector string) error {
-			command, ok := reg.Get("image.build")
-			if !ok {
-				return errors.New("image.build command is unavailable")
-			}
-			_, err := command.Handler(cctx, registry.Params{registry.RequestContextParam: ctx, "source": selector})
-			return err
-		}, log)
-	}()
-	// The workflow script worker executes check and watch runs. Before it
-	// starts any, it terminates the scripts a previous daemon left running and
-	// records their runs as interrupted. It runs on gctx like the goroutines
-	// above, so it kills its scripts and stops before st.Close(); their rows
-	// stay running for the next start.
-	workflowRunWake, stopWorkflowRunWake := taskHub.Subscribe()
-	workflowRunner := &workflowrun.Supervisor{
-		Jobs: taskService, Sources: taskService, Images: workflowImages.Store, BaseDir: p.Base,
-		BaseEnv: globalEnv, AgentRuntime: manager.ScriptRuntime,
-		Clock: time.Now, Wake: workflowRunWake, Log: log,
-	}
-	go func() {
-		defer wg.Done()
-		defer stopWorkflowRunWake()
-		workflowRunner.Run(gctx)
-	}()
-	// Defers run LIFO. Registration order top-to-bottom is:
-	//   st.Close (top of Run) -> manager.Shutdown -> [cancel+wg.Wait] -> proxy.Shutdown
-	// so execution order (bottom-to-top) is:
-	//   proxy.Shutdown -> cancel+wg.Wait -> manager.Shutdown -> st.Close
-	// i.e. the proxy HTTP listener drains first, then the background
-	// goroutines are cancelled and awaited,
-	// then the loop manager, and only then does the store close.
-	defer func() {
-		cancel()
-		wg.Wait()
-	}()
-	defer func() {
-		shctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = proxy.Shutdown(shctx)
-	}()
-
-	recordEvent(log, st, auditReg, hub, "", "daemon_start", fmt.Sprintf(`{"pid":%d,"version":%q}`, os.Getpid(), version.Version))
-	log.Info("tariboyd starting", "version", version.Version, "base", p.Base, "listen", o.Listen)
-
-	errc := make(chan error, 2)
-	go func() {
-		if listen.Network == "tcp" {
-			errc <- srv.ServeTCP(listen.Addr, listen.AuthToken)
-			return
-		}
-		sock := listen.Addr
-		if sock == "" {
-			sock = p.Socket()
-		}
-		errc <- srv.ServeUnix(sock)
-	}()
-
-	if o.HTTPAddr != "" {
-		go func() {
-			if err := srv.ServeWeb(o.HTTPAddr); err != nil {
-				errc <- fmt.Errorf("http listener serve: %w", err)
-			}
-		}()
-		log.Info("http api listening", "addr", o.HTTPAddr)
-	}
-
-	select {
-	case err := <-errc:
 		return err
-	case <-ctx.Done():
-		shctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		recordEvent(log, st, auditReg, hub, "", "daemon_stop", "{}")
-		log.Info("tariboyd stopping")
-		if err := srv.Shutdown(shctx); err != nil {
-			return err
-		}
-		return <-errc
 	}
+	if err := listenProxy(proc, c, px, &stack); err != nil {
+		return err
+	}
+	pl := buildPlugins(proc, c)
+	mg := buildManager(ctx, o, proc, c, tk, px, pl)
+	startRuntime(ctx, proc, mg, pl, &stack)
+	startWorkers(ctx, o, proc, c, tk, px, mg, &stack)
+	return serve(ctx, o, proc, c, tk, px, pl, mg, &stack)
 }
 
 const maxPricingDiagnosticSourceBytes = 256
@@ -1184,27 +440,6 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
-}
-
-func recordEvent(log *slog.Logger, st *store.Store, reg *audit.Registry, hub *events.Hub, agent, kind, data string) {
-	if agent != "" && reg != nil {
-		// Agent-scoped events go to the durable per-agent audit.jsonl.
-		var m map[string]any
-		if data != "" && data != "{}" {
-			if err := json.Unmarshal([]byte(data), &m); err != nil {
-				m = map[string]any{"data": data}
-			}
-		}
-		reg.For(agent).Record(kind, "system", "", m)
-	} else if err := st.AddEvent(agent, kind, data); err != nil {
-		// Agentless (global) events — daemon_start/stop, plugin_* — stay in the DB.
-		log.Warn("failed to record daemon event", "kind", kind, "err", err)
-	}
-	// Agent-scoped audit events also stream to any SSE subscribers.
-	if hub != nil && agent != "" {
-		hub.Emit(events.Event{Agent: agent, Type: "audit", Time: store.FormatTime(time.Now()),
-			Data: map[string]any{"kind": kind, "data": data}})
-	}
 }
 
 // emitMessageEvent turns a bus publish into per-agent live events. An agent's own

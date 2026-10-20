@@ -47,7 +47,7 @@ type Middleware func(Handler) Handler
 
 // Warn is invoked when a warn-mode budget is exceeded (set by the daemon to
 // publish a bus message + event). Audit records an agent-scoped audit event
-// (set by the daemon to recordEvent with the real agent). Emit pushes a proxy
+// (set by the daemon to its Recorder with the real agent). Emit pushes a proxy
 // SSE event. All are optional.
 type Config struct {
 	Tokens    *TokenRegistry

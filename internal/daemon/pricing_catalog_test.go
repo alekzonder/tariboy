@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/testutil"
@@ -164,18 +163,6 @@ func TestPricingCatalogRunsWithDaemonLifecycle(t *testing.T) {
 	}
 	if input != 9 {
 		t.Fatalf("managed gpt-4o input price = %v, want 9 from the later tick", input)
-	}
-}
-
-func waitDaemonReady(t *testing.T, base string) {
-	t.Helper()
-	c := client.New(paths.New(base).Socket())
-	var err error
-	if !testutil.WaitFor(10*time.Second, func() bool {
-		_, err = c.Call("GET", "/api/daemon/status", nil)
-		return err == nil
-	}) {
-		t.Fatalf("daemon never became ready: %v", err)
 	}
 }
 

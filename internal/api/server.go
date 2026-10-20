@@ -33,9 +33,10 @@ type Server struct {
 	reg             *registry.Registry
 	cctx            *registry.Ctx
 	http            *http.Server
-	webSrv          *http.Server // loopback web listener (nil until ServeWeb)
+	webSrv          *http.Server // loopback web listener (nil until BindWeb)
 	serveMu         sync.Mutex
 	stopping        bool
+	listeners       []net.Listener // every bound listener, closed by Shutdown
 	events          events.Source
 	plugins         http.Handler
 	support         SupportBundleSource
@@ -852,31 +853,52 @@ func toLowerMethod(m string) string {
 }
 
 func (s *Server) ServeUnix(sock string) error {
+	serve, err := s.BindUnix(sock)
+	if err != nil {
+		return err
+	}
+	return serve()
+}
+
+// BindUnix binds the unix socket and returns the function that serves it. The
+// socket accepts connections (into its backlog) as soon as BindUnix returns.
+func (s *Server) BindUnix(sock string) (func() error, error) {
 	// Rebuild the handler so a SetEventSource that ran after NewServer (which
 	// cached a handler built without the SSE route) takes effect.
 	handler := s.Handler()
 	_ = os.Remove(sock) // stale socket from a previous run
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.Chmod(sock, 0o600); err != nil {
 		ln.Close()
+		return nil, err
+	}
+	return s.bound(s.http, handler, ln), nil
+}
+
+// bound records ln so Shutdown closes it even if it is never served, and
+// returns the function that serves it on hs with handler.
+func (s *Server) bound(hs *http.Server, handler http.Handler, ln net.Listener) func() error {
+	s.serveMu.Lock()
+	s.listeners = append(s.listeners, ln)
+	s.serveMu.Unlock()
+	return func() error {
+		s.serveMu.Lock()
+		if s.stopping {
+			s.serveMu.Unlock()
+			_ = ln.Close()
+			return nil
+		}
+		hs.Handler = handler
+		s.serveMu.Unlock()
+		err := hs.Serve(ln)
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
 		return err
 	}
-	s.serveMu.Lock()
-	if s.stopping {
-		s.serveMu.Unlock()
-		_ = ln.Close()
-		return nil
-	}
-	s.http.Handler = handler
-	s.serveMu.Unlock()
-	err = s.http.Serve(ln)
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
 }
 
 // corsMiddleware adds permissive-but-scoped CORS headers so a browser SPA served
@@ -903,24 +925,22 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) ServeTCP(addr, authToken string) error {
-	handler := corsMiddleware(AuthMiddleware(authToken, s.Handler()))
-	ln, err := net.Listen("tcp", addr)
+	serve, err := s.BindTCP(addr, authToken)
 	if err != nil {
 		return err
 	}
-	s.serveMu.Lock()
-	if s.stopping {
-		s.serveMu.Unlock()
-		_ = ln.Close()
-		return nil
+	return serve()
+}
+
+// BindTCP binds the bearer-authenticated TCP listener and returns the function
+// that serves it.
+func (s *Server) BindTCP(addr, authToken string) (func() error, error) {
+	handler := corsMiddleware(AuthMiddleware(authToken, s.Handler()))
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
 	}
-	s.http.Handler = handler
-	s.serveMu.Unlock()
-	err = s.http.Serve(ln)
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
+	return s.bound(s.http, handler, ln), nil
 }
 
 // isLoopbackWebHost reports whether the Host header names a loopback host the
@@ -1031,35 +1051,45 @@ func webCORSMiddleware(next http.Handler) http.Handler {
 // (defense-in-depth against DNS-rebinding) and loopback-only CORS. The caller
 // (daemon.Run) validates addr is loopback before calling this.
 func (s *Server) ServeWeb(addr string) error {
-	ln, err := net.Listen("tcp", addr)
+	serve, err := s.BindWeb(addr)
 	if err != nil {
 		return err
 	}
+	return serve()
+}
+
+// BindWeb binds the loopback web listener and returns the function that serves
+// it. See ServeWeb.
+func (s *Server) BindWeb(addr string) (func() error, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
 	// Host check outermost: a request with a non-loopback Host is refused 421
 	// before CORS ever labels it, preflight included.
-	webSrv := NewHTTPServer(webHostMiddleware(webCORSMiddleware(s.Handler())))
+	handler := webHostMiddleware(webCORSMiddleware(s.Handler()))
+	webSrv := NewHTTPServer(nil)
 	s.serveMu.Lock()
-	if s.stopping {
-		s.serveMu.Unlock()
-		_ = ln.Close()
-		return nil
-	}
 	s.webSrv = webSrv
 	s.serveMu.Unlock()
-	err = webSrv.Serve(ln)
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
+	return s.bound(webSrv, handler, ln), nil
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.serveMu.Lock()
 	s.stopping = true
 	webSrv := s.webSrv
+	listeners := s.listeners
 	s.serveMu.Unlock()
 	if webSrv != nil {
 		_ = webSrv.Shutdown(ctx)
 	}
-	return s.http.Shutdown(ctx)
+	err := s.http.Shutdown(ctx)
+	// http.Server.Shutdown closes only the listeners it serves; also release
+	// the ones bound but never served. Closing after Shutdown makes a Serve
+	// that is still starting see ErrServerClosed, not a closed listener.
+	for _, ln := range listeners {
+		_ = ln.Close()
+	}
+	return err
 }

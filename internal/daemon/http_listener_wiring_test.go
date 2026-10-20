@@ -12,7 +12,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
-	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // The loopback listener carries the JSON API with no auth, and nothing else: a
@@ -31,18 +30,16 @@ func TestHTTPListenerServesAPIAndNotUI(t *testing.T) {
 	}()
 
 	client := &http.Client{Timeout: time.Second}
-	var body string
-	if !testutil.WaitFor(5*time.Second, func() bool {
-		resp, err := client.Get("http://" + addr + "/api/daemon/status")
-		if err != nil {
-			return false
-		}
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		body = string(b)
-		return resp.StatusCode == 200
-	}) {
-		t.Fatalf("http listener never answered /api/daemon/status")
+	waitDaemonReady(t, base)
+	resp, err := client.Get("http://" + addr + "/api/daemon/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	body := string(b)
+	if resp.StatusCode != 200 {
+		t.Fatalf("http listener /api/daemon/status = %d %q", resp.StatusCode, body)
 	}
 	if !strings.Contains(body, `"ok":true`) {
 		t.Fatalf("status body = %q", body)
@@ -71,11 +68,11 @@ func TestHTTPListenerServesAPIAndNotUI(t *testing.T) {
 		t.Fatalf("default support entries = %+v", supportZIP.File)
 	}
 
-	resp, err := client.Get("http://" + addr + "/")
+	resp, err = client.Get("http://" + addr + "/")
 	if err != nil {
 		t.Fatalf("GET /: %v", err)
 	}
-	b, _ := io.ReadAll(resp.Body)
+	b, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != 404 || !strings.Contains(string(b), `"not_found"`) {
 		t.Fatalf("GET / = %d %q, want a 404 JSON envelope", resp.StatusCode, b)

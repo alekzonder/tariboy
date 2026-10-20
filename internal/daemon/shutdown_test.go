@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/aiproxy"
-	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
-	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func TestShutdownWaitsForScheduler(t *testing.T) {
@@ -98,15 +96,7 @@ func TestShutdownDrainsIngesterBeforeStoreClose(t *testing.T) {
 		t.Fatal("daemon never wired the AI-proxy ingester")
 	}
 
-	sock := paths.New(base).Socket()
-	c := client.New(sock)
-	var upErr error
-	if !testutil.WaitFor(30*time.Second, func() bool {
-		_, upErr = c.Call("GET", "/api/daemon/status", nil)
-		return upErr == nil
-	}) {
-		t.Fatalf("daemon never came up: %v", upErr)
-	}
+	waitDaemonReady(t, base)
 
 	const n = 50
 	baseTS := time.Now().UTC()

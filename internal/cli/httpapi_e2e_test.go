@@ -14,7 +14,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/daemon"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
-	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // TestHTTPAPIEndToEnd boots the real daemon with a loopback listener and drives
@@ -42,24 +41,25 @@ func TestHTTPAPIEndToEnd(t *testing.T) {
 			t.Errorf("daemon.Run: %v", err)
 		}
 	})
+	ready := make(chan struct{})
 	go func() {
-		done <- daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error", HTTPAddr: addr}))
+		done <- daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error", HTTPAddr: addr,
+			Ready: func() { close(ready) }}))
 	}()
+	select {
+	case <-ready:
+	case <-time.After(30 * time.Second):
+		t.Fatal("daemon did not become ready")
+	}
 
 	client := &http.Client{Timeout: 2 * time.Second}
-
-	// Wait for the listener, then assert the envelope.
-	var raw string
-	testutil.WaitFor(7500*time.Millisecond, func() bool {
-		resp, err := client.Get("http://" + addr + "/api/agents")
-		if err != nil {
-			return false
-		}
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		raw = string(b)
-		return resp.StatusCode == 200
-	})
+	resp, err := client.Get("http://" + addr + "/api/agents")
+	if err != nil {
+		t.Fatalf("GET /api/agents: %v", err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	raw := string(b)
 	var env struct {
 		OK     bool `json:"ok"`
 		Result struct {

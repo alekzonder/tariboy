@@ -6,7 +6,7 @@ import (
 )
 
 // Registry hands out one shared *Log per agent. All writers for an agent (the
-// daemon's recordEvent, the loop engine's lifecycle sink, and the runner's log
+// daemon's Recorder, the loop engine's lifecycle sink, and the runner's log
 // tailer) MUST obtain their Log from the same Registry so the seq counter and
 // file handle stay consistent — two independent *Log values over the same file
 // would each seed seq from the last line and then collide.

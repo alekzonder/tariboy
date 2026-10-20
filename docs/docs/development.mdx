@@ -713,7 +713,8 @@ live state:
 - **Wait for state, not for time.** Use `testutil.WaitFor` instead of a
   `time.Sleep` loop, and prove that something did not happen with a hook, a
   fake timer, or `testing/synctest`. A `time.Sleep` that must stay in a test
-  has a comment that says why.
+  has a comment that says why. A test that starts `daemon.Run` waits on
+  `Options.Ready` instead of polling the daemon socket.
 - **Mark independent tests with `t.Parallel()`.** Tests that use `t.Setenv`,
   `os.Chdir`, or package-level state stay sequential.
 - **Tests that drive a real `tmux` have the `tmux` build tag**
