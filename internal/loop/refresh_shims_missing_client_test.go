@@ -15,6 +15,7 @@ import (
 // Missing required direct scripts skip only the affected agent; a stale shim is
 // safer than replacing it with a dead one, and another agent may still refresh.
 func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 	var logs bytes.Buffer
@@ -64,6 +65,7 @@ func TestRefreshShimsSkipsAgentMissingRequiredDirectScript(t *testing.T) {
 }
 
 func TestStartAllSkipsEnabledAgentMissingRequiredDirectScript(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 
@@ -97,6 +99,7 @@ func TestStartAllSkipsEnabledAgentMissingRequiredDirectScript(t *testing.T) {
 // Direct scripts, not the removed central dispatcher, are the startup
 // prerequisite for a stale shim refresh.
 func TestRefreshShimsRewritesShimsWithDirectScripts(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 	a := agent.Agent{

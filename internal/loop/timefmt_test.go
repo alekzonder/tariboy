@@ -14,6 +14,7 @@ import (
 // Script run times keep the full clock precision in the stored format; the
 // supervisor used to write finished_at with whole seconds.
 func TestScriptSupervisorWritesCanonicalRunTimes(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	at := time.Date(2026, 9, 10, 2, 0, 0, 123456789, time.UTC)
 	m.cfg.Clock = func() time.Time { return at }
@@ -36,6 +37,7 @@ func TestScriptSupervisorWritesCanonicalRunTimes(t *testing.T) {
 
 // Live events carry the stored format, converted to UTC.
 func TestManagerEventTimesAreCanonical(t *testing.T) {
+	t.Parallel()
 	m, _, _, _ := newManager(t, &fakeRunner{})
 	at := time.Date(2026, 9, 10, 4, 0, 0, 10, time.FixedZone("x", 7200))
 	m.cfg.Clock = func() time.Time { return at }
@@ -49,6 +51,7 @@ func TestManagerEventTimesAreCanonical(t *testing.T) {
 
 // messageAge reads the canonical bus ts.
 func TestMessageAgeReadsCanonicalTS(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 9, 10, 2, 1, 30, 0, time.UTC)
 	if d, ok := messageAge(store.FormatTime(now.Add(-90*time.Second)), now); !ok || d != 90*time.Second {
 		t.Fatalf("age = %s ok=%v", d, ok)

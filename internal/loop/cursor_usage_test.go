@@ -8,6 +8,7 @@ import (
 )
 
 func TestObserveCursorStreamLineReadsResultUsage(t *testing.T) {
+	t.Parallel()
 	initLine := `{"type":"system","subtype":"init","apiKeySource":"env","cwd":"/home/nybble","session_id":"c4aa724f-cb52-4dc4-8a37-eb298d64e1f3","model":"Grok 4.7 256K High","permissionMode":"default"}`
 	model, usage, ok := observeCursorStreamLine(initLine)
 	if !ok || model != "Grok 4.7 256K High" || usage != nil {
@@ -36,6 +37,7 @@ func TestObserveCursorStreamLineReadsResultUsage(t *testing.T) {
 }
 
 func TestTailerReportsCursorResultUsage(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	got := make(chan CursorResultUsage, 1)
 	var model string
@@ -68,6 +70,7 @@ func TestTailerReportsCursorResultUsage(t *testing.T) {
 }
 
 func TestTailerReportsCursorUsageAfterLongStdoutLine(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	got := make(chan CursorResultUsage, 1)
 	var model string
@@ -104,6 +107,7 @@ func TestTailerReportsCursorUsageAfterLongStdoutLine(t *testing.T) {
 }
 
 func TestCursorUsageObserverPrefersConfiguredModelID(t *testing.T) {
+	t.Parallel()
 	initLine := `{"type":"system","subtype":"init","model":"Grok 4.7 256K High"}`
 	resultLine := `{"type":"result","duration_ms":4708,"usage":{"inputTokens":4841,"outputTokens":31,"cacheReadTokens":5888,"cacheWriteTokens":0}}`
 	for configured, want := range map[string]string{

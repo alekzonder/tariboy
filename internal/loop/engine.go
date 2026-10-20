@@ -120,6 +120,10 @@ type Engine struct {
 	onClose            func(agent, iterationID string)
 	iterationCompleted func(agent, iterationID string)
 	beforeLaunch       func(*agent.Agent) (activatedImage, error)
+	// idle, when set, runs each time Run is about to wait for its next event.
+	// It is a test seam: counting its calls tells a test how many events Run
+	// has handled, including events that changed nothing.
+	idle func()
 
 	mu            sync.Mutex
 	current       string // current iteration id ("" when idle)
@@ -273,6 +277,9 @@ func (e *Engine) Run(ctx context.Context) {
 			if timer != nil {
 				timer.Stop()
 			}
+		}
+		if e.idle != nil {
+			e.idle()
 		}
 		select {
 		case <-ctx.Done():

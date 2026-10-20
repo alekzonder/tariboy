@@ -14,6 +14,7 @@ import (
 )
 
 func TestManagerReportsTheIterationEndBeforeTheGoalWake(t *testing.T) {
+	t.Parallel()
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	finish := start.Add(5 * time.Minute)
 	var calls []string
@@ -47,6 +48,7 @@ func TestManagerReportsTheIterationEndBeforeTheGoalWake(t *testing.T) {
 }
 
 func TestManagerDoesNotReportAHarnessErrorAsAnIterationEnd(t *testing.T) {
+	t.Parallel()
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	var ends []tasks.IterationEnd
 	completed := 0
@@ -74,6 +76,7 @@ func TestManagerDoesNotReportAHarnessErrorAsAnIterationEnd(t *testing.T) {
 }
 
 func TestManagerReportsAGoalSelectedDuringTheIteration(t *testing.T) {
+	t.Parallel()
 	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	var ends []tasks.IterationEnd
 	m := NewManager(ManagerConfig{

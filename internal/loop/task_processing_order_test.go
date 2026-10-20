@@ -11,6 +11,7 @@ import (
 )
 
 func TestTaskProcessingOrderIndependentOfTemplate(t *testing.T) {
+	t.Parallel()
 	for _, names := range [][]string{nil, {"goal", "awaiting-replies", "messages", "one-shot"}, {"messages"}} {
 		template := image.PromptTemplate{SchemaVersion: 2}
 		for _, name := range names {
@@ -49,6 +50,7 @@ func TestTaskProcessingOrderIndependentOfTemplate(t *testing.T) {
 }
 
 func TestTaskProcessingOrderEmptyInputs(t *testing.T) {
+	t.Parallel()
 	for _, awaiting := range []string{"", "# Awaiting replies\nwaiting"} {
 		got, err := RenderPromptTemplate(runtimeTemplate(t, "identity"), t.TempDir(), RuntimePromptValues{AwaitingReplies: awaiting})
 		if err != nil {
@@ -66,6 +68,7 @@ func TestTaskProcessingOrderEmptyInputs(t *testing.T) {
 }
 
 func TestLegacyTaskProcessingOrder(t *testing.T) {
+	t.Parallel()
 	got := AssemblePrompt(PromptParts{OneShot: "run first", Messages: "message second", AwaitingReplies: "# Awaiting replies\nreply state", Goal: "# Agent Goal\n\nkey: LEGACY-1\ndescription: selected legacy task", Tail: "finish"})
 	last := -1
 	for _, want := range []string{"# Task Processing Order", "## One-shot", "run first", "## Messages", "message second", "### Awaiting replies", "## Goal", "key: LEGACY-1\ndescription: selected legacy task", "finish"} {

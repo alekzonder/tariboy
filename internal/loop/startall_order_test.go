@@ -12,6 +12,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // fifoShim replaces an agent's direct loop shim with a named pipe, so the shim
@@ -52,14 +53,10 @@ func unblockFifoShim(t *testing.T, path string) {
 }
 
 func waitForFile(path string, d time.Duration) bool {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
-			return true
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return false
+	return testutil.WaitFor(d, func() bool {
+		_, err := os.Stat(path)
+		return err == nil
+	})
 }
 
 // Ordering half of SUPER-224: refreshing the shims must happen before the
@@ -74,6 +71,7 @@ func waitForFile(path string, d time.Duration) bool {
 // the stale shim; with the refresh first, the supervisor cannot start until the
 // test unparks the pipe, by which point "worker" is repointed at the live client.
 func TestStartAllRefreshesShimsBeforeScriptSupervisorStarts(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, raw := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 	st := script.NewStore(raw, time.Now)

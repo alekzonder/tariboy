@@ -100,6 +100,7 @@ var finalizePaths = []struct {
 // still on disk: the status is what every observer polls, so the socket has to
 // go first. Moving os.Remove after the store write makes this fail.
 func TestFinalizeIterationRemovesSocketBeforeCommittingTerminalStatus(t *testing.T) {
+	t.Parallel()
 	for _, p := range finalizePaths {
 		t.Run(p.name, func(t *testing.T) {
 			m, st, l, li := finalizeFixture(t, nil)
@@ -134,6 +135,7 @@ func TestFinalizeIterationRemovesSocketBeforeCommittingTerminalStatus(t *testing
 // surviving marker alone is also what a finalizeIteration that does nothing at
 // all would leave behind.
 func TestFinalizeIterationKeepsSocketWhenTerminalStatusIsRejected(t *testing.T) {
+	t.Parallel()
 	for _, p := range finalizePaths {
 		t.Run(p.name, func(t *testing.T) {
 			m, st, l, li := finalizeFixture(t, errors.New("store is down"))
@@ -166,6 +168,7 @@ func TestFinalizeIterationKeepsSocketWhenTerminalStatusIsRejected(t *testing.T) 
 }
 
 func TestRecoverStaleKillCASLossPreservesSuccessorSocket(t *testing.T) {
+	t.Parallel()
 	m, st, l, li := finalizeFixture(t, nil)
 	const successor = "successor iteration socket"
 	st.beforeCAS = func() {
@@ -196,6 +199,7 @@ func TestRecoverStaleKillCASLossPreservesSuccessorSocket(t *testing.T) {
 }
 
 func TestRecoverStaleKillAlreadyTerminalRemovesStaleSocket(t *testing.T) {
+	t.Parallel()
 	m, st, l, li := finalizeFixture(t, nil)
 	st.it.Status = "done"
 

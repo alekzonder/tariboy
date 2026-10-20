@@ -46,6 +46,7 @@ import (
 )
 
 func TestManagerPassesCurrentGoalToRunner(t *testing.T) {
+	t.Parallel()
 	want := tasks.Task{Key: "TARI-43"}
 	m := &Manager{cfg: ManagerConfig{
 		CurrentGoal: func(agentName string, _ time.Time) (tasks.Task, bool, error) {
@@ -95,7 +96,7 @@ func TestShutdownDoesNotHoldManagerLockWhileDrainingHTTP(t *testing.T) {
 		m.Shutdown()
 		close(shutdownDone)
 	}()
-	time.Sleep(20 * time.Millisecond)
+	waitForBlockedIn(t, "loop.shutdownAgentAPIs", "net/http.(*Server).Shutdown")
 	activeDone := make(chan struct{})
 	go func() {
 		_ = m.ActiveAgents()
@@ -125,20 +126,20 @@ func startScriptTestSupervisor(t *testing.T, m *Manager) {
 
 func awaitScriptRun(t *testing.T, st *script.Store, agentName, id string, want func(script.Run) bool) script.Run {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		r, err := st.GetRun(agentName, id)
-		if err == nil && want(r) {
-			return r
-		}
-		time.Sleep(10 * time.Millisecond)
+	var r script.Run
+	var err error
+	if testutil.WaitFor(3*time.Second, func() bool {
+		r, err = st.GetRun(agentName, id)
+		return err == nil && want(r)
+	}) {
+		return r
 	}
-	r, err := st.GetRun(agentName, id)
 	t.Fatalf("script %s did not reach expected state: %#v %v", id, r, err)
 	return script.Run{}
 }
 
 func TestScriptSupervisorKeepsOutputInLogAndPublishesPath(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, raw := newManager(t, &fakeRunner{})
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -205,6 +206,7 @@ func TestScriptSupervisorKeepsOutputInLogAndPublishesPath(t *testing.T) {
 }
 
 func TestScriptSupervisorDeprecatedQuietExitTwoStaysQuiet(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
@@ -239,6 +241,7 @@ func TestScriptSupervisorDeprecatedQuietExitTwoStaysQuiet(t *testing.T) {
 }
 
 func TestScriptSupervisorExportsTheQuietExitCode(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
@@ -269,6 +272,7 @@ func TestScriptSupervisorExportsTheQuietExitCode(t *testing.T) {
 }
 
 func TestScriptSupervisorMakeExitTwoCreatesFailureResult(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
@@ -299,6 +303,7 @@ func TestScriptSupervisorMakeExitTwoCreatesFailureResult(t *testing.T) {
 }
 
 func TestFinishScriptDoesNotPublishResultWithoutLogPath(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts, m.cfg.Bus = st, bus.New(raw, time.Now)
@@ -322,6 +327,7 @@ func TestFinishScriptDoesNotPublishResultWithoutLogPath(t *testing.T) {
 }
 
 func TestScriptSupervisorRecoveryAndCancel(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts = st
@@ -384,6 +390,13 @@ func TestCancelRecurringRunStopsItsDefinitionAfterProcessExit(t *testing.T) {
 	run = awaitScriptRun(t, st, "worker", run.ID, func(run script.Run) bool {
 		return run.Status == script.RunRunning && run.PID != nil
 	})
+	// A TERM that lands before the shell ran its trap ends the script at once.
+	if !testutil.WaitFor(3*time.Second, func() bool {
+		out, _ := os.ReadFile(run.LogPath)
+		return strings.Contains(string(out), "started")
+	}) {
+		t.Fatal("script did not install its TERM trap")
+	}
 	if err := m.CancelScriptTarget("worker", run.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -406,6 +419,7 @@ func TestCancelRecurringRunStopsItsDefinitionAfterProcessExit(t *testing.T) {
 }
 
 func TestScriptLogRejectsSymlink(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts = st
@@ -441,6 +455,7 @@ func TestScriptLogRejectsSymlink(t *testing.T) {
 }
 
 func TestRemoveScriptRejectsActiveRecordsAndRemovesTerminalRecords(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts = st
@@ -488,6 +503,7 @@ func TestRemoveScriptRejectsActiveRecordsAndRemovesTerminalRecords(t *testing.T)
 }
 
 func TestStartScriptDoesNotLaunchCanceledPendingRecord(t *testing.T) {
+	t.Parallel()
 	m, as, _, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts = st
@@ -680,6 +696,7 @@ func pinBasicImage(t *testing.T, m *Manager, ag *agent.Agent) {
 // leave the agent in "error", not silently launch the loop without a control
 // plane (which previously made every iteration end in no_i_am_done forever).
 func TestStartFailsLoudlyWhenToolsSocketUnbindable(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, _, _ := newManager(t, r)
 	// Sockets would land in a directory that does not exist, so net.Listen fails.
@@ -713,7 +730,6 @@ func TestStartFailsLoudlyWhenToolsSocketUnbindable(t *testing.T) {
 
 func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string, *store.Store) {
 	t.Helper()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	base := t.TempDir()
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
@@ -758,6 +774,7 @@ func testSkillsDir(t *testing.T) string {
 }
 
 func TestRefreshLoopConfigSignalsGoalReconciler(t *testing.T) {
+	t.Parallel()
 	m, _, _, _ := newManager(t, &fakeRunner{})
 	calls := 0
 	m.cfg.GoalSignal = func() { calls++ }
@@ -770,6 +787,7 @@ func TestRefreshLoopConfigSignalsGoalReconciler(t *testing.T) {
 }
 
 func TestStartSignalsGoalReconcilerWhileIterationIsAdopting(t *testing.T) {
+	t.Parallel()
 	m, as, _, _ := newManager(t, &fakeRunner{})
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -787,6 +805,7 @@ func TestStartSignalsGoalReconcilerWhileIterationIsAdopting(t *testing.T) {
 }
 
 func TestRestartSignalsGoalReconcilerAfterReenableDuringAdoption(t *testing.T) {
+	t.Parallel()
 	m, as, _, _ := newManager(t, &fakeRunner{})
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Enabled: true}); err != nil {
 		t.Fatal(err)
@@ -812,6 +831,7 @@ func TestRestartSignalsGoalReconcilerAfterReenableDuringAdoption(t *testing.T) {
 // a standalone agent would persist successfully but task publication would
 // create no delivery for it.
 func TestRunSubscribesStandaloneAgentToOwnInbox(t *testing.T) {
+	t.Parallel()
 	m, _, _, raw := newManager(t, &fakeRunner{})
 	bs := bus.New(raw, time.Now)
 	m.cfg.Bus = bs
@@ -835,6 +855,7 @@ func TestRunSubscribesStandaloneAgentToOwnInbox(t *testing.T) {
 }
 
 func TestRunDoesNotInjectRetiredCapabilityEnvironment(t *testing.T) {
+	t.Parallel()
 	m, as, _, _ := newManager(t, &fakeRunner{})
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "solo"}); err != nil {
 		t.Fatal(err)
@@ -851,6 +872,7 @@ func TestRunDoesNotInjectRetiredCapabilityEnvironment(t *testing.T) {
 // Catches Manager.Run accepting a complete create request but silently
 // rebuilding a mostly-default Agent before the one-row persistence boundary.
 func TestRunPersistsCompleteConfiguration(t *testing.T) {
+	t.Parallel()
 	m, store, _, _ := newManager(t, &fakeRunner{})
 	cwd := t.TempDir()
 	spec := registry.RunSpec{
@@ -916,17 +938,17 @@ func (r *killBlockingRunner) Run(ctx context.Context, _ agent.Agent, _ string, i
 
 func awaitCurrentIteration(t *testing.T, m *Manager, name string) string {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	var id string
+	if testutil.WaitFor(2*time.Second, func() bool {
 		m.runtimes.mu.Lock()
 		rt := m.runtimes.runs[name]
 		m.runtimes.mu.Unlock()
 		if rt != nil {
-			if id := rt.engine.CurrentIterationID(); id != "" {
-				return id
-			}
+			id = rt.engine.CurrentIterationID()
 		}
-		time.Sleep(10 * time.Millisecond)
+		return id != ""
+	}) {
+		return id
 	}
 	t.Fatalf("agent %q did not start an iteration", name)
 	return ""
@@ -941,6 +963,7 @@ func (s killRecordingShim) SendKeys(shim.SendKeysParams) error { return nil }
 func (s killRecordingShim) Report() shim.ReportResult          { return shim.ReportResult{} }
 
 func TestManagerKillForwardsToLiveShim(t *testing.T) {
+	t.Parallel()
 	r := &killBlockingRunner{started: make(chan string, 1)}
 	m, _, agentsDir, _ := newManager(t, r)
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}}); err != nil {
@@ -1059,6 +1082,7 @@ func startPendingAdoption(
 }
 
 func TestManagerAttachForwardsToAdoptedShim(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
 	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
 
@@ -1080,6 +1104,7 @@ func TestManagerAttachForwardsToAdoptedShim(t *testing.T) {
 }
 
 func TestManagerKillForwardsToAdoptedShim(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
 	killed := make(chan struct{}, 1)
 	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{killed: killed})
@@ -1095,6 +1120,7 @@ func TestManagerKillForwardsToAdoptedShim(t *testing.T) {
 }
 
 func TestManagerStartDuringAdoptionDoesNotLaunchDuplicate(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
@@ -1118,6 +1144,7 @@ func TestManagerStartDuringAdoptionDoesNotLaunchDuplicate(t *testing.T) {
 }
 
 func TestManagerExecRejectsDuringAdoption(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
 	startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
 
@@ -1133,6 +1160,7 @@ func TestManagerExecRejectsDuringAdoption(t *testing.T) {
 }
 
 func TestManagerStopDuringAdoptionDoesNotRestartEngine(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
 	killed := make(chan struct{}, 1)
 	id := startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{killed: killed})
@@ -1175,6 +1203,7 @@ func TestManagerStopDuringAdoptionDoesNotRestartEngine(t *testing.T) {
 }
 
 func TestManagerRestartDuringAdoptionLaunchesInteractiveIteration(t *testing.T) {
+	t.Parallel()
 	r := &killBlockingRunner{started: make(chan string, 1)}
 	m, as, agentsDir, _ := newManager(t, r)
 	killed := make(chan struct{}, 1)
@@ -1208,6 +1237,7 @@ func TestManagerRestartDuringAdoptionLaunchesInteractiveIteration(t *testing.T) 
 }
 
 func TestManagerStopCancelsConsumedAdoptionRestart(t *testing.T) {
+	t.Parallel()
 	r := &killBlockingRunner{started: make(chan string, 1)}
 	m, as, agentsDir, _ := newManager(t, r)
 	killed := make(chan struct{}, 1)
@@ -1256,6 +1286,7 @@ func TestManagerStopCancelsConsumedAdoptionRestart(t *testing.T) {
 }
 
 func TestManagerAdoptedControlCannotCrossSocketReuse(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
 	id := startPendingAdoption(t, m, as, agentsDir, attachRecordingShim{})
 	connecting := make(chan struct{})
@@ -1277,15 +1308,11 @@ func TestManagerAdoptedControlCannotCrossSocketReuse(t *testing.T) {
 	if err := os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if _, err := os.Stat(l.ShimSock()); os.IsNotExist(err) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("adoption did not remove the old shim socket")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		_, err := os.Stat(l.ShimSock())
+		return os.IsNotExist(err)
+	}) {
+		t.Fatal("adoption did not remove the old shim socket")
 	}
 
 	handoff := &m.runtimes.locksFor("smoke").handoff
@@ -1319,6 +1346,7 @@ func TestManagerAdoptedControlCannotCrossSocketReuse(t *testing.T) {
 }
 
 func TestManagerAttachAndResizeForwardToLiveShim(t *testing.T) {
+	t.Parallel()
 	r := &killBlockingRunner{started: make(chan string, 1)}
 	m, _, agentsDir, _ := newManager(t, r)
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke", Harness: "stub", Plugins: []string{"context"}}); err != nil {
@@ -1368,6 +1396,7 @@ func TestManagerAttachAndResizeForwardToLiveShim(t *testing.T) {
 }
 
 func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
+	t.Parallel()
 	r := &killBlockingRunner{
 		started: make(chan string, 2), release: make(chan struct{}),
 		returnAfterCancel: &Outcome{Status: "timeout", DoneFlag: true, ExitCode: 0, CPUMs: 17, MemPeakKB: 23},
@@ -1445,14 +1474,10 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 	// Both Kill calls above have observed the recovery path; let the cancelled
 	// iteration finish unwinding so the polls below can see it close.
 	releaseRunner()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(2*time.Second, func() bool {
 		it, _ := as.GetIteration("smoke", id)
-		if it.Status != "running" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		return it.Status != "running"
+	})
 	it, _ := as.GetIteration("smoke", id)
 	if it.Status != "harness_error" || it.ExitCode == nil || *it.ExitCode != -1 {
 		t.Fatalf("recovered iteration = %+v, want terminal harness_error with exit -1", it)
@@ -1460,8 +1485,7 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 	// The repeated Kill above is idempotent while the recovered iteration is
 	// unwinding. Once it has closed, the stale-kill marker must no longer mask
 	// the normal no-running-iteration error.
-	deadline = time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(2*time.Second, func() bool {
 		m.runtimes.mu.Lock()
 		rt := m.runtimes.runs["smoke"]
 		current := ""
@@ -1476,11 +1500,8 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 		// and a store read in between. Waiting on the current iteration alone
 		// releases this poll exactly as that window opens, and the Kill below
 		// would then be masked by the still-live marker.
-		if current == "" && marker == "" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		return current == "" && marker == ""
+	})
 	if err := m.Kill("smoke"); err == nil || !strings.Contains(err.Error(), "has no running iteration") {
 		t.Fatalf("Kill after recovered iteration unwound = %v, want no-running-iteration error", err)
 	}
@@ -1541,6 +1562,7 @@ func TestManagerKillRecoveryWinsCancelledRunnerNormalOutcome(t *testing.T) {
 }
 
 func TestManagerRunProvisionsAndStops(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1583,6 +1605,7 @@ func TestManagerRunProvisionsAndStops(t *testing.T) {
 }
 
 func TestRunRejectsContractInvalidImageBeforeProvisioning(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	buildContractInvalidImage(t, m.cfg.ImgStore, "invalid")
 
@@ -1598,6 +1621,7 @@ func TestRunRejectsContractInvalidImageBeforeProvisioning(t *testing.T) {
 }
 
 func TestRunV2UsesEnabledExternalPluginResolver(t *testing.T) {
+	t.Parallel()
 	m, _, _, _ := newManager(t, &fakeRunner{})
 	pluginDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins", "widget")
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
@@ -1630,6 +1654,7 @@ func TestRunV2UsesEnabledExternalPluginResolver(t *testing.T) {
 }
 
 func TestRunV2DoesNotReadLegacyExternalPluginPrompt(t *testing.T) {
+	t.Parallel()
 	m, as, _, _ := newManager(t, &fakeRunner{})
 	pluginDir := filepath.Join(filepath.Dir(m.cfg.ImgStore.Dir), "plugins", "widget")
 	if err := os.MkdirAll(pluginDir, 0o700); err != nil {
@@ -1662,6 +1687,7 @@ func TestRunV2DoesNotReadLegacyExternalPluginPrompt(t *testing.T) {
 }
 
 func TestStartEnablesStopDisables(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, _, _ := newManager(t, r)
 	if _, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "smoke",
@@ -1692,6 +1718,7 @@ func TestStartEnablesStopDisables(t *testing.T) {
 }
 
 func TestToolsLoopControlStartsStopsAndReturnsStoredState(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	defer m.Shutdown()
@@ -1736,6 +1763,7 @@ func TestToolsLoopControlStartsStopsAndReturnsStoredState(t *testing.T) {
 }
 
 func TestRunRejectsTraversalName(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	defer m.Shutdown()
@@ -1782,6 +1810,7 @@ func TestRunRejectsTraversalName(t *testing.T) {
 }
 
 func TestReattachAdoptsLiveIteration(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	// Persist a running agent with a running iteration and a result.json waiting.
@@ -1803,13 +1832,10 @@ func TestReattachAdoptsLiveIteration(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Wait for the adopt-poller to record the outcome.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if it, err := as.GetIteration("smoke", id); err == nil && it.Status != "running" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool {
+		it, err := as.GetIteration("smoke", id)
+		return err == nil && it.Status != "running"
+	})
 	it, _ := as.GetIteration("smoke", id)
 	if it.Status == "running" {
 		t.Fatalf("live iteration not adopted: %+v", it)
@@ -1820,6 +1846,7 @@ func TestReattachAdoptsLiveIteration(t *testing.T) {
 // TestReattachOnlyStartsEnabledAgents proves the boot reconcile gate keys on
 // the Enabled flag: an agent with Enabled=false must NOT come up on daemon boot.
 func TestReattachOnlyStartsEnabledAgents(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
 	if err := as.Create(agent.Agent{Name: "on", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, IntervalS: 0}); err != nil {
@@ -1846,6 +1873,7 @@ func TestReattachOnlyStartsEnabledAgents(t *testing.T) {
 }
 
 func TestRecordAdoptedPreservesPersistedTimeoutAndHardWatchdogReason(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{}
 	m, as, agentsDir, _ := newManager(t, r)
 	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"context"}}
@@ -1874,6 +1902,7 @@ func TestRecordAdoptedPreservesPersistedTimeoutAndHardWatchdogReason(t *testing.
 }
 
 func TestRecordAdoptedSignalsGoalCompletionAfterFinalStatus(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub"}
 	if err := as.Create(ag); err != nil {
@@ -1918,6 +1947,7 @@ func (p *adoptionProxy) RevokeIteration(iteration string) {
 func (*adoptionProxy) UpdateTask(string, string, string) int { return 0 }
 
 func TestAdoptionRevokesIterationProxyLease(t *testing.T) {
+	t.Parallel()
 	for _, stale := range []bool{false, true} {
 		t.Run(fmt.Sprintf("stale=%v", stale), func(t *testing.T) {
 			m, as, agentsDir, _ := newManager(t, &fakeRunner{})
@@ -1982,7 +2012,7 @@ func (*timeoutAdoptionShim) Report() shim.ReportResult          { return shim.Re
 func (*timeoutAdoptionShim) SetHardDeadline(string) error       { return nil }
 
 func TestAdoptionEnforcesExtendedPersistedSoftDeadlineOnce(t *testing.T) {
-
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	fastAdoptTiming(m, 5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)
 	base := time.Now().UTC()
@@ -2025,10 +2055,7 @@ func TestAdoptionEnforcesExtendedPersistedSoftDeadlineOnce(t *testing.T) {
 		t.Fatalf("extend adopted timeout: %v", err)
 	}
 	clockNanos.Store(base.Add(31 * time.Second).UnixNano())
-	probeDeadline := time.Now().Add(time.Second)
-	for time.Now().Before(probeDeadline) && handler.statuses.Load() < 2 {
-		time.Sleep(5 * time.Millisecond)
-	}
+	testutil.WaitFor(time.Second, func() bool { return handler.statuses.Load() >= 2 })
 	if got := handler.statuses.Load(); got < 2 {
 		t.Fatalf("adoption did not probe live shim after extension: statuses=%d", got)
 	}
@@ -2037,14 +2064,10 @@ func TestAdoptionEnforcesExtendedPersistedSoftDeadlineOnce(t *testing.T) {
 	}
 
 	clockNanos.Store(base.Add(61 * time.Second).UnixNano())
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(2*time.Second, func() bool {
 		it, _ := as.GetIteration(ag.Name, id)
-		if it.Status == "timeout" {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		return it.Status == "timeout"
+	})
 	it, err := as.GetIteration(ag.Name, id)
 	if err != nil {
 		t.Fatal(err)
@@ -2075,6 +2098,7 @@ func serveStubShim(t *testing.T, sock string) {
 // A stop policy halts the agent with error_reason. Start alone must bring the
 // iterations back: there is no second switch left off by the halt.
 func TestStartAfterStopPolicyHaltResumesIterations(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, _, _ := newManager(t, r)
 	t.Cleanup(m.Shutdown)
@@ -2096,18 +2120,18 @@ func TestStartAfterStopPolicyHaltResumesIterations(t *testing.T) {
 	if err := m.Start("smoke"); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(2500 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if testutil.WaitFor(2500*time.Millisecond, func() bool {
+		its, _ := as.ListIterations("smoke")
+		return len(its) > 0
+	}) {
+		return
 	}
 	st, _ := m.LiveState("smoke")
 	t.Fatalf("Start after a stop-policy halt ran no iteration (state %q)", st)
 }
 
 func TestStartAfterStopRestoresRunningState(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "no_i_am_done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
 
@@ -2150,13 +2174,10 @@ func TestStartAfterStopRestoresRunningState(t *testing.T) {
 	if _, err := m2.Exec("smoke", ""); err != nil {
 		t.Fatalf("exec on reattached agent: %v", err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) > len(before) {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool {
+		its, _ := as.ListIterations("smoke")
+		return len(its) > len(before)
+	})
 	if its, _ := as.ListIterations("smoke"); len(its) <= len(before) {
 		t.Fatal("fresh manager did not pick up the running agent (no iteration ran)")
 	}
@@ -2166,6 +2187,7 @@ func TestStartAfterStopRestoresRunningState(t *testing.T) {
 // Finding 2: with a live adopted iteration, the engine must not launch a second
 // iteration until the adoption finishes (result.json appears and is classified).
 func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, _ := newManager(t, r)
 
@@ -2182,6 +2204,8 @@ func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
 	as.CreateIteration(agent.Iteration{ID: id, Agent: "smoke", Trigger: "interval",
 		Status: "running", StartedAt: time.Now().Format(time.RFC3339)})
 	// Deliberately no result.json yet.
+	fastAdoptTiming(m, 5*time.Millisecond, 10*time.Millisecond, time.Second)
+	watcherReads := countWatcherClockReads(m)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -2190,8 +2214,11 @@ func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
 	}
 
 	// While the adoption is pending, the engine must NOT run: only the adopted
-	// iteration row exists and it stays running.
-	time.Sleep(400 * time.Millisecond)
+	// iteration row exists and it stays running. Each watcher poll reads the
+	// clock twice, so this waits out several polls of the pending adoption.
+	if !testutil.WaitFor(5*time.Second, func() bool { return watcherReads.Load() >= 8 }) {
+		t.Fatal("adoption watcher did not poll the live iteration")
+	}
 	if its, _ := as.ListIterations("smoke"); len(its) != 1 {
 		t.Fatalf("engine started before adoption finished: %d iterations", len(its))
 	}
@@ -2202,15 +2229,11 @@ func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
 	// Now the shim finishes: result.json lands, adoption classifies it, and the
 	// engine is allowed to start and run a fresh iteration.
 	os.WriteFile(l.ResultPath(id), []byte(`{"exit_code":0,"cpu_ms":1,"mem_peak_kb":2}`), 0o600)
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(3*time.Second, func() bool {
 		its, _ := as.ListIterations("smoke")
 		adopted, _ := as.GetIteration("smoke", id)
-		if adopted.Status != "running" && len(its) >= 2 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		return adopted.Status != "running" && len(its) >= 2
+	})
 	adopted, _ := as.GetIteration("smoke", id)
 	if adopted.Status == "running" {
 		t.Fatalf("adopted iteration never classified: %+v", adopted)
@@ -2225,7 +2248,7 @@ func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
 // forever; adoption classifies it terminally as harness_error and removes the
 // dead socket.
 func TestReattachStaleShimClassifiesHarnessError(t *testing.T) {
-
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	fastAdoptTiming(m, 10*time.Millisecond, 20*time.Millisecond, 50*time.Millisecond)
@@ -2248,13 +2271,10 @@ func TestReattachStaleShimClassifiesHarnessError(t *testing.T) {
 	if err := m.StartAll(ctx); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if it, _ := as.GetIteration("smoke", id); it.Status != "running" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool {
+		it, _ := as.GetIteration("smoke", id)
+		return it.Status != "running"
+	})
 	it, _ := as.GetIteration("smoke", id)
 	if it.Status != "harness_error" {
 		t.Fatalf("stale shim not classified: status=%q", it.Status)
@@ -2269,6 +2289,7 @@ func TestReattachStaleShimClassifiesHarnessError(t *testing.T) {
 }
 
 func TestManagerWakesOnPublish(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, _, st := newManager(t, r)
 	// Attach a bus and wire the hook exactly as the daemon does.
@@ -2308,13 +2329,7 @@ func TestManagerWakesOnPublish(t *testing.T) {
 	if _, err := bs.Publish(bus.Message{Channel: bus.InboxChannel("smoke"), Type: "ping", Text: "hi"}); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if iterationCount(t, as, "smoke") > before {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { return iterationCount(t, as, "smoke") > before })
 	if iterationCount(t, as, "smoke") <= before {
 		t.Fatal("publish did not wake the agent")
 	}
@@ -2322,6 +2337,7 @@ func TestManagerWakesOnPublish(t *testing.T) {
 }
 
 func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
+	t.Parallel()
 	r := newCollisionRunner()
 	m, as, agentsDir, st := newManager(t, r)
 	bs := bus.New(st, time.Now)
@@ -2368,13 +2384,7 @@ func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
 	}
 
 	r.blocked.Store(false)
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if iterationCount(t, as, "smoke") == 1 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(3*time.Second, func() bool { return iterationCount(t, as, "smoke") == 1 })
 	its, _ := as.ListIterations("smoke")
 	if len(its) != 1 || its[0].Trigger != "message" {
 		t.Fatalf("post-collision iterations = %+v, want one message iteration", its)
@@ -2382,6 +2392,7 @@ func TestManagerRetriesPendingAfterInteractiveOwnerCloses(t *testing.T) {
 }
 
 func TestManagerWiresGroupTools(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, st := newManager(t, r)
 	bs := bus.New(st, time.Now)
@@ -2566,6 +2577,7 @@ func TestManagerWiresGroupTools(t *testing.T) {
 // unacked pending delivery at reattach time just blocks in select forever —
 // stranded on a quiet channel until some unrelated future publish wakes it.
 func TestReattachWakesEventOnlyAgentWithPending(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, st := newManager(t, r)
 	bs := bus.New(st, time.Now)
@@ -2605,13 +2617,7 @@ func TestReattachWakesEventOnlyAgentWithPending(t *testing.T) {
 
 	// Without any further publish, the reattached engine must wake itself and
 	// drain the pending delivery via a message-triggered iteration.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if iterationCount(t, as, "smoke") > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { return iterationCount(t, as, "smoke") > 0 })
 	its, _ := as.ListIterations("smoke")
 	if len(its) == 0 {
 		t.Fatal("event-only agent with pending delivery never ran after reattach")
@@ -2634,6 +2640,7 @@ func fastAdoptTiming(m *Manager, poll, probe, timeout time.Duration) {
 }
 
 func TestBuildImageForAgentResolvesRelativePathFromWorkdir(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	workdir := filepath.Join(base, "workdir")
@@ -2665,6 +2672,7 @@ func TestBuildImageForAgentResolvesRelativePathFromWorkdir(t *testing.T) {
 }
 
 func TestBuildImageForAgentAssemblesExtends(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	workdir := filepath.Join(base, "workdir")
@@ -2693,6 +2701,7 @@ func TestBuildImageForAgentAssemblesExtends(t *testing.T) {
 }
 
 func TestAgentImageBuildSourcePathResolution(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "creator", Harness: "stub"})
 	if err != nil {
@@ -2766,6 +2775,7 @@ func TestAgentImageBuildSourcePathResolution(t *testing.T) {
 }
 
 func TestAgentAuthoredImageRejectsDisabledExternalPlugin(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "creator", Harness: "stub"})
 	if err != nil {
@@ -2850,6 +2860,7 @@ func TestBuildImageForAgentWaitsForPublicationGate(t *testing.T) {
 
 // The ordinary image builder still rejects symlinks inside packaged skills.
 func TestBuildImageForAgentRejectsSkillSymlink(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	workdir := filepath.Join(base, "workdir")
@@ -2915,6 +2926,7 @@ func TestBuildImageForAgentRejectsSkillSymlink(t *testing.T) {
 }
 
 func TestReapOrphanSessions(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
@@ -2943,6 +2955,7 @@ func TestReapOrphanSessions(t *testing.T) {
 }
 
 func TestLiveState(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
 	a := agent.Agent{Name: "ls", ImageRef: "basic:latest", Enabled: true,
@@ -2960,6 +2973,7 @@ func TestLiveState(t *testing.T) {
 }
 
 func TestLiveStateReportsAndClearsAIStall(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
 	now := time.Date(2026, 9, 10, 2, 10, 0, 0, time.UTC)
@@ -3000,6 +3014,7 @@ func assertLiveState(t *testing.T, m *Manager, name, want string) {
 }
 
 func TestLiveStateGatesOnEnabled(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
 	// Enabled=false must be "stopped".
@@ -3019,6 +3034,7 @@ func TestLiveStateGatesOnEnabled(t *testing.T) {
 }
 
 func TestReapOrphanSessionIgnoresInteractiveFlag(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{}
 	m, as, _, _ := newManager(t, r)
 	killed := map[string]bool{}
@@ -3095,6 +3111,7 @@ func leakedRowCount(t *testing.T, s *store.Store, name string) int {
 // rebuildable tree; a purging Remove hard-deletes everything AND the leaked
 // agent-keyed side-table rows.
 func TestRemovePreserveThenPurge(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, s := newManager(t, r)
 	defer m.Shutdown()
@@ -3171,6 +3188,7 @@ func TestRemovePreserveThenPurge(t *testing.T) {
 // preserving down, Reprovision re-unpacks the (new) image over the retained
 // CONTEXT.md / iterations / audit and restarts the loop.
 func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	m, as, agentsDir, _ := newManager(t, r)
 	defer m.Shutdown()
@@ -3249,6 +3267,7 @@ func TestReprovisionKeepsDataAndSwapsImage(t *testing.T) {
 }
 
 func TestReprovisionContractFailurePreservesIdentityAndTree(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	defer m.Shutdown()
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "keep", Harness: "stub"})
@@ -3282,6 +3301,7 @@ func TestReprovisionContractFailurePreservesIdentityAndTree(t *testing.T) {
 }
 
 func TestReprovisionReplacesRatherThanOverlaysImageTree(t *testing.T) {
+	t.Parallel()
 	m, _, agentsDir, _ := newManager(t, &fakeRunner{})
 	defer m.Shutdown()
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "replace", Harness: "stub"})
@@ -3311,6 +3331,7 @@ func TestReprovisionReplacesRatherThanOverlaysImageTree(t *testing.T) {
 }
 
 func TestReprovisionBridgeFailurePreservesIdentityAndTree(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	defer m.Shutdown()
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "bridge", Harness: "stub"})
@@ -3365,6 +3386,7 @@ func buildBasic2(t *testing.T, st *image.Store) {
 // A schedule the agent arms for itself carries no channel, and its wake is
 // service traffic: it belongs in the agent's service chat, not in the inbox.
 func TestAgentScheduleWithoutChannelWakesTheServiceChat(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, st := newManager(t, &fakeRunner{})
 	m.cfg.Schedules = schedule.NewStore(st, time.Now)
 	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "worker", Harness: "stub"})
@@ -3407,6 +3429,7 @@ func writeAgentShellScripts(t *testing.T, agentsDir, name, global, own string) {
 }
 
 func TestStartScriptSourcesAgentShellScripts(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, raw := newManager(t, &fakeRunner{})
 	st := script.NewStore(raw, time.Now)
 	m.cfg.Scripts = st
@@ -3429,6 +3452,7 @@ func TestStartScriptSourcesAgentShellScripts(t *testing.T) {
 }
 
 func TestScriptRuntimeSourcesAgentShellScripts(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	if err := as.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", Cwd: t.TempDir()}); err != nil {
 		t.Fatal(err)

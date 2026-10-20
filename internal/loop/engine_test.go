@@ -19,6 +19,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 type fakeRunner struct {
@@ -104,12 +105,36 @@ func (f *fakeTimerFactory) lastDelay() time.Duration {
 	return f.delays[len(f.delays)-1]
 }
 
+// idleTracker counts Run's returns to its select through the engine's idle
+// seam. Install it before Run starts.
+type idleTracker struct{ ch chan struct{} }
+
+func trackIdle(e *Engine) *idleTracker {
+	it := &idleTracker{ch: make(chan struct{}, 256)}
+	e.idle = func() { it.ch <- struct{}{} }
+	return it
+}
+
+// wait waits until Run returned to its select n more times: once when it
+// starts, then once per event it handled.
+func (it *idleTracker) wait(t *testing.T, n int) {
+	t.Helper()
+	for i := range n {
+		select {
+		case <-it.ch:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("engine returned to its select %d of %d times", i, n)
+		}
+	}
+}
+
 func baseAgent() agent.Agent {
 	return agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Enabled: true, IntervalS: 60, TimeoutS: 30,
 		OnTimeout: "restart", OnError: "restart", Plugins: []string{"whoami", "loop", "messages"}}
 }
 
 func TestRunOnceDone(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true, CPUMs: 5, MemPeakKB: 9}}}
 	e, as := newEngine(t, baseAgent(), r)
 	res := e.runOnce(context.Background(), "interval", "")
@@ -126,6 +151,7 @@ func TestRunOnceDone(t *testing.T) {
 }
 
 func TestRunOnceNoIAmDone(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "no_i_am_done", ExitCode: 0}}}
 	e, as := newEngine(t, baseAgent(), r)
 	if res := e.runOnce(context.Background(), "interval", ""); res != TickCompletedWaiting {
@@ -138,6 +164,7 @@ func TestRunOnceNoIAmDone(t *testing.T) {
 }
 
 func TestRunOnceHarnessErrorStopHalts(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.OnError = "stop"
 	r := &fakeRunner{outcomes: []Outcome{{Status: "harness_error", ExitCode: 7}}}
@@ -158,6 +185,7 @@ func (detachedRunner) Run(context.Context, agent.Agent, string, string, string) 
 }
 
 func TestEngineDetachedIterationRemainsRunning(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.OnError = "stop"
 	e, as := newEngine(t, ag, detachedRunner{})
@@ -192,6 +220,7 @@ func TestEngineDetachedIterationRemainsRunning(t *testing.T) {
 }
 
 func TestRunOnceTimeoutStop(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.OnTimeout = "stop"
 	r := &fakeRunner{outcomes: []Outcome{{Status: "timeout"}}}
@@ -206,6 +235,7 @@ func TestRunOnceTimeoutStop(t *testing.T) {
 }
 
 func TestRunOnceTimeoutRestart(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "timeout"}}}
 	e, _ := newEngine(t, baseAgent(), r)
 	if res := e.runOnce(context.Background(), "interval", ""); res != TickTimeoutRestart {
@@ -219,6 +249,7 @@ var idleOutcome = Outcome{Status: "done", DoneFlag: true, Productive: false}
 // TestIdleAutostopDisabled: MaxIdleIterations==0 (default) never idle-stops,
 // no matter how many idle iterations pile up.
 func TestIdleAutostopDisabled(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{idleOutcome}}
 	e, as := newEngine(t, baseAgent(), r) // MaxIdleIterations defaults 0
 	for i := 0; i < 5; i++ {
@@ -236,6 +267,7 @@ func TestIdleAutostopDisabled(t *testing.T) {
 // waiting for the first two idle iterations and cleanly stops exactly at the
 // third — state=stopped (loop off, NO error_reason) with an idle_limit reason.
 func TestIdleAutostopFiresAtThreshold(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.MaxIdleIterations = 3
 	r := &fakeRunner{outcomes: []Outcome{idleOutcome}}
@@ -272,6 +304,7 @@ func TestIdleAutostopFiresAtThreshold(t *testing.T) {
 // count equals N (never > N), proving the streak is scoped past the restart
 // boundary rather than re-counting the pre-restart idle history.
 func TestIdleAutostopRestartGrantsFreshBudget(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.MaxIdleIterations = 3
 	r := &fakeRunner{outcomes: []Outcome{idleOutcome}}
@@ -311,6 +344,7 @@ func TestIdleAutostopRestartGrantsFreshBudget(t *testing.T) {
 // TestIdleAutostopProductiveResets: a productive iteration in the middle resets
 // the streak, so the count must reach the threshold again before stopping.
 func TestIdleAutostopProductiveResets(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.MaxIdleIterations = 2
 	// idle, idle-reset-by-productive, then idle, idle => stop on the 2nd idle run.
@@ -343,6 +377,7 @@ func TestIdleAutostopProductiveResets(t *testing.T) {
 // idle run must NOT count toward the streak (it defaults productive=1), so it
 // resets the count rather than pushing it over the threshold.
 func TestIdleAutostopTimeoutDoesNotCount(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.MaxIdleIterations = 3
 	// idle, idle, timeout (restart), idle: streak after these is 1, below 3.
@@ -374,6 +409,7 @@ func TestIdleAutostopTimeoutDoesNotCount(t *testing.T) {
 // TestRunOnceOnIterationCloseDone verifies the close hook fires exactly once,
 // with the right (agent, iterationID), for a normal "done" outcome.
 func TestRunOnceOnIterationCloseDone(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, _ := newEngine(t, baseAgent(), r)
 
@@ -394,6 +430,7 @@ func TestRunOnceOnIterationCloseDone(t *testing.T) {
 }
 
 func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, baseAgent(), r)
 
@@ -415,6 +452,7 @@ func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
 }
 
 func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
+	t.Parallel()
 	raw := storetest.Open(t)
 	as := agent.NewStore(raw)
 	ag := baseAgent()
@@ -464,6 +502,7 @@ func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
 // runner error, the runErr early-return path in runOnce) and timeout (via
 // applyPolicy's normal path).
 func TestRunOnceOnIterationCloseHarnessErrorAndTimeout(t *testing.T) {
+	t.Parallel()
 	t.Run("harness_error via runner error", func(t *testing.T) {
 		r := &erroringRunner{}
 		e, as := newEngine(t, baseAgent(), r)
@@ -518,6 +557,7 @@ func (erroringRunner) Run(_ context.Context, _ agent.Agent, _, _, _ string) (Out
 }
 
 func TestRunLoopManualTrigger(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0 // pure manual
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
@@ -529,13 +569,7 @@ func TestRunLoopManualTrigger(t *testing.T) {
 
 	e.Trigger("one-shot prompt")
 	// Wait until the manual iteration is recorded.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) == 1 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { its, _ := as.ListIterations("smoke"); return len(its) == 1 })
 	cancel()
 	<-done
 	its, _ := as.ListIterations("smoke")
@@ -548,6 +582,7 @@ func TestRunLoopManualTrigger(t *testing.T) {
 // (IntervalS <= 0) processes manual triggers without ever allocating a timer,
 // which is what used to leak on every manual wakeup.
 func TestRunEventOnlyCreatesNoTimers(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0 // event-only; loop stays enabled but has no interval cadence
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
@@ -562,13 +597,7 @@ func TestRunEventOnlyCreatesNoTimers(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		e.Trigger("")
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) == 3 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { its, _ := as.ListIterations("smoke"); return len(its) == 3 })
 	cancel()
 	<-done
 
@@ -585,6 +614,7 @@ func TestRunEventOnlyCreatesNoTimers(t *testing.T) {
 // interval cycle is Stop()ed when a manual trigger wins the select, so the
 // unfired timer is not abandoned.
 func TestRunStopsTimerOnManualTrigger(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 3600 // long interval so the timer never fires on its own
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
@@ -597,25 +627,14 @@ func TestRunStopsTimerOnManualTrigger(t *testing.T) {
 	go func() { e.Run(ctx); close(done) }()
 
 	// Wait until Run has created the first interval timer before triggering.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if f.createdCount() >= 1 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { return f.createdCount() >= 1 })
 	first := f.lastTimer()
 	if first == nil {
 		t.Fatal("Run did not create an interval timer")
 	}
 
 	e.Trigger("")
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) == 1 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { its, _ := as.ListIterations("smoke"); return len(its) == 1 })
 	cancel()
 	<-done
 
@@ -629,19 +648,21 @@ func TestRunStopsTimerOnManualTrigger(t *testing.T) {
 }
 
 func TestWakeStartsParkedEngine(t *testing.T) {
+	t.Parallel()
 	// A disabled interval agent parks (no timer, blocked on select). A later
 	// enable + Wake(WakeStart) must run an iteration.
 	ag := baseAgent()
 	ag.Enabled = false
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
+	idle := trackIdle(e)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { e.Run(ctx); close(done) }()
 
 	// Nothing should run while parked.
-	time.Sleep(50 * time.Millisecond)
+	idle.wait(t, 1)
 	if its, _ := as.ListIterations("smoke"); len(its) != 0 {
 		t.Fatalf("parked engine ran %d iterations", len(its))
 	}
@@ -654,13 +675,7 @@ func TestWakeStartsParkedEngine(t *testing.T) {
 	}
 	e.Wake(WakeStart)
 
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) >= 1 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { its, _ := as.ListIterations("smoke"); return len(its) >= 1 })
 	cancel()
 	<-done
 	if its, _ := as.ListIterations("smoke"); len(its) < 1 {
@@ -669,16 +684,21 @@ func TestWakeStartsParkedEngine(t *testing.T) {
 }
 
 func TestIntervalTimerReloadsPersistedPauseBeforeRunning(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
 	factory := &fakeTimerFactory{}
 	e.newTimer = factory.newTimer
+	idle := trackIdle(e)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { e.Run(ctx); close(done) }()
-	waitForTimerCount(t, factory, 1)
+	idle.wait(t, 1)
+	if factory.createdCount() != 1 {
+		t.Fatalf("created timers = %d, want 1", factory.createdCount())
+	}
 
 	stored, err := as.Get(ag.Name)
 	if err != nil {
@@ -689,7 +709,7 @@ func TestIntervalTimerReloadsPersistedPauseBeforeRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 	factory.lastTimer().ch <- time.Now()
-	time.Sleep(50 * time.Millisecond)
+	idle.wait(t, 1)
 	cancel()
 	<-done
 
@@ -701,6 +721,7 @@ func TestIntervalTimerReloadsPersistedPauseBeforeRunning(t *testing.T) {
 }
 
 func TestWakeMessageRunsIterationWhenPending(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0 // event-only
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
@@ -714,13 +735,7 @@ func TestWakeMessageRunsIterationWhenPending(t *testing.T) {
 	go func() { e.Run(ctx); close(done) }()
 
 	e.Wake(WakeMessage)
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) >= 1 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { its, _ := as.ListIterations("smoke"); return len(its) >= 1 })
 	cancel()
 	<-done
 	its, _ := as.ListIterations("smoke")
@@ -730,17 +745,19 @@ func TestWakeMessageRunsIterationWhenPending(t *testing.T) {
 }
 
 func TestWakeMessageNoopWhenEmpty(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
 	e, as := newEngine(t, ag, r)
 	e.SetMessagePeek(func() (bool, error) { return false, nil }) // nothing pending
+	idle := trackIdle(e)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { e.Run(ctx); close(done) }()
 	e.Wake(WakeMessage)
-	time.Sleep(80 * time.Millisecond)
+	idle.wait(t, 2)
 	cancel()
 	<-done
 	if its, _ := as.ListIterations("smoke"); len(its) != 0 {
@@ -778,17 +795,14 @@ func (r *collisionRunner) SessionBlocked(agent.Agent) bool {
 
 func waitForTimerCount(t *testing.T, factory *fakeTimerFactory, want int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if factory.createdCount() >= want {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	if testutil.WaitFor(2*time.Second, func() bool { return factory.createdCount() >= want }) {
+		return
 	}
 	t.Fatalf("created timers = %d, want at least %d", factory.createdCount(), want)
 }
 
 func TestWakeMessageRetriesAfterInteractiveSessionCloses(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.Interactive = true
 	ag.IntervalS = 0
@@ -813,13 +827,7 @@ func TestWakeMessageRetriesAfterInteractiveSessionCloses(t *testing.T) {
 
 	r.blocked.Store(false)
 	factory.lastTimer().ch <- time.Now()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if its, _ := as.ListIterations("smoke"); len(its) == 1 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { its, _ := as.ListIterations("smoke"); return len(its) == 1 })
 	cancel()
 	<-done
 
@@ -830,6 +838,7 @@ func TestWakeMessageRetriesAfterInteractiveSessionCloses(t *testing.T) {
 }
 
 func TestWakeMessageCoalescesBeforeDrain(t *testing.T) {
+	t.Parallel()
 	e, _ := newEngine(t, baseAgent(), &fakeRunner{
 		outcomes: []Outcome{{Status: "done", DoneFlag: true}},
 	})
@@ -842,6 +851,7 @@ func TestWakeMessageCoalescesBeforeDrain(t *testing.T) {
 }
 
 func TestRunOnceDoesNotStartAfterContextCancellation(t *testing.T) {
+	t.Parallel()
 	e, as := newEngine(t, baseAgent(), &fakeRunner{
 		outcomes: []Outcome{{Status: "done", DoneFlag: true}},
 	})
@@ -871,6 +881,7 @@ func (r *pausingRunner) Run(
 }
 
 func TestWakeMessageDuringRunQueuesOneFutureGeneration(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0
 	r := &pausingRunner{
@@ -910,6 +921,7 @@ func TestWakeMessageDuringRunQueuesOneFutureGeneration(t *testing.T) {
 }
 
 func TestWakeMessageDuringRunSurvivesFullEventQueue(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0
 	r := &pausingRunner{
@@ -955,6 +967,7 @@ func TestWakeMessageDuringRunSurvivesFullEventQueue(t *testing.T) {
 }
 
 func TestWakeMessageRetryCoalescesPublishesAndReparksOnConfig(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.Interactive = true
 	ag.IntervalS = 0
@@ -971,10 +984,14 @@ func TestWakeMessageRetryCoalescesPublishesAndReparksOnConfig(t *testing.T) {
 	e.Wake(WakeMessage)
 	waitForTimerCount(t, factory, 1)
 	first := factory.lastTimer()
+	// An armed retry owns the pending condition, so these publishes return
+	// without queueing a signal for Run.
 	for range 8 {
 		e.Wake(WakeMessage)
 	}
-	time.Sleep(50 * time.Millisecond)
+	if n := len(e.msgWake.ch); n != 0 {
+		t.Fatalf("publishes during an armed retry queued %d signals, want 0", n)
+	}
 	if got := factory.createdCount(); got != 1 {
 		t.Fatalf("coalesced publishes created %d retry timers, want 1", got)
 	}
@@ -996,6 +1013,7 @@ func TestWakeMessageRetryCoalescesPublishesAndReparksOnConfig(t *testing.T) {
 }
 
 func TestWakeMessageRetryCancelsWhenStoppedOrPendingClears(t *testing.T) {
+	t.Parallel()
 	t.Run("stop", func(t *testing.T) {
 		ag := baseAgent()
 		ag.Interactive = true
@@ -1019,10 +1037,7 @@ func TestWakeMessageRetryCancelsWhenStoppedOrPendingClears(t *testing.T) {
 			t.Fatal(err)
 		}
 		e.Wake(WakeStop)
-		deadline := time.Now().Add(time.Second)
-		for time.Now().Before(deadline) && atomic.LoadInt32(&retry.stopped) == 0 {
-			time.Sleep(5 * time.Millisecond)
-		}
+		testutil.WaitFor(time.Second, func() bool { return atomic.LoadInt32(&retry.stopped) != 0 })
 		if atomic.LoadInt32(&retry.stopped) == 0 {
 			t.Fatal("stop wake left message retry armed")
 		}
@@ -1044,17 +1059,20 @@ func TestWakeMessageRetryCancelsWhenStoppedOrPendingClears(t *testing.T) {
 		e.SetMessagePeek(func() (bool, error) { return pending.Load(), nil })
 		factory := &fakeTimerFactory{}
 		e.newTimer = factory.newTimer
+		idle := trackIdle(e)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go func() { e.Run(ctx); close(done) }()
 		e.Wake(WakeMessage)
+		// Start, then the blocked message attempt that armed the retry.
+		idle.wait(t, 2)
 		waitForTimerCount(t, factory, 1)
 
 		pending.Store(false)
 		r.blocked.Store(false)
 		factory.lastTimer().ch <- time.Now()
-		time.Sleep(50 * time.Millisecond)
+		idle.wait(t, 1)
 		cancel()
 		<-done
 		if r.calls != 0 {
@@ -1166,6 +1184,7 @@ func TestRunOnceNoSpanWhenTelemetryOff(t *testing.T) {
 }
 
 func TestWakeIsNonBlocking(t *testing.T) {
+	t.Parallel()
 	// Wake must never block even if no one is draining the channel.
 	e, _ := newEngine(t, baseAgent(), &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
 	for i := 0; i < 100; i++ {
@@ -1179,6 +1198,7 @@ type blockingRunner struct{ fakeRunner }
 func (b *blockingRunner) SessionBlocked(agent.Agent) bool { return true }
 
 func TestRunOnceManualFailsOnSessionConflict(t *testing.T) {
+	t.Parallel()
 	r := &blockingRunner{}
 	ag := baseAgent()
 	ag.Interactive = true
@@ -1204,6 +1224,7 @@ func TestRunOnceManualFailsOnSessionConflict(t *testing.T) {
 }
 
 func TestRunOnceManualSessionConflictSignalsGoalAfterFailedRow(t *testing.T) {
+	t.Parallel()
 	r := &blockingRunner{}
 	ag := baseAgent()
 	ag.Interactive = true
@@ -1235,6 +1256,7 @@ func TestRunOnceManualSessionConflictSignalsGoalAfterFailedRow(t *testing.T) {
 }
 
 func TestRunOnceLoopSkipsOnSessionConflict(t *testing.T) {
+	t.Parallel()
 	r := &blockingRunner{}
 	ag := baseAgent()
 	ag.Interactive = true
@@ -1267,6 +1289,7 @@ func (r *reapableRunner) SessionBlocked(agent.Agent) bool  { return true }
 func (r *reapableRunner) ReapOrphanBlock(agent.Agent) bool { r.reaps++; return true }
 
 func TestRunOnceReapsOrphanThenLaunches(t *testing.T) {
+	t.Parallel()
 	r := &reapableRunner{fakeRunner: fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}}
 	ag := baseAgent()
 	ag.Interactive = true
@@ -1295,6 +1318,7 @@ func TestRunOnceReapsOrphanThenLaunches(t *testing.T) {
 }
 
 func TestRunOnceRecordsLifecycleAudit(t *testing.T) {
+	t.Parallel()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, _ := newEngine(t, baseAgent(), r)
 	var types []string
@@ -1315,22 +1339,28 @@ func asStr(v any) string {
 // TestEngineSkipsIterationWhenDisabled verifies the interval gate requires
 // the Enabled flag: a disabled agent must not fire any interval iteration
 // even when IntervalS>0.
-// Mirrors TestWakeStartsParkedEngine's "parked engine" shape (real timer,
-// real sleep, assert ListIterations stays empty).
+// The fake timer factory shows that Run never arms an interval timer for it.
 func TestEngineSkipsIterationWhenDisabled(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.Enabled = false
-	ag.IntervalS = 1 // short enough to fire well within the test's wait window
+	ag.IntervalS = 1
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
+	factory := &fakeTimerFactory{}
+	e.newTimer = factory.newTimer
+	idle := trackIdle(e)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { e.Run(ctx); close(done) }()
 
-	// Wait comfortably past the 1s interval; a disabled agent must never
-	// launch an interval iteration, no matter how long we wait here.
-	time.Sleep(1500 * time.Millisecond)
+	// Run has reloaded the agent and chosen its timer; a disabled agent
+	// waits with none, so no interval iteration can ever start.
+	idle.wait(t, 1)
+	if c := factory.createdCount(); c != 0 {
+		t.Fatalf("disabled agent armed %d interval timer(s), want 0", c)
+	}
 	cancel()
 	<-done
 
@@ -1346,6 +1376,7 @@ func TestEngineSkipsIterationWhenDisabled(t *testing.T) {
 // TestEngineIntervalGate pins the one switch: an enabled agent runs interval
 // iterations unless it is halted or uses the terminal-only bare image.
 func TestEngineIntervalGate(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name  string
 		edit  func(*agent.Agent)
@@ -1366,15 +1397,17 @@ func TestEngineIntervalGate(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			factory := &fakeTimerFactory{}
+			e.newTimer = factory.newTimer
+			idle := trackIdle(e)
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan struct{})
 			go func() { e.Run(ctx); close(done) }()
-			deadline := time.Now().Add(1500 * time.Millisecond)
-			for time.Now().Before(deadline) {
-				if its, _ := as.ListIterations("smoke"); len(its) > 0 {
-					break
-				}
-				time.Sleep(10 * time.Millisecond)
+			idle.wait(t, 1)
+			// Fire the interval timer when Run armed one; a gated agent arms none.
+			if timer := factory.lastTimer(); timer != nil {
+				timer.ch <- time.Now()
+				idle.wait(t, 1)
 			}
 			cancel()
 			<-done
@@ -1387,6 +1420,7 @@ func TestEngineIntervalGate(t *testing.T) {
 }
 
 func TestDisableLoopSetsError(t *testing.T) {
+	t.Parallel()
 	ag := agent.Agent{Name: "eh", ImageRef: "i:latest", OnError: "stop", Enabled: true}
 	e, st := newEngine(t, ag, &fakeRunner{outcomes: []Outcome{{Status: "harness_error"}}})
 	e.applyPolicy(Outcome{Status: "harness_error"})
@@ -1404,6 +1438,7 @@ func TestDisableLoopSetsError(t *testing.T) {
 // unusable harness): the loop halts with the real cause in error_reason and one
 // iteration_failed audit event, instead of failing silently every tick.
 func TestRunOnceBeforeLaunchErrorSurfacesReason(t *testing.T) {
+	t.Parallel()
 	e, as := newEngine(t, baseAgent(), &fakeRunner{})
 	e.SetBeforeLaunch(func(*agent.Agent) (activatedImage, error) {
 		return activatedImage{}, errors.New("image manifest verify: digest mismatch")
@@ -1433,6 +1468,7 @@ func TestRunOnceBeforeLaunchErrorSurfacesReason(t *testing.T) {
 }
 
 func TestRunOnceRecordsHarnessErrorReason(t *testing.T) {
+	t.Parallel()
 	for name, r := range map[string]IterationRunner{
 		"runner error": erroringRunner{},
 		"harness exit": &fakeRunner{outcomes: []Outcome{{Status: "harness_error", ExitCode: 3, Error: "harness exited with code 3"}}},

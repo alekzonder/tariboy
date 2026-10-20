@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	goruntime "runtime"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -18,6 +19,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/shim"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // toolsHTTP dials the per-agent tools socket the way the skill scripts do: a
@@ -117,6 +119,7 @@ func liveIterationOnDisk(t *testing.T, m *Manager, as *agent.Store, agentsDir, n
 // The assertion is on the answer to a request, not on the socket file: the file
 // alone proves nothing about who, if anyone, is serving it.
 func TestStartAllBindsToolsSocketForUnfinishedIterationWithoutEngine(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		agent   string
@@ -198,7 +201,7 @@ func (*adoptedDoneGraceShim) SendKeys(shim.SendKeysParams) error { return nil }
 func (*adoptedDoneGraceShim) Report() shim.ReportResult          { return shim.ReportResult{} }
 
 func TestAdoptedIterationHonorsDoneGrace(t *testing.T) {
-
+	t.Parallel()
 	for _, idle := range []bool{false, true} {
 		t.Run(map[bool]string{false: "productive", true: "idle"}[idle], func(t *testing.T) {
 			m, as, agentsDir, _ := newManager(t, &fakeRunner{})
@@ -241,15 +244,11 @@ func TestAdoptedIterationHonorsDoneGrace(t *testing.T) {
 				t.Fatalf("i-am-done = %d %v, want 200 for iteration %q", code, res, id)
 			}
 
-			deadline := time.Now().Add(time.Second)
 			var it agent.Iteration
-			for time.Now().Before(deadline) {
+			testutil.WaitFor(time.Second, func() bool {
 				it, err = as.GetIteration(ag.Name, id)
-				if err == nil && it.Status != "running" {
-					break
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
+				return err == nil && it.Status != "running"
+			})
 			if it.Status != "done" || !it.DoneFlag || it.Productive == idle {
 				t.Fatalf("adopted iteration = %+v, want done flag and productive=%t", it, !idle)
 			}
@@ -267,7 +266,7 @@ func TestAdoptedIterationHonorsDoneGrace(t *testing.T) {
 }
 
 func TestAdoptedIterationDoneGraceAndSoftTimeoutSendOneKill(t *testing.T) {
-
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	fastAdoptTiming(m, 5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)
 	m.cfg.DoneGrace = 20 * time.Millisecond
@@ -276,6 +275,7 @@ func TestAdoptedIterationDoneGraceAndSoftTimeoutSendOneKill(t *testing.T) {
 	var clockNanos atomic.Int64
 	clockNanos.Store(base.UnixNano())
 	m.cfg.Clock = func() time.Time { return time.Unix(0, clockNanos.Load()).UTC() }
+	watcherReads := countWatcherClockReads(m)
 
 	ag := agent.Agent{Name: "adopted", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"loop"}}
 	pinBasicImage(t, m, &ag)
@@ -311,18 +311,19 @@ func TestAdoptedIterationDoneGraceAndSoftTimeoutSendOneKill(t *testing.T) {
 		t.Fatalf("i-am-done: code=%d err=%v", code, err)
 	}
 	// Let adoption observe the done flag while both deadlines are still pending,
-	// then cross the grace and soft-timeout boundaries in the same poll.
-	time.Sleep(50 * time.Millisecond)
+	// then cross the grace and soft-timeout boundaries in the same poll. Each
+	// watcher poll reads the clock twice after it loads the iteration, so four
+	// more reads include one whole poll that loaded the done flag.
+	reads := watcherReads.Load()
+	if !testutil.WaitFor(5*time.Second, func() bool { return watcherReads.Load() >= reads+4 }) {
+		t.Fatal("adoption watcher did not poll after i-am-done")
+	}
 	clockNanos.Store(base.Add(2 * time.Second).UnixNano())
 
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(time.Second, func() bool {
 		it, getErr := as.GetIteration(ag.Name, id)
-		if getErr == nil && it.Status != "running" {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		return getErr == nil && it.Status != "running"
+	})
 	if got := handler.kills.Load(); got != 1 {
 		t.Fatalf("overlapping done grace and soft timeout sent %d Kill requests, want 1", got)
 	}
@@ -335,6 +336,7 @@ func TestAdoptedIterationDoneGraceAndSoftTimeoutSendOneKill(t *testing.T) {
 // must therefore take over the very same server, and teardown must close and
 // unlink exactly one.
 func TestEngineStartReusesEarlyBoundToolsSocket(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}})
 	l, id := liveIterationOnDisk(t, m, as, agentsDir, "adopted", true)
 
@@ -353,17 +355,13 @@ func TestEngineStartReusesEarlyBoundToolsSocket(t *testing.T) {
 		[]byte(`{"exit_code":0,"ended_at":"t","cpu_ms":3,"mem_peak_kb":4}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(3 * time.Second)
 	var rt *runtime
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(3*time.Second, func() bool {
 		m.runtimes.mu.Lock()
 		rt = m.runtimes.runs["adopted"]
 		m.runtimes.mu.Unlock()
-		if rt != nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		return rt != nil
+	})
 	if rt == nil {
 		t.Fatal("engine did not start after the adoption finished")
 	}
@@ -389,6 +387,7 @@ func TestEngineStartReusesEarlyBoundToolsSocket(t *testing.T) {
 // Remove already tears down a running agent's server, and it owes the same to
 // one that only ever had the early bind.
 func TestRemoveClosesEarlyBoundToolsSocket(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 	l, _ := liveIterationOnDisk(t, m, as, agentsDir, "quiet", false)
@@ -407,4 +406,35 @@ func TestRemoveClosesEarlyBoundToolsSocket(t *testing.T) {
 	if _, _, err := toolsCall(l.Sock(), "GET", "/tools/whoami", ""); err == nil {
 		t.Fatal("tools socket still answers after Remove")
 	}
+}
+
+// calledFrom reports whether a function whose name contains fn is on the
+// caller's stack.
+func calledFrom(fn string) bool {
+	pc := make([]uintptr, 32)
+	frames := goruntime.CallersFrames(pc[:goruntime.Callers(2, pc)])
+	for {
+		f, more := frames.Next()
+		if strings.Contains(f.Function, fn) {
+			return true
+		}
+		if !more {
+			return false
+		}
+	}
+}
+
+// countWatcherClockReads wraps the manager clock and counts the reads made by
+// iteration watchers. Each watcher poll that loads the iteration reads the
+// clock twice, so the count tells a test how often a watcher has polled.
+func countWatcherClockReads(m *Manager) *atomic.Int64 {
+	var reads atomic.Int64
+	clock := m.cfg.Clock
+	m.cfg.Clock = func() time.Time {
+		if calledFrom("(*iterationWatcher).watch") {
+			reads.Add(1)
+		}
+		return clock()
+	}
+	return &reads
 }

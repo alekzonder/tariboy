@@ -35,6 +35,7 @@ func runtimeTemplate(t *testing.T, name string) image.PromptTemplate {
 }
 
 func TestFormatRuntimeGoalPreservesLiteralTaskText(t *testing.T) {
+	t.Parallel()
 	got := FormatRuntimeGoal(tasks.Task{
 		Key: "TARI-43", Title: "Render goal", Priority: tasks.PriorityP1,
 		Status: tasks.StatusInProgress, Description: "line one\nline two",
@@ -46,6 +47,7 @@ func TestFormatRuntimeGoalPreservesLiteralTaskText(t *testing.T) {
 }
 
 func TestFormatRuntimeGoalExplainsCustomerAndPRHandoffs(t *testing.T) {
+	t.Parallel()
 	got := FormatRuntimeGoal(tasks.Task{Key: "TARI-43", Status: tasks.StatusWaitCustomer})
 	for _, want := range []string{"wait for the customer answer", "Pull request", "Wait customer"} {
 		if !strings.Contains(got, want) {
@@ -55,6 +57,7 @@ func TestFormatRuntimeGoalExplainsCustomerAndPRHandoffs(t *testing.T) {
 }
 
 func TestRenderPromptTemplatePreservesOtherLayersOrder(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "prompt", "layers"), 0o700); err != nil {
 		t.Fatal(err)
@@ -93,6 +96,7 @@ func TestRenderPromptTemplatePreservesOtherLayersOrder(t *testing.T) {
 }
 
 func TestRenderPromptTemplateEmptyStillIncludesTaskProcessingOrder(t *testing.T) {
+	t.Parallel()
 	template := image.PromptTemplate{SchemaVersion: 2}
 	template.SHA256 = promptTemplateSHA(t, template)
 	got, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{})
@@ -102,6 +106,7 @@ func TestRenderPromptTemplateEmptyStillIncludesTaskProcessingOrder(t *testing.T)
 }
 
 func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		runtime string
 		value   RuntimePromptValues
@@ -130,6 +135,7 @@ func TestRenderPromptTemplateNamesOwningSkillForRuntimeData(t *testing.T) {
 }
 
 func TestValidatePromptTemplateAcceptsWorkdirRuntime(t *testing.T) {
+	t.Parallel()
 	template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{{Kind: "runtime", Runtime: "workdir"}}}
 	template.SHA256 = promptTemplateSHA(t, template)
 	if err := image.ValidatePromptTemplate(template); err != nil {
@@ -138,6 +144,7 @@ func TestValidatePromptTemplateAcceptsWorkdirRuntime(t *testing.T) {
 }
 
 func TestRenderPromptTemplateRejectsUnsafeLayerPath(t *testing.T) {
+	t.Parallel()
 	template := image.PromptTemplate{SchemaVersion: 2, Entries: []image.TemplateEntry{{Kind: "file", ArchivePath: "../secret", SHA256: strings.Repeat("0", 64)}}}
 	template.SHA256 = promptTemplateSHA(t, template)
 	if _, err := RenderPromptTemplate(template, t.TempDir(), RuntimePromptValues{}); err == nil {
@@ -146,6 +153,7 @@ func TestRenderPromptTemplateRejectsUnsafeLayerPath(t *testing.T) {
 }
 
 func TestFormatRuntimeIdentityUsesCurrentIterationImageAndCWD(t *testing.T) {
+	t.Parallel()
 	want := "# You are agent worker\nimage: reviewer:latest\nimage-version: 3.4.5\nimage-digest: sha256:abc\ncwd: /srv/work\niteration: worker-1"
 	if got := FormatRuntimeIdentity("worker", "reviewer:latest", "3.4.5", "sha256:abc", "/srv/work", "worker-1"); got != want {
 		t.Fatalf("identity = %q, want %q", got, want)
@@ -153,6 +161,7 @@ func TestFormatRuntimeIdentityUsesCurrentIterationImageAndCWD(t *testing.T) {
 }
 
 func TestFormatRuntimeWorkdir(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join("agents", "worker", "workdir")
 	absolute, err := filepath.Abs(path)
 	if err != nil {
@@ -168,6 +177,7 @@ func TestFormatRuntimeWorkdir(t *testing.T) {
 }
 
 func TestReadPromptTemplateRequiresTrustedIterationDigest(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "prompt"), 0o700); err != nil {
 		t.Fatal(err)

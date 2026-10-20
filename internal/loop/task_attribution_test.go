@@ -46,6 +46,7 @@ func (r *attributionTaskReader) GetTask(_ context.Context, actor tasks.Actor, ke
 }
 
 func TestResolveNativeTaskAttributionWalksToRootAsAgent(t *testing.T) {
+	t.Parallel()
 	reader := &attributionTaskReader{tasks: map[string]tasks.Task{
 		"SUPER-1": {Key: "SUPER-1"},
 		"SUPER-2": {Key: "SUPER-2", ParentKey: "SUPER-1"},
@@ -82,6 +83,7 @@ func TestResolveNativeTaskAttributionWalksToRootAsAgent(t *testing.T) {
 }
 
 func TestResolveNativeTaskAttributionPropagatesLookupError(t *testing.T) {
+	t.Parallel()
 	want := errors.New("native task unavailable")
 	reader := &attributionTaskReader{err: map[string]error{"SUPER-9": want}}
 	_, _, err := resolveNativeTaskAttribution(context.Background(), reader, "worker", "SUPER-9")
@@ -91,6 +93,7 @@ func TestResolveNativeTaskAttributionPropagatesLookupError(t *testing.T) {
 }
 
 func TestResolveNativeTaskAttributionRejectsParentCycle(t *testing.T) {
+	t.Parallel()
 	reader := &attributionTaskReader{tasks: map[string]tasks.Task{
 		"SUPER-1": {Key: "SUPER-1", ParentKey: "SUPER-2"},
 		"SUPER-2": {Key: "SUPER-2", ParentKey: "SUPER-1"},
@@ -102,6 +105,7 @@ func TestResolveNativeTaskAttributionRejectsParentCycle(t *testing.T) {
 }
 
 func TestResolveNativeTaskAttributionUsesRealServiceAuthorization(t *testing.T) {
+	t.Parallel()
 	state := storetest.Open(t)
 	service := tasks.NewService(state.DB, "customer", func() time.Time {
 		return time.Date(2026, 8, 3, 6, 0, 0, 0, time.UTC)
@@ -133,6 +137,7 @@ func TestResolveNativeTaskAttributionUsesRealServiceAuthorization(t *testing.T) 
 }
 
 func TestSetGoalUpdatesSelectionAndLiveProxyAttribution(t *testing.T) {
+	t.Parallel()
 	reader := &attributionTaskReader{tasks: map[string]tasks.Task{
 		"T-1": {Key: "T-1"},
 		"T-2": {Key: "T-2", ParentKey: "T-1"},
@@ -164,6 +169,7 @@ func TestSetGoalUpdatesSelectionAndLiveProxyAttribution(t *testing.T) {
 // an agent read its former task, never select it. A task the agent reads as
 // the ancestor of its own work resolves as it always did.
 func TestSetGoalRefusesATaskReadOnlyAsAFormerHolder(t *testing.T) {
+	t.Parallel()
 	state := storetest.Open(t)
 	service := tasks.NewService(state.DB, "customer", func() time.Time {
 		return time.Date(2026, 10, 2, 6, 0, 0, 0, time.UTC)
@@ -210,6 +216,7 @@ func TestSetGoalRefusesATaskReadOnlyAsAFormerHolder(t *testing.T) {
 }
 
 func TestSetGoalDoesNotPersistWhenLiveLeaseCannotBeUpdated(t *testing.T) {
+	t.Parallel()
 	reader := &attributionTaskReader{tasks: map[string]tasks.Task{"T-1": {Key: "T-1"}}}
 	proxy := &attributionProxy{}
 	selected := false

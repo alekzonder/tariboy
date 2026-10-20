@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	goruntime "runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/image"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // restartLaunchFixture drives an interactive agent through adoption and a
@@ -81,6 +83,33 @@ func holdPublicationGate(t *testing.T) (release func()) {
 	return release
 }
 
+// waitForBlockedIn waits until a goroutine whose stack holds every frame is
+// blocked, which proves it reached a lock, gate or drain the test holds closed.
+func waitForBlockedIn(t *testing.T, frames ...string) {
+	t.Helper()
+	buf := make([]byte, 1<<20)
+	blocked := func() bool {
+		n := goruntime.Stack(buf, true)
+		for _, g := range strings.Split(string(buf[:n]), "\n\n") {
+			header, _, _ := strings.Cut(g, "\n")
+			if strings.Contains(header, "[running]") || strings.Contains(header, "[runnable]") {
+				continue
+			}
+			all := true
+			for _, frame := range frames {
+				all = all && strings.Contains(g, frame)
+			}
+			if all {
+				return true
+			}
+		}
+		return false
+	}
+	if !testutil.WaitFor(5*time.Second, blocked) {
+		t.Fatalf("no goroutine blocked in %s", strings.Join(frames, " > "))
+	}
+}
+
 // exitOnDeadlock ends the test binary when the manager is deadlocked: a
 // deadlocked Manager cannot be shut down, so the registered cleanup would hang
 // until the go test timeout instead of reporting the failure.
@@ -103,9 +132,9 @@ func TestRestartAfterAdoptionAndReprovisionDoNotDeadlock(t *testing.T) {
 	reprovisioned := make(chan error, 1)
 	go func() { reprovisioned <- f.m.Reprovision("smoke", "") }()
 	// Let Reprovision queue first, then the launch.
-	time.Sleep(100 * time.Millisecond)
+	waitForBlockedIn(t, "(*Manager).Reprovision")
 	close(f.proceed)
-	time.Sleep(100 * time.Millisecond)
+	waitForBlockedIn(t, "(*Manager).acquireRestartLaunch")
 	releaseGate()
 
 	select {
@@ -130,7 +159,7 @@ func TestManagerAPIsDoNotWaitForRestartImageActivation(t *testing.T) {
 	releaseGate := holdPublicationGate(t)
 	close(f.proceed)
 	// The launch now waits for the publication gate inside image activation.
-	time.Sleep(100 * time.Millisecond)
+	waitForBlockedIn(t, "(*Manager).activatePendingImage")
 
 	calls := []struct {
 		name string

@@ -10,6 +10,7 @@ import (
 )
 
 func TestAgentImageV2AcceptsSkillSourcesOutsideWorkdir(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	work := filepath.Join(base, "work")
 	source := filepath.Join(work, "images", "reviewer")

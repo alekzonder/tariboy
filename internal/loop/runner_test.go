@@ -36,6 +36,7 @@ import (
 )
 
 func TestAssemblePromptOrder(t *testing.T) {
+	t.Parallel()
 	got := AssemblePrompt(PromptParts{
 		Agent: "smoke", Cwd: "/w",
 		ImagePrompt: "SYSTEM+BODY", Context: "CTX", UserPrompt: "STANDING",
@@ -55,6 +56,7 @@ func TestAssemblePromptOrder(t *testing.T) {
 }
 
 func TestAssemblePromptSkipsBlanks(t *testing.T) {
+	t.Parallel()
 	got := AssemblePrompt(PromptParts{Agent: "a", Cwd: "/w", ImagePrompt: "BODY", Tail: "TAIL"})
 	if strings.Contains(got, "\n\n\n") {
 		t.Fatalf("blank sections not collapsed: %q", got)
@@ -65,6 +67,7 @@ func TestAssemblePromptSkipsBlanks(t *testing.T) {
 }
 
 func TestBuildEnv(t *testing.T) {
+	t.Parallel()
 	env := BuildEnv([]string{"PATH=/usr/bin", "HOME=/h"}, "/a/bin", "smoke", "iter-1", "/a/agent.sock",
 		false, "", "", map[string]string{"APP_ENV": "prod"}, map[string]string{"TOKEN": "s3cr3t"})
 	m := map[string]string{}
@@ -89,6 +92,7 @@ func TestBuildEnv(t *testing.T) {
 }
 
 func TestAgentShellCommandSourcesGlobalThenAgent(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	layout := agentdir.New(filepath.Join(base, "agents"), "a1")
 	if err := os.MkdirAll(layout.Root, 0o700); err != nil {
@@ -108,6 +112,7 @@ func TestAgentShellCommandSourcesGlobalThenAgent(t *testing.T) {
 }
 
 func TestAgentShellCommandStopsOnSourceFailure(t *testing.T) {
+	t.Parallel()
 	for _, location := range []string{"global", "agent"} {
 		for _, script := range []string{"set +e; return 7\n", "false\nprintf SCRIPT_CONTINUED\n"} {
 			t.Run(location+"/"+script, func(t *testing.T) {
@@ -139,6 +144,7 @@ func TestAgentShellCommandStopsOnSourceFailure(t *testing.T) {
 }
 
 func TestAgentShellCommandPreservesArgvAfterSet(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	layout := agentdir.New(filepath.Join(base, "agents"), "a1")
 	if err := os.MkdirAll(layout.Root, 0o700); err != nil {
@@ -157,6 +163,7 @@ func TestAgentShellCommandPreservesArgvAfterSet(t *testing.T) {
 }
 
 func TestClassify(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		exit   int
 		done   bool
@@ -178,12 +185,14 @@ func TestClassify(t *testing.T) {
 }
 
 func TestClassifyHardWatchdogAsTimeout(t *testing.T) {
+	t.Parallel()
 	if got := Classify(143, false, false, true); got != "timeout" {
 		t.Fatalf("hard watchdog result classified %q, want timeout", got)
 	}
 }
 
 func TestAssemblePromptMessagesOrder(t *testing.T) {
+	t.Parallel()
 	got := AssemblePrompt(PromptParts{
 		Agent: "smoke", Cwd: "/w",
 		ImagePrompt: "BODY", Context: "CTX", Messages: "MSGS", UserPrompt: "STANDING", Tail: "TAIL",
@@ -198,6 +207,7 @@ func TestAssemblePromptMessagesOrder(t *testing.T) {
 }
 
 func TestFormatMessages(t *testing.T) {
+	t.Parallel()
 	out := FormatMessages([]bus.Message{
 		{ID: "m1", Type: "deploy.requested", Source: "agent:alice", Text: "ship it",
 			Subject: map[string]any{"env": "prod"}},
@@ -217,6 +227,7 @@ func TestFormatMessages(t *testing.T) {
 }
 
 func TestFormatMessagesRendersThreadingState(t *testing.T) {
+	t.Parallel()
 	out := FormatMessages([]bus.Message{
 		{ID: "r1", Type: "answer", Source: "agent:bob", Text: "done",
 			Kind: "reply", InReplyTo: "req-9", CorrelationID: "corr-9"},
@@ -229,12 +240,14 @@ func TestFormatMessagesRendersThreadingState(t *testing.T) {
 }
 
 func TestFormatMessagesEmpty(t *testing.T) {
+	t.Parallel()
 	if got := FormatMessages(nil); got != "" {
 		t.Fatalf("empty batch should render nothing, got %q", got)
 	}
 }
 
 func TestFormatAwaitingReplies(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 12, 12, 0, 30, 0, time.UTC)
 	sent := store.FormatTime(now.Add(-90 * time.Second))
 	out := FormatAwaitingReplies([]bus.Message{
@@ -251,6 +264,7 @@ func TestFormatAwaitingReplies(t *testing.T) {
 }
 
 func TestBuildEnvInjectsProxy(t *testing.T) {
+	t.Parallel()
 	out := BuildEnv([]string{"PATH=/x", "ANTHROPIC_API_KEY=real-secret"}, "/bin", "alice", "alice-1",
 		"/sock", true, "http://127.0.0.1:5555", "sk-tariboy-tok", nil, nil)
 	m := map[string]string{}
@@ -277,6 +291,7 @@ func TestBuildEnvInjectsProxy(t *testing.T) {
 }
 
 func TestBuildEnvNoProxyKeepsEnv(t *testing.T) {
+	t.Parallel()
 	out := BuildEnv([]string{"PATH=/x", "ANTHROPIC_API_KEY=real"}, "/bin", "a", "a-1", "/s", false, "", "", nil, nil)
 	m := map[string]string{}
 	for _, kv := range out {
@@ -291,6 +306,7 @@ func TestBuildEnvNoProxyKeepsEnv(t *testing.T) {
 }
 
 func TestBuildEnvKeepsProviderKeysWhenProxyEnabledWithoutToken(t *testing.T) {
+	t.Parallel()
 	out := BuildEnv([]string{"PATH=/x", "ANTHROPIC_API_KEY=REALKEY", "OPENAI_API_KEY=REALKEY2"},
 		"/bin", "a", "a-1", "/s", true, "", "", nil, nil)
 	m := map[string]string{}
@@ -330,6 +346,7 @@ func (h *doneGraceShimHandler) Report() shim.ReportResult {
 }
 
 func TestAwaitKillsAfterDoneGraceForAllModes(t *testing.T) {
+	t.Parallel()
 	for _, interactive := range []bool{false, true} {
 		t.Run(fmt.Sprintf("interactive=%v", interactive), func(t *testing.T) {
 			base := t.TempDir()
@@ -399,8 +416,8 @@ func TestAwaitKillsAfterDoneGraceForAllModes(t *testing.T) {
 }
 
 func TestPrepareUsesAgentNameAsTmuxSession(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
@@ -474,6 +491,7 @@ func (s *countingSpawner) Start(argv, env []string, dir string) error { s.starts
 // (which would otherwise hit the real API directly with the operator's key) and
 // must surface a failed status with no dangling token.
 func TestRunAbortsWhenMintFails(t *testing.T) {
+	t.Parallel()
 	binder := &failMintBinder{base: "http://127.0.0.1:5555"}
 	r, ag, _, _ := newRunnerForProxyTest(t, binder)
 	cs := &countingSpawner{}
@@ -590,7 +608,6 @@ func newRunnerForProxyTest(t *testing.T, binder ProxyBinder) (*ShimRunner, agent
 	base := t.TempDir()
 	// The stub harness only needs a path here; the fake spawner writes result.json
 	// directly, so the script is never executed.
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
@@ -625,6 +642,7 @@ func newRunnerForProxyTest(t *testing.T, binder ProxyBinder) (*ShimRunner, agent
 }
 
 func TestRunMintsAndRevokesToken(t *testing.T) {
+	t.Parallel()
 	// Reuse the existing ShimRunner test harness (a stub spawner + fake result).
 	// The key assertion: after a run, exactly one token was minted and then revoked.
 	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
@@ -639,6 +657,7 @@ func TestRunMintsAndRevokesToken(t *testing.T) {
 }
 
 func TestRunAttributesTokenToCurrentGoal(t *testing.T) {
+	t.Parallel()
 	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
 	r, ag, _, _ := newRunnerForProxyTest(t, binder)
 	goalReads := 0
@@ -666,6 +685,7 @@ func TestRunAttributesTokenToCurrentGoal(t *testing.T) {
 }
 
 func TestRunFailsWhenGoalAttributionCannotBePersisted(t *testing.T) {
+	t.Parallel()
 	binder := &fakeBinder{base: "http://127.0.0.1:5555", failUpdate: true}
 	r, ag, _, _ := newRunnerForProxyTest(t, binder)
 	r.cfg.CurrentGoal = func(string, time.Time) (tasks.Task, bool, error) {
@@ -689,6 +709,7 @@ func (s cancelSpawner) Start(_, _ []string, _ string) error {
 }
 
 func TestShimRunnerCancellationDetachesLiveIteration(t *testing.T) {
+	t.Parallel()
 	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
 	r, ag, _, as := newRunnerForProxyTest(t, binder)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -767,6 +788,7 @@ func (s managedChildShim) SendKeys(shim.SendKeysParams) error { return nil }
 func (s managedChildShim) Report() shim.ReportResult          { return shim.ReportResult{} }
 
 func TestShimRunnerTerminatesSpawnThatRacesStoppedIteration(t *testing.T) {
+	t.Parallel()
 	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
 	r, ag, _, as := newRunnerForProxyTest(t, binder)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -952,6 +974,7 @@ func TestRunHappyPathRecordsAllPhaseSpans(t *testing.T) {
 }
 
 func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
+	t.Parallel()
 	binder := &fakeBinder{base: "http://127.0.0.1:5555"}
 	r, ag, _, as := newRunnerForProxyTest(t, binder)
 	spawner := r.cfg.Spawner.(*fakeProxySpawner)
@@ -1007,8 +1030,8 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 // an iteration must lay it into the harness-native dir (<cwd>/.claude/skills)
 // so the harness sees it. Modeled on TestPrepareUsesAgentNameAsTmuxSession.
 func TestRunnerSchemaV1StillMaterializesPackedSkillsUnderCWD(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
@@ -1204,6 +1227,7 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 }
 
 func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
@@ -1249,7 +1273,6 @@ func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T)
 	if err := os.WriteFile(filepath.Join(promptDir, "template.json"), templateBody, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	r := NewShimRunner(RunnerConfig{
 		AgentsDir: agentsDir, Store: as, ShimBin: "/opt/tariboy-shim",
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -1276,6 +1299,7 @@ func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T)
 }
 
 func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
@@ -1311,7 +1335,6 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(promptDir, "template.json"), templateBody, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	var goalReads []string
 	r := NewShimRunner(RunnerConfig{
@@ -1349,6 +1372,7 @@ func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 }
 
 func TestMergeSkillLaunchEnvRejectsHomeOverrides(t *testing.T) {
+	t.Parallel()
 	for _, key := range []string{"HOME", "CODEX_HOME", "XDG_CONFIG_HOME"} {
 		if _, err := mergeSkillLaunchEnv([]string{"HOME=/safe"}, []string{key + "=/bridge"}); err == nil {
 			t.Fatalf("accepted %s override", key)
@@ -1357,6 +1381,7 @@ func TestMergeSkillLaunchEnvRejectsHomeOverrides(t *testing.T) {
 }
 
 func TestRunGuardManualFailsWhenSessionAlive(t *testing.T) {
+	t.Parallel()
 	sp := &countingSpawner{}
 	r := NewShimRunner(RunnerConfig{
 		AgentsDir:      t.TempDir(),
@@ -1374,6 +1399,7 @@ func TestRunGuardManualFailsWhenSessionAlive(t *testing.T) {
 }
 
 func TestReapOrphanBlock(t *testing.T) {
+	t.Parallel()
 	newRunner := func(t *testing.T, running bool, killed *int) (*ShimRunner, agent.Agent) {
 		t.Helper()
 		s := storetest.Open(t)
@@ -1431,6 +1457,7 @@ func TestReapOrphanBlock(t *testing.T) {
 }
 
 func TestSessionBlockedOnlyInteractive(t *testing.T) {
+	t.Parallel()
 	r := NewShimRunner(RunnerConfig{HasTmuxSession: func(string) bool { return true }})
 	if r.SessionBlocked(agent.Agent{Name: "a", Interactive: false}) {
 		t.Fatal("non-interactive agent must never be session-blocked")
@@ -1447,7 +1474,6 @@ func TestSessionBlockedOnlyInteractive(t *testing.T) {
 func newPromptProbe(t *testing.T) (*ShimRunner, agent.Agent, agentdir.Layout, *bus.Bus, string) {
 	t.Helper()
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 	bs := bus.New(s, time.Now)
@@ -1497,6 +1523,7 @@ func prepAndReadPrompt(t *testing.T, r *ShimRunner, ag agent.Agent, l agentdir.L
 // iteration must NOT ack the drained message batch. The delivery stays pending so
 // it re-renders next iteration until the agent processes it explicitly.
 func TestRunDoesNotAckBatch(t *testing.T) {
+	t.Parallel()
 	r, ag, l, bs, iterID := newPromptProbe(t)
 	if _, err := bs.Subscribe(ag.Name, bus.InboxChannel(ag.Name), bus.Matcher{}, nil); err != nil {
 		t.Fatal(err)
@@ -1526,6 +1553,7 @@ func TestRunDoesNotAckBatch(t *testing.T) {
 // TestPrepareReRendersUntilProcessed asserts a message keeps rendering into the
 // prompt across iterations until MarkProcessed drains it.
 func TestPrepareReRendersUntilProcessed(t *testing.T) {
+	t.Parallel()
 	r, ag, l, bs, iterID := newPromptProbe(t)
 	if _, err := bs.Subscribe(ag.Name, bus.InboxChannel(ag.Name), bus.Matcher{}, nil); err != nil {
 		t.Fatal(err)
@@ -1559,6 +1587,7 @@ func TestPrepareReRendersUntilProcessed(t *testing.T) {
 // path still fires through the runner: an unprocessed message re-renders until it
 // is dead-lettered, after which it no longer appears in the prompt.
 func TestPrepareDropsMessageAfterDLQ(t *testing.T) {
+	t.Parallel()
 	r, ag, l, bs, iterID := newPromptProbe(t)
 	if _, err := bs.Subscribe(ag.Name, bus.InboxChannel(ag.Name), bus.Matcher{}, nil); err != nil {
 		t.Fatal(err)
@@ -1587,6 +1616,7 @@ func TestPrepareDropsMessageAfterDLQ(t *testing.T) {
 // TestPrepareRendersAwaitingReplies asserts an outstanding request produces the
 // derived "# Awaiting replies" prompt section.
 func TestPrepareRendersAwaitingReplies(t *testing.T) {
+	t.Parallel()
 	r, ag, l, bs, iterID := newPromptProbe(t)
 	req, err := bs.Request(ag.Name, "ops:deploys", "status?", "")
 	if err != nil {
@@ -1602,6 +1632,7 @@ func TestPrepareRendersAwaitingReplies(t *testing.T) {
 }
 
 func TestBuildEnvEmptyAgentBinSkipsPathPrepend(t *testing.T) {
+	t.Parallel()
 	env := BuildEnv([]string{"PATH=/usr/bin:/bin"}, "", "a", "i1", "/tmp/s.sock", false, "", "", nil, nil)
 	for _, kv := range env {
 		if strings.HasPrefix(kv, "PATH=") {
@@ -1851,8 +1882,8 @@ func environmentValue(env []string, key string) string {
 }
 
 func TestPrepareBareImage(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
@@ -1912,6 +1943,7 @@ func TestPrepareBareImage(t *testing.T) {
 }
 
 func TestEnforceSoftTimeoutDoesNotKillAfterConcurrentExtension(t *testing.T) {
+	t.Parallel()
 	db := storetest.Open(t)
 	as := agent.NewStore(db)
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
@@ -1964,6 +1996,7 @@ func (s failingHarnessSpawner) Start(_, _ []string, _ string) error {
 }
 
 func TestRunReportsHarnessExitReason(t *testing.T) {
+	t.Parallel()
 	r, ag, l, _ := newRunnerForProxyTest(t, &fakeBinder{base: "http://127.0.0.1:5555"})
 	r.cfg.Spawner = failingHarnessSpawner{l: l}
 	out, err := r.Run(context.Background(), ag, "manual", "alice-1", "")
@@ -1977,6 +2010,7 @@ func TestRunReportsHarnessExitReason(t *testing.T) {
 }
 
 func TestRunRejectsMissingAgentCwd(t *testing.T) {
+	t.Parallel()
 	r, ag, _, _ := newRunnerForProxyTest(t, &fakeBinder{base: "http://127.0.0.1:5555"})
 	cs := &countingSpawner{}
 	r.cfg.Spawner = cs

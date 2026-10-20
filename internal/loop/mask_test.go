@@ -6,6 +6,7 @@ import (
 )
 
 func TestMaskLaunch(t *testing.T) {
+	t.Parallel()
 	secrets := map[string]string{
 		"ANTHROPIC_API_KEY": "sk-secret-123",
 		"EMPTY_SECRET":      "", // must not cause over-masking
@@ -69,6 +70,7 @@ func TestMaskLaunch(t *testing.T) {
 // whole record. It is still masked where its KEY matches (rule (a)), but its raw
 // text is left alone inside unrelated argv/env entries.
 func TestMaskLaunchShortSecretNoOverMask(t *testing.T) {
+	t.Parallel()
 	secrets := map[string]string{
 		"FEATURE_FLAG": "true", // short common value: len < minSubstringSecretLen
 	}
@@ -100,6 +102,7 @@ func TestMaskLaunchShortSecretNoOverMask(t *testing.T) {
 
 // Finding #4: a bare env entry with no '=' must stay bare, not become "FOO=".
 func TestMaskLaunchBareEnvEntryPreserved(t *testing.T) {
+	t.Parallel()
 	secrets := map[string]string{"ANTHROPIC_API_KEY": "sk-secret-123"}
 	env := []string{
 		"BARE_ENTRY",                      // no '=': keep exactly as-is
@@ -125,6 +128,7 @@ func TestMaskLaunchBareEnvEntryPreserved(t *testing.T) {
 // per-agent secret and has no provider key name. The child still receives every
 // value; only the audit copy is redacted.
 func TestMaskLaunchRedactsInheritedSecretShapedKeys(t *testing.T) {
+	t.Parallel()
 	env := []string{
 		"GITHUB_TOKEN=ghp_live_value",
 		"AWS_SECRET_ACCESS_KEY=aws_live_value",
