@@ -24,7 +24,7 @@ describe("task column layout record", () => {
   it("defaults to today's table", () => {
     expect(defaultTaskColumnLayout()).toEqual({
       order: ["priority", "key", "task", "agent", "server", "status", "duration", "updated"],
-      widths: { priority: 30, key: 168, agent: 104, server: 96, status: 110, duration: 74, updated: 76 },
+      widths: { priority: 30, key: 168, agent: 104, server: 96, status: 148, duration: 74, updated: 76 },
     })
   })
 
