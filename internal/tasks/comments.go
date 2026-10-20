@@ -50,85 +50,19 @@ func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, i
 		ID: commentID, TaskKey: task.Key, Author: actor.Principal, Body: body,
 		Revision: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	resolved, err := openWaitsForPrincipal(ctx, tx, task, actor.Principal)
+	resolved, err := s.resolveCommentWaitsTx(ctx, tx, task, actor, commentID, now)
 	if err != nil {
 		return CommentResult{}, err
 	}
-	// A workflow's own question is answered by an outcome, never by a comment.
-	resolved = withoutWorkflowWaits(resolved)
-	if len(resolved) > 0 {
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE task_waiting_for
-			SET resolving_comment_id = ?, resolved_at = ?
-			WHERE task_id = ? AND expected_principal = ? AND resolved_at = '' AND requesting_principal <> ?`,
-			commentID, now, task.ID, actor.Principal, workflowActor); err != nil {
-			return CommentResult{}, err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE task_notification_state SET read_at = ?
-			WHERE customer_principal = ? AND read_at = '' AND notification_id IN (
-				SELECT o.notification_id
-				FROM task_notification_outbox o
-				JOIN task_events e ON e.sequence = o.event_sequence
-				WHERE o.message_type = 'task.question' AND e.task_id = ?
-			)`, now, userPrincipal(s.customer), task.ID); err != nil {
-			return CommentResult{}, err
-		}
-		for i := range resolved {
-			resolved[i].ResolvingCommentID = commentID
-			resolved[i].ResolvedAt = now
-		}
-		// The customer's answer lets the asker work again: iterations that
-		// counted as idle before the question no longer count.
-		if task.WorkflowDigest != "" && containsPrincipal(resolved, task.Customer) {
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE task_status_visits SET idle_iterations = 0 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-				return CommentResult{}, err
-			}
-		}
-	}
 
 	mentions := s.parseMentions(body)
-	created := make([]WaitingFor, 0, len(mentions))
-	for _, principal := range mentions {
-		if task.WorkflowDigest != "" {
-			// The workflow already waits on this principal; keep its question.
-			open, err := openWaitsForPrincipal(ctx, tx, task, principal)
-			if err != nil {
-				return CommentResult{}, err
-			}
-			if len(withoutWorkflowWaits(open)) < len(open) {
-				continue
-			}
-		}
-		wait, err := upsertWait(ctx, tx, task, principal, actor.Principal, commentID, now)
-		if err != nil {
-			return CommentResult{}, err
-		}
-		created = append(created, wait)
-	}
-	customerWaits, err := openWaitsForPrincipal(ctx, tx, task, task.Customer)
+	created, err := createMentionWaitsTx(ctx, tx, task, actor, mentions, commentID, now)
 	if err != nil {
 		return CommentResult{}, err
 	}
 	previousStatus := task.Status
-	// The assignee's question to the customer moves the task to wait_customer;
-	// the customer's answer, or the customer mentioning the assignee, hands it
-	// back.
-	asks := task.Assignee == actor.Principal && !actor.IsCustomer && containsPrincipal(created, task.Customer)
-	answered := task.Status == StatusWaitCustomer && len(customerWaits) == 0 &&
-		(containsPrincipal(resolved, task.Customer) ||
-			actor.IsCustomer && task.Assignee != "" && slices.Contains(mentions, task.Assignee))
-	if task.Status != StatusDone && task.Status != StatusCancelled {
-		if task.WorkflowDigest != "" {
-			if err := commentWorkflowStateTx(ctx, tx, &task, asks, answered); err != nil {
-				return CommentResult{}, err
-			}
-		} else if asks {
-			task.Status = StatusWaitCustomer
-		} else if answered {
-			task.Status = StatusInProgress
-		}
+	if err := commentStatusTx(ctx, tx, &task, actor, mentions, created, resolved); err != nil {
+		return CommentResult{}, err
 	}
 	if _, err := saveTaskStateTx(ctx, tx, &task, previousStatus, now, false); err != nil {
 		return CommentResult{}, err
@@ -148,25 +82,8 @@ func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, i
 	if err != nil {
 		return CommentResult{}, err
 	}
-	for _, wait := range created {
-		if wait.ExpectedPrincipal == actor.Principal {
-			continue
-		}
-		if err := enqueueNotificationTx(ctx, tx, sequence, wait.ExpectedPrincipal, actor.Principal,
-			"task.question", task, actor.Principal+" asked for an answer on "+task.Key, now); err != nil {
-			return CommentResult{}, err
-		}
-	}
-	notified := map[string]bool{}
-	for _, wait := range resolved {
-		if wait.RequestingPrincipal == actor.Principal || notified[wait.RequestingPrincipal] {
-			continue
-		}
-		if err := enqueueNotificationTx(ctx, tx, sequence, wait.RequestingPrincipal, actor.Principal,
-			"task.answered", task, actor.Principal+" answered on "+task.Key, now); err != nil {
-			return CommentResult{}, err
-		}
-		notified[wait.RequestingPrincipal] = true
+	if err := notifyCommentTx(ctx, tx, sequence, task, actor, created, resolved, now); err != nil {
+		return CommentResult{}, err
 	}
 	response := CommentResult{Comment: comment, CreatedWaits: created, ResolvedWaits: resolved}
 	if err := writeTaskIdempotency(
@@ -179,6 +96,136 @@ func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, i
 	}
 	s.signal()
 	return response, nil
+}
+
+// resolveCommentWaitsTx resolves the open questions the commenting actor was
+// asked on the task and returns them.
+func (s *TaskService) resolveCommentWaitsTx(
+	ctx context.Context, tx *sql.Tx, task Task, actor Actor, commentID int64, now string,
+) ([]WaitingFor, error) {
+	resolved, err := openWaitsForPrincipal(ctx, tx, task, actor.Principal)
+	if err != nil {
+		return nil, err
+	}
+	// A workflow's own question is answered by an outcome, never by a comment.
+	resolved = withoutWorkflowWaits(resolved)
+	if len(resolved) == 0 {
+		return resolved, nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE task_waiting_for
+		SET resolving_comment_id = ?, resolved_at = ?
+		WHERE task_id = ? AND expected_principal = ? AND resolved_at = '' AND requesting_principal <> ?`,
+		commentID, now, task.ID, actor.Principal, workflowActor); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE task_notification_state SET read_at = ?
+		WHERE customer_principal = ? AND read_at = '' AND notification_id IN (
+			SELECT o.notification_id
+			FROM task_notification_outbox o
+			JOIN task_events e ON e.sequence = o.event_sequence
+			WHERE o.message_type = 'task.question' AND e.task_id = ?
+		)`, now, userPrincipal(s.customer), task.ID); err != nil {
+		return nil, err
+	}
+	for i := range resolved {
+		resolved[i].ResolvingCommentID = commentID
+		resolved[i].ResolvedAt = now
+	}
+	// The customer's answer lets the asker work again: iterations that
+	// counted as idle before the question no longer count.
+	if task.WorkflowDigest != "" && containsPrincipal(resolved, task.Customer) {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE task_status_visits SET idle_iterations = 0 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
+			return nil, err
+		}
+	}
+	return resolved, nil
+}
+
+// createMentionWaitsTx opens a question for each principal the comment
+// mentions and returns the questions it opened.
+func createMentionWaitsTx(
+	ctx context.Context, tx *sql.Tx, task Task, actor Actor, mentions []string, commentID int64, now string,
+) ([]WaitingFor, error) {
+	created := make([]WaitingFor, 0, len(mentions))
+	for _, principal := range mentions {
+		if task.WorkflowDigest != "" {
+			// The workflow already waits on this principal; keep its question.
+			open, err := openWaitsForPrincipal(ctx, tx, task, principal)
+			if err != nil {
+				return nil, err
+			}
+			if len(withoutWorkflowWaits(open)) < len(open) {
+				continue
+			}
+		}
+		wait, err := upsertWait(ctx, tx, task, principal, actor.Principal, commentID, now)
+		if err != nil {
+			return nil, err
+		}
+		created = append(created, wait)
+	}
+	return created, nil
+}
+
+// commentStatusTx moves the task's status for the questions a comment opened
+// and resolved.
+func commentStatusTx(
+	ctx context.Context, tx *sql.Tx, task *Task, actor Actor, mentions []string, created, resolved []WaitingFor,
+) error {
+	customerWaits, err := openWaitsForPrincipal(ctx, tx, *task, task.Customer)
+	if err != nil {
+		return err
+	}
+	// The assignee's question to the customer moves the task to wait_customer;
+	// the customer's answer, or the customer mentioning the assignee, hands it
+	// back.
+	asks := task.Assignee == actor.Principal && !actor.IsCustomer && containsPrincipal(created, task.Customer)
+	answered := task.Status == StatusWaitCustomer && len(customerWaits) == 0 &&
+		(containsPrincipal(resolved, task.Customer) ||
+			actor.IsCustomer && task.Assignee != "" && slices.Contains(mentions, task.Assignee))
+	if task.Status != StatusDone && task.Status != StatusCancelled {
+		if task.WorkflowDigest != "" {
+			if err := commentWorkflowStateTx(ctx, tx, task, asks, answered); err != nil {
+				return err
+			}
+		} else if asks {
+			task.Status = StatusWaitCustomer
+		} else if answered {
+			task.Status = StatusInProgress
+		}
+	}
+	return nil
+}
+
+// notifyCommentTx tells each mentioned principal about its new question and
+// each asker about its answer.
+func notifyCommentTx(
+	ctx context.Context, tx *sql.Tx, sequence int64, task Task, actor Actor, created, resolved []WaitingFor, now string,
+) error {
+	for _, wait := range created {
+		if wait.ExpectedPrincipal == actor.Principal {
+			continue
+		}
+		if err := enqueueNotificationTx(ctx, tx, sequence, wait.ExpectedPrincipal, actor.Principal,
+			"task.question", task, actor.Principal+" asked for an answer on "+task.Key, now); err != nil {
+			return err
+		}
+	}
+	notified := map[string]bool{}
+	for _, wait := range resolved {
+		if wait.RequestingPrincipal == actor.Principal || notified[wait.RequestingPrincipal] {
+			continue
+		}
+		if err := enqueueNotificationTx(ctx, tx, sequence, wait.RequestingPrincipal, actor.Principal,
+			"task.answered", task, actor.Principal+" answered on "+task.Key, now); err != nil {
+			return err
+		}
+		notified[wait.RequestingPrincipal] = true
+	}
+	return nil
 }
 
 // commentWorkflowStateTx derives the state a comment leaves a workflow task
