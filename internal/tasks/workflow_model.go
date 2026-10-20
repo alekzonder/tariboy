@@ -61,17 +61,11 @@ type QueueWorkflow struct {
 }
 
 // TaskWorkflowColumns follow the stored task columns in every task select and
-// need TaskWorkflowJoin. The last column is the owner kind of the current
-// status, read from the image manifest only for an unpaused workflow task in
-// wait_customer, so a list query never opens a manifest it does not need.
+// need TaskWorkflowJoin. The last column is the stored owner kind of the
+// current status, which the scan uses to derive WaitingOn.
 const TaskWorkflowColumns = `
        COALESCE(t.workflow_digest, ''), COALESCE(t.workflow_status, ''), t.workflow_paused_reason,
-       COALESCE(wi.name, ''), COALESCE(wi.version, ''),
-       CASE WHEN t.status = 'wait_customer' AND t.workflow_paused_reason = '' THEN COALESCE((
-         SELECT json_extract(s.value, '$.owner.kind')
-         FROM json_each(wi.manifest, '$.definition.statuses') s
-         WHERE json_extract(s.value, '$.id') = t.workflow_status
-       ), '') ELSE '' END`
+       COALESCE(wi.name, ''), COALESCE(wi.version, ''), t.workflow_owner_kind`
 
 // TaskWorkflowJoin joins the image of a workflow task.
 const TaskWorkflowJoin = `

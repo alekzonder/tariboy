@@ -658,19 +658,9 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 	}
 	if filter.Blocked != nil {
 		if *filter.Blocked {
-			query += ` AND (t.manual_block_reason <> '' OR EXISTS (
-				SELECT 1 FROM task_relations r
-				JOIN tasks blocker ON blocker.id = r.source_id
-				WHERE r.target_id = t.id AND r.type = 'blocks'
-				  AND blocker.status NOT IN ('done', 'cancelled')
-			))`
+			query += ` AND (t.manual_block_reason <> '' OR t.open_blockers > 0)`
 		} else {
-			query += ` AND t.manual_block_reason = '' AND NOT EXISTS (
-				SELECT 1 FROM task_relations r
-				JOIN tasks blocker ON blocker.id = r.source_id
-				WHERE r.target_id = t.id AND r.type = 'blocks'
-				  AND blocker.status NOT IN ('done', 'cancelled')
-			)`
+			query += ` AND t.manual_block_reason = '' AND t.open_blockers = 0`
 		}
 	}
 	if filter.AfterKey != "" {

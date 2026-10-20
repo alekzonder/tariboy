@@ -235,12 +235,7 @@ func readyWith(ctx context.Context, q queryer, actor Actor, filter ReadyFilter) 
 	query := cte + visibleTaskSelect + `
 		WHERE v.access_rank = 2 AND t.status = 'open' AND t.assignee = '' AND t.manual_block_reason = ''
 		  AND t.workflow_digest IS NULL
-		  AND NOT EXISTS (
-			SELECT 1 FROM task_relations r
-			JOIN tasks blocker ON blocker.id = r.source_id
-			WHERE r.target_id = t.id AND r.type = 'blocks'
-			  AND blocker.status NOT IN ('done', 'cancelled')
-		  )`
+		  AND t.open_blockers = 0`
 	if filter.Queue != "" {
 		query += ` AND t.queue_prefix = ?`
 		args = append(args, strings.ToUpper(strings.TrimSpace(filter.Queue)))

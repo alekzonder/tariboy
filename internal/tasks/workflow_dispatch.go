@@ -79,11 +79,7 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 			WHERE t.assignee = 'agent:' || m.agent AND t.id <> ?
 			  AND t.status IN ('in_progress', 'open')
 			  AND t.manual_block_reason = ''
-			  AND NOT EXISTS (
-				SELECT 1 FROM task_relations r JOIN tasks b ON b.id = r.source_id
-				WHERE r.target_id = t.id AND r.type = 'blocks'
-				  AND b.status NOT IN ('done', 'cancelled')
-			  )
+			  AND t.open_blockers = 0
 		  )
 		ORDER BY COALESCE((
 			SELECT MAX(h.dispatched_at) FROM task_workflow_holders h
@@ -126,12 +122,7 @@ func (s *Service) DispatchPending(ctx context.Context) (int, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT t.id FROM tasks t
 		WHERE t.workflow_digest IS NOT NULL AND t.status = 'open' AND t.workflow_paused_reason = ''
-		  AND t.manual_block_reason = '' AND NOT EXISTS (
-			SELECT 1 FROM task_relations r
-			JOIN tasks blocker ON blocker.id = r.source_id
-			WHERE r.target_id = t.id AND r.type = 'blocks'
-			  AND blocker.status NOT IN ('done', 'cancelled')
-		  )
+		  AND t.manual_block_reason = '' AND t.open_blockers = 0
 		ORDER BY t.priority, t.created_at, t.id`)
 	if err != nil {
 		return 0, err
