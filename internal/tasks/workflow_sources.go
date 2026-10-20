@@ -91,6 +91,8 @@ type QueueSource struct {
 	Script  string `json:"script"`
 	Every   string `json:"every"`
 	Timeout string `json:"timeout,omitempty"`
+	// Description is the manifest's one-line description of the source.
+	Description string `json:"description,omitempty"`
 	// NextRunAt is when the source runs next; "" while it runs, and the
 	// current time when it has never run.
 	NextRunAt string `json:"next_run_at,omitempty"`
@@ -482,7 +484,8 @@ func (s *RunService) ListQueueSources(ctx context.Context, actor Actor, queue st
 	now := s.clock()
 	out := make([]QueueSource, 0, len(bound))
 	for _, b := range bound {
-		item := QueueSource{Queue: queue, Name: b.source.Name, Script: b.source.Script, Every: b.source.Every, Timeout: b.source.Timeout}
+		item := QueueSource{Queue: queue, Name: b.source.Name, Script: b.source.Script, Every: b.source.Every, Timeout: b.source.Timeout,
+			Description: b.source.Description}
 		recent, err := querySourceRuns(ctx, s.db, ` WHERE queue_prefix = ? AND source = ? ORDER BY id DESC LIMIT ?`,
 			queue, b.source.Name, workflowViewRuns)
 		if err != nil {

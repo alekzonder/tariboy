@@ -171,6 +171,20 @@ func printWorkflowManagedHint(apiErr *client.APIError, key string, stderr io.Wri
 // advanceCommand is the advance command line for key in status, with --from so
 // a retry cannot apply twice. A status that is not a plain identifier is left
 // out rather than printed to the terminal.
+// describedChecks names an outcome's checks by path, each followed by its
+// description in parentheses when the view carries one.
+func describedChecks(outcome tasks.OutcomeView) []string {
+	out := make([]string, 0, len(outcome.Checks))
+	for i, script := range outcome.Checks {
+		if i < len(outcome.CheckDetails) && outcome.CheckDetails[i].Description != "" {
+			out = append(out, script+" ("+strings.Join(strings.Fields(outcome.CheckDetails[i].Description), " ")+")")
+			continue
+		}
+		out = append(out, script)
+	}
+	return out
+}
+
 func advanceCommand(key, status string) string {
 	if status == "" || strings.IndexFunc(status, func(r rune) bool {
 		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_')
@@ -229,7 +243,7 @@ func printWorkflow(raw json.RawMessage, key string, stdout io.Writer) bool {
 			line += "  missing: " + strings.Join(outcome.Missing, ", ")
 		}
 		if len(outcome.Checks) > 0 {
-			line += "  checks: " + strings.Join(outcome.Checks, ", ")
+			line += "  checks: " + strings.Join(describedChecks(outcome), ", ")
 		}
 		fmt.Fprintln(stdout, line)
 	}

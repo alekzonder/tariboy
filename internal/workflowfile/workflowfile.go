@@ -68,19 +68,24 @@ type Status struct {
 	Cancelled    bool         `yaml:"cancelled,omitempty" json:"cancelled,omitempty"`
 }
 
+// Watch is the script that owns a script status. Description is one line of
+// plain text for the operator: what the script waits for.
 type Watch struct {
-	Script  string `yaml:"script" json:"script"`
-	Every   string `yaml:"every" json:"every"`
-	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Script      string `yaml:"script" json:"script"`
+	Every       string `yaml:"every" json:"every"`
+	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
 // Source is a queue-level script the daemon runs on a schedule for every queue
 // bound to the workflow. Each new item key it reports becomes a task.
+// Description is one line of plain text for the operator.
 type Source struct {
-	Name    string `yaml:"name" json:"name"`
-	Script  string `yaml:"script" json:"script"`
-	Every   string `yaml:"every" json:"every"`
-	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Name        string `yaml:"name" json:"name"`
+	Script      string `yaml:"script" json:"script"`
+	Every       string `yaml:"every" json:"every"`
+	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
 type Transition struct {
@@ -90,10 +95,13 @@ type Transition struct {
 	Checks   []Check  `yaml:"checks,omitempty" json:"checks,omitempty"`
 }
 
+// Check is a gate script of a transition. Description is one line of plain
+// text for the operator and the agent: what the script verifies.
 type Check struct {
-	Script  string `yaml:"script" json:"script"`
-	RunAs   string `yaml:"run_as,omitempty" json:"run_as,omitempty"`
-	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Script      string `yaml:"script" json:"script"`
+	RunAs       string `yaml:"run_as,omitempty" json:"run_as,omitempty"`
+	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
 // Parse reads a Workflowfile.yaml, or the one inside a directory. It decodes

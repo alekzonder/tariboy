@@ -284,3 +284,52 @@ func TestTransitionOnKeyIsString(t *testing.T) {
 		t.Fatalf("On = %q", got)
 	}
 }
+
+func TestParseDescriptions(t *testing.T) {
+	dir := t.TempDir()
+	src := `schema_version: 1
+name: notes
+workflow_version: 0.1.0
+initial_status: draft
+sources:
+  - name: incoming
+    script: ./scripts/incoming.sh
+    every: 2m
+    description: Lists the open pull requests that ask for a review.
+statuses:
+  - id: draft
+    owner: { pool: writers }
+    transitions:
+      - on: drafted
+        to: publish
+        checks:
+          - script: ./scripts/check.sh
+            description: The notes start with a heading.
+  - id: publish
+    owner: script
+    watch:
+      script: ./scripts/publish.sh
+      every: 10s
+      description: Publishes the notes once the delay has passed.
+    transitions:
+      - { on: published, to: done }
+  - id: done
+    terminal: true
+`
+	if err := os.WriteFile(filepath.Join(dir, "Workflowfile.yaml"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Parse(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Sources[0].Description; got != "Lists the open pull requests that ask for a review." {
+		t.Fatalf("source description = %q", got)
+	}
+	if got := f.Statuses[0].Transitions[0].Checks[0].Description; got != "The notes start with a heading." {
+		t.Fatalf("check description = %q", got)
+	}
+	if got := f.Statuses[1].Watch.Description; got != "Publishes the notes once the delay has passed." {
+		t.Fatalf("watch description = %q", got)
+	}
+}
