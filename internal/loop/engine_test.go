@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,7 +18,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/events"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 type fakeRunner struct {
@@ -44,11 +43,7 @@ func min(a, b int) int {
 
 func newEngine(t *testing.T, ag agent.Agent, r IterationRunner) (*Engine, *agent.Store) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	if err := as.Create(ag); err != nil {
 		t.Fatal(err)
@@ -420,11 +415,7 @@ func TestRunOnceGoalIterationCompletedAfterFinalStatus(t *testing.T) {
 }
 
 func TestRunOnceRejectedTerminalStatusHasNoOutcomeSideEffects(t *testing.T) {
-	raw, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = raw.Close() })
+	raw := storetest.Open(t)
 	as := agent.NewStore(raw)
 	ag := baseAgent()
 	if err := as.Create(ag); err != nil {

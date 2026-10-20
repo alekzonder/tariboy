@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
@@ -38,11 +38,7 @@ statuses:
 // binds queue DEV to it, and returns a task held by agent dev-1.
 func workflowGoalFixture(t *testing.T) (*tasks.Service, *workflowimage.Store, tasks.Task) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", func() time.Time { return time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC) })
 	if _, err := st.DB.Exec(`INSERT INTO agents(name, image_ref, image_digest, enabled, goal_enabled) VALUES ('dev-1', 'basic:latest', 'sha', 1, 1)`); err != nil {
 		t.Fatal(err)

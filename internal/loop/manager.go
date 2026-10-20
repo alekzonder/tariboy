@@ -49,8 +49,13 @@ type ScriptResultNotifier interface {
 }
 
 type ManagerConfig struct {
-	AgentsDir     string
-	RuntimeDir    string
+	AgentsDir string
+	// RuntimeDir holds the agent sockets. Empty keeps them in each agent
+	// directory; the environment is never consulted.
+	RuntimeDir string
+	// BaseEnv is the baseline environment of iterations and scripts. Nil uses
+	// the daemon process environment.
+	BaseEnv       []string
 	ShimBin       string
 	ImgStore      *image.Store
 	Store         *agent.Store
@@ -216,10 +221,6 @@ func NewManager(cfg ManagerConfig) *Manager {
 	if cfg.Spawner == nil {
 		cfg.Spawner = ExecSpawner{}
 	}
-	if cfg.RuntimeDir == "" && cfg.AgentsDir != "" {
-		cfg.RuntimeDir = defaultRuntimeDir(cfg.AgentsDir)
-		_ = os.MkdirAll(cfg.RuntimeDir, 0o700)
-	}
 	if cfg.HasTmuxSession == nil {
 		cfg.HasTmuxSession = tmuxHasSession
 	}
@@ -309,14 +310,6 @@ func (m *Manager) iterationCompleted(agentName, iterationID string) {
 	}
 }
 
-func defaultRuntimeDir(agentsDir string) string {
-	base := agentsDir
-	if filepath.Base(agentsDir) == "agents" {
-		base = filepath.Dir(agentsDir)
-	}
-	return paths.New(base).RuntimeDir()
-}
-
 // reapOrphanSessions kills any agent-named tmux session that has no live
 // iteration to adopt and no running-status iteration in the store. A tmux session
 // only ever exists for an interactive incarnation, so a session with no live
@@ -355,7 +348,7 @@ func (m *Manager) runnerFor(ag agent.Agent) IterationRunner {
 		return m.cfg.RunnerFactory(ag)
 	}
 	return NewShimRunner(RunnerConfig{
-		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, ShimBin: m.cfg.ShimBin,
+		AgentsDir: m.cfg.AgentsDir, RuntimeDir: m.cfg.RuntimeDir, BaseEnv: m.cfg.BaseEnv, ShimBin: m.cfg.ShimBin,
 		ImgStore: m.cfg.ImgStore, Store: m.cfg.Store, Spawner: m.cfg.Spawner, Clock: m.cfg.Clock,
 		DoneGrace: m.cfg.DoneGrace, Logger: m.cfg.Log, Bus: m.cfg.Bus, Proxy: m.cfg.Proxy, AuditFor: m.cfg.AuditFor,
 		RecordCursorUsage: m.cfg.RecordCursorUsage, CodexApproval: m.cfg.CodexApproval,

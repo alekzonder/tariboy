@@ -407,7 +407,7 @@ func (m *Manager) prepareImageSkillBridge(ag agent.Agent, manifest image.Manifes
 		if err != nil {
 			return harness.SkillLaunchConfig{}, err
 		}
-		env := BuildEnv(os.Environ(), l.BinDir(), ag.Name, "", l.Sock(), false, "", "", ag.Env, secrets)
+		env := BuildEnv(baseEnv(m.cfg.BaseEnv), l.BinDir(), ag.Name, "", l.Sock(), false, "", "", ag.Env, secrets)
 		executable, err := harness.FindExecutable(adapter.Executable(), env, agentCwd(ag, l))
 		if err != nil {
 			return harness.SkillLaunchConfig{}, fmt.Errorf("harness executable %q not found for image skills", adapter.Type())
