@@ -21,9 +21,7 @@ func TestHolderIsFreeOnceItsTaskWaitsInACustomerStatus(t *testing.T) {
 	if goal, err := goals.ReconcileAgent("dev-1", now); err != nil || goal.TaskKey != task.Key {
 		t.Fatalf("initial goal = %#v, %v", goal, err)
 	}
-	if _, err := db.Exec(`UPDATE agents SET enabled = 0 WHERE name = 'dev-2'`); err != nil {
-		t.Fatal(err)
-	}
+	tasks.SetAgent(t, svc, "dev-2", `enabled = 0`)
 	other, err := svc.CreateTask(ctx, actor, tasks.CreateTaskInput{Queue: "DEV", Title: "other"})
 	if err != nil {
 		t.Fatal(err)
@@ -39,10 +37,7 @@ func TestHolderIsFreeOnceItsTaskWaitsInACustomerStatus(t *testing.T) {
 	if err != nil || goal.TaskKey != "" || goal.Waiting {
 		t.Fatalf("goal after customer handoff = %#v, %v; want released", goal, err)
 	}
-	var current string
-	if err := db.QueryRow(`SELECT current_goal_task_key FROM agents WHERE name = 'dev-1'`).Scan(&current); err != nil {
-		t.Fatal(err)
-	}
+	current := tasks.AgentGoalTaskKey(t, db, "dev-1")
 	if current != "" {
 		t.Fatalf("current_goal_task_key = %q; want cleared", current)
 	}

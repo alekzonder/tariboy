@@ -45,62 +45,18 @@ type pauseWait struct {
 
 func openWaitRows(t *testing.T, svc *Service, task Task) []pauseWait {
 	t.Helper()
-	rows, err := svc.db.Query(`
-		SELECT w.expected_principal, w.requesting_principal, w.requesting_comment_id, COALESCE(c.body, '')
-		FROM task_waiting_for w LEFT JOIN task_comments c ON c.id = w.requesting_comment_id
-		WHERE w.task_id = ? AND w.resolved_at = '' ORDER BY w.id`, task.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
+	detail := taskDetail(t, svc, task)
 	var out []pauseWait
-	for rows.Next() {
-		var w pauseWait
-		if err := rows.Scan(&w.expected, &w.requesting, &w.commentID, &w.body); err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, w)
+	for _, w := range detail.WaitingFor {
+		out = append(out, pauseWait{expected: w.ExpectedPrincipal, requesting: w.RequestingPrincipal,
+			commentID: w.RequestingCommentID, body: commentOf(detail, w.RequestingCommentID).Body})
 	}
 	return out
 }
 
-// visitCounters returns idle_iterations, rejected_requests, and script_failures
-// of the open visit.
-func visitCounters(t *testing.T, svc *Service, task Task) [3]int {
-	t.Helper()
-	var c [3]int
-	if err := svc.db.QueryRow(`
-		SELECT idle_iterations, rejected_requests, script_failures FROM task_status_visits
-		WHERE task_id = ? AND left_at = ''`, task.ID).Scan(&c[0], &c[1], &c[2]); err != nil {
-		t.Fatal(err)
-	}
-	return c
-}
-
 func setCounters(t *testing.T, svc *Service, task Task) {
 	t.Helper()
-	if _, err := svc.db.Exec(`
-		UPDATE task_status_visits SET idle_iterations = 2, rejected_requests = 4, script_failures = 1
-		WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func holderRow(t *testing.T, svc *Service, task Task, pool string) (string, bool) {
-	t.Helper()
-	var agent string
-	var released bool
-	err := svc.db.QueryRow(`SELECT agent, released FROM task_workflow_holders WHERE task_id = ? AND pool = ?`,
-		task.ID, pool).Scan(&agent, &released)
-	if err != nil {
-		return "", false
-	}
-	return agent, released
-}
-
-func countEvents(t *testing.T, svc *Service, task Task, kind string) int {
-	t.Helper()
-	return countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ? AND kind = ?`, task.ID, kind)
+	forceOpenVisit(t, svc, task, `idle_iterations = 2, rejected_requests = 4, script_failures = 1`)
 }
 
 func TestPauseStopsTheVisitAndAsksTheCustomer(t *testing.T) {
@@ -124,10 +80,10 @@ func TestPauseStopsTheVisitAndAsksTheCustomer(t *testing.T) {
 		fields["workflow_paused_reason"] != PauseRejectedRequests {
 		t.Fatalf("json = %v", fields)
 	}
-	if state := requestState(t, svc, request.ID); state != "cancelled" {
+	if state := requestState(t, svc, task, request.ID); state != "cancelled" {
 		t.Fatalf("request = %s", state)
 	}
-	if state, _, cancel := runState(t, svc, run.ID); state != "running" || !cancel {
+	if state, _, cancel := runState(t, svc, task, run.ID); state != "running" || !cancel {
 		t.Fatalf("running run = %s cancel %v", state, cancel)
 	}
 	waits := openWaitRows(t, svc, task)
@@ -166,9 +122,7 @@ func TestPauseStopsTheVisitAndAsksTheCustomer(t *testing.T) {
 func TestPauseInAScriptStatusStopsTheWatch(t *testing.T) {
 	svc, actor, task := watchFixture(t)
 	run := scheduleWatch(t, svc, actor, task)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = '2026-07-31T12:00:00.000000000Z' WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceNextWatchAt(t, svc, task, "2026-07-31T12:00:00.000000000Z")
 	paused := pause(t, svc, task.Key, PauseScriptFailures, "")
 	if paused.WaitingOn != WaitingOnPause || paused.Assignee != "" || paused.WorkflowStatus != "merge" {
 		t.Fatalf("paused = %#v", paused)
@@ -176,7 +130,7 @@ func TestPauseInAScriptStatusStopsTheWatch(t *testing.T) {
 	if _, _, _, next := openVisit(t, svc, task); next != "" {
 		t.Fatalf("next_watch_at = %q", next)
 	}
-	if state, _, _ := runState(t, svc, run.ID); state != "cancelled" {
+	if state, _, _ := runState(t, svc, task, run.ID); state != "cancelled" {
 		t.Fatalf("pending watch run = %s", state)
 	}
 	if waits := openWaitRows(t, svc, task); len(waits) != 1 || strings.Contains(waits[0].body, "Details") {
@@ -321,7 +275,7 @@ func TestCheckThatPassesAfterThePauseChangesNothing(t *testing.T) {
 	if got.WorkflowStatus != "review" || got.WorkflowPausedReason != PauseRejectedRequests || got.Revision != paused.Revision {
 		t.Fatalf("after pass = %#v", got)
 	}
-	if state := requestState(t, svc, request.ID); state != "cancelled" {
+	if state := requestState(t, svc, task, request.ID); state != "cancelled" {
 		t.Fatalf("request = %s", state)
 	}
 	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_script_runs WHERE task_id = ? AND state IN ('pending', 'running')`, task.ID); n != 0 {

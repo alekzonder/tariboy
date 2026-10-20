@@ -53,9 +53,7 @@ func TestRunsRecordTheirHolder(t *testing.T) {
 	}
 	// The holder is fixed when the run is created: a later assignee change
 	// does not move it, and the worker's job takes it from the row.
-	if _, err := svc.db.Exec(`UPDATE tasks SET assignee = 'agent:dev-2' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `assignee = 'agent:dev-2'`)
 	jobs, err := svc.PendingRunJobs(context.Background())
 	if err != nil || len(jobs) != 1 || jobs[0].Run.ID != agentRun.ID || jobs[0].Holder != "reviewer-1" {
 		t.Fatalf("jobs = %#v, %v", jobs, err)
@@ -110,12 +108,8 @@ func TestRunLogAccess(t *testing.T) {
 	}
 	// After the task was released to another agent, the recorded agent keeps
 	// its log, and the new assignee, a holder now, reads queue-mode logs only.
-	if _, err := svc.db.Exec(`UPDATE tasks SET assignee = 'agent:dev-2' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`UPDATE task_workflow_holders SET agent = 'dev-2' WHERE task_id = ? AND pool = 'reviewers'`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `assignee = 'agent:dev-2'`)
+	forceHolder(t, svc, task, "reviewers", `agent = 'dev-2'`)
 	if err := read(reviewer, agentRun); err != nil {
 		t.Errorf("released agent, its own log: %v", err)
 	}

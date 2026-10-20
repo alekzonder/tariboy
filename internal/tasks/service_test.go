@@ -64,13 +64,7 @@ func TestCreateTaskPullRequestValidatesPersistsAndReplays(t *testing.T) {
 	}); ErrorCode(err) != "invalid_pull_request" {
 		t.Fatalf("invalid pull request error = %v", err)
 	}
-	var taskCount, eventCount int
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix = 'PULL'`).Scan(&taskCount); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_events WHERE task_id = ?`, created.ID).Scan(&eventCount); err != nil {
-		t.Fatal(err)
-	}
+	taskCount, eventCount := len(queueTasks(t, svc, "PULL")), len(taskEvents(t, svc, created))
 	if taskCount != 1 || eventCount != 1 {
 		t.Fatalf("tasks/events = %d/%d, want 1/1", taskCount, eventCount)
 	}
@@ -259,6 +253,7 @@ func TestCreateTaskInQueueWithoutWorkflowKeepsLegacyBehavior(t *testing.T) {
 	if task.Status != StatusOpen {
 		t.Fatalf("legacy task = %#v", task)
 	}
+	// A storage check: the legacy workflow columns stay NULL.
 	var workflowVersionID, workflowStatus, workflowRevision any
 	if err := svc.db.QueryRow(`
 		SELECT workflow_version_id, workflow_status, workflow_revision
@@ -294,6 +289,7 @@ func TestUpdateQueueRollsBackOwnersWhenRevisionGuardUpdatesNoRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A guard that updates no row, which the API never causes by itself.
 	if _, err := svc.db.Exec(`
 		CREATE TRIGGER suppress_queue_update
 		BEFORE UPDATE ON task_queues
@@ -392,13 +388,7 @@ func TestCreateTaskIdempotencyReplaysOriginalWithoutAllocatingAnotherKey(t *test
 	if replayed.Key != first.Key || replayed.Title != first.Title {
 		t.Fatalf("replayed = %#v, first = %#v", replayed, first)
 	}
-	var tasks, events int
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix = 'IDEM'`).Scan(&tasks); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_events WHERE kind = 'task.created'`).Scan(&events); err != nil {
-		t.Fatal(err)
-	}
+	tasks, events := len(queueTasks(t, svc, "IDEM")), len(queueEvents(t, svc, "", "task.created"))
 	if tasks != 1 || events != 1 {
 		t.Fatalf("tasks/events = %d/%d, want 1/1", tasks, events)
 	}

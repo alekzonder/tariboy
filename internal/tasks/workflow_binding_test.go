@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -30,16 +29,9 @@ func seedBindingImage(t *testing.T, svc *Service, name, version string, pools ..
 	def.Statuses = append(def.Statuses, workflowfile.Status{ID: "done", Terminal: true})
 	sum := sha256.Sum256([]byte(name + "|" + version + "|" + strings.Join(pools, ",")))
 	digest := hex.EncodeToString(sum[:])
-	raw, err := json.Marshal(workflowimage.Manifest{
+	storeManifest(t, svc, workflowimage.Manifest{
 		SchemaVersion: 1, Name: name, Version: version, Digest: digest, BuiltAt: "2026-10-02T00:00:00Z", Definition: def,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO task_workflow_images(digest, name, version, manifest, built_at) VALUES (?, ?, ?, ?, ?)`,
-		digest, name, version, string(raw), "2026-10-02T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
 	// A snapshot of the seeded images, newest first, so the resolver never
 	// queries the database: like the image store, it is safe inside a task
 	// transaction.
@@ -87,11 +79,7 @@ func workflowFixture(t *testing.T) (*Service, Actor) {
 		t.Fatal(err)
 	}
 	for _, agent := range []string{"dev-1", "dev-2", "reviewer-1"} {
-		if _, err := svc.db.Exec(`
-			INSERT INTO agents(name, image_ref, image_digest)
-			VALUES (?, 'basic:latest', 'digest')`, agent); err != nil {
-			t.Fatal(err)
-		}
+		seedAgent(t, svc, agent, "")
 	}
 	return svc, actor
 }
@@ -138,13 +126,11 @@ func TestRebindAgentPoolIsRevisionedAuditedAndIdempotent(t *testing.T) {
 	if err != nil || len(emptied.Agents) != 0 {
 		t.Fatalf("empty rebind = %#v, %v; want an empty pool", emptied, err)
 	}
-	var eventRevision int64
-	if err := svc.db.QueryRow(`
-		SELECT task_revision FROM task_events
-		WHERE queue_prefix = 'DEV' AND kind = 'task.agent_pool_rebound'
-		ORDER BY sequence DESC LIMIT 1`).Scan(&eventRevision); err != nil {
-		t.Fatal(err)
+	rebinds := queueEvents(t, svc, "DEV", "task.agent_pool_rebound")
+	if len(rebinds) == 0 {
+		t.Fatal("no task.agent_pool_rebound event")
 	}
+	eventRevision := rebinds[len(rebinds)-1].TaskRevision
 	if eventRevision != emptied.Revision {
 		t.Fatalf("pool audit revision = %d; want %d", eventRevision, emptied.Revision)
 	}
@@ -244,28 +230,15 @@ func TestQueueWorkflowBindingRules(t *testing.T) {
 		t.Fatalf("bind v2 = %#v, %v", next, err)
 	}
 	var kinds []string
-	rows, err := svc.db.Query(`SELECT kind FROM task_events WHERE queue_prefix = 'DEV' AND kind LIKE 'queue.workflow_%' ORDER BY sequence`)
-	if err != nil {
-		t.Fatal(err)
+	for _, event := range queueEvents(t, svc, "DEV", "queue.workflow_") {
+		kinds = append(kinds, event.Kind)
 	}
-	for rows.Next() {
-		var k string
-		if err := rows.Scan(&k); err != nil {
-			t.Fatal(err)
-		}
-		kinds = append(kinds, k)
-	}
-	rows.Close()
 	if !reflect.DeepEqual(kinds, []string{"queue.workflow_bound", "queue.workflow_bound"}) {
 		t.Fatalf("events = %v; want one per real change", kinds)
 	}
 
 	// A task in flight keeps its pinned digest across a clear.
-	if _, err := svc.db.Exec(`
-		INSERT INTO tasks(task_key, queue_prefix, title, status, author, customer, created_at, updated_at, workflow_digest, workflow_status)
-		VALUES ('DEV-1', 'DEV', 't', 'open', 'u', 'u', 'n', 'n', ?, 'in-developers')`, d2); err != nil {
-		t.Fatal(err)
-	}
+	inFlight := insertPinnedTask(t, svc, d2, "in-developers")
 	if err := svc.ClearQueueWorkflow(ctx, actor, "DEV", 1); ErrorCode(err) != "revision_conflict" {
 		t.Fatalf("stale clear error = %v", err)
 	}
@@ -278,12 +251,11 @@ func TestQueueWorkflowBindingRules(t *testing.T) {
 	if err := svc.ClearQueueWorkflow(ctx, actor, "DEV", 2); ErrorCode(err) != "queue_workflow_not_found" {
 		t.Fatalf("clear unbound = %v", err)
 	}
-	var pinned string
-	if err := svc.db.QueryRow(`SELECT workflow_digest FROM tasks WHERE task_key = 'DEV-1'`).Scan(&pinned); err != nil || pinned != d2 {
-		t.Fatalf("pinned = %q, %v; want %q", pinned, err, d2)
+	if pinned := storedTask(t, svc, inFlight.Key).WorkflowDigest; pinned != d2 {
+		t.Fatalf("pinned = %q; want %q", pinned, d2)
 	}
-	if err := svc.db.QueryRow(`SELECT kind FROM task_events WHERE queue_prefix = 'DEV' ORDER BY sequence DESC LIMIT 1`).Scan(&pinned); err != nil || pinned != "queue.workflow_cleared" {
-		t.Fatalf("last event = %q, %v", pinned, err)
+	if events := queueEvents(t, svc, "DEV", ""); len(events) == 0 || events[len(events)-1].Kind != "queue.workflow_cleared" {
+		t.Fatalf("events = %#v; want queue.workflow_cleared last", events)
 	}
 }
 
@@ -324,11 +296,7 @@ func TestRebindAgentPoolKeepsPoolsOfPinnedVersionsNonEmpty(t *testing.T) {
 	if _, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow:1", 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`
-		INSERT INTO tasks(task_key, queue_prefix, title, status, author, customer, created_at, updated_at, workflow_digest, workflow_status)
-		VALUES ('DEV-1', 'DEV', 't', 'open', 'u', 'u', 'n', 'n', ?, 'in-reviewers')`, d1); err != nil {
-		t.Fatal(err)
-	}
+	pinned := insertPinnedTask(t, svc, d1, "in-reviewers")
 	if _, err := svc.SetQueueWorkflow(ctx, actor, "DEV", "flow:2", 1); err != nil {
 		t.Fatal(err)
 	}
@@ -338,9 +306,7 @@ func TestRebindAgentPoolKeepsPoolsOfPinnedVersionsNonEmpty(t *testing.T) {
 		!reflect.DeepEqual(domain.Data["pools"], []string{"reviewers"}) {
 		t.Fatalf("empty pool of a pinned version error = %#v", err)
 	}
-	if _, err := svc.db.Exec(`UPDATE tasks SET status = 'done' WHERE task_key = 'DEV-1'`); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, pinned, `status = 'done'`)
 	if _, err := svc.RebindAgentPool(ctx, actor, "DEV", "reviewers", nil, reviewers.Revision, "empty-closed"); err != nil {
 		t.Fatalf("empty rebind once the pinned task closed: %v", err)
 	}

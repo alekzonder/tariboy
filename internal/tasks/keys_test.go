@@ -75,7 +75,8 @@ func TestMigrateLegacyKeysRewritesKeysAndKeepsOldOnesResolvable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Reproduce a database written before random keys existed.
+	// Reproduce a database written before random keys existed; these legacy
+	// rows and the reads after the migration are storage checks.
 	if _, err := svc.db.Exec(`UPDATE tasks SET task_key = 'KEYS-17' WHERE task_key = ?`, task.Key); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +140,8 @@ func TestMigrateLegacyKeysKeepsLaterAllDigitRandomKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The random alphabet includes 2-9, so a new key can be all digits.
+	// The random alphabet includes 2-9, so a new key can be all digits; the
+	// key is set directly to reach that case.
 	if _, err := svc.db.Exec(`UPDATE tasks SET task_key = 'KEYS-3469' WHERE task_key = ?`, task.Key); err != nil {
 		t.Fatal(err)
 	}

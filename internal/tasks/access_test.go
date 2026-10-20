@@ -160,11 +160,7 @@ func TestGroupVisibilityTracksCurrentMembership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`
-		INSERT INTO agents(name, image_ref, image_digest, "group")
-		VALUES ('worker', 'basic:latest', 'digest', 'dev-team')`); err != nil {
-		t.Fatal(err)
-	}
+	seedAgent(t, svc, "worker", "dev-team")
 	page, err := svc.ListTasks(ctx, AgentActor("worker"), ListFilter{})
 	if err != nil {
 		t.Fatal(err)
@@ -172,9 +168,7 @@ func TestGroupVisibilityTracksCurrentMembership(t *testing.T) {
 	if _, ok := taskKeys(page.Tasks)[task.Key]; !ok {
 		t.Fatalf("group member does not see %s", task.Key)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET "group" = '' WHERE name = 'worker'`); err != nil {
-		t.Fatal(err)
-	}
+	setAgent(t, svc, "worker", `"group" = ''`)
 	page, err = svc.ListTasks(ctx, AgentActor("worker"), ListFilter{})
 	if err != nil {
 		t.Fatal(err)

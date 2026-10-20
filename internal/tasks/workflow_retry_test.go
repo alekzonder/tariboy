@@ -31,7 +31,7 @@ func TestRetryTransitionRequestRunsTheChecksAgain(t *testing.T) {
 		retried.Message != "looks good" || retried.Actor != "agent:reviewer-1" || retried.WaitSeconds == 0 {
 		t.Fatalf("retried = %#v", retried)
 	}
-	if state, _ := requestRow(t, svc, failed.ID); state != "failed" {
+	if state, _ := requestRow(t, svc, task, failed.ID); state != "failed" {
 		t.Fatalf("the failed request is now %s", state)
 	}
 	runs := listRuns(t, svc, actor, task)
@@ -47,7 +47,7 @@ func TestRetryTransitionRequestRunsTheChecksAgain(t *testing.T) {
 	complete(t, svc, runs[0].ID, RunCompletion{Verdict: "pass", ExitCode: exitCode(0)})
 	second := listRuns(t, svc, actor, task)[0]
 	complete(t, svc, second.ID, RunCompletion{Verdict: "pass", ExitCode: exitCode(0)})
-	if state, _ := requestRow(t, svc, retried.ID); state != "applied" {
+	if state, _ := requestRow(t, svc, task, retried.ID); state != "applied" {
 		t.Fatalf("retried request = %s", state)
 	}
 	if got := storedTask(t, svc, task.Key); got.WorkflowStatus == "review" {
@@ -106,9 +106,7 @@ func TestRetryTransitionRequestRefusals(t *testing.T) {
 	t.Run("paused", func(t *testing.T) {
 		svc, actor, task, _ := runFixture(t)
 		failed := failApprove(t, svc, actor, task)
-		if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = 'script_failures' WHERE id = ?`, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceTask(t, svc, task, `workflow_paused_reason = 'script_failures'`)
 		if _, err := svc.RetryTransitionRequest(ctx, actor, task.Key, failed.ID); ErrorCode(err) != "workflow_paused" {
 			t.Fatalf("err = %v", err)
 		}

@@ -24,14 +24,7 @@ func seedWorkflowImage(t *testing.T, svc *Service, digest string) workflowimage.
 			},
 		},
 	}
-	raw, err := json.Marshal(m)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO task_workflow_images(digest, name, version, manifest, built_at) VALUES (?, ?, ?, ?, ?)`,
-		digest, m.Name, m.Version, string(raw), m.BuiltAt); err != nil {
-		t.Fatal(err)
-	}
+	storeManifest(t, svc, m)
 	return m
 }
 
@@ -43,10 +36,8 @@ func seedWorkflowTask(t *testing.T, svc *Service, actor Actor, digest, category,
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE tasks SET status = ?, workflow_digest = ?, workflow_status = ?, workflow_paused_reason = ? WHERE id = ?`,
-		category, digest, status, paused, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `status = ?, workflow_digest = ?, workflow_status = ?, workflow_paused_reason = ?`,
+		category, digest, status, paused)
 	got, err := taskByID(svc.db, task.ID)
 	if err != nil {
 		t.Fatal(err)

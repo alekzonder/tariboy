@@ -18,9 +18,7 @@ func triggerFixture(t *testing.T) (*Service, Actor) {
 	if _, err := svc.CreateQueue(context.Background(), operator, CreateQueueInput{Prefix: "DEV", Name: "Development"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`INSERT INTO agents(name, image_ref, image_digest) VALUES ('dev-a', 'basic:latest', 'digest')`); err != nil {
-		t.Fatal(err)
-	}
+	seedAgent(t, svc, "dev-a", "")
 	return svc, operator
 }
 
@@ -35,22 +33,16 @@ func mustCreateTrigger(t *testing.T, svc *Service, operator Actor, pattern strin
 
 func countTasksMentioning(t *testing.T, svc *Service, text string) int {
 	t.Helper()
-	var count int
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE description LIKE ?`, "%"+text+"%").Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	return count
+	return len(tasksMentioning(t, svc, "DEV", text))
 }
 
 func TestReconcileWorkflowObservationsRecoversCommittedBusMessage(t *testing.T) {
 	svc, operator := triggerFixture(t)
 	mustCreateTrigger(t, svc, operator, "metrics:api")
-	if _, err := svc.db.Exec(`INSERT INTO channels(name,kind,created_at) VALUES('metrics:api','chat',?) ON CONFLICT DO NOTHING`, svc.now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,text,data,kind) VALUES('durable-1','metrics:api',?,'plugin:metrics','metric.alert','{"service":"api"}','API alert','{"value":7}','event')`, "2099-01-01T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	// A committed message without a commit sequence: the bus always records
+	// one, so only a row written before sequences existed lacks it.
+	insertMessage(t, svc.db, legacyMessage{ID: "durable-1", Channel: "metrics:api", TS: "2099-01-01T00:00:00Z",
+		Source: "plugin:metrics", Type: "metric.alert", Text: "API alert"})
 	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil || n != 1 {
 		t.Fatalf("reconcile = %d, %v", n, err)
 	}
@@ -88,27 +80,25 @@ func TestReconcileWorkflowObservationsUsesCommitSequenceNotTimestampOrID(t *test
 	svc, operator := triggerFixture(t)
 	mustCreateTrigger(t, svc, operator, "metrics:*")
 	ts := "2099-01-01T00:00:00Z"
+	// Ids that sort against commit order and one shared timestamp: the bus
+	// chooses both itself, so the rows are written directly.
 	for _, message := range []struct{ id, channel string }{{"z-first", "metrics:z"}, {"a-second", "metrics:a"}} {
-		if _, err := svc.db.Exec(`INSERT INTO channels(name,kind,created_at) VALUES(?,'chat',?) ON CONFLICT DO NOTHING`, message.channel, ts); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := svc.db.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,kind) VALUES(?,?,?,'plugin:metrics','alert','{}','event')`, message.id, message.channel, ts); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := svc.db.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES(?)`, message.id); err != nil {
-			t.Fatal(err)
-		}
+		insertMessage(t, svc.db, legacyMessage{ID: message.id, Channel: message.channel, TS: ts,
+			Source: "plugin:metrics", Type: "alert", Sequenced: true})
 	}
 	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 10); err != nil || n != 2 {
 		t.Fatalf("reconcile = %d, %v", n, err)
 	}
-	var cursor int64
-	if err := svc.db.QueryRow(`SELECT last_message_sequence FROM task_workflow_ingress_state WHERE singleton=1`).Scan(&cursor); err != nil || cursor != 2 {
-		t.Fatalf("cursor = %d, %v", cursor, err)
+	if cursor := ingressCursor(t, svc); cursor != 2 {
+		t.Fatalf("cursor = %d", cursor)
 	}
 	var first, second int64
-	_ = svc.db.QueryRow(`SELECT id FROM tasks WHERE description LIKE '%z-first%'`).Scan(&first)
-	_ = svc.db.QueryRow(`SELECT id FROM tasks WHERE description LIKE '%a-second%'`).Scan(&second)
+	if tasks := tasksMentioning(t, svc, "DEV", "z-first"); len(tasks) == 1 {
+		first = tasks[0].ID
+	}
+	if tasks := tasksMentioning(t, svc, "DEV", "a-second"); len(tasks) == 1 {
+		second = tasks[0].ID
+	}
 	if first == 0 || second == 0 || first > second {
 		t.Fatalf("task ids first/second = %d/%d; want commit order", first, second)
 	}
@@ -116,21 +106,9 @@ func TestReconcileWorkflowObservationsUsesCommitSequenceNotTimestampOrID(t *test
 
 func insertWorkflowIngressMessage(t *testing.T, svc *Service, id, channel, eventAt string) int64 {
 	t.Helper()
-	if _, err := svc.db.Exec(`INSERT INTO channels(name,kind,created_at) VALUES(?,'chat',?) ON CONFLICT DO NOTHING`, channel, svc.now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,text,data,kind) VALUES(?,?,?,'plugin:test','event','{}',?,'{}','event')`, id, channel, eventAt, id); err != nil {
-		t.Fatal(err)
-	}
-	res, err := svc.db.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES(?)`, id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sequence, err := res.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return sequence
+	// The event time is the message timestamp, which the bus would take from
+	// its clock.
+	return insertMessage(t, svc.db, legacyMessage{ID: id, Channel: channel, TS: eventAt, Text: id, Sequenced: true})
 }
 
 func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) {
@@ -143,17 +121,10 @@ func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) 
 	if err := reserveWorkflowIngressWriter(context.Background(), tx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(`INSERT INTO channels(name,kind,created_at) VALUES('issue-provider:issues','chat',?) ON CONFLICT DO NOTHING`, svc.now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tx.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,text,data,kind) VALUES('trigger-before','issue-provider:issues','2099-01-01T00:00:00Z','plugin:test','event','{}','trigger-before','{}','event')`); err != nil {
-		t.Fatal(err)
-	}
-	res, err := tx.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES('trigger-before')`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	oldSequence, _ := res.LastInsertId()
+	// The message commits inside this transaction, which holds the ingress
+	// writer; the bus cannot publish into a caller's transaction.
+	oldSequence := insertMessage(t, tx, legacyMessage{ID: "trigger-before", Channel: "issue-provider:issues",
+		TS: "2099-01-01T00:00:00Z", Text: "trigger-before", Sequenced: true})
 	created := make(chan struct {
 		trigger QueueWorkflowTrigger
 		err     error
@@ -192,9 +163,7 @@ func TestTriggerActivationSequenceExcludesEarlierCommittedMessage(t *testing.T) 
 
 func TestNewTriggerAtSequenceZeroUsesCommitOrderNotExternalTimestamp(t *testing.T) {
 	svc, operator := triggerFixture(t)
-	if _, err := svc.db.Exec(`DELETE FROM messages`); err != nil {
-		t.Fatal(err)
-	}
+	clearMessages(t, svc)
 	trigger := mustCreateTrigger(t, svc, operator, "issue-provider:*")
 	if trigger.CreatedAfterSequence != 0 || !trigger.ActivationSequenceSet {
 		t.Fatalf("new zero-sequence trigger = %#v", trigger)
@@ -252,17 +221,11 @@ func TestWorkflowObservationEventAtAcceptsAnyOffset(t *testing.T) {
 
 func TestTriggerActivationBackfillsPreexistingUnsequencedMessageBeforeWatermark(t *testing.T) {
 	svc, operator := triggerFixture(t)
-	if _, err := svc.db.Exec(`INSERT INTO channels(name,kind,created_at) VALUES('issue-provider:issues','chat',?) ON CONFLICT DO NOTHING`, svc.now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,text,data,kind) VALUES('legacy-trigger-message','issue-provider:issues','2099-01-01T00:00:00Z','plugin:test','event','{}','legacy-trigger-message','{}','event')`); err != nil {
-		t.Fatal(err)
-	}
+	// A row written before commit sequences existed; the bus always records one.
+	insertMessage(t, svc.db, legacyMessage{ID: "legacy-trigger-message", Channel: "issue-provider:issues",
+		TS: "2099-01-01T00:00:00Z", Text: "legacy-trigger-message"})
 	trigger := mustCreateTrigger(t, svc, operator, "issue-provider:*")
-	var repairedSequence int64
-	if err := svc.db.QueryRow(`SELECT sequence FROM task_workflow_message_sequence WHERE message_id='legacy-trigger-message'`).Scan(&repairedSequence); err != nil {
-		t.Fatal(err)
-	}
+	repairedSequence := messageSequence(t, svc, "legacy-trigger-message")
 	if repairedSequence > trigger.CreatedAfterSequence {
 		t.Fatalf("repaired sequence %d is after activation watermark %d", repairedSequence, trigger.CreatedAfterSequence)
 	}
@@ -277,16 +240,10 @@ func TestTriggerActivationBackfillsPreexistingUnsequencedMessageBeforeWatermark(
 func TestConcurrentWorkflowObservationReconcilersNeverRegressCursor(t *testing.T) {
 	svc := newTestService(t)
 	for i := 0; i < 20; i++ {
+		// Ids that sort against commit order, which the bus never chooses.
 		id := fmt.Sprintf("message-%02d", 19-i)
-		if _, err := svc.db.Exec(`INSERT INTO channels(name,kind,created_at) VALUES('metrics:x','chat',?) ON CONFLICT DO NOTHING`, svc.now()); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := svc.db.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,kind) VALUES(?,'metrics:x',?,'plugin:metrics','alert','{}','event')`, id, svc.now()); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := svc.db.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES(?)`, id); err != nil {
-			t.Fatal(err)
-		}
+		insertMessage(t, svc.db, legacyMessage{ID: id, Channel: "metrics:x", TS: svc.now(),
+			Source: "plugin:metrics", Type: "alert", Sequenced: true})
 	}
 	var wg sync.WaitGroup
 	errs := make(chan error, 16)
@@ -306,26 +263,18 @@ func TestConcurrentWorkflowObservationReconcilersNeverRegressCursor(t *testing.T
 	for err := range errs {
 		t.Fatalf("concurrent reconcile: %v", err)
 	}
-	var cursor int64
-	if err := svc.db.QueryRow(`SELECT last_message_sequence FROM task_workflow_ingress_state WHERE singleton=1`).Scan(&cursor); err != nil || cursor != 20 {
-		t.Fatalf("cursor = %d, %v; want 20", cursor, err)
+	if cursor := ingressCursor(t, svc); cursor != 20 {
+		t.Fatalf("cursor = %d; want 20", cursor)
 	}
 }
 
 func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
 	svc := newTestService(t)
-	if _, err := svc.db.Exec(`INSERT INTO task_queues(prefix,name,created_at,updated_at) VALUES('DEV','Development',?,?)`, svc.now(), svc.now()); err != nil {
+	if _, err := svc.CreateQueue(context.Background(), CustomerActor("customer"), CreateQueueInput{Prefix: "DEV", Name: "Development"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`INSERT INTO channels(name,kind,created_at) VALUES('issue-provider:issues','chat',?)`, svc.now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,text,data,kind) VALUES('overlap-event','issue-provider:issues',?,'plugin:issue-provider','issue.created','{}','overlap','{}','event')`, svc.now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES('overlap-event')`); err != nil {
-		t.Fatal(err)
-	}
+	insertMessage(t, svc.db, legacyMessage{ID: "overlap-event", Channel: "issue-provider:issues", TS: svc.now(),
+		Source: "plugin:issue-provider", Type: "issue.created", Text: "overlap", Sequenced: true})
 
 	counted := make(chan struct{})
 	release := make(chan struct{})
@@ -342,6 +291,8 @@ func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
 
 	created := make(chan error, 1)
 	go func() {
+		// A bare row insert: the test checks that SQLite itself serializes
+		// it behind the reconciler, not the service's own locking.
 		_, err := svc.db.Exec(`INSERT INTO task_queue_workflow_triggers(queue_prefix,pattern,correlation_key,action,enabled,created_by,created_at,updated_at) VALUES('DEV','issue-provider:*','','create_task',1,'operator',?,?)`, svc.now(), svc.now())
 		created <- err
 	}()
@@ -357,9 +308,8 @@ func TestZeroTargetCursorAdvanceSerializesAgainstTargetCreation(t *testing.T) {
 	if err := <-created; err != nil {
 		t.Fatal(err)
 	}
-	var cursor int64
-	if err := svc.db.QueryRow(`SELECT last_message_sequence FROM task_workflow_ingress_state WHERE singleton=1`).Scan(&cursor); err != nil || cursor != 1 {
-		t.Fatalf("cursor = %d, %v; want 1", cursor, err)
+	if cursor := ingressCursor(t, svc); cursor != 1 {
+		t.Fatalf("cursor = %d; want 1", cursor)
 	}
 }
 
@@ -384,12 +334,20 @@ func TestQueueWorkflowTriggerCreatesFlexibleTaskIdempotently(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var count int
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE queue_prefix='DEV' AND title='Fix production' AND status='open' AND workflow_version_id IS NULL`).Scan(&count); err != nil || count != 1 {
-		t.Fatalf("trigger tasks = %d, %v", count, err)
+	var flexible, fromUser int
+	for _, task := range queueTasks(t, svc, "DEV") {
+		if task.Title == "Fix production" && task.Status == StatusOpen && task.WorkflowDigest == "" {
+			flexible++
+		}
+		if task.Title == "From a user" {
+			fromUser++
+		}
 	}
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE title='From a user'`).Scan(&count); err != nil || count != 0 {
-		t.Fatalf("non-plugin message tasks = %d, %v; want 0", count, err)
+	if flexible != 1 {
+		t.Fatalf("trigger tasks = %d", flexible)
+	}
+	if fromUser != 0 {
+		t.Fatalf("non-plugin message tasks = %d; want 0", fromUser)
 	}
 }
 

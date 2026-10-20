@@ -104,9 +104,7 @@ func TestDispatchPendingSkipsPausedTasks(t *testing.T) {
 	setAgent(t, svc, "dev-1", `enabled = 0`)
 	setAgent(t, svc, "dev-2", `enabled = 0`)
 	task := mustCreateDev(t, svc, actor, "t")
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = 'idle_iterations' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_paused_reason = 'idle_iterations'`)
 	setAgent(t, svc, "dev-1", `enabled = 1`)
 	if n, err := svc.DispatchPending(ctx); err != nil || n != 0 {
 		t.Fatalf("dispatch of a paused task = %d, %v", n, err)

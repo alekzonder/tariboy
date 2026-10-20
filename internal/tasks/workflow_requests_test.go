@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 	"strings"
 	"sync"
@@ -31,9 +30,7 @@ func requestFixture(t *testing.T) (*Service, Actor, Task) {
 	if err := svc.EnsureDefaultQueue(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, goal_enabled = 1`); err != nil {
-		t.Fatal(err)
-	}
+	enableAgents(t, svc)
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)
 	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
 	seedEngineImage(t, svc, requestDefinition())
@@ -49,45 +46,6 @@ func requestFixture(t *testing.T) (*Service, Actor, Task) {
 		t.Fatalf("fixture task = %#v", task)
 	}
 	return svc, actor, task
-}
-
-func eventPayload(t *testing.T, svc *Service, task Task, kind string) map[string]any {
-	t.Helper()
-	var raw string
-	if err := svc.db.QueryRow(`SELECT payload FROM task_events WHERE task_id = ? AND kind = ? ORDER BY sequence DESC LIMIT 1`,
-		task.ID, kind).Scan(&raw); err != nil {
-		t.Fatalf("event %s: %v", kind, err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		t.Fatal(err)
-	}
-	return payload
-}
-
-func insertPendingRequest(t *testing.T, svc *Service, task Task) int64 {
-	t.Helper()
-	result, err := svc.db.Exec(`
-		INSERT INTO task_transition_requests(task_id, visit_id, outcome, actor, state, created_at)
-		SELECT ?, id, 'ready', 'agent:dev-1', 'pending', '2026-10-02T00:00:00Z'
-		FROM task_status_visits WHERE task_id = ? AND left_at = ''`, task.ID, task.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return id
-}
-
-func requestState(t *testing.T, svc *Service, id int64) string {
-	t.Helper()
-	var state string
-	if err := svc.db.QueryRow(`SELECT state FROM task_transition_requests WHERE id = ?`, id).Scan(&state); err != nil {
-		t.Fatal(err)
-	}
-	return state
 }
 
 func setPlanAndSummary(t *testing.T, svc *Service, actor Actor, key string) {
@@ -119,19 +77,13 @@ func TestAdvanceAppliesATransitionWithoutChecks(t *testing.T) {
 	if stored.WorkflowStatus != "review" || stored.Status != StatusInProgress || stored.Assignee != "agent:reviewer-1" {
 		t.Fatalf("stored = %#v", stored)
 	}
-	var outcome, message, leftAt string
-	if err := svc.db.QueryRow(`SELECT outcome, message, left_at FROM task_status_visits WHERE task_id = ? AND sequence = 1`,
-		task.ID).Scan(&outcome, &message, &leftAt); err != nil {
-		t.Fatal(err)
-	}
+	first := visitBySequence(t, svc, task, 1)
+	outcome, message, leftAt := first.Outcome, first.Message, first.LeftAt
 	if outcome != "ready" || message != "PR opened" || leftAt == "" {
 		t.Fatalf("closed visit = %q %q %q", outcome, message, leftAt)
 	}
-	var status, enteredBy string
-	if err := svc.db.QueryRow(`SELECT status_id, entered_by FROM task_status_visits WHERE task_id = ? AND left_at = ''`,
-		task.ID).Scan(&status, &enteredBy); err != nil {
-		t.Fatal(err)
-	}
+	open := openStatusVisit(t, svc, task)
+	status, enteredBy := open.Status, open.EnteredBy
 	if status != "review" || enteredBy != "agent:dev-1" {
 		t.Fatalf("open visit = %q %q", status, enteredBy)
 	}
@@ -218,18 +170,12 @@ func TestAdvanceRefusals(t *testing.T) {
 	if _, err := svc.Advance(ctx, holder, task.Key, AdvanceInput{Outcome: "ready"}); ErrorCode(err) != "transition_pending" {
 		t.Fatalf("pending: %v", err)
 	}
-	if _, err := svc.db.Exec(`DELETE FROM task_transition_requests WHERE id = ?`, pending); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = 'idle' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	deleteRequest(t, svc, pending)
+	forceTask(t, svc, task, `workflow_paused_reason = 'idle'`)
 	if _, err := svc.Advance(ctx, holder, task.Key, AdvanceInput{Outcome: "ready"}); ErrorCode(err) != "workflow_paused" {
 		t.Fatalf("paused: %v", err)
 	}
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = '' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_paused_reason = ''`)
 
 	// Nobody advances a script status.
 	enter(t, svc, task.Key, "merge", "approved")
@@ -306,18 +252,15 @@ func TestMoveWorkflow(t *testing.T) {
 	if moved.WorkflowStatus != "approval" || moved.Category != StatusWaitCustomer || moved.WaitingOn != WaitingOnCustomer {
 		t.Fatalf("moved = %#v", moved)
 	}
-	if state := requestState(t, svc, pending); state != "cancelled" {
+	if state := requestState(t, svc, task, pending); state != "cancelled" {
 		t.Fatalf("pending request = %s", state)
 	}
 	payload := eventPayload(t, svc, task, "workflow.moved")
 	if payload["from"] != "develop" || payload["to"] != "approval" || payload["actor"] != "user:customer" || payload["reason"] != "skip review" {
 		t.Fatalf("moved payload = %v", payload)
 	}
-	var outcome, message string
-	if err := svc.db.QueryRow(`SELECT outcome, message FROM task_status_visits WHERE task_id = ? AND sequence = 1`,
-		task.ID).Scan(&outcome, &message); err != nil {
-		t.Fatal(err)
-	}
+	first := visitBySequence(t, svc, task, 1)
+	outcome, message := first.Outcome, first.Message
 	if outcome != "" || message != "skip review" {
 		t.Fatalf("closed visit = %q %q", outcome, message)
 	}
@@ -340,9 +283,7 @@ func TestMoveWorkflow(t *testing.T) {
 	}
 
 	// A paused task is unpaused by the move.
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = 'idle' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_paused_reason = 'idle'`)
 	unpaused, err := svc.MoveWorkflow(ctx, actor, task.Key, "review", "hand over")
 	if err != nil {
 		t.Fatal(err)
@@ -371,9 +312,7 @@ func TestCancelWorkflowTask(t *testing.T) {
 	}
 	enter(t, svc, task.Key, "approval", "ask")
 	pending := insertPendingRequest(t, svc, task)
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = 'idle' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_paused_reason = 'idle'`)
 	cancelled, err := svc.CancelWorkflowTask(ctx, actor, task.Key)
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +326,7 @@ func TestCancelWorkflowTask(t *testing.T) {
 		stored.WorkflowPausedReason != "" || stored.Revision != cancelled.Revision {
 		t.Fatalf("stored = %#v", stored)
 	}
-	if state := requestState(t, svc, pending); state != "cancelled" {
+	if state := requestState(t, svc, task, pending); state != "cancelled" {
 		t.Fatalf("pending request = %s", state)
 	}
 	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_waiting_for WHERE task_id = ? AND resolved_at = ''`, task.ID); n != 0 {
@@ -396,11 +335,8 @@ func TestCancelWorkflowTask(t *testing.T) {
 	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_status_visits WHERE task_id = ? AND left_at = ''`, task.ID); n != 0 {
 		t.Fatalf("open visits = %d", n)
 	}
-	var message string
-	if err := svc.db.QueryRow(`SELECT message FROM task_status_visits WHERE task_id = ? ORDER BY sequence DESC LIMIT 1`,
-		task.ID).Scan(&message); err != nil {
-		t.Fatal(err)
-	}
+	visits := workflowView(t, svc, task).Visits
+	message := visits[len(visits)-1].Message
 	if message != "cancelled" {
 		t.Fatalf("visit message = %q", message)
 	}
@@ -436,7 +372,7 @@ func TestClosingAVisitCancelsItsPendingRequest(t *testing.T) {
 			if err := closeVisit(svc, actor, task); err != nil {
 				t.Fatal(err)
 			}
-			if state := requestState(t, svc, pending); state != "cancelled" {
+			if state := requestState(t, svc, task, pending); state != "cancelled" {
 				t.Fatalf("request = %s", state)
 			}
 			if n := countRows(t, svc, `SELECT COUNT(*) FROM task_transition_requests WHERE task_id = ? AND state = 'pending'`, task.ID); n != 0 {
@@ -470,7 +406,11 @@ func TestAdvanceByAgentsThatDoNotOwnTheStatus(t *testing.T) {
 	unchanged("develop")
 	// A pool member that may read the task (here as a queue owner) is still not
 	// the holder.
-	if _, err := svc.db.Exec(`INSERT INTO task_queue_owners(queue_prefix, agent) VALUES ('DEV', 'dev-2')`); err != nil {
+	queue, err := svc.GetQueue(ctx, operatorOf(svc), "DEV")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.UpdateQueue(ctx, operatorOf(svc), "DEV", UpdateQueueInput{Owners: &[]string{"dev-2"}, Revision: queue.Revision}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.Advance(ctx, AgentActor("dev-2"), task.Key, AdvanceInput{Outcome: "ask"}); ErrorCode(err) != "not_holder" || ErrorStatus(err) != 403 {
@@ -487,9 +427,7 @@ func TestAdvanceByAgentsThatDoNotOwnTheStatus(t *testing.T) {
 
 func TestAdvanceInAStatusTheManifestDoesNotDeclare(t *testing.T) {
 	svc, actor, task := requestFixture(t)
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_status = 'gone' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_status = 'gone'`)
 	if _, err := svc.Advance(context.Background(), actor, task.Key, AdvanceInput{Outcome: "ready"}); ErrorCode(err) != "status_unknown" || ErrorStatus(err) != 409 {
 		t.Fatalf("unknown status: %v", err)
 	}
@@ -632,10 +570,8 @@ func TestApplyTransitionAppliesAPendingRequest(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	var state, finishedAt string
-	if err := svc.db.QueryRow(`SELECT state, finished_at FROM task_transition_requests WHERE id = ?`, id).Scan(&state, &finishedAt); err != nil {
-		t.Fatal(err)
-	}
+	request := transitionRequest(t, svc, task, id)
+	state, finishedAt := request.State, request.FinishedAt
 	if state != "applied" || finishedAt == "" {
 		t.Fatalf("request = %q finished %q", state, finishedAt)
 	}
@@ -646,25 +582,6 @@ func TestApplyTransitionAppliesAPendingRequest(t *testing.T) {
 	transitioned := eventPayload(t, svc, task, "workflow.transitioned")
 	if transitioned["outcome"] != "ready" || transitioned["message"] != "checks passed" || transitioned["actor"] != "agent:dev-1" {
 		t.Fatalf("transitioned payload = %v", transitioned)
-	}
-}
-
-// seedOpenWait records an open wait requester asked of expected on task.
-func seedOpenWait(t *testing.T, svc *Service, task Task, requester, expected string) {
-	t.Helper()
-	result, err := svc.db.Exec(`INSERT INTO task_comments(task_id, author, body, created_at, updated_at) VALUES (?, ?, 'q', 'n', 'n')`,
-		task.ID, requester)
-	if err != nil {
-		t.Fatal(err)
-	}
-	commentID, err := result.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`
-		INSERT INTO task_waiting_for(task_id, expected_principal, requesting_principal, requesting_comment_id, requested_at, resolved_at)
-		VALUES (?, ?, ?, ?, 'n', '')`, task.ID, expected, requester, commentID); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -739,12 +656,12 @@ func TestAdvanceFromGuardsTheStatusTheCallerSaw(t *testing.T) {
 	holder := AgentActor("dev-1")
 	t.Run("mismatch is refused and writes nothing", func(t *testing.T) {
 		svc, _, task := requestFixture(t)
-		before := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID)
+		before := len(taskEvents(t, svc, task))
 		_, err := svc.Advance(ctx, holder, task.Key, AdvanceInput{Outcome: "ask", From: "review"})
 		if ErrorCode(err) != "status_changed" || ErrorStatus(err) != 409 || err.(*Error).Data["status"] != "develop" {
 			t.Fatalf("stale from: %#v", err)
 		}
-		if after := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID); after != before {
+		if after := len(taskEvents(t, svc, task)); after != before {
 			t.Fatalf("events %d -> %d", before, after)
 		}
 		if n := countRows(t, svc, `SELECT COUNT(*) FROM task_transition_requests WHERE task_id = ?`, task.ID); n != 0 {

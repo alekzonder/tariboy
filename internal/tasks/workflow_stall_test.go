@@ -95,9 +95,7 @@ func TestIdleIterationsThatDoNotCount(t *testing.T) {
 			return end
 		}},
 		{"a released holder", func(t *testing.T, svc *Service, task Task) IterationEnd {
-			if _, err := svc.db.Exec(`UPDATE task_workflow_holders SET released = 1 WHERE task_id = ?`, task.ID); err != nil {
-				t.Fatal(err)
-			}
+			forceHolders(t, svc, task, `released = 1`)
 			return iterationEnd("dev-1", task.Key)
 		}},
 		{"a paused task", func(t *testing.T, svc *Service, task Task) IterationEnd {
@@ -135,9 +133,7 @@ func TestIdleIterationsThatDoNotCount(t *testing.T) {
 
 func TestATransitionRequestDuringTheIterationResetsTheIdleCount(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET idle_iterations = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceOpenVisit(t, svc, task, `idle_iterations = 2`)
 	_, run := advanceApprove(t, svc, actor, task)
 	if got := visitCounters(t, svc, task); got[0] != 0 {
 		t.Fatalf("counters after the request = %v; a request resets the idle count", got)
@@ -185,9 +181,7 @@ func TestIdleIterationLimits(t *testing.T) {
 
 func TestRejectedRequestsPauseAtTheLimit(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET rejected_requests = 4 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceOpenVisit(t, svc, task, `rejected_requests = 4`)
 	_, run := advanceApprove(t, svc, actor, task)
 	complete(t, svc, run.ID, RunCompletion{Verdict: "reject", Message: "CI is red", ExitCode: exitCode(112)})
 	stored := storedTask(t, svc, task.Key)
@@ -208,10 +202,7 @@ func TestRejectedRequestsPauseAtTheLimit(t *testing.T) {
 
 func TestAnAppliedTransitionResetsTheCounters(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET idle_iterations = 2, rejected_requests = 4, script_failures = 2
-		WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceOpenVisit(t, svc, task, `idle_iterations = 2, rejected_requests = 4, script_failures = 2`)
 	_, first := advanceApprove(t, svc, actor, task)
 	complete(t, svc, first.ID, RunCompletion{Verdict: "pass", ExitCode: exitCode(0)})
 	second := listRuns(t, svc, actor, task)[0]
@@ -228,9 +219,7 @@ func TestAnAppliedTransitionResetsTheCounters(t *testing.T) {
 func TestScriptFailuresPauseAtTheLimit(t *testing.T) {
 	setFailures := func(t *testing.T, svc *Service, task Task, n int) {
 		t.Helper()
-		if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = ? WHERE task_id = ? AND left_at = ''`, n, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceScriptFailures(t, svc, task, n)
 	}
 	// requirePaused checks the pause every limit leaves: the customer's
 	// category and exactly one pause event.
@@ -296,9 +285,7 @@ func TestEveryVerdictButAFailureResetsScriptFailures(t *testing.T) {
 	for _, verdict := range []string{"pass", "reject"} {
 		t.Run("check "+verdict, func(t *testing.T) {
 			svc, actor, task, _ := runFixture(t)
-			if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-				t.Fatal(err)
-			}
+			forceScriptFailures(t, svc, task, 2)
 			_, run := advanceApprove(t, svc, actor, task)
 			complete(t, svc, run.ID, RunCompletion{Verdict: verdict, ExitCode: exitCode(0)})
 			if _, _, failures, _ := openVisit(t, svc, task); failures != 0 {
@@ -308,26 +295,13 @@ func TestEveryVerdictButAFailureResetsScriptFailures(t *testing.T) {
 	}
 	t.Run("watch quiet", func(t *testing.T) {
 		svc, actor, task := watchFixture(t)
-		if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceScriptFailures(t, svc, task, 2)
 		run := scheduleWatch(t, svc, actor, task)
 		complete(t, svc, run.ID, RunCompletion{Verdict: "quiet", ExitCode: exitCode(111)})
 		if _, _, failures, _ := openVisit(t, svc, task); failures != 0 {
 			t.Fatalf("failures = %d", failures)
 		}
 	})
-}
-
-// unavailableSince returns the holder row's unavailable_since.
-func unavailableSince(t *testing.T, svc *Service, task Task, pool string) string {
-	t.Helper()
-	var since string
-	if err := svc.db.QueryRow(`SELECT unavailable_since FROM task_workflow_holders WHERE task_id = ? AND pool = ?`,
-		task.ID, pool).Scan(&since); err != nil {
-		t.Fatal(err)
-	}
-	return since
 }
 
 func checkHolders(t *testing.T, svc *Service, now time.Time) int {
@@ -410,12 +384,8 @@ func TestCheckHoldersCauses(t *testing.T) {
 	}{
 		{"deleted", "agent dev-1 no longer exists", func(t *testing.T, svc *Service) {
 			// Pool membership restricts deleting an agent.
-			if _, err := svc.db.Exec(`DELETE FROM task_agent_pool_members WHERE agent = 'dev-1'`); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := svc.db.Exec(`DELETE FROM agents WHERE name = 'dev-1'`); err != nil {
-				t.Fatal(err)
-			}
+			dropPoolMember(t, svc, "dev-1")
+			deleteAgent(t, svc, "dev-1")
 		}},
 		{"disabled", "agent dev-1 is disabled", func(t *testing.T, svc *Service) { setAgent(t, svc, "dev-1", `enabled = 0`) }},
 		{"bare image", "agent dev-1 uses the bare image and runs no iterations", func(t *testing.T, svc *Service) { setAgent(t, svc, "dev-1", `image_ref = 'bare:latest'`) }},
@@ -424,9 +394,7 @@ func TestCheckHoldersCauses(t *testing.T) {
 			setAgent(t, svc, "dev-1", `status_message = 'idle_limit (3 idle iterations)'`)
 		}},
 		{"left the pool", "agent dev-1 is no longer a member of pool developers", func(t *testing.T, svc *Service) {
-			if _, err := svc.db.Exec(`DELETE FROM task_agent_pool_members WHERE agent = 'dev-1'`); err != nil {
-				t.Fatal(err)
-			}
+			dropPoolMember(t, svc, "dev-1")
 		}},
 	}
 	for _, tc := range cases {
@@ -528,20 +496,14 @@ func TestAPendingCheckKeepsIterationsFromCountingIdle(t *testing.T) {
 		t.Fatalf("counters = %v; a pending check is not idleness", got)
 	}
 	// The request is cancelled during the next iteration: still not idle.
-	if _, err := svc.db.Exec(`UPDATE task_transition_requests SET state = 'cancelled', finished_at = ? WHERE id = ?`,
-		store.FormatTime(at(11)), request.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceRequest(t, svc, request.ID, `state = 'cancelled', finished_at = ?`, store.FormatTime(at(11)))
 	recordEnd(t, svc, iterationBetween("reviewer-1", task.Key, 10, 12))
 	if got := visitCounters(t, svc, task); got[0] != 0 {
 		t.Fatalf("counters = %v; a request cancelled during the iteration is not idleness", got)
 	}
 	// An iteration reported after the request finished, which ended while it
 	// was still pending, does not count either.
-	if _, err := svc.db.Exec(`UPDATE task_transition_requests SET state = 'rejected', finished_at = ? WHERE id = ?`,
-		store.FormatTime(at(30)), request.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceRequest(t, svc, request.ID, `state = 'rejected', finished_at = ?`, store.FormatTime(at(30)))
 	recordEnd(t, svc, iterationBetween("reviewer-1", task.Key, 20, 25))
 	if got := visitCounters(t, svc, task); got[0] != 0 {
 		t.Fatalf("counters = %v; the request was pending when the iteration ended", got)
@@ -572,9 +534,7 @@ func TestTheHoldersQuestionKeepsIterationsFromCountingIdle(t *testing.T) {
 		t.Fatalf("counters = %v; a question is not idleness", got)
 	}
 	// The answer clears what counted before the question.
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET idle_iterations = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceOpenVisit(t, svc, task, `idle_iterations = 2`)
 	setClock(12)
 	if _, err := svc.AddComment(ctx, CustomerActor("customer"), task.Key, AddCommentInput{Body: "Postgres."}); err != nil {
 		t.Fatal(err)
@@ -631,16 +591,6 @@ func TestTheIterationInWhichTheAnswerArrivesIsNotIdle(t *testing.T) {
 	}
 }
 
-// resumedAt returns the open visit's resumed_at.
-func resumedAt(t *testing.T, svc *Service, task Task) string {
-	t.Helper()
-	var resumed string
-	if err := svc.db.QueryRow(`SELECT resumed_at FROM task_status_visits WHERE task_id = ? AND left_at = ''`, task.ID).Scan(&resumed); err != nil {
-		t.Fatal(err)
-	}
-	return resumed
-}
-
 func TestAnIterationThatStartedBeforeAResumeIsNotIdle(t *testing.T) {
 	svc, actor, task := requestFixture(t)
 	pause(t, svc, task.Key, PauseIdleIterations, "")
@@ -681,12 +631,8 @@ func TestUnavailableHolderTasksSelectsOnlyCandidates(t *testing.T) {
 		t.Fatalf("ids = %v, %v; every holder can work", ids, err)
 	}
 	// The other task is held by dev-2, who can work.
-	if _, err := svc.db.Exec(`UPDATE tasks SET assignee = 'agent:dev-2' WHERE task_key = ?`, other.Key); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`UPDATE task_workflow_holders SET agent = 'dev-2' WHERE task_id = (SELECT id FROM tasks WHERE task_key = ?)`, other.Key); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, other, `assignee = 'agent:dev-2'`)
+	forceHolders(t, svc, other, `agent = 'dev-2'`)
 	setAgent(t, svc, "dev-1", `enabled = 0`)
 	if ids, err := svc.unavailableHolderTasks(ctx); err != nil || len(ids) != 1 || ids[0] != task.ID {
 		t.Fatalf("ids = %v, %v; want only %d", ids, err, task.ID)
@@ -711,9 +657,7 @@ func TestCheckHoldersLogsAnUnloadableManifestOnce(t *testing.T) {
 	svc.SetLogger(slog.New(slog.NewTextHandler(&logged, nil)))
 	setDigest := func(digest string) {
 		t.Helper()
-		if _, err := svc.db.Exec(`UPDATE tasks SET workflow_digest = ? WHERE id = ?`, digest, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceTask(t, svc, task, `workflow_digest = ?`, digest)
 	}
 	setDigest("missing")
 	for i := 0; i < 3; i++ {
@@ -734,9 +678,7 @@ func TestCheckHoldersLogsAnUnloadableManifestOnce(t *testing.T) {
 
 func TestAReleasedHolderCannotSetArtifacts(t *testing.T) {
 	svc, _, task := requestFixture(t)
-	if _, err := svc.db.Exec(`UPDATE task_workflow_holders SET released = 1 WHERE task_id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceHolders(t, svc, task, `released = 1`)
 	if _, err := svc.SetArtifact(context.Background(), AgentActor("dev-1"), task.Key, "plan", "p"); ErrorCode(err) != "not_holder" {
 		t.Fatalf("err = %v; a released holder does not hold the status", err)
 	}
@@ -744,9 +686,7 @@ func TestAReleasedHolderCannotSetArtifacts(t *testing.T) {
 
 func TestAWatchOutcomeResetsScriptFailures(t *testing.T) {
 	svc, actor, task := watchFixture(t)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceScriptFailures(t, svc, task, 2)
 	run := scheduleWatch(t, svc, actor, task)
 	complete(t, svc, run.ID, RunCompletion{Verdict: "outcome", Outcome: "merged", ExitCode: exitCode(0)})
 	stored := storedTask(t, svc, task.Key)
