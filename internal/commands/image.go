@@ -23,7 +23,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/stores"
-	"github.com/alekzonder/tariboy/internal/version"
 )
 
 var gitCommitPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
@@ -54,186 +53,244 @@ func imageBuild() registry.Command {
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
 			requestCtx := registry.RequestContext(p)
-			name := str(p, "name")
-			path := str(p, "path")
-			selector := strings.TrimSpace(str(p, "source"))
-			var restoreLocks, restoreStoreLock func() error
-			var installLock func(dir string) error
-			if selector != "" {
-				if strings.TrimSpace(path) != "" {
-					return nil, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
-				}
+			params, err := parseImageBuildParams(p)
+			if err != nil {
+				return nil, err
+			}
+			var locks imageBuildLocks
+			if params.selector != "" {
 				catalog := storeCatalog(c)
-				prepared, release, err := catalog.PrepareBuild(selector)
+				prepared, release, err := catalog.PrepareBuild(params.selector)
 				if err != nil {
 					return nil, storeError(err)
 				}
 				defer release()
-				path = prepared.Path
-				restoreLocks = func() error { return catalog.RestoreBuildLocks(requestCtx, prepared) }
-				restoreStoreLock = func() error { return catalog.RestoreStoreLock(requestCtx, prepared) }
-				installLock = func(dir string) error { return stores.RestoreLock(requestCtx, dir) }
-				if name == "" {
-					name = prepared.Name
+				params.path = prepared.Path
+				locks = imageBuildLocks{
+					restore:      func() error { return catalog.RestoreBuildLocks(requestCtx, prepared) },
+					restoreStore: func() error { return catalog.RestoreStoreLock(requestCtx, prepared) },
+					install:      func(dir string) error { return stores.RestoreLock(requestCtx, dir) },
 				}
-			} else if strings.TrimSpace(path) == "" {
-				return nil, api.UserError{Code: "missing_path", Msg: "image source path is required", Status: http.StatusBadRequest}
-			}
-			var tags []string
-			if tag, ok := p["tag"].(string); ok {
-				tags = []string{tag}
-			} else if values, ok := stringSlice(p["tag"]); ok {
-				tags = values
-			} else {
-				return nil, api.UserError{Code: "bad_ref", Msg: "image tag must be a string or string array"}
-			}
-			// Accept the pre-v2 direct-handler shape during the schema-v1
-			// compatibility window. Registry-driven callers must pass --name.
-			if name == "" && len(tags) == 1 && tags[0] != "" {
-				if legacy, legacyErr := image.ParseRef(tags[0]); legacyErr == nil {
-					name, tags = legacy.Name, []string{legacy.Tag}
+				if params.name == "" {
+					params.name = prepared.Name
 				}
 			}
-			if name == "" {
-				return nil, api.UserError{Code: "missing_name", Msg: "image name is required", Status: http.StatusBadRequest}
+			params.name, params.tags, err = resolveImageBuildName(params.name, params.tags)
+			if err != nil {
+				return nil, err
 			}
 			if c.Store == nil {
 				return nil, api.UserError{Code: "build_failed", Msg: "image metadata store is unavailable"}
 			}
-			repositoryID, gitCommit := strings.TrimSpace(str(p, "repository-id")), strings.TrimSpace(str(p, "git-commit"))
-			if (repositoryID == "") != (gitCommit == "") || (gitCommit != "" && !gitCommitPattern.MatchString(gitCommit)) {
-				return nil, api.UserError{Code: "bad_provenance", Msg: "repository-id and a 7-64 character hexadecimal git-commit must be provided together", Status: http.StatusBadRequest}
-			}
-			sourceCWD, sourceErr := canonicalSourceDir(path)
-			if sourceErr != nil {
-				return nil, api.UserError{Code: "bad_source_path", Msg: sourceErr.Error(), Status: http.StatusBadRequest}
-			}
-			snapshotStore := &imagesnapshot.Store{Root: filepath.Join(c.BaseDir, "image-source-snapshots"), Clock: time.Now}
-			if c.Store != nil {
-				snapshotStore.DB = c.Store.DB
-			}
-			parsed, err := imagefile.ParseV2(sourceCWD)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
-			}
-			requestedTags := tags
-			refs, defaultTags, err := imageBuildRefs(name, requestedTags, parsed)
+			source, cleanup, err := freezeImageSource(c, params, locks)
 			if err != nil {
 				return nil, err
 			}
-			if err := image.WithPublicationGate(func() error {
-				return imageStore(c).Migrate()
-			}); err != nil {
-				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
-			}
-			buildDir := sourceCWD
-			if len(parsed.Extends) > 0 {
-				if restoreStoreLock != nil {
-					if err := restoreStoreLock(); err != nil {
-						return nil, storeError(err)
-					}
-				}
-				assembled, cleanup, err := imagefile.Assemble(sourceCWD, imageBuildRoot(c), imagefile.ResolveRoots{Plugins: paths.Paths{Base: c.BaseDir}.PluginsDir()}, installLock)
-				if err != nil {
-					return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
-				}
-				defer cleanup()
-				buildDir = assembled
-			} else if restoreLocks != nil {
-				if err := restoreLocks(); err != nil {
-					return nil, storeError(err)
-				}
-			}
-			parsed, err = imagefile.ParseV2(buildDir)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
-			}
-			frozen, err := snapshotStore.Freeze(buildDir, parsed.Skills...)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
-			}
-			frozenDir, err := snapshotStore.OpenFrozen(frozen)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
-			}
-			parsed, err = imagefile.ParseV2(frozenDir)
-			if err != nil {
-				return nil, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
-			}
-			if defaultTags {
-				refs, _, err = imageBuildRefs(name, requestedTags, parsed)
-				if err != nil {
-					return nil, err
-				}
-			}
-			layout := paths.Paths{Base: c.BaseDir}
-			pluginsDir := layout.PluginsDir()
-			resolver := imagePluginResolver(c, pluginsDir)
-			productVersion := c.Version
-			if productVersion == "" {
-				productVersion = version.Version
-			}
-			builtAt := time.Now()
-			clock := func() time.Time { return builtAt }
-			var result any
-			err = image.WithPublicationGate(func() error {
-				store := imageStore(c)
-				if err := store.Migrate(); err != nil {
-					return api.UserError{Code: "build_failed", Msg: err.Error()}
-				}
-				publication, err := store.BeginPublication(refs)
-				if err != nil {
-					return api.UserError{Code: "build_failed", Msg: err.Error()}
-				}
-				restore := func(code string, cause error) error {
-					if restoreErr := publication.Restore(); restoreErr != nil {
-						return api.UserError{Code: code, Msg: fmt.Sprintf("%v; restore images: %v", cause, restoreErr)}
-					}
-					return api.UserError{Code: code, Msg: cause.Error()}
-				}
-				// One build produces one ref; every requested tag is moved onto it,
-				// so a versioned tag and latest always name the same content.
-				man, err := image.BuildV2(parsed, imagefile.ResolveRoots{Plugins: pluginsDir, SourceSkills: frozen.SourceSkills}, refs[0], store, clock, resolver)
-				if err != nil {
-					return restore("build_failed", err)
-				}
-				for _, ref := range refs[1:] {
-					if err := store.SetTag(ref, man.Digest); err != nil {
-						return restore("build_failed", err)
-					}
-				}
-				results := make([]map[string]any, 0, len(refs))
-				tx, err := c.Store.DB.BeginTx(context.Background(), nil)
-				if err != nil {
-					return restore("provenance_failed", err)
-				}
-				defer tx.Rollback()
-				provenanceStore := imageprovenance.Store{DB: c.Store.DB}
-				for _, ref := range refs {
-					if _, err := snapshotStore.CaptureFrozenTx(context.Background(), tx, ref.String(), man.Digest, name, frozen, imagesource.Provenance{RepositoryID: repositoryID, GitCommit: gitCommit}); err != nil {
-						return restore("provenance_failed", err)
-					}
-					if err := provenanceStore.UpsertTx(tx, imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
-						return restore("provenance_failed", err)
-					}
-					results = append(results, map[string]any{"name": man.Name, "tag": ref.Tag, "digest": man.Digest, "layers": len(man.Layers)})
-				}
-				if err := tx.Commit(); err != nil {
-					return restore("provenance_failed", err)
-				}
-				if len(results) == 1 || defaultTags {
-					result = results[0]
-				} else {
-					result = map[string]any{"images": results}
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, err
-			}
-			return result, nil
+			defer cleanup()
+			return publishImage(c, params, source)
 		},
 	}
+}
+
+// imageBuildParams holds the checked request parameters of image.build.
+type imageBuildParams struct {
+	selector, name, path    string
+	tags                    []string
+	repositoryID, gitCommit string
+}
+
+// parseImageBuildParams checks the request parameters of image.build. It
+// reads no store and no file.
+func parseImageBuildParams(p registry.Params) (imageBuildParams, error) {
+	params := imageBuildParams{
+		selector:     strings.TrimSpace(str(p, "source")),
+		name:         str(p, "name"),
+		path:         str(p, "path"),
+		repositoryID: strings.TrimSpace(str(p, "repository-id")),
+		gitCommit:    strings.TrimSpace(str(p, "git-commit")),
+	}
+	if params.selector != "" && strings.TrimSpace(params.path) != "" {
+		return imageBuildParams{}, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
+	}
+	if params.selector == "" && strings.TrimSpace(params.path) == "" {
+		return imageBuildParams{}, api.UserError{Code: "missing_path", Msg: "image source path is required", Status: http.StatusBadRequest}
+	}
+	if tag, ok := p["tag"].(string); ok {
+		params.tags = []string{tag}
+	} else if values, ok := stringSlice(p["tag"]); ok {
+		params.tags = values
+	} else {
+		return imageBuildParams{}, api.UserError{Code: "bad_ref", Msg: "image tag must be a string or string array"}
+	}
+	if (params.repositoryID == "") != (params.gitCommit == "") || (params.gitCommit != "" && !gitCommitPattern.MatchString(params.gitCommit)) {
+		return imageBuildParams{}, api.UserError{Code: "bad_provenance", Msg: "repository-id and a 7-64 character hexadecimal git-commit must be provided together", Status: http.StatusBadRequest}
+	}
+	return params, nil
+}
+
+// resolveImageBuildName returns the target image name and tags.
+func resolveImageBuildName(name string, tags []string) (string, []string, error) {
+	// Accept the pre-v2 direct-handler shape during the schema-v1
+	// compatibility window. Registry-driven callers must pass --name.
+	if name == "" && len(tags) == 1 && tags[0] != "" {
+		if legacy, legacyErr := image.ParseRef(tags[0]); legacyErr == nil {
+			name, tags = legacy.Name, []string{legacy.Tag}
+		}
+	}
+	if name == "" {
+		return "", nil, api.UserError{Code: "missing_name", Msg: "image name is required", Status: http.StatusBadRequest}
+	}
+	return name, tags, nil
+}
+
+// imageBuildLocks restores the lock files of a store build; it is empty for
+// a build from a path.
+type imageBuildLocks struct {
+	restore, restoreStore func() error
+	install               func(dir string) error
+}
+
+// imageBuildSource is the frozen source an image is built from.
+type imageBuildSource struct {
+	sourceCWD   string
+	snapshots   *imagesnapshot.Store
+	frozen      imagesnapshot.FrozenSource
+	parsed      *imagefile.V2
+	refs        []image.Ref
+	defaultTags bool
+}
+
+// freezeImageSource assembles the source, restores its locks and freezes a
+// snapshot of it. cleanup removes the assembled directory.
+func freezeImageSource(c *registry.Ctx, params imageBuildParams, locks imageBuildLocks) (imageBuildSource, func(), error) {
+	cleanup := func() {}
+	sourceCWD, sourceErr := canonicalSourceDir(params.path)
+	if sourceErr != nil {
+		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_source_path", Msg: sourceErr.Error(), Status: http.StatusBadRequest}
+	}
+	snapshotStore := &imagesnapshot.Store{Root: filepath.Join(c.BaseDir, "image-source-snapshots"), Clock: time.Now, DB: c.Store.DB}
+	parsed, err := imagefile.ParseV2(sourceCWD)
+	if err != nil {
+		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
+	}
+	refs, defaultTags, err := imageBuildRefs(params.name, params.tags, parsed)
+	if err != nil {
+		return imageBuildSource{}, cleanup, err
+	}
+	if err := image.WithPublicationGate(func() error {
+		return imageStore(c).Migrate()
+	}); err != nil {
+		return imageBuildSource{}, cleanup, api.UserError{Code: "build_failed", Msg: err.Error()}
+	}
+	buildDir := sourceCWD
+	if len(parsed.Extends) > 0 {
+		if locks.restoreStore != nil {
+			if err := locks.restoreStore(); err != nil {
+				return imageBuildSource{}, cleanup, storeError(err)
+			}
+		}
+		assembled, removeAssembled, err := imagefile.Assemble(sourceCWD, imageBuildRoot(c), imagefile.ResolveRoots{Plugins: paths.Paths{Base: c.BaseDir}.PluginsDir()}, locks.install)
+		if err != nil {
+			return imageBuildSource{}, cleanup, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
+		}
+		cleanup = removeAssembled
+		buildDir = assembled
+	} else if locks.restore != nil {
+		if err := locks.restore(); err != nil {
+			return imageBuildSource{}, cleanup, storeError(err)
+		}
+	}
+	parsed, err = imagefile.ParseV2(buildDir)
+	if err != nil {
+		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
+	}
+	frozen, err := snapshotStore.Freeze(buildDir, parsed.Skills...)
+	if err != nil {
+		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
+	}
+	frozenDir, err := snapshotStore.OpenFrozen(frozen)
+	if err != nil {
+		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_source_path", Msg: err.Error(), Status: http.StatusBadRequest}
+	}
+	parsed, err = imagefile.ParseV2(frozenDir)
+	if err != nil {
+		return imageBuildSource{}, cleanup, api.UserError{Code: "bad_imagefile", Msg: err.Error()}
+	}
+	if defaultTags {
+		refs, _, err = imageBuildRefs(params.name, params.tags, parsed)
+		if err != nil {
+			return imageBuildSource{}, cleanup, err
+		}
+	}
+	return imageBuildSource{sourceCWD: sourceCWD, snapshots: snapshotStore, frozen: frozen, parsed: parsed, refs: refs, defaultTags: defaultTags}, cleanup, nil
+}
+
+// publishImage builds the image from source, moves every requested tag onto
+// it and records its provenance in one transaction. A failure restores the
+// previous images.
+func publishImage(c *registry.Ctx, params imageBuildParams, source imageBuildSource) (any, error) {
+	refs := source.refs
+	pluginsDir := paths.Paths{Base: c.BaseDir}.PluginsDir()
+	resolver := imagePluginResolver(c, pluginsDir)
+	builtAt := time.Now()
+	clock := func() time.Time { return builtAt }
+	var result any
+	err := image.WithPublicationGate(func() error {
+		store := imageStore(c)
+		if err := store.Migrate(); err != nil {
+			return api.UserError{Code: "build_failed", Msg: err.Error()}
+		}
+		publication, err := store.BeginPublication(refs)
+		if err != nil {
+			return api.UserError{Code: "build_failed", Msg: err.Error()}
+		}
+		restore := func(code string, cause error) error {
+			if restoreErr := publication.Restore(); restoreErr != nil {
+				return api.UserError{Code: code, Msg: fmt.Sprintf("%v; restore images: %v", cause, restoreErr)}
+			}
+			return api.UserError{Code: code, Msg: cause.Error()}
+		}
+		// One build produces one ref; every requested tag is moved onto it,
+		// so a versioned tag and latest always name the same content.
+		man, err := image.BuildV2(source.parsed, imagefile.ResolveRoots{Plugins: pluginsDir, SourceSkills: source.frozen.SourceSkills}, refs[0], store, clock, resolver)
+		if err != nil {
+			return restore("build_failed", err)
+		}
+		for _, ref := range refs[1:] {
+			if err := store.SetTag(ref, man.Digest); err != nil {
+				return restore("build_failed", err)
+			}
+		}
+		results := make([]map[string]any, 0, len(refs))
+		tx, err := c.Store.DB.BeginTx(context.Background(), nil)
+		if err != nil {
+			return restore("provenance_failed", err)
+		}
+		defer tx.Rollback()
+		provenanceStore := imageprovenance.Store{DB: c.Store.DB}
+		for _, ref := range refs {
+			if _, err := source.snapshots.CaptureFrozenTx(context.Background(), tx, ref.String(), man.Digest, params.name, source.frozen, imagesource.Provenance{RepositoryID: params.repositoryID, GitCommit: params.gitCommit}); err != nil {
+				return restore("provenance_failed", err)
+			}
+			if err := provenanceStore.UpsertTx(tx, imageprovenance.Record{Ref: ref.String(), Digest: man.Digest, SourceCWD: source.sourceCWD, BuiltAt: man.BuiltAt}); err != nil {
+				return restore("provenance_failed", err)
+			}
+			results = append(results, map[string]any{"name": man.Name, "tag": ref.Tag, "digest": man.Digest, "layers": len(man.Layers)})
+		}
+		if err := tx.Commit(); err != nil {
+			return restore("provenance_failed", err)
+		}
+		if len(results) == 1 || source.defaultTags {
+			result = results[0]
+		} else {
+			result = map[string]any{"images": results}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func imageBuildRefs(name string, tags []string, parsed *imagefile.V2) ([]image.Ref, bool, error) {

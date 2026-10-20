@@ -26,6 +26,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
 	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func localCtx(t *testing.T) *registry.Ctx {
@@ -1242,16 +1243,13 @@ func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
 				if err := os.WriteFile(filepath.Join(dir, "result.json"), []byte(`{"exit_code":0}`), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				deadline := time.Now().Add(3 * time.Second)
-				for {
-					it, err := as.GetIteration("worker", id)
-					if err == nil && it.Status == "done" {
-						return
-					}
-					if time.Now().After(deadline) {
-						t.Fatalf("iteration did not finish: %+v err=%v", it, err)
-					}
-					time.Sleep(10 * time.Millisecond)
+				var it agent.Iteration
+				var err error
+				if !testutil.WaitFor(3*time.Second, func() bool {
+					it, err = as.GetIteration("worker", id)
+					return err == nil && it.Status == "done"
+				}) {
+					t.Fatalf("iteration did not finish: %+v err=%v", it, err)
 				}
 			}
 			read := func(path string) []byte {
