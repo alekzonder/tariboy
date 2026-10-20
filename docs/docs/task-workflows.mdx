@@ -1259,11 +1259,11 @@ and what it may do next. Agents and the operator can read it.
 | `instructions_path` | The status instruction file inside the image. |
 | `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), `checks` (script paths), and `check_details`: the same checks, in order, each with `script`, `description` (when the image gives one), and the resolved `run_as` and `timeout`. A finished task has none. |
 | `artifacts` | The current value of each artifact. |
-| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message. |
+| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message, plus the visit's counters `idle_iterations`, `rejected_requests`, and `script_failures` (absent when zero); compare them with the `limits` of the status to see how close the task is to a pause. |
 | `last_request` | The latest transition request: `id`, `outcome`, `message`, `actor`, `state`, `result_message`, times, and `wait_seconds` while pending. |
-| `runs` | The 20 most recent script runs, newest first. |
+| `runs` | The 20 most recent script runs, newest first. A check run carries the `request_id` of the transition request it belongs to. |
 | `declared_artifacts` | Every artifact the manifest declares, in manifest order, as `name` and `description`, whether or not it has a value. |
-| `statuses` | Every status the manifest declares, in manifest order, as `id`, `owner` (as in `owner` above: `pool:<name>`, `customer`, `script`, or empty for a terminal status), and `terminal`. A finished task lists them too. |
+| `statuses` | Every status the manifest declares, in manifest order, as `id`, `owner` (as in `owner` above: `pool:<name>`, `customer`, `script`, or empty for a terminal status), and `terminal`. A non-terminal status also carries `initial`, `instructions_path`, its `transitions` (`on`, `to`, `requires`, and `checks` as `check_details` above), its `watch` (`script`, `description`, `every`, and the resolved `timeout`), and its effective `limits`; a terminal status carries `cancelled` when it declares it. A finished task lists them too. |
 
 ## Commands
 

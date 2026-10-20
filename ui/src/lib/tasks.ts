@@ -384,7 +384,22 @@ export const markTaskNotificationRead = (id: string, target?: ApiTarget) =>
 
 // Workflow tasks.
 
-export interface WorkflowOutcome { on: string; to: string; requires?: string[]; missing?: string[]; checks?: string[] }
+export interface WorkflowOutcome {
+  on: string
+  to: string
+  requires?: string[]
+  missing?: string[]
+  /** Script paths of the checks, in order. */
+  checks?: string[]
+  /** The same checks, in the same order, with description and resolved run mode and timeout. */
+  check_details?: WorkflowCheckView[]
+}
+/** One check of a transition with its defaults resolved; `timeout` is a Go duration such as `1m0s`. */
+export interface WorkflowCheckView { script: string; description?: string; run_as: "queue" | "agent"; timeout: string }
+export interface WorkflowWatchView { script: string; description?: string; every: string; timeout: string }
+export interface WorkflowTransitionView { on: string; to: string; requires?: string[]; checks?: WorkflowCheckView[] }
+/** The effective limits of a status; `unavailable_grace` is a Go duration such as `5m0s`. */
+export interface WorkflowLimitsView { idle_iterations: number; rejected_requests: number; script_failures: number; unavailable_grace: string }
 export interface WorkflowArtifact { id: number; name: string; value: string; author: string; created_at: string }
 export interface WorkflowVisit {
   id: number
@@ -395,6 +410,10 @@ export interface WorkflowVisit {
   left_at?: string
   outcome?: string
   message?: string
+  /** The visit's counters, compared with the status limits; absent when zero. */
+  idle_iterations?: number
+  rejected_requests?: number
+  script_failures?: number
 }
 export type TransitionState = "pending" | "applied" | "rejected" | "failed" | "cancelled"
 export interface TransitionRequest {
@@ -427,6 +446,8 @@ export interface ScriptRun {
   started_at?: string
   finished_at?: string
   log_path?: string
+  /** The transition request a check run belongs to; absent for a watch run. */
+  request_id?: number
 }
 export interface SourceRun {
   id: number
@@ -449,6 +470,7 @@ export interface QueueSource {
   script: string
   every: string
   timeout?: string
+  description?: string
   next_run_at?: string
   failures: number
   last_run?: SourceRun
@@ -476,8 +498,22 @@ export interface WorkflowView {
   statuses: WorkflowStatusInfo[]
 }
 export interface WorkflowDeclaredArtifact { name: string; description: string }
-/** `owner` is `pool:NAME`, `customer`, `script`, or "" for a terminal status. */
-export interface WorkflowStatusInfo { id: string; owner: string; terminal: boolean }
+/**
+ * One status of the pinned image. `owner` is `pool:NAME`, `customer`, `script`,
+ * or "" for a terminal status. The graph fields are absent when empty, and a
+ * terminal status has none of them.
+ */
+export interface WorkflowStatusInfo {
+  id: string
+  owner: string
+  terminal: boolean
+  initial?: boolean
+  cancelled?: boolean
+  instructions_path?: string
+  watch?: WorkflowWatchView
+  transitions?: WorkflowTransitionView[]
+  limits?: WorkflowLimitsView
+}
 /** `tag` is the tag the binding follows: new tasks get the version it names. Empty pins the digest. */
 export interface QueueWorkflow { queue: string; name: string; version: string; digest: string; tag: string; revision: number; updated_at: string }
 export interface QueueSecretInfo { key: string; updated_at: string }
@@ -485,8 +521,8 @@ export interface WorkflowImage { name: string; tag: string; version: string; dig
 /** `kind` is "" for a terminal status. */
 export interface WorkflowOwner { kind: "pool" | "customer" | "script" | ""; pool?: string }
 export interface WorkflowLimits { idle_iterations?: number; rejected_requests?: number; script_failures?: number; unavailable_grace?: string }
-export interface WorkflowCheck { script: string; run_as?: string; timeout?: string }
-export interface WorkflowWatch { script: string; every: string; timeout?: string }
+export interface WorkflowCheck { script: string; run_as?: string; timeout?: string; description?: string }
+export interface WorkflowWatch { script: string; every: string; timeout?: string; description?: string }
 export interface WorkflowTransition { on: string; to: string; requires?: string[]; checks?: WorkflowCheck[] }
 export interface WorkflowDefinitionStatus {
   id: string

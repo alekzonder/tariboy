@@ -58,9 +58,8 @@ type ScriptRun struct {
 	// after a restart; it is never marshalled.
 	PID *int `json:"-"`
 	// RequestID is the transition request a check belongs to, 0 for a watch;
-	// the Goal block matches a failed request to its run by it. It is never
-	// marshalled.
-	RequestID int64 `json:"-"`
+	// the Goal block and Desktop match a failed request to its run by it.
+	RequestID int64 `json:"request_id,omitempty"`
 }
 
 // RunJob is everything the worker needs to execute one pending run.

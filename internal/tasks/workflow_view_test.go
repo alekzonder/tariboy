@@ -193,11 +193,20 @@ func TestGetWorkflowListsDeclaredArtifactsAndStatuses(t *testing.T) {
 		{ID: "approval", Owner: "customer"}, {ID: "merge", Owner: "script"},
 		{ID: "done", Terminal: true}, {ID: "dropped", Terminal: true},
 	}
+	// identity keeps the fields this test is about; the graph fields have
+	// their own test.
+	identity := func(statuses []StatusView) []StatusView {
+		out := make([]StatusView, 0, len(statuses))
+		for _, s := range statuses {
+			out = append(out, StatusView{ID: s.ID, Owner: s.Owner, Terminal: s.Terminal})
+		}
+		return out
+	}
 	view, err := svc.GetWorkflow(ctx, actor, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(view.DeclaredArtifacts, wantArtifacts) || !reflect.DeepEqual(view.Statuses, wantStatuses) {
+	if !reflect.DeepEqual(view.DeclaredArtifacts, wantArtifacts) || !reflect.DeepEqual(identity(view.Statuses), wantStatuses) {
 		t.Fatalf("declared = %#v statuses = %#v", view.DeclaredArtifacts, view.Statuses)
 	}
 	f := jsonFields(t, view)
@@ -210,9 +219,82 @@ func TestGetWorkflowListsDeclaredArtifactsAndStatuses(t *testing.T) {
 	if _, err := svc.CancelWorkflowTask(ctx, actor, task.Key); err != nil {
 		t.Fatal(err)
 	}
-	if view, err = svc.GetWorkflow(ctx, actor, task.Key); err != nil || !reflect.DeepEqual(view.Statuses, wantStatuses) ||
+	if view, err = svc.GetWorkflow(ctx, actor, task.Key); err != nil || !reflect.DeepEqual(identity(view.Statuses), wantStatuses) ||
 		!reflect.DeepEqual(view.DeclaredArtifacts, wantArtifacts) {
 		t.Fatalf("cancelled view = %#v, %v", view, err)
+	}
+}
+
+// Every status is described in full, not only the current one: the stepper
+// in Desktop shows what each step needs and which script owns it.
+func TestGetWorkflowDescribesEveryStatus(t *testing.T) {
+	svc, actor, task := requestFixture(t)
+	ctx := context.Background()
+	six := 6
+	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) {
+		m.Definition.Limits = &workflowfile.Limits{RejectedRequests: &six}
+		m.Definition.Statuses[0].Instructions = "./statuses/develop.md"
+		m.Definition.Statuses[0].Limits = &workflowfile.Limits{IdleIterations: &six, UnavailableGrace: "10m"}
+		m.Definition.Statuses[1].Transitions[0].Checks[0].Description = "CI is green."
+		m.Definition.Statuses[3].Watch = &workflowfile.Watch{Script: "./watch/merge.sh", Every: "2m", Description: "Waits for the merge."}
+	})
+	view, err := svc.GetWorkflow(ctx, actor, task.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	develop := view.Statuses[0]
+	if !develop.Initial || develop.InstructionsPath != "statuses/develop.md" || develop.Watch != nil ||
+		!reflect.DeepEqual(develop.Transitions, []TransitionView{
+			{On: "ready", To: "review", Requires: []string{"plan", "summary"}}, {On: "ask", To: "approval"}}) ||
+		!reflect.DeepEqual(develop.Limits, &LimitsView{IdleIterations: 6, RejectedRequests: 6, ScriptFailures: 3, UnavailableGrace: "10m0s"}) {
+		t.Fatalf("develop = %#v", develop)
+	}
+	review := view.Statuses[1]
+	if review.Initial || !reflect.DeepEqual(review.Transitions, []TransitionView{
+		{On: "approve", To: "approval", Checks: []CheckView{{Script: "checks/ci.sh", Description: "CI is green.", RunAs: "queue", Timeout: "1m0s"}}},
+		{On: "changes", To: "develop"}}) ||
+		!reflect.DeepEqual(review.Limits, &LimitsView{IdleIterations: 3, RejectedRequests: 6, ScriptFailures: 3, UnavailableGrace: "5m0s"}) {
+		t.Fatalf("review = %#v", review)
+	}
+	merge := view.Statuses[3]
+	if !reflect.DeepEqual(merge.Watch, &WatchView{Script: "./watch/merge.sh", Description: "Waits for the merge.", Every: "2m", Timeout: "1m0s"}) ||
+		len(merge.Transitions) != 1 || merge.Limits == nil {
+		t.Fatalf("merge = %#v", merge)
+	}
+	if done, dropped := view.Statuses[4], view.Statuses[5]; !done.Terminal || done.Cancelled || done.Limits != nil ||
+		done.Transitions != nil || !dropped.Cancelled {
+		t.Fatalf("terminal = %#v %#v", done, dropped)
+	}
+	statuses := jsonFields(t, view)["statuses"].([]any)
+	if !reflect.DeepEqual(statuses[4], map[string]any{"id": "done", "owner": "", "terminal": true}) {
+		t.Fatalf("terminal JSON = %v", statuses[4])
+	}
+	if first := statuses[0].(map[string]any); first["initial"] != true || first["limits"] == nil || first["transitions"] == nil {
+		t.Fatalf("initial JSON = %v", first)
+	}
+}
+
+// A visit carries its counters, so a reader can tell how close the task is
+// to a pause.
+func TestGetWorkflowVisitsCarryCounters(t *testing.T) {
+	svc, actor, task, _ := runFixture(t)
+	request, first := advanceApprove(t, svc, actor, task)
+	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "CI is red", ExitCode: exitCode(112)})
+	view, err := svc.GetWorkflow(context.Background(), actor, task.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := view.Visits[len(view.Visits)-1]
+	if open.LeftAt != "" || open.RejectedRequests != 1 || open.ScriptFailures != 0 || open.IdleIterations != 0 {
+		t.Fatalf("open visit = %#v", open)
+	}
+	if fields := jsonFields(t, open); fields["rejected_requests"] != float64(1) || fields["script_failures"] != nil {
+		t.Fatalf("visit JSON = %v", fields)
+	}
+	// The run of a check names its request, so a failed request can be
+	// paired with its log; a watch run names none.
+	if run := view.Runs[0]; run.RequestID != request.ID || jsonFields(t, run)["request_id"] != float64(request.ID) {
+		t.Fatalf("run = %#v", run)
 	}
 }
 

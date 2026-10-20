@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/workflowfile"
+	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
 
 // OutcomeView is one transition of the current status as the task shows it.
@@ -40,11 +41,74 @@ type DeclaredArtifact struct {
 	Description string `json:"description"`
 }
 
-// StatusView is one status the manifest declares.
+// StatusView is one status the manifest declares, with what a reader needs to
+// understand the step: who owns it, how it is left, and which scripts guard
+// it. The graph fields are omitted when empty, and a terminal status has
+// none of them.
 type StatusView struct {
 	ID       string `json:"id"`
 	Owner    string `json:"owner"` // "pool:<name>", "customer", "script", or "" for terminal
 	Terminal bool   `json:"terminal"`
+	// Initial marks the status a new task enters; Cancelled marks a terminal
+	// status whose result counts as cancelled.
+	Initial          bool             `json:"initial,omitempty"`
+	Cancelled        bool             `json:"cancelled,omitempty"`
+	InstructionsPath string           `json:"instructions_path,omitempty"` // source-relative path inside the image
+	Watch            *WatchView       `json:"watch,omitempty"`
+	Transitions      []TransitionView `json:"transitions,omitempty"`
+	Limits           *LimitsView      `json:"limits,omitempty"` // the effective limits; nil for a terminal status
+}
+
+// TransitionView is one way out of a status: the outcome, its target, and
+// what the daemon requires before it applies.
+type TransitionView struct {
+	On       string      `json:"on"`
+	To       string      `json:"to"`
+	Requires []string    `json:"requires,omitempty"`
+	Checks   []CheckView `json:"checks,omitempty"`
+}
+
+// WatchView is the script that owns a script status, with its defaults resolved.
+type WatchView struct {
+	Script      string `json:"script"`
+	Description string `json:"description,omitempty"`
+	Every       string `json:"every"`
+	Timeout     string `json:"timeout"` // the effective timeout, as a duration
+}
+
+// LimitsView is the effective limits of one status, defaults and overrides
+// resolved, as durations and counts a reader can compare with the visit's
+// counters.
+type LimitsView struct {
+	IdleIterations   int    `json:"idle_iterations"`
+	RejectedRequests int    `json:"rejected_requests"`
+	ScriptFailures   int    `json:"script_failures"`
+	UnavailableGrace string `json:"unavailable_grace"`
+}
+
+// statusView renders one manifest status with its graph.
+func statusView(manifest workflowimage.Manifest, status workflowfile.Status) StatusView {
+	view := StatusView{ID: status.ID, Owner: statusOwner(status), Terminal: status.Terminal,
+		Initial: status.ID == manifest.Definition.InitialStatus, Cancelled: status.Cancelled,
+		InstructionsPath: strings.TrimPrefix(status.Instructions, "./")}
+	if status.Terminal {
+		return view
+	}
+	if status.Watch != nil {
+		view.Watch = &WatchView{Script: status.Watch.Script, Description: status.Watch.Description, Every: status.Watch.Every,
+			Timeout: scriptTimeout(status.Watch.Timeout, workflowfile.DefaultWatchTimeout).String()}
+	}
+	for _, transition := range status.Transitions {
+		t := TransitionView{On: transition.On, To: transition.To, Requires: transition.Requires}
+		for _, check := range transition.Checks {
+			t.Checks = append(t.Checks, checkView(check))
+		}
+		view.Transitions = append(view.Transitions, t)
+	}
+	limits := manifest.Definition.StatusLimits(status.ID)
+	view.Limits = &LimitsView{IdleIterations: limits.IdleIterations, RejectedRequests: limits.RejectedRequests,
+		ScriptFailures: limits.ScriptFailures, UnavailableGrace: limits.UnavailableGrace.String()}
+	return view
 }
 
 // WorkflowView is the read model of one workflow task: where it is, who owns
@@ -108,7 +172,7 @@ func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key strin
 		view.DeclaredArtifacts = append(view.DeclaredArtifacts, DeclaredArtifact{Name: a.Name, Description: a.Description})
 	}
 	for _, s := range manifest.Definition.Statuses {
-		view.Statuses = append(view.Statuses, StatusView{ID: s.ID, Owner: statusOwner(s), Terminal: s.Terminal})
+		view.Statuses = append(view.Statuses, statusView(manifest, s))
 	}
 	if view.Artifacts, err = currentArtifactsTx(ctx, tx, task.ID); err != nil {
 		return WorkflowView{}, err
@@ -157,7 +221,8 @@ func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key strin
 // statusVisitsTx returns every visit of a task, oldest first.
 func statusVisitsTx(ctx context.Context, q queryer, taskID int64) ([]StatusVisit, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, sequence, status_id, entered_at, entered_by, left_at, outcome, message
+		SELECT id, sequence, status_id, entered_at, entered_by, left_at, outcome, message,
+		       idle_iterations, rejected_requests, script_failures
 		FROM task_status_visits WHERE task_id = ? ORDER BY sequence`, taskID)
 	if err != nil {
 		return nil, err
@@ -166,7 +231,8 @@ func statusVisitsTx(ctx context.Context, q queryer, taskID int64) ([]StatusVisit
 	visits := []StatusVisit{}
 	for rows.Next() {
 		var v StatusVisit
-		if err := rows.Scan(&v.ID, &v.Sequence, &v.Status, &v.EnteredAt, &v.EnteredBy, &v.LeftAt, &v.Outcome, &v.Message); err != nil {
+		if err := rows.Scan(&v.ID, &v.Sequence, &v.Status, &v.EnteredAt, &v.EnteredBy, &v.LeftAt, &v.Outcome, &v.Message,
+			&v.IdleIterations, &v.RejectedRequests, &v.ScriptFailures); err != nil {
 			return nil, err
 		}
 		visits = append(visits, v)
