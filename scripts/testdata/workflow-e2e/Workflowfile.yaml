@@ -30,6 +30,7 @@ statuses:
         checks:
           - script: ./scripts/check-env.sh
             timeout: 20s
+            description: The queue secret and env reach a queue run.
           - script: ./scripts/check-gate.sh
             run_as: agent
             timeout: 20s
