@@ -12,6 +12,7 @@ import (
 )
 
 func TestTranscriptHandler(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	agent := "a1"
 	iter := "a1-20260710-1"

@@ -12,6 +12,7 @@ import (
 )
 
 func TestAgentUsageGroupingAndTotals(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -113,6 +114,7 @@ func TestAgentUsageGroupingAndTotals(t *testing.T) {
 }
 
 func TestAgentUsageSeriesAndDefaults(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "bob", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -148,6 +150,7 @@ func TestAgentUsageSeriesAndDefaults(t *testing.T) {
 }
 
 func TestAgentUsageBadParams(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)

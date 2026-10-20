@@ -3,6 +3,7 @@ package commands
 import "testing"
 
 func TestRegistryDoesNotExposeRemovedJudgeCommands(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	for _, name := range []string{"judge.ls", "judge.review", "judge.automation.get", "improvement.ls"} {
 		if _, ok := r.Get(name); ok {
@@ -12,6 +13,7 @@ func TestRegistryDoesNotExposeRemovedJudgeCommands(t *testing.T) {
 }
 
 func TestRegistryDoesNotExposeRemovedEvalCommandsOrRoutes(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	for _, name := range []string{"eval.ls", "eval.inspect"} {
 		if _, ok := r.Get(name); ok {

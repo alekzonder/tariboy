@@ -18,6 +18,7 @@ import (
 )
 
 func TestAppendAndGzipTranscript(t *testing.T) {
+	t.Parallel()
 	agentsDir := t.TempDir()
 	l := agentdir.New(agentsDir, "alice")
 	if err := l.EnsureIteration("alice-1"); err != nil {
@@ -102,6 +103,7 @@ func TestAppendAndGzipTranscript(t *testing.T) {
 // close, and verifies the plain file is gone and the .gz decompresses back to
 // the transcript line the proxy wrote.
 func TestGzipTranscriptAfterRealProxyCall(t *testing.T) {
+	// Sequential: sets FAKE_ANTHROPIC_KEY with t.Setenv.
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5}}`))
@@ -177,6 +179,7 @@ func TestGzipTranscriptAfterRealProxyCall(t *testing.T) {
 // GzipTranscript on a nonexistent proxy-transcript.jsonl must not error and
 // must not create a stray .gz file.
 func TestGzipTranscriptMissingIsNoop(t *testing.T) {
+	t.Parallel()
 	agentsDir := t.TempDir()
 	l := agentdir.New(agentsDir, "bob")
 	if err := l.EnsureIteration("bob-1"); err != nil {
@@ -197,6 +200,7 @@ func TestGzipTranscriptMissingIsNoop(t *testing.T) {
 // byte-for-byte. This fails against a json.RawMessage entry, whose Marshal
 // rejects the whole entry (metadata included) when a body is not valid JSON.
 func TestAppendTranscriptOpaqueBodies(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		req  []byte
@@ -207,6 +211,7 @@ func TestAppendTranscriptOpaqueBodies(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			agentsDir := t.TempDir()
 			l := agentdir.New(agentsDir, "alice")
 			if err := l.EnsureIteration("alice-1"); err != nil {

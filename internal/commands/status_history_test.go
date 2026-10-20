@@ -10,6 +10,7 @@ import (
 )
 
 func TestAgentStatusHistoryFiltersStatusEvents(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	// Seed the agent's audit.jsonl with mixed events.
 	logPath := agentdir.New(paths.New(c.BaseDir).AgentsDir(), "a1").AuditLog()

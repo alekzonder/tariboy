@@ -18,6 +18,7 @@ import (
 )
 
 func TestCodexChatGPTStreamingResponseRecordsUsageAndCost(t *testing.T) {
+	t.Parallel()
 	const sse = "event: response.completed\n" +
 		`data: {"type":"response.completed","response":{"model":"gpt-5.6-terra","usage":{"input_tokens":100,"input_tokens_details":{"cache_write_tokens":7,"cached_tokens":25},"output_tokens":40}}}` + "\n\n"
 
@@ -85,6 +86,7 @@ func TestCodexChatGPTStreamingResponseRecordsUsageAndCost(t *testing.T) {
 }
 
 func TestCodexChatGPTSSEBodyWithJSONContentTypeRecordsUsage(t *testing.T) {
+	t.Parallel()
 	const sse = "event: response.completed\n" +
 		`data: {"type":"response.completed","response":{"model":"gpt-5.6-terra","usage":{"input_tokens":100,"input_tokens_details":{"cache_write_tokens":7,"cached_tokens":25},"output_tokens":40}}}` + "\n\n"
 
@@ -128,6 +130,7 @@ func TestCodexChatGPTSSEBodyWithJSONContentTypeRecordsUsage(t *testing.T) {
 }
 
 func TestForwardUnknownModelPricingWarnsWithoutRequestContent(t *testing.T) {
+	t.Parallel()
 	const requestContent = "request-content-must-not-log"
 	model := strings.Repeat("m", 300)
 	cases := []struct {
@@ -151,6 +154,7 @@ func TestForwardUnknownModelPricingWarnsWithoutRequestContent(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", tc.contentType)
 				_, _ = w.Write([]byte(tc.response))
@@ -194,6 +198,7 @@ func TestForwardUnknownModelPricingWarnsWithoutRequestContent(t *testing.T) {
 }
 
 func TestCodexChatGPTResponsesForwardOAuthAndRecordUsage(t *testing.T) {
+	t.Parallel()
 	var upstreamCalls atomic.Int32
 	var gotPath string
 	var gotAuthorization, gotAccountID bool
@@ -247,6 +252,7 @@ func TestCodexChatGPTResponsesForwardOAuthAndRecordUsage(t *testing.T) {
 }
 
 func TestCodexChatGPTModelsProxiedWithoutPersistence(t *testing.T) {
+	t.Parallel()
 	var upstreamCalls atomic.Int32
 	var gotPathAndQuery bool
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +296,7 @@ func TestCodexChatGPTModelsProxiedWithoutPersistence(t *testing.T) {
 }
 
 func TestCodexChatGPTModelsSubrouteNotPersisted(t *testing.T) {
+	t.Parallel()
 	agentsDir := t.TempDir()
 	mkIter(t, agentsDir, "codex", "codex-model-detail-1")
 	var rows []AIRequest
@@ -312,6 +319,7 @@ func TestCodexChatGPTModelsSubrouteNotPersisted(t *testing.T) {
 }
 
 func TestCodexChatGPTFailsClosedBeforeUpstream(t *testing.T) {
+	t.Parallel()
 	var upstreamCalls atomic.Int32
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upstreamCalls.Add(1)
@@ -398,6 +406,7 @@ func TestCodexChatGPTFailsClosedBeforeUpstream(t *testing.T) {
 }
 
 func TestCodexChatGPTCrossOriginRedirectNotFollowed(t *testing.T) {
+	t.Parallel()
 	var firstOriginCalls atomic.Int32
 	var secondOriginCalls atomic.Int32
 	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -434,6 +443,7 @@ func TestCodexChatGPTCrossOriginRedirectNotFollowed(t *testing.T) {
 }
 
 func TestCodexChatGPTSameOriginRedirectFollowed(t *testing.T) {
+	t.Parallel()
 	var finalCalls atomic.Int32
 	var authorizationOK, accountIDOK bool
 	var up *httptest.Server
@@ -477,6 +487,7 @@ func TestCodexChatGPTSameOriginRedirectFollowed(t *testing.T) {
 }
 
 func TestCodexChatGPTRedirectPreservesConfiguredClientPolicy(t *testing.T) {
+	t.Parallel()
 	var policyCalls atomic.Int32
 	var finalCalls atomic.Int32
 	var up *httptest.Server
@@ -517,6 +528,7 @@ func TestCodexChatGPTRedirectPreservesConfiguredClientPolicy(t *testing.T) {
 }
 
 func TestProviderForOpenAIRouteBoundaries(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path string
 		want string
@@ -541,6 +553,7 @@ func TestProviderForOpenAIRouteBoundaries(t *testing.T) {
 }
 
 func TestCodexRoutePathSafety(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		path string
 		want bool
@@ -571,6 +584,7 @@ func TestCodexRoutePathSafety(t *testing.T) {
 }
 
 func TestSafeRoutePathRejectsResidualEscapes(t *testing.T) {
+	t.Parallel()
 	for _, path := range []string{
 		"/responses%2fcompact",
 		"/v1%2fresponses",
@@ -590,6 +604,7 @@ func TestSafeRoutePathRejectsResidualEscapes(t *testing.T) {
 }
 
 func TestChatGPTCredentialsRejectedOnNonCodexRoutesBeforeUpstream(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		path          string
@@ -634,6 +649,7 @@ func TestChatGPTCredentialsRejectedOnNonCodexRoutesBeforeUpstream(t *testing.T) 
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var chatGPTCalls, anthropicCalls, trapCalls atomic.Int32
 			newUpstream := func(calls *atomic.Int32) *httptest.Server {
 				t.Helper()
@@ -710,6 +726,7 @@ func TestChatGPTCredentialsRejectedOnNonCodexRoutesBeforeUpstream(t *testing.T) 
 }
 
 func TestUnsafeRouteRejectedBeforeBudgetAndRecord(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		path        string
@@ -724,6 +741,7 @@ func TestUnsafeRouteRejectedBeforeBudgetAndRecord(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			st := newStore(t)
 			if err := st.SetBudget(Budget{Scope: "agent:codex", LimitUSD: 0, PeriodS: 3600, Mode: "warn"}); err != nil {
 				t.Fatal(err)
@@ -778,6 +796,7 @@ func TestUnsafeRouteRejectedBeforeBudgetAndRecord(t *testing.T) {
 }
 
 func TestCodexChatGPTSubrouteNeverReachesAnthropic(t *testing.T) {
+	t.Parallel()
 	var chatGPTCalls, anthropicCalls atomic.Int32
 	chatGPT := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		chatGPTCalls.Add(1)
@@ -815,6 +834,7 @@ func TestCodexChatGPTSubrouteNeverReachesAnthropic(t *testing.T) {
 }
 
 func TestCodexChatGPTBypassesGenericModelRules(t *testing.T) {
+	t.Parallel()
 	var chatGPTCalls, trapCalls atomic.Int32
 	chatGPT := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		chatGPTCalls.Add(1)
@@ -852,6 +872,7 @@ func TestCodexChatGPTBypassesGenericModelRules(t *testing.T) {
 }
 
 func TestOpenAIAPIKeyTrafficKeepsGenericModelRules(t *testing.T) {
+	t.Parallel()
 	var defaultCalls, ruleCalls atomic.Int32
 	var authorizationOK bool
 	defaultUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -890,6 +911,7 @@ func TestOpenAIAPIKeyTrafficKeepsGenericModelRules(t *testing.T) {
 }
 
 func TestCodexResponsesRouteRecordsAttributedTranscript(t *testing.T) {
+	// Sequential: sets OPENAI_API_KEY with t.Setenv.
 	const upstreamKey = "upstream-openai-key"
 	t.Setenv("OPENAI_API_KEY", upstreamKey)
 	var gotAuth, gotPath string
@@ -936,6 +958,7 @@ func TestCodexResponsesRouteRecordsAttributedTranscript(t *testing.T) {
 }
 
 func TestForwardKeepsProviderKeyAndParsesUsage(t *testing.T) {
+	t.Parallel()
 	// Fake Anthropic upstream: asserts it received the provider key from the
 	// harness request, never a tariboy attribution token.
 	var gotKey string
@@ -981,6 +1004,7 @@ func TestForwardKeepsProviderKeyAndParsesUsage(t *testing.T) {
 }
 
 func TestForwardStreamingSSEByteIdenticalAndUsage(t *testing.T) {
+	t.Parallel()
 	// Realistic multi-event Anthropic SSE stream (event:/data: framing, blank-line
 	// boundaries, a message_delta cumulative output, and OpenAI-style [DONE]).
 	const sse = "event: message_start\n" +
@@ -1053,6 +1077,7 @@ func TestForwardStreamingSSEByteIdenticalAndUsage(t *testing.T) {
 // must be recorded on the exchange (ex.RespBody) so persist writes it to the
 // transcript, WITHOUT altering the client output (must stay byte-identical).
 func TestForwardStreamingCapturesRespBody(t *testing.T) {
+	t.Parallel()
 	const sse = "event: message_start\n" +
 		`data: {"type":"message_start","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":1}}}` + "\n" +
 		"\n" +
@@ -1105,6 +1130,7 @@ func TestForwardStreamingCapturesRespBody(t *testing.T) {
 // TestForwardStreamingRespBodyCappedButClientUncapped proves the tee is capped
 // for the transcript while the client still receives ALL bytes byte-identically.
 func TestForwardStreamingRespBodyCappedButClientUncapped(t *testing.T) {
+	t.Parallel()
 	// Build an SSE stream that exceeds respBodyCap so the capture truncates.
 	var b strings.Builder
 	big := strings.Repeat("x", 100_000)
@@ -1164,6 +1190,7 @@ func TestForwardStreamingRespBodyCappedButClientUncapped(t *testing.T) {
 }
 
 func TestForwardRequiresAttributionPath(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	router := NewRouter()
 	router.SetDefault("anthropic", Upstream{BaseURL: "http://unused", KeyEnv: "DEFINITELY_UNSET_KEY_ENV"})
@@ -1182,6 +1209,7 @@ func TestForwardRequiresAttributionPath(t *testing.T) {
 }
 
 func TestForwardPathTokenKeepsProviderAuth(t *testing.T) {
+	t.Parallel()
 	var gotKey string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotKey = r.Header.Get("x-api-key")
@@ -1232,6 +1260,7 @@ func gzipIfAccepted(t *testing.T, contentType, body string) *httptest.Server {
 }
 
 func TestAnthropicCompressedResponseRecordsUsage(t *testing.T) {
+	t.Parallel()
 	const sse = "event: message_start\n" +
 		`data: {"type":"message_start","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":7,"cache_read_input_tokens":25,"output_tokens":1}}}` + "\n\n" +
 		"event: message_delta\n" +
@@ -1243,6 +1272,7 @@ func TestAnthropicCompressedResponseRecordsUsage(t *testing.T) {
 		{"json", "application/json", js, `{"model":"claude-opus-4-8"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			up := gzipIfAccepted(t, tc.contentType, tc.body)
 			defer up.Close()
 
@@ -1284,6 +1314,7 @@ func TestAnthropicCompressedResponseRecordsUsage(t *testing.T) {
 }
 
 func TestAnthropicOpenAIAndCursorHitSeparateHandlers(t *testing.T) {
+	t.Parallel()
 	type call struct {
 		path   string
 		body   string

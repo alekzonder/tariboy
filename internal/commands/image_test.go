@@ -25,18 +25,14 @@ import (
 	"github.com/alekzonder/tariboy/internal/loop"
 	"github.com/alekzonder/tariboy/internal/plugins"
 	"github.com/alekzonder/tariboy/internal/registry"
-	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func localCtx(t *testing.T) *registry.Ctx {
 	t.Helper()
 	base := t.TempDir()
-	s, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	return &registry.Ctx{
 		Store:   s,
 		BaseDir: base,
@@ -107,6 +103,7 @@ func writeExample(t *testing.T) string {
 }
 
 func TestImageBuildRejectsSchemaV1Source(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "Tariboyfile.yaml"), []byte("schema_version: 1\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -118,6 +115,7 @@ func TestImageBuildRejectsSchemaV1Source(t *testing.T) {
 }
 
 func TestImageCommandLifecycle(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 
@@ -165,6 +163,7 @@ func TestImageCommandLifecycle(t *testing.T) {
 }
 
 func TestImageBuildV2RequiresNameAndDefaultsTag(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts: []\n"), 0o600); err != nil {
@@ -188,6 +187,7 @@ func TestImageBuildV2RequiresNameAndDefaultsTag(t *testing.T) {
 }
 
 func TestImageBuildUsesSourceVersionUnlessTagExplicit(t *testing.T) {
+	t.Parallel()
 	for _, explicit := range []string{"", "latest", "custom"} {
 		c := localCtx(t)
 		src := t.TempDir()
@@ -230,6 +230,7 @@ func TestImageBuildUsesSourceVersionUnlessTagExplicit(t *testing.T) {
 }
 
 func TestImageBuildV2PackagesSiblingSkill(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	root := t.TempDir()
 	source := filepath.Join(root, "store", "images", "reviewer")
@@ -299,6 +300,7 @@ func TestImageBuildV2PackagesSiblingSkill(t *testing.T) {
 }
 
 func TestImageBuildRebuildsExistingTag(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	first, err := cmdHandler(t, "image.build")(c, registry.Params{"name": "reviewer", "tag": "latest", "path": src})
@@ -318,6 +320,7 @@ func TestImageBuildRebuildsExistingTag(t *testing.T) {
 }
 
 func TestImageBuildUpdatesImportedAndRetaggedRefs(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name string
 		seed func(*testing.T, *image.Store, image.Ref) string
@@ -386,6 +389,7 @@ func TestImageBuildUpdatesImportedAndRetaggedRefs(t *testing.T) {
 }
 
 func TestImageBuildUpdatesImportedRefAfterRefRemoval(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -426,6 +430,7 @@ func TestImageBuildUpdatesImportedRefAfterRefRemoval(t *testing.T) {
 }
 
 func TestArtifactImportOverBuildHidesStaleProvenance(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
 	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": writeExample(t)}); err != nil {
@@ -477,6 +482,7 @@ func TestArtifactImportOverBuildHidesStaleProvenance(t *testing.T) {
 }
 
 func TestImageBuildMigratesUnmarkedOrdinaryRefWithMatchingProvenance(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "legacy", Tag: "latest"}
@@ -507,6 +513,7 @@ func TestImageBuildMigratesUnmarkedOrdinaryRefWithMatchingProvenance(t *testing.
 }
 
 func TestImageBuildMultipleTags(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	result, err := cmdHandler(t, "image.build")(c, registry.Params{
 		"name": "reviewer", "tag": []string{"latest", "v2"}, "path": writeExample(t),
@@ -566,6 +573,7 @@ func persistedImageState(t *testing.T, c *registry.Ctx, refs ...image.Ref) persi
 }
 
 func TestImageBuildRollsBackEveryTagWhenSecondMetadataWriteFails(t *testing.T) {
+	t.Parallel()
 	for _, existing := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "existing"}[existing], func(t *testing.T) {
 			c := localCtx(t)
@@ -601,6 +609,7 @@ func TestImageBuildRollsBackEveryTagWhenSecondMetadataWriteFails(t *testing.T) {
 }
 
 func TestImageBuildRejectsDuplicateAndReservedTagsBeforePublishing(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name string
 		tags []string
@@ -624,6 +633,7 @@ func TestImageBuildRejectsDuplicateAndReservedTagsBeforePublishing(t *testing.T)
 }
 
 func TestImageBuildWaitsForPublicationGate(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	entered := make(chan struct{})
 	release := make(chan struct{})
@@ -656,6 +666,7 @@ func TestImageBuildWaitsForPublicationGate(t *testing.T) {
 }
 
 func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -721,6 +732,7 @@ func TestAgentImageAssignmentWaitsForPublicationRollback(t *testing.T) {
 }
 
 func TestImageRemoveWaitsForCommittedAssignment(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
 	result, err := cmdHandler(t, "image.build")(c, registry.Params{"name": ref.Name, "tag": ref.Tag, "path": writeExample(t)})
@@ -765,6 +777,7 @@ func TestImageRemoveWaitsForCommittedAssignment(t *testing.T) {
 }
 
 func TestImageBuildRestoresExistingRefAndMetadataWhenProvenanceFails(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -806,6 +819,7 @@ func TestImageBuildRestoresExistingRefAndMetadataWhenProvenanceFails(t *testing.
 }
 
 func TestImageBuildRestoresRefWhenProvenanceFails(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	ref := image.Ref{Name: "imported", Tag: "v1"}
@@ -837,6 +851,7 @@ func TestImageBuildRestoresRefWhenProvenanceFails(t *testing.T) {
 }
 
 func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	result, err := cmdHandler(t, "image.build")(c, registry.Params{
@@ -865,6 +880,7 @@ func TestImageBuildRecordsExplicitGitProvenance(t *testing.T) {
 }
 
 func TestImageBuildRejectsPartialGitProvenance(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	_, err := cmdHandler(t, "image.build")(c, registry.Params{
 		"name": "developer", "tag": "v1", "path": writeExample(t), "repository-id": "tariboy",
@@ -876,6 +892,7 @@ func TestImageBuildRejectsPartialGitProvenance(t *testing.T) {
 }
 
 func TestImageBuildRollsBackArtifactWhenProvenanceCannotCommit(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	if err := c.Store.Close(); err != nil {
@@ -891,6 +908,7 @@ func TestImageBuildRollsBackArtifactWhenProvenanceCannotCommit(t *testing.T) {
 }
 
 func TestImageListReportsCurrentAndPendingAgents(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	result, err := cmdHandler(t, "image.build")(c, registry.Params{"tag": "shared:latest", "path": src})
@@ -939,6 +957,7 @@ func equalStrings(value any, want []string) bool {
 }
 
 func TestImageValidateV2ResolvesPromptFilesWithoutWritingArtifact(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts:\n  - file: ./missing.md\n"), 0o600); err != nil {
@@ -959,6 +978,7 @@ func TestImageValidateV2ResolvesPromptFilesWithoutWritingArtifact(t *testing.T) 
 }
 
 func TestImageValidateChecksTargetRefAndAllowsExistingTag(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins: []\nprompts: []\n"), 0o600); err != nil {
@@ -984,6 +1004,7 @@ func TestImageValidateChecksTargetRefAndAllowsExistingTag(t *testing.T) {
 }
 
 func TestImageValidateV2ReturnsOrderedResolvedTemplate(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "role.md"), []byte("review carefully"), 0o600); err != nil {
@@ -1018,6 +1039,7 @@ func TestImageValidateV2ReturnsOrderedResolvedTemplate(t *testing.T) {
 }
 
 func TestImageValidateV2ReturnsSkillMetadataAndDuplicateWarnings(t *testing.T) {
+	// Sequential: sets HOME with t.Setenv.
 	c := localCtx(t)
 	source := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
@@ -1063,6 +1085,7 @@ func TestImageValidateV2ReturnsSkillMetadataAndDuplicateWarnings(t *testing.T) {
 }
 
 func TestImageCommandsRejectReservedBasicRef(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	_, err := cmdHandler(t, "image.build")(c, registry.Params{"tag": "basic:latest", "path": src})
@@ -1086,6 +1109,7 @@ func TestImageCommandsRejectReservedBasicRef(t *testing.T) {
 }
 
 func TestImageRemoveRejectsActiveAndPendingRefsAndClearsProvenance(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	for _, ref := range []string{"active:latest", "pending:latest", "unused:latest"} {
@@ -1124,6 +1148,7 @@ func TestImageRemoveRejectsActiveAndPendingRefsAndClearsProvenance(t *testing.T)
 }
 
 func TestImageListManifestVersion(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	for _, tc := range []struct{ name, version string }{{"versioned", "1.2.3"}, {"legacy", ""}} {
 		src := writeExample(t)
@@ -1171,6 +1196,7 @@ func (s heldImageSpawner) Start(argv, _ []string, _ string) error {
 }
 
 func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
+	// Sequential: sets TARIBOY_* env with t.Setenv.
 	for _, nextVersion := range []string{"1.1.0"} {
 		t.Run(nextVersion, func(t *testing.T) {
 			c := localCtx(t)
@@ -1314,6 +1340,7 @@ func TestImageBuildDuringIterationPreservesActiveAndAdvancesNext(t *testing.T) {
 // ref id comes from name and image_version, so rebuilding the same version
 // republishes the same ref instead of creating another generation.
 func TestImageBuildWithoutVersionBumpKeepsRefID(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := t.TempDir()
 	write := func(prompt string) {
@@ -1358,6 +1385,7 @@ func TestImageBuildWithoutVersionBumpKeepsRefID(t *testing.T) {
 }
 
 func TestImageDetailRejectsChangedDigest(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	build := func() string {
@@ -1402,6 +1430,7 @@ func TestImageDetailRejectsChangedDigest(t *testing.T) {
 }
 
 func TestImageValidateAndBuildPathAssembleExtends(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	root := t.TempDir()
 	for rel, body := range map[string]string{

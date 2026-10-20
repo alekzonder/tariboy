@@ -9,6 +9,7 @@ import (
 )
 
 func TestRetentionCommands(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t) // returns (*registry.Ctx, *agent.Store, *fakeControl)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	pol := retention.NewStore(c.Store)
@@ -66,6 +67,7 @@ func TestRetentionCommands(t *testing.T) {
 }
 
 func TestRetentionSetRejectsNegative(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	pol := retention.NewStore(c.Store)
@@ -91,6 +93,7 @@ func TestRetentionSetRejectsNegative(t *testing.T) {
 }
 
 func TestRetentionBadAgentName(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	pol := retention.NewStore(c.Store)
 	c.Retention = &retention.RetentionAPI{

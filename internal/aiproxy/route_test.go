@@ -8,6 +8,7 @@ import (
 )
 
 func TestRouterDefaultsAndRules(t *testing.T) {
+	t.Parallel()
 	r := NewRouter()
 	if u := r.Resolve("anthropic", "claude-opus-4-8"); u.BaseURL != "https://api.anthropic.com" || u.KeyEnv != "ANTHROPIC_API_KEY" {
 		t.Fatalf("anthropic default = %+v", u)
@@ -35,6 +36,7 @@ func TestRouterDefaultsAndRules(t *testing.T) {
 }
 
 func TestLoadRouterEnvOverride(t *testing.T) {
+	t.Parallel()
 	s := storetest.Open(t)
 	getenv := func(k string) string {
 		if k == "TARIBOY_UPSTREAM_ANTHROPIC_BASE_URL" {
@@ -61,6 +63,7 @@ func TestLoadRouterEnvOverride(t *testing.T) {
 }
 
 func TestLoadRouterChatGPTEnvOverrideCannotInheritWildcardRuleCredential(t *testing.T) {
+	t.Parallel()
 	s := storetest.Open(t)
 	configured := proxyConfig{
 		Upstreams: map[string]Upstream{

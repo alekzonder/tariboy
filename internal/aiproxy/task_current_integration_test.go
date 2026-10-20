@@ -14,6 +14,7 @@ import (
 // forward-and-persist pipeline. Native Tasks validation and root resolution are
 // covered in internal/loop; this test covers the proxy token update itself.
 func TestTaskAttributionTagsProxiedRows(t *testing.T) {
+	t.Parallel()
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":5,` +

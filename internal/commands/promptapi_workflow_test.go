@@ -19,6 +19,7 @@ import (
 )
 
 func TestPromptPreviewShowsTheWorkflowGoalBlock(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "v2", Enabled: true, GoalEnabled: true, OnTimeout: "restart", OnError: "restart"}); err != nil {
 		t.Fatal(err)

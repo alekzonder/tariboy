@@ -3,6 +3,7 @@ package aiproxy
 import "testing"
 
 func TestUsageNormalizedClampsNegativeBuckets(t *testing.T) {
+	t.Parallel()
 	u := Usage{InputTokens: -1, OutputTokens: -2, CacheWriteTokens: -3, CacheReadTokens: -4}.Normalized()
 	if u != (Usage{}) {
 		t.Fatalf("normalized usage = %+v, want all zero", u)
@@ -10,6 +11,7 @@ func TestUsageNormalizedClampsNegativeBuckets(t *testing.T) {
 }
 
 func TestParseAnthropicUsage(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"model":"claude-opus-4-8","usage":{"input_tokens":60,"output_tokens":50,
 		"cache_creation_input_tokens":10,"cache_read_input_tokens":30}}`)
 	u, model, ok := ParseAnthropicUsage(body)
@@ -25,6 +27,7 @@ func TestParseAnthropicUsage(t *testing.T) {
 }
 
 func TestParseOpenAIUsage(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"model":"gpt-4o","usage":{"prompt_tokens":100,"completion_tokens":40,
 		"prompt_tokens_details":{"cached_tokens":40}}}`)
 	u, model, ok := ParseOpenAIUsage(body)
@@ -34,6 +37,7 @@ func TestParseOpenAIUsage(t *testing.T) {
 }
 
 func TestParseOpenAIResponsesUsage(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"model":"gpt-5","usage":{"input_tokens":100,"output_tokens":7,"input_tokens_details":{"cached_tokens":40,"cache_write_tokens":10}}}`)
 	u, model, ok := ParseOpenAIUsage(body)
 	if !ok || model != "gpt-5" || u.InputTokens != 50 || u.OutputTokens != 7 || u.CacheWriteTokens != 10 || u.CacheReadTokens != 40 {
@@ -48,6 +52,7 @@ func TestParseOpenAIResponsesUsage(t *testing.T) {
 }
 
 func TestParseOpenAIUsageClampsCacheTokensAboveInput(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"model":"gpt-5","usage":{"input_tokens":10,"output_tokens":7,"input_tokens_details":{"cached_tokens":7,"cache_write_tokens":5}}}`)
 	u, _, ok := ParseOpenAIUsage(body)
 	if !ok || u.InputTokens != 0 || u.CacheWriteTokens != 5 || u.CacheReadTokens != 7 {
@@ -56,6 +61,7 @@ func TestParseOpenAIUsageClampsCacheTokensAboveInput(t *testing.T) {
 }
 
 func TestSSEAccumulator(t *testing.T) {
+	t.Parallel()
 	a := &SSEAccumulator{}
 	a.FeedData([]byte(`{"type":"message_start","message":{"model":"claude-opus-4-8",
 		"usage":{"input_tokens":100,"cache_creation_input_tokens":10,"cache_read_input_tokens":5,"output_tokens":1}}}`))
@@ -72,6 +78,7 @@ func TestSSEAccumulator(t *testing.T) {
 }
 
 func TestSSEAccumulatorChatGPTResponseCompletedLastValidWins(t *testing.T) {
+	t.Parallel()
 	a := &SSEAccumulator{}
 	a.FeedData([]byte(`{"type":"response.completed","response":{"model":"gpt-5.6-preview","usage":{"input_tokens":1,"input_tokens_details":{"cache_write_tokens":2,"cached_tokens":3},"output_tokens":4}}}`))
 	a.FeedData([]byte(`{"type":"response.output_text.delta","delta":"ignored"}`))
@@ -96,6 +103,7 @@ func TestSSEAccumulatorChatGPTResponseCompletedLastValidWins(t *testing.T) {
 // [DONE]-free stop) through the accumulator the way a proxy would: split the
 // wire bytes into events and hand each data line's JSON to FeedData.
 func TestSSEAccumulatorRawStream(t *testing.T) {
+	t.Parallel()
 	raw := "event: message_start\n" +
 		`data: {"type":"message_start","message":{"id":"msg_1","model":"claude-opus-4-8","role":"assistant","usage":{"input_tokens":100,"cache_creation_input_tokens":10,"cache_read_input_tokens":5,"output_tokens":1}}}` + "\n" +
 		"\n" +

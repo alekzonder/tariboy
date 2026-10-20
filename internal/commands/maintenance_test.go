@@ -9,6 +9,7 @@ import (
 )
 
 func TestMaintenanceCommands(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	c.Maintenance = maintenance.New(c.Store, filepath.Join(t.TempDir(), "backups"), nil, nil)
 

@@ -13,6 +13,7 @@ import (
 )
 
 func TestTaskActivityMergesUsageAndEventsPerTaskAndAgent(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	for _, name := range []string{"alice", "bob"} {
 		if err := as.Create(agent.Agent{Name: name, ImageRef: "basic:latest"}); err != nil {
@@ -87,6 +88,7 @@ func TestTaskActivityMergesUsageAndEventsPerTaskAndAgent(t *testing.T) {
 }
 
 func TestTaskActivityRejectsBadTime(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	c.Tasks = tasks.NewService(c.Store.DB, "customer", time.Now)
 	_, err := h(t, "tasks.activity")(c, registry.Params{"since": "yesterday"})

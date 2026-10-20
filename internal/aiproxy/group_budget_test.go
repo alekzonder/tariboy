@@ -26,6 +26,7 @@ func seedReq(t *testing.T, s *Store, ag string, cost float64) {
 }
 
 func TestGroupBudgetAggregatesMembers(t *testing.T) {
+	t.Parallel()
 	base, ai := newAIStore(t)
 	as := agent.NewStore(base)
 	as.Create(agent.Agent{Name: "scout", ImageRef: "i:latest", Group: "research"})
@@ -49,6 +50,7 @@ func TestGroupBudgetAggregatesMembers(t *testing.T) {
 }
 
 func TestBudgetCacheGroupDecision(t *testing.T) {
+	t.Parallel()
 	base, ai := newAIStore(t)
 	as := agent.NewStore(base)
 	as.Create(agent.Agent{Name: "scout", ImageRef: "i:latest", Group: "research"})

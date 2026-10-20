@@ -9,6 +9,7 @@ import (
 )
 
 func TestQueueSecretSetRouteStoresTheValueAsGivenAndNeverReturnsIt(t *testing.T) {
+	t.Parallel()
 	stub := &workflowStub{}
 	httpServer := workflowServer(t, stub)
 	value := "  s3cr3t-token \n"
@@ -32,6 +33,7 @@ func TestQueueSecretSetRouteStoresTheValueAsGivenAndNeverReturnsIt(t *testing.T)
 }
 
 func TestQueueSecretSetRouteBoundsTheBody(t *testing.T) {
+	t.Parallel()
 	stub := &workflowStub{}
 	httpServer := workflowServer(t, stub)
 	status, _ := taskRequest(t, httpServer.Client(), "PUT", httpServer.URL+"/api/task-queues/DEV/secrets/GH_TOKEN",
@@ -42,6 +44,7 @@ func TestQueueSecretSetRouteBoundsTheBody(t *testing.T) {
 }
 
 func TestQueueSecretRoutesPassServiceErrorsThrough(t *testing.T) {
+	t.Parallel()
 	stub := &workflowStub{err: &tasks.Error{Status: http.StatusConflict, Code: "workflow_secret_missing",
 		Msg: "workflow secrets have no value: GH_TOKEN", Data: map[string]any{"secrets": []string{"GH_TOKEN"}}}}
 	httpServer := workflowServer(t, stub)

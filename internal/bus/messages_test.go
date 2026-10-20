@@ -29,6 +29,7 @@ func deliverOne(t *testing.T, b *Bus, agent, channel, text string) Message {
 }
 
 func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref) VALUES ('alice', 'basic:latest'), ('bob', 'basic:latest')`); err != nil {
 		t.Fatal(err)
@@ -94,6 +95,7 @@ func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
 }
 
 func TestClearPendingHandlesLargeQueue(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref) VALUES ('alice', 'basic:latest')`); err != nil {
 		t.Fatal(err)
@@ -127,6 +129,7 @@ func TestClearPendingHandlesLargeQueue(t *testing.T) {
 }
 
 func TestInboxStatusFiltering(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := InboxChannel("bob")
 	sub(t, b, "bob", ch)
@@ -166,6 +169,7 @@ func TestInboxStatusFiltering(t *testing.T) {
 }
 
 func TestInboxBeforeCursor(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := InboxChannel("bob")
 	sub(t, b, "bob", ch)
@@ -191,6 +195,7 @@ func TestInboxBeforeCursor(t *testing.T) {
 // sorts AFTER "alpha"); paging before the newer alpha message must still surface
 // it, which the composite (ts, id) cursor guarantees.
 func TestInboxBeforeCursorCrossChannel(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	sub(t, b, "bob", "zebra")
 	sub(t, b, "bob", "alpha")
@@ -214,6 +219,7 @@ func TestInboxBeforeCursorCrossChannel(t *testing.T) {
 }
 
 func TestMarkProcessedRejectsEmptyResult(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := InboxChannel("bob")
 	sub(t, b, "bob", ch)
@@ -232,6 +238,7 @@ func TestMarkProcessedRejectsEmptyResult(t *testing.T) {
 }
 
 func TestMarkProcessedIdempotentAndAudit(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	var audits []string
 	b.SetAuditHook(func(agent, kind, data string) { audits = append(audits, kind) })
@@ -262,6 +269,7 @@ func TestMarkProcessedIdempotentAndAudit(t *testing.T) {
 }
 
 func TestMarkProcessedAllAgentDeliveries(t *testing.T) {
+	t.Parallel()
 	// bob subscribes twice (two matchers) → two deliveries of one message;
 	// processing marks both, and the inbox collapses to a single archived item.
 	b := newBusSeconds(t)
@@ -289,6 +297,7 @@ func TestMarkProcessedAllAgentDeliveries(t *testing.T) {
 }
 
 func TestMarkProcessedAllowedOnDLQ(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := InboxChannel("bob")
 	sub(t, b, "bob", ch)
@@ -314,6 +323,7 @@ func TestMarkProcessedAllowedOnDLQ(t *testing.T) {
 }
 
 func TestRequeue(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	var audits []string
 	b.SetAuditHook(func(a, k, d string) { audits = append(audits, k) })
@@ -349,6 +359,7 @@ func TestRequeue(t *testing.T) {
 // acked_at non-NULL so Pending() (WHERE acked_at IS NULL) never re-drained it —
 // the inbox showed it pending forever while the agent never received it again.
 func TestProcessThenRequeueRedrains(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := InboxChannel("bob")
 	sub(t, b, "bob", ch)
@@ -382,6 +393,7 @@ func TestProcessThenRequeueRedrains(t *testing.T) {
 // tab. Before the fix MarkProcessed set processed_at without clearing dlq, so the
 // row matched BOTH the 'processed' and 'dlq' HAVING filters and appeared twice.
 func TestDLQProcessedInExactlyOneTab(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := InboxChannel("bob")
 	sub(t, b, "bob", ch)
@@ -415,6 +427,7 @@ func TestDLQProcessedInExactlyOneTab(t *testing.T) {
 // (Divergent per-delivery attempts only arise from an internal split, so this
 // white-box test sets the delivery dlq flags directly.)
 func TestMultiSubPartialDLQConsistent(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := ChatChannel("room")
 	s1, err := b.Subscribe("bob", ch, Matcher{"type": "note"}, nil)
@@ -460,6 +473,7 @@ func TestMultiSubPartialDLQConsistent(t *testing.T) {
 }
 
 func TestReplyRoutingReplyTo(t *testing.T) {
+	t.Parallel()
 	// Rule 1: explicit reply_to wins.
 	b := newBusSeconds(t)
 	target := ChatChannel("back")
@@ -485,6 +499,7 @@ func TestReplyRoutingReplyTo(t *testing.T) {
 }
 
 func TestReplyRoutingSourceAgent(t *testing.T) {
+	t.Parallel()
 	// Rule 2: no reply_to, source is agent:<n> → that agent's inbox.
 	b := newBusSeconds(t)
 	orig, err := b.Publish(Message{Channel: ChatChannel("room"), Type: "q", Text: "?",
@@ -505,6 +520,7 @@ func TestReplyRoutingSourceAgent(t *testing.T) {
 }
 
 func TestReplyRoutingOriginChannel(t *testing.T) {
+	t.Parallel()
 	// Rule 3: no reply_to, non-agent source → originating channel.
 	b := newBusSeconds(t)
 	room := ChatChannel("room")
@@ -522,6 +538,7 @@ func TestReplyRoutingOriginChannel(t *testing.T) {
 }
 
 func TestReplyInheritsSubjectMinusWatch(t *testing.T) {
+	t.Parallel()
 	// A reply inherits every subject key of the original except 'watch', so sink
 	// plugins can route it back via subject.chat_id/message_id (§4.1).
 	b := newBusSeconds(t)
@@ -547,6 +564,7 @@ func TestReplyInheritsSubjectMinusWatch(t *testing.T) {
 }
 
 func TestReplyWatchOnlySubjectStaysEmpty(t *testing.T) {
+	t.Parallel()
 	// An original whose only subject key is 'watch' yields a subject-less reply.
 	b := newBusSeconds(t)
 	orig, err := b.Publish(Message{Channel: ChatChannel("room"), Type: "q", Text: "?",
@@ -564,6 +582,7 @@ func TestReplyWatchOnlySubjectStaysEmpty(t *testing.T) {
 }
 
 func TestReplyAutoProcesses(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	var audits []string
 	b.SetAuditHook(func(a, k, d string) { audits = append(audits, k) })
@@ -594,6 +613,7 @@ func TestReplyAutoProcesses(t *testing.T) {
 }
 
 func TestReplyByNonSubscriberDoesNotError(t *testing.T) {
+	t.Parallel()
 	// An operator (no delivery of the original) can reply; the missing
 	// auto-process is silent, not an error.
 	b := newBusSeconds(t)
@@ -607,6 +627,7 @@ func TestReplyByNonSubscriberDoesNotError(t *testing.T) {
 }
 
 func TestReplyUnknownMessage(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	if _, err := b.Reply("alice", "nope-000", "x", nil, ""); err != ErrNotFound {
 		t.Fatalf("err=%v want ErrNotFound", err)
@@ -614,6 +635,7 @@ func TestReplyUnknownMessage(t *testing.T) {
 }
 
 func TestRequestAndPending(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	target := GroupDirect("dev", "carol")
 	req, err := b.Request("alice", target, "can you help?", "")
@@ -642,6 +664,7 @@ func TestRequestAndPending(t *testing.T) {
 }
 
 func TestRequestDeadlineArmsAndReplyCancels(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	var armed [][3]string
 	var cancelled []string
@@ -669,6 +692,7 @@ func TestRequestDeadlineArmsAndReplyCancels(t *testing.T) {
 }
 
 func TestRequestNoDeadlineDoesNotArm(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	armedCount := 0
 	b.SetDeadlineHooks(func(*sql.Tx, string, string, string) error { armedCount++; return nil }, nil)
@@ -681,6 +705,7 @@ func TestRequestNoDeadlineDoesNotArm(t *testing.T) {
 }
 
 func TestRequestDeadlineWithoutHookIsRejected(t *testing.T) {
+	t.Parallel()
 	// No SetDeadlineHooks wired: a --deadline request must fail honestly (P8-F2)
 	// rather than return success with no timeout ever armed. And it must not
 	// publish a request message when it can't honour the deadline.
@@ -696,6 +721,7 @@ func TestRequestDeadlineWithoutHookIsRejected(t *testing.T) {
 }
 
 func TestRequestDeadlineValidatedBeforePublish(t *testing.T) {
+	t.Parallel()
 	// F1 regression: a malformed deadline must be rejected BEFORE the request is
 	// published, so no live, timeout-less request is orphaned in the member inbox
 	// (a retry would then duplicate it). A well-formed deadline still publishes
@@ -731,6 +757,7 @@ func TestRequestDeadlineValidatedBeforePublish(t *testing.T) {
 }
 
 func TestRequestRollsBackWhenDeadlineArmFails(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	b.SetDeadlineHooks(func(*sql.Tx, string, string, string) error { return errors.New("arm failed") }, nil)
 	if _, err := b.Request("alice", GroupDirect("dev", "carol"), "help", "5m"); err == nil {
@@ -742,6 +769,7 @@ func TestRequestRollsBackWhenDeadlineArmFails(t *testing.T) {
 }
 
 func TestReplyRollsBackWhenDeadlineCancelFails(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	target := GroupDirect("dev", "carol")
 	sub(t, b, "carol", target)
@@ -763,6 +791,7 @@ func TestReplyRollsBackWhenDeadlineCancelFails(t *testing.T) {
 }
 
 func TestComputeWatchDeterministicAndKeyed(t *testing.T) {
+	t.Parallel()
 	// Same params (regardless of key order) → same watch; different channel or
 	// params → different watch; empty params → empty watch.
 	p1 := map[string]any{"query": "PROJ", "limit": float64(5)}
@@ -789,6 +818,7 @@ func TestComputeWatchDeterministicAndKeyed(t *testing.T) {
 }
 
 func TestSubscribeParamsWatchDedupAndIsolation(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := "issue-provider:query"
 	pA := map[string]any{"query": "PROJ-A"}
@@ -852,6 +882,7 @@ func TestSubscribeParamsWatchDedupAndIsolation(t *testing.T) {
 }
 
 func TestSubscribeParamsEmptyIsPlainSubscribe(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	s, err := b.SubscribeParams("alice", ChatChannel("x"), Matcher{}, nil, nil)
 	if err != nil {
@@ -863,6 +894,7 @@ func TestSubscribeParamsEmptyIsPlainSubscribe(t *testing.T) {
 }
 
 func TestSubscribeParamsRunsValidator(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	var gotChannel string
 	var gotParams map[string]any
@@ -911,6 +943,7 @@ func TestSubscribeParamsRunsValidator(t *testing.T) {
 // idempotent no-ops, and failed ops never fire it, so the core subscribe path
 // never touches the plugin store.
 func TestSubscriptionHookFires(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	var fired []string
 	b.SetSubscriptionHook(func(channel string) { fired = append(fired, channel) })

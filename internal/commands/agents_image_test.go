@@ -37,6 +37,7 @@ func readAgentImageStatus(t *testing.T, c *registry.Ctx) imageStatusJSON {
 }
 
 func TestAgentImageProjection(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"rebuilt", "same version", "unchanged", "pending", "unversioned", "broken latest", "broken current", "broken pending", "activation error"} {
 		t.Run(scenario, func(t *testing.T) {
 			c := localCtx(t)
@@ -142,6 +143,7 @@ func TestAgentImageProjection(t *testing.T) {
 }
 
 func TestAgentImageReadWaitsForPublicationGate(t *testing.T) {
+	t.Parallel()
 	for _, command := range []string{"agent.image.status", "agent.image.cancel"} {
 		t.Run(command, func(t *testing.T) {
 			c := localCtx(t)

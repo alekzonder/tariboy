@@ -3,6 +3,7 @@ package bus
 import "testing"
 
 func TestReconcileChatsProvisionsPersonalChats(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
@@ -43,6 +44,7 @@ func TestReconcileChatsProvisionsPersonalChats(t *testing.T) {
 }
 
 func TestReconcileChatsIsIdempotent(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	for i := range 3 {
 		if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
@@ -66,6 +68,7 @@ func TestReconcileChatsIsIdempotent(t *testing.T) {
 }
 
 func TestChatByChannelResolvesAndMisses(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
@@ -83,6 +86,7 @@ func TestChatByChannelResolvesAndMisses(t *testing.T) {
 // chat_read_v1 config value into per-participant read marks, including the
 // forward-only rule: an older stored mark must not pull a newer one back.
 func TestReconcileChatsCarriesLegacyReadMarks(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if _, err := b.db.Exec(`INSERT INTO daemon_config(key, value) VALUES (?, ?)`, legacyReadKey,
 		`{"worker":"2026-07-06T10:00:05Z","gone":"2026-07-06T10:00:09Z"}`); err != nil {
@@ -132,12 +136,14 @@ func readTS(t *testing.T, b *Bus, chatID, principal string) string {
 // and the script-result publisher and self-targeted schedules tag it with the
 // recipient itself as ProducedByAgent.
 func TestServiceChatPublishStillWakesTheAgent(t *testing.T) {
+	t.Parallel()
 	for _, msg := range []Message{
 		{Source: "script", Type: "script.result", Text: "done", ProducedByAgent: "worker"},
 		{Source: "schedule", Type: "schedule.fire", Text: "tick", ProducedByAgent: "worker"},
 		{Source: "system:scripts", Type: "script.result", Text: "done"},
 	} {
 		t.Run(msg.Source, func(t *testing.T) {
+			t.Parallel()
 			b := newBus(t)
 			if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 				t.Fatal(err)
@@ -162,6 +168,7 @@ func TestServiceChatPublishStillWakesTheAgent(t *testing.T) {
 // Only the inbox and the service chat deliver to their own author: an agent's
 // reply in its personal chat must not echo back into its own queue.
 func TestPersonalChatReplyDoesNotWakeItsAuthor(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
@@ -183,6 +190,7 @@ func TestPersonalChatReplyDoesNotWakeItsAuthor(t *testing.T) {
 // never receives its own message back into its own queue. This is what keeps a
 // multi-agent chat on the one wake path instead of inventing a second.
 func TestThreeParticipantChatDeliversToEveryOtherAgent(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	chat, err := b.CreateChat(Chat{ID: "team-alpha", Kind: ChatKindGroup, Title: "Team Alpha"})
 	if err != nil {

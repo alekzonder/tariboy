@@ -10,6 +10,7 @@ import (
 )
 
 func TestSecretStoreLsRm(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 
@@ -41,6 +42,7 @@ func TestSecretStoreLsRm(t *testing.T) {
 // TestSecretRmNotFound ensures removing an absent secret yields a not_found
 // UserError (and not a generic/DB error masquerading as not_found).
 func TestSecretRmNotFound(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 

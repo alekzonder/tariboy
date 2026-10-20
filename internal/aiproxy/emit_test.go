@@ -11,6 +11,7 @@ import (
 )
 
 func TestProxyEmitsMetadataOnly(t *testing.T) {
+	// Sequential: sets FAKE_KEY with t.Setenv.
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":50,

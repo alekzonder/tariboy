@@ -3,6 +3,7 @@ package commands
 import "testing"
 
 func TestPushPullLoginRegisteredAndCLILocal(t *testing.T) {
+	t.Parallel()
 	reg := BuildRegistry()
 	for _, path := range []string{"push", "pull", "login"} {
 		cmd, ok := reg.Get(path)

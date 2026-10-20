@@ -11,6 +11,7 @@ import (
 )
 
 func TestEventsSinceCursor(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	c := &registry.Ctx{BaseDir: base}
 	path := agentdir.New(paths.New(base).AgentsDir(), "m").AuditLog()
@@ -42,6 +43,7 @@ func TestEventsSinceCursor(t *testing.T) {
 }
 
 func TestEventsIterationAndBefore(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	c := &registry.Ctx{BaseDir: base}
 	path := agentdir.New(paths.New(base).AgentsDir(), "m").AuditLog()
@@ -68,6 +70,7 @@ func TestEventsIterationAndBefore(t *testing.T) {
 }
 
 func TestFilteredEventsAndDistinctTypes(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	c := &registry.Ctx{BaseDir: base}
 	path := agentdir.New(paths.New(base).AgentsDir(), "m").AuditLog()

@@ -42,6 +42,7 @@ func (r activityCheckedReader) Read([]byte) (int, error) {
 }
 
 func TestAuthRejectsUnknownToken(t *testing.T) {
+	t.Parallel()
 	p := testProxy(t)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/_tariboy/sk-tariboy-bogus/v1/messages", strings.NewReader(`{"model":"x"}`))
@@ -53,6 +54,7 @@ func TestAuthRejectsUnknownToken(t *testing.T) {
 }
 
 func TestAuthAcceptsTokenAndReachesForward(t *testing.T) {
+	t.Parallel()
 	p := testProxy(t)
 	// Replace the forward terminal with a recorder so we can assert attribution.
 	var seen Attribution
@@ -74,6 +76,7 @@ func TestAuthAcceptsTokenAndReachesForward(t *testing.T) {
 }
 
 func TestAuthenticatedRequestRecordsActivityBeforeForward(t *testing.T) {
+	t.Parallel()
 	p := testProxy(t)
 	called := false
 	p.cfg.Activity = func(agent, iteration string, at time.Time) error {
@@ -103,6 +106,7 @@ func TestAuthenticatedRequestRecordsActivityBeforeForward(t *testing.T) {
 }
 
 func TestProviderDetection(t *testing.T) {
+	t.Parallel()
 	p := testProxy(t)
 	var provider string
 	p.forward = func(ex *Exchange) error { provider = ex.Provider; ex.W.WriteHeader(200); return nil }
@@ -125,6 +129,7 @@ func TestProviderDetection(t *testing.T) {
 }
 
 func TestListenBindsLoopbackOnly(t *testing.T) {
+	t.Parallel()
 	p := testProxy(t)
 	addr, err := p.Listen()
 	if err != nil {
@@ -140,6 +145,7 @@ func TestListenBindsLoopbackOnly(t *testing.T) {
 }
 
 func TestProxyListenAtReusesExactLoopbackAddress(t *testing.T) {
+	t.Parallel()
 	first := testProxy(t)
 	addr, err := first.ListenAt("127.0.0.1:0")
 	if err != nil {
@@ -169,12 +175,14 @@ func TestProxyListenAtReusesExactLoopbackAddress(t *testing.T) {
 }
 
 func TestProxyListenAtRejectsNonLoopbackAddress(t *testing.T) {
+	t.Parallel()
 	if _, err := testProxy(t).ListenAt("0.0.0.0:0"); err == nil {
 		t.Fatal("non-loopback proxy address was accepted")
 	}
 }
 
 func TestProxyGroupSnapshotIsCapturedOnceBeforeAsyncIngest(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	if _, err := s.db.Exec(`INSERT INTO groups(name, lead, settings) VALUES ('alpha', '', '{}'), ('beta', '', '{}')`); err != nil {
 		t.Fatal(err)
@@ -242,6 +250,7 @@ func TestProxyGroupSnapshotIsCapturedOnceBeforeAsyncIngest(t *testing.T) {
 }
 
 func TestProxyGroupSnapshotLookupFailureRecordsUngroupedWithBoundedWarning(t *testing.T) {
+	t.Parallel()
 	agentsDir := t.TempDir()
 	mkIter(t, agentsDir, "alice", "alice-1")
 	var logs bytes.Buffer

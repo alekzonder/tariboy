@@ -14,6 +14,7 @@ func discardLogger() *slog.Logger {
 }
 
 func TestIngesterBatchFlush(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	ing := NewIngester(s, discardLogger())
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
@@ -33,6 +34,7 @@ func TestIngesterBatchFlush(t *testing.T) {
 // drainer running, filling the buffer past capacity drops the extra rows rather
 // than deadlocking (they are recoverable via daemon reindex from the JSONL).
 func TestIngesterEnqueueDropsWhenFull(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	ing := NewIngester(s, discardLogger())
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
@@ -56,6 +58,7 @@ func TestIngesterEnqueueDropsWhenFull(t *testing.T) {
 // rows dropped on buffer-full (the extras beyond capacity), so overflow is
 // observable/rate-limitable instead of a per-row log flood.
 func TestIngesterDroppedCounter(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	ing := NewIngester(s, discardLogger())
 	if got := ing.Dropped(); got != 0 {
@@ -76,6 +79,7 @@ func TestIngesterDroppedCounter(t *testing.T) {
 // running drainer, many concurrent Enqueues, then ctx cancel drains and flushes
 // everything buffered. Total (4000) stays under the buffer (4096) so no drops.
 func TestIngesterRunDrainsOnCancel(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	ing := NewIngester(s, discardLogger())
 	ctx, cancel := context.WithCancel(context.Background())
@@ -105,6 +109,7 @@ func TestIngesterRunDrainsOnCancel(t *testing.T) {
 }
 
 func TestIngesterDrainAddsQueuedRowsToRunningBatch(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	ing := NewIngester(s, discardLogger())
 	batch := []AIRequest{sampleReq("air-running", "alice", "basic", 0.01, time.Now().UTC())}

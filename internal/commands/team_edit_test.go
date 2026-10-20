@@ -13,7 +13,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/registry"
-	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/teamportable"
 )
 
@@ -28,6 +28,7 @@ func (*fakeGroups) Rename(string, string) error                   { return nil }
 func (*fakeGroups) ChangeLead(string, string) error               { return nil }
 
 func TestTeamEditRoutesRegistered(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	for _, tc := range []struct{ path, method, route string }{
 		{"group.rename", "PATCH", "/api/groups/{name}/name"},
@@ -49,6 +50,7 @@ func TestTeamEditRoutesRegistered(t *testing.T) {
 }
 
 func TestBuiltInTeamTemplateRoutesAreAbsent(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	for _, path := range []string{"team.template.ls", "team.template.create"} {
 		if _, ok := r.Get(path); ok {
@@ -58,6 +60,7 @@ func TestBuiltInTeamTemplateRoutesAreAbsent(t *testing.T) {
 }
 
 func TestTeamSourceImportPlanReusesSourceWithinOneArchive(t *testing.T) {
+	t.Parallel()
 	imported := map[string]string{}
 	first := teamportable.Image{SourceName: "shared", SourceDigest: "digest"}
 	if reuse, err := planTeamSource(imported, first); err != nil || reuse {
@@ -72,6 +75,7 @@ func TestTeamSourceImportPlanReusesSourceWithinOneArchive(t *testing.T) {
 }
 
 func TestAgentTimeoutOverrideRequiresDurationAndReturnsSeconds(t *testing.T) {
+	t.Parallel()
 	if seconds, err := parseAgentTimeout("2h"); err != nil || seconds != 7200 {
 		t.Fatalf("2h = %d, %v", seconds, err)
 	}
@@ -81,6 +85,7 @@ func TestAgentTimeoutOverrideRequiresDurationAndReturnsSeconds(t *testing.T) {
 }
 
 func TestRewriteTeamComposeImageRefsForConflictResolution(t *testing.T) {
+	t.Parallel()
 	input := []byte("version: 1\nagents:\n  worker:\n    image: demo:v1\n    group: team\n")
 	output, err := rewriteTeamComposeRefs(input, map[string]string{"demo:v1": "demo:imported"})
 	if err != nil {
@@ -96,6 +101,7 @@ func TestRewriteTeamComposeImageRefsForConflictResolution(t *testing.T) {
 }
 
 func TestYAMLPreviewReportsMissingAgentImageBeforeApply(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	c.Groups = &fakeGroups{}
@@ -114,6 +120,7 @@ func TestYAMLPreviewReportsMissingAgentImageBeforeApply(t *testing.T) {
 }
 
 func TestTeamImportDoesNotReuseSnapshotForChangedImageDigest(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	c.Groups = &fakeGroups{}
@@ -151,12 +158,9 @@ func TestTeamImportDoesNotReuseSnapshotForChangedImageDigest(t *testing.T) {
 }
 
 func TestApplyTeamImageBuildsTwoRefsFromOneImportedSource(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	source := filepath.Join(base, "team-imports", "id", "images", "shared")
 	if err := os.MkdirAll(source, 0o700); err != nil {
 		t.Fatal(err)
@@ -199,12 +203,9 @@ func TestApplyTeamImageBuildsTwoRefsFromOneImportedSource(t *testing.T) {
 }
 
 func TestApplyTeamImageRejectsDisabledExternalPlugin(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	c := &registry.Ctx{Store: db, BaseDir: base}
 	installDisabledPlugin(t, c, "widget")
 	source := filepath.Join(base, "team-imports", "id", "images", "shared")
@@ -227,12 +228,9 @@ func TestApplyTeamImageRejectsDisabledExternalPlugin(t *testing.T) {
 }
 
 func TestApplyTeamImageWaitsForPublicationGate(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	source := filepath.Join(base, "team-imports", "id", "images", "shared")
 	if err := os.MkdirAll(source, 0o700); err != nil {
 		t.Fatal(err)

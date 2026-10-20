@@ -20,6 +20,7 @@ func ctxWithBus(t *testing.T) (*registry.Ctx, *bus.Bus) {
 }
 
 func TestChannelLsAndMessageSend(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	// operator publish creates the channel and the message.
 	res, err := h(t, "message.send")(c, registry.Params{"channel": "chat:room", "type": "note", "text": "hi"})
@@ -47,6 +48,7 @@ func TestChannelLsAndMessageSend(t *testing.T) {
 }
 
 func TestAgentSubscriptions(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	// One agent subscribes to two channels; a second agent to a third. The
 	// endpoint must return only the queried agent's channels (deduped), never
@@ -81,6 +83,7 @@ func TestAgentSubscriptions(t *testing.T) {
 }
 
 func TestAgentSubscriptionsProtectedFlag(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	for _, ch := range []string{"agent:worker:inbox", "group:dev:inbox", "chat:messenger:x"} {
 		if _, err := b.Subscribe("worker", ch, nil, nil); err != nil {
@@ -104,6 +107,7 @@ func TestAgentSubscriptionsProtectedFlag(t *testing.T) {
 }
 
 func TestAgentSubscribeUnsubscribe(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: "i:latest"})
 
@@ -150,6 +154,7 @@ func TestAgentSubscribeUnsubscribe(t *testing.T) {
 // so a provider can act on it. This is the daemon half compose's object-form
 // subscribe entries drive.
 func TestAgentSubscribeParams(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: "i:latest"})
 
@@ -212,6 +217,7 @@ func isCode(err error, code string) bool {
 // appears in channel.ls (GET /api/channels), so the agent Subscribe picker can
 // offer a bound-but-idle chat. The row is marked by its kind ("chat").
 func TestChannelLsListsBoundIdleChannel(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	if err := b.EnsureChannel("chat:messenger:idle"); err != nil {
 		t.Fatal(err)
@@ -231,6 +237,7 @@ func TestChannelLsListsBoundIdleChannel(t *testing.T) {
 }
 
 func TestChannelInspect(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	b.Publish(bus.Message{Channel: "chat:room", Type: "x", Text: "a"})
 	insp, err := h(t, "channel.inspect")(c, registry.Params{"channel": "chat:room"})

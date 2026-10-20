@@ -5,6 +5,7 @@ import "testing"
 // The queue is the messages this participant has not answered: another
 // participant said them, and no reply of this participant points at them.
 func TestUnansweredExcludesRepliedAndOwnMessages(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	first := publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "one"})
 	second := publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "two"})
@@ -24,6 +25,7 @@ func TestUnansweredExcludesRepliedAndOwnMessages(t *testing.T) {
 // Review Focus item 4: a plain send fills no in_reply_to, so it answers
 // nothing. Pinned so a later helpful fallback cannot quietly retire a question.
 func TestPlainSendDoesNotCountAsAnAnswer(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	orig := publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "question"})
 	publish(t, b, Message{Channel: chat.Channel, Source: "agent:worker", Type: "message", Text: "unrelated"})
@@ -39,6 +41,7 @@ func TestPlainSendDoesNotCountAsAnAnswer(t *testing.T) {
 // A principal that joins later owes no answer for what was said before it was
 // in the chat.
 func TestUnansweredIgnoresMessagesOlderThanJoin(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "before reviewer joined"})
 	if err := b.AddParticipant(chat.ID, "agent:reviewer", "member"); err != nil {
@@ -65,6 +68,7 @@ func TestUnansweredIgnoresMessagesOlderThanJoin(t *testing.T) {
 // that does not exist is an empty queue rather than an error the caller has to
 // special-case.
 func TestUnansweredForNonParticipantIsEmpty(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "hello"})
 	queue, err := b.Unanswered(chat.ID, "agent:stranger")
@@ -80,6 +84,7 @@ func TestUnansweredForNonParticipantIsEmpty(t *testing.T) {
 // The agent-wide queue is every chat it takes part in, so one call is the whole
 // answering obligation of an iteration.
 func TestUnansweredForPrincipalSpansChats(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	tasksChat, err := b.GetChat(ChatIDTasks("worker"))
 	if err != nil {

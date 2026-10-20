@@ -11,6 +11,7 @@ import (
 // ranked list for the agent sidebar, one merged feed per agent, and a read mark
 // the unread counter is measured against.
 func TestChatListFeedAndReadMark(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
@@ -100,6 +101,7 @@ func TestChatListFeedAndReadMark(t *testing.T) {
 // channel as its reply target so an agent's reply lands in the chat rather than
 // back in its own inbox.
 func TestMessageSendSpeaksAsTheCustomer(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	if _, err := h(t, "message.send")(c, registry.Params{
 		"channel": "agent:worker:inbox", "type": "message", "text": "hi", "reply_to": "user:customer",
@@ -117,6 +119,7 @@ func TestMessageSendSpeaksAsTheCustomer(t *testing.T) {
 // only moves forward. The feed carries the current mark so the client can place
 // its "new messages" divider without fetching the whole chat list.
 func TestChatReadExactMovesTheMarkBackAndFeedCarriesIt(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
@@ -166,6 +169,7 @@ func TestChatReadExactMovesTheMarkBackAndFeedCarriesIt(t *testing.T) {
 // The unanswered queue is the answering obligation, and it is not the delivery
 // queue: a reply retires a message, a plain send does not.
 func TestChatUnansweredAndParticipants(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
@@ -211,6 +215,7 @@ func TestChatUnansweredAndParticipants(t *testing.T) {
 // agent name the sidebar already knows. Both address the same endpoint, so one
 // argument carries either.
 func TestChatMessagesAndReadAddressAChatByID(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	if err := b.ReconcileChats([]string{"worker"}, "user:customer"); err != nil {
 		t.Fatal(err)
@@ -252,6 +257,7 @@ func TestChatMessagesAndReadAddressAChatByID(t *testing.T) {
 // namespaces are provisioned, not claimed by hand, and an id already in use
 // must never be silently taken over by a second chat.
 func TestCreateChatRejectsReservedAndTakenIDs(t *testing.T) {
+	t.Parallel()
 	c, _ := ctxWithBus(t)
 	create := func(id string) error {
 		_, err := h(t, "chat.create")(c, registry.Params{"id": id, "title": "Team Alpha"})
@@ -278,6 +284,7 @@ func TestCreateChatRejectsReservedAndTakenIDs(t *testing.T) {
 // what carries delivery, so an agent added here is subscribed and an agent
 // removed is not.
 func TestChatCreateAndParticipantCommands(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	created, err := h(t, "chat.create")(c, registry.Params{
 		"id": "team-alpha", "title": "Team Alpha", "participants": "agent:worker,agent:reviewer",

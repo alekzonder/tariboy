@@ -16,6 +16,7 @@ func seedAgent(t *testing.T) (*registry.Ctx, *agent.Store) {
 }
 
 func TestAgentModelSet(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	res, err := agentModel().Handler(c, registry.Params{"name": "a1", "value": "opus"})
 	if err != nil {
@@ -31,6 +32,7 @@ func TestAgentModelSet(t *testing.T) {
 }
 
 func TestAgentModelReadOnlyWhenNoValue(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	// seed a value, then read with no value
 	if _, err := agentModel().Handler(c, registry.Params{"name": "a1", "value": "sonnet"}); err != nil {
@@ -46,6 +48,7 @@ func TestAgentModelReadOnlyWhenNoValue(t *testing.T) {
 }
 
 func TestAgentEffortSet(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	if _, err := agentEffort().Handler(c, registry.Params{"name": "a1", "value": "high"}); err != nil {
 		t.Fatal(err)
@@ -57,6 +60,7 @@ func TestAgentEffortSet(t *testing.T) {
 }
 
 func TestAgentInteractiveSet(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	if _, err := agentInteractive().Handler(c, registry.Params{"name": "a1", "value": true}); err != nil {
 		t.Fatal(err)
@@ -68,6 +72,7 @@ func TestAgentInteractiveSet(t *testing.T) {
 }
 
 func TestAgentInteractiveRejectsNonBool(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	if _, err := agentInteractive().Handler(c, registry.Params{"name": "a1", "value": "yes"}); err == nil {
 		t.Fatal("string value should be rejected")
@@ -75,6 +80,7 @@ func TestAgentInteractiveRejectsNonBool(t *testing.T) {
 }
 
 func TestAgentHarnessSet(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	res, err := agentHarness().Handler(c, registry.Params{"name": "a1", "value": "codex"})
 	if err != nil {
@@ -90,6 +96,7 @@ func TestAgentHarnessSet(t *testing.T) {
 }
 
 func TestAgentHarnessRejectsInvalidAndDoesNotPersist(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	// seed a valid value first
 	if _, err := agentHarness().Handler(c, registry.Params{"name": "a1", "value": "claude"}); err != nil {
@@ -108,6 +115,7 @@ func TestAgentHarnessRejectsInvalidAndDoesNotPersist(t *testing.T) {
 }
 
 func TestAgentHarnessReadOnlyWhenNoValue(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	if _, err := agentHarness().Handler(c, registry.Params{"name": "a1", "value": "opencode"}); err != nil {
 		t.Fatal(err)
@@ -124,6 +132,7 @@ func TestAgentHarnessReadOnlyWhenNoValue(t *testing.T) {
 // TestConfigCommandsRegistered locks in that the setters are wired into the
 // daemon registry with the expected HTTP routes (so they are actually served).
 func TestConfigCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	want := map[string]string{
 		"agent.model":              "POST /api/agents/{name}/model",
@@ -145,6 +154,7 @@ func TestConfigCommandsRegistered(t *testing.T) {
 }
 
 func TestAgentMessageSettingsValidateAndPersist(t *testing.T) {
+	t.Parallel()
 	c, agents := seedAgent(t)
 	for path, field := range map[string]string{
 		"agent.messages.batch":     "messages_batch",
@@ -165,6 +175,7 @@ func TestAgentMessageSettingsValidateAndPersist(t *testing.T) {
 }
 
 func TestAgentCwdSetReadClear(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	dir := t.TempDir()
 	// set

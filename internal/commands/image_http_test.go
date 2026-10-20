@@ -23,6 +23,7 @@ func routed(t *testing.T, path string) registry.HandlerFunc {
 }
 
 func TestImageRoutesRegistered(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ path, method, route string }{
 		{"image.ls", "GET", "/api/images"},
 		{"image.inspect", "GET", "/api/images/{ref}"},
@@ -51,6 +52,7 @@ func TestImageRoutesRegistered(t *testing.T) {
 }
 
 func TestImageLsInspectRmViaHandler(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t) // from image_test.go: writes a Tariboyfile + task.md
 
@@ -85,6 +87,7 @@ func TestImageLsInspectRmViaHandler(t *testing.T) {
 }
 
 func TestImagePromptFilesReadViaHandler(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	src := writeExample(t)
 	if _, err := cmdHandler(t, "image.build")(c, registry.Params{"tag": "demo:latest", "path": src}); err != nil {

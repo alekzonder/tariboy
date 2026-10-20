@@ -19,6 +19,7 @@ import (
 )
 
 func TestStoreCommandsRegisteredWithRoutes(t *testing.T) {
+	t.Parallel()
 	want := map[string]registry.HTTPRoute{
 		"store.add":     {Method: http.MethodPost, Path: "/api/stores"},
 		"store.list":    {Method: http.MethodGet, Path: "/api/stores"},
@@ -42,6 +43,7 @@ func TestStoreCommandsRegisteredWithRoutes(t *testing.T) {
 }
 
 func TestStoreCommandLifecycleReturnsHTTPShapes(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source := t.TempDir()
 	writeImageV2(t, filepath.Join(source, "images", "reviewer"), "3.4.5")
@@ -114,6 +116,7 @@ func jsonObject(t *testing.T, value any) map[string]any {
 }
 
 func TestImageBuildStoreSelectorInstallsLocksAndDefaultsIdentity(t *testing.T) {
+	// Sequential: sets PATH and NPX_* with t.Setenv.
 	c := localCtx(t)
 	source := t.TempDir()
 	imageDir := filepath.Join(source, "images", "reviewer")
@@ -168,6 +171,7 @@ func TestImageBuildStoreSelectorInstallsLocksAndDefaultsIdentity(t *testing.T) {
 }
 
 func TestImageBuildStoreSelectorUpdatesExistingVersionTag(t *testing.T) {
+	// Sequential: sets PATH and NPX_LOG with t.Setenv.
 	c := localCtx(t)
 	source := t.TempDir()
 	imageDir := filepath.Join(source, "images", "reviewer")
@@ -231,6 +235,7 @@ func TestImageBuildStoreSelectorUpdatesExistingVersionTag(t *testing.T) {
 }
 
 func TestImageBuildStoreSelectorRejectsTraversalAndExplicitPath(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source := t.TempDir()
 	writeImageV2(t, filepath.Join(source, "images", "reviewer"), "1.0.0")
@@ -248,6 +253,7 @@ func TestImageBuildStoreSelectorRejectsTraversalAndExplicitPath(t *testing.T) {
 }
 
 func TestImageBuildStoreSelectorRejectsLinkedImagesDirectory(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source, outside := t.TempDir(), t.TempDir()
 	writeImageV2(t, filepath.Join(outside, "reviewer"), "1.0.0")
@@ -266,6 +272,7 @@ func TestImageBuildStoreSelectorRejectsLinkedImagesDirectory(t *testing.T) {
 }
 
 func TestImageBuildPathCompatibility(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source := t.TempDir()
 	writeImageV2(t, source, "4.5.6")
@@ -282,6 +289,7 @@ func TestImageBuildPathCompatibility(t *testing.T) {
 }
 
 func TestStoreAutoCommandPersistsPolicy(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	source := t.TempDir()
 	writeImageV2(t, filepath.Join(source, "images", "reviewer"), "3.4.5")
@@ -321,6 +329,7 @@ func TestStoreAutoCommandPersistsPolicy(t *testing.T) {
 }
 
 func TestStoreErrorReportsRefreshFailureAsConflict(t *testing.T) {
+	t.Parallel()
 	err := storeError(fmt.Errorf("%w team: git failed: exit status 1: error: Your local changes", stores.ErrRefresh))
 	userErr, ok := err.(api.UserError)
 	if !ok || userErr.Code != "store_refresh_failed" || userErr.Status != http.StatusConflict || !strings.Contains(userErr.Msg, "Your local changes") {
@@ -329,6 +338,7 @@ func TestStoreErrorReportsRefreshFailureAsConflict(t *testing.T) {
 }
 
 func TestImageBuildStoreSelectorAssemblesExtendsLayerByLayer(t *testing.T) {
+	// Sequential: sets PATH and NPX_LOG with t.Setenv.
 	c := localCtx(t)
 	source := t.TempDir()
 	write := func(rel, body string) {

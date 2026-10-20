@@ -12,6 +12,7 @@ import (
 )
 
 func TestReindexPreservesGroupSnapshotAndLeavesLegacyRowsUngrouped(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	if _, err := st.DB.Exec(`INSERT INTO agents(name, image_ref, "group") VALUES ('alice', 'basic:latest', 'beta')`); err != nil {
@@ -61,6 +62,7 @@ func TestReindexPreservesGroupSnapshotAndLeavesLegacyRowsUngrouped(t *testing.T)
 }
 
 func TestReindexRestoresRecordedUsage(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	agentsDir := filepath.Join(base, "agents")

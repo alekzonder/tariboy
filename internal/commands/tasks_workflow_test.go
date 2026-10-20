@@ -149,6 +149,7 @@ func workflowServer(t *testing.T, stub *workflowStub) *httptest.Server {
 }
 
 func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, method, path string
 		body               any
@@ -215,6 +216,7 @@ func TestWorkflowRoutesCallTheServiceAsTheCustomer(t *testing.T) {
 }
 
 func TestRunLogRouteValidatesMaxBytes(t *testing.T) {
+	t.Parallel()
 	for query, wantStatus := range map[string]int{"?max_bytes=-1": 400, "?max_bytes=abc": 400, "?max_bytes=1.5": 400, "?max_bytes=0": 200, "": 200, "?max_bytes=": 200} {
 		stub := &workflowStub{}
 		httpServer := workflowServer(t, stub)
@@ -229,6 +231,7 @@ func TestRunLogRouteValidatesMaxBytes(t *testing.T) {
 }
 
 func TestWorkflowRoutesPassServiceErrorsThrough(t *testing.T) {
+	t.Parallel()
 	stub := &workflowStub{err: &tasks.Error{Status: http.StatusConflict, Code: "workflow_managed",
 		Msg: "task lifecycle is managed by its workflow", Data: map[string]any{"status": "develop", "outcomes": []string{"ready"}}}}
 	httpServer := workflowServer(t, stub)
@@ -249,6 +252,7 @@ func TestWorkflowRoutesPassServiceErrorsThrough(t *testing.T) {
 }
 
 func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
+	t.Parallel()
 	httpServer := workflowServer(t, &workflowStub{})
 	status, env := taskRequest(t, httpServer.Client(), "GET", httpServer.URL+"/api/openapi.json", nil)
 	if status != http.StatusOK {

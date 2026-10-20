@@ -107,6 +107,7 @@ func h(t *testing.T, path string) registry.HandlerFunc {
 }
 
 func TestAgentRunAndPs(t *testing.T) {
+	t.Parallel()
 	c, as, fc := ctxWithStore(t)
 	res, err := h(t, "agent.run")(c, registry.Params{
 		"image": "basic:latest", "name": "smoke", "harness": "stub",
@@ -134,6 +135,7 @@ func TestAgentRunAndPs(t *testing.T) {
 }
 
 func TestAgentRunDefaultsMessageQueueToOneHundred(t *testing.T) {
+	t.Parallel()
 	c, _, fc := ctxWithStore(t)
 	if _, err := h(t, "agent.run")(c, registry.Params{"image": "basic:latest", "name": "worker"}); err != nil {
 		t.Fatal(err)
@@ -149,6 +151,7 @@ func TestAgentRunDefaultsMessageQueueToOneHundred(t *testing.T) {
 // Catches the create handler dropping a clone field or lossy reparsing of
 // structured HTTP environment/plugin values before they reach the manager.
 func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
+	t.Parallel()
 	c, _, fc := ctxWithStore(t)
 	cwd := t.TempDir()
 	_, err := h(t, "agent.run")(c, registry.Params{
@@ -188,6 +191,7 @@ func TestAgentRunMapsCompleteConfiguration(t *testing.T) {
 // Catches the create surface accepting Goal settings without carrying them to
 // the manager or returning the canonical create projection.
 func TestAgentGoalSettingsRoundTrip(t *testing.T) {
+	t.Parallel()
 	c, _, fc := ctxWithStore(t)
 	result, err := h(t, "agent.run")(c, registry.Params{
 		"image": "basic:latest", "name": "worker",
@@ -208,6 +212,7 @@ func TestAgentGoalSettingsRoundTrip(t *testing.T) {
 // Catches agent.run creating a non-interactive agent when interactive is
 // omitted: new agents default to interactive unless explicitly disabled.
 func TestAgentRunInteractiveDefaultsTrue(t *testing.T) {
+	t.Parallel()
 	c, _, fc := ctxWithStore(t)
 	if _, err := h(t, "agent.run")(c, registry.Params{"image": "basic:latest", "name": "worker"}); err != nil {
 		t.Fatal(err)
@@ -229,6 +234,7 @@ func TestAgentRunInteractiveDefaultsTrue(t *testing.T) {
 }
 
 func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	a := agent.Agent{Name: "worker", AIStallTimeoutS: 300}
 	got, err := agentView(c, a, "error")
@@ -252,6 +258,7 @@ func TestAgentViewReportsDerivedAIStallReason(t *testing.T) {
 // Catches Goal updates bypassing Store.Update (which owns sticky-key clearing)
 // or failing to use the existing configuration refresh/goal signal hook.
 func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
+	t.Parallel()
 	c, agents, fc := ctxWithStore(t)
 	if err := agents.Create(agent.Agent{Name: "worker", GoalEnabled: true, GoalWaitCustomerTimeoutS: 300}); err != nil {
 		t.Fatal(err)
@@ -319,6 +326,7 @@ func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
 // Catches inspect/list omitting either editable Goal setting or the read-only
 // daemon-owned sticky key.
 func TestAgentGoalSettingsInspectAndListProjection(t *testing.T) {
+	t.Parallel()
 	c, agents, _ := ctxWithStore(t)
 	if err := agents.Create(agent.Agent{Name: "worker", GoalEnabled: true, GoalWaitCustomerTimeoutS: 120}); err != nil {
 		t.Fatal(err)
@@ -352,6 +360,7 @@ func mustAgentRows(t *testing.T, value any, err error) []map[string]any {
 // Each case catches a malformed clone request reaching provisioning or
 // persistence instead of failing at the agent.run boundary with a stable code.
 func TestAgentRunRejectsInvalidCompleteConfiguration(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		key   string
@@ -397,6 +406,7 @@ func TestAgentRunRejectsInvalidCompleteConfiguration(t *testing.T) {
 // Catches generated OpenAPI advertising the legacy comma strings after the
 // HTTP create route learned lossless object/array inputs.
 func TestAgentRunDeclaresStructuredHTTPInputs(t *testing.T) {
+	t.Parallel()
 	args := map[string]registry.Arg{}
 	for _, arg := range agentRun().Args {
 		args[arg.Name] = arg
@@ -423,6 +433,7 @@ func TestAgentRunDeclaresStructuredHTTPInputs(t *testing.T) {
 }
 
 func TestAgentStatusIncludesActiveIterationDeadlines(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -447,6 +458,7 @@ func TestAgentStatusIncludesActiveIterationDeadlines(t *testing.T) {
 }
 
 func TestAgentStatusIncludesMessageQueueSaturation(t *testing.T) {
+	t.Parallel()
 	c, agents, _ := ctxWithStore(t)
 	if err := agents.Create(agent.Agent{Name: "worker", ImageRef: "basic:latest", MessagesMaxQueue: 2}); err != nil {
 		t.Fatal(err)
@@ -470,6 +482,7 @@ func TestAgentStatusIncludesMessageQueueSaturation(t *testing.T) {
 }
 
 func TestIterationExtendTimeoutCommand(t *testing.T) {
+	t.Parallel()
 	c, as, fc := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -492,6 +505,7 @@ func TestIterationExtendTimeoutCommand(t *testing.T) {
 }
 
 func TestAgentStopAndRm(t *testing.T) {
+	t.Parallel()
 	c, as, fc := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke"})
 	if _, err := h(t, "agent.stop")(c, registry.Params{"name": "smoke"}); err != nil {
@@ -527,6 +541,7 @@ func TestAgentStopAndRm(t *testing.T) {
 }
 
 func TestAgentInspectNotFound(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	if _, err := h(t, "agent.inspect")(c, registry.Params{"name": "ghost"}); err == nil {
 		t.Fatal("inspect of missing agent should error")
@@ -534,6 +549,7 @@ func TestAgentInspectNotFound(t *testing.T) {
 }
 
 func TestAgentInspectReportsEffectiveCwd(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 
 	// Empty Cwd -> effective cwd is the agent's workdir, never blank.
@@ -562,6 +578,7 @@ func TestAgentInspectReportsEffectiveCwd(t *testing.T) {
 // must not partially replace the last accepted limits, and every agent view
 // must expose the same derived budget projection.
 func TestAgentBudgetSetIsAtomicAndProjected(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -595,6 +612,7 @@ func TestAgentBudgetSetIsAtomicAndProjected(t *testing.T) {
 // workdir instead of the raw configured CWD, or silently guesses message
 // delivery defaults that belong to the persisted source agent.
 func TestAgentInspectReportsCompleteCloneProjection(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{
 		Name: "source", MessagesBatch: 17, MessagesMaxQueue: 1234,
@@ -621,6 +639,7 @@ func TestAgentInspectReportsCompleteCloneProjection(t *testing.T) {
 // The agents list is polled by the UI, so it computes each state from the row
 // it already read and reads every budget in one query.
 func TestAgentPsReadsStateAndBudgetWithoutPerAgentQueries(t *testing.T) {
+	t.Parallel()
 	c, as, fc := ctxWithStore(t)
 	for _, name := range []string{"a1", "a2"} {
 		if err := as.Create(agent.Agent{Name: name, ImageRef: "basic:latest", HarnessType: "stub", Enabled: true}); err != nil {
@@ -654,6 +673,7 @@ func TestAgentPsReadsStateAndBudgetWithoutPerAgentQueries(t *testing.T) {
 }
 
 func TestAgentScheduleInspectAndListProjection(t *testing.T) {
+	t.Parallel()
 	c, agents, _ := ctxWithStore(t)
 	if err := agents.Create(agent.Agent{Name: "worker"}); err != nil {
 		t.Fatal(err)

@@ -41,6 +41,7 @@ func lsIDs(t *testing.T, c *registry.Ctx, p registry.Params) []string {
 }
 
 func TestIterationTagCommandsAddRemoveSetInBatch(t *testing.T) {
+	t.Parallel()
 	c, _ := taggedCtx(t)
 
 	res, err := h(t, "iteration.tag.add")(c, registry.Params{
@@ -72,6 +73,7 @@ func TestIterationTagCommandsAddRemoveSetInBatch(t *testing.T) {
 }
 
 func TestIterationTagCommandsRejectBadInput(t *testing.T) {
+	t.Parallel()
 	c, _ := taggedCtx(t)
 	cases := map[string]registry.Params{
 		"invalid_tag": {"name": "smoke", "id": []string{"it-1"}, "tag": []string{"two words"}},
@@ -91,6 +93,7 @@ func TestIterationTagCommandsRejectBadInput(t *testing.T) {
 }
 
 func TestIterationLsFiltersByTagAndStartDate(t *testing.T) {
+	t.Parallel()
 	c, _ := taggedCtx(t)
 	if _, err := h(t, "iteration.tag.add")(c, registry.Params{
 		"name": "smoke", "id": []string{"it-1"}, "tag": []string{"processed"}}); err != nil {

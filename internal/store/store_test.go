@@ -16,6 +16,7 @@ func open(t *testing.T) *Store {
 }
 
 func TestOpenMigrates(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	v, err := s.SchemaVersion()
 	if err != nil {
@@ -27,6 +28,7 @@ func TestOpenMigrates(t *testing.T) {
 }
 
 func TestOpenCreatesWorkflowImages(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	requireTable(t, s.DB, "task_workflow_images")
 	var unique int
@@ -63,6 +65,7 @@ func TestOpenCreatesWorkflowImages(t *testing.T) {
 }
 
 func TestOpenCreatesWorkflowEngineSchema(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	for _, table := range []string{"task_queue_workflows", "task_workflow_holders", "task_status_visits", "task_transition_requests", "task_artifacts"} {
 		requireTable(t, s.DB, table)
@@ -106,6 +109,7 @@ func TestOpenCreatesWorkflowEngineSchema(t *testing.T) {
 }
 
 func TestOpenCreatesScriptRunSchema(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	requireTable(t, s.DB, "task_script_runs")
 	requireColumn(t, s.DB, "task_status_visits", "next_watch_at")
@@ -169,6 +173,7 @@ func holderMigrationFixture(t *testing.T, first string) *Store {
 }
 
 func TestHolderReleasedMigrationDefaultsToHeld(t *testing.T) {
+	t.Parallel()
 	requireColumn(t, open(t).DB, "task_workflow_holders", "released")
 	s := holderMigrationFixture(t, "0060_task_workflow_holder_released.sql")
 	var released int
@@ -178,6 +183,7 @@ func TestHolderReleasedMigrationDefaultsToHeld(t *testing.T) {
 }
 
 func TestHolderUnavailableSinceMigrationDefaultsToEmpty(t *testing.T) {
+	t.Parallel()
 	requireColumn(t, open(t).DB, "task_workflow_holders", "unavailable_since")
 	s := holderMigrationFixture(t, "0061_task_workflow_holder_unavailable.sql")
 	var since string
@@ -187,6 +193,7 @@ func TestHolderUnavailableSinceMigrationDefaultsToEmpty(t *testing.T) {
 }
 
 func TestDropLoopEnabledMigrationTurnsOffAgentsWithoutLoop(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "drop-loop-enabled.db")
 	legacy := openBeforeMigration(t, path, "0064_agent_drop_loop_enabled.sql")
 	if _, err := legacy.DB.Exec(`
@@ -222,6 +229,7 @@ func TestDropLoopEnabledMigrationTurnsOffAgentsWithoutLoop(t *testing.T) {
 }
 
 func TestVisitResumedAtMigration(t *testing.T) {
+	t.Parallel()
 	db := open(t).DB
 	requireColumn(t, db, "task_status_visits", "resumed_at")
 	var n int
@@ -252,6 +260,7 @@ func TestVisitResumedAtMigration(t *testing.T) {
 }
 
 func TestOpenRemovesJudgeTables(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "remove-judge.db")
 	db := createDatabaseBeforeMigration(t, path, "0043_remove_judge.sql")
 	requireTable(t, db, "judge_runs")
@@ -275,6 +284,7 @@ func TestOpenRemovesJudgeTables(t *testing.T) {
 }
 
 func TestAgentGoalsMigrationPreservesTasksAndAddsReleaseFields(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "agent-goals-upgrade.db")
 	db := createDatabaseBeforeMigration(t, path, "0037_agent_goals.sql")
 	if _, err := db.Exec(`
@@ -338,6 +348,7 @@ func TestAgentGoalsMigrationPreservesTasksAndAddsReleaseFields(t *testing.T) {
 }
 
 func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "script-runs-upgrade.db")
 	db := createDatabaseBeforeMigration(t, path, "0034_script_runs_and_outbox.sql")
 	if _, err := db.Exec(`
@@ -405,6 +416,7 @@ func TestScriptRunsMigrationPreservesLegacyHistoryAndBusSchedules(t *testing.T) 
 }
 
 func TestPricingMigrationAddsSourcesAndGroupSnapshot(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "pricing-upgrade.db")
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
 	if err != nil {
@@ -471,6 +483,7 @@ func TestPricingMigrationAddsSourcesAndGroupSnapshot(t *testing.T) {
 }
 
 func TestTaskWorkflowMigrationKeepsPoolsTriggersAndTaskColumns(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	for _, table := range []string{
 		"task_workflow_versions", "task_agent_pools", "task_agent_pool_members",
@@ -487,6 +500,7 @@ func TestTaskWorkflowMigrationKeepsPoolsTriggersAndTaskColumns(t *testing.T) {
 }
 
 func TestWorkflowEngineRemovalMigration(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "workflow-engine-removal.db")
 	legacy := openBeforeMigration(t, path, "0054_drop_task_workflow_engine.sql")
 	const now = "2026-10-01T00:00:00Z"
@@ -588,6 +602,7 @@ func TestWorkflowEngineRemovalMigration(t *testing.T) {
 }
 
 func TestWorkflowActivationSequenceMigrationPreservesLegacyTargets(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "workflow-sequence-upgrade.db")
 	db := createDatabaseAppliedThrough0027(t, path)
 	if _, err := db.Exec(`
@@ -611,6 +626,7 @@ func TestWorkflowActivationSequenceMigrationPreservesLegacyTargets(t *testing.T)
 }
 
 func TestOpenIsIdempotent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	db := filepath.Join(dir, "x.db")
 	s1, err := Open(db)
@@ -626,6 +642,7 @@ func TestOpenIsIdempotent(t *testing.T) {
 }
 
 func TestConfigGetSet(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	if _, ok, _ := s.ConfigGet("k"); ok {
 		t.Fatal("unset key reported ok")
@@ -643,6 +660,7 @@ func TestConfigGetSet(t *testing.T) {
 }
 
 func TestAddEvent(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	if err := s.AddEvent("", "daemon_start", `{"pid":1}`); err != nil {
 		t.Fatal(err)
@@ -657,6 +675,7 @@ func TestAddEvent(t *testing.T) {
 }
 
 func TestOpenEscapesPathAndLimitsConns(t *testing.T) {
+	t.Parallel()
 	// A base dir containing spaces and shell-special characters must still open:
 	// SQLite URI filenames are percent-decoded, so url.PathEscape makes them safe.
 	dir := filepath.Join(t.TempDir(), "a b & c")
@@ -677,6 +696,7 @@ func TestOpenEscapesPathAndLimitsConns(t *testing.T) {
 }
 
 func TestMigration0011DropsState(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	rows, err := s.DB.Query(`SELECT name FROM pragma_table_info('agents')`)
 	if err != nil {
@@ -700,6 +720,7 @@ func TestMigration0011DropsState(t *testing.T) {
 }
 
 func TestTaskPriorityMigrationPreservesLegacyTaskData(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "legacy.db")
 	s := openBeforeTaskPriorityMigration(t, dbPath)
 	now := "2026-08-03T00:00:00Z"
@@ -854,6 +875,7 @@ func openBeforeMigration(t *testing.T, path, first string) *Store {
 }
 
 func TestTaskAssignmentIterationMigrationUpgradesApplied0026(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "upgrade.db")
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
 	if err != nil {
@@ -906,6 +928,7 @@ func TestTaskAssignmentIterationMigrationUpgradesApplied0026(t *testing.T) {
 }
 
 func TestTaskAssignmentIterationMigrationAcceptsIntermediate0026Column(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "intermediate.db")
 	db := createDatabaseAppliedThrough0026(t, path)
 	if _, err := db.Exec(`ALTER TABLE task_assignments ADD COLUMN lease_iteration TEXT NOT NULL DEFAULT ''`); err != nil {
@@ -1030,6 +1053,7 @@ func createDatabaseAppliedThrough0027(t *testing.T, path string) *sql.DB {
 }
 
 func TestTaskPriorityConstraint(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	now := "2026-08-03T00:00:00Z"
 	if _, err := s.DB.Exec(`
@@ -1085,6 +1109,7 @@ func requireColumn(t *testing.T, db *sql.DB, table, column string) {
 }
 
 func TestMessageSenderMigrationBackfillsExistingMessages(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "message-sender.db")
 	db := createDatabaseBeforeMigration(t, path, "0048_message_sender.sql")
 	if _, err := db.Exec(`INSERT INTO messages(id, channel, ts, source, data, produced_by_agent) VALUES
@@ -1115,6 +1140,7 @@ func TestMessageSenderMigrationBackfillsExistingMessages(t *testing.T) {
 }
 
 func TestTaskStartedAtMigrationBackfillsTheFirstStartFromEvents(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "legacy.db")
 	s := openBeforeMigration(t, dbPath, "0049_task_started_at.sql")
 	if _, err := s.DB.Exec(`
@@ -1166,6 +1192,7 @@ func TestTaskStartedAtMigrationBackfillsTheFirstStartFromEvents(t *testing.T) {
 }
 
 func TestScriptQuietExitMigrationWrapsLegacyDefinitions(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "quiet-exit.db")
 	s := openBeforeMigration(t, path, "0052_script_quiet_exit_constant.sql")
 	if _, err := s.DB.Exec(`INSERT INTO scripts(id, agent, name, description, command, mode, interval_seconds, quiet_exit, state, created_at, next_run_at) VALUES

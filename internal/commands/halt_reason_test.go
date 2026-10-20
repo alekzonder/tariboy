@@ -29,6 +29,7 @@ func assertHalt(t *testing.T, out map[string]any, wantKind, wantReason string) {
 }
 
 func TestReadersExposeHaltReason(t *testing.T) {
+	t.Parallel()
 	const idle = agent.IdleStopPrefix + " (3 idle iterations)"
 
 	readers := []struct {
