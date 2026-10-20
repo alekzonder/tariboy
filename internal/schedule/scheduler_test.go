@@ -4,12 +4,12 @@ import (
 	"database/sql"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
 	basestore "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 type fakePublisher struct{ msgs []bus.Message }
@@ -90,11 +90,7 @@ func (f *unguardedPublisher) Publish(m bus.Message) (bus.Message, error) {
 
 func TestSchedulerRetryPublishesOnce(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
-	db, err := basestore.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t)
 	b := bus.New(db, func() time.Time { return now })
 	st := NewStore(db, func() time.Time { return now })
 	channel := bus.InboxChannel("smoke")
@@ -132,11 +128,7 @@ func (p *cancelingPublisher) PublishWithGuard(m bus.Message, guard func(*sql.Tx,
 
 func TestSchedulerDoesNotPublishStaleCancelledSchedule(t *testing.T) {
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
-	db, err := basestore.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t)
 	b := bus.New(db, func() time.Time { return now })
 	st := NewStore(db, func() time.Time { return now })
 	channel := bus.InboxChannel("smoke")

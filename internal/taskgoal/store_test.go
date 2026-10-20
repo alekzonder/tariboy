@@ -2,11 +2,11 @@ package taskgoal
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
 	basestore "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -499,11 +499,7 @@ type goalTask struct {
 
 func goalStore(t *testing.T, now time.Time) *Store {
 	t.Helper()
-	base, err := basestore.Open(filepath.Join(t.TempDir(), "goals.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = base.Close() })
+	base := storetest.Open(t)
 	s := NewStore(base)
 	seedAgent(t, s, "worker", now.Add(-time.Hour))
 	return s
@@ -606,10 +602,6 @@ func execGoalSQL(t *testing.T, s *Store, query string) {
 
 func openGoalStore(t *testing.T) *basestore.Store {
 	t.Helper()
-	base, err := basestore.Open(filepath.Join(t.TempDir(), "goals.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = base.Close() })
+	base := storetest.Open(t)
 	return base
 }

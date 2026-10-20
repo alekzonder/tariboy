@@ -6,22 +6,17 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newAPI(t *testing.T) (*API, *bus.Bus, *TokenRegistry) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	b := bus.New(s, func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) })
 	reg := NewTokenRegistry(nil)
 	a := NewAPI(reg, b, slog.New(slog.NewTextHandler(io.Discard, nil)), func(string, string, string) {})

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -142,11 +142,7 @@ func renamedSource(t *testing.T, version, name string) *workflowfile.File {
 
 func newRegistry(t *testing.T) (*Registry, *sql.DB) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := storetest.Open(t)
 	return &Registry{Store: newStore(t), DB: st.DB}, st.DB
 }
 

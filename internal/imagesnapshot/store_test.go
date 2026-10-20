@@ -10,16 +10,12 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesource"
-	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestCaptureStoresImmutableContentAndReusesDigest(t *testing.T) {
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 
 	source := filepath.Join(base, "source")
 	if err := os.Mkdir(source, 0o700); err != nil {
@@ -79,11 +75,7 @@ func TestCaptureStoresImmutableContentAndReusesDigest(t *testing.T) {
 
 func TestCaptureRejectsUnsafeEntriesWithoutPublishing(t *testing.T) {
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 
 	source := filepath.Join(base, "source")
 	if err := os.Mkdir(source, 0o700); err != nil {
@@ -272,11 +264,7 @@ func TestFreezeDisambiguatesFileBoundaries(t *testing.T) {
 
 func TestCaptureStoresAndLooksUpGitProvenanceByImageDigest(t *testing.T) {
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 
 	source := filepath.Join(base, "source")
 	if err := os.Mkdir(source, 0o700); err != nil {
@@ -308,11 +296,7 @@ func TestCaptureStoresAndLooksUpGitProvenanceByImageDigest(t *testing.T) {
 
 func TestLookupDigestRejectsConflictingGitProvenance(t *testing.T) {
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 
 	source := filepath.Join(base, "source")
 	if err := os.Mkdir(source, 0o700); err != nil {

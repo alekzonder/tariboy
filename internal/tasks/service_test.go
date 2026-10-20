@@ -2,21 +2,16 @@ package tasks
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newTestService(t *testing.T) *Service {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	return NewService(st.DB, "customer", func() time.Time {
 		return time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	})

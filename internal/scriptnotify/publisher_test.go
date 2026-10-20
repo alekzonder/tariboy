@@ -5,13 +5,13 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 type fakeBus struct {
@@ -30,11 +30,7 @@ func (f *fakeBus) Publish(message bus.Message) (bus.Message, error) {
 
 func resultFixture(t *testing.T, now time.Time) (*store.Store, string) {
 	t.Helper()
-	db, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t)
 	scripts := script.NewStore(db, func() time.Time { return now })
 	_, run, err := scripts.CreateOnce("alice", script.CreateOnce{Name: "check", Description: "check repo", Command: "make check"})
 	if err != nil {

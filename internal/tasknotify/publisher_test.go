@@ -5,12 +5,12 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -29,11 +29,7 @@ func (f *fakeBus) Publish(message bus.Message) (bus.Message, error) {
 }
 
 func TestFlushPublishesAssignmentQuestionAnswerAndTriageChannels(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	now := time.Date(2026, 7, 31, 13, 0, 0, 0, time.UTC)
 	svc := tasks.NewService(st.DB, "customer", func() time.Time { return now })
 	ctx := context.Background()
@@ -49,7 +45,7 @@ func TestFlushPublishesAssignmentQuestionAnswerAndTriageChannels(t *testing.T) {
 	assigned, _ := svc.CreateTask(ctx, customer, tasks.CreateTaskInput{
 		Queue: "NOTE", Title: "assigned", Assignee: "worker",
 	})
-	_, err = svc.AddComment(ctx, tasks.AgentActor("worker"), assigned.Key, tasks.AddCommentInput{
+	_, err := svc.AddComment(ctx, tasks.AgentActor("worker"), assigned.Key, tasks.AddCommentInput{
 		Body: "Question for @user:customer",
 	})
 	if err != nil {
@@ -96,11 +92,7 @@ func TestFlushPublishesAssignmentQuestionAnswerAndTriageChannels(t *testing.T) {
 }
 
 func TestFailedPublishIsRetriedAfterBackoff(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	now := time.Date(2026, 7, 31, 13, 0, 0, 0, time.UTC)
 	svc := tasks.NewService(st.DB, "customer", func() time.Time { return now })
 	ctx := context.Background()
@@ -140,11 +132,7 @@ func TestFailedPublishIsRetriedAfterBackoff(t *testing.T) {
 // A retry due 11ns after a second is not due 10ns after it, although the
 // RFC 3339 text of the two times has different widths.
 func TestRetryIsNotPublishedBeforeItIsDueWithinOneSecond(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	second := time.Date(2026, 7, 31, 13, 0, 0, 0, time.UTC)
 	now := second
 	svc := tasks.NewService(st.DB, "customer", func() time.Time { return now })
