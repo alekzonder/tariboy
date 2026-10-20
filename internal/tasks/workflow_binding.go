@@ -23,7 +23,7 @@ type AgentPool struct {
 	UpdatedAt string   `json:"updated_at"`
 }
 
-func (s *Service) requireWorkflowAdmin(actor Actor) error {
+func (s *WorkflowEngine) requireWorkflowAdmin(actor Actor) error {
 	if err := validateActor(actor); err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func (s *Service) requireWorkflowAdmin(actor Actor) error {
 	return nil
 }
 
-func (s *Service) RebindAgentPool(
+func (s *WorkflowEngine) RebindAgentPool(
 	ctx context.Context,
 	actor Actor,
 	queue string,
@@ -150,7 +150,7 @@ func (s *Service) RebindAgentPool(
 	return pool, nil
 }
 
-func (s *Service) GetAgentPool(ctx context.Context, actor Actor, queue, pool string) (AgentPool, error) {
+func (s *WorkflowEngine) GetAgentPool(ctx context.Context, actor Actor, queue, pool string) (AgentPool, error) {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return AgentPool{}, err
 	}
@@ -164,7 +164,7 @@ func (s *Service) GetAgentPool(ctx context.Context, actor Actor, queue, pool str
 	return item, nil
 }
 
-func (s *Service) ListAgentPools(ctx context.Context, actor Actor, queue string) ([]AgentPool, error) {
+func (s *WorkflowEngine) ListAgentPools(ctx context.Context, actor Actor, queue string) ([]AgentPool, error) {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ type WorkflowResolver func(ref string) (digest string, err error)
 // SetWorkflowResolver installs the resolver SetQueueWorkflow uses to turn a
 // workflow ref into a digest. Without one, binding is unavailable. It must be
 // called before the service handles requests.
-func (s *Service) SetWorkflowResolver(resolve WorkflowResolver) { s.workflowResolver = resolve }
+func (s *WorkflowEngine) SetWorkflowResolver(resolve WorkflowResolver) { s.workflowResolver = resolve }
 
 func queueWorkflowRevisionConflict(current int64) error {
 	return &Error{
@@ -309,7 +309,7 @@ func poolsEmptyError(pools []string) error {
 	}
 }
 
-func (s *Service) resolveWorkflowRef(ref string) (string, error) {
+func (s *WorkflowEngine) resolveWorkflowRef(ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return "", domainError(http.StatusBadRequest, "missing_workflow", "workflow reference is required")
@@ -347,7 +347,7 @@ func workflowRefTag(ref string) string {
 // the current binding revision, 0 for a first binding. Binding the digest and
 // tag that are already bound changes nothing and keeps the revision. A binding
 // made by a tag follows it; see FollowQueueWorkflows.
-func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref string, revision int64) (QueueWorkflow, error) {
+func (s *WorkflowEngine) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref string, revision int64) (QueueWorkflow, error) {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return QueueWorkflow{}, err
 	}
@@ -357,7 +357,7 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 	if err != nil {
 		return QueueWorkflow{}, err
 	}
-	global, err := s.globalEnvNames()
+	global, err := s.admin.globalEnvNames()
 	if err != nil {
 		return QueueWorkflow{}, err
 	}
@@ -436,7 +436,7 @@ func (s *Service) SetQueueWorkflow(ctx context.Context, actor Actor, queue, ref 
 // FollowQueueWorkflows moves every binding made by a tag of the workflow
 // image name, or of any image when name is empty, to the digest its tag names
 // now. Tasks already created keep the digest they are pinned to.
-func (s *Service) FollowQueueWorkflows(ctx context.Context, name string) error {
+func (s *WorkflowEngine) FollowQueueWorkflows(ctx context.Context, name string) error {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT qw.queue_prefix FROM task_queue_workflows qw
 		JOIN task_workflow_images wi ON wi.digest = qw.workflow_digest
@@ -469,7 +469,7 @@ func (s *Service) FollowQueueWorkflows(ctx context.Context, name string) error {
 	return errors.Join(errs...)
 }
 
-func (s *Service) followQueueWorkflow(ctx context.Context, queue string) (bool, error) {
+func (s *WorkflowEngine) followQueueWorkflow(ctx context.Context, queue string) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -491,7 +491,7 @@ func (s *Service) followQueueWorkflow(ctx context.Context, queue string) (bool, 
 // keeps the binding. When a pool of the new version is empty or a secret it
 // requires is missing, the binding stays and a queue.workflow_follow_blocked
 // event records why; the next task, publication or daemon start retries.
-func (s *Service) followQueueWorkflowTx(ctx context.Context, tx *sql.Tx, current QueueWorkflow) (QueueWorkflow, error) {
+func (s *WorkflowEngine) followQueueWorkflowTx(ctx context.Context, tx *sql.Tx, current QueueWorkflow) (QueueWorkflow, error) {
 	if current.Tag == "" || s.workflowResolver == nil {
 		return current, nil
 	}
@@ -506,7 +506,7 @@ func (s *Service) followQueueWorkflowTx(ctx context.Context, tx *sql.Tx, current
 	} else if err != nil {
 		return QueueWorkflow{}, err
 	}
-	global, err := s.globalEnvNames()
+	global, err := s.admin.globalEnvNames()
 	if err != nil {
 		return QueueWorkflow{}, err
 	}
@@ -554,7 +554,7 @@ func (s *Service) followQueueWorkflowTx(ctx context.Context, tx *sql.Tx, current
 
 // ClearQueueWorkflow removes the binding of a queue. Tasks already created
 // keep the digest they are pinned to.
-func (s *Service) ClearQueueWorkflow(ctx context.Context, actor Actor, queue string, revision int64) error {
+func (s *WorkflowEngine) ClearQueueWorkflow(ctx context.Context, actor Actor, queue string, revision int64) error {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return err
 	}
@@ -601,7 +601,7 @@ func (s *Service) ClearQueueWorkflow(ctx context.Context, actor Actor, queue str
 }
 
 // GetQueueWorkflow returns the workflow image a queue is bound to.
-func (s *Service) GetQueueWorkflow(ctx context.Context, actor Actor, queue string) (QueueWorkflow, error) {
+func (s *WorkflowEngine) GetQueueWorkflow(ctx context.Context, actor Actor, queue string) (QueueWorkflow, error) {
 	if err := s.requireWorkflowAdmin(actor); err != nil {
 		return QueueWorkflow{}, err
 	}

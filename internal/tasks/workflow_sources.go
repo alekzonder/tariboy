@@ -233,7 +233,7 @@ func nextSourceRun(src workflowfile.Source, last SourceRun, found bool, now time
 // QueueSourceJobs lists every source of every bound queue, due or not, so the
 // worker also learns which running sources are no longer bound. It reads
 // through s.db one query at a time: the database has a single connection.
-func (s *Service) QueueSourceJobs(ctx context.Context, now time.Time) ([]SourceJob, error) {
+func (s *RunService) QueueSourceJobs(ctx context.Context, now time.Time) ([]SourceJob, error) {
 	sources, err := boundSourcesTx(ctx, s.db, "")
 	if err != nil {
 		return nil, err
@@ -259,7 +259,7 @@ func (s *Service) QueueSourceJobs(ctx context.Context, now time.Time) ([]SourceJ
 			job.Artifacts = append(job.Artifacts, declared.Name)
 		}
 		if job.Due {
-			if job.QueueEnv, job.QueueSecrets, err = s.queueEnvironment(ctx, b.queue); err != nil {
+			if job.QueueEnv, job.QueueSecrets, err = s.admin.queueEnvironment(ctx, b.queue); err != nil {
 				return nil, err
 			}
 		}
@@ -270,7 +270,7 @@ func (s *Service) QueueSourceJobs(ctx context.Context, now time.Time) ([]SourceJ
 
 // StartSourceRun records a running run of job and returns its id. A source
 // that already has a running run is refused by the database.
-func (s *Service) StartSourceRun(ctx context.Context, job SourceJob, startedAt time.Time) (int64, error) {
+func (s *RunService) StartSourceRun(ctx context.Context, job SourceJob, startedAt time.Time) (int64, error) {
 	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO task_queue_source_runs(queue_prefix, source, script, workflow_digest, state, started_at)
 		VALUES (?, ?, ?, ?, 'running', ?)`, job.Queue, job.Source, job.Script, job.WorkflowDigest, store.FormatTime(startedAt))
@@ -282,7 +282,7 @@ func (s *Service) StartSourceRun(ctx context.Context, job SourceJob, startedAt t
 
 // SetSourceRunPID records the process and log of a running source run, so its
 // log can be read before the run finishes; an empty logPath keeps the stored one.
-func (s *Service) SetSourceRunPID(ctx context.Context, id int64, pid int, logPath string) error {
+func (s *RunService) SetSourceRunPID(ctx context.Context, id int64, pid int, logPath string) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE task_queue_source_runs SET pid = ?, log_path = COALESCE(NULLIF(?, ''), log_path)
 		WHERE id = ? AND state = 'running'`, pid, logPath, id)
@@ -291,13 +291,13 @@ func (s *Service) SetSourceRunPID(ctx context.Context, id int64, pid int, logPat
 
 // RunningSourceRuns lists every running source run with its recorded PID; at
 // daemon start the worker uses it to find the scripts a previous daemon left.
-func (s *Service) RunningSourceRuns(ctx context.Context) ([]SourceRun, error) {
+func (s *RunService) RunningSourceRuns(ctx context.Context) ([]SourceRun, error) {
 	return querySourceRuns(ctx, s.db, ` WHERE state = 'running' ORDER BY id`)
 }
 
 // RecoverSourceRuns records every running source run as interrupted; the source
 // runs next after every, as after any finished run.
-func (s *Service) RecoverSourceRuns(ctx context.Context) error {
+func (s *RunService) RecoverSourceRuns(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE task_queue_source_runs SET state = 'interrupted', finished_at = ?,
 			message = 'the daemon restarted during the run'
@@ -310,7 +310,7 @@ func (s *Service) RecoverSourceRuns(ctx context.Context) error {
 // failure creates none, and a crash after the commit repeats none. A run whose
 // source the queue's workflow no longer declares is recorded as cancelled and
 // creates nothing. Completing a run that is no longer running is a no-op.
-func (s *Service) CompleteSourceRun(ctx context.Context, id int64, done SourceCompletion) error {
+func (s *RunService) CompleteSourceRun(ctx context.Context, id int64, done SourceCompletion) error {
 	switch done.Verdict {
 	case verdictItems, verdictQuiet, verdictFailure:
 	default:
@@ -413,7 +413,7 @@ func (e *invalidSourceItem) Error() string { return e.err.Error() }
 // createSourceTasksTx creates the tasks of the items whose key is new, as the
 // customer, and records each key. Every item is checked before any task is
 // created.
-func (s *Service) createSourceTasksTx(ctx context.Context, tx *sql.Tx, b boundSource, run SourceRun, items []SourceItem) (int, error) {
+func (s *RunService) createSourceTasksTx(ctx context.Context, tx *sql.Tx, b boundSource, run SourceRun, items []SourceItem) (int, error) {
 	for i, item := range items {
 		if err := validateScriptArtifacts(b.manifest, item.Artifacts); err != nil {
 			return 0, &invalidSourceItem{fmt.Errorf("item %d: %w", i, err)}
@@ -440,7 +440,7 @@ func (s *Service) createSourceTasksTx(ctx context.Context, tx *sql.Tx, b boundSo
 			description += "\n\n"
 		}
 		description += "Created by source " + CodeSpan(run.Source) + " for item " + CodeSpan(item.Key) + "."
-		task, err := s.createTaskTx(ctx, tx, actor, CreateTaskInput{
+		task, err := s.taskSvc.createTaskTx(ctx, tx, actor, CreateTaskInput{
 			Queue: run.Queue, Title: item.Title, Description: description, Priority: item.Priority,
 		})
 		if err != nil {
@@ -467,8 +467,8 @@ func (s *Service) createSourceTasksTx(ctx context.Context, tx *sql.Tx, b boundSo
 
 // ListQueueSources returns the sources of a queue's bound workflow with their
 // schedule and newest run. Only the customer may read them.
-func (s *Service) ListQueueSources(ctx context.Context, actor Actor, queue string) ([]QueueSource, error) {
-	if err := s.requireWorkflowAdmin(actor); err != nil {
+func (s *RunService) ListQueueSources(ctx context.Context, actor Actor, queue string) ([]QueueSource, error) {
+	if err := s.engine.requireWorkflowAdmin(actor); err != nil {
 		return nil, err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))
@@ -513,8 +513,8 @@ func (s *Service) ListQueueSources(ctx context.Context, actor Actor, queue strin
 
 // QueueSourceRunLog returns the tail of a source run's log, as ScriptRunLog
 // does for a task's run. Only the customer may read it.
-func (s *Service) QueueSourceRunLog(ctx context.Context, actor Actor, queue string, id int64, maxBytes int) (string, bool, error) {
-	if err := s.requireWorkflowAdmin(actor); err != nil {
+func (s *RunService) QueueSourceRunLog(ctx context.Context, actor Actor, queue string, id int64, maxBytes int) (string, bool, error) {
+	if err := s.engine.requireWorkflowAdmin(actor); err != nil {
 		return "", false, err
 	}
 	queue = strings.ToUpper(strings.TrimSpace(queue))

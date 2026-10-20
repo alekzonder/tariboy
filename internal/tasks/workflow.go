@@ -30,7 +30,7 @@ func descendantCounts(ctx context.Context, q queryer, taskID int64) (total int, 
 	return total, active, err
 }
 
-func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in UpdateTaskInput) (Task, error) {
+func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, in UpdateTaskInput) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err
 	}
@@ -158,7 +158,7 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 	return task, nil
 }
 
-func (s *Service) CompleteTask(ctx context.Context, actor Actor, key string, in CompleteInput) (Task, error) {
+func (s *TaskService) CompleteTask(ctx context.Context, actor Actor, key string, in CompleteInput) (Task, error) {
 	if !in.CompleteAnyway {
 		// UpdateTask accepts an unchanged status on a workflow task, so a
 		// workflow task already closed is refused here rather than there.
@@ -218,7 +218,7 @@ func (s *Service) CompleteTask(ctx context.Context, actor Actor, key string, in 
 	return task, nil
 }
 
-func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in RelationInput) (Relation, error) {
+func (s *TaskService) AddRelation(ctx context.Context, actor Actor, key string, in RelationInput) (Relation, error) {
 	if err := validateActor(actor); err != nil {
 		return Relation{}, err
 	}
@@ -329,7 +329,7 @@ func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in R
 	return relation, nil
 }
 
-func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, in DeleteRelationInput) error {
+func (s *TaskService) DeleteRelation(ctx context.Context, actor Actor, key string, in DeleteRelationInput) error {
 	if err := validateActor(actor); err != nil {
 		return err
 	}
@@ -418,7 +418,7 @@ func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, i
 	return nil
 }
 
-func (s *Service) ClaimTask(ctx context.Context, actor Actor, key string, revision int64) (Task, error) {
+func (s *TaskService) ClaimTask(ctx context.Context, actor Actor, key string, revision int64) (Task, error) {
 	if actor.IsCustomer || !strings.HasPrefix(actor.Principal, "agent:") {
 		return Task{}, domainError(http.StatusForbidden, "forbidden", "only an agent can claim a task")
 	}

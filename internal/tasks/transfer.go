@@ -79,7 +79,7 @@ LEFT JOIN tasks p ON p.id = t.parent_id
 ORDER BY t.id`
 
 // ExportTask reads a task and its whole subtree as a transferable bundle.
-func (s *Service) ExportTask(ctx context.Context, actor Actor, key string) (TransferBundle, error) {
+func (s *TaskService) ExportTask(ctx context.Context, actor Actor, key string) (TransferBundle, error) {
 	if err := validateActor(actor); err != nil {
 		return TransferBundle{}, err
 	}
@@ -198,7 +198,7 @@ func transferRelations(ctx context.Context, db *sql.DB, rootID int64) ([]Transfe
 // ImportTask writes an exported bundle into this daemon under its original
 // keys. It refuses rather than renaming anything: a missing queue or a key that
 // is already in use here means the transfer was aimed at the wrong daemon.
-func (s *Service) ImportTask(ctx context.Context, actor Actor, bundle TransferBundle) (Task, error) {
+func (s *TaskService) ImportTask(ctx context.Context, actor Actor, bundle TransferBundle) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err
 	}

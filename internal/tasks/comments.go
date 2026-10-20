@@ -11,7 +11,7 @@ import (
 
 var mentionRE = regexp.MustCompile(`@((?:agent|user):[A-Za-z0-9][A-Za-z0-9._-]*)`)
 
-func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in AddCommentInput) (CommentResult, error) {
+func (s *TaskService) AddComment(ctx context.Context, actor Actor, key string, in AddCommentInput) (CommentResult, error) {
 	if err := validateActor(actor); err != nil {
 		return CommentResult{}, err
 	}
@@ -200,7 +200,7 @@ func commentWorkflowStateTx(ctx context.Context, tx *sql.Tx, task *Task, asks, a
 	})
 }
 
-func (s *Service) parseMentions(body string) []string {
+func (s *TaskService) parseMentions(body string) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	for _, match := range mentionRE.FindAllStringSubmatch(body, -1) {

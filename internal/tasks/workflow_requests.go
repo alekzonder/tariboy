@@ -31,7 +31,7 @@ type AdvanceInput struct {
 // without checks applies in this call. A transition with checks is recorded
 // as a pending request with a pending run of its first check, and applies when
 // the last check passes.
-func (s *Service) Advance(ctx context.Context, actor Actor, key string, in AdvanceInput) (TransitionRequest, error) {
+func (s *WorkflowEngine) Advance(ctx context.Context, actor Actor, key string, in AdvanceInput) (TransitionRequest, error) {
 	if err := validateActor(actor); err != nil {
 		return TransitionRequest{}, err
 	}
@@ -43,7 +43,7 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 // only for the task's latest request made in its open visit: a failure is a
 // broken script or environment the customer may have fixed since, while a
 // rejection is the holder's to answer.
-func (s *Service) RetryTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
+func (s *WorkflowEngine) RetryTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return TransitionRequest{}, err
 	}
@@ -52,7 +52,7 @@ func (s *Service) RetryTransitionRequest(ctx context.Context, actor Actor, key s
 
 // advance records a transition request. With retryOf set it repeats that
 // failed request in place of in, on behalf of its requester.
-func (s *Service) advance(ctx context.Context, actor Actor, key string, in AdvanceInput, retryOf int64) (TransitionRequest, error) {
+func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, in AdvanceInput, retryOf int64) (TransitionRequest, error) {
 	in.Outcome = strings.TrimSpace(in.Outcome)
 	if len(in.Message) > maxTransitionMessageBytes {
 		return TransitionRequest{}, domainError(http.StatusBadRequest, "invalid_message",
@@ -243,7 +243,7 @@ func retriedRequestTx(ctx context.Context, tx *sql.Tx, task Task, id int64) (Adv
 // message. It is the one place a request becomes a status change; a caller
 // that applies a pending request later must first confirm the request's visit
 // is still the task's open visit.
-func (s *Service) applyTransitionTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, requestID int64, transition workflowfile.Transition, actor, message string) error {
+func (s *WorkflowEngine) applyTransitionTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, requestID int64, transition workflowfile.Transition, actor, message string) error {
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE task_transition_requests SET state = 'applied', finished_at = ? WHERE id = ?`,
 		s.now(), requestID); err != nil {
@@ -268,7 +268,7 @@ func checkWaitSeconds(transition workflowfile.Transition) int {
 
 // GetTransitionRequest returns one transition request of a task the actor may
 // read. A pending request carries WaitSeconds.
-func (s *Service) GetTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
+func (s *WorkflowEngine) GetTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
 	if err := validateActor(actor); err != nil {
 		return TransitionRequest{}, err
 	}
@@ -306,7 +306,7 @@ func (s *Service) GetTransitionRequest(ctx context.Context, actor Actor, key str
 }
 
 // MoveWorkflow moves a task to any status without checks. Customer only.
-func (s *Service) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason string) (Task, error) {
+func (s *WorkflowEngine) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason string) (Task, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return Task{}, err
 	}
@@ -383,7 +383,7 @@ func (s *Service) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason
 }
 
 // CancelWorkflowTask closes a workflow task as cancelled. Customer only.
-func (s *Service) CancelWorkflowTask(ctx context.Context, actor Actor, key string) (Task, error) {
+func (s *WorkflowEngine) CancelWorkflowTask(ctx context.Context, actor Actor, key string) (Task, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return Task{}, err
 	}

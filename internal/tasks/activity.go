@@ -51,7 +51,7 @@ func activityWindow(col string, f ActivityFilter) (string, []any) {
 }
 
 // TaskActivity summarizes the window's task events per task the actor can see.
-func (s *Service) TaskActivity(ctx context.Context, actor Actor, f ActivityFilter) ([]TaskActivity, error) {
+func (s *TaskService) TaskActivity(ctx context.Context, actor Actor, f ActivityFilter) ([]TaskActivity, error) {
 	if err := validateActor(actor); err != nil {
 		return nil, err
 	}

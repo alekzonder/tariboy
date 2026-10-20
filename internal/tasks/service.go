@@ -7,100 +7,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
-
-	"github.com/alekzonder/tariboy/internal/store"
 )
 
 var queuePrefixRE = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
-
-type Service struct {
-	db                                       *sql.DB
-	read                                     *sql.DB
-	customer                                 string
-	clock                                    func() time.Time
-	hub                                      *Hub
-	goalSignal                               func()
-	workflowResolver                         WorkflowResolver
-	runBaseDir                               string
-	globalEnv                                func() ([]string, error)
-	log                                      *slog.Logger
-	holderFailuresMu                         sync.Mutex
-	holderFailures                           map[int64]string // task id -> logged manifest failure of CheckHolders
-	workflowIngressEnabled                   atomic.Bool
-	workflowIngressAfterTargetCount          func()
-	workflowActivationAfterWriterReservation func()
-}
-
-func NewService(db *sql.DB, customer string, clock func() time.Time) *Service {
-	if clock == nil {
-		clock = time.Now
-	}
-	s := &Service{db: db, customer: strings.TrimPrefix(strings.TrimSpace(customer), "user:"), clock: clock}
-	s.refreshWorkflowIngressEnabled(context.Background())
-	return s
-}
-
-// SetReader makes ListTasks, which the UI polls, read through a read-only
-// connection pool instead of the writer connection.
-func (s *Service) SetReader(db *sql.DB) { s.read = db }
-
-func (s *Service) reader() *sql.DB {
-	if s.read != nil {
-		return s.read
-	}
-	return s.db
-}
-
-func (s *Service) WorkflowIngressEnabled() bool { return s.workflowIngressEnabled.Load() }
-
-func (s *Service) refreshWorkflowIngressEnabled(ctx context.Context) {
-	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM task_queue_workflow_triggers WHERE enabled=1`).Scan(&count); err == nil {
-		s.workflowIngressEnabled.Store(count > 0)
-	}
-}
-
-func (s *Service) CustomerLogin() string { return s.customer }
-
-func (s *Service) SetHub(hub *Hub) { s.hub = hub }
-
-// SetRunBaseDir sets the daemon base directory under which workflow script runs
-// keep their files, so a run's log is read only from where the worker wrote it.
-func (s *Service) SetRunBaseDir(dir string) { s.runBaseDir = dir }
-
-func (s *Service) SetGoalSignal(signal func()) { s.goalSignal = signal }
-
-// SetLogger sets where the service logs what it skips instead of failing a
-// whole call, such as a pending script run whose job cannot be built.
-func (s *Service) SetLogger(log *slog.Logger) { s.log = log }
-
-func (s *Service) logger() *slog.Logger {
-	if s.log == nil {
-		return slog.Default()
-	}
-	return s.log
-}
-
-func (s *Service) signal() {
-	if s.hub != nil {
-		s.hub.Nudge()
-	}
-	if s.goalSignal != nil {
-		s.goalSignal()
-	}
-}
-
-func (s *Service) now() string {
-	return store.FormatTime(s.clock())
-}
 
 func newID(prefix string) string {
 	var b [12]byte
@@ -110,100 +24,7 @@ func newID(prefix string) string {
 	return prefix + "-" + hex.EncodeToString(b[:])
 }
 
-func (s *Service) CreateQueue(ctx context.Context, actor Actor, in CreateQueueInput) (Queue, error) {
-	if err := validateActor(actor); err != nil {
-		return Queue{}, err
-	}
-	if !actor.IsCustomer || actor.Principal != userPrincipal(s.customer) {
-		return Queue{}, domainError(http.StatusForbidden, "forbidden", "only the daemon customer can administer queues")
-	}
-	in.Prefix = strings.ToUpper(strings.TrimSpace(in.Prefix))
-	in.Name = strings.TrimSpace(in.Name)
-	if !queuePrefixRE.MatchString(in.Prefix) {
-		return Queue{}, domainError(http.StatusBadRequest, "invalid_queue_prefix",
-			"queue prefix must match ^[A-Z][A-Z0-9]{1,9}$")
-	}
-	if in.Name == "" {
-		return Queue{}, domainError(http.StatusBadRequest, "missing_name", "queue name is required")
-	}
-	now := s.now()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Queue{}, err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO task_queues(prefix, name, description, responsible_agent, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		in.Prefix, in.Name, strings.TrimSpace(in.Description),
-		strings.TrimPrefix(normalizeAssignee(in.ResponsibleAgent), "agent:"), now, now); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return Queue{}, domainError(http.StatusConflict, "queue_exists", "queue prefix already exists")
-		}
-		return Queue{}, err
-	}
-	owners := make([]string, 0, len(in.Owners))
-	seen := map[string]bool{}
-	for _, owner := range in.Owners {
-		owner = strings.TrimPrefix(normalizeAssignee(owner), "agent:")
-		if owner == "" || seen[owner] {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO task_queue_owners(queue_prefix, agent) VALUES (?, ?)`,
-			in.Prefix, owner); err != nil {
-			return Queue{}, err
-		}
-		seen[owner] = true
-		owners = append(owners, owner)
-	}
-	queue := Queue{
-		Prefix: in.Prefix, Name: in.Name, Description: strings.TrimSpace(in.Description),
-		Owners: owners, ResponsibleAgent: strings.TrimPrefix(normalizeAssignee(in.ResponsibleAgent), "agent:"),
-		Revision: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	if _, err := appendQueueEventTx(ctx, tx, queue, "task.queue_created", actor,
-		map[string]any{"name": queue.Name}, now); err != nil {
-		return Queue{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return Queue{}, err
-	}
-	s.signal()
-	return queue, nil
-}
-
-// EnsureDefaultQueue creates the TASK queue when it is absent, so every daemon
-// starts with one queue. An existing TASK queue is left untouched.
-func (s *Service) EnsureDefaultQueue(ctx context.Context) error {
-	now := s.now()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	queue := Queue{Prefix: "TASK", Name: "Tasks", Owners: []string{}, Revision: 1, CreatedAt: now, UpdatedAt: now}
-	result, err := tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO task_queues(prefix, name, description, responsible_agent, created_at, updated_at)
-		VALUES (?, ?, '', '', ?, ?)`, queue.Prefix, queue.Name, now, now)
-	if err != nil {
-		return err
-	}
-	if n, err := result.RowsAffected(); err != nil || n == 0 {
-		return err
-	}
-	if _, err := appendQueueEventTx(ctx, tx, queue, "task.queue_created",
-		Actor{Principal: "system:tariboyd"}, map[string]any{"name": queue.Name}, now); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.signal()
-	return nil
-}
-
-func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInput) (Task, error) {
+func (s *TaskService) CreateTask(ctx context.Context, actor Actor, in CreateTaskInput) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err
 	}
@@ -246,7 +67,7 @@ func (s *Service) CreateTask(ctx context.Context, actor Actor, in CreateTaskInpu
 
 // createTaskTx creates a task inside tx; a task of a bound queue enters the
 // workflow's initial status. It neither reads nor writes idempotency.
-func (s *Service) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in CreateTaskInput) (Task, error) {
+func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in CreateTaskInput) (Task, error) {
 	in.Title = strings.TrimSpace(in.Title)
 	if in.Title == "" {
 		return Task{}, domainError(http.StatusBadRequest, "missing_title", "task title is required")
@@ -299,7 +120,7 @@ func (s *Service) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in 
 			return Task{}, workflowManagedError()
 		}
 		// A binding made by a tag gives each new task the version the tag names now.
-		if binding, err = s.followQueueWorkflowTx(ctx, tx, binding); err != nil {
+		if binding, err = s.engine.followQueueWorkflowTx(ctx, tx, binding); err != nil {
 			return Task{}, err
 		}
 		workflowDigest = binding.Digest
@@ -384,7 +205,7 @@ func (s *Service) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in 
 		if err != nil {
 			return Task{}, err
 		}
-		if err := s.enterStatusTx(ctx, tx, &task, manifest, manifest.Definition.InitialStatus, actor.Principal, "", ""); err != nil {
+		if err := s.engine.enterStatusTx(ctx, tx, &task, manifest, manifest.Definition.InitialStatus, actor.Principal, "", ""); err != nil {
 			return Task{}, err
 		}
 	} else if task.Assignee != "" && task.Assignee != actor.Principal {
@@ -470,7 +291,7 @@ func writeTaskIdempotency(
 	return err
 }
 
-func (s *Service) GetTask(ctx context.Context, actor Actor, key string) (TaskDetail, error) {
+func (s *TaskService) GetTask(ctx context.Context, actor Actor, key string) (TaskDetail, error) {
 	if err := validateActor(actor); err != nil {
 		return TaskDetail{}, err
 	}
@@ -525,7 +346,7 @@ var listOrders = map[string]struct{ by, after string }{
 	},
 }
 
-func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter) (TaskPage, error) {
+func (s *TaskService) ListTasks(ctx context.Context, actor Actor, filter ListFilter) (TaskPage, error) {
 	if err := validateActor(actor); err != nil {
 		return TaskPage{}, err
 	}
