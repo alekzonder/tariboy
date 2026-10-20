@@ -28,6 +28,7 @@ func providerRecords() []Record {
 }
 
 func TestValidateSubscribeParams(t *testing.T) {
+	t.Parallel()
 	recs := providerRecords()
 	cases := []struct {
 		name    string
@@ -58,6 +59,7 @@ func TestValidateSubscribeParams(t *testing.T) {
 }
 
 func TestProviderForAndIsProviderChannel(t *testing.T) {
+	t.Parallel()
 	recs := providerRecords()
 	if owner, p, ok := ProviderFor(recs, "issue-provider:query"); !ok || owner != "issue-provider" || p.Channel != "issue-provider:query" {
 		t.Fatalf("ProviderFor(issue-provider:query) = %q %+v %v", owner, p, ok)
@@ -77,6 +79,7 @@ func TestProviderForAndIsProviderChannel(t *testing.T) {
 // sorted by channel, param keys unioned from required+properties, help trimmed
 // to its first line, and schema-less channels contributing no params.
 func TestProvidedChannels(t *testing.T) {
+	t.Parallel()
 	recs := []Record{
 		{
 			Name: "issue-provider",
@@ -124,6 +127,7 @@ func TestProvidedChannels(t *testing.T) {
 // supports directly, including nested items + enum (the issue-provider:ticket example
 // in the spec).
 func TestValidateAgainstSchemaSubset(t *testing.T) {
+	t.Parallel()
 	schema := json.RawMessage(`{
 		"type":"object",
 		"required":["ticket"],

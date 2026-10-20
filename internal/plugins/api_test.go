@@ -24,6 +24,7 @@ func newAPI(t *testing.T) (*API, *bus.Bus, *TokenRegistry) {
 }
 
 func TestPublishScoped(t *testing.T) {
+	t.Parallel()
 	a, b, reg := newAPI(t)
 	tok, _ := reg.Mint(Identity{Name: "echo", Publish: []string{"chat:*"}, Subscribe: []string{"chat:in"}})
 
@@ -72,6 +73,7 @@ func TestPublishScoped(t *testing.T) {
 }
 
 func TestPublishReportsNonDLQRecipients(t *testing.T) {
+	t.Parallel()
 	a, b, reg := newAPI(t)
 	if _, err := b.Subscribe("worker", "chat:telegram:worker", bus.Matcher{}, nil); err != nil {
 		t.Fatal(err)
@@ -98,6 +100,7 @@ func TestPublishReportsNonDLQRecipients(t *testing.T) {
 }
 
 func TestPublishRequiresDeliveryBeforePersistingIdempotentMessage(t *testing.T) {
+	t.Parallel()
 	a, b, reg := newAPI(t)
 	token, _ := reg.Mint(Identity{Name: "telegram", Publish: []string{"chat:telegram:*"}})
 	publish := func() *httptest.ResponseRecorder {
@@ -125,6 +128,7 @@ func TestPublishRequiresDeliveryBeforePersistingIdempotentMessage(t *testing.T) 
 }
 
 func TestSubscriptions(t *testing.T) {
+	t.Parallel()
 	a, _, reg := newAPI(t)
 	tok, _ := reg.Mint(Identity{Name: "echo", Subscribe: []string{"chat:in", "chat:in2"}})
 	rr := httptest.NewRecorder()
@@ -152,6 +156,7 @@ func TestSubscriptions(t *testing.T) {
 // it returns the full current watch list for exactly the plugin's provided
 // channels, scoped by the plugin token.
 func TestPluginWatchesPull(t *testing.T) {
+	t.Parallel()
 	a, b, reg := newAPI(t)
 	tok, _ := reg.Mint(Identity{Name: "issue-provider", Provide: []string{"issue-provider:query", "issue-provider:ticket"}})
 

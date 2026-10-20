@@ -20,6 +20,7 @@ func (f fakeLister) List() ([]Record, error) { return f.recs, f.err }
 // while a readable store still enforces a provided channel's required-params
 // gate loudly.
 func TestParamsValidatorForSwallowsListError(t *testing.T) {
+	t.Parallel()
 	// Store unreadable: every subscribe is allowed, target treated as non-provider.
 	var gotChannel string
 	var gotErr error
@@ -55,6 +56,7 @@ func TestParamsValidatorForSwallowsListError(t *testing.T) {
 // TestParamsValidatorForNilOnErrCallback ensures a nil onListErr callback is
 // tolerated (the daemon always passes one, but the helper must not panic).
 func TestParamsValidatorForNilOnErrCallback(t *testing.T) {
+	t.Parallel()
 	v := ParamsValidatorFor(fakeLister{err: errors.New("boom")}, nil)
 	if err := v("chat:room", nil); err != nil {
 		t.Fatalf("expected nil error with nil callback, got: %v", err)

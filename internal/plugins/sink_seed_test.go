@@ -24,6 +24,7 @@ import (
 // Together this is the fix for the dead sink: subscribe=[chat:*] used to be
 // literal-subscribed and match nothing, so /deliver never ran.
 func TestSinkSeedOnPublishAndEchoSuppression(t *testing.T) {
+	t.Parallel()
 	h, b, _ := newHost(t, nil)
 	// API shares the host's bus + token registry so a seed on publish is visible
 	// to the host drainer.
@@ -103,6 +104,7 @@ func TestSinkSeedOnPublishAndEchoSuppression(t *testing.T) {
 // subscribe a glob entry (which the exact-match bus can never deliver to) while
 // still subscribing a concrete entry alongside it.
 func TestSinkStartSkipsGlobSubscribe(t *testing.T) {
+	t.Parallel()
 	h, b, _ := newHost(t, nil)
 	rec := Record{
 		Name:  "messenger",

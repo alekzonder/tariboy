@@ -45,6 +45,7 @@ func actionSink(t *testing.T, h *Host, store *Store, name string, subscribe []st
 }
 
 func TestApplyActionSubscriptionsAddsIdempotently(t *testing.T) {
+	t.Parallel()
 	h, b, store := newHost(t, nil)
 	actionSink(t, h, store, "messenger-provider", []string{"chat:*"})
 	response := map[string]any{
@@ -65,6 +66,7 @@ func TestApplyActionSubscriptionsAddsIdempotently(t *testing.T) {
 }
 
 func TestApplyActionSubscriptionsRejectsInvalidBatchWithoutPartialMutation(t *testing.T) {
+	t.Parallel()
 	h, b, store := newHost(t, nil)
 	actionSink(t, h, store, "messenger-provider", []string{"chat:*"})
 	response := map[string]any{
@@ -79,6 +81,7 @@ func TestApplyActionSubscriptionsRejectsInvalidBatchWithoutPartialMutation(t *te
 }
 
 func TestApplyActionSubscriptionsPreservesDeclaredConcreteSubscription(t *testing.T) {
+	t.Parallel()
 	h, b, store := newHost(t, nil)
 	actionSink(t, h, store, "messenger-provider", []string{"chat:*", "chat:standing"})
 	if _, err := b.Subscribe("plugin:messenger-provider", "chat:standing", bus.Matcher{}, nil); err != nil {
@@ -96,6 +99,7 @@ func TestApplyActionSubscriptionsPreservesDeclaredConcreteSubscription(t *testin
 }
 
 func TestApplyActionSubscriptionsRemovesOnlyUnusedRouteChannel(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name      string
 		routes    map[string]any
@@ -138,6 +142,7 @@ func TestApplyActionSubscriptionsRemovesOnlyUnusedRouteChannel(t *testing.T) {
 }
 
 func TestApplyActionSubscriptionsRejectsMalformedMetadataAndNonSink(t *testing.T) {
+	t.Parallel()
 	h, _, store := newHost(t, nil)
 	actionSink(t, h, store, "messenger-provider", []string{"chat:*"})
 	for _, response := range []map[string]any{

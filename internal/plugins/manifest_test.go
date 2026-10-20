@@ -18,6 +18,7 @@ const goodManifest = `{
 }`
 
 func TestParseAndValidate(t *testing.T) {
+	t.Parallel()
 	m, err := ParseManifest([]byte(goodManifest))
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +35,7 @@ func TestParseAndValidate(t *testing.T) {
 }
 
 func TestValidateRejects(t *testing.T) {
+	t.Parallel()
 	base := func() Manifest { m, _ := ParseManifest([]byte(goodManifest)); return m }
 	cases := map[string]func(*Manifest){
 		"bad name":                       func(m *Manifest) { m.Name = "Echo Plugin!" },
@@ -61,6 +63,7 @@ func TestValidateRejects(t *testing.T) {
 }
 
 func TestValidateRejectsOperatorCommandWithoutAction(t *testing.T) {
+	t.Parallel()
 	m, err := ParseManifest([]byte(`{
   "name":"telegram","version":"0.1.0","protocol_version":1,
   "types":["channel-source"],"exec":"telegram",
@@ -76,6 +79,7 @@ func TestValidateRejectsOperatorCommandWithoutAction(t *testing.T) {
 }
 
 func TestValidateOperatorContributions(t *testing.T) {
+	t.Parallel()
 	valid := `{
   "name":"telegram","version":"0.1.0","protocol_version":1,
   "types":["channel-source","channel-sink"],"exec":"telegram",
@@ -137,6 +141,7 @@ func TestValidateOperatorContributions(t *testing.T) {
 }
 
 func TestValidateOperatorActionData(t *testing.T) {
+	t.Parallel()
 	m, err := ParseManifest([]byte(`{
   "name":"telegram","version":"0.1.0","protocol_version":1,
   "types":["channel-source"],"exec":"telegram",
@@ -193,6 +198,7 @@ const provideManifest = `{
 }`
 
 func TestValidateAcceptsProvide(t *testing.T) {
+	t.Parallel()
 	m, err := ParseManifest([]byte(provideManifest))
 	if err != nil {
 		t.Fatal(err)
@@ -206,6 +212,7 @@ func TestValidateAcceptsProvide(t *testing.T) {
 }
 
 func TestValidateRejectsProvide(t *testing.T) {
+	t.Parallel()
 	base := func() Manifest { m, _ := ParseManifest([]byte(provideManifest)); return m }
 	cases := map[string]func(*Manifest){
 		"provide outside publish scope": func(m *Manifest) {
@@ -234,6 +241,7 @@ func TestValidateRejectsProvide(t *testing.T) {
 }
 
 func TestLoadManifest(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(goodManifest), 0o600); err != nil {
 		t.Fatal(err)
@@ -259,6 +267,7 @@ const promptManifest = `{
 }`
 
 func TestLoadPrompt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(promptManifest), 0o600); err != nil {
 		t.Fatal(err)
@@ -291,6 +300,7 @@ func TestLoadPrompt(t *testing.T) {
 }
 
 func TestResolveInstalledReadsDeclaredPrompt(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	pdir := filepath.Join(root, "sample-plugin")
 	if err := os.MkdirAll(pdir, 0o700); err != nil {
@@ -319,6 +329,7 @@ func TestResolveInstalledReadsDeclaredPrompt(t *testing.T) {
 }
 
 func TestResolveInstalledDistinguishesPromptlessPluginFromMissing(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	dir := filepath.Join(root, "issue-provider")
 	if err := os.MkdirAll(dir, 0o700); err != nil {

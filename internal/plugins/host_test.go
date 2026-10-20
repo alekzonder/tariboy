@@ -16,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func newHost(t *testing.T, runner Runner) (*Host, *bus.Bus, *Store) {
@@ -35,6 +36,7 @@ func newHost(t *testing.T, runner Runner) (*Host, *bus.Bus, *Store) {
 }
 
 func TestPluginActionNotRunning(t *testing.T) {
+	t.Parallel()
 	h, _, _ := newHost(t, nil)
 	if _, err := h.PluginAction("ghost", map[string]any{"action": "bind"}); !errors.Is(err, ErrNotRunning) {
 		t.Fatalf("PluginAction: want ErrNotRunning, got %v", err)
@@ -45,6 +47,7 @@ func TestPluginActionNotRunning(t *testing.T) {
 }
 
 func TestHostContributionsReturnsEnabledInstalledManifests(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	install := func(name string, enabled bool) {
 		dir := h.versionDir(name, "1.0.0")
@@ -95,22 +98,22 @@ func writeExec(t *testing.T, h *Host, name string) {
 
 func waitRunning(t *testing.T, h *Host, name string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		list, _ := h.List()
+	var list []map[string]any
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		list, _ = h.List()
 		for _, e := range list {
 			if e["name"] == name && e["state"] == "running" {
-				return
+				return true
 			}
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("plugin %s never running: %+v", name, list)
-		}
-		time.Sleep(10 * time.Millisecond)
+		return false
+	}) {
+		t.Fatalf("plugin %s never running: %+v", name, list)
 	}
 }
 
 func TestHostStartReachesRunningAndEmitsEvent(t *testing.T) {
+	t.Parallel()
 	h, b, ps := newHost(t, nil) // runner set per-plugin below via a health server + fake
 	rec := sampleRecord("echo")
 	if err := ps.Upsert(rec); err != nil {
@@ -131,16 +134,12 @@ func TestHostStartReachesRunningAndEmitsEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Poll List until running.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		list, _ := h.List()
-		if len(list) == 1 && list[0]["state"] == "running" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("plugin never running: %+v", list)
-		}
-		time.Sleep(10 * time.Millisecond)
+	var list []map[string]any
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		list, _ = h.List()
+		return len(list) == 1 && list[0]["state"] == "running"
+	}) {
+		t.Fatalf("plugin never running: %+v", list)
 	}
 	// A system:plugins event was published. onState flips the live state to
 	// "running" (observed by the poll loop above) BEFORE its Bus.Publish call
@@ -148,17 +147,11 @@ func TestHostStartReachesRunningAndEmitsEvent(t *testing.T) {
 	// the state flip can race the publish and miss it. Poll with a bounded
 	// deadline instead of reading once, to close that happens-before gap
 	// deterministically without weakening the assertion.
-	var msgs []bus.Message
-	evDeadline := time.Now().Add(2 * time.Second)
-	for {
-		msgs, _ = b.Tail("system:plugins", 10)
-		if len(msgs) > 0 {
-			break
-		}
-		if time.Now().After(evDeadline) {
-			t.Fatal("no system:plugins event")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		msgs, _ := b.Tail("system:plugins", 10)
+		return len(msgs) > 0
+	}) {
+		t.Fatal("no system:plugins event")
 	}
 	// A token was minted for the plugin.
 	if h.cfg.Tokens.Count() != 1 {
@@ -212,6 +205,7 @@ func hasEnvKey(env []string, key string) bool {
 }
 
 func TestHostInjectsSocketAndTokenEnv(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	rec := sampleRecord("echo")
 	if err := ps.Upsert(rec); err != nil {
@@ -259,6 +253,7 @@ func TestHostInjectsSocketAndTokenEnv(t *testing.T) {
 // the accounted proxy. A benign inherited var (PATH) must survive. This mirrors
 // the identical scrub the agent-loop runner applies (internal/loop/runner.go).
 func TestHostScrubsRealProviderKeys(t *testing.T) {
+	// Sequential: t.Setenv.
 	t.Setenv("ANTHROPIC_API_KEY", "real-anthropic-secret")
 	t.Setenv("OPENAI_API_KEY", "real-openai-secret")
 
@@ -297,6 +292,7 @@ func TestHostScrubsRealProviderKeys(t *testing.T) {
 }
 
 func TestHostStopAllDrainsBeforeClose(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	for _, name := range []string{"a", "b", "c"} {
 		rec := sampleRecord(name)
@@ -423,6 +419,7 @@ func (r *countingNameRunner) count(name string) int {
 // untouched (not re-spawned, still running). It also proves the guards: an
 // unknown plugin is ErrNotFound and a disabled one is refused (not silently run).
 func TestHostRestart(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	runner := &countingNameRunner{}
 	h.cfg.Runner = runner
@@ -490,6 +487,7 @@ func TestHostRestart(t *testing.T) {
 }
 
 func TestHostConcurrentStartStop(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
 	names := []string{"p0", "p1", "p2", "p3", "p4", "p5"}
@@ -526,6 +524,7 @@ func TestHostConcurrentStartStop(t *testing.T) {
 }
 
 func TestHostInstallRemove(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
 
@@ -577,6 +576,7 @@ func TestHostInstallRemove(t *testing.T) {
 }
 
 func TestHostInstallKeepsVersionsSideBySideAndActivatesLatest(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
 	install := func(version, script string) string {
@@ -616,6 +616,7 @@ func TestHostInstallKeepsVersionsSideBySideAndActivatesLatest(t *testing.T) {
 }
 
 func TestHostInstallWaitsForPreviousPluginToDrain(t *testing.T) {
+	t.Parallel()
 	runner := &blockingUpgradeRunner{stopEntered: make(chan struct{}), releaseStop: make(chan struct{})}
 	h, _, ps := newHost(t, runner)
 	pluginSource := func(version string) string {
@@ -669,6 +670,7 @@ func TestHostInstallWaitsForPreviousPluginToDrain(t *testing.T) {
 }
 
 func TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion(t *testing.T) {
+	t.Parallel()
 	runner := &blockingUpgradeRunner{stopEntered: make(chan struct{}), releaseStop: make(chan struct{})}
 	h, _, ps := newHost(t, runner)
 	sock := h.SocketPath("single")
@@ -716,10 +718,7 @@ func TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion(t *testing.T) {
 		t.Fatal("install ignored configured drain timeout")
 	}
 	close(runner.releaseStop)
-	deadline := time.Now().Add(2 * time.Second)
-	for runner.count() < 2 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(2*time.Second, func() bool { return runner.count() >= 2 })
 	if runner.count() != 2 {
 		t.Fatalf("rolled-back active process was not restarted: starts=%d", runner.count())
 	}
@@ -730,6 +729,7 @@ func TestHostInstallDrainTimeoutRestartsRolledBackActiveVersion(t *testing.T) {
 }
 
 func TestStartAllMigratesLegacyPackageIntoVersionDirectory(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, &nameRunner{})
 	rec := sampleRecord("legacy")
 	if err := ps.Upsert(rec); err != nil {
@@ -763,6 +763,7 @@ func TestStartAllMigratesLegacyPackageIntoVersionDirectory(t *testing.T) {
 }
 
 func TestHostInstallRejectsNonRegularFile(t *testing.T) {
+	t.Parallel()
 	h, _, _ := newHost(t, &nameRunner{})
 	src := t.TempDir()
 	manifest := `{"name":"fifo-plugin","version":"1.0.0","protocol_version":1,"types":["tool"],"exec":"run.sh","channels":{"publish":[],"subscribe":[]}}`
@@ -781,6 +782,7 @@ func TestHostInstallRejectsNonRegularFile(t *testing.T) {
 }
 
 func TestHostInstallFailureRestoresPreviousActiveVersion(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, &nameRunner{})
 	pluginSource := func(version string) string {
 		dir := t.TempDir()
@@ -827,6 +829,7 @@ func TestHostInstallFailureRestoresPreviousActiveVersion(t *testing.T) {
 // refused (no process, state="error", not in the running map), while a normal
 // same-dir exec still starts.
 func TestStartRefusesSymlinkEscapeExec(t *testing.T) {
+	t.Parallel()
 	h, b, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
 	h.baseCtx = context.Background()
@@ -901,6 +904,7 @@ func TestStartRefusesSymlinkEscapeExec(t *testing.T) {
 // whole-tree reject, not a per-symlink resolve. Nothing must land in
 // PluginsDir and no supervisor must be started.
 func TestHostInstallRejectsSymlinkInTree(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
 
@@ -942,6 +946,7 @@ func TestHostInstallRejectsSymlinkInTree(t *testing.T) {
 // name is still accepted (reaches not_found / real behaviour, not the name
 // error).
 func TestHostRejectsTraversalName(t *testing.T) {
+	t.Parallel()
 	h, _, _ := newHost(t, nil)
 
 	// A sibling directory + file OUTSIDE PluginsDir. "../victim" from inside
@@ -1000,6 +1005,7 @@ func TestHostRejectsTraversalName(t *testing.T) {
 // promptly with no orphaned goroutine/token (the pre-fix TOCTOU orphaned the
 // first rp's cancel, so StopAll could hang and leak).
 func TestStartSameNameConcurrentNoLeak(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	h.cfg.Runner = &nameRunner{}
 	h.baseCtx = context.Background()

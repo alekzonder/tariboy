@@ -14,6 +14,7 @@ func ip(n int) *int { return &n }
 var declared = Declared{Outcomes: []string{"merged", "closed"}, Artifacts: []string{"merge_commit", "notes"}}
 
 func TestClassifyExitTable(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		kind   string
@@ -54,6 +55,7 @@ func TestClassifyExitTable(t *testing.T) {
 }
 
 func TestClassifyCheckPassKeepsMessageAndArtifacts(t *testing.T) {
+	t.Parallel()
 	v := Classify(KindCheck, ip(0), false, []byte(`{"message":"ok","artifacts":{"notes":"n"}}`), nil, declared)
 	if v.Kind != VerdictPass || v.Message != "ok" || v.Artifacts["notes"] != "n" {
 		t.Fatalf("got %+v", v)
@@ -61,6 +63,7 @@ func TestClassifyCheckPassKeepsMessageAndArtifacts(t *testing.T) {
 }
 
 func TestClassifyRejectMessage(t *testing.T) {
+	t.Parallel()
 	v := Classify(KindCheck, ip(112), false, []byte(`{"message":"tests fail","artifacts":{"notes":"n"}}`), nil, declared)
 	if v.Kind != VerdictReject || v.Message != "tests fail" || v.Artifacts != nil {
 		t.Fatalf("got %+v", v)
@@ -76,6 +79,7 @@ func TestClassifyRejectMessage(t *testing.T) {
 }
 
 func TestClassifyWatchOutcomeArtifacts(t *testing.T) {
+	t.Parallel()
 	v := Classify(KindWatch, ip(0), false, []byte(`{"outcome":"merged","message":"m","artifacts":{"merge_commit":"9f"}}`), nil, declared)
 	if v.Kind != VerdictOutcome || v.Message != "m" || v.Artifacts["merge_commit"] != "9f" {
 		t.Fatalf("got %+v", v)
@@ -83,6 +87,7 @@ func TestClassifyWatchOutcomeArtifacts(t *testing.T) {
 }
 
 func TestClassifyFailureReasons(t *testing.T) {
+	t.Parallel()
 	big := strings.Repeat("a", MaxArtifactBytes+1)
 	cases := []struct {
 		name      string
@@ -126,6 +131,7 @@ func TestClassifyFailureReasons(t *testing.T) {
 }
 
 func TestClassifyMatchesResultKeysExactly(t *testing.T) {
+	t.Parallel()
 	for name, raw := range map[string]string{
 		"outcome in another case":     `{"Outcome":"merged"}`,
 		"message in another case":     `{"outcome":"merged","MESSAGE":"m"}`,
@@ -150,6 +156,7 @@ func TestClassifyMatchesResultKeysExactly(t *testing.T) {
 }
 
 func TestClassifyBoundsEveryMessageOnARuneBoundary(t *testing.T) {
+	t.Parallel()
 	long := "a" + strings.Repeat("ж", MaxMessageBytes)
 	v := Classify(KindCheck, ip(7), false, []byte(`{"message":"`+long+`"}`), nil, declared)
 	if v.Kind != VerdictFailure || len(v.Message) > MaxMessageBytes || !utf8.ValidString(v.Message) || !strings.Contains(v.Message, "exit 7") {
@@ -171,6 +178,7 @@ func TestClassifyBoundsEveryMessageOnARuneBoundary(t *testing.T) {
 }
 
 func TestProtocolEnv(t *testing.T) {
+	t.Parallel()
 	env := ProtocolEnv(EnvValues{TaskKey: "A-1", Queue: "q", WorkflowName: "w", WorkflowVersion: "1", Status: "s",
 		WorkflowDir: "/w", TaskFile: "/t.json", TaskDir: "/d", ResultFile: "/r.json"})
 	joined := strings.Join(env, "\n")

@@ -12,9 +12,12 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func TestBackoffCapped(t *testing.T) {
+	t.Parallel()
 	if backoff(1) != 500*time.Millisecond {
 		t.Fatalf("backoff(1) = %v", backoff(1))
 	}
@@ -77,6 +80,7 @@ func healthServer(t *testing.T, sock string, status *int) {
 }
 
 func TestSupervisorReachesRunningThenStopsOnCancel(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "p.sock")
 	status := 200
 	healthServer(t, sock, &status)
@@ -112,6 +116,7 @@ func TestSupervisorReachesRunningThenStopsOnCancel(t *testing.T) {
 }
 
 func TestExecRunnerRealProcess(t *testing.T) {
+	t.Parallel()
 	// Drive the real execRunner against the re-exec fake plugin.
 	sock := filepath.Join(t.TempDir(), "real.sock")
 	spec := SpawnSpec{
@@ -138,15 +143,10 @@ func TestExecRunnerRealProcess(t *testing.T) {
 		t.Fatal("no handshake from real process")
 	}
 	// The plugin should be serving /health on its socket.
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		if err := NewClient(sock).Health(context.Background()); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("plugin never became healthy")
-		}
-		time.Sleep(20 * time.Millisecond)
+	if !testutil.WaitFor(3*time.Second, func() bool {
+		return NewClient(sock).Health(context.Background()) == nil
+	}) {
+		t.Fatal("plugin never became healthy")
 	}
 	if err := h.Stop(time.Second); err != nil {
 		t.Fatalf("stop: %v", err)
@@ -180,10 +180,9 @@ func (r *sequencedRunner) Start(spec SpawnSpec, logw io.Writer) (ProcHandle, err
 		h.hs <- HandshakeResult{Err: errors.New("boom")}
 	case n == 3:
 		h.hs <- HandshakeResult{Line: []byte(r.okLine)}
-		go func() {
-			time.Sleep(20 * time.Millisecond)
-			close(h.done)
-		}()
+		// The life still reaches running: the supervisor sees the exit only
+		// after its handshake and first health check.
+		close(h.done)
 	default:
 		// Hang: no handshake ever arrives and the process never exits, so
 		// this life blocks on ctx.Done() until the test cancels.
@@ -196,6 +195,7 @@ func (r *sequencedRunner) Start(spec SpawnSpec, logw io.Writer) (ProcHandle, err
 // again, must restart at the backoff FLOOR, not at the grown value the early
 // crashes accumulated.
 func TestBackoffResetsAfterHealthyLife(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "p.sock")
 	status := 200
 	healthServer(t, sock, &status)
@@ -292,6 +292,7 @@ func (infiniteReader) Read(p []byte) (int, error) {
 }
 
 func TestHandshakeLineTooLong(t *testing.T) {
+	t.Parallel()
 	h := &execHandle{hs: make(chan HandshakeResult, 1)}
 	done := make(chan struct{})
 	go func() {

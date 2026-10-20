@@ -12,16 +12,19 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // orderRecorder is a fake plugin socket that records the ORDER of the watch
 // snapshots it receives on POST /watches. To force the delivery-ordering race
-// deterministically it stalls any NON-EMPTY snapshot for `slowNonEmpty` before
-// acking, while empty snapshots ack immediately. Under the old goroutine-per-
-// event push, the fast empty ([]) delivery would then land before the stalled
-// non-empty ([w]) one, leaving the provider reconciled to a watch that is gone.
+// deterministically it holds any NON-EMPTY snapshot until the test closes
+// release, signalling held when one arrives, while empty snapshots ack
+// immediately. Under the old goroutine-per-event push, the fast empty ([])
+// delivery would then land before the held non-empty ([w]) one, leaving the
+// provider reconciled to a watch that is gone.
 type orderRecorder struct {
-	slowNonEmpty time.Duration
+	held    chan struct{} // receives one value per non-empty snapshot that arrives
+	release chan struct{} // closed by the test to ack the non-empty snapshots
 
 	mu     sync.Mutex
 	counts []int // number of watches in each snapshot, in arrival (ack) order
@@ -39,8 +42,13 @@ func (or *orderRecorder) serve(t *testing.T, sock string) {
 	mux.HandleFunc("/watches", func(w http.ResponseWriter, r *http.Request) {
 		var body ChannelWatchesDTO
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if len(body.Watches) > 0 && or.slowNonEmpty > 0 {
-			time.Sleep(or.slowNonEmpty) // stall the non-empty snapshot to open the race
+		if len(body.Watches) > 0 {
+			or.held <- struct{}{}
+			select {
+			case <-or.release:
+			case <-r.Context().Done():
+				return
+			}
 		}
 		or.mu.Lock()
 		or.counts = append(or.counts, len(body.Watches))
@@ -50,6 +58,20 @@ func (or *orderRecorder) serve(t *testing.T, sock string) {
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
 	t.Cleanup(func() { srv.Close() })
+}
+
+func newOrderRecorder() *orderRecorder {
+	return &orderRecorder{held: make(chan struct{}, 8), release: make(chan struct{})}
+}
+
+// awaitHeld waits until a non-empty snapshot is held in the handler.
+func (or *orderRecorder) awaitHeld(t *testing.T) {
+	t.Helper()
+	select {
+	case <-or.held:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no non-empty snapshot reached the provider")
+	}
 }
 
 func (or *orderRecorder) recorded() []int {
@@ -68,12 +90,8 @@ func (or *orderRecorder) reset() {
 
 func awaitStartupPush(t *testing.T, or *orderRecorder) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for len(or.recorded()) == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("provider received no startup watch reconciliation")
-		}
-		time.Sleep(5 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool { return len(or.recorded()) > 0 }) {
+		t.Fatal("provider received no startup watch reconciliation")
 	}
 	or.reset()
 }
@@ -83,18 +101,12 @@ func awaitStartupPush(t *testing.T, or *orderRecorder) {
 // not wait on the long-lived plugin supervisor goroutine, which also rides h.wg.
 func waitPushDrain(t *testing.T, h *Host) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for {
+	if !testutil.WaitFor(3*time.Second, func() bool {
 		h.pushMu.Lock()
-		n := len(h.pushQueue)
-		h.pushMu.Unlock()
-		if n == 0 {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("watch-push workers did not drain within deadline")
-		}
-		time.Sleep(5 * time.Millisecond)
+		defer h.pushMu.Unlock()
+		return len(h.pushQueue) == 0
+	}) {
+		t.Fatal("watch-push workers did not drain within deadline")
 	}
 }
 
@@ -132,20 +144,31 @@ func startProvider(t *testing.T, h *Host, ps *Store, name string, srv interface 
 // delivery. The serialized per-(plugin,channel) push guarantees this; the old
 // goroutine-per-event push would let [] overtake [w] and end on [w].
 func TestPushWatchesDeliversInEventOrder(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
-	rec := &orderRecorder{slowNonEmpty: 250 * time.Millisecond}
+	rec := newOrderRecorder()
 	startProvider(t, h, ps, "issues", rec)
 	awaitStartupPush(t, rec)
 
 	watch := []bus.WatchInfo{{Watch: "a1b2c3", Params: map[string]any{"q": "X"}, Subscribers: []string{"dev-worker"}}}
 
-	// Event 1: subscribe -> full list [w]. Event 2: unsubscribe -> []. The small
-	// gap lets the serializer's worker pick up [w] before [] arrives, so both are
-	// delivered (in order) rather than [] coalescing [w] away — this exercises the
-	// ordering path, not just the final-state coalescing path.
+	// Event 1: subscribe -> full list [w]. Event 2: unsubscribe -> []. Waiting
+	// until the provider holds [w] means the serializer's worker picked it up
+	// before [] arrives, so both are delivered (in order) rather than []
+	// coalescing [w] away — this exercises the ordering path, not just the
+	// final-state coalescing path.
 	h.PushWatches("issues", "issues:query", watch)
-	time.Sleep(30 * time.Millisecond)
+	rec.awaitHeld(t)
 	h.PushWatches("issues", "issues:query", nil)
+	// The [] snapshot waits behind the in-flight [w] instead of being sent.
+	h.pushMu.Lock()
+	wp := h.pushQueue["issues\x00issues:query"]
+	queued := wp != nil && wp.hasPending && len(wp.pending) == 0
+	h.pushMu.Unlock()
+	if !queued {
+		t.Fatal("the empty snapshot was not queued behind the in-flight one")
+	}
+	close(rec.release)
 
 	waitPushDrain(t, h)
 
@@ -174,8 +197,9 @@ func TestPushWatchesDeliversInEventOrder(t *testing.T) {
 // contract: when several snapshots pile up while one is in flight, only the
 // newest survives — the provider is not walked through every intermediate list.
 func TestPushWatchesCoalescesStaleSnapshots(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
-	rec := &orderRecorder{slowNonEmpty: 200 * time.Millisecond}
+	rec := newOrderRecorder()
 	startProvider(t, h, ps, "issues", rec)
 	awaitStartupPush(t, rec)
 
@@ -183,13 +207,14 @@ func TestPushWatchesCoalescesStaleSnapshots(t *testing.T) {
 	two := []bus.WatchInfo{{Watch: "w1", Subscribers: []string{"a"}}, {Watch: "w2", Subscribers: []string{"b"}}}
 	three := append(append([]bus.WatchInfo{}, two...), bus.WatchInfo{Watch: "w3", Subscribers: []string{"c"}})
 
-	// First push stalls in the handler (250ms non-empty). While it is in flight we
-	// enqueue two more; only the last (three watches) should be delivered after the
-	// first completes — the middle one is coalesced away.
+	// First push is held in the handler. While it is in flight we enqueue two
+	// more; only the last (three watches) should be delivered after the first
+	// completes — the middle one is coalesced away.
 	h.PushWatches("issues", "issues:query", one)
-	time.Sleep(20 * time.Millisecond) // ensure the worker grabbed `one`
+	rec.awaitHeld(t) // the worker grabbed `one`
 	h.PushWatches("issues", "issues:query", two)
 	h.PushWatches("issues", "issues:query", three)
+	close(rec.release)
 
 	waitPushDrain(t, h)
 

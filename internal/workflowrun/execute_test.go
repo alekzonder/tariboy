@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // fixture is one run's layout under a temporary base directory.
@@ -77,6 +79,7 @@ func readLog(t *testing.T, r Result) string {
 }
 
 func TestExecuteCheckPass(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `echo hello; echo oops >&2; cat "$TARIBOY_TASK_FILE" > "$FIXTURE_DIR/seen.json"; exit 0`+"\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictPass {
@@ -104,6 +107,7 @@ func TestExecuteCheckPass(t *testing.T) {
 }
 
 func TestExecuteCheckRejectWithMessage(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `printf '{"message":"tests fail"}' > "$TARIBOY_RESULT_FILE"; exit 112`+"\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictReject || r.Verdict.Message != "tests fail" {
@@ -113,6 +117,7 @@ func TestExecuteCheckRejectWithMessage(t *testing.T) {
 }
 
 func TestExecuteWatchOutcomeWithArtifact(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `printf '{"outcome":"merged","artifacts":{"merge_commit":"9f2c"}}' > "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
 	r := Execute(context.Background(), f.spec(KindWatch))
 	if r.Verdict.Kind != VerdictOutcome || r.Verdict.Outcome != "merged" || r.Verdict.Artifacts["merge_commit"] != "9f2c" {
@@ -121,6 +126,7 @@ func TestExecuteWatchOutcomeWithArtifact(t *testing.T) {
 }
 
 func TestExecuteWatchQuiet(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, "exit 111\n")
 	r := Execute(context.Background(), f.spec(KindWatch))
 	if r.Verdict.Kind != VerdictQuiet {
@@ -130,6 +136,7 @@ func TestExecuteWatchQuiet(t *testing.T) {
 }
 
 func TestExecuteCrash(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, "echo boom >&2; exit 3\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "exit 3") {
@@ -142,6 +149,7 @@ func TestExecuteCrash(t *testing.T) {
 }
 
 func TestExecuteKilledBySignal(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, "kill -9 $$\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictFailure || r.ExitCode != nil {
@@ -150,6 +158,7 @@ func TestExecuteKilledBySignal(t *testing.T) {
 }
 
 func TestExecuteTimeoutKillsGroup(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.pid"; wait`+"\n")
 	spec := f.spec(KindCheck)
 	spec.Timeout = 300 * time.Millisecond
@@ -165,13 +174,18 @@ func TestExecuteTimeoutKillsGroup(t *testing.T) {
 }
 
 func TestExecuteCancelIsNotTimeout(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `echo started > "$FIXTURE_DIR/started"; sleep 30`+"\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	spec := f.spec(KindCheck)
 	spec.OnStart = func(int) {
 		go func() {
-			time.Sleep(100 * time.Millisecond)
+			// Cancel once the script is running, not while it is starting.
+			testutil.WaitFor(5*time.Second, func() bool {
+				_, err := os.Stat(filepath.Join(f.dir, "started"))
+				return err == nil
+			})
 			cancel()
 		}()
 	}
@@ -186,6 +200,7 @@ func TestExecuteCancelIsNotTimeout(t *testing.T) {
 // until the script has exited, so the worker must see that and judge the exit
 // code instead of signalling a finished process.
 func TestExecuteExitBeforeTheTimeoutSignalIsJudgedByItsCode(t *testing.T) {
+	// Sequential: it sets the package-level testHookTimeout that every Execute reads.
 	f := newFixture(t, "sleep 0.3; exit 0\n")
 	spec := f.spec(KindCheck)
 	spec.Timeout = 50 * time.Millisecond
@@ -199,6 +214,7 @@ func TestExecuteExitBeforeTheTimeoutSignalIsJudgedByItsCode(t *testing.T) {
 }
 
 func TestProcessIsNeverSignalledAfterItExited(t *testing.T) {
+	t.Parallel()
 	cmd := exec.Command("sleep", "0.1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
@@ -215,17 +231,15 @@ func TestProcessIsNeverSignalledAfterItExited(t *testing.T) {
 }
 
 func TestExecuteOnStartPanicKillsTheRun(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.pid"; sleep 30`+"\n")
 	spec := f.spec(KindCheck)
 	childFile := filepath.Join(f.dir, "child.pid")
 	spec.OnStart = func(int) {
-		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) {
-			if _, err := os.Stat(childFile); err == nil {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+		testutil.WaitFor(2*time.Second, func() bool {
+			_, err := os.Stat(childFile)
+			return err == nil
+		})
 		panic("bookkeeping exploded")
 	}
 	start := time.Now()
@@ -240,6 +254,7 @@ func TestExecuteOnStartPanicKillsTheRun(t *testing.T) {
 }
 
 func TestExecuteCancelledBeforeStart(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `touch "$FIXTURE_DIR/ran"`+"\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -250,6 +265,7 @@ func TestExecuteCancelledBeforeStart(t *testing.T) {
 }
 
 func TestExecuteKillsOrphanedChild(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.pid"; exit 0`+"\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictPass {
@@ -259,6 +275,7 @@ func TestExecuteKillsOrphanedChild(t *testing.T) {
 }
 
 func TestExecuteLargeOutputGoesToDisk(t *testing.T) {
+	t.Parallel()
 	const size = 8 << 20
 	f := newFixture(t, "head -c "+strconv.Itoa(size)+" /dev/zero; exit 0\n")
 	var before, after runtime.MemStats
@@ -279,6 +296,7 @@ func TestExecuteLargeOutputGoesToDisk(t *testing.T) {
 }
 
 func TestExecuteResultTooLarge(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `head -c 70000 /dev/zero | tr '\0' ' ' > "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "larger than") {
@@ -287,6 +305,7 @@ func TestExecuteResultTooLarge(t *testing.T) {
 }
 
 func TestExecuteResultSymlinkIsFailure(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `printf '{"message":"x"}' > "$FIXTURE_DIR/real.json"; ln -s "$FIXTURE_DIR/real.json" "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "result file") {
@@ -295,6 +314,7 @@ func TestExecuteResultSymlinkIsFailure(t *testing.T) {
 }
 
 func TestExecuteResultDirectoryIsFailure(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `mkdir "$TARIBOY_RESULT_FILE"; exit 0`+"\n")
 	r := Execute(context.Background(), f.spec(KindCheck))
 	if r.Verdict.Kind != VerdictFailure || !strings.Contains(r.Verdict.Message, "result file") {
@@ -303,6 +323,7 @@ func TestExecuteResultDirectoryIsFailure(t *testing.T) {
 }
 
 func TestExecuteRemovesStaleResult(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, "exit 0\n")
 	if err := os.MkdirAll(f.runDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -317,6 +338,7 @@ func TestExecuteRemovesStaleResult(t *testing.T) {
 }
 
 func TestExecuteMissingScript(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, "exit 0\n")
 	spec := f.spec(KindCheck)
 	spec.ScriptPath = filepath.Join(f.dir, "image", "absent.sh")
@@ -330,6 +352,7 @@ func TestExecuteMissingScript(t *testing.T) {
 }
 
 func TestExecuteNonExecutableScript(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, "exit 0\n")
 	if err := os.Chmod(f.script, 0o644); err != nil {
 		t.Fatal(err)
@@ -341,6 +364,7 @@ func TestExecuteNonExecutableScript(t *testing.T) {
 }
 
 func TestExecuteMissingCwd(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `touch "$FIXTURE_DIR/ran"`+"\n")
 	spec := f.spec(KindCheck)
 	spec.Cwd = filepath.Join(f.dir, "nowhere")
@@ -356,6 +380,7 @@ func TestExecuteMissingCwd(t *testing.T) {
 }
 
 func TestExecuteExistingLogFails(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `touch "$FIXTURE_DIR/ran"`+"\n")
 	if err := os.MkdirAll(f.runDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -373,6 +398,7 @@ func TestExecuteExistingLogFails(t *testing.T) {
 }
 
 func TestExecuteModes(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, "exit 0\n")
 	// A task directory that already exists with wider permissions is narrowed.
 	if err := os.MkdirAll(f.taskDir, 0o755); err != nil {
@@ -402,6 +428,7 @@ func TestExecuteModes(t *testing.T) {
 }
 
 func TestExecuteOnStartOnceWithLivePID(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, `echo $$ > "$FIXTURE_DIR/self.pid"; sleep 0.2`+"\n")
 	spec := f.spec(KindCheck)
 	var pids []int
@@ -423,6 +450,7 @@ func TestExecuteOnStartOnceWithLivePID(t *testing.T) {
 }
 
 func TestExecuteEnvironmentIsExactlySpecEnv(t *testing.T) {
+	// Sequential: t.Setenv.
 	t.Setenv("WORKFLOWRUN_LEAK_SENTINEL", "1")
 	f := newFixture(t, `env > "$FIXTURE_DIR/env.txt"`+"\n")
 	spec := f.spec(KindCheck)
@@ -467,16 +495,12 @@ func readPID(t *testing.T, path string) int {
 // requireGone waits up to two seconds for pid to stop existing.
 func requireGone(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		err := syscall.Kill(pid, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			return
-		}
-		if time.Now().After(deadline) {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
-			t.Fatalf("process %d still exists: %v", pid, err)
-		}
-		time.Sleep(20 * time.Millisecond)
+	var err error
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		err = syscall.Kill(pid, 0)
+		return errors.Is(err, syscall.ESRCH)
+	}) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatalf("process %d still exists: %v", pid, err)
 	}
 }

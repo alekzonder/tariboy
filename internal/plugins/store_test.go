@@ -23,6 +23,7 @@ func sampleRecord(name string) Record {
 }
 
 func TestUpsertGetListDelete(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	if err := s.Upsert(sampleRecord("echo")); err != nil {
 		t.Fatal(err)
@@ -59,6 +60,7 @@ func TestUpsertGetListDelete(t *testing.T) {
 }
 
 func TestScanRecordRejectsMalformedJSON(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	s.Upsert(sampleRecord("echo"))
 	// Corrupt the types JSON directly.
@@ -71,6 +73,7 @@ func TestScanRecordRejectsMalformedJSON(t *testing.T) {
 }
 
 func TestSetEnabledAndState(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	s.Upsert(sampleRecord("echo"))
 	if err := s.SetEnabled("echo", false); err != nil {
