@@ -6,6 +6,7 @@ import (
 )
 
 func TestReadHandshake(t *testing.T) {
+	t.Parallel()
 	line := `{"name":"echo","version":"0.1.0","types":["channel-sink"],"protocol_version":1,"socket":"/tmp/echo.sock"}` + "\n"
 	h, err := ReadHandshake(strings.NewReader(line + "extra stdout noise\n"))
 	if err != nil {
@@ -23,6 +24,7 @@ func TestReadHandshake(t *testing.T) {
 }
 
 func TestHandshakeValidate(t *testing.T) {
+	t.Parallel()
 	m, _ := ParseManifest([]byte(goodManifest))
 	ok := Handshake{Name: "echo", ProtocolVersion: 1, Socket: "/x"}
 	if err := ok.Validate(m); err != nil {

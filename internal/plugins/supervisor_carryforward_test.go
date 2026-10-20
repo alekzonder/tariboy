@@ -18,6 +18,7 @@ var discardLog = slog.New(slog.NewTextHandler(io.Discard, nil))
 // Carry-forward 1: symlink-safe exec. ResolveExec must refuse an exec that
 // resolves outside the plugin dir (e.g. a symlink to /bin/sh).
 func TestResolveExecContainedOK(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "run")
 	if err := os.WriteFile(bin, []byte("#!/bin/true\n"), 0o755); err != nil {
@@ -34,6 +35,7 @@ func TestResolveExecContainedOK(t *testing.T) {
 }
 
 func TestResolveExecSymlinkEscapeRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	evil := filepath.Join(dir, "evil")
 	if err := os.Symlink("/bin/sh", evil); err != nil {
@@ -45,6 +47,7 @@ func TestResolveExecSymlinkEscapeRefused(t *testing.T) {
 }
 
 func TestResolveExecMissingRefused(t *testing.T) {
+	t.Parallel()
 	if _, err := ResolveExec(t.TempDir(), "nope"); err == nil {
 		t.Fatal("ResolveExec accepted a missing exec")
 	}
@@ -82,6 +85,7 @@ func (r *silentRunner) totalStops() int {
 // Carry-forward 2 (state machine): a silent handshake must time out, be
 // reported unhealthy, and the process handle must be Stop()'d (killed).
 func TestSupervisorHandshakeTimeoutStopsHandle(t *testing.T) {
+	t.Parallel()
 	m, _ := ParseManifest([]byte(goodManifest))
 	r := &silentRunner{}
 	details := make(chan string, 64)
@@ -144,6 +148,7 @@ drain:
 // plugin that ignores SIGTERM; Stop must escalate to SIGKILL on the process
 // group and reap it, so the blocked handshake reader unblocks.
 func TestExecRunnerKillsSilentProcessGroup(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "silent.sock")
 	spec := SpawnSpec{
 		Name: "silent", Exec: os.Args[0], Dir: t.TempDir(), Socket: sock,
@@ -178,6 +183,7 @@ func TestExecRunnerKillsSilentProcessGroup(t *testing.T) {
 // types inconsistent with the manifest must NOT be rejected — the supervisor
 // reaches running and uses the manifest for capability decisions.
 func TestSupervisorHandshakeTypesMismatchStillRuns(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "p.sock")
 	status := 200
 	healthServer(t, sock, &status)
@@ -208,6 +214,7 @@ func TestSupervisorHandshakeTypesMismatchStillRuns(t *testing.T) {
 // Carry-forward 5: the per-life token must be revoked on every exit path
 // (handshake reject, exit, unhealthy, cancel).
 func TestSupervisorRevokesTokenOnEveryExit(t *testing.T) {
+	t.Parallel()
 	m, _ := ParseManifest([]byte(goodManifest))
 	reg := NewTokenRegistry(nil)
 	var minted []string

@@ -19,6 +19,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/tasks"
+	"github.com/alekzonder/tariboy/internal/testutil"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -119,6 +120,7 @@ type fakeJobs struct {
 	completeBlock    map[int64]chan struct{} // CompleteScriptRun waits for the channel
 	attempts         map[int64]int           // CompleteScriptRun calls per run
 	pendingCalls     int                     // PendingRunJobs calls
+	cancelCalls      int                     // CancelRequestedRuns calls, one per pass
 	running          []tasks.ScriptRun       // RunningScriptRuns rows
 	recoverFail      int                     // RecoverScriptRuns fails this many more times
 	recovered        bool                    // RecoverScriptRuns succeeded
@@ -256,6 +258,7 @@ func (f *fakeJobs) ScheduleDueWatches(context.Context, time.Time) (int, error) {
 func (f *fakeJobs) CancelRequestedRuns(context.Context) ([]tasks.ScriptRun, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.cancelCalls++
 	var out []tasks.ScriptRun
 	for id := range f.cancel {
 		out = append(out, tasks.ScriptRun{ID: id, TaskKey: f.taskOf(id), State: "running"})
@@ -360,18 +363,12 @@ func (h *harness) awaitCompletion(id int64, within time.Duration) tasks.RunCompl
 // awaitRecovered waits for RecoverScriptRuns to succeed.
 func (h *harness) awaitRecovered() {
 	h.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
+	if !testutil.WaitFor(5*time.Second, func() bool {
 		h.jobs.mu.Lock()
-		recovered := h.jobs.recovered
-		h.jobs.mu.Unlock()
-		if recovered {
-			return
-		}
-		if time.Now().After(deadline) {
-			h.t.Fatal("recovery did not run")
-		}
-		time.Sleep(10 * time.Millisecond)
+		defer h.jobs.mu.Unlock()
+		return h.jobs.recovered
+	}) {
+		h.t.Fatal("recovery did not run")
 	}
 }
 
@@ -437,6 +434,7 @@ func noToolsSocket(t *testing.T, env map[string]string) {
 }
 
 func TestSupervisorRunsACheckAndCompletesIt(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"))
 	h.start()
 	done := h.awaitCompletion(1, 5*time.Second)
@@ -465,6 +463,7 @@ func TestSupervisorRunsACheckAndCompletesIt(t *testing.T) {
 }
 
 func TestSupervisorQueueModeEnvironmentAndCwd(t *testing.T) {
+	t.Parallel()
 	job := checkJob(1, "DEV-1", "scripts/env.sh")
 	job.WorkflowEnv = map[string]string{"SHARED": "workflow", "WF_ONLY": "wf", "TARIBOY_TASK_KEY": "hijack",
 		"TARIBOY_TOOLS_SOCKET": "/wf/tools.sock"}
@@ -501,6 +500,7 @@ func TestSupervisorQueueModeEnvironmentAndCwd(t *testing.T) {
 }
 
 func TestSupervisorAgentModeEnvironmentAndCwd(t *testing.T) {
+	t.Parallel()
 	job := checkJob(1, "DEV-1", "scripts/env.sh")
 	job.Run.RunAs = workflowfile.RunAsAgent
 	job.Holder = "worker"
@@ -542,6 +542,7 @@ func TestSupervisorAgentModeEnvironmentAndCwd(t *testing.T) {
 }
 
 func TestSupervisorWatchRunIsAlwaysQueueMode(t *testing.T) {
+	t.Parallel()
 	job := checkJob(1, "DEV-1", "scripts/quiet.sh")
 	job.Run.Kind, job.Run.RunAs, job.Holder, job.Outcome = KindWatch, workflowfile.RunAsAgent, "worker", ""
 	h := newHarness(t, job)
@@ -556,6 +557,7 @@ func TestSupervisorWatchRunIsAlwaysQueueMode(t *testing.T) {
 }
 
 func TestSupervisorPreExecutionFailures(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3t-value-never-shown"
 	unknownHolder := checkJob(1, "DEV-1", "scripts/pass.sh")
 	unknownHolder.Run.RunAs = workflowfile.RunAsAgent
@@ -603,6 +605,7 @@ func TestSupervisorPreExecutionFailures(t *testing.T) {
 }
 
 func TestSupervisorRunsDifferentTasksConcurrentlyUpToParallel(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/sleep.sh"), checkJob(2, "DEV-2", "scripts/sleep.sh"),
 		checkJob(3, "DEV-3", "scripts/sleep.sh"))
 	h.sup.Parallel = 2
@@ -620,6 +623,7 @@ func TestSupervisorRunsDifferentTasksConcurrentlyUpToParallel(t *testing.T) {
 }
 
 func TestSupervisorNeverOverlapsRunsOfOneTask(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/sleep.sh"), checkJob(2, "DEV-1", "scripts/sleep.sh"))
 	h.start()
 	h.awaitCompletion(1, 10*time.Second)
@@ -632,11 +636,24 @@ func TestSupervisorNeverOverlapsRunsOfOneTask(t *testing.T) {
 }
 
 func TestSupervisorClaimRefusedRunsNothing(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"), checkJob(2, "DEV-2", "scripts/pass.sh"))
 	h.jobs.refuse[1] = true
 	h.start()
 	h.awaitCompletion(2, 5*time.Second)
-	time.Sleep(150 * time.Millisecond)
+	// One pass tries run 1 before run 2, so its claim was refused before run 2
+	// completed. Stopping waits for every run goroutine, so a run started
+	// despite the refusal would have left its files by now.
+	h.stop()
+	h.jobs.mu.Lock()
+	_, ran := h.jobs.pids[1]
+	h.jobs.mu.Unlock()
+	if ran {
+		t.Fatal("a refused claim started a process")
+	}
+	if _, err := os.Stat(filepath.Join(h.base, "tasks", "DEV-1")); !os.IsNotExist(err) {
+		t.Fatalf("a refused claim created its task directory: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(h.marks, "pass-DEV-1")); !os.IsNotExist(err) {
 		t.Fatalf("a refused claim executed its script: %v", err)
 	}
@@ -649,6 +666,7 @@ func TestSupervisorClaimRefusedRunsNothing(t *testing.T) {
 }
 
 func TestSupervisorCancelRequestKillsAStubbornScript(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/stubborn.sh"))
 	h.start()
 	h.awaitStart(1)
@@ -670,6 +688,7 @@ func TestSupervisorCancelRequestKillsAStubbornScript(t *testing.T) {
 }
 
 func TestSupervisorShutdownLeavesRunsUncompleted(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/stubborn.sh"))
 	h.start()
 	h.awaitStart(1)
@@ -686,29 +705,25 @@ func TestSupervisorShutdownLeavesRunsUncompleted(t *testing.T) {
 
 func waitFile(t *testing.T, path string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(5*time.Second, func() bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}) {
+		t.Fatalf("%s did not appear", path)
 	}
-	t.Fatalf("%s did not appear", path)
 }
 
 func groupGone(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if err := syscall.Kill(-pid, 0); errors.Is(err, syscall.ESRCH) {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		return errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH)
+	}) {
+		t.Fatalf("process group %d is still alive", pid)
 	}
-	t.Fatalf("process group %d is still alive", pid)
 }
 
 func TestSupervisorRedactsQueueSecretsFromWhatAScriptReturns(t *testing.T) {
+	t.Parallel()
 	job := checkJob(1, "DEV-1", "scripts/leak.sh")
 	job.Artifacts = []string{"note"}
 	job.QueueSecrets = map[string]string{"LONG_SECRET": "queue-secret-123", "SHORT_SECRET": "abc"}
@@ -733,6 +748,7 @@ func watchJob(id int64, key, script string) tasks.RunJob {
 }
 
 func TestSupervisorRetriesAFailedCompletionAndKeepsTheTaskBusy(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"), checkJob(2, "DEV-1", "scripts/pass.sh"))
 	h.jobs.completeFail[1] = 3
 	h.start()
@@ -752,22 +768,30 @@ func TestSupervisorRetriesAFailedCompletionAndKeepsTheTaskBusy(t *testing.T) {
 }
 
 func TestSupervisorKeepsATaskBusyWhileItsCompletionFails(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"), checkJob(2, "DEV-1", "scripts/pass.sh"))
 	h.jobs.completeFail[1] = 1 << 30
 	h.start()
-	waitFile(t, filepath.Join(h.marks, "pass-DEV-1"))
-	time.Sleep(300 * time.Millisecond)
+	// The first attempt comes from the run itself; each later one from one
+	// pass. Passes run one after another, so a fourth attempt proves that the
+	// passes of the second and third attempts finished without claiming run 2.
+	if !testutil.WaitFor(5*time.Second, func() bool {
+		h.jobs.mu.Lock()
+		defer h.jobs.mu.Unlock()
+		return h.jobs.attempts[1] >= 4
+	}) {
+		t.Fatal("the failed completion was not retried on every pass")
+	}
 	h.jobs.mu.Lock()
-	attempts := h.jobs.attempts[1]
 	_, claimedTwo := h.jobs.claimed[2]
 	h.jobs.mu.Unlock()
-	// The completion is retried on every pass, and the task stays busy.
-	if attempts < 3 || claimedTwo {
-		t.Fatalf("attempts %d, second run claimed %v", attempts, claimedTwo)
+	if claimedTwo {
+		t.Fatal("the second run of a task was claimed while its first completion was unrecorded")
 	}
 }
 
 func TestSupervisorCountsRunNotFoundAsCompleted(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"), checkJob(2, "DEV-1", "scripts/pass.sh"))
 	h.jobs.completeNotFound[1] = true
 	h.start()
@@ -780,6 +804,7 @@ func TestSupervisorCountsRunNotFoundAsCompleted(t *testing.T) {
 }
 
 func TestSupervisorCompletesAPreStartFailureInTheBackground(t *testing.T) {
+	t.Parallel()
 	broken := checkJob(1, "DEV-1", "scripts/absent.sh")
 	h := newHarness(t, broken, checkJob(2, "DEV-2", "scripts/pass.sh"))
 	release := make(chan struct{})
@@ -797,6 +822,7 @@ func TestSupervisorCompletesAPreStartFailureInTheBackground(t *testing.T) {
 }
 
 func TestSupervisorRecoversBeforeStartingAnyRun(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/pass.sh"))
 	h.jobs.recoverFail = 2
 	h.start()
@@ -831,6 +857,7 @@ func orphan(t *testing.T, env ...string) *exec.Cmd {
 }
 
 func TestSupervisorTerminatesOnlyProvenOrphans(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	resultFile := filepath.Join(h.base, "tasks", "DEV-7", "runs", "7", "result.json")
 	ours := orphan(t, "TARIBOY_RESULT_FILE="+resultFile)
@@ -849,6 +876,7 @@ func TestSupervisorTerminatesOnlyProvenOrphans(t *testing.T) {
 }
 
 func TestSupervisorSignalsNothingWithoutProc(t *testing.T) {
+	// Sequential: it points the package-level procRoot elsewhere.
 	h := newHarness(t)
 	var logged strings.Builder
 	var logMu sync.Mutex
@@ -876,6 +904,7 @@ func TestSupervisorSignalsNothingWithoutProc(t *testing.T) {
 }
 
 func TestRecordUnrecordedStopsAtTheFirstFailureOfAPass(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	w := &worker{s: h.sup, log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		busy: map[string]bool{}, retry: map[int64]unrecorded{}, quietDirs: map[string][]string{}}
@@ -907,6 +936,7 @@ func TestRecordUnrecordedStopsAtTheFirstFailureOfAPass(t *testing.T) {
 }
 
 func TestProtectedOrphanPIDs(t *testing.T) {
+	t.Parallel()
 	sameGroup := exec.Command("sleep", "30")
 	if err := sameGroup.Start(); err != nil {
 		t.Fatal(err)
@@ -927,6 +957,7 @@ func TestProtectedOrphanPIDs(t *testing.T) {
 }
 
 func TestSupervisorNeverSignalsInitOrItself(t *testing.T) {
+	// Sequential: it points the package-level procRoot elsewhere.
 	h := newHarness(t)
 	var logged strings.Builder
 	var logMu sync.Mutex
@@ -962,6 +993,7 @@ type writerFunc func([]byte) (int, error)
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 
 func TestSupervisorStartsChecksBeforeWatches(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, watchJob(1, "DEV-1", "scripts/quiet.sh"), checkJob(2, "DEV-2", "scripts/sleep.sh"))
 	h.sup.Parallel = 1
 	h.start()
@@ -974,6 +1006,7 @@ func TestSupervisorStartsChecksBeforeWatches(t *testing.T) {
 }
 
 func TestSupervisorKeepsOneSlotFromWatches(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, watchJob(1, "DEV-1", "scripts/sleep.sh"), watchJob(2, "DEV-2", "scripts/sleep.sh"),
 		watchJob(3, "DEV-3", "scripts/sleep.sh"))
 	h.sup.Parallel = 2
@@ -989,16 +1022,25 @@ func TestSupervisorKeepsOneSlotFromWatches(t *testing.T) {
 }
 
 func TestSupervisorAsksForJobsOnlyWithAFreeSlot(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t, checkJob(1, "DEV-1", "scripts/stubborn.sh"), checkJob(2, "DEV-2", "scripts/pass.sh"))
 	h.sup.Parallel = 1
 	h.start()
 	h.awaitStart(1)
 	h.jobs.mu.Lock()
-	before := h.jobs.pendingCalls
+	before, passes := h.jobs.pendingCalls, h.jobs.cancelCalls
 	h.jobs.mu.Unlock()
-	for range 5 {
+	// Every pass lists cancelled runs before it looks for a free slot, so the
+	// start of a later pass proves the one before it finished.
+	for i := range 5 {
 		h.nudge()
-		time.Sleep(40 * time.Millisecond)
+		if !testutil.WaitFor(5*time.Second, func() bool {
+			h.jobs.mu.Lock()
+			defer h.jobs.mu.Unlock()
+			return h.jobs.cancelCalls > passes+i+1
+		}) {
+			t.Fatal("the supervisor stopped passing")
+		}
 	}
 	h.jobs.mu.Lock()
 	after := h.jobs.pendingCalls
@@ -1009,6 +1051,7 @@ func TestSupervisorAsksForJobsOnlyWithAFreeSlot(t *testing.T) {
 }
 
 func TestSupervisorKeepsTheNewestQuietRunDirectories(t *testing.T) {
+	t.Parallel()
 	jobs := make([]tasks.RunJob, 0, keptQuietRunDirs+2)
 	for id := int64(1); id <= keptQuietRunDirs+1; id++ {
 		jobs = append(jobs, watchJob(id, "DEV-1", "scripts/quiet.sh"))
@@ -1022,12 +1065,8 @@ func TestSupervisorKeepsTheNewestQuietRunDirectories(t *testing.T) {
 		return err == nil
 	}
 	h.awaitCompletion(keptQuietRunDirs+2, 30*time.Second)
-	deadline := time.Now().Add(2 * time.Second)
-	for exists(1) {
-		if time.Now().After(deadline) {
-			t.Fatal("the quiet run evicted from the ring kept its directory")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool { return !exists(1) }) {
+		t.Fatal("the quiet run evicted from the ring kept its directory")
 	}
 	for id := 2; id <= keptQuietRunDirs+2; id++ {
 		if !exists(id) {
@@ -1037,6 +1076,7 @@ func TestSupervisorKeepsTheNewestQuietRunDirectories(t *testing.T) {
 }
 
 func TestRememberQuietKeepsARingPerTaskAndSkipsCancelledRuns(t *testing.T) {
+	t.Parallel()
 	w := &worker{quietDirs: map[string][]string{}}
 	quiet := tasks.RunCompletion{Verdict: VerdictQuiet}
 	dir := func(task string, i int) string { return "/runs/" + task + "/" + strconv.Itoa(i) }
@@ -1071,6 +1111,7 @@ func TestRememberQuietKeepsARingPerTaskAndSkipsCancelledRuns(t *testing.T) {
 }
 
 func TestPrepareGivesAQueueRunADefaultPath(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	w := &worker{s: h.sup}
 	job := checkJob(1, "DEV-1", "scripts/env.sh")
@@ -1088,6 +1129,7 @@ func TestPrepareGivesAQueueRunADefaultPath(t *testing.T) {
 }
 
 func TestPrepareRefusesAQueueRunWhoseBaseEnvFails(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	w := &worker{s: h.sup}
 	h.sup.BaseEnv = func() ([]string, error) { return nil, errors.New("global agent shell script: exit status 3") }
@@ -1102,6 +1144,7 @@ func TestPrepareRefusesAQueueRunWhoseBaseEnvFails(t *testing.T) {
 }
 
 func TestPrepareRefusesATaskKeyThatIsNotOneDirectory(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	w := &worker{s: h.sup}
 	for _, key := range []string{"", ".", "..", "a/b", "../x"} {
@@ -1114,6 +1157,7 @@ func TestPrepareRefusesATaskKeyThatIsNotOneDirectory(t *testing.T) {
 }
 
 func TestRedactCompletionLeavesNoPartialSecret(t *testing.T) {
+	t.Parallel()
 	secrets := map[string]string{"A": "abcdefgh", "B": "efghijkl"}
 	done := redactCompletion(tasks.RunCompletion{
 		Message: "x abcdefghijkl y", Artifacts: map[string]string{"note": "abcdefghijkl"},
@@ -1124,6 +1168,7 @@ func TestRedactCompletionLeavesNoPartialSecret(t *testing.T) {
 }
 
 func TestMergeEnvLaterReplacesEarlierAndStrips(t *testing.T) {
+	t.Parallel()
 	got := mergeEnv([]string{"A=1", "B=1", "TARIBOY_TOOLS_SOCKET=x"}, []string{"B=2", "C=3"}, []string{"A=4"})
 	want := []string{"A=4", "B=2", "C=3"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {

@@ -6,6 +6,7 @@ import (
 )
 
 func TestCanPublish(t *testing.T) {
+	t.Parallel()
 	id := Identity{Name: "echo", Publish: []string{"chat:*", "user:ops"}}
 	for ch, want := range map[string]bool{
 		"chat:echo-out": true,
@@ -25,6 +26,7 @@ func TestCanPublish(t *testing.T) {
 }
 
 func TestTokenLifecycle(t *testing.T) {
+	t.Parallel()
 	reg := NewTokenRegistry(bytes.NewReader(bytes.Repeat([]byte{0xCD}, 1024)))
 	tok, err := reg.Mint(Identity{Name: "echo", Publish: []string{"chat:*"}, Subscribe: []string{"chat:in"}})
 	if err != nil {
@@ -47,6 +49,7 @@ func TestTokenLifecycle(t *testing.T) {
 }
 
 func TestMintUnique(t *testing.T) {
+	t.Parallel()
 	reg := NewTokenRegistry(nil)
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {

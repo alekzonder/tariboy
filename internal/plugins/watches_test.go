@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // watchRecorder is a fake plugin socket serving /health and /watches; it records
@@ -60,6 +61,7 @@ func (wr *watchRecorder) reset() {
 // running provider plugin receives POST /watches carrying the channel's full
 // current watch list.
 func TestHostPushWatchesReachesRunningPlugin(t *testing.T) {
+	t.Parallel()
 	h, _, ps := newHost(t, nil)
 	rec := sampleRecord("issues")
 	rec.Channels = Channels{
@@ -82,45 +84,35 @@ func TestHostPushWatchesReachesRunningPlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRunning(t, h, "issues")
-	startupDeadline := time.Now().Add(2 * time.Second)
-	for {
-		_, hits := wr.snapshot()
-		if hits > 0 {
-			break
-		}
-		if time.Now().After(startupDeadline) {
-			t.Fatal("plugin never received startup watch reconciliation")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool { _, hits := wr.snapshot(); return hits > 0 }) {
+		t.Fatal("plugin never received startup watch reconciliation")
 	}
 
 	h.PushWatches("issues", "issues:query", []bus.WatchInfo{
 		{Watch: "a1b2c3", Params: map[string]any{"query": "PROJ"}, Subscribers: []string{"dev-manager", "dev-worker"}},
 	})
 
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		got, hits := wr.snapshot()
-		if hits > 0 && len(got.Watches) == 1 {
-			if got.Channel != "issues:query" || len(got.Watches) != 1 {
-				t.Fatalf("push body = %+v", got)
-			}
-			if got.Watches[0].Watch != "a1b2c3" || len(got.Watches[0].Subscribers) != 2 {
-				t.Fatalf("pushed watch = %+v", got.Watches[0])
-			}
-			if got.Watches[0].Params["query"] != "PROJ" {
-				t.Fatalf("params not carried in push: %+v", got.Watches[0].Params)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("plugin never received the watch push")
-		}
-		time.Sleep(10 * time.Millisecond)
+	var got ChannelWatchesDTO
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		var hits int
+		got, hits = wr.snapshot()
+		return hits > 0 && len(got.Watches) == 1
+	}) {
+		t.Fatal("plugin never received the watch push")
+	}
+	if got.Channel != "issues:query" || len(got.Watches) != 1 {
+		t.Fatalf("push body = %+v", got)
+	}
+	if got.Watches[0].Watch != "a1b2c3" || len(got.Watches[0].Subscribers) != 2 {
+		t.Fatalf("pushed watch = %+v", got.Watches[0])
+	}
+	if got.Watches[0].Params["query"] != "PROJ" {
+		t.Fatalf("params not carried in push: %+v", got.Watches[0].Params)
 	}
 }
 
 func TestHostRunningTransitionPushesCurrentWatches(t *testing.T) {
+	t.Parallel()
 	h, b, ps := newHost(t, nil)
 	rec := sampleRecord("issues")
 	rec.Channels = Channels{Provide: []Provided{{Channel: "issues:query"}}}
@@ -144,23 +136,21 @@ func TestHostRunningTransitionPushesCurrentWatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRunning(t, h, "issues")
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		got, hits := wr.snapshot()
-		if hits > 0 {
-			if got.Channel != "issues:query" || len(got.Watches) != 1 || got.Watches[0].Params["query"] != "PROJ" {
-				t.Fatalf("startup watch push = %+v", got)
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("running transition did not reconcile current provider watches")
-		}
-		time.Sleep(10 * time.Millisecond)
+	var got ChannelWatchesDTO
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		var hits int
+		got, hits = wr.snapshot()
+		return hits > 0
+	}) {
+		t.Fatal("running transition did not reconcile current provider watches")
+	}
+	if got.Channel != "issues:query" || len(got.Watches) != 1 || got.Watches[0].Params["query"] != "PROJ" {
+		t.Fatalf("startup watch push = %+v", got)
 	}
 }
 
 func TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary(t *testing.T) {
+	t.Parallel()
 	h, b, ps := newHost(t, nil)
 	rec := sampleRecord("issues")
 	rec.Channels = Channels{Provide: []Provided{{Channel: "issues:query"}}}
@@ -179,16 +169,8 @@ func TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRunning(t, h, "issues")
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		_, hits := wr.snapshot()
-		if hits > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("initial startup refresh missing")
-		}
-		time.Sleep(5 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool { _, hits := wr.snapshot(); return hits > 0 }) {
+		t.Fatal("initial startup refresh missing")
 	}
 	wr.reset()
 
@@ -208,19 +190,16 @@ func TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary(t *testing.T) {
 	}
 	h.pushMu.Unlock()
 
-	deadline = time.Now().Add(2 * time.Second)
-	for {
-		got, hits := wr.snapshot()
-		if hits > 0 && len(got.Watches) == 1 {
-			if got.Watches[0].Params["query"] != "LATEST" {
-				t.Fatalf("startup refresh delivered stale watches: %+v", got)
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("startup refresh did not deliver subscription committed before delivery")
-		}
-		time.Sleep(5 * time.Millisecond)
+	var got ChannelWatchesDTO
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		var hits int
+		got, hits = wr.snapshot()
+		return hits > 0 && len(got.Watches) == 1
+	}) {
+		t.Fatal("startup refresh did not deliver subscription committed before delivery")
+	}
+	if got.Watches[0].Params["query"] != "LATEST" {
+		t.Fatalf("startup refresh delivered stale watches: %+v", got)
 	}
 }
 
@@ -228,6 +207,7 @@ func TestStartupRefreshReadsCurrentWatchesAtDeliveryBoundary(t *testing.T) {
 // that is not running returns immediately (the pull path reconciles later)
 // rather than blocking or panicking.
 func TestHostPushWatchesPluginNotRunning(t *testing.T) {
+	t.Parallel()
 	h, _, _ := newHost(t, nil)
 	h.baseCtx = context.Background()
 	done := make(chan struct{})

@@ -112,6 +112,7 @@ func sourceJob(h *harness, script string) tasks.SourceJob {
 }
 
 func TestSupervisorRunsASourceAndReportsItsItems(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	sources := newFakeSources()
 	sources.setJobs(sourceJob(h, "scripts/items.sh"))
@@ -167,6 +168,7 @@ func TestSupervisorRunsASourceAndReportsItsItems(t *testing.T) {
 }
 
 func TestSupervisorKillsASourceTheQueueNoLongerBinds(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	sources := newFakeSources()
 	sources.setJobs(sourceJob(h, "scripts/stubborn.sh"))
@@ -185,6 +187,7 @@ func TestSupervisorKillsASourceTheQueueNoLongerBinds(t *testing.T) {
 }
 
 func TestRedactSourceCompletionFailsAKeyWithASecret(t *testing.T) {
+	t.Parallel()
 	secrets := map[string]string{"TOKEN": "secret-token"}
 	done := redactSourceCompletion(tasks.SourceCompletion{Verdict: VerdictItems, Items: []tasks.SourceItem{
 		{Key: "ok", Title: "a secret-token", Description: "secret-token", Artifacts: map[string]string{"x": "secret-token"}},

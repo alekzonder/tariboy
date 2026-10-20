@@ -45,6 +45,7 @@ func recordingPlugin(t *testing.T, sock string) *[]MessageDTO {
 }
 
 func TestSinkDrainDeliversAndAcks(t *testing.T) {
+	t.Parallel()
 	h, b, _ := newHost(t, nil)
 	sock := h.SocketPath("echo")
 	got := recordingPlugin(t, sock)
@@ -70,6 +71,7 @@ func TestSinkDrainDeliversAndAcks(t *testing.T) {
 // reply-forwarding contract (spec §6.4) — map the reply back to its external
 // entity. Guards toDTO against silently dropping those fields.
 func TestSinkDrainForwardsReplyRoutingFields(t *testing.T) {
+	t.Parallel()
 	h, b, _ := newHost(t, nil)
 	sock := h.SocketPath("echo")
 	got := recordingPlugin(t, sock)
@@ -96,6 +98,7 @@ func TestSinkDrainForwardsReplyRoutingFields(t *testing.T) {
 }
 
 func TestSinkDrainLeavesUnackedOnFailure(t *testing.T) {
+	t.Parallel()
 	h, b, _ := newHost(t, nil)
 	// No plugin server listening on the socket -> deliver fails.
 	subscriber := "plugin:echo"

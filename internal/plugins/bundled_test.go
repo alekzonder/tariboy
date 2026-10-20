@@ -7,6 +7,7 @@ import (
 )
 
 func TestEnsureBundledInstallsUpgradesAndPreservesWorkdir(t *testing.T) {
+	t.Parallel()
 	h, _, store := newHost(t, &nameRunner{})
 	manifest := Manifest{
 		Name: "telegram", Version: "1.0.0", ProtocolVersion: ProtocolVersion,
@@ -49,6 +50,7 @@ func TestEnsureBundledInstallsUpgradesAndPreservesWorkdir(t *testing.T) {
 }
 
 func TestEnsureBundledSkipsMissingDeveloperBinary(t *testing.T) {
+	t.Parallel()
 	h, _, _ := newHost(t, &nameRunner{})
 	installed, err := h.EnsureBundled(filepath.Join(t.TempDir(), "missing"), Manifest{Name: "telegram"})
 	if err != nil || installed {

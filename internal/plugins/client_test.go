@@ -29,6 +29,7 @@ func serveUnixMux(t *testing.T, mux *http.ServeMux) string {
 }
 
 func TestClientRoutes(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/routes", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"routes": map[string]any{"c1": "chat:orders"}, "has_token": true})
@@ -43,6 +44,7 @@ func TestClientRoutes(t *testing.T) {
 }
 
 func TestClientActionSuccess(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/action", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
@@ -60,6 +62,7 @@ func TestClientActionSuccess(t *testing.T) {
 }
 
 func TestClientActionError(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/action", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(409)
@@ -100,6 +103,7 @@ func serveUnixPlugin(t *testing.T, health int, deliver int, gotBody *[]byte) str
 }
 
 func TestClientHealth(t *testing.T) {
+	t.Parallel()
 	c := NewClient(serveUnixPlugin(t, 200, 200, nil))
 	if err := c.Health(context.Background()); err != nil {
 		t.Fatalf("healthy plugin: %v", err)
@@ -115,6 +119,7 @@ func TestClientHealth(t *testing.T) {
 }
 
 func TestClientDeliver(t *testing.T) {
+	t.Parallel()
 	var body []byte
 	c := NewClient(serveUnixPlugin(t, 200, 200, &body))
 	msg := MessageDTO{ID: "m1", Channel: "chat:in", Type: "chat.msg", Text: "hi", Source: "user:ops"}
@@ -161,27 +166,35 @@ func serveHungPlugin(t *testing.T) string {
 // TestClientHungPluginTimes out verifies that a wedged plugin cannot stall the
 // caller indefinitely: the client's per-call timeout must fire.
 func TestClientHungPluginTimesOut(t *testing.T) {
+	t.Parallel()
 	c := NewClient(serveHungPlugin(t))
 
-	start := time.Now()
-	if err := c.Health(context.Background()); err == nil {
-		t.Fatal("hung plugin health check should error, not hang forever")
-	}
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Fatalf("Health took %v; client timeout should have fired well before that", elapsed)
-	}
-
-	start = time.Now()
-	msg := MessageDTO{ID: "m1", Channel: "chat:in", Type: "chat.msg"}
-	if err := c.Deliver(context.Background(), msg); err == nil {
-		t.Fatal("hung plugin deliver should error, not hang forever")
-	}
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Fatalf("Deliver took %v; client timeout should have fired well before that", elapsed)
-	}
+	// Each call waits out the full client timeout, so the two run side by side.
+	t.Run("health", func(t *testing.T) {
+		t.Parallel()
+		start := time.Now()
+		if err := c.Health(context.Background()); err == nil {
+			t.Fatal("hung plugin health check should error, not hang forever")
+		}
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Fatalf("Health took %v; client timeout should have fired well before that", elapsed)
+		}
+	})
+	t.Run("deliver", func(t *testing.T) {
+		t.Parallel()
+		start := time.Now()
+		msg := MessageDTO{ID: "m1", Channel: "chat:in", Type: "chat.msg"}
+		if err := c.Deliver(context.Background(), msg); err == nil {
+			t.Fatal("hung plugin deliver should error, not hang forever")
+		}
+		if elapsed := time.Since(start); elapsed > 5*time.Second {
+			t.Fatalf("Deliver took %v; client timeout should have fired well before that", elapsed)
+		}
+	})
 }
 
 func TestClientPushWatches(t *testing.T) {
+	t.Parallel()
 	var got ChannelWatchesDTO
 	mux := http.NewServeMux()
 	mux.HandleFunc("/watches", func(w http.ResponseWriter, r *http.Request) {
@@ -202,6 +215,7 @@ func TestClientPushWatches(t *testing.T) {
 }
 
 func TestClientPushWatchesNon2xx(t *testing.T) {
+	t.Parallel()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/watches", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) })
 	err := NewClient(serveUnixMux(t, mux)).PushWatches(context.Background(), "issue-provider:query", nil)
@@ -211,6 +225,7 @@ func TestClientPushWatchesNon2xx(t *testing.T) {
 }
 
 func TestProvidedChannelNames(t *testing.T) {
+	t.Parallel()
 	if got := providedChannelNames(nil); got != nil {
 		t.Fatalf("nil provide → nil, got %v", got)
 	}

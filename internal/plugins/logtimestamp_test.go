@@ -17,6 +17,7 @@ func fixedClock() func() time.Time {
 const wantTS = "2026-07-13 09:08:07.006"
 
 func TestTSWriter_PrefixesEachLine(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := newTSWriter(&buf, fixedClock())
 	if _, err := w.Write([]byte("hello\nworld\n")); err != nil {
@@ -32,6 +33,7 @@ func TestTSWriter_PrefixesEachLine(t *testing.T) {
 // A single logical line split across multiple Writes (io.Copy chunk boundaries)
 // must be timestamped ONCE, when its newline finally arrives — not per chunk.
 func TestTSWriter_BuffersPartialLineAcrossWrites(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := newTSWriter(&buf, fixedClock())
 	w.Write([]byte("abc"))
@@ -47,6 +49,7 @@ func TestTSWriter_BuffersPartialLineAcrossWrites(t *testing.T) {
 // A trailing partial line (no newline, e.g. plugin killed mid-write) is held
 // until Flush, then emitted with a timestamp and a synthesized newline.
 func TestTSWriter_FlushEmitsTrailingPartialLine(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := newTSWriter(&buf, fixedClock())
 	w.Write([]byte("tail-no-newline"))
@@ -72,6 +75,7 @@ func TestTSWriter_FlushEmitsTrailingPartialLine(t *testing.T) {
 // without bound. Past the cap, the held partial content is force-emitted as one
 // timestamped line and the buffer stays bounded regardless of stream length.
 func TestTSWriter_ForceEmitsNewlineLessOutputPastCap(t *testing.T) {
+	t.Parallel()
 	var out bytes.Buffer
 	w := newTSWriter(&out, fixedClock())
 
@@ -115,6 +119,7 @@ func firstN(s string, n int) string {
 // Every captured line gets a timestamp regardless of its source content — a raw
 // print with no time field is timestamped exactly like an slog line would be.
 func TestTSWriter_TimestampsRawLines(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	w := newTSWriter(&buf, fixedClock())
 	w.Write([]byte("plain stdout print, no time= field\n"))

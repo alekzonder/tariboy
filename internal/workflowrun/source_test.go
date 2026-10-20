@@ -11,6 +11,7 @@ import (
 var sourceDeclared = Declared{Artifacts: []string{"pull_request"}}
 
 func TestClassifySourceItems(t *testing.T) {
+	t.Parallel()
 	raw := `{"items":[
 		{"key":"org/repo#42@3f2a9c1","title":"Review org/repo#42","description":"https://x/42","priority":"P1",
 		 "artifacts":{"pull_request":"https://github.com/org/repo/pull/42"}},
@@ -27,6 +28,7 @@ func TestClassifySourceItems(t *testing.T) {
 }
 
 func TestClassifySourceExitCodes(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		exit   int
@@ -56,6 +58,7 @@ func TestClassifySourceExitCodes(t *testing.T) {
 }
 
 func TestClassifySourceRejectsInvalidResults(t *testing.T) {
+	t.Parallel()
 	many := make([]string, MaxSourceItems+1)
 	for i := range many {
 		many[i] = fmt.Sprintf(`{"key":"k%d","title":"t"}`, i)
