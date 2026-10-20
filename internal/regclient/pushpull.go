@@ -1,6 +1,7 @@
 package regclient
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -25,7 +26,24 @@ func fileDigest(path string) (string, error) {
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-func Push(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
+// PushResult is the push output; JSON keys and order match the former map.
+type PushResult struct {
+	Digest  string `json:"digest"`
+	Name    string `json:"name"`
+	Pushed  bool   `json:"pushed,omitempty"`
+	Skipped bool   `json:"skipped,omitempty"`
+	Tag     string `json:"tag"`
+}
+
+// PullResult is the pull output; JSON keys and order match the former map.
+type PullResult struct {
+	Digest string `json:"digest"`
+	Name   string `json:"name"`
+	Pulled bool   `json:"pulled"`
+	Tag    string `json:"tag"`
+}
+
+func Push(ctx context.Context, imagesDir string, ref image.Ref, c *Client) (*PushResult, error) {
 	local := &image.Store{Dir: imagesDir}
 	archive, err := local.ArchivePath(ref)
 	if err != nil {
@@ -35,22 +53,22 @@ func Push(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if have, exists, err := c.Head(ref); err != nil {
+	if have, exists, err := c.Head(ctx, ref); err != nil {
 		return nil, err
 	} else if exists && have == digest {
-		return map[string]any{"name": ref.Name, "tag": ref.Tag, "digest": digest, "skipped": true}, nil
+		return &PushResult{Name: ref.Name, Tag: ref.Tag, Digest: digest, Skipped: true}, nil
 	}
-	if err := c.Put(ref, archive, digest); err != nil {
+	if err := c.Put(ctx, ref, archive, digest); err != nil {
 		return nil, err
 	}
-	return map[string]any{"name": ref.Name, "tag": ref.Tag, "digest": digest, "pushed": true}, nil
+	return &PushResult{Name: ref.Name, Tag: ref.Tag, Digest: digest, Pushed: true}, nil
 }
 
 // Pull downloads ref, RE-VERIFIES the digest against the server header, then
 // installs atomically (temp+rename+sidecar) into the local image store and
 // re-Inspects the manifest (schema-version re-check via image.Store.Inspect). A
 // tampered/corrupt download can never install (spec §13).
-func Pull(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
+func Pull(ctx context.Context, imagesDir string, ref image.Ref, c *Client) (*PullResult, error) {
 	if err := os.MkdirAll(imagesDir, 0o700); err != nil {
 		return nil, err
 	}
@@ -61,7 +79,7 @@ func Pull(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName) // no-op once renamed
 	hasher := sha256.New()
-	header, err := c.Get(ref, io.MultiWriter(tmp, hasher))
+	header, err := c.Get(ctx, ref, io.MultiWriter(tmp, hasher))
 	if err != nil {
 		tmp.Close()
 		return nil, err
@@ -83,5 +101,5 @@ func Pull(imagesDir string, ref image.Ref, c *Client) (map[string]any, error) {
 	if _, err := (&image.Store{Dir: imagesDir}).PublishArchiveFile(ref, tmpName); err != nil {
 		return nil, err
 	}
-	return map[string]any{"name": m.Name, "tag": m.Tag, "digest": got, "pulled": true}, nil
+	return &PullResult{Name: m.Name, Tag: m.Tag, Digest: got, Pulled: true}, nil
 }

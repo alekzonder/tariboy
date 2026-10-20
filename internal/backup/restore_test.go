@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -527,5 +528,55 @@ func TestRestoreCanonicalizesLegacyTimes(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s = %q, want %q", q, got, c.want)
 		}
+	}
+}
+
+func TestRestoreRejectsUnknownArchiveColumn(t *testing.T) {
+	for _, col := range []string{`x") ; DROP TABLE agents; --`, "no_such_column"} {
+		t.Run(col, func(t *testing.T) {
+			src, agentsDir := seed(t)
+			var built bytes.Buffer
+			if _, err := Build(&built, src, agentsDir, "bot", Options{}, clk); err != nil {
+				t.Fatal(err)
+			}
+			meta, files, err := readArchive(bytes.NewReader(built.Bytes()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Rows of earlier tables (agents, iterations, ...) precede schedules,
+			// so a rejected schedules row proves the whole transaction rolls back.
+			if len(meta.Tables["schedules"]) == 0 {
+				t.Fatal("seed has no schedules rows")
+			}
+			meta.Tables["schedules"][0][col] = "v"
+			var extra []tarEntry
+			for name, data := range files {
+				extra = append(extra, tarEntry{name: "files/" + name, data: data, typ: tar.TypeReg})
+			}
+			arc := archiveWith(t, meta, extra)
+
+			dstDir := t.TempDir()
+			dst, err := store.Open(filepath.Join(dstDir, "y.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { dst.Close() })
+			_, err = Restore(bytes.NewReader(arc), dst, filepath.Join(dstDir, "agents"), RestoreOptions{})
+			if err == nil {
+				t.Fatal("restore with an unknown archive column must fail")
+			}
+			if !strings.Contains(err.Error(), "schedules") || !strings.Contains(err.Error(), strconv.Quote(col)) {
+				t.Fatalf("error %q must name table schedules and column %q", err, col)
+			}
+			for _, ts := range backupTables {
+				var n int
+				if err := dst.DB.QueryRow(`SELECT COUNT(*) FROM ` + ts.name).Scan(&n); err != nil {
+					t.Fatalf("count %s: %v", ts.name, err)
+				}
+				if n != 0 {
+					t.Fatalf("table %s has %d rows after a failed restore", ts.name, n)
+				}
+			}
+		})
 	}
 }

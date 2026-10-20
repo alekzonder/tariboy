@@ -47,8 +47,23 @@ type Server struct {
 
 func NewServer(reg *registry.Registry, cctx *registry.Ctx) *Server {
 	s := &Server{reg: reg, cctx: cctx}
-	s.http = &http.Server{Handler: s.Handler()}
+	s.http = NewHTTPServer(s.Handler())
 	return s
+}
+
+// readHeaderTimeout bounds how long a client may take to send request headers;
+// a variable so tests can shorten it.
+var readHeaderTimeout = 10 * time.Second
+
+// NewHTTPServer returns an http.Server with header and idle limits. It sets no
+// ReadTimeout or WriteTimeout: SSE, websockets and terminals stay open for long.
+func NewHTTPServer(h http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
+	}
 }
 
 // SetEventSource installs the live-events source; when set, the streaming SSE
@@ -382,15 +397,25 @@ func (s *Server) serveImageImportPreview(w http.ResponseWriter, r *http.Request)
 	WriteOK(w, preview)
 }
 
+// rejectUntrustedOrigin answers 403 and returns true for a websocket upgrade
+// that has no bearer token and comes from a browser page this daemon does not
+// serve. The tokenless loopback listener relies on that browser Origin
+// boundary. Authenticated federated sockets may legitimately come from another
+// host, while non-browser clients commonly omit Origin entirely.
+func rejectUntrustedOrigin(w http.ResponseWriter, r *http.Request) bool {
+	if requestAuthenticated(r) {
+		return false
+	}
+	if origin := r.Header.Get("Origin"); origin != "" && !isAllowedWebOrigin(origin) {
+		WriteErr(w, http.StatusForbidden, "forbidden_origin", "websocket origin is not allowed")
+		return true
+	}
+	return false
+}
+
 func (s *Server) serveTasks(w http.ResponseWriter, r *http.Request) {
-	// The tokenless loopback listener relies on the browser Origin boundary.
-	// Authenticated federated sockets may legitimately come from another host,
-	// while non-browser clients commonly omit Origin entirely.
-	if !requestAuthenticated(r) {
-		if origin := r.Header.Get("Origin"); origin != "" && !isAllowedWebOrigin(origin) {
-			WriteErr(w, http.StatusForbidden, "forbidden_origin", "websocket origin is not allowed")
-			return
-		}
+	if rejectUntrustedOrigin(w, r) {
+		return
 	}
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
@@ -471,6 +496,10 @@ func wildcardNames(pattern string) []string {
 	return out
 }
 
+// defaultMaxBodyBytes bounds a command's JSON body unless its route sets
+// MaxBodyBytes.
+const defaultMaxBodyBytes = 1 << 20
+
 func (s *Server) dispatch(cmd registry.Command, w http.ResponseWriter, r *http.Request) {
 	p := registry.Params{}
 	if r.Method == http.MethodGet || r.Method == http.MethodDelete {
@@ -481,13 +510,15 @@ func (s *Server) dispatch(cmd registry.Command, w http.ResponseWriter, r *http.R
 		}
 	} else if r.Body != nil {
 		defer r.Body.Close()
-		if cmd.HTTP.MaxBodyBytes > 0 {
-			if r.ContentLength > cmd.HTTP.MaxBodyBytes {
-				WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds the upload limit")
-				return
-			}
-			r.Body = http.MaxBytesReader(w, r.Body, cmd.HTTP.MaxBodyBytes)
+		limit := cmd.HTTP.MaxBodyBytes
+		if limit <= 0 {
+			limit = defaultMaxBodyBytes
 		}
+		if r.ContentLength > limit {
+			WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds the upload limit")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		// An empty body (io.EOF) means "no params"; any other decode error is a bad request.
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil && !errors.Is(err, io.EOF) {
 			var tooLarge *http.MaxBytesError
@@ -560,7 +591,10 @@ func (s *Server) serveEvents(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			if _, err := w.Write([]byte("event: " + e.Type + "\ndata: " + string(data) + "\n\n")); err != nil {
+			// A "reset" event means the hub dropped events for this slow
+			// subscriber; the client refetches instead of trusting the stream.
+			frame := "id: " + strconv.FormatUint(e.Seq, 10) + "\nevent: " + e.Type + "\ndata: " + string(data) + "\n\n"
+			if _, err := w.Write([]byte(frame)); err != nil {
 				return
 			}
 			flusher.Flush()
@@ -579,12 +613,19 @@ func queryInt(r *http.Request, key string, def int) int {
 	return def
 }
 
+// terminalReadLimit is the largest browser-to-PTY frame, such as one paste.
+// A larger frame closes the socket with "message too big".
+const terminalReadLimit = 8 << 20
+
 // serveTerminal bridges a browser websocket to the agent's live interactive
 // shim PTY. Binary frames carry raw terminal bytes in both directions; a text
 // frame {"cols":C,"rows":R} triggers a PTY resize. When no interactive
 // iteration is running, Attach fails and the socket is closed with code 4404 so
 // the frontend can distinguish "gone" from an ordinary close.
 func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
+	if rejectUntrustedOrigin(w, r) {
+		return
+	}
 	name := r.PathValue("name")
 	cols, rows := queryInt(r, "cols", 80), queryInt(r, "rows", 24)
 
@@ -594,13 +635,10 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
 		// the client can tell "no session" from other close reasons.
 		//
 		// InsecureSkipVerify disables coder/websocket's default same-origin
-		// check. Auth here is the bearer token (Authorization header or
-		// ?token= query param, checked before this handler runs), not the
-		// browser Origin, and CORS already answers every request with
-		// Access-Control-Allow-Origin: * (see the CORS middleware below), so
-		// origin pinning adds no real protection — it only breaks the
-		// federated /terminals page, where a browser on daemon A opens a
-		// terminal websocket to daemon B and Origin never equals Host.
+		// check, which would break the federated /terminals page: a browser
+		// on daemon A opens a terminal websocket to daemon B and Origin never
+		// equals Host. A bearer-authenticated request is trusted by its token;
+		// a tokenless one already passed rejectUntrustedOrigin above.
 		if c, e := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true}); e == nil {
 			c.Close(4404, "no interactive session")
 		}
@@ -608,16 +646,16 @@ func (s *Server) serveTerminal(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// See the InsecureSkipVerify comment above: token auth + wildcard CORS
-	// make origin pinning both redundant and harmful for cross-host use.
+	// See the InsecureSkipVerify comment above.
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		return
 	}
 	defer ws.CloseNow()
 	// Terminal input (paste, control sequences) must not be capped by the
-	// library's default 32 KiB read limit; -1 disables the limit entirely.
-	ws.SetReadLimit(-1)
+	// library's default 32 KiB read limit, but a bounded limit keeps one frame
+	// from growing daemon memory without end.
+	ws.SetReadLimit(terminalReadLimit)
 	ctx := r.Context()
 
 	// PTY bytes → browser (binary frames).
@@ -999,7 +1037,7 @@ func (s *Server) ServeWeb(addr string) error {
 	}
 	// Host check outermost: a request with a non-loopback Host is refused 421
 	// before CORS ever labels it, preflight included.
-	webSrv := &http.Server{Handler: webHostMiddleware(webCORSMiddleware(s.Handler()))}
+	webSrv := NewHTTPServer(webHostMiddleware(webCORSMiddleware(s.Handler())))
 	s.serveMu.Lock()
 	if s.stopping {
 		s.serveMu.Unlock()

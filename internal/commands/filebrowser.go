@@ -69,7 +69,7 @@ func fileRead() registry.Command {
 }
 
 func fileWrite() registry.Command {
-	return registry.Command{
+	return withMaxBody(registry.Command{
 		Path:    "agent.file.write",
 		Summary: "Overwrite/save a file in an agent's cwd (jailed)",
 		Args: []registry.Arg{
@@ -88,7 +88,7 @@ func fileWrite() registry.Command {
 			}
 			return map[string]any{"path": str(p, "path"), "saved": true}, nil
 		},
-	}
+	}, jsonEscapedBodyLimit(filebrowser.MaxReadBytes))
 }
 
 func fileCreate() registry.Command {

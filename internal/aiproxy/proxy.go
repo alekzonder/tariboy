@@ -18,8 +18,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/internal/store"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 // Exchange carries one request through the middleware chain.
@@ -149,10 +147,10 @@ func (p *Proxy) budget(next Handler) Handler {
 			ex.Status = "budget_block"
 			if p.cfg.Audit != nil {
 				p.cfg.Audit(ex.Attr.Agent, "budget_block",
-					`{"scope":"`+d.Scope+`"}`)
+					string(marshalJSON(struct {
+						Scope string `json:"scope"`
+					}{d.Scope})))
 			}
-			ex.W.Header().Set("Content-Type", "application/json")
-			ex.W.WriteHeader(http.StatusTooManyRequests)
 			message := "budget exceeded"
 			if len(d.Exhausted) > 0 {
 				message += ": " + strings.Join(d.Exhausted, ", ")
@@ -160,10 +158,11 @@ func (p *Proxy) budget(next Handler) Handler {
 			if ex.Provider == "cursor" {
 				// The cursor agent CLI is a Connect client: 429 maps to
 				// resource_exhausted in the Connect error JSON.
-				ex.W.Write([]byte(`{"code":"resource_exhausted","message":"` + message + `"}`))
+				writeJSONError(ex.W, http.StatusTooManyRequests,
+					connectError{Code: "resource_exhausted", Message: message})
 				return nil
 			}
-			ex.W.Write([]byte(`{"type":"error","error":{"type":"rate_limit_error","message":"` + message + `"}}`))
+			writeJSONError(ex.W, http.StatusTooManyRequests, anthropicError("rate_limit_error", message))
 			return nil
 		}
 		// warn: emit once, keep serving.
@@ -560,7 +559,18 @@ func (p *Proxy) ListenAt(addr string) (string, error) {
 		return "", err
 	}
 	p.ln = ln
-	p.server = &http.Server{Handler: h2c.NewHandler(p, &http2.Server{})}
+	// HTTP/1.1 plus HTTP/2 with prior knowledge (h2c) on the loopback
+	// listener. No Read/WriteTimeout: model responses stream for minutes.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+	p.server = &http.Server{
+		Handler:           p,
+		Protocols:         protocols,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
+	}
 	return ln.Addr().String(), nil
 }
 
@@ -887,4 +897,45 @@ func copyHeaders(dst, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
+}
+
+// anthropicErrorBody is the Anthropic Messages API error envelope. Field
+// order matches the wire layout clients already see.
+type anthropicErrorBody struct {
+	Type  string               `json:"type"`
+	Error anthropicErrorDetail `json:"error"`
+}
+
+type anthropicErrorDetail struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+func anthropicError(errType, message string) anthropicErrorBody {
+	return anthropicErrorBody{Type: "error", Error: anthropicErrorDetail{Type: errType, Message: message}}
+}
+
+// connectError is the Connect protocol error JSON read by the cursor agent CLI.
+type connectError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// marshalJSON encodes v without HTML escaping so ordinary values keep the
+// byte layout of the former hand-written bodies.
+func marshalJSON(v any) []byte {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return []byte(`{}`)
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
+}
+
+// writeJSONError writes v as a JSON error response with status.
+func writeJSONError(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(marshalJSON(v))
 }

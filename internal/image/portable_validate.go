@@ -26,7 +26,7 @@ import (
 var portablePluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
 const (
-	maxPortableImageCompressed = int64(64 << 20)
+	MaxPortableImageCompressed = int64(64 << 20)
 	maxPortableImageExpanded   = int64(256 << 20)
 	maxPortableImageFiles      = 4096
 	maxPortableImagePathBytes  = 512
@@ -60,7 +60,7 @@ func validatePortableArchive(archive []byte, ref Ref) (Manifest, error) {
 }
 
 func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecontract.ExternalResolver, enforceContract bool) (Manifest, error) {
-	if int64(len(archive)) > maxPortableImageCompressed {
+	if int64(len(archive)) > MaxPortableImageCompressed {
 		return Manifest{}, errors.New("image archive exceeds compressed size limit")
 	}
 	gz, err := gzip.NewReader(bytes.NewReader(archive))

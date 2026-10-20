@@ -51,7 +51,7 @@ type Arg struct {
 
 type HTTPRoute struct {
 	Method, Path string
-	// MaxBodyBytes bounds JSON decoding when positive; zero preserves the route default.
+	// MaxBodyBytes bounds JSON decoding when positive; zero keeps the 1 MiB API default.
 	MaxBodyBytes int64 `json:"-"`
 }
 

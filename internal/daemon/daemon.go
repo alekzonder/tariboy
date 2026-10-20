@@ -706,7 +706,8 @@ func Run(ctx context.Context, o Options) error {
 			}
 			return n
 		},
-		ActiveAgents: func(context.Context) int64 { return int64(manager.ActiveAgents()) },
+		ActiveAgents:  func(context.Context) int64 { return int64(manager.ActiveAgents()) },
+		EventsDropped: func(context.Context) int64 { return hub.Dropped() },
 	})
 
 	// A publish wakes exactly the agents that received a delivery and feeds the

@@ -384,6 +384,11 @@ func taskCommands() []registry.Command { return TaskOperatorCommands() }
 const maxQueueSecretBody = 512 << 10
 
 // withMaxBody sets the request body bound of an HTTP command.
+// jsonEscapedBodyLimit is the body limit for a route that carries a text file
+// of up to maxFile bytes as one JSON string: an escape such as \u0000 takes six
+// bytes, plus room for the other fields.
+func jsonEscapedBodyLimit(maxFile int64) int64 { return 6*maxFile + 64<<10 }
+
 func withMaxBody(cmd registry.Command, limit int64) registry.Command {
 	route := *cmd.HTTP
 	route.MaxBodyBytes = limit

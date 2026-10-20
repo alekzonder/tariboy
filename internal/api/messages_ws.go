@@ -39,13 +39,8 @@ func (s *Server) serveAgentStates(w http.ResponseWriter, r *http.Request) {
 
 // serveHints forwards every agent's events of the given types as hint frames.
 func (s *Server) serveHints(w http.ResponseWriter, r *http.Request, types []string, hint func(events.Event) map[string]any) {
-	// The tokenless loopback listener relies on the browser Origin boundary,
-	// exactly as the Tasks socket does.
-	if !requestAuthenticated(r) {
-		if origin := r.Header.Get("Origin"); origin != "" && !isAllowedWebOrigin(origin) {
-			WriteErr(w, http.StatusForbidden, "forbidden_origin", "websocket origin is not allowed")
-			return
-		}
+	if rejectUntrustedOrigin(w, r) {
+		return
 	}
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
@@ -65,6 +60,12 @@ func (s *Server) serveHints(w http.ResponseWriter, r *http.Request, types []stri
 			return
 		case event, ok := <-stream:
 			if !ok {
+				return
+			}
+			if event.Type == "reset" {
+				// The hub dropped events for this socket. The client refetches
+				// on every reconnect, so closing recovers what it missed.
+				ws.Close(websocket.StatusTryAgainLater, "events dropped")
 				return
 			}
 			if err := ws.Write(ctx, websocket.MessageText, mustJSON(hint(event))); err != nil {

@@ -24,6 +24,25 @@ persisted `otlp_endpoint` daemon setting.
   `*.localhost` to loopback, so the Android origin is that app's WebView or a
   loopback port-80 page, which `http://localhost` already covered. The Host
   check is unchanged.
+- Every daemon HTTP server (the unix socket, daemon TCP, the loopback web
+  listener, the agent tools socket, and the AI proxy) closes a connection whose
+  request headers take more than 10 seconds, closes idle keep-alive
+  connections after 120 seconds, and refuses headers larger than 64 KiB. The
+  servers set no read or write timeout for the whole request, because SSE,
+  websockets, terminals and model responses stay open for a long time.
+- A command request body is limited to 1 MiB and a larger body gets HTTP 413
+  `too_large`. A route raises its own limit only where it needs to: file
+  uploads, queue secrets (512 KiB), and the two text-file editors (the agent
+  file editor and image source files), whose limit fits their largest file
+  after JSON escaping. The agent tools API limits every body to 1 MiB.
+- Every websocket route (Tasks, message and agent-state hints, and the agent
+  terminal) checks the browser `Origin` when the request has no bearer token:
+  only the web listener's allowed origins above may open it, and any other
+  origin gets HTTP 403 `forbidden_origin`. A request with a valid bearer token
+  may come from any origin, because a federated `/terminals` page on one
+  daemon opens sockets on another. A terminal websocket accepts frames of at
+  most 8 MiB (one paste); a larger frame closes the socket with "message too
+  big".
 - The Android app permits cleartext only to `127.0.0.1`, `localhost`, and
   `::1` through its network security config, and its WebView has no Tauri IPC
   permissions. It keeps server tokens in WebView session storage, not a
