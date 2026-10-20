@@ -459,8 +459,13 @@ fallback, tested by `isWorkflowTask`) is presented by category; the daemon's
 `status_view` (Active, Closed, All) selects by category too, and a flexible
 task's category equals its status. `TaskRow` takes its tone from `task.category` and its
 label from `taskStatusLabel(task)`: the workflow status ID, humanised, in a
-clipped pill whose title is the ID, plus a `waiting_on` marker (`customer`,
-`script`, or a danger `paused` whose title is the pause reason). `TaskDetail`
+clipped pill whose title is the ID, then the task's `workflow_step` as `k/n`
+(hidden on a phone), plus a `waiting_on` marker (`customer`, `script`, or a
+danger `paused` whose title is the pause reason). A `workflow_attention` of
+kind `failed`, `script_failed`, or `rejected` replaces the `customer`/`script`
+marker with a problem mark whose title is the message; the pause pill
+outranks it, and `idle` earns no mark. The row needs no request of its own:
+both objects come with the task JSON. `TaskDetail`
 compares `status` only with `category` for its dirty check and tone, and sends
 no `status` or `assignee` on Save for a workflow task; it hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for

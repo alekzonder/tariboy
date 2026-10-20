@@ -183,9 +183,15 @@ workflow status, for example **Approval**, instead of one of the five fixed
 labels; a long status ID is clipped and its full text is the tooltip. The
 colour of the label follows the task's category (`open`, `in_progress`,
 `wait_customer`, `done`, `cancelled`), not the status ID, so a closed workflow
-task reads as closed whatever its last status was. Beside the label a small
-**customer** or **script** marker says who the task waits on, and a red
-**paused** marker replaces it when the daemon paused the task (its tooltip
+task reads as closed whatever its last status was. Beside the label an open
+task shows its step as `3/6`, its position among the workflow's statuses
+(hidden on a phone), then a small **customer** or **script** marker that says
+who the task waits on. A problem mark takes the marker's place when something
+needs a person: red when a check could not run or the status's watch script
+failed, accent-coloured when a check rejected the request; its tooltip carries
+the script's words and the count behind it (see
+[Attention summary](/docs/task-workflows#attention-summary)). A red
+**paused** marker outranks both when the daemon paused the task (its tooltip
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.
 

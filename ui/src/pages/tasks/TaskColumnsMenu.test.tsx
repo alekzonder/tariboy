@@ -39,7 +39,7 @@ describe("task columns menu", () => {
     await openMenu()
 
     await userEvent.click(item("Widen Status"))
-    expect(readTaskColumnLayout().widths.status).toBe(126)
+    expect(readTaskColumnLayout().widths.status).toBe(164)
     await userEvent.click(item("Narrow Key"))
     expect(readTaskColumnLayout().widths.key).toBe(96)
     expect(item("Narrow Key")).toHaveAttribute("data-disabled")

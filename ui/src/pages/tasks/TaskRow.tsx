@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type Modifier,
 } from "@dnd-kit/core"
-import { ChevronRight, GripVertical, Plus } from "lucide-react"
+import { ChevronRight, GripVertical, Plus, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import {
@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { PriorityTag, StatusPill } from "@/components/ui/status"
 import { cn } from "@/lib/utils"
-import { taskTone } from "@/lib/statusTone"
-import { isWorkflowTask, taskStatusLabel, type TaskPriority } from "@/lib/tasks"
+import { TONE_TEXT, taskTone, type StatusTone } from "@/lib/statusTone"
+import { isWorkflowTask, taskStatusLabel, type TaskPriority, type WorkflowAttention } from "@/lib/tasks"
 import type { VisibleTaskRow } from "@/lib/taskTree"
 import TaskColumnResizeHandle from "./TaskColumnResizeHandle"
 import {
@@ -43,6 +43,37 @@ const priorityLabels = {
   P2: "Normal",
   P3: "Low",
 } as const
+
+/** The tone a row's problem mark takes, or null when the summary earns no mark:
+ *  an idle holder is the panel's business, not the list's. */
+function attentionTone(attention: WorkflowAttention | undefined): StatusTone | null {
+  switch (attention?.kind) {
+    case "failed": case "script_failed": return "danger"
+    case "rejected": return "attention"
+    default: return null
+  }
+}
+
+const ATTENTION_TITLE: Record<WorkflowAttention["kind"], string> = {
+  paused: "Paused",
+  failed: "A check could not run",
+  rejected: "A check rejected the request",
+  script_failed: "The watch script failed",
+  idle: "No transition requested yet",
+}
+
+/** A problem on a workflow task, as one mark the row has room for; the title
+ *  carries the script's words. */
+function AttentionMark({ attention }: { attention: WorkflowAttention }) {
+  const tone = attentionTone(attention) ?? "quiet"
+  const title = [ATTENTION_TITLE[attention.kind], attention.message, attention.count ? `(${attention.count})` : ""].filter(Boolean).join(": ").replace(": (", " (")
+  return (
+    <span role="img" aria-label={`Problem: ${title}`} title={title} data-attention={attention.kind}
+      className={cn("inline-flex shrink-0 items-center", TONE_TEXT[tone])}>
+      <TriangleAlert aria-hidden="true" className="size-3.5 [stroke-width:1.8]" />
+    </span>
+  )
+}
 
 /* @dnd-kit intentionally exposes callback refs and live attributes from its
  * hook for render-time spreading; they are not mutable React ref reads. */
@@ -219,8 +250,16 @@ export default function TaskRow({
                       title keeps the whole ID readable. */}
                   <span title={row.task.status} className="min-w-0 max-w-[24ch] truncate">{taskStatusLabel(row.task)}</span>
                 </StatusPill>
+                {row.task.workflow_step && (
+                  <span title={`Step ${row.task.workflow_step.index} of ${row.task.workflow_step.total}`}
+                    className="hidden shrink-0 font-mono text-[10.5px] tabular-nums text-muted-foreground sm:inline">
+                    {row.task.workflow_step.index}/{row.task.workflow_step.total}
+                  </span>
+                )}
                 {row.task.waiting_on === "pause" ? (
                   <StatusPill tone="danger" size="sm" title={row.task.workflow_paused_reason || undefined}>paused</StatusPill>
+                ) : attentionTone(row.task.workflow_attention) ? (
+                  <AttentionMark attention={row.task.workflow_attention!} />
                 ) : row.task.waiting_on ? (
                   <StatusPill tone="quiet" size="sm">{row.task.waiting_on}</StatusPill>
                 ) : null}

@@ -12,7 +12,8 @@ export const TASK_COLUMNS = {
   priority: 30,
   agent: 104,
   server: 96,
-  status: 110,
+  // A workflow status pill, its `k/n` step, and a problem mark fit side by side.
+  status: 148,
   duration: 74,
   updated: 76,
   add: 24,

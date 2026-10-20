@@ -150,15 +150,15 @@ describe("task table column layout", () => {
   it("resizes a column from the keyboard within its bounds", () => {
     renderRow("agent")
     const handle = screen.getByRole("separator", { name: "Resize Status column" })
-    expect(handle).toHaveAttribute("aria-valuenow", "110")
+    expect(handle).toHaveAttribute("aria-valuenow", "148")
 
     fireEvent.keyDown(handle, { key: "ArrowRight" })
-    expect(readTaskColumnLayout().widths.status).toBe(118)
+    expect(readTaskColumnLayout().widths.status).toBe(156)
     fireEvent.keyDown(handle, { key: "ArrowLeft", shiftKey: true })
-    expect(readTaskColumnLayout().widths.status).toBe(86)
+    expect(readTaskColumnLayout().widths.status).toBe(124)
     fireEvent.keyDown(handle, { key: "Home" })
-    expect(readTaskColumnLayout().widths.status).toBe(110)
-    expect(within(screen.getByTestId(`task-row-${task.key}`)).getByText("In progress").parentElement!.style.width).toBe("110px")
+    expect(readTaskColumnLayout().widths.status).toBe(148)
+    expect(within(screen.getByTestId(`task-row-${task.key}`)).getByText("In progress").parentElement!.style.width).toBe("148px")
     expect(screen.queryByRole("separator", { name: "Resize Task column" })).toBeNull()
   })
 
@@ -287,6 +287,42 @@ describe("task row status", () => {
     expect(screen.queryByText("customer")).toBeNull()
     expect(screen.queryByText("script")).toBeNull()
     expect(screen.queryByText("paused")).toBeNull()
+    expect(screen.queryByRole("img")).toBeNull()
+  })
+
+  it("counts the step of a workflow task, hidden on a phone", () => {
+    renderTask({ ...workflowTask, workflow_step: { index: 3, total: 6 } })
+    const step = screen.getByTitle("Step 3 of 6")
+    expect(step).toHaveTextContent("3/6")
+    expect(step).toHaveClass("hidden", "sm:inline")
+  })
+
+  it("marks a failed or rejected request and a failed watch, with the script's words in the title", () => {
+    const failed = renderTask({ ...workflowTask, workflow_attention: { kind: "failed", message: "the script failed with exit 3", count: 1, request_id: 4, run_id: 9 } })
+    const mark = screen.getByRole("img", { name: "Problem: A check could not run: the script failed with exit 3 (1)" })
+    expect(mark).toHaveAttribute("data-attention", "failed")
+    expect(mark).toHaveClass("text-status-failed")
+    failed.unmount()
+
+    const rejected = renderTask({ ...workflowTask, workflow_attention: { kind: "rejected", message: "no heading", count: 2 } })
+    expect(screen.getByRole("img")).toHaveClass("text-primary")
+    expect(screen.getByRole("img")).toHaveAttribute("title", "A check rejected the request: no heading (2)")
+    rejected.unmount()
+
+    // The mark takes the place of the wait marker; the pause pill outranks it.
+    const watch = renderTask({ ...workflowTask, waiting_on: "script", workflow_attention: { kind: "script_failed", message: "502" } })
+    expect(screen.getByRole("img")).toHaveAttribute("data-attention", "script_failed")
+    expect(screen.queryByText("script")).toBeNull()
+    watch.unmount()
+
+    renderTask({ ...workflowTask, waiting_on: "pause", workflow_paused_reason: "script_failures", workflow_attention: { kind: "paused", message: "scripts failed" } })
+    expect(screen.getByText("paused")).toBeInTheDocument()
+    expect(screen.queryByRole("img")).toBeNull()
+  })
+
+  it("keeps an idle holder off the list: that is the panel's to explain", () => {
+    renderTask({ ...workflowTask, workflow_attention: { kind: "idle", message: "2 iterations", count: 2 } })
+    expect(screen.queryByRole("img")).toBeNull()
   })
 
   it("truncates a 64-character status ID with CSS and keeps the full ID in a title", () => {
