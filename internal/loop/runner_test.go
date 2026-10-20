@@ -31,6 +31,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -332,11 +333,7 @@ func TestAwaitKillsAfterDoneGraceForAllModes(t *testing.T) {
 	for _, interactive := range []bool{false, true} {
 		t.Run(fmt.Sprintf("interactive=%v", interactive), func(t *testing.T) {
 			base := t.TempDir()
-			s, err := store.Open(filepath.Join(base, "x.db"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { s.Close() })
+			s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 			as := agent.NewStore(s)
 
 			ag := agent.Agent{Name: "alice", ImageRef: "basic:latest", Interactive: interactive}
@@ -404,11 +401,7 @@ func TestAwaitKillsAfterDoneGraceForAllModes(t *testing.T) {
 func TestPrepareUsesAgentNameAsTmuxSession(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
 	ag := agent.Agent{
@@ -598,11 +591,7 @@ func newRunnerForProxyTest(t *testing.T, binder ProxyBinder) (*ShimRunner, agent
 	// The stub harness only needs a path here; the fake spawner writes result.json
 	// directly, so the script is never executed.
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
 	ag := agent.Agent{Name: "alice", ImageRef: "basic:latest", ImageDigest: "sha256:abc",
@@ -1020,11 +1009,7 @@ func TestRunSnapshotsTimeoutFromOnePreSpawnClockSample(t *testing.T) {
 func TestRunnerSchemaV1StillMaterializesPackedSkillsUnderCWD(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
 	ag := agent.Agent{
@@ -1088,11 +1073,7 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
-			db, err := store.Open(filepath.Join(base, "state.db"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
+			db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 			as := agent.NewStore(db)
 			binDir := filepath.Join(base, "harness-bin")
 			if err := os.MkdirAll(binDir, 0o700); err != nil {
@@ -1224,11 +1205,7 @@ func TestRunnerSchemaV2AttachesImageSkillBridgeWithoutChangingCWDOrHome(t *testi
 
 func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T) {
 	base := t.TempDir()
-	db, err := store.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	externalCwd := t.TempDir()
 	ag := agent.Agent{
@@ -1300,11 +1277,7 @@ func TestRunnerSchemaV2AppendsGoalGuidanceWithoutGoalTemplateEntry(t *testing.T)
 
 func TestRunnerSchemaV2RendersAuthoritativeGoal(t *testing.T) {
 	base := t.TempDir()
-	db, err := store.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	ag := agent.Agent{Name: "alice", ImageRef: "img:latest", ImageDigest: "digest", HarnessType: "stub"}
 	if err := as.Create(ag); err != nil {
@@ -1403,11 +1376,7 @@ func TestRunGuardManualFailsWhenSessionAlive(t *testing.T) {
 func TestReapOrphanBlock(t *testing.T) {
 	newRunner := func(t *testing.T, running bool, killed *int) (*ShimRunner, agent.Agent) {
 		t.Helper()
-		s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { s.Close() })
+		s := storetest.Open(t)
 		as := agent.NewStore(s)
 		ag := agent.Agent{Name: "manager", ImageRef: "i:latest", Interactive: true}
 		if err := as.Create(ag); err != nil {
@@ -1479,11 +1448,7 @@ func newPromptProbe(t *testing.T) (*ShimRunner, agent.Agent, agentdir.Layout, *b
 	t.Helper()
 	base := t.TempDir()
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 	bs := bus.New(s, time.Now)
 
@@ -1664,11 +1629,7 @@ func (s *harnessPreflightSpawner) Start(_ []string, env []string, _ string) erro
 func newHarnessPreflightRunner(t *testing.T, bare bool, agentEnv map[string]string) (*ShimRunner, agent.Agent, agentdir.Layout, *harnessPreflightSpawner) {
 	t.Helper()
 	base := t.TempDir()
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
 	ag := agent.Agent{
@@ -1892,11 +1853,7 @@ func environmentValue(env []string, key string) string {
 func TestPrepareBareImage(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 
 	ag := agent.Agent{Name: "bob", ImageRef: "bare:latest", HarnessType: "stub", Interactive: true}
@@ -1955,11 +1912,7 @@ func TestPrepareBareImage(t *testing.T) {
 }
 
 func TestEnforceSoftTimeoutDoesNotKillAfterConcurrentExtension(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "agent.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t)
 	as := agent.NewStore(db)
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)

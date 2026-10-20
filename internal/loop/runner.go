@@ -154,6 +154,14 @@ func messageAge(ts string, now time.Time) (time.Duration, bool) {
 // last. When proxyEnabled is set the harness is pointed at the local AI proxy,
 // while provider credentials remain the harness' responsibility and are
 // forwarded by the proxy as-is.
+// baseEnv returns a copy of env, or the process environment when env is nil.
+func baseEnv(env []string) []string {
+	if env == nil {
+		return os.Environ()
+	}
+	return slices.Clone(env)
+}
+
 func BuildEnv(base []string, agentBin, agentName, iterationID, toolsSock string, proxyEnabled bool, proxyURL, proxyToken string, env, secrets map[string]string) []string {
 	m := map[string]string{}
 	for _, kv := range base {
@@ -367,8 +375,11 @@ var ErrSessionAlive = errors.New("tmux_session_exists")
 var ErrIterationDetached = errors.New("iteration_detached")
 
 type RunnerConfig struct {
-	AgentsDir    string
-	RuntimeDir   string
+	AgentsDir  string
+	RuntimeDir string
+	// BaseEnv is the baseline environment of the harness. Nil uses the daemon
+	// process environment.
+	BaseEnv      []string
 	ShimBin      string
 	ImgStore     *image.Store
 	Store        *agent.Store
@@ -1057,7 +1068,7 @@ func (r *ShimRunner) buildLaunch(ag agent.Agent, l agentdir.Layout, iterationID 
 	}
 	hargv = append(hargv, in.activated.Skills.Args...)
 
-	base := append(os.Environ(), henv...)
+	base := append(baseEnv(r.cfg.BaseEnv), henv...)
 	binDir := l.BinDir()
 	if in.bare {
 		binDir = ""

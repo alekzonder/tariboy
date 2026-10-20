@@ -40,7 +40,9 @@ import (
 	"github.com/alekzonder/tariboy/internal/scriptnotify"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func TestManagerPassesCurrentGoalToRunner(t *testing.T) {
@@ -713,17 +715,13 @@ func newManager(t *testing.T, r IterationRunner) (*Manager, *agent.Store, string
 	t.Helper()
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	base := t.TempDir()
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	buildBasic(t, imgStore)
 	m := NewManager(ManagerConfig{
-		AgentsDir: filepath.Join(base, "agents"),
-		ShimBin:   "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
+		AgentsDir: filepath.Join(base, "agents"), RuntimeDir: testutil.ShortDir(t),
+		ShimBin: "/opt/tariboy-shim", ImgStore: imgStore, Store: as,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
 		Bus:           bus.New(s, time.Now),
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
@@ -2139,7 +2137,7 @@ func TestStartAfterStopRestoresRunningState(t *testing.T) {
 
 	// A fresh manager over the same store/dir reattaches the running agent.
 	m2 := NewManager(ManagerConfig{
-		AgentsDir: agentsDir, ShimBin: "/opt/tariboy-shim",
+		AgentsDir: agentsDir, RuntimeDir: m.cfg.RuntimeDir, ShimBin: "/opt/tariboy-shim",
 		Store: as, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: time.Now,
 		RunnerFactory: func(agent.Agent) IterationRunner { return r },
 	})
@@ -2922,11 +2920,7 @@ func TestBuildImageForAgentRejectsSkillSymlink(t *testing.T) {
 
 func TestReapOrphanSessions(t *testing.T) {
 	base := t.TempDir()
-	s, err := store.Open(filepath.Join(base, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.OpenAt(t, filepath.Join(base, "x.db"))
 	as := agent.NewStore(s)
 	// live orphan session (no running iteration) -> reaped.
 	_ = as.Create(agent.Agent{Name: "orphan", ImageRef: "basic:latest", Interactive: true})

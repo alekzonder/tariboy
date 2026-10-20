@@ -168,7 +168,7 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 	}
 
 	secrets, _ := s.cfg.Store.SecretMap(ag.Name)
-	env := agentScriptEnv(ag, l, secrets, l.Sock())
+	env := agentScriptEnv(s.cfg.BaseEnv, ag, l, secrets, l.Sock())
 	// Appended last: os/exec keeps the final value of a duplicated key, so an
 	// agent's own environment cannot redefine the protocol.
 	env = append(env, script.ProtocolEnv()...)
@@ -621,7 +621,7 @@ func (m *Manager) ScriptRuntime(agentName string) (cwd string, env []string, err
 	}
 	l := agentdir.New(m.cfg.AgentsDir, ag.Name).WithRuntime(m.cfg.RuntimeDir)
 	cwd = cwdOf(ag, l)
-	env, err = agentShellEnv(filepath.Dir(m.cfg.AgentsDir), l.ShellScriptPath(), cwd, agentScriptEnv(ag, l, secrets, ""))
+	env, err = agentShellEnv(filepath.Dir(m.cfg.AgentsDir), l.ShellScriptPath(), cwd, agentScriptEnv(m.cfg.BaseEnv, ag, l, secrets, ""))
 	if err != nil {
 		return "", nil, fmt.Errorf("agent shell scripts of agent %q: %w", agentName, err)
 	}
@@ -629,11 +629,11 @@ func (m *Manager) ScriptRuntime(agentName string) (cwd string, env []string, err
 }
 
 // agentScriptEnv is the environment of a script that runs as ag: the daemon
-// baseline, the agent's environment and secrets, and the agent bin directory
+// baseline (base, nil for the process environment), the agent's environment and secrets, and the agent bin directory
 // on PATH. toolsSock is the agent tools socket, or "" for a script that must
 // not reach it.
-func agentScriptEnv(ag agent.Agent, l agentdir.Layout, secrets map[string]string, toolsSock string) []string {
-	env := BuildEnv(os.Environ(), l.BinDir(), ag.Name, "", toolsSock, false, "", "", ag.Env, secrets)
+func agentScriptEnv(base []string, ag agent.Agent, l agentdir.Layout, secrets map[string]string, toolsSock string) []string {
+	env := BuildEnv(baseEnv(base), l.BinDir(), ag.Name, "", toolsSock, false, "", "", ag.Env, secrets)
 	if toolsSock != "" {
 		return env
 	}

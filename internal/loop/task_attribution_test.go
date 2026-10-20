@@ -3,12 +3,11 @@ package loop
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -103,11 +102,7 @@ func TestResolveNativeTaskAttributionRejectsParentCycle(t *testing.T) {
 }
 
 func TestResolveNativeTaskAttributionUsesRealServiceAuthorization(t *testing.T) {
-	state, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = state.Close() })
+	state := storetest.Open(t)
 	service := tasks.NewService(state.DB, "customer", func() time.Time {
 		return time.Date(2026, 8, 3, 6, 0, 0, 0, time.UTC)
 	})
@@ -169,11 +164,7 @@ func TestSetGoalUpdatesSelectionAndLiveProxyAttribution(t *testing.T) {
 // an agent read its former task, never select it. A task the agent reads as
 // the ancestor of its own work resolves as it always did.
 func TestSetGoalRefusesATaskReadOnlyAsAFormerHolder(t *testing.T) {
-	state, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = state.Close() })
+	state := storetest.Open(t)
 	service := tasks.NewService(state.DB, "customer", func() time.Time {
 		return time.Date(2026, 10, 2, 6, 0, 0, 0, time.UTC)
 	})
