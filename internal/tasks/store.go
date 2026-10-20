@@ -4,7 +4,9 @@ import (
 	"database/sql"
 )
 
-const taskSelect = `
+// taskColumns, taskFrom, and scanTask read one task; taskSelect joins them.
+// visibleTaskSelect also returns the access rank and needs visibleCTE.
+const taskColumns = `
 SELECT t.id, t.task_key, t.queue_prefix, COALESCE(p.task_key, ''),
        t.position, t.priority, t.title, t.description, t.status, t.pull_request, t.author, t.customer,
        t.group_name, t.assignee, t.manual_block_reason,
@@ -15,15 +17,23 @@ SELECT t.id, t.task_key, t.queue_prefix, COALESCE(p.task_key, ''),
          WHERE r.target_id = t.id AND r.type = 'blocks'
            AND blocker.status NOT IN ('done', 'cancelled')
        ) OR t.manual_block_reason <> '',
-       t.revision, t.created_at, t.started_at, t.updated_at, t.completed_at,` + TaskWorkflowColumns + `
+       t.revision, t.created_at, t.started_at, t.updated_at, t.completed_at,` + TaskWorkflowColumns
+
+const taskFrom = `
 FROM tasks t
 LEFT JOIN tasks p ON p.id = t.parent_id` + TaskWorkflowJoin
+
+const taskSelect = taskColumns + taskFrom
+
+const visibleTaskSelect = taskColumns + `, v.access_rank` + taskFrom + `
+JOIN visible_access v ON v.id = t.id`
 
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanTask(row rowScanner) (Task, error) {
+// scanTask scans the columns of taskColumns, then extra.
+func scanTask(row rowScanner, extra ...any) (Task, error) {
 	var t Task
 	var blocked bool
 	workflow, finish := WorkflowScanTargets(&t)
@@ -33,9 +43,17 @@ func scanTask(row rowScanner) (Task, error) {
 		&t.Group, &t.Assignee, &t.ManualBlockReason, &blocked,
 		&t.Revision, &t.CreatedAt, &t.StartedAt, &t.UpdatedAt, &t.CompletedAt,
 	}
-	err := row.Scan(append(dest, workflow...)...)
+	err := row.Scan(append(append(dest, workflow...), extra...)...)
 	t.Blocked = blocked
 	finish()
+	return t, err
+}
+
+// scanVisibleTask scans a row of visibleTaskSelect and sets Access.
+func scanVisibleTask(row rowScanner) (Task, error) {
+	var rank int
+	t, err := scanTask(row, &rank)
+	t.Access = accessName(rank)
 	return t, err
 }
 

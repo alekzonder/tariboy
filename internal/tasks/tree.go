@@ -231,28 +231,16 @@ func (s *Service) Ready(ctx context.Context, actor Actor, filter ReadyFilter) ([
 }
 
 func readyWith(ctx context.Context, q queryer, actor Actor, filter ReadyFilter) ([]Task, error) {
-	visible, err := visibleTaskIDs(ctx, q, actor)
-	if err != nil {
-		return nil, err
-	}
-	writeIDs := map[int64]string{}
-	for id, access := range visible {
-		if access == "write" {
-			writeIDs[id] = access
-		}
-	}
-	if len(writeIDs) == 0 {
-		return []Task{}, nil
-	}
-	query, args := addVisibleClause(taskSelect+`
-		WHERE t.status = 'open' AND t.assignee = '' AND t.manual_block_reason = ''
+	cte, args := visibleCTE(actor)
+	query := cte + visibleTaskSelect + `
+		WHERE v.access_rank = 2 AND t.status = 'open' AND t.assignee = '' AND t.manual_block_reason = ''
 		  AND t.workflow_digest IS NULL
 		  AND NOT EXISTS (
 			SELECT 1 FROM task_relations r
 			JOIN tasks blocker ON blocker.id = r.source_id
 			WHERE r.target_id = t.id AND r.type = 'blocks'
 			  AND blocker.status NOT IN ('done', 'cancelled')
-		  )`, writeIDs)
+		  )`
 	if filter.Queue != "" {
 		query += ` AND t.queue_prefix = ?`
 		args = append(args, strings.ToUpper(strings.TrimSpace(filter.Queue)))
@@ -269,13 +257,12 @@ func readyWith(ctx context.Context, q queryer, actor Actor, filter ReadyFilter) 
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Task
+	out := []Task{}
 	for rows.Next() {
-		task, err := scanTask(rows)
+		task, err := scanVisibleTask(rows)
 		if err != nil {
 			return nil, err
 		}
-		task.Access = "write"
 		out = append(out, task)
 	}
 	return out, rows.Err()

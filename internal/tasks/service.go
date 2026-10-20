@@ -571,14 +571,8 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 		}
 		visibilityActor = AgentActor(filter.ScopeAgent)
 	}
-	visible, err := visibleTaskIDs(ctx, s.reader(), visibilityActor)
-	if err != nil {
-		return TaskPage{}, err
-	}
-	query, args := addVisibleClause(taskSelect+` WHERE 1=1`, visible)
-	if len(visible) == 0 {
-		return TaskPage{Tasks: []Task{}}, nil
-	}
+	cte, args := visibleCTE(visibilityActor)
+	query := cte + visibleTaskSelect + ` WHERE 1=1`
 	if filter.Queue != "" {
 		query += ` AND t.queue_prefix = ?`
 		args = append(args, strings.ToUpper(filter.Queue))
@@ -697,11 +691,10 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 	defer rows.Close()
 	out := []Task{}
 	for rows.Next() {
-		task, err := scanTask(rows)
+		task, err := scanVisibleTask(rows)
 		if err != nil {
 			return TaskPage{}, err
 		}
-		task.Access = visible[task.ID]
 		out = append(out, task)
 	}
 	if err := rows.Err(); err != nil {
