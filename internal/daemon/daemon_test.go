@@ -22,6 +22,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
 )
@@ -267,11 +268,7 @@ func TestWorkflowDispatcherRunsAtStartupOnSignalAndPeriodicallyAndStops(t *testi
 }
 
 func TestOrdinaryPublishDoesNotSynchronouslyWriteWorkflowStateOrChangeLegacyDelivery(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "publish.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storetest.Open(t)
 	agents := agent.NewStore(st)
 	if err := agents.Create(agent.Agent{Name: "legacy"}); err != nil {
 		t.Fatal(err)
@@ -326,11 +323,7 @@ func TestOrdinaryPublishDoesNotSynchronouslyWriteWorkflowStateOrChangeLegacyDeli
 }
 
 func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tasks.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storetest.Open(t)
 	service := tasks.NewService(st.DB, "customer", time.Now)
 	actor := tasks.CustomerActor("customer")
 	if _, err := service.CreateQueue(context.Background(), actor, tasks.CreateQueueInput{Prefix: "GOAL", Name: "Goals"}); err != nil {
@@ -353,11 +346,7 @@ func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
 // would still have no durable delivery lane after restart.
 func TestReconcileAgentInboxesRepairsExistingAgentsIdempotently(t *testing.T) {
 	base := t.TempDir()
-	st, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	agents := agent.NewStore(st)
 	for _, name := range []string{"legacy", "already"} {
 		if err := agents.Create(agent.Agent{Name: name}); err != nil {
@@ -425,6 +414,7 @@ func TestTelemetryNoopSetupShutdown(t *testing.T) {
 
 func TestRunServesAndShutsDown(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- Run(ctx, daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error"})) }()
@@ -483,10 +473,7 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seed, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	seed := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	worker := agent.Agent{
 		Name: "worker", ImageRef: "basic:latest", ImageDigest: manifest.Digest, HarnessType: "stub", Cwd: t.TempDir(),
 		Enabled: true, GoalEnabled: true, Plugins: []string{"context"},
@@ -582,6 +569,7 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 
 func TestFreshDaemonStartsWithNoInstalledPlugins(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
@@ -633,10 +621,7 @@ func TestRunRejectsPublicTCPWithoutAuth(t *testing.T) {
 }
 
 func TestRecordEventLogsOnError(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := storetest.Open(t)
 	s.Close() // subsequent AddEvent must fail (database is closed)
 	var buf bytes.Buffer
 	recordEvent(slog.New(slog.NewTextHandler(&buf, nil)), s, nil, nil, "", "daemon_start", "{}")
@@ -648,6 +633,7 @@ func TestRecordEventLogsOnError(t *testing.T) {
 
 func TestSecondDaemonRefusesWhenSocketLive(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)

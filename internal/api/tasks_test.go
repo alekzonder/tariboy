@@ -7,24 +7,19 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/coder/websocket"
 )
 
 func TestTasksWebSocketRejectsUntrustedOriginWithoutBearer(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := NewServer(registry.New(), &registry.Ctx{
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -202,11 +197,7 @@ func TestRegistryHTTPHandlerReceivesRequestCancellation(t *testing.T) {
 }
 
 func TestTasksWebSocketReplaysLiveEventsAndResumesWithoutDuplicate(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	hub := tasks.NewHub(svc)
 	svc.SetHub(hub)

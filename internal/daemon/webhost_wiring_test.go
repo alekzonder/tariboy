@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/paths"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // A request with a spoofed Host is rejected (421) by the web listener; a request
@@ -15,6 +18,7 @@ import (
 // such check (it is unreachable from a browser and its posture is unchanged).
 func TestWebListenerRejectsForeignHost(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -65,6 +69,7 @@ func TestWebListenerRejectsForeignHost(t *testing.T) {
 // A web-bind failure is fatal: Run returns the bind error instead of hanging.
 func TestWebBindFailureIsFatal(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

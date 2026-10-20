@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/daemon"
+	"github.com/alekzonder/tariboy/internal/paths"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // TestHTTPAPIEndToEnd boots the real daemon with a loopback listener and drives
@@ -20,6 +22,7 @@ import (
 // host allowlist, or the mutating routes regress. No external network.
 func TestHTTPAPIEndToEnd(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

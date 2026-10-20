@@ -26,6 +26,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // captureSpawner records the environment an iteration's harness would be started
@@ -217,11 +218,7 @@ func buildBasicImage(t *testing.T, dir string) {
 func TestProxyHandoffReusesAddressAndPrunesTerminalLeases(t *testing.T) {
 	base := t.TempDir()
 	p := paths.New(base)
-	st, err := store.Open(p.DB())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storetest.OpenAt(t, p.DB())
 	agents := agent.NewStore(st)
 	for _, it := range []agent.Iteration{
 		{ID: "alice-1", Agent: "alice", Trigger: "manual", Status: "running", StartedAt: "2026-07-29T10:00:00Z"},
@@ -270,11 +267,7 @@ func TestProxyHandoffReusesAddressAndPrunesTerminalLeases(t *testing.T) {
 func TestProxyHandoffFailsIfLiveAddressIsOccupied(t *testing.T) {
 	base := t.TempDir()
 	p := paths.New(base)
-	st, err := store.Open(p.DB())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storetest.OpenAt(t, p.DB())
 	agents := agent.NewStore(st)
 	if err := agents.CreateIteration(agent.Iteration{
 		ID: "alice-1", Agent: "alice", Trigger: "manual", Status: "running", StartedAt: "2026-07-29T10:00:00Z",
@@ -313,6 +306,7 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	buildBasicImage(t, filepath.Join(base, "images"))
 	spawner := &survivingShimSpawner{fired: make(chan struct{})}
 	t.Cleanup(spawner.close)
@@ -479,6 +473,7 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 func TestProxyWiredIntoIteration(t *testing.T) {
 	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	buildBasicImage(t, filepath.Join(base, "images"))
 
 	spawner := &captureSpawner{fired: make(chan struct{})}
@@ -615,6 +610,7 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 	defer fake.Close()
 
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	t.Setenv("TARIBOY_RUNTIME_DIR", filepath.Join(base, "runtime"))
 	t.Setenv("TARIBOY_UPSTREAM_CHATGPT_BASE_URL", fake.URL)
 	buildBasicImage(t, filepath.Join(base, "images"))
@@ -913,6 +909,7 @@ func TestProviderKeysFromAgentEnvAndSecretsReachHarness(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
+			storetest.Seed(t, paths.New(base).DB())
 			buildBasicImage(t, filepath.Join(base, "images"))
 
 			spawner := &captureSpawner{fired: make(chan struct{})}

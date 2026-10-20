@@ -12,10 +12,12 @@ import (
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestShutdownWaitsForScheduler(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	t.Setenv("TARIBOY_RUNTIME_DIR", t.TempDir())
 	started := make(chan struct{})
 	canceled := make(chan struct{})
@@ -74,6 +76,7 @@ func TestShutdownWaitsForScheduler(t *testing.T) {
 // stuck) or some rows would be missing (lost to "database is closed").
 func TestShutdownDrainsIngesterBeforeStoreClose(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	runtimeDir := t.TempDir()
 	t.Setenv("TARIBOY_RUNTIME_DIR", runtimeDir)
 

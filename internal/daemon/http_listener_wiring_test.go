@@ -9,12 +9,16 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/paths"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // The loopback listener carries the JSON API with no auth, and nothing else: a
 // non-/api path is a 404 envelope now that the daemon ships no UI.
 func TestHTTPListenerServesAPIAndNotUI(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -88,6 +92,7 @@ func TestHTTPListenerServesAPIAndNotUI(t *testing.T) {
 
 func TestNonLoopbackHTTPAddrRefused(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	err := Run(context.Background(), daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error", HTTPAddr: "0.0.0.0:8798"}))
 	if err == nil || !strings.Contains(err.Error(), "loopback") {
 		t.Fatalf("Run err = %v, want a non-loopback refusal", err)

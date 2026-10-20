@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -17,11 +17,7 @@ import (
 // principal rather than orphaning them.
 func TestResolveCustomerLoginFixesLoginAndReconcilesExistingState(t *testing.T) {
 	base := t.TempDir()
-	st, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	service := tasks.NewService(st.DB, "olduser", time.Now)
 	actor := tasks.CustomerActor("olduser")
 	ctx := context.Background()

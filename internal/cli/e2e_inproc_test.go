@@ -21,6 +21,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/daemon"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 var errInProcessPricingRefreshDisabled = errors.New("pricing refresh disabled in CLI daemon test")
@@ -63,6 +64,7 @@ func TestInProcessDaemonOptionsDisablesPricingNetwork(t *testing.T) {
 func startDaemon(t *testing.T) (base, sock string, c *client.Client) {
 	t.Helper()
 	base = t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	t.Cleanup(func() {
@@ -184,6 +186,7 @@ func waitFor(t *testing.T, cond func() bool) {
 
 func TestCLITalksToDaemon(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error"}))

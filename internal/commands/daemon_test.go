@@ -3,23 +3,18 @@ package commands
 import (
 	"io"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/toolcheck"
 )
 
 func ctx(t *testing.T) *registry.Ctx {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	return &registry.Ctx{
 		Store: s, Version: "v-test", BaseDir: "/base",
 		Log:       slog.New(slog.NewTextHandler(io.Discard, nil)),

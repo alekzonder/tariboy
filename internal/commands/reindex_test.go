@@ -8,16 +8,12 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestReindexPreservesGroupSnapshotAndLeavesLegacyRowsUngrouped(t *testing.T) {
 	base := t.TempDir()
-	st, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	if _, err := st.DB.Exec(`INSERT INTO agents(name, image_ref, "group") VALUES ('alice', 'basic:latest', 'beta')`); err != nil {
 		t.Fatal(err)
 	}
@@ -66,11 +62,7 @@ func TestReindexPreservesGroupSnapshotAndLeavesLegacyRowsUngrouped(t *testing.T)
 
 func TestReindexRestoresRecordedUsage(t *testing.T) {
 	base := t.TempDir()
-	st, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	agentsDir := filepath.Join(base, "agents")
 	if err := agentdir.New(agentsDir, "alice").EnsureIteration("alice-1"); err != nil {
 		t.Fatal(err)

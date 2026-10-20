@@ -1,23 +1,18 @@
 package daemon
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // Startup reconciliation gives every persisted agent its chats, so an agent
 // created before the chats migration is not left without a conversation.
 func TestReconcileAgentChatsProvisionsPersistedAgents(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storetest.Open(t)
 	agents := agent.NewStore(st)
 	if err := agents.Create(agent.Agent{Name: "worker", ImageRef: "img:latest"}); err != nil {
 		t.Fatal(err)

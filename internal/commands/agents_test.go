@@ -16,6 +16,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 type fakeControl struct {
@@ -90,11 +91,7 @@ func (f *fakeControl) RefreshLoopConfig(name string) { f.refreshed = append(f.re
 
 func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	fc := &fakeControl{agents: as}
 	return &registry.Ctx{Store: s, Bus: bus.New(s, time.Now), Control: fc, BaseDir: t.TempDir()}, as, fc
