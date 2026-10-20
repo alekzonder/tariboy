@@ -3,7 +3,6 @@ package loop
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentapi"
@@ -12,6 +11,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/schedule"
 	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -153,7 +153,7 @@ func (f toolsFacade) statusSnapshot() (map[string]any, error) {
 }
 
 func (f toolsFacade) setStatus(message string) (map[string]any, error) {
-	updated := f.cfg.Clock().Format(time.RFC3339)
+	updated := store.FormatTime(f.cfg.Clock())
 	if err := f.cfg.Store.SetStatus(f.agent, message, updated); err != nil {
 		return nil, err
 	}
