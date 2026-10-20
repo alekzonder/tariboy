@@ -1585,56 +1585,92 @@ How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
 ### The workflow panel
 
 Opening a workflow task shows a **Workflow** panel in the task sheet in place of
-the status select. The header gives `name@version`, the status, the owner, and
-the holder; a pause banner comes first when the task is paused. The task's
-assignee is read-only, because the workflow assigns pool work, and the sheet
-has no **Move to another server…**, because the daemon refuses to export a
-workflow task. The panel follows the task's events as well as its revision: a
-rejected request, a script run, or another event refetches the view while the
-sheet is open, and an older response never replaces a newer one. The panel has
-these sections:
+the status select. It reads top down: what is wrong, where the task is, what
+may happen next, what it produced, and what ran. The task's assignee is
+read-only, because the workflow assigns pool work, and the sheet has no
+**Move to another server…**, because the daemon refuses to export a workflow
+task. The panel follows the task's events as well as its revision: a rejected
+request, a script run, or another event refetches the view while the sheet is
+open, and an older response never replaces a newer one. The panel has these
+sections:
 
-- **Pause banner.** Appears when the task is paused. It explains the reason and
-  offers **Continue** and **Cancel task**, plus **Release holder** when the
-  status is a pool status. **Continue** keeps the same holder in a pool status
-  and resumes the task in its current status otherwise. Each asks for
-  confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the cancel
-  route.
-- **Outcomes.** Each outcome shows its target status, the artifacts it
-  requires (a name with no value is highlighted), and its checks. In a customer
-  status each outcome is a button, with an optional message of up to 4096
-  characters; Desktop sends the advance request and polls it until the checks
-  finish, then shows an `applied` result by reloading the task or a refusal
-  with the daemon's message. A button is disabled while a request is checking,
-  while a request made elsewhere is still pending (with **Refresh**), while the
-  task is paused, and while a required artifact has no value. A rejected or
-  failed last request is shown only when it was made in the current visit of an
-  open task, and a "still checking" notice goes once the request settles. A
-  failed last request has **Retry**, in any status, unless the task is paused or
-  a request is checking: it sends
+- **Pause banner.** Appears first when the task is paused. It explains the
+  reason and offers **Continue** and **Cancel task**, plus **Release holder**
+  when the status is a pool status. **Continue** keeps the same holder in a
+  pool status and resumes the task in its current status otherwise. Each asks
+  for confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the
+  cancel route.
+- **Problem.** Appears when something needs a person and the task is not
+  paused, with a title, the script's own message as text, how close the task
+  is to a pause (`2 of 5 rejections`, from the visit counters and the status
+  limits), and a line that says what to do. The first that applies is shown:
+  a **failed** request of the current visit (a check could not run: the run's
+  log opens by itself, and **Retry** sends
   `POST /api/tasks/{key}/workflow/requests/{id}/retry` and follows the new
-  request like an outcome button. In a pool or script status the outcomes are
-  listed for reference, because the agent or the watch script decides.
-- **Artifacts.** Every artifact the image declares: the current value,
-  rendered as Markdown with a **Markdown** / **Text** switch for plain text,
-  collapsed to six lines or 600 characters when long and shown in full once
-  expanded, with **Edit** and **History**, which loads the earlier values on
-  demand in the same mode; a declared artifact with no value shows its
-  description and **Set**. Editing is disabled once the task is closed.
+  request like an outcome button, unless the task is paused); a **rejected**
+  request of the current visit (the advice names the agent in a pool status
+  and the artifact or a return to the agent in a customer status; the run's
+  **Log** is on demand); a **failed watch** in a script status, with its log
+  open; a pool status with **no agent** free; and, quietly, a holder that
+  ended iterations without a transition request. A request from an earlier
+  visit, a closed task, and a pending request show nothing here.
+- **Workflow.** The statuses of the pinned image in manifest order: the
+  current one marked, the visited ones ticked, and a return count on a status
+  the task came back to from a later one. A status opens to show its owner,
+  its instruction file, its watch script with the image's `description`,
+  schedule, and timeout, each way out with the artifacts it requires and its
+  checks (script, `description`, `run_as`, and timeout), and the effective
+  limits. The row wraps on a narrow screen.
+- **Header.** `name@version`, `step k of n`, the status, the owner, and the
+  holder, with the labeled actions **Return to agent…**, **Move to status…**,
+  and **Cancel task**; see below.
+- **Outcomes.** Each outcome shows its target status, the artifacts it
+  requires (a set one ticked, a missing one highlighted), and its checks with
+  what each verifies, when the image describes it, and the resolved `run_as`
+  and timeout. In a customer status each outcome is a button, with an optional
+  message of up to 4096 characters; Desktop sends the advance request and
+  polls it until the checks finish, then shows an `applied` result by
+  reloading the task or a refusal with the daemon's message. A button is
+  disabled while a request is checking, while a request made elsewhere is
+  still pending (with **Refresh**), while the task is paused, and while a
+  required artifact has no value. A result that settled without applying is
+  shown here until the refetched view carries it; from then on the Problem
+  section explains it. In a pool or script status the outcomes are listed for
+  reference, because the agent or the watch script decides.
+- **Artifacts.** The artifacts an outcome of the current status requires come
+  first under **Needed to leave this status**, missing ones before set ones,
+  each with a `required by outcome → status` chip; the other declared
+  artifacts fold away behind **Other artifacts (n)**. Each shows its
+  description, the current value rendered as Markdown with a **Markdown** /
+  **Text** switch for plain text, collapsed to six lines or 600 characters
+  when long and shown in full once expanded, with **Edit** and **History**,
+  which loads the earlier values on demand in the same mode; a declared
+  artifact with no value shows **Set**. Editing is disabled once the task is
+  closed.
 - **Runs.** The latest 20 script runs with kind, script, state, verdict, exit
-  code, and times, and a **Log** toggle that loads the log on demand and says
-  when it is truncated; while a run is pending or running, an open log has
-  **Refresh**. Who may read a log is described in
+  code, and times. The verdict carries the tone: a failure or rejection is
+  red, a pass or outcome green, a quiet run dim. A **Log** toggle loads the
+  log on demand and says when it is truncated; while a run is pending or
+  running, an open log has **Refresh**. Who may read a log is described in
   [Runs and logs](#runs-and-logs); a refusal is shown in place of the log.
 - **Visits.** Every stay in a status, with who entered it, when it was left and
   by which outcome, and the message.
-- **Move and cancel.** The panel header has two labeled buttons: **Move to
-  status…** (every declared status but the current one, terminal statuses
-  grouped last, and a required reason) and **Cancel task**, which is hidden once
-  the task is closed. A move to a terminal status closes the task.
-  Both ask for confirmation, because they skip outcomes, checks, and required
-  artifacts and stop the current scripts. They are shown only to a principal
-  that may edit the task.
+- **Return to agent.** Sends the task back to a pool status with a message
+  the agent reads in its Goal as the transition message. The targets are the
+  pool statuses a declared outcome of the current status leads to, the pool
+  statuses the task visited before, newest first, and, for a paused pool
+  status, the status itself as a restart; the most recently visited one is
+  chosen first. In a customer status a declared outcome is sent as an advance
+  with the message; everywhere else, and for a paused task, the operator's
+  move is sent with the message as its reason, after a confirmation that says
+  so. The action is hidden on a closed task and on an unpaused pool status an
+  agent already holds.
+- **Move and cancel.** **Move to status…** offers every declared status but
+  the current one, terminal statuses grouped last, and needs a reason; a move
+  to a terminal status closes the task. **Cancel task** is hidden once the
+  task is closed. Both ask for confirmation, because they skip outcomes,
+  checks, and required artifacts and stop the current scripts. The three
+  actions are shown only to a principal that may edit the task.
 
 Messages and logs are text; Desktop never interprets them as Markdown or HTML.
 Artifact values render as Markdown without raw HTML, or as text when switched. After an action in the sheet the task list reloads as well,

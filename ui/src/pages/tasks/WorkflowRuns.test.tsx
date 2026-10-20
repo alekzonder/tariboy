@@ -29,6 +29,13 @@ it("lists runs newest first with kind, script, state, verdict and exit code", ()
   expect(rows[1]).toHaveTextContent("the notes must start with a heading")
 })
 
+it("gives each run the tone of its verdict", () => {
+  render(<WorkflowRuns taskKey="REL-1" runs={[checkRun, watchRun, { ...checkRun, id: 5, verdict: "pass", exit_code: 0 }, { ...watchRun, id: 4, state: "finished", verdict: "quiet", exit_code: 111 }]} target={target} />)
+  const rows = screen.getAllByRole("listitem")
+  expect(rows.map((row) => row.getAttribute("data-tone"))).toEqual(["attention", "danger", "live", "faint"])
+  expect(within(rows[1]).getByText("reject")).toHaveAttribute("data-tone", "danger")
+})
+
 it("says so when there are no runs", () => {
   render(<WorkflowRuns taskKey="REL-1" runs={[]} target={target} />)
   expect(screen.getByText("No script has run yet.")).toBeInTheDocument()

@@ -35,6 +35,24 @@ it("lists every declared artifact with no value yet, with its description and a 
   expect(screen.getAllByRole("listitem")).toHaveLength(2)
 })
 
+it("puts the artifacts an outcome needs first, missing ones before set ones, and folds the rest away", () => {
+  const required = new Map([
+    ["notes", [{ on: "drafted", to: "review", missing: false }]],
+    ["summary", [{ on: "drafted", to: "review", missing: true }]],
+  ])
+  renderArtifacts({ required, declared: [{ name: "notes", description: "The notes." }, { name: "summary", description: "One paragraph." }, { name: "changelog", description: "" }] })
+  const needed = within(screen.getByRole("list", { name: "Artifacts needed now" })).getAllByRole("listitem")
+  expect(needed.map((item) => item.querySelector("span")!.textContent)).toEqual(["summary", "notes"])
+  expect(within(needed[0]).getByText("required by drafted → review")).toHaveAttribute("data-requirement", "missing")
+  expect(within(needed[1]).getByText("required by drafted → review")).toHaveAttribute("data-requirement", "set")
+  expect(within(needed[1]).getByText("The notes.")).toBeInTheDocument()
+  expect(screen.queryByText("changelog")).not.toBeInTheDocument()
+  const others = screen.getByRole("button", { name: "Other artifacts (1)" })
+  expect(others).toHaveAttribute("aria-expanded", "false")
+  fireEvent.click(others)
+  expect(within(screen.getByRole("list", { name: "Other artifacts" })).getByText("changelog")).toBeInTheDocument()
+})
+
 it("lets a long author wrap", () => {
   const author = "agent:" + "a".repeat(64)
   renderArtifacts({ artifacts: [{ ...notes, author }] })

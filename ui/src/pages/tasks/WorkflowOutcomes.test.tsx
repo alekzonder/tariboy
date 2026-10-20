@@ -80,7 +80,7 @@ it("shows a rejection with the script's message as text and re-enables the butto
   vi.useFakeTimers()
   api.advanceTask.mockResolvedValue(request("pending", { wait_seconds: 30 }))
   api.getTransitionRequest.mockResolvedValue(request("rejected", { result_message: "<b>no heading</b>" }))
-  const { onChanged, onRefresh } = renderOutcomes()
+  const { onChanged, onRefresh, rerender } = renderOutcomes()
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "approve" })) })
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
   const notice = screen.getByRole("alert")
@@ -90,6 +90,18 @@ it("shows a rejection with the script's message as text and re-enables the butto
   expect(screen.getByRole("button", { name: "approve" })).toBeEnabled()
   expect(onChanged).not.toHaveBeenCalled()
   expect(onRefresh).toHaveBeenCalled()
+  // Once the refetched view carries the request, the problem block explains it.
+  rerender({ ...customerView, last_request: request("rejected", { result_message: "<b>no heading</b>" }) })
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+})
+
+it("names each check with what it verifies and marks a set artifact", () => {
+  renderOutcomes({ ...poolView, outcomes: [{ on: "drafted", to: "review", requires: ["notes", "summary"], missing: ["summary"],
+    checks: ["./checks/notes.sh"], check_details: [{ script: "./checks/notes.sh", description: "The notes start with a heading.", run_as: "queue", timeout: "30s" }] }] })
+  const row = screen.getByText("drafted").closest("li")!
+  expect(within(row).getByText("notes")).toHaveAttribute("data-present", "true")
+  expect(within(row).getByText("The notes start with a heading.")).toBeInTheDocument()
+  expect(within(row).getByText("as queue, timeout 30s")).toBeInTheDocument()
 })
 
 it("stops waiting after wait_seconds and offers a refresh", async () => {
@@ -113,34 +125,6 @@ it("refetches the view and shows the message when the status changed meanwhile",
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "approve" })) })
   expect(onRefresh).toHaveBeenCalled()
   expect(screen.getByRole("alert")).toHaveTextContent("the task is in status publish")
-})
-
-it("shows the last request's failure from the view", () => {
-  renderOutcomes({ ...customerView, last_request: request("failed", { result_message: "check timed out\nlog: /x/run.log" }) })
-  const notice = screen.getByRole("alert")
-  expect(notice).toHaveTextContent("Failed")
-  expect(notice).toHaveTextContent("check timed out")
-})
-
-it("retries the last failed request, even in a pool status, and follows it like an advance", async () => {
-  vi.useFakeTimers()
-  api.retryTransitionRequest.mockResolvedValue(request("pending", { id: 12, wait_seconds: 30 }))
-  api.getTransitionRequest.mockResolvedValueOnce(request("applied", { id: 12 }))
-  const { onChanged } = renderOutcomes({ ...poolView, last_request: request("failed", { result_message: "GitHub answered HTTP 401" }) })
-  await act(async () => { fireEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: "Retry" })) })
-  expect(api.retryTransitionRequest).toHaveBeenCalledWith("REL-1", 11, target)
-  expect(screen.getByText("checking…")).toBeInTheDocument()
-  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-  expect(api.getTransitionRequest).toHaveBeenCalledWith("REL-1", 12, target)
-  expect(onChanged).toHaveBeenCalledTimes(1)
-})
-
-it("offers no retry for a rejection or on a paused task", () => {
-  const { unmount } = renderOutcomes({ ...poolView, last_request: request("rejected", { result_message: "no heading" }) })
-  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument()
-  unmount()
-  renderOutcomes({ ...poolView, waiting_on: "pause", last_request: request("failed") })
-  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument()
 })
 
 it("refetches the view when another request is still pending, and when the task is paused or lacks an artifact", async () => {
@@ -202,24 +186,6 @@ it("keeps a status_changed message once the view reaches the status it names", a
   expect(screen.getByRole("alert")).toHaveTextContent("the task is in status publish")
 })
 
-it("shows a rejected last request only when it belongs to the current visit", () => {
-  // Made at 10:03, before the open visit was entered at 10:04:30.
-  const earlier = request("rejected", { result_message: "old rejection", created_at: "2026-10-01T10:03:00Z" })
-  const { rerender } = renderOutcomes({ ...customerView, last_request: earlier })
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument()
-  rerender({ ...customerView, last_request: { ...earlier, created_at: "2026-10-01T10:04:30Z" } })
-  expect(screen.getByRole("alert")).toHaveTextContent("old rejection")
-})
-
-it("never shows a failed last request on a closed task", () => {
-  const failed = request("failed", { result_message: "check timed out" })
-  for (const category of ["done", "cancelled"] as const) {
-    const { unmount } = renderOutcomes({ ...customerView, category, owner: "", outcomes: [], last_request: failed })
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
-    unmount()
-  }
-})
-
 it("drops the timeout notice once the last request is no longer pending", async () => {
   vi.useFakeTimers()
   api.advanceTask.mockResolvedValue(request("pending", { wait_seconds: 1 }))
@@ -232,7 +198,8 @@ it("drops the timeout notice once the last request is no longer pending", async 
   expect(screen.getByText(/still checking/i)).toBeInTheDocument()
   rerender({ ...customerView, last_request: request("rejected", { result_message: "no heading" }) })
   expect(screen.queryByText(/still checking/i)).not.toBeInTheDocument()
-  expect(screen.getByRole("alert")).toHaveTextContent("no heading")
+  // The settled request is the problem block's to explain, not this section's.
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument()
 })
 
 it("keeps the timeout notice while the view's last request is another one", async () => {
