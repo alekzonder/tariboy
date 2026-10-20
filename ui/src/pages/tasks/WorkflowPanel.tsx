@@ -5,22 +5,29 @@ import type { ApiTarget } from "@/lib/api"
 import { cancelWorkflowTask, getTaskWorkflow, moveTaskWorkflow, type Task, type WorkflowView } from "@/lib/tasks"
 import { cn } from "@/lib/utils"
 import { EMPTY, FIELD, LABEL, MONO, QUIET_ACTION, ROW, SelectShell } from "./panelStyles"
+import ReturnToAgent from "./ReturnToAgent"
 import { formatTaskTime } from "./taskTime"
 import WorkflowArtifacts from "./WorkflowArtifacts"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
+import { canReturnToAgent, isClosed, requiredBy, stepOf } from "./workflowGraph"
 import WorkflowOutcomes from "./WorkflowOutcomes"
 import WorkflowPauseBanner from "./WorkflowPauseBanner"
+import WorkflowProblem from "./WorkflowProblem"
 import WorkflowRuns from "./WorkflowRuns"
+import WorkflowStepper from "./WorkflowStepper"
 import { errorText, useMounted } from "./workflowShared"
 
 /** A mono value that may be a 64-character ID: it wraps rather than overflows. */
 const MONO_ID = cn(MONO, "min-w-0 break-all")
 
+type OpenForm = "move" | "return" | null
+
 /**
- * The workflow of a task, in the task detail: where it is, what it may do
- * next, what it produced, and what ran. It replaces the status control of a
- * flexible task; the status changes only through an outcome, a move, a cancel,
- * or a pause decision. The Desktop acts as the customer (operator routes).
+ * The workflow of a task, in the task detail: what is wrong, where it is,
+ * what it may do next, what it produced, and what ran. It replaces the status
+ * control of a flexible task; the status changes only through an outcome, a
+ * return to the agent, a move, a cancel, or a pause decision. The Desktop
+ * acts as the customer (operator routes).
  */
 export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }: {
   task: Task
@@ -35,7 +42,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
 }) {
   const [view, setView] = useState<WorkflowView | null>(null)
   const [error, setError] = useState("")
-  const [moving, setMoving] = useState(false)
+  const [form, setForm] = useState<OpenForm>(null)
   const [canceling, setCanceling] = useState(false)
   const [cancelError, setCancelError] = useState("")
   const { confirm, dialog } = useWorkflowConfirm()
@@ -73,8 +80,9 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
     </section>
   }
 
-  const closed = view.category === "done" || view.category === "cancelled"
+  const closed = isClosed(view)
   const editable = task.access !== "context" && task.access !== "respond"
+  const step = stepOf(view)
   const cancel = () => confirm({
     title: "Cancel this task?",
     description: "The task closes as cancelled and its scripts stop. The workflow status stays where it stopped.",
@@ -96,34 +104,42 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
     onCancel: () => resolve(false),
     run: () => { moveTaskWorkflow(task.key, to, reason, target).then(() => { resolve(true); changed() }, reject) },
   }))
+  const open = (next: OpenForm) => { setCancelError(""); setForm(form === next ? null : next) }
 
   return (
     <div className="flex min-w-0 flex-col gap-[18px]">
       {view.waiting_on === "pause" && <WorkflowPauseBanner taskKey={task.key}
         reason={view.paused_reason ?? task.workflow_paused_reason ?? ""} pool={view.owner.startsWith("pool:")}
         target={target} onChanged={changed} />}
+      <WorkflowProblem taskKey={task.key} view={view} target={target} onChanged={changed} onRefresh={refresh} />
+      <WorkflowStepper view={view} />
       <div className="flex min-w-0 items-center gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px] text-muted-foreground">
           <span className={cn(MONO, "font-medium text-foreground")} title={view.digest}>{view.name}@{view.version}</span>
+          {step && !closed && <span className={MONO}>step {step.index} of {step.total}</span>}
           <span className="min-w-0">status <span className={cn(MONO_ID, "text-foreground")}>{view.status}</span></span>
           {view.owner && <span className="min-w-0">owner <span className={cn(MONO_ID, "text-foreground")}>{view.owner}</span></span>}
           {view.holder && <span className="min-w-0">holder <span className={cn(MONO_ID, "text-foreground")}>{view.holder}</span></span>}
         </div>
-        {/* Labeled, not behind a menu: the customer's manual way out of the
-            workflow has to be found without hunting for it. */}
-        {editable && <div className="flex shrink-0 items-center gap-1">
+        {/* Labeled, not behind a menu: the customer's way to send the task
+            back, and the manual way out of the workflow, have to be found
+            without hunting for them. */}
+        {editable && <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          {canReturnToAgent(view) && <Button type="button" variant="ghost" size="sm" className="h-7"
+            onClick={() => open("return")}>Return to agent…</Button>}
           <Button type="button" variant="ghost" size="sm" className="h-7"
-            onClick={() => { setCancelError(""); setMoving(true) }}>Move to status…</Button>
+            onClick={() => open("move")}>Move to status…</Button>
           {!closed && <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive"
             disabled={canceling} onClick={cancel}>Cancel task</Button>}
         </div>}
       </div>
       {failure}
       {cancelError && <p role="alert" className="text-[12px] text-status-failed">{cancelError}</p>}
-      {moving && <MoveForm view={view} onDone={() => setMoving(false)} onMove={move} />}
+      {form === "move" && <MoveForm view={view} onDone={() => setForm(null)} onMove={move} />}
+      {form === "return" && <ReturnToAgent taskKey={task.key} view={view} target={target} onChanged={changed} onDone={() => setForm(null)} />}
       <WorkflowOutcomes taskKey={task.key} view={view} target={target} onChanged={changed} onRefresh={refresh} />
       <WorkflowArtifacts taskKey={task.key} artifacts={view.artifacts} declared={view.declared_artifacts ?? []}
-        editable={editable && !closed} target={target} onChanged={changed} />
+        required={closed ? undefined : requiredBy(view)} editable={editable && !closed} target={target} onChanged={changed} />
       <WorkflowRuns taskKey={task.key} runs={view.runs ?? []} target={target} />
       <section className="flex min-w-0 flex-col gap-1">
         <span className={LABEL}>Visits</span>

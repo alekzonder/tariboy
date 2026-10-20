@@ -45,6 +45,7 @@ export const checkRun: ScriptRun = {
   created_at: "2026-10-01T10:05:00Z",
   started_at: "2026-10-01T10:05:01Z",
   finished_at: "2026-10-01T10:05:03Z",
+  request_id: 11,
 }
 
 export const watchRun: ScriptRun = {
@@ -86,11 +87,19 @@ export const customerView: WorkflowView = {
     { name: "changelog", description: "Optional changelog entry." },
   ],
   statuses: [
-    { id: "draft", owner: "pool:writers", terminal: false },
-    { id: "review", owner: "customer", terminal: false },
-    { id: "publish", owner: "script", terminal: false },
+    { id: "draft", owner: "pool:writers", terminal: false, initial: true, instructions_path: "statuses/draft.md",
+      transitions: [{ on: "drafted", to: "review", requires: ["notes", "summary"],
+        checks: [{ script: "./checks/notes.sh", description: "The notes start with a heading.", run_as: "queue", timeout: "30s" }] }],
+      limits: { idle_iterations: 3, rejected_requests: 5, script_failures: 3, unavailable_grace: "5m0s" } },
+    { id: "review", owner: "customer", terminal: false,
+      transitions: [{ on: "approve", to: "publish", requires: ["notes"], checks: [{ script: "./checks/notes.sh", run_as: "queue", timeout: "1m0s" }] }, { on: "rework", to: "draft" }],
+      limits: { idle_iterations: 3, rejected_requests: 5, script_failures: 3, unavailable_grace: "5m0s" } },
+    { id: "publish", owner: "script", terminal: false,
+      watch: { script: "./scripts/ci.sh", description: "Waits for the CI of the notes.", every: "10s", timeout: "30s" },
+      transitions: [{ on: "published", to: "done" }],
+      limits: { idle_iterations: 3, rejected_requests: 5, script_failures: 3, unavailable_grace: "5m0s" } },
     { id: "done", owner: "", terminal: true },
-    { id: "dropped", owner: "", terminal: true },
+    { id: "dropped", owner: "", terminal: true, cancelled: true },
   ],
 }
 

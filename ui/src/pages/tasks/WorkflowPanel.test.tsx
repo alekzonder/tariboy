@@ -124,9 +124,43 @@ it("moves to a declared status with a required reason after confirmation", async
 it("lists every declared artifact, so one with no value can be set", async () => {
   renderPanel()
   const artifacts = (await screen.findByText("Artifacts")).closest("section")!
+  // `notes` is needed by `approve`; the rest fold away until asked for.
+  expect(within(artifacts).getByRole("list", { name: "Artifacts needed now" })).toHaveTextContent("notes")
+  await userEvent.click(within(artifacts).getByRole("button", { name: "Other artifacts (2)" }))
   const changelog = within(artifacts).getByText("changelog").closest("li")!
   expect(within(changelog).getByText("no value")).toBeInTheDocument()
   expect(within(changelog).getByRole("button", { name: "Set" })).toBeInTheDocument()
+})
+
+it("shows the step, the stepper, and the problem block above the header", async () => {
+  api.getTaskWorkflow.mockResolvedValue({ ...customerView,
+    last_request: { id: 11, task_key: "REL-1", outcome: "approve", actor: "user:owner", state: "rejected", result_message: "no heading", created_at: "2026-10-01T10:06:00Z" } })
+  renderPanel()
+  const header = (await screen.findByText("release@1.2.0")).parentElement!
+  expect(header).toHaveTextContent("step 2 of 5")
+  expect(within(screen.getByRole("list", { name: "Workflow steps" })).getByRole("button", { name: /^review/ })).toHaveAttribute("aria-current", "step")
+  expect(screen.getByRole("alert")).toHaveTextContent("A check rejected the request: approve")
+  expect(screen.getByRole("alert")).toHaveTextContent("no heading")
+})
+
+it("returns the task to the agent through the declared outcome, with the message", async () => {
+  api.advanceTask.mockResolvedValue({ id: 1, task_key: "REL-1", outcome: "rework", actor: "user:owner", state: "applied", created_at: "" })
+  const { onTaskChanged } = renderPanel()
+  await openAction("Return to agent…")
+  expect(screen.getByLabelText("Return to status")).toHaveValue("draft")
+  await userEvent.type(screen.getByLabelText("Message to the agent"), "add tests")
+  await userEvent.click(screen.getByRole("button", { name: "Return to agent" }))
+  await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Return to agent" }))
+  await waitFor(() => expect(api.advanceTask).toHaveBeenCalledWith("REL-1", "rework", "add tests", "review", target))
+  await waitFor(() => expect(onTaskChanged).toHaveBeenCalledTimes(1))
+  expect(screen.queryByLabelText("Message to the agent")).not.toBeInTheDocument()
+})
+
+it("offers no return to the agent while an agent holds an unpaused pool status", async () => {
+  api.getTaskWorkflow.mockResolvedValue(poolView)
+  renderPanel({ ...workflowTask, status: "draft", category: "in_progress", waiting_on: undefined })
+  await screen.findByText("release@1.2.0")
+  expect(screen.queryByRole("button", { name: "Return to agent…" })).not.toBeInTheDocument()
 })
 
 it("shows a refused move inline", async () => {

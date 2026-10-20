@@ -1,17 +1,29 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
+import { StatusPill } from "@/components/ui/status"
 import { cn } from "@/lib/utils"
 import { EMPTY, MONO, QUIET_ACTION } from "./panelStyles"
 import { formatTaskTime } from "./taskTime"
-import { errorText } from "./workflowShared"
+import { errorText, runTone } from "./workflowShared"
+
+/** The left bar of a run row, by tone: the eye finds a failed run in a list. */
+const TONE_BAR: Record<ReturnType<typeof runTone>, string> = {
+  live: "border-status-running",
+  attention: "border-primary",
+  danger: "border-status-failed",
+  quiet: "border-border",
+  faint: "border-border opacity-80",
+}
 
 /**
- * One script run: a task's check or watch, or a queue's source. A log is read
- * only when asked for, through readLog, and shown as text: it is the script's
- * own output. A run still going keeps writing its log, so its open log has
- * Refresh.
+ * One script run: a task's check or watch, or a queue's source. Its verdict
+ * carries the tone, so a failed run reads as one. A log is read only when
+ * asked for, through readLog, and shown as text: it is the script's own
+ * output. A run still going keeps writing its log, so its open log has
+ * Refresh. With autoLoad the log is read on mount: the run is the one a
+ * problem block explains, and its log is the explanation.
  */
-export default function RunRow({ head, state, verdict, exitCode, startedAt, finishedAt, message, going, readLog }: {
+export default function RunRow({ head, state, verdict, exitCode, startedAt, finishedAt, message, going, readLog, autoLoad = false }: {
   /** The leading cells: what ran. */
   head: ReactNode
   state: string
@@ -22,6 +34,7 @@ export default function RunRow({ head, state, verdict, exitCode, startedAt, fini
   message?: string
   going: boolean
   readLog: () => Promise<{ text: string; truncated: boolean }>
+  autoLoad?: boolean
 }) {
   const [log, setLog] = useState<{ text: string; truncated: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
@@ -38,12 +51,16 @@ export default function RunRow({ head, state, verdict, exitCode, startedAt, fini
     if (log) { setLog(null); return }
     read()
   }
+  // Read once on mount when asked; a later change of readLog is the same run.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autoLoad) read() }, [autoLoad])
+  const tone = runTone(state, verdict)
   return (
-    <li className="flex min-w-0 flex-col gap-1">
+    <li data-tone={tone} className={cn("flex min-w-0 flex-col gap-1 border-l-2 pl-2", TONE_BAR[tone])}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5">
         {head}
         <span className={MONO}>{state}</span>
-        {verdict && <span className={MONO}>{verdict}</span>}
+        {verdict && <StatusPill tone={tone} size="sm" quiet="chip" className="font-mono">{verdict}</StatusPill>}
         {exitCode !== undefined && exitCode !== null && <span className={MONO}>exit {exitCode}</span>}
         <time dateTime={startedAt} className={cn(MONO, "text-muted-foreground")}>{formatTaskTime(startedAt)}</time>
         {finishedAt && <time dateTime={finishedAt} className={cn(MONO, "text-muted-foreground")}>
