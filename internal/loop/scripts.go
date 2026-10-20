@@ -19,6 +19,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/script"
+	"github.com/alekzonder/tariboy/internal/store"
 	"golang.org/x/sys/unix"
 )
 
@@ -103,7 +104,7 @@ func (s *scriptSupervisor) superviseScripts(ctx context.Context) {
 		s.cfg.Log.Error("list scripts agents", "err", err)
 		return
 	}
-	now := s.cfg.Clock().UTC().Format(time.RFC3339)
+	now := store.FormatTime(s.cfg.Clock())
 	due, err := s.cfg.Scripts.DueDefinitions(now)
 	if err != nil {
 		s.cfg.Log.Error("list due scripts", "err", err)
@@ -154,7 +155,7 @@ func (s *scriptSupervisor) startScript(ctx context.Context, ag agent.Agent, r sc
 		s.finishScript(key, r, -1, fmt.Errorf("resolve script log path: %w", err), "")
 		return
 	}
-	claimed, err := s.cfg.Scripts.ClaimRun(r.Agent, r.ID, s.cfg.Clock().UTC().Format(time.RFC3339), logPath)
+	claimed, err := s.cfg.Scripts.ClaimRun(r.Agent, r.ID, store.FormatTime(s.cfg.Clock()), logPath)
 	if err != nil {
 		s.finishScript(key, r, -1, err, logPath)
 		return
@@ -267,7 +268,7 @@ func (s *scriptSupervisor) finishScript(key string, r script.Run, code int, runE
 		return
 	}
 	if cancelRequested || current.CancelRequested {
-		if err := s.cfg.Scripts.CancelRun(r.Agent, r.ID, s.cfg.Clock().UTC().Format(time.RFC3339)); err != nil && !errors.Is(err, script.ErrConflict) {
+		if err := s.cfg.Scripts.CancelRun(r.Agent, r.ID, store.FormatTime(s.cfg.Clock())); err != nil && !errors.Is(err, script.ErrConflict) {
 			s.cfg.Log.Error("cancel script run", "agent", r.Agent, "run", r.ID, "err", err)
 			return
 		}
@@ -296,7 +297,7 @@ func (s *scriptSupervisor) finishScript(key string, r script.Run, code int, runE
 			status = script.RunSucceeded
 		}
 	}
-	if _, err := s.cfg.Scripts.CompleteRun(r.Agent, r.ID, script.Completion{Status: status, ExitCode: exitCode, FinishedAt: s.cfg.Clock().UTC().Format(time.RFC3339), LogPath: logPath}); err != nil {
+	if _, err := s.cfg.Scripts.CompleteRun(r.Agent, r.ID, script.Completion{Status: status, ExitCode: exitCode, FinishedAt: store.FormatTime(s.cfg.Clock()), LogPath: logPath}); err != nil {
 		if !errors.Is(err, script.ErrConflict) {
 			s.cfg.Log.Error("complete script run", "agent", r.Agent, "run", r.ID, "err", err)
 		}
@@ -439,7 +440,7 @@ func (s *scriptSupervisor) CancelScriptTarget(agentName, id string) error {
 	if s.cfg.Scripts == nil {
 		return fmt.Errorf("script store not configured")
 	}
-	at := s.cfg.Clock().UTC().Format(time.RFC3339)
+	at := store.FormatTime(s.cfg.Clock())
 	if run, err := s.cfg.Scripts.GetRun(agentName, id); err == nil {
 		if run.Status == script.RunRunning {
 			run, err = s.cfg.Scripts.RequestRunCancellation(agentName, id)

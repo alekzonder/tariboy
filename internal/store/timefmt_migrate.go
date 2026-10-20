@@ -7,7 +7,7 @@ import (
 	"sort"
 )
 
-const canonicalTimestampsMigration = "0066_canonical_timestamps.sql"
+const canonicalTimestampsMigration = "0067_canonical_timestamps.sql"
 
 // Earlier migrations created these defaults with millisecond precision.
 const (

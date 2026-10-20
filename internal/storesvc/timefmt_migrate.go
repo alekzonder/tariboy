@@ -19,7 +19,7 @@ var timeColumns = []struct{ table, column string }{
 
 // canonicalizeTimestamps rewrites every time column to store.TimeLayout and
 // changes the millisecond SQL defaults to store.SQLNow, in the migration's
-// transaction, with the same steps as the main store's 0066 migration.
+// transaction, with the same steps as the main store's 0067 migration.
 func canonicalizeTimestamps(tx *sql.Tx) error {
 	for _, c := range timeColumns {
 		if err := store.CanonicalizeColumn(tx, c.table, c.column); err != nil {
