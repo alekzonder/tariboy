@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseListenUnix(t *testing.T) {
+	t.Parallel()
 	l, err := ParseListen("unix", "")
 	if err != nil || l.Network != "unix" || l.Addr != "" {
 		t.Fatalf("l=%+v err=%v", l, err)
@@ -20,6 +21,7 @@ func TestParseListenUnix(t *testing.T) {
 }
 
 func TestParseListenLoopbackTCPNoAuth(t *testing.T) {
+	t.Parallel()
 	l, err := ParseListen("tcp:127.0.0.1:7411", "")
 	if err != nil || l.Network != "tcp" || l.Addr != "127.0.0.1:7411" {
 		t.Fatalf("l=%+v err=%v", l, err)
@@ -27,6 +29,7 @@ func TestParseListenLoopbackTCPNoAuth(t *testing.T) {
 }
 
 func TestParseListenPublicTCPRequiresAuth(t *testing.T) {
+	t.Parallel()
 	if _, err := ParseListen("tcp:0.0.0.0:7411", ""); err == nil {
 		t.Fatal("public tcp without auth accepted")
 	}
@@ -39,6 +42,7 @@ func TestParseListenPublicTCPRequiresAuth(t *testing.T) {
 }
 
 func TestParseListenBadSpec(t *testing.T) {
+	t.Parallel()
 	for _, spec := range []string{"", "udp:1.2.3.4:1", "tcp:", "tcp:hostonly"} {
 		if _, err := ParseListen(spec, ""); err == nil {
 			t.Fatalf("spec %q accepted", spec)
@@ -47,6 +51,7 @@ func TestParseListenBadSpec(t *testing.T) {
 }
 
 func TestAuthMiddleware(t *testing.T) {
+	t.Parallel()
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	h := AuthMiddleware("tok", next)
 

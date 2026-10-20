@@ -14,6 +14,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/testutil"
 	"github.com/coder/websocket"
 )
 
@@ -36,6 +37,7 @@ func messagesWSServer(t *testing.T) (*httptest.Server, *events.Hub) {
 // One socket per host carries every chat's live hints, so the client refetches
 // immediately instead of polling.
 func TestMessagesWebSocketStreamsEveryAgentsMessageHints(t *testing.T) {
+	t.Parallel()
 	httpServer, hub := messagesWSServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -83,6 +85,7 @@ func TestMessagesWebSocketStreamsEveryAgentsMessageHints(t *testing.T) {
 // that conversation. A message outside any chat carries no chat key at all, so
 // existing consumers keep working unchanged.
 func TestMessageHintCarriesTheChatID(t *testing.T) {
+	t.Parallel()
 	httpServer, hub := messagesWSServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -128,6 +131,7 @@ func TestMessageHintCarriesTheChatID(t *testing.T) {
 // Terminal stream bytes are not conversation, so the chat socket must ask the
 // hub for message events only, and for every agent rather than one.
 func TestMessagesWebSocketWatchesEveryAgentAndOnlyMessages(t *testing.T) {
+	t.Parallel()
 	recorder := &recordingEvents{}
 	server := NewServer(registry.New(), &registry.Ctx{
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -144,10 +148,7 @@ func TestMessagesWebSocketWatchesEveryAgentAndOnlyMessages(t *testing.T) {
 	}
 	defer ws.CloseNow()
 
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && recorder.calls() == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(3*time.Second, func() bool { return recorder.calls() > 0 })
 	agent, types := recorder.subscription()
 	if agent != "" || len(types) != 1 || types[0] != "message" {
 		t.Fatalf("subscribed as agent %q with types %v; want every agent and [message]", agent, types)
@@ -181,6 +182,7 @@ func (r *recordingEvents) subscription() (string, []string) {
 }
 
 func TestMessagesWebSocketRejectsUntrustedOriginWithoutBearer(t *testing.T) {
+	t.Parallel()
 	httpServer, _ := messagesWSServer(t)
 	_, response, err := websocket.Dial(context.Background(), messagesWSURL(httpServer.URL),
 		&websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"https://evil.example"}}})

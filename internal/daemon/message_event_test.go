@@ -11,6 +11,7 @@ import (
 // attributing the event to its author the customer's side of a chat would never
 // reach a live client.
 func TestMessageEventCarriesSenderAndReachesTheAuthoredChat(t *testing.T) {
+	t.Parallel()
 	hub := events.NewHub()
 	stream, cancel := hub.Subscribe("", nil)
 	defer cancel()
@@ -38,6 +39,7 @@ func TestMessageEventCarriesSenderAndReachesTheAuthoredChat(t *testing.T) {
 // personal chat reaches no agent delivery, so without attributing it to its
 // author the customer's side of the chat would stay dark until the next poll.
 func TestChatMessageEventNamesItsChatAndItsAuthor(t *testing.T) {
+	t.Parallel()
 	hub := events.NewHub()
 	stream, cancel := hub.Subscribe("", nil)
 	defer cancel()
@@ -68,6 +70,7 @@ func TestChatMessageEventNamesItsChatAndItsAuthor(t *testing.T) {
 // A message outside any chat carries no chat id, so a consumer cannot mistake
 // a channel name for one.
 func TestNonChatMessageEventCarriesNoChatID(t *testing.T) {
+	t.Parallel()
 	hub := events.NewHub()
 	stream, cancel := hub.Subscribe("", nil)
 	defer cancel()

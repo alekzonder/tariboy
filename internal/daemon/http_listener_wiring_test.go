@@ -12,17 +12,19 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // The loopback listener carries the JSON API with no auth, and nothing else: a
 // non-/api path is a 404 envelope now that the daemon ships no UI.
 func TestHTTPListenerServesAPIAndNotUI(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	addr := "127.0.0.1:8799"
+	addr := freeLoopbackAddr(t)
 	errc := make(chan error, 1)
 	go func() {
 		errc <- Run(ctx, daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error", HTTPAddr: addr}))
@@ -30,21 +32,16 @@ func TestHTTPListenerServesAPIAndNotUI(t *testing.T) {
 
 	client := &http.Client{Timeout: time.Second}
 	var body string
-	ok := false
-	for i := 0; i < 100; i++ {
+	if !testutil.WaitFor(5*time.Second, func() bool {
 		resp, err := client.Get("http://" + addr + "/api/daemon/status")
-		if err == nil {
-			b, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				body = string(b)
-				ok = true
-				break
-			}
+		if err != nil {
+			return false
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !ok {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		body = string(b)
+		return resp.StatusCode == 200
+	}) {
 		t.Fatalf("http listener never answered /api/daemon/status")
 	}
 	if !strings.Contains(body, `"ok":true`) {
@@ -91,6 +88,7 @@ func TestHTTPListenerServesAPIAndNotUI(t *testing.T) {
 }
 
 func TestNonLoopbackHTTPAddrRefused(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	err := Run(context.Background(), daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error", HTTPAddr: "0.0.0.0:8798"}))

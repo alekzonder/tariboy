@@ -34,16 +34,11 @@ func startDaemon(t *testing.T, token, version string) string {
 	_ = ln.Close()
 	go func() { _ = srv.ServeTCP(addr, token) }()
 	base := "http://" + addr
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	waitUp(t, func() (*http.Response, error) {
 		req, _ := http.NewRequest("GET", base+"/api/daemon/status", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
-		if resp, err := http.DefaultClient.Do(req); err == nil {
-			_ = resp.Body.Close()
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return http.DefaultClient.Do(req)
+	})
 	return base
 }
 
@@ -62,6 +57,7 @@ func getStatus(t *testing.T, url, bearer string) int {
 }
 
 func TestTwoDaemonFederation(t *testing.T) {
+	t.Parallel()
 	a := startDaemon(t, "token-a", "A")
 	b := startDaemon(t, "token-b", "B")
 

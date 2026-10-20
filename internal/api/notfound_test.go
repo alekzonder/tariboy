@@ -14,6 +14,7 @@ import (
 // like an unknown /api/ route. This is the contract the desktop app relies on —
 // it owns the SPA, the daemon owns the API.
 func TestNonAPIPathsReturnJSON404(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	_ = reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",

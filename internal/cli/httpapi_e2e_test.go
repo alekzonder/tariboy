@@ -14,6 +14,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/daemon"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // TestHTTPAPIEndToEnd boots the real daemon with a loopback listener and drives
@@ -21,6 +22,7 @@ import (
 // the desktop app's webview uses. Discriminant: it fails if the listener, the
 // host allowlist, or the mutating routes regress. No external network.
 func TestHTTPAPIEndToEnd(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
@@ -48,18 +50,16 @@ func TestHTTPAPIEndToEnd(t *testing.T) {
 
 	// Wait for the listener, then assert the envelope.
 	var raw string
-	for i := 0; i < 150; i++ {
+	testutil.WaitFor(7500*time.Millisecond, func() bool {
 		resp, err := client.Get("http://" + addr + "/api/agents")
-		if err == nil {
-			b, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				raw = string(b)
-				break
-			}
+		if err != nil {
+			return false
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		raw = string(b)
+		return resp.StatusCode == 200
+	})
 	var env struct {
 		OK     bool `json:"ok"`
 		Result struct {

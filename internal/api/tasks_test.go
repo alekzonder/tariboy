@@ -19,6 +19,7 @@ import (
 )
 
 func TestTasksWebSocketRejectsUntrustedOriginWithoutBearer(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := NewServer(registry.New(), &registry.Ctx{
@@ -70,6 +71,7 @@ func readTaskHint(t *testing.T, ws *websocket.Conn) tasks.EventHint {
 }
 
 func TestWorkflowRouteTemplatesAppearInOpenAPIAndBindPathParameters(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	for _, route := range []registry.Command{
 		{
@@ -154,6 +156,7 @@ func TestWorkflowRouteTemplatesAppearInOpenAPIAndBindPathParameters(t *testing.T
 }
 
 func TestRegistryHTTPHandlerReceivesRequestCancellation(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	started := make(chan struct{})
 	cancelled := make(chan struct{})
@@ -197,6 +200,7 @@ func TestRegistryHTTPHandlerReceivesRequestCancellation(t *testing.T) {
 }
 
 func TestTasksWebSocketReplaysLiveEventsAndResumesWithoutDuplicate(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	hub := tasks.NewHub(svc)

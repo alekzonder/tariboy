@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -15,6 +16,10 @@ import (
 // Every request goes to the access log; the application log gets only slow or
 // failed requests, so polling does not flood tariboyd.log.
 func TestAccessLogSplitsRequestsFromApplicationLog(t *testing.T) {
+	synctest.Test(t, testAccessLogSplitsRequestsFromApplicationLog)
+}
+
+func testAccessLogSplitsRequestsFromApplicationLog(t *testing.T) {
 	reg := registry.New()
 	_ = reg.Register(registry.Command{
 		Path: "fast", Summary: "fast",
@@ -25,6 +30,7 @@ func TestAccessLogSplitsRequestsFromApplicationLog(t *testing.T) {
 		Path: "slow", Summary: "slow",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/slow"},
 		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			// Advances the synctest bubble's fake clock past slowRequest; no real wait.
 			time.Sleep(30 * time.Millisecond)
 			return 1, nil
 		},

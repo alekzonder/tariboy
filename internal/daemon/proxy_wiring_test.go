@@ -27,6 +27,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/shim"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // captureSpawner records the environment an iteration's harness would be started
@@ -216,6 +217,7 @@ func buildBasicImage(t *testing.T, dir string) {
 }
 
 func TestProxyHandoffReusesAddressAndPrunesTerminalLeases(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	p := paths.New(base)
 	st := storetest.OpenAt(t, p.DB())
@@ -265,6 +267,7 @@ func TestProxyHandoffReusesAddressAndPrunesTerminalLeases(t *testing.T) {
 }
 
 func TestProxyHandoffFailsIfLiveAddressIsOccupied(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	p := paths.New(base)
 	st := storetest.OpenAt(t, p.DB())
@@ -335,13 +338,12 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 		}
 		t.Cleanup(stop)
 		c := client.New(paths.New(base).Socket())
-		deadline := time.Now().Add(5 * time.Second)
 		var err error
-		for time.Now().Before(deadline) {
-			if _, err = c.Call("GET", "/api/daemon/status", nil); err == nil {
-				return c, stop
-			}
-			time.Sleep(20 * time.Millisecond)
+		if testutil.WaitFor(5*time.Second, func() bool {
+			_, err = c.Call("GET", "/api/daemon/status", nil)
+			return err == nil
+		}) {
+			return c, stop
 		}
 		stop()
 		t.Fatalf("daemon did not become ready: %v", err)
@@ -398,26 +400,24 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 
 	_, stopSecond := startDaemon()
 	defer stopSecond()
-	deadline := time.Now().Add(5 * time.Second)
 	var responseStatus int
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(5*time.Second, func() bool {
 		req, reqErr := http.NewRequest(http.MethodPost, oldProxyURL+"/v1/messages", strings.NewReader(`{"model":"claude-test"}`))
 		if reqErr != nil {
 			t.Fatal(reqErr)
 		}
 		req.Header.Set("x-api-key", "provider-key")
-		if resp, callErr := http.DefaultClient.Do(req); callErr == nil {
-			responseStatus = resp.StatusCode
-			_ = resp.Body.Close()
-			if responseStatus == http.StatusOK {
-				break
-			}
-			if responseStatus == http.StatusUnauthorized {
-				t.Fatalf("carried proxy token was rejected at the old URL %s", oldProxyURL)
-			}
+		resp, callErr := http.DefaultClient.Do(req)
+		if callErr != nil {
+			return false
 		}
-		time.Sleep(25 * time.Millisecond)
-	}
+		responseStatus = resp.StatusCode
+		_ = resp.Body.Close()
+		if responseStatus == http.StatusUnauthorized {
+			t.Fatalf("carried proxy token was rejected at the old URL %s", oldProxyURL)
+		}
+		return responseStatus == http.StatusOK
+	})
 	if responseStatus != http.StatusOK {
 		t.Fatalf("old proxy URL did not recover after restart, last status=%d", responseStatus)
 	}
@@ -428,18 +428,15 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 	if err := spawner.finish(); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(5*time.Second, func() bool {
 		check, openErr := store.Open(paths.New(base).DB())
-		if openErr == nil {
-			it, getErr := agent.NewStore(check).GetIteration("restart-agent", iterationID)
-			check.Close()
-			if getErr == nil && it.Status == "no_i_am_done" {
-				break
-			}
+		if openErr != nil {
+			return false
 		}
-		time.Sleep(25 * time.Millisecond)
-	}
+		it, getErr := agent.NewStore(check).GetIteration("restart-agent", iterationID)
+		check.Close()
+		return getErr == nil && it.Status == "no_i_am_done"
+	})
 	check, err := store.Open(paths.New(base).DB())
 	if err != nil {
 		t.Fatal(err)
@@ -449,18 +446,15 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 	if err != nil || final.Status != "no_i_am_done" {
 		t.Fatalf("adopted iteration = %+v, err=%v, want no_i_am_done", final, err)
 	}
-	deadline = time.Now().Add(5 * time.Second)
 	leaseCount := -1
-	for time.Now().Before(deadline) {
+	testutil.WaitFor(5*time.Second, func() bool {
 		registry, openErr := aiproxy.OpenTokenRegistry(paths.New(base).ProxyHandoffFile(), nil)
-		if openErr == nil {
-			leaseCount = registry.Count()
-			if leaseCount == 0 {
-				break
-			}
+		if openErr != nil {
+			return false
 		}
-		time.Sleep(25 * time.Millisecond)
-	}
+		leaseCount = registry.Count()
+		return leaseCount == 0
+	})
 	if leaseCount != 0 {
 		t.Fatalf("proxy leases after adopted completion = %d, want 0", leaseCount)
 	}
@@ -496,13 +490,7 @@ func TestProxyWiredIntoIteration(t *testing.T) {
 
 	sock := paths.New(base).Socket()
 	c := client.New(sock)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := c.Call("GET", "/api/daemon/status", nil); err == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	waitDaemonReady(t, base)
 
 	// Create + start a message-triggered agent.
 	raw, err := c.Call("POST", "/api/agents", map[string]any{
@@ -645,17 +633,7 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 	}
 
 	c := client.New(paths.New(base).Socket())
-	deadline := time.Now().Add(5 * time.Second)
-	var statusErr error
-	for time.Now().Before(deadline) {
-		if _, statusErr = c.Call("GET", "/api/daemon/status", nil); statusErr == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if statusErr != nil {
-		t.Fatalf("daemon never came up: %v", statusErr)
-	}
+	waitDaemonReady(t, base)
 
 	raw, err := c.Call("POST", "/api/agents", map[string]any{
 		"image": "basic:latest", "harness": "codex", "plugins": "context", "loop": true,
@@ -768,8 +746,7 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 	}
 
 	request(http.MethodPost, "/responses", `{"model":"gpt-5.6-terra","input":"hello"}`)
-	usageDeadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(usageDeadline) {
+	testutil.WaitFor(3*time.Second, func() bool {
 		if err := ingester.Flush(); err != nil {
 			t.Fatalf("flush responses request: %v", err)
 		}
@@ -777,11 +754,8 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(usage) == 1 && usage[0].Requests == 1 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return len(usage) == 1 && usage[0].Requests == 1
+	})
 	if len(usage) != 1 || usage[0].Requests != 1 || usage[0].InputTokens != 13 || usage[0].OutputTokens != 8 {
 		t.Fatalf("responses usage = %+v, want one 13/8-token request", usage)
 	}
@@ -864,15 +838,12 @@ func TestCodexChatGPTProxyWiring(t *testing.T) {
 	}
 	defer iterationStore.Close()
 	agentStore := agent.NewStore(iterationStore)
-	finishDeadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(finishDeadline) {
+	if !testutil.WaitFor(3*time.Second, func() bool {
 		it, err := agentStore.GetIteration(created.Name, iterationID)
-		if err == nil && it.Status != "running" {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+		return err == nil && it.Status != "running"
+	}) {
+		t.Fatal("captured Codex iteration did not finish normally")
 	}
-	t.Fatal("captured Codex iteration did not finish normally")
 }
 
 func TestProviderKeysFromAgentEnvAndSecretsReachHarness(t *testing.T) {
@@ -932,13 +903,7 @@ func TestProviderKeysFromAgentEnvAndSecretsReachHarness(t *testing.T) {
 
 			sock := paths.New(base).Socket()
 			c := client.New(sock)
-			deadline := time.Now().Add(5 * time.Second)
-			for time.Now().Before(deadline) {
-				if _, err := c.Call("GET", "/api/daemon/status", nil); err == nil {
-					break
-				}
-				time.Sleep(20 * time.Millisecond)
-			}
+			waitDaemonReady(t, base)
 
 			raw, err := c.Call("POST", "/api/agents", tc.body)
 			if err != nil {

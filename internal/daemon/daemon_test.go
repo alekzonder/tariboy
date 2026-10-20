@@ -25,9 +25,11 @@ import (
 	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 	"github.com/alekzonder/tariboy/internal/telemetry"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func TestTasksRuntimeAliasRefreshAndOwnership(t *testing.T) {
+	t.Parallel()
 	runtimeDir := t.TempDir()
 	for _, value := range []string{"old", "new"} {
 		bundle := t.TempDir()
@@ -92,6 +94,7 @@ func (f *fakeObservationReconciler) ReconcileWorkflowObservations(context.Contex
 }
 
 func TestWorkflowObservationReconcilerRunsAtStartupPeriodicallyAndStops(t *testing.T) {
+	t.Parallel()
 	fake := &fakeObservationReconciler{calls: make(chan struct{}, 4)}
 	signal := newWorkflowIngressSignal()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -116,6 +119,7 @@ func TestWorkflowObservationReconcilerRunsAtStartupPeriodicallyAndStops(t *testi
 }
 
 func TestWorkflowIngressSignalProcessesPromptlyAndCoalescesWithoutBlockingPublish(t *testing.T) {
+	t.Parallel()
 	fake := &fakeObservationReconciler{calls: make(chan struct{}, 8)}
 	signal := newWorkflowIngressSignal()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -154,6 +158,7 @@ func (f *fakeGoalHooks) IterationCompleted(agent, iterationID string) {
 }
 
 func TestGoalHooksAlsoWakeTheWorkflowDispatcher(t *testing.T) {
+	t.Parallel()
 	goal := &fakeGoalHooks{}
 	signal, iterationCompleted := withWorkflowDispatch(goal, func() { goal.calls = append(goal.calls, "dispatch") })
 	signal()
@@ -191,6 +196,7 @@ func (f *fakeDispatcher) CheckHolders(context.Context, time.Time) (int, error) {
 }
 
 func TestWorkflowDispatcherChecksHoldersAfterEachDispatch(t *testing.T) {
+	t.Parallel()
 	var logs bytes.Buffer
 	fake := &fakeDispatcher{calls: make(chan struct{}, 8), err: context.DeadlineExceeded}
 	signal := newWorkflowIngressSignal()
@@ -203,18 +209,14 @@ func TestWorkflowDispatcherChecksHoldersAfterEachDispatch(t *testing.T) {
 	<-fake.calls
 	signal.Signal()
 	<-fake.calls
-	deadline := time.Now().Add(time.Second)
-	for {
+	var order string
+	if !testutil.WaitFor(time.Second, func() bool {
 		fake.mu.Lock()
-		order := strings.Join(fake.order, ",")
-		fake.mu.Unlock()
-		if order == "dispatch,holders,dispatch,holders" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("order = %s", order)
-		}
-		time.Sleep(5 * time.Millisecond)
+		defer fake.mu.Unlock()
+		order = strings.Join(fake.order, ",")
+		return order == "dispatch,holders,dispatch,holders"
+	}) {
+		t.Fatalf("order = %s", order)
 	}
 	cancel()
 	<-done
@@ -224,6 +226,7 @@ func TestWorkflowDispatcherChecksHoldersAfterEachDispatch(t *testing.T) {
 }
 
 func TestWorkflowDispatcherRunsAtStartupOnSignalAndPeriodicallyAndStops(t *testing.T) {
+	t.Parallel()
 	var logs bytes.Buffer
 	fake := &fakeDispatcher{calls: make(chan struct{}, 8), err: context.DeadlineExceeded}
 	signal := newWorkflowIngressSignal()
@@ -268,6 +271,7 @@ func TestWorkflowDispatcherRunsAtStartupOnSignalAndPeriodicallyAndStops(t *testi
 }
 
 func TestOrdinaryPublishDoesNotSynchronouslyWriteWorkflowStateOrChangeLegacyDelivery(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	agents := agent.NewStore(st)
 	if err := agents.Create(agent.Agent{Name: "legacy"}); err != nil {
@@ -323,6 +327,7 @@ func TestOrdinaryPublishDoesNotSynchronouslyWriteWorkflowStateOrChangeLegacyDeli
 }
 
 func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	service := tasks.NewService(st.DB, "customer", time.Now)
 	actor := tasks.CustomerActor("customer")
@@ -345,6 +350,7 @@ func TestTaskMutationSignalsGoalReconciler(t *testing.T) {
 // Removing daemon-start reconciliation must make this fail: the legacy agent
 // would still have no durable delivery lane after restart.
 func TestReconcileAgentInboxesRepairsExistingAgentsIdempotently(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	st := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	agents := agent.NewStore(st)
@@ -375,6 +381,7 @@ func TestReconcileAgentInboxesRepairsExistingAgentsIdempotently(t *testing.T) {
 }
 
 func TestRecordEventAgentScopedGoesToAuditFile(t *testing.T) {
+	t.Parallel()
 	agentsDir := t.TempDir()
 	reg := audit.NewRegistry(
 		func(a string) string { return agentdir.New(agentsDir, a).AuditLog() },
@@ -398,6 +405,7 @@ func TestRecordEventAgentScopedGoesToAuditFile(t *testing.T) {
 // daemon boot in these tests (no OTEL_EXPORTER_OTLP_ENDPOINT is set), so a
 // non-nil logger is passed as Run does — Setup may log.Warn with no nil guard.
 func TestTelemetryNoopSetupShutdown(t *testing.T) {
+	t.Parallel()
 	log := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 	tel, err := telemetry.Setup(context.Background(),
 		telemetry.Config{Endpoint: "", ServiceName: "tariboy"}, log)
@@ -413,6 +421,7 @@ func TestTelemetryNoopSetupShutdown(t *testing.T) {
 }
 
 func TestRunServesAndShutsDown(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
@@ -423,15 +432,10 @@ func TestRunServesAndShutsDown(t *testing.T) {
 	c := client.New(sock)
 	var raw json.RawMessage
 	var err error
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
+	if !testutil.WaitFor(15*time.Second, func() bool {
 		raw, err = c.Call("GET", "/api/daemon/status", nil)
-		if err == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if err != nil {
+		return err == nil
+	}) {
 		t.Fatalf("daemon never came up: %v", err)
 	}
 	var st map[string]any
@@ -568,6 +572,7 @@ func TestRunTaskGoalInitialScanUsesPublishHookAndStops(t *testing.T) {
 }
 
 func TestFreshDaemonStartsWithNoInstalledPlugins(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
@@ -588,17 +593,12 @@ func TestFreshDaemonStartsWithNoInstalledPlugins(t *testing.T) {
 	})
 
 	c := client.New(paths.New(base).Socket())
-	deadline := time.Now().Add(15 * time.Second)
 	var raw json.RawMessage
 	var err error
-	for time.Now().Before(deadline) {
+	if !testutil.WaitFor(15*time.Second, func() bool {
 		raw, err = c.Call("GET", "/api/plugins", nil)
-		if err == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if err != nil {
+		return err == nil
+	}) {
 		t.Fatalf("daemon never came up: %v", err)
 	}
 	var listing struct {
@@ -614,6 +614,7 @@ func TestFreshDaemonStartsWithNoInstalledPlugins(t *testing.T) {
 }
 
 func TestRunRejectsPublicTCPWithoutAuth(t *testing.T) {
+	t.Parallel()
 	err := Run(context.Background(), daemonTestOptions(Options{BaseDir: t.TempDir(), Listen: "tcp:0.0.0.0:0", LogLevel: "error"}))
 	if err == nil {
 		t.Fatal("public tcp without auth must fail")
@@ -621,6 +622,7 @@ func TestRunRejectsPublicTCPWithoutAuth(t *testing.T) {
 }
 
 func TestRecordEventLogsOnError(t *testing.T) {
+	t.Parallel()
 	s := storetest.Open(t)
 	s.Close() // subsequent AddEvent must fail (database is closed)
 	var buf bytes.Buffer
@@ -632,6 +634,7 @@ func TestRecordEventLogsOnError(t *testing.T) {
 }
 
 func TestSecondDaemonRefusesWhenSocketLive(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
@@ -640,17 +643,13 @@ func TestSecondDaemonRefusesWhenSocketLive(t *testing.T) {
 	go func() { done <- Run(ctx, daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error"})) }()
 
 	p := paths.New(base)
-	ready := false
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if c, err := net.DialTimeout("unix", p.Socket(), 200*time.Millisecond); err == nil {
+	if !testutil.WaitFor(10*time.Second, func() bool {
+		c, err := net.DialTimeout("unix", p.Socket(), 200*time.Millisecond)
+		if err == nil {
 			c.Close()
-			ready = true
-			break
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !ready {
+		return err == nil
+	}) {
 		t.Fatal("first daemon never became ready")
 	}
 	if _, err := os.Stat(p.PidFile()); err != nil {

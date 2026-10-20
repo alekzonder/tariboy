@@ -50,6 +50,7 @@ func supportTestServer(source SupportBundleSource) *Server {
 }
 
 func TestSupportBundleRouteStreamsPreparedZIP(t *testing.T) {
+	t.Parallel()
 	source := &fakeSupportSource{archive: fakeSupportArchive{body: "zip-body"}}
 	server := supportTestServer(source)
 	request := httptest.NewRequest(
@@ -76,6 +77,7 @@ func TestSupportBundleRouteStreamsPreparedZIP(t *testing.T) {
 }
 
 func TestSupportBundleRouteDefaultsToSafeTenIterationRequest(t *testing.T) {
+	t.Parallel()
 	source := &fakeSupportSource{archive: fakeSupportArchive{body: "zip"}}
 	server := supportTestServer(source)
 	response := httptest.NewRecorder()
@@ -94,6 +96,7 @@ func TestSupportBundleRouteDefaultsToSafeTenIterationRequest(t *testing.T) {
 }
 
 func TestSupportBundleRouteRejectsMalformedQuery(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"?include_agent_data=x",
 		"?iteration_limit=0",
@@ -117,6 +120,7 @@ func TestSupportBundleRouteRejectsMalformedQuery(t *testing.T) {
 }
 
 func TestSupportBundleRouteMapsOversizedDataBeforeWritingZIP(t *testing.T) {
+	t.Parallel()
 	source := &fakeSupportSource{err: supportbundle.ErrTooLarge}
 	response := httptest.NewRecorder()
 
@@ -135,6 +139,7 @@ func TestSupportBundleRouteMapsOversizedDataBeforeWritingZIP(t *testing.T) {
 }
 
 func TestSupportBundleRouteDoesNotExposeInternalCollectorError(t *testing.T) {
+	t.Parallel()
 	source := &fakeSupportSource{err: errors.New("/private/base read failed with token secret")}
 	response := httptest.NewRecorder()
 
@@ -155,6 +160,7 @@ func TestSupportBundleRouteDoesNotExposeInternalCollectorError(t *testing.T) {
 }
 
 func TestSupportBundleRouteIsAbsentUntilConfigured(t *testing.T) {
+	t.Parallel()
 	response := httptest.NewRecorder()
 	supportTestServer(nil).Handler().ServeHTTP(
 		response,

@@ -12,6 +12,7 @@ import (
 // Startup reconciliation gives every persisted agent its chats, so an agent
 // created before the chats migration is not left without a conversation.
 func TestReconcileAgentChatsProvisionsPersistedAgents(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	agents := agent.NewStore(st)
 	if err := agents.Create(agent.Agent{Name: "worker", ImageRef: "img:latest"}); err != nil {

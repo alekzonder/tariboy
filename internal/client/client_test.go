@@ -10,6 +10,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 func startDaemon(t *testing.T) string {
@@ -35,18 +36,17 @@ func startDaemon(t *testing.T) string {
 	go srv.ServeUnix(sock)
 	// wait
 	c := New(sock)
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := c.Call("GET", "/api/help.json", nil); err == nil {
-			return sock
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		_, err := c.Call("GET", "/api/help.json", nil)
+		return err == nil
+	}) {
+		t.Fatal("no server")
 	}
-	t.Fatal("no server")
-	return ""
+	return sock
 }
 
 func TestCallOK(t *testing.T) {
+	t.Parallel()
 	sock := startDaemon(t)
 	raw, err := New(sock).Call("GET", "/api/daemon/status", map[string]string{"q": "42"})
 	if err != nil {
@@ -60,6 +60,7 @@ func TestCallOK(t *testing.T) {
 }
 
 func TestCallAPIError(t *testing.T) {
+	t.Parallel()
 	sock := startDaemon(t)
 	_, err := New(sock).Call("POST", "/api/fail", nil)
 	apiErr, ok := err.(*APIError)
@@ -69,6 +70,7 @@ func TestCallAPIError(t *testing.T) {
 }
 
 func TestDaemonDown(t *testing.T) {
+	t.Parallel()
 	_, err := New(filepath.Join(t.TempDir(), "absent.sock")).Call("GET", "/api/daemon/status", nil)
 	if err == nil || !IsDaemonDown(err) {
 		t.Fatalf("want daemon-down error, got %v", err)

@@ -11,18 +11,20 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // A request with a spoofed Host is rejected (421) by the web listener; a request
 // with the real loopback Host is served. The primary unix API listener has no
 // such check (it is unreachable from a browser and its posture is unchanged).
 func TestWebListenerRejectsForeignHost(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	addr := "127.0.0.1:8796"
+	addr := freeLoopbackAddr(t)
 	errc := make(chan error, 1)
 	go func() {
 		errc <- Run(ctx, daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error", HTTPAddr: addr}))
@@ -30,20 +32,14 @@ func TestWebListenerRejectsForeignHost(t *testing.T) {
 
 	client := &http.Client{Timeout: time.Second}
 	// Wait until the listener is up (correct Host succeeds).
-	ok := false
-	for i := 0; i < 100; i++ {
-		req, _ := http.NewRequest("GET", "http://"+addr+"/api/daemon/status", nil)
-		resp, err := client.Do(req)
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				ok = true
-				break
-			}
+	if !testutil.WaitFor(5*time.Second, func() bool {
+		resp, err := client.Get("http://" + addr + "/api/daemon/status")
+		if err != nil {
+			return false
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !ok {
+		resp.Body.Close()
+		return resp.StatusCode == 200
+	}) {
 		t.Fatal("web listener never served the API with the real Host")
 	}
 
@@ -68,18 +64,19 @@ func TestWebListenerRejectsForeignHost(t *testing.T) {
 
 // A web-bind failure is fatal: Run returns the bind error instead of hanging.
 func TestWebBindFailureIsFatal(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	storetest.Seed(t, paths.New(base).DB())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Occupy the port first so the web listener's bind fails.
-	occupied := "127.0.0.1:8795"
-	ln, lerr := net.Listen("tcp", occupied)
+	// Occupy a port first so the web listener's bind fails.
+	ln, lerr := net.Listen("tcp", "127.0.0.1:0")
 	if lerr != nil {
-		t.Skipf("cannot occupy %s: %v", occupied, lerr)
+		t.Fatal(lerr)
 	}
 	defer ln.Close()
+	occupied := ln.Addr().String()
 
 	errc := make(chan error, 1)
 	go func() {

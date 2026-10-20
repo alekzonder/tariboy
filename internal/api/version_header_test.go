@@ -14,6 +14,7 @@ import (
 // daemon's build version, so a client of any age can notice it is talking to a
 // daemon it does not match (SUPER-224 §4).
 func TestOperatorAPIStampsVersionHeader(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	_ = reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
