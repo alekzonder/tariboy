@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/workflowfile"
@@ -156,6 +157,151 @@ func TestTaskJSONRoundTrip(t *testing.T) {
 		task.ID = 0 // not part of the JSON form
 		if !reflect.DeepEqual(back, task) {
 			t.Fatalf("round trip\n got %#v\nwant %#v", back, task)
+		}
+	}
+}
+
+// A list row carries a summary of the task's workflow trouble and position,
+// computed by the task select itself so a page of tasks costs no extra
+// queries.
+func TestTaskScanWorkflowAttentionAndStep(t *testing.T) {
+	svc, actor, task, _ := runFixture(t)
+	ctx := context.Background()
+	stored := storedTask(t, svc, task.Key)
+	if stored.WorkflowAttention != nil || !reflect.DeepEqual(stored.WorkflowStep, &WorkflowStep{Index: 2, Total: 6}) {
+		t.Fatalf("fresh task = %#v %#v", stored.WorkflowAttention, stored.WorkflowStep)
+	}
+	fields := jsonFields(t, stored)
+	if _, ok := fields["workflow_attention"]; ok || fields["workflow_step"] == nil {
+		t.Fatalf("fresh JSON = %v", fields)
+	}
+
+	// An idle holder is the quietest signal.
+	forceOpenVisit(t, svc, task, `idle_iterations = 2`)
+	if got := storedTask(t, svc, task.Key).WorkflowAttention; got == nil || got.Kind != "idle" || got.Count != 2 || got.Message == "" {
+		t.Fatalf("idle = %#v", got)
+	}
+
+	// A rejected request names the check's message and the request.
+	request, first := advanceApprove(t, svc, actor, task)
+	if got := storedTask(t, svc, task.Key).WorkflowAttention; got != nil {
+		t.Fatalf("pending request = %#v; a pending request is not trouble", got)
+	}
+	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "CI is red\nsee the log", ExitCode: exitCode(112)})
+	got := storedTask(t, svc, task.Key).WorkflowAttention
+	if got == nil || got.Kind != "rejected" || got.Message != "CI is red" || got.Count != 1 || got.RequestID != request.ID || got.RunID != first.ID {
+		t.Fatalf("rejected = %#v", got)
+	}
+
+	// A failed request outranks the rejection before it and drops the log line
+	// of its result message.
+	request, first = advanceApprove(t, svc, actor, task)
+	complete(t, svc, first.ID, RunCompletion{Verdict: "failure", Message: "the script failed with exit 3", ExitCode: exitCode(3), LogPath: "/base/runs/1/run.log"})
+	got = storedTask(t, svc, task.Key).WorkflowAttention
+	if got == nil || got.Kind != "failed" || got.Message != "the script failed with exit 3" || got.Count != 1 ||
+		got.RequestID != request.ID || got.RunID != first.ID {
+		t.Fatalf("failed = %#v", got)
+	}
+
+	// A pause outranks everything and says why.
+	paused := pause(t, svc, task.Key, PauseScriptFailures, "boom")
+	if got := paused.WorkflowAttention; got == nil || got.Kind != "paused" || got.Message != pauseReasonText(PauseScriptFailures) {
+		t.Fatalf("paused = %#v", got)
+	}
+	if _, err := svc.ResumeWorkflow(ctx, actor, task.Key, "continue"); err != nil {
+		t.Fatal(err)
+	}
+	// A resumed visit starts its counters again: the failed request is still
+	// the latest one of the visit, but the pause is over.
+	if got := storedTask(t, svc, task.Key).WorkflowAttention; got == nil || got.Kind != "failed" {
+		t.Fatalf("resumed = %#v", got)
+	}
+
+	// A watch that fails in a script status is reported with its run.
+	task = enter(t, svc, task.Key, "merge", "approved")
+	run := scheduleWatch(t, svc, actor, task)
+	if got := storedTask(t, svc, task.Key).WorkflowAttention; got != nil {
+		t.Fatalf("new visit = %#v; the failed request belongs to the old visit", got)
+	}
+	complete(t, svc, run.ID, RunCompletion{Verdict: "failure", Message: "GitHub answered 502"})
+	got = storedTask(t, svc, task.Key).WorkflowAttention
+	if got == nil || got.Kind != "script_failed" || got.Message != "GitHub answered 502" || got.Count != 1 || got.RunID != run.ID || got.RequestID != 0 {
+		t.Fatalf("script_failed = %#v", got)
+	}
+	if step := storedTask(t, svc, task.Key).WorkflowStep; !reflect.DeepEqual(step, &WorkflowStep{Index: 4, Total: 6}) {
+		t.Fatalf("step = %#v", step)
+	}
+
+	// A closed task has neither.
+	if _, err := svc.CancelWorkflowTask(ctx, actor, task.Key); err != nil {
+		t.Fatal(err)
+	}
+	closed := storedTask(t, svc, task.Key)
+	if closed.WorkflowAttention != nil || closed.WorkflowStep != nil {
+		t.Fatalf("closed = %#v %#v", closed.WorkflowAttention, closed.WorkflowStep)
+	}
+
+	// A flexible task has neither field in its JSON.
+	flexible, err := svc.CreateTask(ctx, actor, CreateTaskInput{Queue: "TASK", Title: "flex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields = jsonFields(t, storedTask(t, svc, flexible.Key))
+	if _, ok := fields["workflow_attention"]; ok {
+		t.Fatalf("flexible JSON = %v", fields)
+	}
+	if _, ok := fields["workflow_step"]; ok {
+		t.Fatalf("flexible JSON = %v", fields)
+	}
+}
+
+// The attention summary and the step reach a list page, not only a single
+// task read.
+func TestListTasksCarriesWorkflowAttention(t *testing.T) {
+	svc, actor, task, _ := runFixture(t)
+	_, first := advanceApprove(t, svc, actor, task)
+	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "CI is red", ExitCode: exitCode(112)})
+	page, err := svc.ListTasks(context.Background(), actor, ListFilter{Queue: "DEV"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *Task
+	for i := range page.Tasks {
+		if page.Tasks[i].Key == task.Key {
+			found = &page.Tasks[i]
+		}
+	}
+	if found == nil || found.WorkflowAttention == nil || found.WorkflowAttention.Kind != "rejected" || found.WorkflowStep == nil {
+		t.Fatalf("listed = %#v", found)
+	}
+}
+
+// The task select reaches the open visit, its latest request, and its latest
+// run through indexes, so a page of tasks does not scan those tables.
+func TestTaskSelectUsesIndexes(t *testing.T) {
+	svc, _ := workflowFixture(t)
+	rows, err := svc.db.Query(`EXPLAIN QUERY PLAN `+taskSelect+` WHERE t.id = ?`, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan []string
+	for rows.Next() {
+		var id, parent, notUsed int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, detail := range plan {
+		for _, table := range []string{"task_status_visits", "task_transition_requests", "task_script_runs"} {
+			if strings.HasPrefix(detail, "SCAN "+table) || strings.Contains(detail, "SCAN "+table+" ") {
+				t.Errorf("plan scans %s: %q\n%s", table, detail, strings.Join(plan, "\n"))
+			}
 		}
 	}
 }

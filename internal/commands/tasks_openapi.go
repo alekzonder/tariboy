@@ -36,7 +36,18 @@ func taskOpenAPISchemas() map[string]map[string]any {
 			"category":        status,
 			"waiting_on":      map[string]any{"type": "string", "enum": []string{tasks.WaitingOnCustomer, tasks.WaitingOnScript, tasks.WaitingOnPause}},
 			"workflow_digest": str, "workflow_name": str, "workflow_version": str, "workflow_paused_reason": str,
+			"workflow_attention": schemaRef("WorkflowAttention"), "workflow_step": schemaRef("WorkflowStep"),
 			"pull_request": str, "revision": integer}),
+		"WorkflowAttention": objectSchema([]string{"kind"}, map[string]any{
+			"kind": map[string]any{"type": "string", "enum": []string{tasks.AttentionPaused, tasks.AttentionFailed, tasks.AttentionRejected, tasks.AttentionScriptFailed, tasks.AttentionIdle},
+				"description": "What needs a person on an open workflow task, the most urgent kind first: paused, failed, rejected, script_failed, idle"},
+			"message":    map[string]any{"type": "string", "description": "The first line of the script's message, or what the pause means"},
+			"count":      map[string]any{"type": "integer", "description": "The visit counter behind the kind: rejected requests, script failures, or idle iterations"},
+			"request_id": map[string]any{"type": "integer", "description": "The failed or rejected transition request"},
+			"run_id":     map[string]any{"type": "integer", "description": "The script run whose log explains it"}}),
+		"WorkflowStep": objectSchema([]string{"index", "total"}, map[string]any{
+			"index": map[string]any{"type": "integer", "description": "The position of the current status in the manifest, from 1"},
+			"total": map[string]any{"type": "integer", "description": "The number of statuses the manifest declares"}}),
 		"OutcomeView": objectSchema([]string{"on", "to"}, map[string]any{"on": str, "to": str, "requires": stringArray(), "missing": stringArray(), "checks": stringArray(),
 			"check_details": map[string]any{"type": "array", "items": schemaRef("CheckView"), "description": "The checks in order, with their description and resolved run mode and timeout"}}),
 		"CheckView": objectSchema([]string{"script", "run_as", "timeout"}, map[string]any{"script": str, "description": str,

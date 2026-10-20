@@ -92,6 +92,7 @@ func applyState(task *Task, state taskState) error {
 		return err
 	}
 	task.Status, task.Category, task.Assignee, task.WaitingOn = category, category, assignee, waiting
+	settleWorkflowSummary(task)
 	return nil
 }
 

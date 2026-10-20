@@ -339,9 +339,14 @@ func TestWorkflowOpenAPIDescribesRoutesAndSchemas(t *testing.T) {
 		t.Errorf("QueueSource schema lacks description")
 	}
 	props, _ := doc.Components.Schemas["Task"]["properties"].(map[string]any)
-	for _, name := range []string{"category", "waiting_on", "workflow_digest", "workflow_name", "workflow_version", "workflow_paused_reason"} {
+	for _, name := range []string{"category", "waiting_on", "workflow_digest", "workflow_name", "workflow_version", "workflow_paused_reason", "workflow_attention", "workflow_step"} {
 		if props[name] == nil {
 			t.Errorf("Task schema lacks %s", name)
+		}
+	}
+	for _, name := range []string{"WorkflowAttention", "WorkflowStep"} {
+		if doc.Components.Schemas[name] == nil {
+			t.Errorf("openapi lacks schema %s", name)
 		}
 	}
 	var advance map[string]any
