@@ -257,6 +257,13 @@ Nobody sets a category; the daemon derives it from the status owner:
 | Terminal status | `done`, or `cancelled` when the status declares `cancelled: true` | unchanged | |
 | Cancelled with `ttasks cancel` | `cancelled`; the status stays where the task stopped | unchanged | |
 
+One function derives this table, from the owner kind of the status, the
+holder, the pause, and whether the holder's question is open. Entering a
+status, resuming a pause, pausing, dispatching, and a comment all use it, and
+one statement writes the result. A pool status picks a holder only when the
+task is neither paused nor blocked; a blocked task stays `open` with no
+holder until the daemon dispatches it after the blocker closes.
+
 `waiting_on` is non-empty only while the category is `wait_customer`. It takes
 the values `customer`, `script`, and `pause`; `pause` marks a task the daemon
 paused and is described under [Pauses](#pauses). A flexible task has `category` equal to `status`
@@ -1332,6 +1339,8 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `tasks.workflow_digest` | The pinned image digest; `NULL` for a flexible task. |
 | `tasks.workflow_status` | The current workflow status. |
 | `tasks.workflow_paused_reason` | The pause reason; empty unless the task is paused. |
+| `tasks.workflow_owner_kind` | The owner kind of the current status (`pool`, `customer`, or `script`), copied from the pinned manifest; empty for a terminal or undeclared status and for a flexible task. Triggers keep it current when the status, the digest, or the manifest changes (migration `0069`). |
+| `tasks.open_blockers` | How many `blocks` relations point at the task from a task that is not `done` or `cancelled`. A task is blocked while this is above zero or it has a manual block reason. Triggers on relations and on the blocker's status keep it current, for flexible and workflow tasks alike (migration `0069`). |
 | `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
