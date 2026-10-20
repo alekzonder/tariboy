@@ -15,6 +15,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func clk() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
@@ -53,11 +54,7 @@ func seedBus(t *testing.T, s *store.Store, ag string) {
 func seed(t *testing.T) (*store.Store, string) {
 	t.Helper()
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	as.SecretSet("bot", "API_KEY", "supersecret")

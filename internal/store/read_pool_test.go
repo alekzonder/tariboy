@@ -1,7 +1,6 @@
 package store
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -9,11 +8,7 @@ import (
 // A read through the read pool must not wait for the single writer
 // connection: the API polls must keep answering while a write runs.
 func TestReadPoolDoesNotWaitForTheWriter(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s := openFresh(t)
 	if err := s.ConfigSet("k", "v1"); err != nil {
 		t.Fatal(err)
 	}
@@ -44,11 +39,7 @@ func TestReadPoolDoesNotWaitForTheWriter(t *testing.T) {
 
 // The read pool is read-only, so a handler cannot write through it by mistake.
 func TestReadPoolRejectsWrites(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s := openFresh(t)
 	if _, err := s.Reader().Exec(`INSERT INTO daemon_config(key, value) VALUES ('a', 'b')`); err == nil {
 		t.Fatal("write through the read pool succeeded")
 	}
@@ -56,11 +47,7 @@ func TestReadPoolRejectsWrites(t *testing.T) {
 
 // A Store built around one handle, as tests do, reads through that handle.
 func TestReaderFallsBackToDB(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s := openFresh(t)
 	if bare := (&Store{DB: s.DB}); bare.Reader() != s.DB {
 		t.Fatal("Reader of a bare Store is not its DB")
 	}
