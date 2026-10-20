@@ -158,16 +158,8 @@ func TestAddCommentIdempotencyReplaysWithoutDuplicateWaitOrRevision(t *testing.T
 	if replayed.Comment.ID != first.Comment.ID || replayed.Comment.Body != first.Comment.Body {
 		t.Fatalf("replayed = %#v, first = %#v", replayed, first)
 	}
-	var comments, waits, revision int
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_comments WHERE task_id = ?`, task.ID).Scan(&comments); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_waiting_for WHERE task_id = ?`, task.ID).Scan(&waits); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.db.QueryRow(`SELECT revision FROM tasks WHERE id = ?`, task.ID).Scan(&revision); err != nil {
-		t.Fatal(err)
-	}
+	detail := taskDetail(t, svc, task)
+	comments, waits, revision := len(detail.Comments), len(detail.WaitingFor), detail.Task.Revision
 	if comments != 1 || waits != 1 || revision != 2 {
 		t.Fatalf("comments/waits/revision = %d/%d/%d, want 1/1/2", comments, waits, revision)
 	}
@@ -199,6 +191,7 @@ func TestAssignedAgentCustomerQuestionTransitionsToWaitCustomer(t *testing.T) {
 		updated.Sequence >= commented.Sequence {
 		t.Fatalf("comment event = %#v after %#v", commented, updated)
 	}
+	// A storage check: no API lists the notification outbox.
 	var outboxSequence int64
 	if err := svc.db.QueryRow(`
 		SELECT event_sequence FROM task_notification_outbox

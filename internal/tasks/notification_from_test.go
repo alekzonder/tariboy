@@ -16,6 +16,8 @@ func TestNotificationOutboxRecordsItsAuthor(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// A storage check: the outbox row is what the notifier reads, and no API
+	// lists it.
 	var channel, raw string
 	if err := svc.db.QueryRow(`
 		SELECT channel, data FROM task_notification_outbox

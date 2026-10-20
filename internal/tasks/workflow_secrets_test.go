@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
@@ -17,22 +16,7 @@ import (
 // requires the named secrets.
 func requireSecrets(t *testing.T, svc *Service, digest string, names ...string) {
 	t.Helper()
-	var raw string
-	if err := svc.db.QueryRow(`SELECT manifest FROM task_workflow_images WHERE digest = ?`, digest).Scan(&raw); err != nil {
-		t.Fatal(err)
-	}
-	var manifest workflowimage.Manifest
-	if err := json.Unmarshal([]byte(raw), &manifest); err != nil {
-		t.Fatal(err)
-	}
-	manifest.Definition.RequiresSecrets = names
-	updated, err := json.Marshal(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`UPDATE task_workflow_images SET manifest = ? WHERE digest = ?`, string(updated), digest); err != nil {
-		t.Fatal(err)
-	}
+	editManifest(t, svc, digest, func(m *workflowimage.Manifest) { m.Definition.RequiresSecrets = names })
 }
 
 func TestSetQueueSecretInfoReturnsTheStoredTime(t *testing.T) {
@@ -157,17 +141,9 @@ func TestQueueSecretEventsNameTheKeyOnly(t *testing.T) {
 	if err := svc.RemoveQueueSecret(ctx, actor, "DEV", "GH_TOKEN"); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := svc.db.Query(`SELECT kind, actor, payload FROM task_events WHERE queue_prefix = 'DEV' AND kind LIKE 'queue.secret_%' ORDER BY sequence`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
 	var kinds []string
-	for rows.Next() {
-		var kind, who, payload string
-		if err := rows.Scan(&kind, &who, &payload); err != nil {
-			t.Fatal(err)
-		}
+	for _, event := range queueEvents(t, svc, "DEV", "queue.secret_") {
+		kind, who, payload := event.Kind, event.Actor, eventJSON(t, event)
 		if who != actor.Principal || payload != `{"key":"GH_TOKEN"}` {
 			t.Fatalf("event %s by %s payload %s; want the key only", kind, who, payload)
 		}

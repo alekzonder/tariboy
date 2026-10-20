@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -50,17 +51,10 @@ func seedEngineImage(t *testing.T, svc *Service, def workflowfile.File) string {
 	}
 	sum := sha256.Sum256(rawDef)
 	digest := hex.EncodeToString(sum[:])
-	raw, err := json.Marshal(workflowimage.Manifest{
+	storeManifest(t, svc, workflowimage.Manifest{
 		SchemaVersion: 1, Name: def.Name, Version: def.WorkflowVersion, Digest: digest,
 		BuiltAt: "2026-10-02T00:00:00Z", Definition: def,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO task_workflow_images(digest, name, version, manifest, built_at) VALUES (?, ?, ?, ?, ?)`,
-		digest, def.Name, def.WorkflowVersion, string(raw), "2026-10-02T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
 	svc.SetWorkflowResolver(func(string) (string, error) { return digest, nil })
 	return digest
 }
@@ -73,9 +67,7 @@ func engineFixture(t *testing.T) (*Service, Actor, string) {
 	if err := svc.EnsureDefaultQueue(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, goal_enabled = 1`); err != nil {
-		t.Fatal(err)
-	}
+	enableAgents(t, svc)
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)
 	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
 	digest := seedEngineImage(t, svc, engineDefinition())
@@ -125,13 +117,6 @@ func enter(t *testing.T, svc *Service, key, statusID, outcome string) Task {
 	return stored
 }
 
-func setAgent(t *testing.T, svc *Service, name, assignments string) {
-	t.Helper()
-	if _, err := svc.db.Exec(`UPDATE agents SET `+assignments+` WHERE name = ?`, name); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func countRows(t *testing.T, svc *Service, query string, args ...any) int {
 	t.Helper()
 	var n int
@@ -139,16 +124,6 @@ func countRows(t *testing.T, svc *Service, query string, args ...any) int {
 		t.Fatal(err)
 	}
 	return n
-}
-
-func holderOf(t *testing.T, svc *Service, task Task, pool string) string {
-	t.Helper()
-	var agent string
-	err := svc.db.QueryRow(`SELECT agent FROM task_workflow_holders WHERE task_id = ? AND pool = ?`, task.ID, pool).Scan(&agent)
-	if err != nil {
-		return ""
-	}
-	return agent
 }
 
 func TestCreateTaskInBoundQueuePinsDigestAndEntersInitialStatus(t *testing.T) {
@@ -175,23 +150,15 @@ func TestCreateTaskInBoundQueuePinsDigestAndEntersInitialStatus(t *testing.T) {
 	if got := holderOf(t, svc, stored, "developers"); got != "dev-1" {
 		t.Fatalf("holder = %q", got)
 	}
-	var sequence int
-	var status, enteredBy, leftAt string
-	if err := svc.db.QueryRow(`SELECT sequence, status_id, entered_by, left_at FROM task_status_visits WHERE task_id = ?`,
-		stored.ID).Scan(&sequence, &status, &enteredBy, &leftAt); err != nil {
-		t.Fatal(err)
+	visits := workflowView(t, svc, stored).Visits
+	if len(visits) != 1 {
+		t.Fatalf("visits = %#v", visits)
 	}
+	sequence, status, enteredBy, leftAt := visits[0].Sequence, visits[0].Status, visits[0].EnteredBy, visits[0].LeftAt
 	if sequence != 1 || status != "develop" || enteredBy != "user:customer" || leftAt != "" {
 		t.Fatalf("visit = %d %q %q %q", sequence, status, enteredBy, leftAt)
 	}
-	var raw string
-	if err := svc.db.QueryRow(`SELECT payload FROM task_events WHERE task_id = ? AND kind = 'workflow.transitioned'`, stored.ID).Scan(&raw); err != nil {
-		t.Fatal(err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		t.Fatal(err)
-	}
+	payload := eventPayload(t, svc, stored, "workflow.transitioned")
 	if payload["from"] != "" || payload["to"] != "develop" || payload["outcome"] != "" || payload["actor"] != "user:customer" {
 		t.Fatalf("transition payload = %v", payload)
 	}
@@ -250,19 +217,15 @@ func TestQueueTriggerTaskPinsTheBinding(t *testing.T) {
 		CreateQueueWorkflowTriggerInput{Pattern: "metrics:api", Action: "create_task"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`INSERT INTO channels(name,kind,created_at) VALUES('metrics:api','chat',?) ON CONFLICT DO NOTHING`, svc.now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`INSERT INTO messages(id,channel,ts,source,type,subject,text,data,kind) VALUES('durable-1','metrics:api',?,'plugin:metrics','metric.alert','{}','API alert','{}','event')`, "2099-01-01T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	publishMessage(t, svc, bus.Message{Channel: "metrics:api", Source: "plugin:metrics", Type: "metric.alert", Text: "API alert"})
 	if n, err := svc.ReconcileWorkflowObservations(context.Background(), 100); err != nil || n != 1 {
 		t.Fatalf("reconcile = %d, %v", n, err)
 	}
-	var pinned, status string
-	if err := svc.db.QueryRow(`SELECT workflow_digest, workflow_status FROM tasks WHERE queue_prefix = 'DEV'`).Scan(&pinned, &status); err != nil {
-		t.Fatal(err)
+	tasks := queueTasks(t, svc, "DEV")
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %#v", tasks)
 	}
+	pinned, status := tasks[0].WorkflowDigest, tasks[0].WorkflowStatus
 	if pinned != digest || status != "develop" {
 		t.Fatalf("trigger task pinned %q in %q", pinned, status)
 	}
@@ -339,9 +302,7 @@ func TestEnterPoolStatusBreaksTiesByLastDispatchThenPoolOrder(t *testing.T) {
 	}
 	enter(t, svc, second.Key, "done", "merged")
 	// dev-2 was dispatched more recently than dev-1.
-	if _, err := svc.db.Exec(`UPDATE task_workflow_holders SET dispatched_at = '2026-01-01T00:00:00.000000000Z' WHERE agent = 'dev-1'`); err != nil {
-		t.Fatal(err)
-	}
+	forceAgentHolders(t, svc, "dev-1", `dispatched_at = '2026-01-01T00:00:00.000000000Z'`)
 	third := mustCreateDev(t, svc, actor, "third")
 	if third.Assignee != "agent:dev-1" {
 		t.Fatalf("third = %q; want the least recently dispatched member", third.Assignee)
@@ -435,10 +396,8 @@ func TestEnterCustomerStatusOpensOneSystemWait(t *testing.T) {
 	if len(waits) != 1 || waits[0].ExpectedPrincipal != "user:customer" || waits[0].RequestingPrincipal != "system:workflow" {
 		t.Fatalf("waits = %#v", waits)
 	}
-	var author, body string
-	if err := svc.db.QueryRow(`SELECT author, body FROM task_comments WHERE id = ?`, waits[0].RequestingCommentID).Scan(&author, &body); err != nil {
-		t.Fatal(err)
-	}
+	comment := commentOf(taskDetail(t, svc, task), waits[0].RequestingCommentID)
+	author, body := comment.Author, comment.Body
 	for _, want := range []string{"approval", "approved", "rejected"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("comment %q lacks %q", body, want)
@@ -516,25 +475,16 @@ func TestEnterStatusRecordsVisitsAndTransitionEvents(t *testing.T) {
 	if final.Revision != task.Revision+2 {
 		t.Fatalf("revision = %d; want %d", final.Revision, task.Revision+2)
 	}
-	rows, err := svc.db.Query(`SELECT sequence, status_id, left_at <> '', outcome, message FROM task_status_visits WHERE task_id = ? ORDER BY sequence`, task.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	type visit struct {
-		seq              int
+		seq              int64
 		status           string
 		left             bool
 		outcome, message string
 	}
 	var got []visit
-	for rows.Next() {
-		var v visit
-		if err := rows.Scan(&v.seq, &v.status, &v.left, &v.outcome, &v.message); err != nil {
-			t.Fatal(err)
-		}
-		got = append(got, v)
+	for _, v := range workflowView(t, svc, task).Visits {
+		got = append(got, visit{v.Sequence, v.Status, v.LeftAt != "", v.Outcome, v.Message})
 	}
-	rows.Close()
 	want := []visit{
 		{1, "develop", true, "ready", "msg ready"},
 		{2, "review", true, "changes", "msg changes"},
@@ -543,23 +493,14 @@ func TestEnterStatusRecordsVisitsAndTransitionEvents(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("visits = %#v", got)
 	}
-	events, err := svc.db.Query(`SELECT payload FROM task_events WHERE task_id = ? AND kind = 'workflow.transitioned' ORDER BY sequence`, task.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
 	var transitions []string
-	for events.Next() {
-		var raw string
-		if err := events.Scan(&raw); err != nil {
-			t.Fatal(err)
+	for _, event := range taskEvents(t, svc, task) {
+		if event.Kind != "workflow.transitioned" {
+			continue
 		}
-		var p map[string]any
-		if err := json.Unmarshal([]byte(raw), &p); err != nil {
-			t.Fatal(err)
-		}
+		p := event.Payload
 		transitions = append(transitions, p["from"].(string)+">"+p["to"].(string)+":"+p["outcome"].(string)+":"+p["actor"].(string))
 	}
-	events.Close()
 	if !reflect.DeepEqual(transitions, []string{
 		">develop::user:customer", "develop>review:ready:user:customer", "review>develop:changes:user:customer",
 	}) {

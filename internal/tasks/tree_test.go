@@ -160,6 +160,8 @@ func TestListTasksOrdersEverySiblingSetByPriorityThenPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Tie every position so only priority orders them; the API always
+	// assigns distinct positions.
 	if _, err := svc.db.Exec(`UPDATE tasks SET position = 0 WHERE task_key IN (?, ?, ?, ?, ?, ?, ?)`,
 		low.Key, critical.Key, high.Key, normal.Key, childLow.Key, childHigh.Key, childHigh2.Key); err != nil {
 		t.Fatal(err)
@@ -217,12 +219,8 @@ func TestMoveStaysWithinPriorityBucket(t *testing.T) {
 		t.Fatalf("moved priority/position = %s/%d; want P2/0", moved.Priority, moved.Position)
 	}
 	for key, want := range map[string]int64{high.Key: 0, normalA.Key: 1, low.Key: 0} {
-		var got int64
-		if err := svc.db.QueryRow(`SELECT position FROM tasks WHERE task_key = ?`, key).Scan(&got); err != nil {
-			t.Fatal(err)
-		}
-		if got != want {
-			t.Fatalf("position of %s = %d; want %d", key, got, want)
+		if got := storedTask(t, svc, key).Position; got != want {
+			t.Fatalf("position of %s = %d; want %d", key, storedTask(t, svc, key).Position, want)
 		}
 	}
 }

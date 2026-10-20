@@ -97,13 +97,6 @@ func logFixture(t *testing.T) (*Service, Actor, Task, ScriptRun, string) {
 	return svc, actor, task, run, path
 }
 
-func setLogPath(t *testing.T, svc *Service, id int64, path string) {
-	t.Helper()
-	if _, err := svc.db.Exec(`UPDATE task_script_runs SET log_path = ? WHERE id = ?`, path, id); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestScriptRunLogReadsTheLog(t *testing.T) {
 	svc, actor, task, run, path := logFixture(t)
 	if err := os.WriteFile(path, []byte("hello\nworld\n"), 0o600); err != nil {
@@ -295,10 +288,7 @@ func TestAgentActionsForRequestsAndRuns(t *testing.T) {
 	if err := os.WriteFile(path, []byte("line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var requestID int64
-	if err := svc.db.QueryRow(`SELECT id FROM task_transition_requests WHERE task_id = ?`, task.ID).Scan(&requestID); err != nil {
-		t.Fatal(err)
-	}
+	requestID := lastRequestID(t, svc, task)
 
 	got, err := svc.AgentAction(ctx, holder, "request_get", map[string]any{"key": task.Key, "id": float64(requestID)})
 	if err != nil || got.(TransitionRequest).ID != requestID {

@@ -167,9 +167,7 @@ func TestListTasksSortsAndPagesEveryOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 		stamp := "2026-01-0" + string(rune('1'+i)) + "T00:00:00Z"
-		if _, err := svc.db.Exec(`UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?`, stamp, stamp, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceTask(t, svc, task, `created_at = ?, updated_at = ?`, stamp, stamp)
 		keys = append(keys, task.Key)
 	}
 	want := map[string][]string{

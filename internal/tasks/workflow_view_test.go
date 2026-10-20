@@ -4,6 +4,8 @@ import (
 	"context"
 	"reflect"
 	"testing"
+
+	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
 
 func TestGetWorkflowOnAFlexibleTask(t *testing.T) {
@@ -143,9 +145,7 @@ func TestGetWorkflowOfACancelledTaskOffersNoExit(t *testing.T) {
 
 func TestGetWorkflowListsDeclaredArtifactsAndStatuses(t *testing.T) {
 	svc, actor, task := requestFixture(t)
-	if _, err := svc.db.Exec(`UPDATE task_workflow_images SET manifest = json_set(manifest, '$.definition.artifacts[0].description', 'The plan.')`); err != nil {
-		t.Fatal(err)
-	}
+	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) { m.Definition.Artifacts[0].Description = "The plan." })
 	ctx := context.Background()
 	wantArtifacts := []DeclaredArtifact{{Name: "plan", Description: "The plan."}, {Name: "summary"}}
 	wantStatuses := []StatusView{
@@ -178,9 +178,7 @@ func TestGetWorkflowListsDeclaredArtifactsAndStatuses(t *testing.T) {
 
 func TestGetWorkflowWithNoDeclaredArtifactsHasEmptyLists(t *testing.T) {
 	svc, actor, task := requestFixture(t)
-	if _, err := svc.db.Exec(`UPDATE task_workflow_images SET manifest = json_remove(manifest, '$.definition.artifacts')`); err != nil {
-		t.Fatal(err)
-	}
+	editManifest(t, svc, task.WorkflowDigest, func(m *workflowimage.Manifest) { m.Definition.Artifacts = nil })
 	view, err := svc.GetWorkflow(context.Background(), actor, task.Key)
 	if err != nil {
 		t.Fatal(err)
@@ -192,9 +190,7 @@ func TestGetWorkflowWithNoDeclaredArtifactsHasEmptyLists(t *testing.T) {
 
 func TestGetWorkflowInAStatusTheManifestDoesNotDeclare(t *testing.T) {
 	svc, actor, task := requestFixture(t)
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_status = 'gone' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_status = 'gone'`)
 	view, err := svc.GetWorkflow(context.Background(), actor, task.Key)
 	if err != nil {
 		t.Fatal(err)

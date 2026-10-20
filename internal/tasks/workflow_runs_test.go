@@ -45,9 +45,7 @@ func runFixture(t *testing.T) (*Service, Actor, Task, *atomic.Int32) {
 	if err := svc.EnsureDefaultQueue(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, goal_enabled = 1`); err != nil {
-		t.Fatal(err)
-	}
+	enableAgents(t, svc)
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)
 	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
 	seedEngineImage(t, svc, runDefinition())
@@ -71,41 +69,6 @@ func listRuns(t *testing.T, svc *Service, actor Actor, task Task) []ScriptRun {
 		t.Fatal(err)
 	}
 	return runs
-}
-
-// openVisit returns the open visit's status, rejected_requests,
-// script_failures, and next_watch_at.
-func openVisit(t *testing.T, svc *Service, task Task) (string, int, int, string) {
-	t.Helper()
-	var status, next string
-	var rejected, failures int
-	if err := svc.db.QueryRow(`
-		SELECT status_id, rejected_requests, script_failures, next_watch_at
-		FROM task_status_visits WHERE task_id = ? AND left_at = ''`, task.ID).Scan(&status, &rejected, &failures, &next); err != nil {
-		t.Fatal(err)
-	}
-	return status, rejected, failures, next
-}
-
-func runState(t *testing.T, svc *Service, id int64) (string, string, bool) {
-	t.Helper()
-	var state, verdict string
-	var cancel bool
-	if err := svc.db.QueryRow(`SELECT state, verdict, cancel_requested FROM task_script_runs WHERE id = ?`, id).
-		Scan(&state, &verdict, &cancel); err != nil {
-		t.Fatal(err)
-	}
-	return state, verdict, cancel
-}
-
-func requestRow(t *testing.T, svc *Service, id int64) (string, string) {
-	t.Helper()
-	var state, result string
-	if err := svc.db.QueryRow(`SELECT state, result_message FROM task_transition_requests WHERE id = ?`, id).
-		Scan(&state, &result); err != nil {
-		t.Fatal(err)
-	}
-	return state, result
 }
 
 func storedTask(t *testing.T, svc *Service, key string) Task {
@@ -155,7 +118,7 @@ func TestAdvanceWithChecksRecordsAPendingRequestAndTheFirstRun(t *testing.T) {
 		request.Message != "looks good" || request.Actor != "agent:reviewer-1" {
 		t.Fatalf("request = %#v", request)
 	}
-	if state := requestState(t, svc, request.ID); state != "pending" {
+	if state := requestState(t, svc, task, request.ID); state != "pending" {
 		t.Fatalf("stored request state = %q", state)
 	}
 	runs := listRuns(t, svc, actor, task)
@@ -168,6 +131,7 @@ func TestAdvanceWithChecksRecordsAPendingRequestAndTheFirstRun(t *testing.T) {
 	}
 	var index int
 	var requestID int64
+	// A direct check of the stored row: no API exposes check_index.
 	if err := svc.db.QueryRow(`SELECT check_index, request_id FROM task_script_runs WHERE id = ?`, run.ID).
 		Scan(&index, &requestID); err != nil {
 		t.Fatal(err)
@@ -191,20 +155,18 @@ func TestCompleteScriptRunPassRunsTheNextCheckThenApplies(t *testing.T) {
 	svc, actor, task, goals := runFixture(t)
 	ctx := context.Background()
 	request, first := advanceApprove(t, svc, actor, task)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceScriptFailures(t, svc, task, 2)
 	if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/runs/1/run.log"); err != nil || !ok {
 		t.Fatalf("claim = %v, %v", ok, err)
 	}
 	complete(t, svc, first.ID, RunCompletion{Verdict: "pass", Message: "ci green", ExitCode: exitCode(0),
 		Artifacts: map[string]string{"summary": "ci ok"}, FinishedAt: time.Date(2026, 7, 31, 12, 0, 2, 0, time.UTC)})
 
-	state, verdict, _ := runState(t, svc, first.ID)
+	state, verdict, _ := runState(t, svc, task, first.ID)
 	if state != "finished" || verdict != "pass" {
 		t.Fatalf("first run = %s %s", state, verdict)
 	}
-	if got := requestState(t, svc, request.ID); got != "pending" {
+	if got := requestState(t, svc, task, request.ID); got != "pending" {
 		t.Fatalf("request after first check = %q", got)
 	}
 	if _, _, failures, _ := openVisit(t, svc, task); failures != 0 {
@@ -229,21 +191,15 @@ func TestCompleteScriptRunPassRunsTheNextCheckThenApplies(t *testing.T) {
 
 	complete(t, svc, runs[0].ID, RunCompletion{Verdict: "pass", ExitCode: exitCode(0),
 		Artifacts: map[string]string{"plan": "branch ok"}})
-	if got := requestState(t, svc, request.ID); got != "applied" {
+	if got := requestState(t, svc, task, request.ID); got != "applied" {
 		t.Fatalf("request after last check = %q", got)
 	}
 	stored := storedTask(t, svc, task.Key)
 	if stored.WorkflowStatus != "approval" || stored.Status != StatusWaitCustomer {
 		t.Fatalf("stored = %#v", stored)
 	}
-	var outcome, message, enteredBy string
-	if err := svc.db.QueryRow(`SELECT outcome, message FROM task_status_visits WHERE task_id = ? AND status_id = 'review' AND left_at <> ''`,
-		task.ID).Scan(&outcome, &message); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.db.QueryRow(`SELECT entered_by FROM task_status_visits WHERE task_id = ? AND left_at = ''`, task.ID).Scan(&enteredBy); err != nil {
-		t.Fatal(err)
-	}
+	left := lastLeftVisit(t, svc, task, "review")
+	outcome, message, enteredBy := left.Outcome, left.Message, openStatusVisit(t, svc, task).EnteredBy
 	if outcome != "approve" || message != "looks good" || enteredBy != "agent:reviewer-1" {
 		t.Fatalf("visit = %q %q %q", outcome, message, enteredBy)
 	}
@@ -265,7 +221,7 @@ func TestCompleteScriptRunPassRunsTheNextCheckThenApplies(t *testing.T) {
 
 func TestCompleteScriptRunPassAfterARequiredArtifactVanishedFailsTheRequest(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
-	if _, err := svc.db.Exec(`INSERT INTO task_artifacts(task_id, name, value, author, created_at) VALUES (?, 'plan', 'p', 'user:customer', 'now')`, task.ID); err != nil {
+	if _, err := svc.SetArtifact(context.Background(), actor, task.Key, "plan", "p"); err != nil {
 		t.Fatal(err)
 	}
 	def := runDefinition()
@@ -273,12 +229,10 @@ func TestCompleteScriptRunPassAfterARequiredArtifactVanishedFailsTheRequest(t *t
 	rewriteDefinition(t, svc, task, def)
 	request, first := advanceApprove(t, svc, actor, task)
 	complete(t, svc, first.ID, RunCompletion{Verdict: "pass"})
-	if _, err := svc.db.Exec(`DELETE FROM task_artifacts WHERE task_id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	deleteArtifacts(t, svc, task)
 	second := listRuns(t, svc, actor, task)[0]
 	complete(t, svc, second.ID, RunCompletion{Verdict: "pass"})
-	state, result := requestRow(t, svc, request.ID)
+	state, result := requestRow(t, svc, task, request.ID)
 	if state != "failed" || !strings.Contains(result, "plan") {
 		t.Fatalf("request = %s %q", state, result)
 	}
@@ -287,28 +241,13 @@ func TestCompleteScriptRunPassAfterARequiredArtifactVanishedFailsTheRequest(t *t
 	}
 }
 
-// rewriteDefinition replaces the definition in the task's pinned manifest.
-func rewriteDefinition(t *testing.T, svc *Service, task Task, def workflowfile.File) {
-	t.Helper()
-	raw, err := json.Marshal(def)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.db.Exec(`UPDATE task_workflow_images SET manifest = json_set(manifest, '$.definition', json(?)) WHERE digest = ?`,
-		string(raw), task.WorkflowDigest); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestCompleteScriptRunRejectClosesTheRequest(t *testing.T) {
 	svc, actor, task, goals := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceScriptFailures(t, svc, task, 2)
 	before := goals.Load()
 	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "CI is red", ExitCode: exitCode(112)})
-	state, result := requestRow(t, svc, request.ID)
+	state, result := requestRow(t, svc, task, request.ID)
 	if state != "rejected" || result != "CI is red" {
 		t.Fatalf("request = %s %q", state, result)
 	}
@@ -326,7 +265,7 @@ func TestCompleteScriptRunRejectClosesTheRequest(t *testing.T) {
 	if rejectedEvent["request_id"] != float64(request.ID) || rejectedEvent["message"] != "CI is red" {
 		t.Fatalf("event = %v", rejectedEvent)
 	}
-	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_script_runs WHERE task_id = ?`, task.ID); n != 1 {
+	if n := len(listRuns(t, svc, operatorOf(svc), task)); n != 1 {
 		t.Fatalf("runs = %d; a rejection runs no further check", n)
 	}
 	// The agent may ask again.
@@ -343,7 +282,7 @@ func TestCompleteScriptRunFailureClosesTheRequestWithTheLog(t *testing.T) {
 			before := goals.Load()
 			complete(t, svc, first.ID, RunCompletion{Verdict: verdict, Message: "exit status 3", ExitCode: exitCode(3),
 				LogPath: "/base/tasks/DEV/runs/1/run.log"})
-			state, result := requestRow(t, svc, request.ID)
+			state, result := requestRow(t, svc, task, request.ID)
 			if state != "failed" || !strings.Contains(result, "exit status 3") || !strings.Contains(result, "/base/tasks/DEV/runs/1/run.log") {
 				t.Fatalf("request = %s %q", state, result)
 			}
@@ -367,7 +306,7 @@ func TestCompleteScriptRunRefusesAnUnknownVerdict(t *testing.T) {
 	if err := svc.CompleteScriptRun(context.Background(), first.ID, RunCompletion{Verdict: "maybe"}); err == nil {
 		t.Fatal("an unknown verdict was accepted")
 	}
-	if state, _, _ := runState(t, svc, first.ID); state != "pending" {
+	if state, _, _ := runState(t, svc, task, first.ID); state != "pending" {
 		t.Fatalf("run = %s", state)
 	}
 }
@@ -376,15 +315,15 @@ func TestCompleteScriptRunTwiceIsANoOp(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
 	complete(t, svc, first.ID, RunCompletion{Verdict: "reject", Message: "no"})
-	events := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID)
+	events := len(taskEvents(t, svc, task))
 	complete(t, svc, first.ID, RunCompletion{Verdict: "pass"})
-	if after := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID); after != events {
+	if after := len(taskEvents(t, svc, task)); after != events {
 		t.Fatalf("events %d -> %d", events, after)
 	}
-	if _, verdict, _ := runState(t, svc, first.ID); verdict != "reject" {
+	if _, verdict, _ := runState(t, svc, task, first.ID); verdict != "reject" {
 		t.Fatalf("verdict = %q", verdict)
 	}
-	if state, _ := requestRow(t, svc, request.ID); state != "rejected" {
+	if state, _ := requestRow(t, svc, task, request.ID); state != "rejected" {
 		t.Fatalf("request = %s", state)
 	}
 	if _, rejected, _, _ := openVisit(t, svc, task); rejected != 1 {
@@ -401,7 +340,7 @@ func TestCompleteScriptRunBoundsTheMessage(t *testing.T) {
 	if len(runs[0].Message) > 4096 || !utf8.ValidString(runs[0].Message) || !strings.HasPrefix(long, runs[0].Message) {
 		t.Fatalf("message = %d bytes, valid %v", len(runs[0].Message), utf8.ValidString(runs[0].Message))
 	}
-	if _, result := requestRow(t, svc, request.ID); len(result) > 4096 {
+	if _, result := requestRow(t, svc, task, request.ID); len(result) > 4096 {
 		t.Fatalf("result_message = %d bytes", len(result))
 	}
 }
@@ -419,9 +358,8 @@ func TestClaimScriptRun(t *testing.T) {
 	if err := svc.SetScriptRunPID(ctx, first.ID, 4242); err != nil {
 		t.Fatal(err)
 	}
-	var pid int
-	if err := svc.db.QueryRow(`SELECT pid FROM task_script_runs WHERE id = ?`, first.ID).Scan(&pid); err != nil || pid != 4242 {
-		t.Fatalf("pid = %d, %v", pid, err)
+	if running, err := svc.RunningScriptRuns(ctx); err != nil || len(running) != 1 || running[0].PID == nil || *running[0].PID != 4242 {
+		t.Fatalf("running = %#v, %v", running, err)
 	}
 	got, err := svc.GetScriptRun(ctx, actor, task.Key, first.ID)
 	if err != nil || got.State != "running" || got.StartedAt != "2026-07-31T12:00:01.000000000Z" || got.LogPath != "/log" {
@@ -429,9 +367,7 @@ func TestClaimScriptRun(t *testing.T) {
 	}
 
 	// A pending run whose cancellation was requested is never claimed.
-	if _, err := svc.db.Exec(`UPDATE task_script_runs SET state = 'pending', cancel_requested = 1 WHERE id = ?`, first.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceRun(t, svc, first.ID, `state = 'pending', cancel_requested = 1`)
 	if ok, err := svc.ClaimScriptRun(ctx, first.ID, svc.clock(), "/log"); err != nil || ok {
 		t.Fatalf("claim of a cancelled run = %v, %v", ok, err)
 	}
@@ -444,15 +380,15 @@ func TestLeavingTheStatusStopsItsRuns(t *testing.T) {
 		if _, err := svc.MoveWorkflow(context.Background(), actor, task.Key, "develop", "back"); err != nil {
 			t.Fatal(err)
 		}
-		if state, _, _ := runState(t, svc, first.ID); state != "cancelled" {
+		if state, _, _ := runState(t, svc, task, first.ID); state != "cancelled" {
 			t.Fatalf("run = %s", state)
 		}
-		if state := requestState(t, svc, request.ID); state != "cancelled" {
+		if state := requestState(t, svc, task, request.ID); state != "cancelled" {
 			t.Fatalf("request = %s", state)
 		}
 		// The worker may still report it; nothing changes.
 		complete(t, svc, first.ID, RunCompletion{Verdict: "pass"})
-		if state, _, _ := runState(t, svc, first.ID); state != "cancelled" {
+		if state, _, _ := runState(t, svc, task, first.ID); state != "cancelled" {
 			t.Fatalf("run after completion = %s", state)
 		}
 	})
@@ -466,7 +402,7 @@ func TestLeavingTheStatusStopsItsRuns(t *testing.T) {
 		if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "develop", "back"); err != nil {
 			t.Fatal(err)
 		}
-		state, _, cancel := runState(t, svc, first.ID)
+		state, _, cancel := runState(t, svc, task, first.ID)
 		if state != "running" || !cancel {
 			t.Fatalf("run = %s cancel %v", state, cancel)
 		}
@@ -476,16 +412,16 @@ func TestLeavingTheStatusStopsItsRuns(t *testing.T) {
 		}
 		status := storedTask(t, svc, task.Key).WorkflowStatus
 		complete(t, svc, first.ID, RunCompletion{Verdict: "pass", Artifacts: map[string]string{"plan": "x"}})
-		if state, _, _ := runState(t, svc, first.ID); state != "cancelled" {
+		if state, _, _ := runState(t, svc, task, first.ID); state != "cancelled" {
 			t.Fatalf("run = %s", state)
 		}
-		if state := requestState(t, svc, request.ID); state != "cancelled" {
+		if state := requestState(t, svc, task, request.ID); state != "cancelled" {
 			t.Fatalf("request = %s", state)
 		}
 		if got := storedTask(t, svc, task.Key).WorkflowStatus; got != status {
 			t.Fatalf("status %s -> %s", status, got)
 		}
-		if n := countRows(t, svc, `SELECT COUNT(*) FROM task_artifacts WHERE task_id = ?`, task.ID); n != 0 {
+		if n := len(artifactsOf(t, svc, task)); n != 0 {
 			t.Fatalf("artifacts = %d", n)
 		}
 	})
@@ -498,17 +434,13 @@ func TestLeavingTheStatusStopsItsRuns(t *testing.T) {
 		}
 		// Leave the status behind the engine's back, without a cancellation.
 		enter(t, svc, task.Key, "develop", "changes")
-		if _, err := svc.db.Exec(`UPDATE task_script_runs SET cancel_requested = 0 WHERE id = ?`, first.ID); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := svc.db.Exec(`UPDATE task_transition_requests SET state = 'pending' WHERE id = ?`, request.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceRun(t, svc, first.ID, `cancel_requested = 0`)
+		forceRequest(t, svc, request.ID, `state = 'pending'`)
 		complete(t, svc, first.ID, RunCompletion{Verdict: "failure", Message: "late"})
-		if state, verdict, _ := runState(t, svc, first.ID); state != "finished" || verdict != "failure" {
+		if state, verdict, _ := runState(t, svc, task, first.ID); state != "finished" || verdict != "failure" {
 			t.Fatalf("run = %s %s", state, verdict)
 		}
-		if state := requestState(t, svc, request.ID); state != "pending" {
+		if state := requestState(t, svc, task, request.ID); state != "pending" {
 			t.Fatalf("request = %s", state)
 		}
 		if status, _, failures, _ := openVisit(t, svc, task); status != "develop" || failures != 0 {
@@ -557,14 +489,11 @@ func TestEnteringAScriptStatusSchedulesItsWatch(t *testing.T) {
 		t.Fatalf("again = %d, %v", n, err)
 	}
 	// Even a due visit gets no second run while one is active.
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = ? WHERE task_id = ? AND left_at = ''`,
-		store.FormatTime(now), task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceNextWatchAt(t, svc, task, store.FormatTime(now))
 	if n, err := svc.ScheduleDueWatches(ctx, now.Add(time.Hour)); err != nil || n != 0 {
 		t.Fatalf("while active = %d, %v", n, err)
 	}
-	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_script_runs WHERE task_id = ?`, task.ID); n != 1 {
+	if n := len(listRuns(t, svc, operatorOf(svc), task)); n != 1 {
 		t.Fatalf("runs = %d", n)
 	}
 	// A pool status has no watch.
@@ -579,15 +508,11 @@ func TestEnteringAScriptStatusSchedulesItsWatch(t *testing.T) {
 func TestScheduleDueWatchesSkipsPausedAndClosedTasks(t *testing.T) {
 	svc, _, task := watchFixture(t)
 	ctx := context.Background()
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = 'hold' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_paused_reason = 'hold'`)
 	if n, err := svc.ScheduleDueWatches(ctx, svc.clock()); err != nil || n != 0 {
 		t.Fatalf("paused = %d, %v", n, err)
 	}
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_paused_reason = '', status = 'cancelled' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_paused_reason = '', status = 'cancelled'`)
 	if n, err := svc.ScheduleDueWatches(ctx, svc.clock()); err != nil || n != 0 {
 		t.Fatalf("closed = %d, %v", n, err)
 	}
@@ -596,9 +521,7 @@ func TestScheduleDueWatchesSkipsPausedAndClosedTasks(t *testing.T) {
 func TestWatchQuietReschedulesAfterEvery(t *testing.T) {
 	svc, actor, task := watchFixture(t)
 	run := scheduleWatch(t, svc, actor, task)
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceScriptFailures(t, svc, task, 2)
 	finished := time.Date(2026, 7, 31, 12, 3, 0, 0, time.UTC)
 	complete(t, svc, run.ID, RunCompletion{Verdict: "quiet", ExitCode: exitCode(111), FinishedAt: finished})
 	status, _, failures, next := openVisit(t, svc, task)
@@ -642,26 +565,19 @@ func TestWatchOutcomeAppliesTheTransition(t *testing.T) {
 	if stored.WorkflowStatus != "done" || stored.Status != StatusDone {
 		t.Fatalf("stored = %#v", stored)
 	}
-	var outcome, message string
-	if err := svc.db.QueryRow(`SELECT outcome, message FROM task_status_visits WHERE task_id = ? AND status_id = 'merge'`,
-		task.ID).Scan(&outcome, &message); err != nil {
-		t.Fatal(err)
-	}
+	merge := lastLeftVisit(t, svc, task, "merge")
+	outcome, message := merge.Outcome, merge.Message
 	if outcome != "merged" || message != "merged as 9f2c1e7" {
 		t.Fatalf("visit = %q %q", outcome, message)
 	}
-	var enteredBy string
-	if err := svc.db.QueryRow(`SELECT entered_by FROM task_status_visits WHERE task_id = ? AND left_at = ''`, task.ID).Scan(&enteredBy); err != nil {
-		t.Fatal(err)
-	}
-	if enteredBy != "script:watch/merge.sh" {
+	if enteredBy := openStatusVisit(t, svc, task).EnteredBy; enteredBy != "script:watch/merge.sh" {
 		t.Fatalf("entered_by = %q", enteredBy)
 	}
-	var reqActor, reqState, reqOutcome string
-	if err := svc.db.QueryRow(`SELECT actor, state, outcome FROM task_transition_requests WHERE task_id = ? ORDER BY id DESC LIMIT 1`,
-		task.ID).Scan(&reqActor, &reqState, &reqOutcome); err != nil {
-		t.Fatal(err)
+	last := workflowView(t, svc, task).LastRequest
+	if last == nil {
+		t.Fatal("no request")
 	}
+	reqActor, reqState, reqOutcome := last.Actor, last.State, last.Outcome
 	if reqActor != "script:watch/merge.sh" || reqState != "applied" || reqOutcome != "merged" {
 		t.Fatalf("request = %s %s %s", reqActor, reqState, reqOutcome)
 	}
@@ -684,16 +600,14 @@ func TestLeavingAScriptStatusStopsTheWatch(t *testing.T) {
 	t.Run("move cancels a pending watch run", func(t *testing.T) {
 		svc, actor, task := watchFixture(t)
 		run := scheduleWatch(t, svc, actor, task)
-		if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = 'x' WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceNextWatchAt(t, svc, task, "x")
 		if _, err := svc.MoveWorkflow(context.Background(), actor, task.Key, "develop", "manual"); err != nil {
 			t.Fatal(err)
 		}
-		if state, _, _ := runState(t, svc, run.ID); state != "cancelled" {
+		if state, _, _ := runState(t, svc, task, run.ID); state != "cancelled" {
 			t.Fatalf("run = %s", state)
 		}
-		if n := countRows(t, svc, `SELECT COUNT(*) FROM task_status_visits WHERE task_id = ? AND next_watch_at <> ''`, task.ID); n != 0 {
+		if n := scheduledVisits(t, svc, task); n != 0 {
 			t.Fatalf("visits still scheduled = %d", n)
 		}
 	})
@@ -704,20 +618,18 @@ func TestLeavingAScriptStatusStopsTheWatch(t *testing.T) {
 		if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
-		if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = 'x' WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceNextWatchAt(t, svc, task, "x")
 		if _, err := svc.CancelWorkflowTask(ctx, actor, task.Key); err != nil {
 			t.Fatal(err)
 		}
-		if state, _, cancel := runState(t, svc, run.ID); state != "running" || !cancel {
+		if state, _, cancel := runState(t, svc, task, run.ID); state != "running" || !cancel {
 			t.Fatalf("run = %s cancel %v", state, cancel)
 		}
-		if n := countRows(t, svc, `SELECT COUNT(*) FROM task_status_visits WHERE task_id = ? AND next_watch_at <> ''`, task.ID); n != 0 {
+		if n := scheduledVisits(t, svc, task); n != 0 {
 			t.Fatalf("visits still scheduled = %d", n)
 		}
 		complete(t, svc, run.ID, RunCompletion{Verdict: "outcome", Outcome: "merged"})
-		if state, _, _ := runState(t, svc, run.ID); state != "cancelled" {
+		if state, _, _ := runState(t, svc, task, run.ID); state != "cancelled" {
 			t.Fatalf("run = %s", state)
 		}
 		if got := storedTask(t, svc, task.Key); got.Status != StatusCancelled || got.WorkflowStatus != "merge" {
@@ -737,12 +649,12 @@ func TestAdvanceWithChecksWaitsForAStoppingRun(t *testing.T) {
 	if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "review", "redo"); err != nil {
 		t.Fatal(err)
 	}
-	before := countRows(t, svc, `SELECT COUNT(*) FROM task_transition_requests WHERE task_id = ?`, task.ID)
+	before := lastRequestID(t, svc, task)
 	_, err := svc.Advance(ctx, AgentActor("reviewer-1"), task.Key, AdvanceInput{Outcome: "approve"})
 	if ErrorCode(err) != "script_running" || ErrorStatus(err) != 409 {
 		t.Fatalf("advance while a run stops: %v", err)
 	}
-	if after := countRows(t, svc, `SELECT COUNT(*) FROM task_transition_requests WHERE task_id = ?`, task.ID); after != before {
+	if after := lastRequestID(t, svc, task); after != before {
 		t.Fatalf("requests %d -> %d", before, after)
 	}
 	complete(t, svc, run.ID, RunCompletion{Verdict: "failure"})
@@ -762,10 +674,10 @@ func TestRecoverScriptRuns(t *testing.T) {
 		if err := svc.RecoverScriptRuns(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if state, _, _ := runState(t, svc, first.ID); state != "interrupted" {
+		if state, _, _ := runState(t, svc, task, first.ID); state != "interrupted" {
 			t.Fatalf("run = %s", state)
 		}
-		state, result := requestRow(t, svc, request.ID)
+		state, result := requestRow(t, svc, task, request.ID)
 		if state != "failed" || !strings.Contains(result, "restarted") {
 			t.Fatalf("request = %s %q", state, result)
 		}
@@ -774,7 +686,7 @@ func TestRecoverScriptRuns(t *testing.T) {
 		}
 		// Completing it later is a no-op.
 		complete(t, svc, first.ID, RunCompletion{Verdict: "pass"})
-		if state, _, _ := runState(t, svc, first.ID); state != "interrupted" {
+		if state, _, _ := runState(t, svc, task, first.ID); state != "interrupted" {
 			t.Fatalf("run = %s", state)
 		}
 	})
@@ -788,7 +700,7 @@ func TestRecoverScriptRuns(t *testing.T) {
 		if err := svc.RecoverScriptRuns(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if state, _, _ := runState(t, svc, run.ID); state != "interrupted" {
+		if state, _, _ := runState(t, svc, task, run.ID); state != "interrupted" {
 			t.Fatalf("run = %s", state)
 		}
 		// The next run follows after every, as after any run: an interrupted
@@ -804,7 +716,7 @@ func TestRecoverScriptRuns(t *testing.T) {
 		if err := svc.RecoverScriptRuns(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if state, _, _ := runState(t, svc, pending.ID); state != "pending" {
+		if state, _, _ := runState(t, svc, task, pending.ID); state != "pending" {
 			t.Fatalf("pending run = %s", state)
 		}
 	})
@@ -823,7 +735,8 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 				t.Fatal(ok, err)
 			}
 		}
-		// The broken task cannot record an event.
+		// The broken task cannot record an event: a database fault no API
+		// produces.
 		if _, err := svc.db.Exec(fmt.Sprintf(`
 			CREATE TRIGGER broken_events BEFORE INSERT ON task_events WHEN NEW.task_id = %d
 			BEGIN SELECT RAISE(ABORT, 'events are broken'); END`, broken.ID)); err != nil {
@@ -832,17 +745,18 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 		if err := svc.RecoverScriptRuns(ctx); err != nil {
 			t.Fatalf("recovery failed for every run: %v", err)
 		}
-		var state, message string
-		if err := svc.db.QueryRow(`SELECT state, message FROM task_script_runs WHERE id = ?`, brokenRun.ID).Scan(&state, &message); err != nil {
+		got, err := svc.GetScriptRun(ctx, actor, broken.Key, brokenRun.ID)
+		if err != nil {
 			t.Fatal(err)
 		}
+		state, message := got.State, got.Message
 		if state != "interrupted" || !strings.Contains(message, "events are broken") {
 			t.Fatalf("broken run = %s %q; want interrupted naming the error", state, message)
 		}
-		if state, result := requestRow(t, svc, brokenRequest.ID); state != "failed" || !strings.Contains(result, "events are broken") {
+		if state, result := requestRow(t, svc, broken, brokenRequest.ID); state != "failed" || !strings.Contains(result, "events are broken") {
 			t.Fatalf("broken request = %s %q", state, result)
 		}
-		if state, _, _ := runState(t, svc, healthyRun.ID); state != "interrupted" {
+		if state, _, _ := runState(t, svc, healthy, healthyRun.ID); state != "interrupted" {
 			t.Fatalf("healthy run = %s", state)
 		}
 		if _, _, _, next := openVisit(t, svc, healthy); next != store.FormatTime(svc.clock().Add(5*time.Minute).UTC()) {
@@ -856,13 +770,13 @@ func TestRecoverScriptRunsToleratesARunItCannotInterrupt(t *testing.T) {
 		if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
-		if _, err := svc.db.Exec(`UPDATE tasks SET workflow_digest = 'missing' WHERE id = ?`, task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceTask(t, svc, task, `workflow_digest = 'missing'`)
 		if err := svc.RecoverScriptRuns(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if state, _, _ := runState(t, svc, run.ID); state != "interrupted" {
+		// The read API needs the manifest; restore it to read what recovery stored.
+		forceTask(t, svc, task, `workflow_digest = ?`, task.WorkflowDigest)
+		if state, _, _ := runState(t, svc, task, run.ID); state != "interrupted" {
 			t.Fatalf("run = %s", state)
 		}
 		if _, _, _, next := openVisit(t, svc, task); next != store.FormatTime(svc.clock().Add(workflowfile.MinWatchEvery).UTC()) {
@@ -897,7 +811,7 @@ func TestForceInterruptReschedulesAWatchOfAnOpenVisit(t *testing.T) {
 	if err := svc.forceInterruptRun(ctx, runs[0], errors.New("boom")); err != nil {
 		t.Fatal(err)
 	}
-	if state, _, _ := runState(t, svc, run.ID); state != "interrupted" {
+	if state, _, _ := runState(t, svc, task, run.ID); state != "interrupted" {
 		t.Fatalf("run = %s", state)
 	}
 	if _, _, _, next := openVisit(t, svc, task); next != store.FormatTime(svc.clock().Add(workflowfile.MinWatchEvery).UTC()) {
@@ -920,7 +834,7 @@ func TestForceInterruptLeavesAClosedVisitUnscheduled(t *testing.T) {
 	if err := svc.forceInterruptRun(ctx, runs[0], errors.New("boom")); err != nil {
 		t.Fatal(err)
 	}
-	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_status_visits WHERE task_id = ? AND next_watch_at <> ''`, task.ID); n != 0 {
+	if n := scheduledVisits(t, svc, task); n != 0 {
 		t.Fatalf("scheduled visits = %d", n)
 	}
 }
@@ -930,20 +844,18 @@ func TestInterruptedCheckWithoutAManifestStillFailsItsRequest(t *testing.T) {
 	ctx := context.Background()
 	// At the limit a loadable manifest would pause; without one there is no
 	// limit to compare.
-	if _, err := svc.db.Exec(`UPDATE task_status_visits SET script_failures = 2 WHERE task_id = ? AND left_at = ''`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceScriptFailures(t, svc, task, 2)
 	request, run := advanceApprove(t, svc, actor, task)
 	if ok, err := svc.ClaimScriptRun(ctx, run.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_digest = 'missing' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_digest = 'missing'`)
 	if err := svc.RecoverScriptRuns(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if state, result := requestRow(t, svc, request.ID); state != "failed" || !strings.Contains(result, "the daemon restarted during check checks/ci.sh") {
+	// The read API needs the manifest; restore it to read what recovery stored.
+	forceTask(t, svc, task, `workflow_digest = ?`, task.WorkflowDigest)
+	if state, result := requestRow(t, svc, task, request.ID); state != "failed" || !strings.Contains(result, "the daemon restarted during check checks/ci.sh") {
 		t.Fatalf("request = %s %q", state, result)
 	}
 	if _, _, failures, _ := openVisit(t, svc, task); failures != 3 {
@@ -1083,13 +995,8 @@ func TestWatchSnapshotCarriesTheOpenVisit(t *testing.T) {
 	}
 	openID := func() (int64, string) {
 		t.Helper()
-		var id int64
-		var entered string
-		if err := svc.db.QueryRow(`SELECT id, entered_at FROM task_status_visits WHERE task_id = ? AND left_at = ''`, task.ID).
-			Scan(&id, &entered); err != nil {
-			t.Fatal(err)
-		}
-		return id, entered
+		visit := openStatusVisit(t, svc, task)
+		return visit.ID, visit.EnteredAt
 	}
 	run := scheduleWatch(t, svc, actor, task)
 	firstID, firstEntered := visitOf()
@@ -1180,10 +1087,10 @@ func TestQuietWatchRunsLeaveNoEventAndOnlyTheNewestAreKept(t *testing.T) {
 	for range workflowViewRuns + 3 {
 		quiet = append(quiet, runOnce("quiet"))
 	}
-	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ? AND kind = 'workflow.script_run'`, task.ID); n != 1 {
+	if n := countEvents(t, svc, task, "workflow.script_run"); n != 1 {
 		t.Fatalf("script_run events = %d; only the failure has one", n)
 	}
-	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_script_runs WHERE task_id = ? AND verdict = 'quiet'`, task.ID); n != workflowViewRuns {
+	if n := countRuns(t, svc, task, "quiet", ""); n != workflowViewRuns {
 		t.Fatalf("quiet runs kept = %d", n)
 	}
 	for _, gone := range quiet[:3] {
@@ -1206,22 +1113,17 @@ func TestACancelledQuietWatchRunIsNotTreatedAsQuiet(t *testing.T) {
 	if ok, err := svc.ClaimScriptRun(ctx, cancelled.ID, svc.clock(), "/log"); err != nil || !ok {
 		t.Fatal(ok, err)
 	}
-	if _, err := svc.db.Exec(`UPDATE task_script_runs SET cancel_requested = 1 WHERE id = ?`, cancelled.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceRun(t, svc, cancelled.ID, `cancel_requested = 1`)
 	complete(t, svc, cancelled.ID, RunCompletion{Verdict: "quiet", ExitCode: exitCode(111)})
-	if state, verdict, _ := runState(t, svc, cancelled.ID); state != "cancelled" || verdict != "quiet" {
+	if state, verdict, _ := runState(t, svc, task, cancelled.ID); state != "cancelled" || verdict != "quiet" {
 		t.Fatalf("run = %s %s", state, verdict)
 	}
-	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ? AND kind = 'workflow.script_run'`, task.ID); n != 1 {
+	if n := countEvents(t, svc, task, "workflow.script_run"); n != 1 {
 		t.Fatalf("script_run events = %d; the cancelled run has one", n)
 	}
 	at := svc.clock()
 	for range workflowViewRuns + 1 {
-		if _, err := svc.db.Exec(`UPDATE task_status_visits SET next_watch_at = ? WHERE task_id = ? AND left_at = ''`,
-			store.FormatTime(at), task.ID); err != nil {
-			t.Fatal(err)
-		}
+		forceNextWatchAt(t, svc, task, store.FormatTime(at))
 		if n, err := svc.ScheduleDueWatches(ctx, at); err != nil || n != 1 {
 			t.Fatalf("scheduled = %d, %v", n, err)
 		}
@@ -1232,8 +1134,7 @@ func TestACancelledQuietWatchRunIsNotTreatedAsQuiet(t *testing.T) {
 	if _, err := svc.GetScriptRun(ctx, actor, task.Key, cancelled.ID); err != nil {
 		t.Fatalf("the cancelled run was pruned as a quiet run: %v", err)
 	}
-	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_script_runs WHERE task_id = ? AND verdict = 'quiet' AND state = 'finished'`,
-		task.ID); n != workflowViewRuns {
+	if n := countRuns(t, svc, task, "quiet", "finished"); n != workflowViewRuns {
 		t.Fatalf("finished quiet runs kept = %d", n)
 	}
 }
@@ -1246,9 +1147,7 @@ func TestPendingRunJobsSkipsARunWhoseJobCannotBeBuilt(t *testing.T) {
 		t.Fatalf("scheduled = %d, %v", n, err)
 	}
 	broken := listRuns(t, svc, actor, task)[0].ID
-	if _, err := svc.db.Exec(`UPDATE tasks SET workflow_digest = 'missing' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `workflow_digest = 'missing'`)
 	var logged strings.Builder
 	svc.SetLogger(slog.New(slog.NewTextHandler(&logged, nil)))
 	jobs, err := svc.PendingRunJobs(ctx)
@@ -1274,18 +1173,18 @@ func TestCompleteScriptRunStoresFinishedAtInUTC(t *testing.T) {
 func TestCompleteScriptRunRefusesAMissingFinishTime(t *testing.T) {
 	svc, actor, task, _ := runFixture(t)
 	request, first := advanceApprove(t, svc, actor, task)
-	events := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID)
+	events := len(taskEvents(t, svc, task))
 	err := svc.CompleteScriptRun(context.Background(), first.ID, RunCompletion{Verdict: "reject", Message: "CI is red"})
 	if ErrorCode(err) != "invalid_completion" || ErrorStatus(err) != http.StatusBadRequest {
 		t.Fatalf("complete without a finish time: %v", err)
 	}
-	if state, verdict, _ := runState(t, svc, first.ID); state != "pending" || verdict != "" {
+	if state, verdict, _ := runState(t, svc, task, first.ID); state != "pending" || verdict != "" {
 		t.Fatalf("run = %s %s; want it unchanged", state, verdict)
 	}
-	if state := requestState(t, svc, request.ID); state != "pending" {
+	if state := requestState(t, svc, task, request.ID); state != "pending" {
 		t.Fatalf("request = %s; want it unchanged", state)
 	}
-	if got := countRows(t, svc, `SELECT COUNT(*) FROM task_events WHERE task_id = ?`, task.ID); got != events {
+	if got := len(taskEvents(t, svc, task)); got != events {
 		t.Fatalf("events = %d; want %d", got, events)
 	}
 }
@@ -1295,7 +1194,7 @@ func TestUndeclaredArtifactNameIsBounded(t *testing.T) {
 	request, first := advanceApprove(t, svc, actor, task)
 	name := strings.Repeat("ж", 100) // 200 bytes
 	complete(t, svc, first.ID, RunCompletion{Verdict: "pass", Artifacts: map[string]string{name: "x"}})
-	state, result := requestRow(t, svc, request.ID)
+	state, result := requestRow(t, svc, task, request.ID)
 	cut := strings.Repeat("ж", 32) // 64 bytes
 	if state != "failed" || !strings.Contains(result, cut) || strings.Contains(result, cut+"ж") || !utf8.ValidString(result) {
 		t.Fatalf("request = %s %q", state, result)
@@ -1310,9 +1209,7 @@ func TestAgentCheckWithoutAnAgentAssignee(t *testing.T) {
 	svc, customer, task, queueRun, _ := logFixture(t)
 	ctx := context.Background()
 	// The customer took the task over before the agent check was created.
-	if _, err := svc.db.Exec(`UPDATE tasks SET assignee = 'user:customer' WHERE id = ?`, task.ID); err != nil {
-		t.Fatal(err)
-	}
+	forceTask(t, svc, task, `assignee = 'user:customer'`)
 	complete(t, svc, queueRun.ID, RunCompletion{Verdict: "pass"})
 	agentRun := listRuns(t, svc, customer, task)[0]
 	if agentRun.RunAs != "agent" || agentRun.Holder != "" || agentRun.State != "pending" {

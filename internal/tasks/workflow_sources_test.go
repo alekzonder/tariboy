@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,9 +34,7 @@ func sourceFixture(t *testing.T) (*Service, Actor) {
 	if err := svc.EnsureDefaultQueue(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, goal_enabled = 1`); err != nil {
-		t.Fatal(err)
-	}
+	enableAgents(t, svc)
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)
 	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
 	seedEngineImage(t, svc, sourceDefinition())
@@ -76,34 +75,25 @@ func itemsDone(at time.Time, items ...SourceItem) SourceCompletion {
 
 func devTasks(t *testing.T, svc *Service) []Task {
 	t.Helper()
-	rows, err := svc.db.Query(`SELECT task_key FROM tasks WHERE queue_prefix = 'DEV' ORDER BY id`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var keys []string
-	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
-			t.Fatal(err)
-		}
-		keys = append(keys, key)
-	}
-	if err := rows.Close(); err != nil {
-		t.Fatal(err)
-	}
-	out := make([]Task, 0, len(keys))
-	for _, key := range keys {
-		out = append(out, storedTask(t, svc, key))
-	}
+	out := queueTasks(t, svc, "DEV")
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
 func sourceRunRow(t *testing.T, svc *Service, id int64) (state, verdict, message string, created int) {
 	t.Helper()
-	if err := svc.db.QueryRow(`SELECT state, verdict, message, tasks_created FROM task_queue_source_runs WHERE id = ?`, id).
-		Scan(&state, &verdict, &message, &created); err != nil {
+	sources, err := svc.ListQueueSources(context.Background(), operatorOf(svc), "DEV")
+	if err != nil {
 		t.Fatal(err)
 	}
+	for _, source := range sources {
+		for _, run := range source.Runs {
+			if run.ID == id {
+				return run.State, run.Verdict, run.Message, run.TasksCreated
+			}
+		}
+	}
+	t.Fatalf("source run %d not found", id)
 	return
 }
 
@@ -186,7 +176,8 @@ func TestSourceItemsCreateOneTaskPerKey(t *testing.T) {
 		t.Fatalf("run = %s %s %d", state, verdict, n)
 	}
 
-	// A repeated key creates nothing, even after its task is gone.
+	// A repeated key creates nothing, even after its task is gone; no API
+	// deletes a task, so the row is removed directly.
 	for _, stmt := range []string{`PRAGMA foreign_keys = OFF`, `DELETE FROM tasks WHERE id = ?`, `PRAGMA foreign_keys = ON`} {
 		var args []any
 		if strings.HasPrefix(stmt, "DELETE") {
@@ -225,10 +216,7 @@ func TestSourceRunWithAnInvalidItemCreatesNothing(t *testing.T) {
 	if state, verdict, message, _ := sourceRunRow(t, svc, id); state != "finished" || verdict != verdictFailure || !strings.Contains(message, "plan") {
 		t.Fatalf("run = %s %s %q", state, verdict, message)
 	}
-	var events int
-	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_events WHERE kind = 'queue.source_failed' AND queue_prefix = 'DEV'`).Scan(&events); err != nil {
-		t.Fatal(err)
-	}
+	events := len(queueEvents(t, svc, "DEV", "queue.source_failed"))
 	if events != 1 {
 		t.Fatalf("queue.source_failed events = %d", events)
 	}
@@ -259,7 +247,7 @@ func TestSourceStopsWhenTheQueueIsUnbound(t *testing.T) {
 	if got := devTasks(t, svc); len(got) != 0 {
 		t.Fatalf("tasks = %+v", got)
 	}
-	if state, _, _, _ := sourceRunRow(t, svc, id); state != "cancelled" {
+	if state := storedSourceRunState(t, svc, id); state != "cancelled" {
 		t.Fatalf("state = %s", state)
 	}
 }
@@ -299,6 +287,8 @@ func TestSourceKeepsOnlyTheNewestQuietRuns(t *testing.T) {
 		completeSource(t, svc, id, SourceCompletion{Verdict: verdictQuiet, FinishedAt: at})
 		at = at.Add(time.Hour)
 	}
+	// A storage check: the API lists only the newest runs, so only the table
+	// shows that older quiet runs were deleted.
 	var n int
 	if err := svc.db.QueryRow(`SELECT COUNT(*) FROM task_queue_source_runs`).Scan(&n); err != nil {
 		t.Fatal(err)
@@ -312,7 +302,9 @@ func TestListQueueSourcesAndLog(t *testing.T) {
 	svc, actor := sourceFixture(t)
 	base := t.TempDir()
 	svc.SetRunBaseDir(base)
-	svc.db.Exec(`INSERT INTO task_queue_secrets(queue_prefix, key, value, updated_at) VALUES ('DEV', 'GH_TOKEN', 'secret-value-1', '')`)
+	if err := svc.SetQueueSecret(context.Background(), actor, "DEV", "GH_TOKEN", "secret-value-1"); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	job := sourceJobs(t, svc, now)[0]
 	for i := 0; i < 2; i++ {

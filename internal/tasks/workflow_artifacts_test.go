@@ -16,9 +16,7 @@ func artifactFixture(t *testing.T) (*Service, Actor, Task) {
 	if err := svc.EnsureDefaultQueue(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.db.Exec(`UPDATE agents SET enabled = 1, goal_enabled = 1`); err != nil {
-		t.Fatal(err)
-	}
+	enableAgents(t, svc)
 	mustRebindPool(t, svc, actor, "developers", []string{"dev-1", "dev-2"}, 0)
 	mustRebindPool(t, svc, actor, "reviewers", []string{"reviewer-1"}, 0)
 	def := engineDefinition()
@@ -69,9 +67,12 @@ func TestSetArtifactKeepsHistoryAndRecordsEventWithoutValue(t *testing.T) {
 	if current.Value != "second" || len(history) != 2 || history[0].Value != "second" || history[1].Value != "first" {
 		t.Fatalf("current = %+v history = %+v", current, history)
 	}
-	var payload string
-	if err := svc.db.QueryRow(`SELECT payload FROM task_events WHERE task_id = ? AND kind = 'artifact.set' ORDER BY sequence LIMIT 1`, task.ID).Scan(&payload); err != nil {
-		t.Fatal(err)
+	payload := ""
+	for _, event := range taskEvents(t, svc, task) {
+		if event.Kind == "artifact.set" {
+			payload = eventJSON(t, event)
+			break
+		}
 	}
 	if !strings.Contains(payload, `"name":"plan"`) || !strings.Contains(payload, `"bytes":5`) ||
 		!strings.Contains(payload, `"author":"agent:`) || strings.Contains(payload, "first") {

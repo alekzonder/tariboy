@@ -101,17 +101,9 @@ func TestQueueEnvIsCustomerOnlyAndAudited(t *testing.T) {
 	if err := svc.RemoveQueueEnv(ctx, actor, "DEV", "LOG_LEVEL"); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := svc.db.Query(`SELECT kind, payload FROM task_events WHERE queue_prefix = 'DEV' AND kind LIKE 'queue.env_%' ORDER BY sequence`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
 	var kinds []string
-	for rows.Next() {
-		var kind, payload string
-		if err := rows.Scan(&kind, &payload); err != nil {
-			t.Fatal(err)
-		}
+	for _, event := range queueEvents(t, svc, "DEV", "queue.env_") {
+		kind, payload := event.Kind, eventJSON(t, event)
 		if payload != `{"key":"LOG_LEVEL"}` {
 			t.Fatalf("event %s payload %s; want the key only", kind, payload)
 		}
