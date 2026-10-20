@@ -99,47 +99,17 @@ func (s *Service) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Task, man
 	previousAssignee, previousCategory := task.Assignee, task.Status
 	task.WorkflowStatus = statusID
 	task.CompletedAt = ""
-	switch {
-	case next.Terminal:
-		task.Status = StatusDone
-		if next.Cancelled {
-			task.Status = StatusCancelled
-		}
+	if next.Terminal {
 		task.CompletedAt = now
-	case next.Owner.Kind == workflowfile.OwnerPool:
-		agent := ""
-		if !task.Blocked && task.WorkflowPausedReason == "" {
-			var err error
-			if agent, err = pickHolderTx(ctx, tx, *task, next.Owner.Pool, nil); err != nil {
-				return err
-			}
-		}
-		if agent == "" {
-			task.Status, task.Assignee = StatusOpen, ""
-		} else {
-			if err := s.recordHolderTx(ctx, tx, *task, next.Owner.Pool, agent); err != nil {
-				return err
-			}
-			task.Status, task.Assignee = StatusInProgress, agentPrincipal(agent)
-		}
-	case next.Owner.Kind == workflowfile.OwnerCustomer:
-		task.Status = StatusWaitCustomer
-	case next.Owner.Kind == workflowfile.OwnerScript:
-		task.Status, task.Assignee = StatusWaitCustomer, ""
-	default:
-		return fmt.Errorf("workflow status %q has no owner", statusID)
 	}
-	// The tasks_started_at trigger stores the first start; mirror it here.
-	if task.Status == StatusInProgress && previousCategory != StatusInProgress && task.StartedAt == "" {
-		task.StartedAt = now
+	state := stateIn(*task, next)
+	if err := s.pickStateHolderTx(ctx, tx, *task, &state); err != nil {
+		return err
 	}
-	task.Revision++
-	task.UpdatedAt = now
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks
-		SET status = ?, workflow_status = ?, assignee = ?, completed_at = ?, revision = ?, updated_at = ?
-		WHERE id = ?`,
-		task.Status, task.WorkflowStatus, task.Assignee, task.CompletedAt, task.Revision, now, task.ID); err != nil {
+	if err := applyState(task, state); err != nil {
+		return err
+	}
+	if _, err := saveTaskStateTx(ctx, tx, task, previousCategory, now, false); err != nil {
 		return err
 	}
 	if _, err := appendEventTx(ctx, tx, *task, "workflow.transitioned", Actor{Principal: via}, map[string]any{
@@ -152,12 +122,7 @@ func (s *Service) enterStatusTx(ctx context.Context, tx *sql.Tx, task *Task, man
 			return err
 		}
 	}
-	if err := recordAssignmentTx(ctx, tx, *task, previousAssignee, now); err != nil {
-		return err
-	}
-	task.WaitingOn = ""
-	finishWorkflowFields(task, next.Owner.Kind)
-	return nil
+	return recordAssignmentTx(ctx, tx, *task, previousAssignee, now)
 }
 
 // resolveWorkflowWaitsTx resolves open waits of a workflow task without an

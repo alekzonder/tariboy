@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
 
@@ -82,17 +81,8 @@ func WorkflowScanTargets(t *Task) ([]any, func()) {
 
 func finishWorkflowFields(t *Task, ownerKind string) {
 	t.Category = t.Status
-	if t.WorkflowDigest == "" || t.Status != StatusWaitCustomer {
-		return
-	}
-	switch {
-	case t.WorkflowPausedReason != "":
-		t.WaitingOn = WaitingOnPause
-	case ownerKind == workflowfile.OwnerCustomer, ownerKind == workflowfile.OwnerPool:
-		// In a pool status the holder's question to the customer is the wait.
-		t.WaitingOn = WaitingOnCustomer
-	case ownerKind == workflowfile.OwnerScript:
-		t.WaitingOn = WaitingOnScript
+	if t.WorkflowDigest != "" {
+		t.WaitingOn = waitingOn(t.Status, ownerKind, t.WorkflowPausedReason != "")
 	}
 }
 

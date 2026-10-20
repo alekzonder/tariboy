@@ -196,21 +196,13 @@ func (s *Service) dispatchTask(ctx context.Context, id int64, busy map[string]bo
 	if err := s.recordHolderTx(ctx, tx, task, status.Owner.Pool, name); err != nil {
 		return "", err
 	}
-	previousAssignee, previousRevision := task.Assignee, task.Revision
-	task.Status, task.Assignee = StatusInProgress, agentPrincipal(name)
-	if task.StartedAt == "" {
-		task.StartedAt = now
-	}
-	task.Revision++
-	task.UpdatedAt = now
-	result, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = ?, assignee = ?, revision = ?, updated_at = ?
-		WHERE id = ? AND revision = ?`,
-		task.Status, task.Assignee, task.Revision, now, task.ID, previousRevision)
-	if err != nil {
+	previousAssignee, previousCategory := task.Assignee, task.Status
+	state := stateIn(task, status)
+	state.Holder = agentPrincipal(name)
+	if err := applyState(&task, state); err != nil {
 		return "", err
 	}
-	if n, err := result.RowsAffected(); err != nil || n != 1 {
+	if saved, err := saveTaskStateTx(ctx, tx, &task, previousCategory, now, true); err != nil || !saved {
 		return "", err
 	}
 	if err := recordAssignmentTx(ctx, tx, task, previousAssignee, now); err != nil {
