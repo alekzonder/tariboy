@@ -273,6 +273,33 @@ In the task JSON a workflow task also carries `workflow_digest`,
 `workflow_name`, `workflow_version`, and `workflow_paused_reason`, which holds
 the pause reason while the task is paused and is empty otherwise.
 
+### Attention summary
+
+An open workflow task also carries two derived objects, so a list of tasks can
+show where each one is and whether it needs a person without reading every
+task's view. Both are absent on a flexible task and on a closed one.
+
+`workflow_step` is `{"index": 3, "total": 6}`: the position of the current
+status in the manifest, counted from 1, and the number of statuses the manifest
+declares.
+
+`workflow_attention` is present only while something needs a person. It is
+derived from the task's open visit: its counters, its latest transition
+request, and its latest finished script run. The first kind that applies wins:
+
+| `kind` | When | `message` | `count` | Ids |
+| --- | --- | --- | --- | --- |
+| `paused` | The task is paused; see [Pauses](#pauses). | What the pause reason means. | | |
+| `failed` | The latest request of the visit is `failed`: a check could not run. | The first line of the request's `result_message`, without the `log:` line. | `script_failures` of the visit | `request_id`, and `run_id` when the run is the latest finished one |
+| `rejected` | The latest request of the visit is `rejected`. | The first line of the check's message. | `rejected_requests` of the visit | `request_id`, and `run_id` as above |
+| `script_failed` | The latest finished run of the visit is a watch that failed. | The first line of the run's message. | `script_failures` of the visit | `run_id` |
+| `idle` | The holder ended one or more iterations in a row without requesting a transition. | A sentence with the count. | `idle_iterations` of the visit | |
+
+A pending request is not attention: the checks are still running. A message
+is cut to 200 characters with `… (cut)`. The same object is returned by every
+route that returns a task, including the list and the tree, and by `ttasks
+show --json`.
+
 On a workflow task `ttasks done`, `ttasks update --status`, `ttasks assign`
 (and `--assignee` on update or create), and `ttasks ready --claim` are refused
 with `workflow_managed`. The error lists the current status and its outcomes.

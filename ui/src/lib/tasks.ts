@@ -19,6 +19,27 @@ export interface TaskQueue {
   updated_at: string
 }
 
+/**
+ * What needs a person on an open workflow task, the most urgent kind first:
+ * `paused` (the daemon waits for a decision), `failed` (a check could not run),
+ * `rejected` (a check rejected the latest request), `script_failed` (the
+ * status's watch failed), `idle` (the holder ends iterations without a
+ * transition request).
+ */
+export interface WorkflowAttention {
+  kind: "paused" | "failed" | "rejected" | "script_failed" | "idle"
+  /** The first line of the script's message, or what the pause means. */
+  message?: string
+  /** The visit counter behind the kind: rejected requests, script failures, or idle iterations. */
+  count?: number
+  /** The failed or rejected transition request. */
+  request_id?: number
+  /** The script run whose log explains it. */
+  run_id?: number
+}
+/** The position of the current status in the manifest, counted from 1. */
+export interface WorkflowStep { index: number; total: number }
+
 export interface Task {
   key: string
   queue: string
@@ -35,6 +56,10 @@ export interface Task {
   workflow_version?: string
   workflow_digest?: string
   workflow_paused_reason?: string
+  /** What needs a person on an open workflow task; absent when nothing does, and on a flexible or closed task. */
+  workflow_attention?: WorkflowAttention
+  /** The position of the current status in the manifest, from 1; absent on a flexible or closed task. */
+  workflow_step?: WorkflowStep
   pull_request?: string
   author: string
   customer: string
