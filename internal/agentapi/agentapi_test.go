@@ -1241,3 +1241,29 @@ func TestChatRoutesAreNotRegistered(t *testing.T) {
 		}
 	}
 }
+
+func TestServerHasHeaderTimeout(t *testing.T) {
+	s := NewServer(Deps{})
+	if s.http.ReadHeaderTimeout <= 0 || s.http.IdleTimeout <= 0 || s.http.MaxHeaderBytes <= 0 {
+		t.Fatalf("agent API server has no header limits: %+v", s.http)
+	}
+}
+
+func TestContextSetRejectsOversizedBody(t *testing.T) {
+	s, _, ctxPath := newTestServer(t, []string{"whoami", "loop", "messages", "context"})
+	body := `{"text":"` + strings.Repeat("x", maxBodyBytes) + `"}`
+	for _, declared := range []bool{true, false} {
+		req := httptest.NewRequest("POST", "/tools/context/set", strings.NewReader(body))
+		if !declared {
+			req.ContentLength = -1
+		}
+		rr := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rr.Body.String(), `"too_large"`) {
+			t.Fatalf("declared=%v: status = %d, body = %.200s", declared, rr.Code, rr.Body.String())
+		}
+	}
+	if _, err := os.Stat(ctxPath); !os.IsNotExist(err) {
+		t.Fatalf("oversized body wrote CONTEXT.md: %v", err)
+	}
+}

@@ -2,6 +2,7 @@ package regclient
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -33,22 +34,22 @@ func TestPushThenPullMovesBytesAndVerifies(t *testing.T) {
 	}
 	srcImages := t.TempDir()
 	ref, digest := buildImage(t, srcImages)
-	pres, err := Push(srcImages, ref, cl)
+	pres, err := Push(context.Background(), srcImages, ref, cl)
 	if err != nil {
 		t.Fatalf("Push: %v", err)
 	}
-	if pres["digest"] != digest || pres["pushed"] != true {
+	if pres.Digest != digest || !pres.Pushed {
 		t.Fatalf("Push result = %+v", pres)
 	}
 	// Second push is a no-op (HEAD-skip).
-	pres2, _ := Push(srcImages, ref, cl)
-	if pres2["skipped"] != true {
+	pres2, _ := Push(context.Background(), srcImages, ref, cl)
+	if !pres2.Skipped {
 		t.Fatalf("second Push should skip, got %+v", pres2)
 	}
 
 	// Pull into a FRESH image dir; the installed sidecar digest must match.
 	dstImages := t.TempDir()
-	if _, err := Pull(dstImages, ref, cl); err != nil {
+	if _, err := Pull(context.Background(), dstImages, ref, cl); err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
 	pulled, err := (&image.Store{Dir: dstImages}).ArchiveBytes(ref)
@@ -86,7 +87,7 @@ func TestPullRejectsDigestMismatch(t *testing.T) {
 	ref := image.Ref{Name: "demo", Tag: "latest"}
 
 	dst := t.TempDir()
-	_, err = Pull(dst, ref, cl)
+	_, err = Pull(context.Background(), dst, ref, cl)
 	if err == nil {
 		t.Fatal("Pull must reject a digest mismatch, got nil error")
 	}
@@ -141,7 +142,7 @@ func TestPullRejectsInvalidArchiveWithoutReplacingExisting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Pull(dst, ref, client); err == nil {
+	if _, err := Pull(context.Background(), dst, ref, client); err == nil {
 		t.Fatal("correct-digest invalid archive was installed")
 	}
 	got, err := store.ArchiveBytes(ref)
@@ -178,7 +179,7 @@ func TestPullRejectsMissingDigest(t *testing.T) {
 	ref := image.Ref{Name: "demo", Tag: "latest"}
 
 	dst := t.TempDir()
-	_, err = Pull(dst, ref, cl)
+	_, err = Pull(context.Background(), dst, ref, cl)
 	if err == nil {
 		t.Fatal("Pull must reject a missing digest header, got nil error")
 	}

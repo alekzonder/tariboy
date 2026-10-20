@@ -2,6 +2,7 @@ package regclient
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -90,7 +91,7 @@ func TestClientTrustsPinnedCertRejectsUntrusted(t *testing.T) {
 		t.Fatalf("NewClient(trusted): %v", err)
 	}
 	var buf bytes.Buffer
-	digest, err := good.Get(ref, &buf)
+	digest, err := good.Get(context.Background(), ref, &buf)
 	if err != nil {
 		t.Fatalf("Get with pinned trusted cert must succeed, got: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestClientTrustsPinnedCertRejectsUntrusted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient(untrusted): %v", err)
 	}
-	if _, err := bad.Get(ref, &bytes.Buffer{}); err == nil {
+	if _, err := bad.Get(context.Background(), ref, &bytes.Buffer{}); err == nil {
 		t.Fatal("Get with an untrusted cert must fail the TLS handshake, but it succeeded")
 	} else if !strings.Contains(err.Error(), "certificate") && !strings.Contains(err.Error(), "x509") {
 		t.Fatalf("expected a TLS/certificate verification error, got: %v", err)

@@ -87,13 +87,28 @@ func Restore(r io.Reader, s *store.Store, agentsDir string, opts RestoreOptions)
 		return Manifest{}, err
 	}
 	for _, ts := range backupTables {
-		for _, rec := range meta.Tables[ts.name] {
+		recs := meta.Tables[ts.name]
+		if len(recs) == 0 {
+			continue
+		}
+		live, err := liveColumns(tx, ts.name)
+		if err != nil {
+			tx.Rollback()
+			return Manifest{}, err
+		}
+		for _, rec := range recs {
 			row := remapRow(rec, ts, oldName, newName, idMaps)
 			if ts.name == "script_runs" {
 				remapScriptRunLogPath(row, agentsDir, newName)
 			}
 			if ts.name == "script_result_outbox" {
 				remapScriptResultOutbox(row, rec, agentsDir, oldName, newName, idMaps)
+			}
+			for c := range row {
+				if !live[c] {
+					tx.Rollback()
+					return Manifest{}, fmt.Errorf("restore: archive column %q is not in table %s", c, ts.name)
+				}
 			}
 			if err := insertRow(tx, ts.name, row); err != nil {
 				tx.Rollback()
@@ -359,12 +374,32 @@ func remapID(s, oldName, newName string) string {
 	return newName + "-" + s
 }
 
+// liveColumns returns the column names of table in the live schema. Archive
+// column names are untrusted, so restore only inserts columns listed here.
+func liveColumns(tx *sql.Tx, table string) (map[string]bool, error) {
+	rows, err := tx.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
+}
+
 // insertRow builds a parameterized INSERT from the row's column map (column
-// names captured from the dump, so it survives added columns — they take their
-// SQL defaults). Columns are sorted for deterministic statements and quoted so
-// a reserved word (e.g. agents."group") is never emitted bare. A registered
-// time column is written in store.TimeLayout, so an older backup restores
-// canonical values; a value that is not a time is kept as it is.
+// names captured from the dump and checked against the live schema by the
+// caller, so it survives added columns — they take their SQL defaults).
+// Columns are sorted for deterministic statements and quoted so a reserved
+// word (e.g. agents."group") is never emitted bare. A registered time column is
+// written in store.TimeLayout, so an older backup restores canonical values; a
+// value that is not a time is kept as it is.
 func insertRow(tx *sql.Tx, table string, row map[string]any) error {
 	cols := make([]string, 0, len(row))
 	for c := range row {

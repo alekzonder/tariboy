@@ -163,7 +163,7 @@ func imageSourceFileGet() registry.Command {
 }
 
 func imageSourceFilePut() registry.Command {
-	return registry.Command{
+	return withMaxBody(registry.Command{
 		Path:      "image.source.file.put",
 		Summary:   "Write an editable image source file",
 		CLIHidden: true,
@@ -180,7 +180,7 @@ func imageSourceFilePut() registry.Command {
 			}
 			return map[string]any{"path": path, "saved": true}, nil
 		},
-	}
+	}, jsonEscapedBodyLimit(imagesource.MaxFileSize))
 }
 
 func imageSourceValidate() registry.Command {

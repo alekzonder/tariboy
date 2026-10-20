@@ -1,6 +1,7 @@
 package regclient
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/pem"
 	"net/http/httptest"
@@ -81,17 +82,17 @@ func TestStoreRoundTripOverTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res, err := Push(srcImages, ref, cl); err != nil || res["pushed"] != true {
+	if res, err := Push(context.Background(), srcImages, ref, cl); err != nil || !res.Pushed {
 		t.Fatalf("Push: %+v err=%v", res, err)
 	}
 
 	// Pull into a FRESH image store; digest + manifest must match, image inspects.
 	dstImages := t.TempDir()
-	res, err := Pull(dstImages, ref, cl)
+	res, err := Pull(context.Background(), dstImages, ref, cl)
 	if err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
-	if res["digest"] != digest || res["pulled"] != true {
+	if res.Digest != digest || !res.Pulled {
 		t.Fatalf("Pull result = %+v (want digest %s)", res, digest)
 	}
 	// The pulled image is a valid image store entry (manifest parses, schema ok).
@@ -115,7 +116,7 @@ func TestPushRejectedWithoutToken(t *testing.T) {
 
 	// No token -> push must fail (401 surfaced as an error).
 	cl, _ := NewClient(ts.URL, "", caFile)
-	if _, err := Push(srcImages, ref, cl); err == nil {
+	if _, err := Push(context.Background(), srcImages, ref, cl); err == nil {
 		t.Fatal("push without a token must be rejected")
 	}
 }
@@ -131,7 +132,7 @@ func TestPullDetectsTampering(t *testing.T) {
 	srcImages := t.TempDir()
 	ref, _ := buildImage(t, srcImages)
 	cl, _ := NewClient(ts.URL, "rw", caFile)
-	if _, err := Push(srcImages, ref, cl); err != nil {
+	if _, err := Push(context.Background(), srcImages, ref, cl); err != nil {
 		t.Fatal(err)
 	}
 
@@ -145,7 +146,7 @@ func TestPullDetectsTampering(t *testing.T) {
 		t.Fatal(err)
 	}
 	dstImages := t.TempDir()
-	if _, err := Pull(dstImages, ref, cl); err == nil {
+	if _, err := Pull(context.Background(), dstImages, ref, cl); err == nil {
 		t.Fatal("pull of a tampered blob must fail the digest re-verify")
 	}
 	// Nothing was installed into the fresh store.

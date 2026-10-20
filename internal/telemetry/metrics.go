@@ -76,10 +76,13 @@ type GaugeSource struct {
 	QueueDepth     func(context.Context) int64
 	PluginsHealthy func(context.Context) int64
 	ActiveAgents   func(context.Context) int64
+	// EventsDropped is the running total of live events lost by slow subscribers.
+	EventsDropped func(context.Context) int64
 }
 
 // RegisterGauges installs the observable gauges (spec §14: queue depth, plugin
-// health, active agents). No-op instruments when OTel is off.
+// health, active agents) and the dropped live events counter. No-op instruments
+// when OTel is off.
 func (m *Metrics) RegisterGauges(g GaugeSource) error {
 	if m == nil {
 		return nil
@@ -101,5 +104,17 @@ func (m *Metrics) RegisterGauges(g GaugeSource) error {
 	if err := reg("tariboy.plugins.healthy", "running plugins", g.PluginsHealthy); err != nil {
 		return err
 	}
-	return reg("tariboy.agents.active", "running agent loops", g.ActiveAgents)
+	if err := reg("tariboy.agents.active", "running agent loops", g.ActiveAgents); err != nil {
+		return err
+	}
+	if g.EventsDropped == nil {
+		return nil
+	}
+	_, err := m.meter.Int64ObservableCounter("tariboy.events.dropped",
+		metric.WithDescription("live events dropped for slow subscribers"),
+		metric.WithInt64Callback(func(ctx context.Context, o metric.Int64Observer) error {
+			o.Observe(g.EventsDropped(ctx))
+			return nil
+		}))
+	return err
 }

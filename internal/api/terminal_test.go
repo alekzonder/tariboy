@@ -144,18 +144,55 @@ func TestServeTerminalCrossOrigin(t *testing.T) {
 	shimEnd, handlerEnd := net.Pipe()
 	defer shimEnd.Close()
 	ctrl := &fakeTermControl{conn: handlerEnd}
-	ts := termServer(t, ctrl)
+	srv := NewServer(registry.New(), &registry.Ctx{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Control: ctrl,
+	})
+	ts := httptest.NewServer(AuthMiddleware("tok", srv.Handler()))
+	t.Cleanup(ts.Close)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	ws, resp, err := websocket.Dial(ctx, wsURL(ts.URL)+"/api/agents/smoke/terminal", &websocket.DialOptions{
+	ws, resp, err := websocket.Dial(ctx, wsURL(ts.URL)+"/api/agents/smoke/terminal?token=tok", &websocket.DialOptions{
 		HTTPHeader: map[string][]string{"Origin": {"https://other.example"}},
 	})
 	if err != nil {
 		t.Fatalf("dial rejected (likely origin check): %v (status=%d)", err, statusOf(resp))
 	}
 	defer ws.CloseNow()
+}
+
+// Without a bearer token the browser Origin is the only boundary, exactly as
+// for the Tasks and hint sockets.
+func TestServeTerminalRejectsUntrustedOriginWithoutBearer(t *testing.T) {
+	ctrl := &fakeTermControl{attachErr: errors.New("must not attach")}
+	ts := termServer(t, ctrl)
+	_, resp, err := websocket.Dial(context.Background(), wsURL(ts.URL)+"/api/agents/smoke/terminal",
+		&websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"https://evil.example"}}})
+	if err == nil || statusOf(resp) != http.StatusForbidden {
+		t.Fatalf("dial err = %v, status = %d; want HTTP 403", err, statusOf(resp))
+	}
+}
+
+// A paste larger than the read limit closes the socket instead of growing
+// the daemon's memory without bound.
+func TestServeTerminalClosesOversizedFrame(t *testing.T) {
+	shimEnd, handlerEnd := net.Pipe()
+	defer shimEnd.Close()
+	ts := termServer(t, &fakeTermControl{conn: handlerEnd})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ws, _, err := websocket.Dial(ctx, wsURL(ts.URL)+"/api/agents/smoke/terminal", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	_ = ws.Write(ctx, websocket.MessageBinary, make([]byte, terminalReadLimit+1))
+	_, _, err = ws.Read(ctx)
+	if websocket.CloseStatus(err) != websocket.StatusMessageTooBig {
+		t.Fatalf("read after oversized frame = %v, want close %v", err, websocket.StatusMessageTooBig)
+	}
 }
 
 func statusOf(r *http.Response) int {

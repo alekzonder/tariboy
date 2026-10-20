@@ -121,7 +121,7 @@ type Server struct {
 
 func NewServer(d Deps) *Server {
 	s := &Server{d: d}
-	s.http = &http.Server{Handler: s.Handler()}
+	s.http = api.NewHTTPServer(s.Handler())
 	return s
 }
 
@@ -161,8 +161,7 @@ func (s *Server) Handler() http.Handler {
 		var body struct {
 			Idle bool `json:"idle"`
 		}
-		if err := decodeBody(r, &body); err != nil {
-			api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+		if !decodeBody(w, r, &body) {
 			return
 		}
 		if err := s.d.SetDone(id, !body.Idle); err != nil {
@@ -238,8 +237,7 @@ func (s *Server) goalSet(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Key string `json:"key"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	body.Key = strings.TrimSpace(body.Key)
@@ -261,8 +259,7 @@ func (s *Server) nativeTaskAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := map[string]any{}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	for _, key := range []string{"author", "actor", "customer", "principal_identity", "iteration", "iteration_id"} {
@@ -293,8 +290,7 @@ func (s *Server) loopControl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct{ Action string }
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Action != "start" && body.Action != "stop" {
@@ -335,12 +331,8 @@ func (s *Server) contextSet(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Text string `json:"text"`
 	}
-	if r.Body != nil {
-		defer r.Body.Close()
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
-			return
-		}
+	if !decodeBody(w, r, &body) {
+		return
 	}
 	if err := s.writeContextAtomic([]byte(body.Text)); err != nil {
 		api.WriteErr(w, http.StatusInternalServerError, "internal", err.Error())
@@ -391,8 +383,7 @@ func (s *Server) messageSend(w http.ResponseWriter, r *http.Request) {
 		Text    string         `json:"text"`
 		Data    map[string]any `json:"data"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Channel == "" {
@@ -421,8 +412,7 @@ func (s *Server) channelSubscribe(w http.ResponseWriter, r *http.Request) {
 		Type    string            `json:"type"` // comma list of type globs
 		Params  map[string]any    `json:"params"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Channel == "" {
@@ -471,8 +461,7 @@ func (s *Server) channelUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ID string `json:"id"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.ID == "" {
@@ -620,8 +609,7 @@ func (s *Server) messageProcessed(w http.ResponseWriter, r *http.Request) {
 		ID     string `json:"id"`
 		Result string `json:"result"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.ID == "" {
@@ -658,8 +646,7 @@ func (s *Server) messageReply(w http.ResponseWriter, r *http.Request) {
 		Data map[string]any `json:"data"`
 		Type string         `json:"type"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.ID == "" {
@@ -691,8 +678,7 @@ func (s *Server) request(w http.ResponseWriter, r *http.Request) {
 		Text     string `json:"text"`
 		Deadline string `json:"deadline"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Channel == "" {
@@ -737,8 +723,7 @@ func (s *Server) messageDLQRequeue(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ID string `json:"id"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.ID == "" {
@@ -823,12 +808,8 @@ func (s *Server) statusSet(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Message string `json:"message"`
 	}
-	if r.Body != nil {
-		defer r.Body.Close()
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
-			return
-		}
+	if !decodeBody(w, r, &body) {
+		return
 	}
 	out, err := s.d.SetStatus(body.Message)
 	if err != nil {
@@ -843,8 +824,7 @@ func (s *Server) scheduleAdd(w http.ResponseWriter, r *http.Request) {
 		Kind, Spec, Channel string
 		Message             json.RawMessage `json:"message"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	tpl := "{}"
@@ -870,8 +850,7 @@ func (s *Server) scheduleLs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) scheduleCancel(w http.ResponseWriter, r *http.Request) {
 	var body struct{ ID string }
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if err := s.d.CancelSchedule(body.ID); err != nil {
@@ -887,8 +866,7 @@ func (s *Server) scriptRunOnce(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body script.CreateOnce
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Description == "" {
@@ -908,8 +886,7 @@ func (s *Server) scriptSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body script.CreateSchedule
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Description == "" {
@@ -944,8 +921,7 @@ func (s *Server) scriptRerun(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ID string `json:"id"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if s.d.RerunScript == nil {
@@ -997,8 +973,7 @@ func (s *Server) scriptLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) scriptCancel(w http.ResponseWriter, r *http.Request) {
 	var body struct{ ID string }
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if s.d.CancelScriptTarget == nil {
@@ -1014,8 +989,7 @@ func (s *Server) scriptCancel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) scriptRemove(w http.ResponseWriter, r *http.Request) {
 	var body struct{ ID string }
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if s.d.RemoveScript == nil {
@@ -1076,8 +1050,7 @@ func (s *Server) imageBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct{ Name, Tag, Path string }
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Name == "" || body.Path == "" {
@@ -1138,8 +1111,7 @@ func (s *Server) groupSendTyped(w http.ResponseWriter, r *http.Request, typ stri
 		Text     string `json:"text"`
 		Deadline string `json:"deadline"`
 	}
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Member == "" || body.Text == "" {
@@ -1182,8 +1154,7 @@ func (s *Server) groupLoop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct{ Member, Action string }
-	if err := decodeBody(r, &body); err != nil {
-		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeBody(w, r, &body) {
 		return
 	}
 	if body.Member == "" {
@@ -1238,15 +1209,32 @@ func (s *Server) Serve(sock string) error {
 
 func (s *Server) Shutdown(ctx context.Context) error { return s.http.Shutdown(ctx) }
 
-func decodeBody(r *http.Request, v any) error {
+// maxBodyBytes bounds every agent tool request body.
+const maxBodyBytes = 1 << 20
+
+// decodeBody decodes a JSON request body into v. On failure it writes the
+// error response (413 too_large over maxBodyBytes, else 400 bad_json) and
+// returns false.
+func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	if r.Body == nil {
-		return nil
+		return true
 	}
 	defer r.Body.Close()
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil && !errors.Is(err, io.EOF) {
-		return err
+	if r.ContentLength > maxBodyBytes {
+		api.WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds 1 MiB")
+		return false
 	}
-	return nil
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(v)
+	var tooLarge *http.MaxBytesError
+	switch {
+	case err == nil || errors.Is(err, io.EOF):
+		return true
+	case errors.As(err, &tooLarge):
+		api.WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds 1 MiB")
+	default:
+		api.WriteErr(w, http.StatusBadRequest, "bad_json", err.Error())
+	}
+	return false
 }
 
 func splitCSV(s string) []string {

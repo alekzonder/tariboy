@@ -50,7 +50,7 @@ func pushCmd() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			res, err := regclient.Push(imagesDirFor(c), ref, cl)
+			res, err := regclient.Push(registry.RequestContext(p), imagesDirFor(c), ref, cl)
 			if err != nil {
 				return nil, api.UserError{Code: "push_failed", Msg: err.Error()}
 			}
@@ -77,7 +77,7 @@ func pullCmd() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			res, err := regclient.Pull(imagesDirFor(c), ref, cl)
+			res, err := regclient.Pull(registry.RequestContext(p), imagesDirFor(c), ref, cl)
 			if err != nil {
 				return nil, api.UserError{Code: "pull_failed", Msg: err.Error()}
 			}

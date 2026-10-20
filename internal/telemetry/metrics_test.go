@@ -21,6 +21,7 @@ func TestMetricsRecordAndGauges(t *testing.T) {
 		QueueDepth:     func(context.Context) int64 { return 7 },
 		PluginsHealthy: func(context.Context) int64 { return 2 },
 		ActiveAgents:   func(context.Context) int64 { return 3 },
+		EventsDropped:  func(context.Context) int64 { return 4 },
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +43,7 @@ func TestMetricsRecordAndGauges(t *testing.T) {
 		"tariboy.iterations", "tariboy.iteration.duration_ms",
 		"tariboy.tokens", "tariboy.cost_usd", "tariboy.proxy.latency_ms",
 		"tariboy.channel.queue_depth", "tariboy.plugins.healthy", "tariboy.agents.active",
+		"tariboy.events.dropped",
 	} {
 		if !got[want] {
 			t.Errorf("metric %q not collected", want)

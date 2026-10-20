@@ -1,15 +1,27 @@
 package regclient
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/alekzonder/tariboy/internal/image"
+)
+
+// Transport timeouts and the download cap; vars so tests can shrink them.
+var (
+	dialTimeout           = 10 * time.Second
+	tlsHandshakeTimeout   = 10 * time.Second
+	responseHeaderTimeout = 30 * time.Second
+	clientTimeout         = 15 * time.Minute
+	maxDownloadBytes      = image.MaxPortableImageCompressed
 )
 
 // Client talks the /v1 push/pull protocol to one store over TLS.
@@ -37,7 +49,15 @@ func NewClient(baseURL, token, caFile string) (*Client, error) {
 	return &Client{
 		base:  normalizeURL(baseURL),
 		token: token,
-		http:  &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg}},
+		http: &http.Client{
+			Timeout: clientTimeout,
+			Transport: &http.Transport{
+				DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
+				TLSClientConfig:       tlsCfg,
+				TLSHandshakeTimeout:   tlsHandshakeTimeout,
+				ResponseHeaderTimeout: responseHeaderTimeout,
+			},
+		},
 	}, nil
 }
 
@@ -51,8 +71,11 @@ func (c *Client) auth(r *http.Request) {
 	}
 }
 
-func (c *Client) Head(ref image.Ref) (string, bool, error) {
-	req, _ := http.NewRequest(http.MethodHead, c.url(ref, ""), nil)
+func (c *Client) Head(ctx context.Context, ref image.Ref) (string, bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, c.url(ref, ""), nil)
+	if err != nil {
+		return "", false, err
+	}
 	c.auth(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -71,7 +94,7 @@ func (c *Client) Head(ref image.Ref) (string, bool, error) {
 	}
 }
 
-func (c *Client) Put(ref image.Ref, archivePath, digest string) error {
+func (c *Client) Put(ctx context.Context, ref image.Ref, archivePath, digest string) error {
 	f, err := os.Open(archivePath)
 	if err != nil {
 		return err
@@ -81,7 +104,7 @@ func (c *Client) Put(ref image.Ref, archivePath, digest string) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPut, c.url(ref, ""), f)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.url(ref, ""), f)
 	if err != nil {
 		return err
 	}
@@ -100,8 +123,13 @@ func (c *Client) Put(ref image.Ref, archivePath, digest string) error {
 	return nil
 }
 
-func (c *Client) Get(ref image.Ref, w io.Writer) (string, error) {
-	req, _ := http.NewRequest(http.MethodGet, c.url(ref, ""), nil)
+// Get streams the archive into w and fails once the body exceeds
+// maxDownloadBytes; callers must discard w on any error.
+func (c *Client) Get(ctx context.Context, ref image.Ref, w io.Writer) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url(ref, ""), nil)
+	if err != nil {
+		return "", err
+	}
 	c.auth(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -111,8 +139,12 @@ func (c *Client) Get(ref image.Ref, w io.Writer) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", decodeErr(resp)
 	}
-	if _, err := io.Copy(w, resp.Body); err != nil {
+	n, err := io.Copy(w, io.LimitReader(resp.Body, maxDownloadBytes+1))
+	if err != nil {
 		return "", err
+	}
+	if n > maxDownloadBytes {
+		return "", fmt.Errorf("download of %s exceeds the %d byte image limit", ref.String(), maxDownloadBytes)
 	}
 	return resp.Header.Get("X-Tariboy-Digest"), nil
 }
