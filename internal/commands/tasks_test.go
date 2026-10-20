@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,7 +14,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -59,11 +58,7 @@ func taskRequest(t *testing.T, client *http.Client, method, url string, body any
 }
 
 func TestPoolAndTriggerOperatorHTTPKeepsTypedRoutesWithoutWorkflowEngine(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
 		Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Tasks: svc,
@@ -176,11 +171,7 @@ func TestPoolAndTriggerOperatorHTTPKeepsTypedRoutesWithoutWorkflowEngine(t *test
 }
 
 func TestTasksHTTPDerivesCustomerScopesListsAndRejectsStaleRevision(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	taskService := tasks.NewService(st.DB, "customer", func() time.Time {
 		return time.Date(2026, 7, 31, 14, 0, 0, 0, time.UTC)
 	})
@@ -275,11 +266,7 @@ func TestTasksHTTPDerivesCustomerScopesListsAndRejectsStaleRevision(t *testing.T
 }
 
 func TestTasksHTTPFiltersStatusViewsBeforeBuildingTheResponse(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
 		Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Tasks: svc,
@@ -337,11 +324,7 @@ func TestTasksHTTPFiltersStatusViewsBeforeBuildingTheResponse(t *testing.T) {
 }
 
 func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	taskService := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
 		Store: st,
@@ -437,11 +420,7 @@ func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
 }
 
 func TestTaskCreateAndUpdateAcceptPullRequestAndWaitCustomer(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
 		Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Tasks: svc,

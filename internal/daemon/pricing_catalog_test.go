@@ -17,10 +17,12 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/paths"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestPricingCatalogRunsWithDaemonLifecycle(t *testing.T) {
 	base := t.TempDir()
+	storetest.Seed(t, paths.New(base).DB())
 	runtimeDir := t.TempDir()
 	t.Setenv("TARIBOY_BASE_DIR", base)
 	t.Setenv("TARIBOY_RUNTIME_DIR", runtimeDir)

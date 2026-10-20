@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"path/filepath"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/script"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 type fakeScriptControl struct {
@@ -95,11 +94,7 @@ func (f *fakeScriptControl) RemoveScript(owner, id string) error {
 }
 
 func TestScriptCommandsExposeDefinitionsAndRuns(t *testing.T) {
-	db, err := store.Open(filepath.Join(t.TempDir(), "commands.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t)
 	if err := agent.NewStore(db).Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
 	}

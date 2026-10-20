@@ -9,16 +9,12 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func ctxWithBus(t *testing.T) (*registry.Ctx, *bus.Bus) {
 	t.Helper()
-	s, err := store.Open(t.TempDir() + "/x.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	b := bus.New(s, time.Now)
 	return &registry.Ctx{Store: s, Bus: b}, b
 }
