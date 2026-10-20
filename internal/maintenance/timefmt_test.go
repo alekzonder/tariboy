@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // Rows on both sides of the cutoff within one second are split by time: a
@@ -13,11 +14,7 @@ import (
 // where RFC3339Nano would give the two values different widths.
 func TestCleanupSplitsSameSecondRowsAtTheCutoff(t *testing.T) {
 	dir := t.TempDir()
-	st, err := store.Open(filepath.Join(dir, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := storetest.OpenAt(t, filepath.Join(dir, "tariboyd.db"))
 	now := testNow.Add(11)
 	svc := New(st, filepath.Join(dir, "backups", "db"), func() time.Time { return now }, nil)
 	db := st.DB

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 var testNow = time.Date(2026, time.September, 24, 3, 0, 0, 0, time.UTC)
@@ -20,11 +21,7 @@ func open(t *testing.T) (*Service, *store.Store, string) {
 	t.Helper()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "tariboyd.db")
-	st, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := storetest.OpenAt(t, dbPath)
 	backups := filepath.Join(dir, "backups", "db")
 	return New(st, backups, func() time.Time { return testNow }, nil), st, backups
 }
@@ -613,11 +610,7 @@ func (c *clock) set(t time.Time) { c.mu.Lock(); c.t = t; c.mu.Unlock() }
 
 func TestLoopFiresOnWallClockAndSkipsLateWakes(t *testing.T) {
 	dir := t.TempDir()
-	st, err := store.Open(filepath.Join(dir, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storetest.OpenAt(t, filepath.Join(dir, "tariboyd.db"))
 	day := func(d, h, m int) time.Time { return time.Date(2026, time.September, d, h, m, 0, 0, time.UTC) }
 	clk := &clock{t: day(24, 2, 0)}
 	svc := New(st, filepath.Join(dir, "backups"), clk.now, nil)

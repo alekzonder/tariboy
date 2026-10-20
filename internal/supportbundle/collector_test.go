@@ -17,7 +17,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 type fixedState map[string]string
@@ -33,11 +33,7 @@ func collectorFixture(t *testing.T, iterations int) (Collector, string) {
 	if err := os.MkdirAll(base, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	db, err := store.Open(filepath.Join(base, "tariboyd.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.OpenAt(t, filepath.Join(base, "tariboyd.db"))
 	as := agent.NewStore(db)
 	for _, name := range []string{"alpha", "beta"} {
 		if err := as.Create(agent.Agent{

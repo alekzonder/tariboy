@@ -13,7 +13,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func mkIter(t *testing.T, as *agent.Store, agentsDir, name, id, started string) {
@@ -32,11 +32,7 @@ func mkIter(t *testing.T, as *agent.Store, agentsDir, name, id, started string) 
 
 func TestPruneKeepsNewestByCount(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	if err := as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"}); err != nil {
 		t.Fatal(err)
@@ -87,8 +83,7 @@ func TestPruneKeepsNewestByCount(t *testing.T) {
 
 func TestPruneNeverRemovesRunning(t *testing.T) {
 	dir := t.TempDir()
-	s, _ := store.Open(filepath.Join(dir, "x.db"))
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
@@ -147,11 +142,7 @@ func untarGz(t *testing.T, path string) map[string]string {
 // TestArchiveRoundTrips: the tar.gz untars to the original iteration contents.
 func TestArchiveRoundTrips(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
@@ -184,11 +175,7 @@ func TestArchiveRoundTrips(t *testing.T) {
 // which pruning deletes, as db-rows.json.
 func TestArchiveCarriesDBRows(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
@@ -222,11 +209,7 @@ func TestArchiveCarriesDBRows(t *testing.T) {
 // TestPruneKeepsIterationWhenArchiveFails: no backup, no deletion.
 func TestPruneKeepsIterationWhenArchiveFails(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
@@ -258,11 +241,7 @@ func TestPruneKeepsIterationWhenArchiveFails(t *testing.T) {
 // still has its rows backed up and pruned.
 func TestPruneArchivesIterationWithoutDir(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
@@ -291,11 +270,7 @@ func TestPruneArchivesIterationWithoutDir(t *testing.T) {
 // removed with the iterations row; a kept iteration's rows survive.
 func TestPruneDeletesAIRequestRowsConsistently(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
@@ -335,11 +310,7 @@ func TestPruneDeletesAIRequestRowsConsistently(t *testing.T) {
 // in-window iterations survive.
 func TestPruneKeepDays(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")
@@ -364,11 +335,7 @@ func TestPruneKeepDays(t *testing.T) {
 // older iterations are victims; newest is always protected.
 func TestPruneMaxBytes(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.Open(filepath.Join(dir, "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	as := agent.NewStore(s)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	agentsDir := filepath.Join(dir, "agents")

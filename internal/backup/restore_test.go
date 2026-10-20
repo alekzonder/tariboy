@@ -14,6 +14,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestRestoreUnderNewName(t *testing.T) {
@@ -31,11 +32,7 @@ func TestRestoreUnderNewName(t *testing.T) {
 
 	// Target host: fresh store + dir.
 	dstDir := t.TempDir()
-	dst, err := store.Open(filepath.Join(dstDir, "y.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	dstAgents := filepath.Join(dstDir, "agents")
 
 	man, err := Restore(bytes.NewReader(arc.Bytes()), dst, dstAgents, RestoreOptions{NewName: "clone"})
@@ -137,11 +134,7 @@ func TestRestoreRemapsOutboxThatOutlivedRemovedScript(t *testing.T) {
 	}
 
 	dstDir := t.TempDir()
-	dst, err := store.Open(filepath.Join(dstDir, "restored.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	if _, err := Restore(bytes.NewReader(arc.Bytes()), dst, filepath.Join(dstDir, "agents"), RestoreOptions{NewName: "clone"}); err != nil {
 		t.Fatal(err)
 	}
@@ -298,11 +291,7 @@ func TestRestoreRoundTrip(t *testing.T) {
 	}
 
 	dstDir := t.TempDir()
-	dst, err := store.Open(filepath.Join(dstDir, "y.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	dstAgents := filepath.Join(dstDir, "agents")
 
 	man, err := Restore(bytes.NewReader(arc.Bytes()), dst, dstAgents, RestoreOptions{})
@@ -355,8 +344,7 @@ func TestRestoreExcludedSecretAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	dstDir := t.TempDir()
-	dst, _ := store.Open(filepath.Join(dstDir, "y.db"))
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	if _, err := Restore(bytes.NewReader(arc.Bytes()), dst, filepath.Join(dstDir, "agents"), RestoreOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -371,8 +359,7 @@ func TestRestoreExcludedSecretAbsent(t *testing.T) {
 
 func TestRestoreRejectsNewerSchema(t *testing.T) {
 	dstDir := t.TempDir()
-	dst, _ := store.Open(filepath.Join(dstDir, "y.db"))
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	sv, _ := dst.SchemaVersion()
 	arc := archiveWith(t, Meta{
 		Manifest: Manifest{FormatVersion: FormatVersion, SchemaVersion: sv + 1, Agent: "x"},
@@ -390,8 +377,7 @@ func TestRestoreRejectsInvalidNewName(t *testing.T) {
 		t.Fatal(err)
 	}
 	dstDir := t.TempDir()
-	dst, _ := store.Open(filepath.Join(dstDir, "y.db"))
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	if _, err := Restore(bytes.NewReader(arc.Bytes()), dst, filepath.Join(dstDir, "agents"), RestoreOptions{NewName: "../evil"}); err == nil {
 		t.Fatal("traversing --name must be rejected")
 	}
@@ -399,8 +385,7 @@ func TestRestoreRejectsInvalidNewName(t *testing.T) {
 
 func TestRestoreRejectsTraversal(t *testing.T) {
 	dstDir := t.TempDir()
-	dst, _ := store.Open(filepath.Join(dstDir, "y.db"))
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	// A hand-built archive whose file entry escapes the destination.
 	arc := maliciousArchive(t) // helper below writes files/../../evil
 	if _, err := Restore(bytes.NewReader(arc), dst, filepath.Join(dstDir, "agents"), RestoreOptions{}); err == nil {
@@ -410,8 +395,7 @@ func TestRestoreRejectsTraversal(t *testing.T) {
 
 func TestRestoreRejectsSymlink(t *testing.T) {
 	dstDir := t.TempDir()
-	dst, _ := store.Open(filepath.Join(dstDir, "y.db"))
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	arc := symlinkArchive(t)
 	if _, err := Restore(bytes.NewReader(arc), dst, filepath.Join(dstDir, "agents"), RestoreOptions{}); err == nil {
 		t.Fatal("symlink entry must be rejected")
@@ -501,11 +485,7 @@ func TestRestoreCanonicalizesLegacyTimes(t *testing.T) {
 		t.Fatal(err)
 	}
 	dstDir := t.TempDir()
-	dst, err := store.Open(filepath.Join(dstDir, "y.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { dst.Close() })
+	dst := storetest.Open(t)
 	if _, err := Restore(bytes.NewReader(arc.Bytes()), dst, filepath.Join(dstDir, "agents"), RestoreOptions{}); err != nil {
 		t.Fatal(err)
 	}

@@ -1,20 +1,14 @@
 package retention
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return NewStore(s)
+	return NewStore(storetest.Open(t))
 }
 
 func TestDefaultAndPerAgent(t *testing.T) {

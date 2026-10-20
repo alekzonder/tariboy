@@ -16,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/aiproxy"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestParseCatalogConvertsPricesAndAliases(t *testing.T) {
@@ -471,11 +472,7 @@ func httpResponse(status int, body []byte) *http.Response {
 
 func openStore(t *testing.T) *store.Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "catalog.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := storetest.Open(t)
 	return s
 }
 
