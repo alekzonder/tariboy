@@ -20,6 +20,11 @@ type StatusVisit struct {
 	LeftAt    string `json:"left_at,omitempty"`
 	Outcome   string `json:"outcome,omitempty"`
 	Message   string `json:"message,omitempty"`
+	// The visit's counters, compared with the status limits to pause the
+	// task; see Limits in the documentation.
+	IdleIterations   int `json:"idle_iterations,omitempty"`
+	RejectedRequests int `json:"rejected_requests,omitempty"`
+	ScriptFailures   int `json:"script_failures,omitempty"`
 }
 
 // TransitionRequest is a request to leave a status with an outcome.
