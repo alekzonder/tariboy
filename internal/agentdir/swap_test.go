@@ -32,6 +32,7 @@ func assertAbsent(t *testing.T, path string) {
 }
 
 func TestSwapDirCommitReplacesOldAndDropsBackup(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	dir, backup, stage := filepath.Join(root, "image"), filepath.Join(root, ".backup"), filepath.Join(root, ".stage")
 	writeMarker(t, dir, "old")
@@ -51,6 +52,7 @@ func TestSwapDirCommitReplacesOldAndDropsBackup(t *testing.T) {
 }
 
 func TestSwapDirRollbackRestoresOld(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	dir, backup, stage := filepath.Join(root, "image"), filepath.Join(root, ".backup"), filepath.Join(root, ".stage")
 	writeMarker(t, dir, "old")
@@ -66,6 +68,7 @@ func TestSwapDirRollbackRestoresOld(t *testing.T) {
 }
 
 func TestSwapDirMissingOldDir(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	dir, backup, stage := filepath.Join(root, "image"), filepath.Join(root, ".backup"), filepath.Join(root, ".stage")
 	writeMarker(t, stage, "new")
@@ -84,6 +87,7 @@ func TestSwapDirMissingOldDir(t *testing.T) {
 }
 
 func TestSwapDirWithoutStageMovesOldAside(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	dir, backup := filepath.Join(root, "bin"), filepath.Join(root, ".bin-backup")
 	writeMarker(t, dir, "old")
@@ -101,6 +105,7 @@ func TestSwapDirWithoutStageMovesOldAside(t *testing.T) {
 }
 
 func TestSwapDirStageFailureRestoresOld(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	dir, backup, stage := filepath.Join(root, "image"), filepath.Join(root, ".backup"), filepath.Join(root, ".missing-stage")
 	writeMarker(t, dir, "old")
@@ -113,6 +118,7 @@ func TestSwapDirStageFailureRestoresOld(t *testing.T) {
 }
 
 func TestSwapImageLeavesCrashMarkerAtImageBackup(t *testing.T) {
+	t.Parallel()
 	l := New(t.TempDir(), "worker")
 	writeMarker(t, l.ImageDir(), "old")
 	stage := filepath.Join(l.Root, ".image-stage-x")

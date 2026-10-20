@@ -16,6 +16,7 @@ import (
 )
 
 func TestSyncBridgeTreeIgnoresUnsupportedDirectorySyncOnly(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	file := filepath.Join(root, "file")
 	if err := os.WriteFile(file, []byte("body"), 0o600); err != nil {
@@ -68,6 +69,7 @@ func bridgeFixture(t *testing.T) (string, []image.ManifestSkill) {
 }
 
 func TestImageBridgeDirUsesDigestContractAndHarness(t *testing.T) {
+	t.Parallel()
 	l := New(t.TempDir(), "worker")
 	digest := strings.Repeat("a", 64)
 	got, err := l.ImageBridgeDir(digest, "1", "claude")
@@ -81,6 +83,7 @@ func TestImageBridgeDirUsesDigestContractAndHarness(t *testing.T) {
 }
 
 func TestImageBridgeDirRejectsUnsafeSegments(t *testing.T) {
+	t.Parallel()
 	l := New(t.TempDir(), "worker")
 	digest := strings.Repeat("a", 64)
 	for _, tc := range []struct{ digest, contract, harness string }{
@@ -94,6 +97,7 @@ func TestImageBridgeDirRejectsUnsafeSegments(t *testing.T) {
 }
 
 func TestPrepareImageBridgeCopiesSkillsAndGeneratedFilesOwnerOnly(t *testing.T) {
+	t.Parallel()
 	source, expected := bridgeFixture(t)
 	expected[0].ClientVersion = "0.45.2"
 	l := New(t.TempDir(), "worker")
@@ -140,6 +144,7 @@ func TestPrepareImageBridgeCopiesSkillsAndGeneratedFilesOwnerOnly(t *testing.T) 
 }
 
 func TestPrepareImageBridgeReusesValidPublishedBridgeWithoutWrites(t *testing.T) {
+	t.Parallel()
 	source, expected := bridgeFixture(t)
 	l := New(t.TempDir(), "worker")
 	finalDir, _ := l.ImageBridgeDir(strings.Repeat("c", 64), "1", "opencode")
@@ -148,11 +153,16 @@ func TestPrepareImageBridgeReusesValidPublishedBridgeWithoutWrites(t *testing.T)
 		t.Fatal(err)
 	}
 	manifestPath := filepath.Join(finalDir, "bridge-manifest.json")
+	// Backdate the manifest so any rewrite shows as a new mtime without
+	// waiting for the clock to tick.
+	past := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(manifestPath, past, past); err != nil {
+		t.Fatal(err)
+	}
 	before, err := os.Stat(manifestPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(10 * time.Millisecond)
 	if err := PrepareImageBridge(source, finalDir, expected, plan); err != nil {
 		t.Fatal(err)
 	}
@@ -166,6 +176,7 @@ func TestPrepareImageBridgeReusesValidPublishedBridgeWithoutWrites(t *testing.T)
 }
 
 func TestPrepareImageBridgeRebuildsInvalidPublishedBridge(t *testing.T) {
+	t.Parallel()
 	source, expected := bridgeFixture(t)
 	l := New(t.TempDir(), "worker")
 	finalDir, _ := l.ImageBridgeDir(strings.Repeat("d", 64), "1", "claude")
@@ -186,6 +197,7 @@ func TestPrepareImageBridgeRebuildsInvalidPublishedBridge(t *testing.T) {
 }
 
 func TestPrepareImageBridgeRejectsManifestedUnexpectedGeneratedFile(t *testing.T) {
+	t.Parallel()
 	source, expected := bridgeFixture(t)
 	finalDir, _ := New(t.TempDir(), "worker").ImageBridgeDir(strings.Repeat("2", 64), "1", "claude")
 	plan := BridgePlan{SkillDestination: "skills"}
@@ -222,6 +234,7 @@ func TestPrepareImageBridgeRejectsManifestedUnexpectedGeneratedFile(t *testing.T
 }
 
 func TestPrepareImageBridgeRejectsUnsafeSourceAndPlanPaths(t *testing.T) {
+	t.Parallel()
 	t.Run("source symlink", func(t *testing.T) {
 		source, expected := bridgeFixture(t)
 		outside := filepath.Join(t.TempDir(), "outside")
@@ -251,6 +264,7 @@ func TestPrepareImageBridgeRejectsUnsafeSourceAndPlanPaths(t *testing.T) {
 }
 
 func TestPrepareImageBridgeConcurrentIdenticalPublishSucceeds(t *testing.T) {
+	t.Parallel()
 	source, expected := bridgeFixture(t)
 	finalDir, _ := New(t.TempDir(), "worker").ImageBridgeDir(strings.Repeat("1", 64), "1", "codex")
 	plan := BridgePlan{SkillDestination: "plugin/skills", Files: []BridgeFile{{Path: "plugin/plugin.json", Body: []byte("{}\n"), Mode: 0o600}}}

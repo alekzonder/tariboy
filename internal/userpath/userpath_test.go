@@ -11,8 +11,13 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
+// TestResolve and TestResolveKillsLongLivedDescendant stay sequential: each
+// case writes a shell script and runs it at once, and a concurrent fork can
+// still hold the script open for writing, failing the exec with ETXTBSY.
 func TestResolve(t *testing.T) {
 	const (
 		validPath       = "/opt/user tools/bin:/usr/bin"
@@ -26,6 +31,9 @@ func TestResolve(t *testing.T) {
 		wantErr       string
 		forbiddenText []string
 		maxDuration   time.Duration
+		// ctxTimeout bounds the caller context so the timeout path runs
+		// without waiting out the 5 s probeTimeout.
+		ctxTimeout time.Duration
 	}{
 		{
 			name: "extracts a delimited path from noisy startup output",
@@ -146,7 +154,8 @@ exec /bin/sleep 10
 `)
 			},
 			wantErr:     "probe timed out",
-			maxDuration: 8 * time.Second,
+			maxDuration: 3 * time.Second,
+			ctxTimeout:  200 * time.Millisecond,
 		},
 		{
 			name: "bounds pipes held open by a shell descendant",
@@ -163,8 +172,15 @@ exit 0
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tt.ctxTimeout > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tt.ctxTimeout)
+				defer cancel()
+			}
+			shell := tt.shell(t)
 			started := time.Now()
-			got, err := Resolve(context.Background(), tt.shell(t))
+			got, err := Resolve(ctx, shell)
 			elapsed := time.Since(started)
 
 			if tt.wantErr == "" {
@@ -198,7 +214,6 @@ exit 0
 
 func TestResolveKillsLongLivedDescendant(t *testing.T) {
 	pidPath := filepath.Join(t.TempDir(), "descendant.pid")
-	t.Setenv("TARIBOY_TEST_DESCENDANT_PID", pidPath)
 	t.Cleanup(func() {
 		data, err := os.ReadFile(pidPath)
 		if err != nil {
@@ -211,7 +226,7 @@ func TestResolveKillsLongLivedDescendant(t *testing.T) {
 	})
 	shell := writeShell(t, 0o700, `
 /bin/sleep 30 </dev/null >/dev/null 2>&1 &
-printf '%s\n' "$!" > "$TARIBOY_TEST_DESCENDANT_PID"
+printf '%s\n' "$!" > '`+pidPath+`'
 PATH='/usr/local/bin:/usr/bin' /bin/sh -c "$2"
 `)
 
@@ -224,11 +239,7 @@ PATH='/usr/local/bin:/usr/bin' /bin/sh -c "$2"
 	}
 
 	pid := readPID(t, pidPath)
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for processExists(pid) && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if processExists(pid) {
+	if !testutil.WaitFor(500*time.Millisecond, func() bool { return !processExists(pid) }) {
 		t.Fatalf("login-shell descendant pid %d survived Resolve return", pid)
 	}
 }
@@ -266,6 +277,7 @@ func processExists(pid int) bool {
 // class without ever carrying the shell's output, the candidate path, or the
 // underlying message.
 func TestReasonNamesTheFailureClassWithoutDisclosingDetails(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		err  error
@@ -282,6 +294,7 @@ func TestReasonNamesTheFailureClassWithoutDisclosingDetails(t *testing.T) {
 		{name: "nil", err: nil, want: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := Reason(tc.err); got != tc.want {
 				t.Fatalf("Reason() = %q, want %q", got, tc.want)
 			}

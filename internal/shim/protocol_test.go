@@ -32,6 +32,7 @@ func (f *fakeHandler) Report() ReportResult {
 func (f *fakeHandler) SetHardDeadline(deadline string) error { f.deadline = deadline; return nil }
 
 func TestRPCRoundTrip(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "shim.sock")
 	l, err := net.Listen("unix", sock)
 	if err != nil {
@@ -66,6 +67,7 @@ func TestRPCRoundTrip(t *testing.T) {
 }
 
 func TestConnectedClientStaysBoundWhenSocketPathIsReused(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "shim.sock")
 	oldListener, err := net.Listen("unix", sock)
 	if err != nil {
@@ -113,6 +115,7 @@ func TestConnectedClientStaysBoundWhenSocketPathIsReused(t *testing.T) {
 }
 
 func TestConnectTimeoutBoundsFullUnixAcceptQueue(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "full.sock")
 	fd, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {
@@ -167,6 +170,7 @@ func (echoStream) Attach(conn net.Conn, _ AttachParams) error {
 }
 
 func TestServeConnAttachEcho(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sock := filepath.Join(dir, "s.sock")
 	l, err := net.Listen("unix", sock)
@@ -189,6 +193,7 @@ func TestServeConnAttachEcho(t *testing.T) {
 }
 
 func TestResizeParamsRoundTrip(t *testing.T) {
+	t.Parallel()
 	b, _ := json.Marshal(ResizeParams{Cols: 120, Rows: 40})
 	var p ResizeParams
 	if err := json.Unmarshal(b, &p); err != nil || p.Cols != 120 || p.Rows != 40 {
@@ -199,6 +204,7 @@ func TestResizeParamsRoundTrip(t *testing.T) {
 // TestClientTimeoutOnHungPeer verifies that Client.call does not block
 // forever when the peer accepts the connection but never responds.
 func TestClientTimeoutOnHungPeer(t *testing.T) {
+	t.Parallel()
 	sock := filepath.Join(t.TempDir(), "hung.sock")
 	l, err := net.Listen("unix", sock)
 	if err != nil {
