@@ -7,6 +7,7 @@ import (
 )
 
 func TestTokenLifecycle(t *testing.T) {
+	t.Parallel()
 	// A deterministic reader makes minted tokens reproducible.
 	reg := NewTokenRegistry(bytes.NewReader(bytes.Repeat([]byte{0xAB}, 1024)))
 	attr := Attribution{Agent: "alice", Iteration: "alice-1", ImageName: "basic",
@@ -40,6 +41,7 @@ func TestTokenLifecycle(t *testing.T) {
 }
 
 func TestMintUnique(t *testing.T) {
+	t.Parallel()
 	reg := NewTokenRegistry(nil) // crypto/rand
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {

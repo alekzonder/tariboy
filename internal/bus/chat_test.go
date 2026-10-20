@@ -28,6 +28,7 @@ func publish(t *testing.T, b *Bus, msg Message) Message {
 }
 
 func TestMessageFromPrefersExplicitAttribution(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		msg  Message
@@ -48,6 +49,7 @@ func TestMessageFromPrefersExplicitAttribution(t *testing.T) {
 // The chat with one agent is the two existing inboxes merged: what the customer
 // sent into the agent's inbox and what that agent sent into the customer's.
 func TestChatMessagesMergeBothInboxesAndFilterByType(t *testing.T) {
+	t.Parallel()
 	b := chatBus(t)
 	publish(t, b, Message{Channel: "agent:worker:inbox", Source: "user:customer", Type: "message", Text: "from the customer"})
 	publish(t, b, Message{Channel: "user:customer", Source: "system:tasks", Type: "task.question",
@@ -79,6 +81,7 @@ func TestChatMessagesMergeBothInboxesAndFilterByType(t *testing.T) {
 // Message ids embed their channel, so the merged feed can only page by time:
 // an id cursor would sort every "agent:*" id below every "user:*" one.
 func TestChatMessagesPagesBackwardsByTimeAcrossBothChannels(t *testing.T) {
+	t.Parallel()
 	b := chatBus(t)
 	publish(t, b, Message{Channel: "user:customer", Source: "agent:worker", Type: "message", Text: "first"})
 	second := publish(t, b, Message{Channel: "agent:worker:inbox", Source: "user:customer", Type: "message", Text: "second"})
@@ -94,6 +97,7 @@ func TestChatMessagesPagesBackwardsByTimeAcrossBothChannels(t *testing.T) {
 }
 
 func TestChatSummariesRankByLastMessageAndCountUnread(t *testing.T) {
+	t.Parallel()
 	b := chatBus(t)
 	publish(t, b, Message{Channel: "user:customer", Source: "agent:alpha", Type: "message", Text: "alpha first"})
 	publish(t, b, Message{Channel: "agent:beta:inbox", Source: "user:customer", Type: "message", Text: "to beta"})
@@ -121,6 +125,7 @@ func TestChatSummariesRankByLastMessageAndCountUnread(t *testing.T) {
 // The stored sender is the same principal MessageFrom resolves, so chat queries
 // can read an indexed column instead of parsing every row body.
 func TestPublishStoresTheResolvedSender(t *testing.T) {
+	t.Parallel()
 	b := chatBus(t)
 	for _, msg := range []Message{
 		{Channel: "user:customer", Source: "system:tasks", Type: "message", Data: map[string]any{"from": "agent:worker"}},
@@ -143,6 +148,7 @@ func TestPublishStoresTheResolvedSender(t *testing.T) {
 // inbox on the host: that walk held the single database connection long enough
 // to queue every other request behind it.
 func TestChatMessagesSeeksOnlyItsTwoChannels(t *testing.T) {
+	t.Parallel()
 	b := chatBus(t)
 	query, args := chatMessagesQuery("user:customer", "worker", DefaultChatTypes, 50, "")
 	joined := queryPlan(t, b, query, args)
@@ -156,6 +162,7 @@ func TestChatMessagesSeeksOnlyItsTwoChannels(t *testing.T) {
 // inboxes of the agents it lists, not walk every agent inbox on the host: on a
 // host with busy worker agents that walk was most of each /api/chats call.
 func TestChatSummariesSeeksOnlyTheListedInboxes(t *testing.T) {
+	t.Parallel()
 	b := chatBus(t)
 	query, args := chatSummariesQuery("user:customer", DefaultChatTypes, map[string]string{"alpha": "", "beta": ""})
 	joined := queryPlan(t, b, query, args)

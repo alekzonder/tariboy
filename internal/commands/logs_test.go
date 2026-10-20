@@ -11,6 +11,7 @@ import (
 // null. A nil slice marshals to `null`, which crashes the web UI audit-log page
 // (events.map on null). Regression test for that.
 func TestLogsEmptyEventsSerializesAsArray(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 
 	got, err := h(t, "logs")(c, registry.Params{"name": "nobody"})

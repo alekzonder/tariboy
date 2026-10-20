@@ -7,6 +7,7 @@ import (
 )
 
 func TestCanonicalTimestampsMigration(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "canonical-timestamps.db")
 	legacy := openBeforeMigration(t, path, canonicalTimestampsMigration)
 	if _, err := legacy.DB.Exec(`
@@ -69,6 +70,7 @@ func TestCanonicalTimestampsMigration(t *testing.T) {
 }
 
 func TestCanonicalizeColumnCrossesChunkBoundaries(t *testing.T) {
+	// Sequential: swaps the package-level canonicalizeChunk.
 	defer func(chunk int) { canonicalizeChunk = chunk }(canonicalizeChunk)
 	canonicalizeChunk = 2
 	s := open(t)
@@ -101,6 +103,7 @@ func TestCanonicalizeColumnCrossesChunkBoundaries(t *testing.T) {
 }
 
 func TestSchemaDefaultsAreCanonical(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	var n int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE instr(sql, '%fZ''') > 0`).Scan(&n); err != nil || n != 0 {

@@ -10,6 +10,7 @@ import (
 )
 
 func TestBackupRestoreCommands(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	// c.BaseDir is a temp dir from the helper; ensure the agents dir exists.
@@ -41,6 +42,7 @@ func TestBackupRestoreCommands(t *testing.T) {
 }
 
 func TestBackupIncludeSecretsWarns(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "bot", ImageRef: "img:1"})
 	os.MkdirAll(filepath.Join(c.BaseDir, "agents", "bot"), 0o700)
@@ -66,6 +68,7 @@ func TestBackupIncludeSecretsWarns(t *testing.T) {
 }
 
 func TestBackupRejectsBadAgentName(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	out := filepath.Join(t.TempDir(), "bad.tar.gz")
 	if _, err := h(t, "backup")(c, registry.Params{"target": "../etc", "output": out}); err == nil {

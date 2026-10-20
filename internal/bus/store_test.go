@@ -12,6 +12,7 @@ import (
 )
 
 func TestPublishWithGuardSerializesGuardAndMessageInsert(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if _, err := b.db.Exec(`CREATE TABLE publish_guard_state(active INTEGER NOT NULL); INSERT INTO publish_guard_state VALUES (0)`); err != nil {
 		t.Fatal(err)
@@ -61,6 +62,7 @@ func TestPublishWithGuardSerializesGuardAndMessageInsert(t *testing.T) {
 }
 
 func TestPublishWithDeniedGuardWritesNothing(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if _, err := b.Subscribe("worker", "chat:denied", nil, nil); err != nil {
 		t.Fatal(err)
@@ -123,6 +125,7 @@ func pub(t *testing.T, b *Bus, channel, typ, text string, subject map[string]any
 }
 
 func TestPublishIdempotencyKeyReturnsOriginalWithoutDuplicateDelivery(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	channel := InboxChannel("alice")
 	sub(t, b, "alice", channel)
@@ -159,6 +162,7 @@ func TestPublishIdempotencyKeyReturnsOriginalWithoutDuplicateDelivery(t *testing
 }
 
 func TestPublishDeadLettersMessagesBeyondAgentQueueLimit(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref, messages_max_queue) VALUES ('alice', 'basic:latest', 2)`); err != nil {
 		t.Fatal(err)
@@ -184,6 +188,7 @@ func TestPublishDeadLettersMessagesBeyondAgentQueueLimit(t *testing.T) {
 }
 
 func TestPendingCountDeduplicatesAndExcludesDLQ(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	if _, err := b.db.Exec(`INSERT INTO agents(name, image_ref) VALUES ('alice', 'basic:latest')`); err != nil {
 		t.Fatal(err)
@@ -224,6 +229,7 @@ func hasMsg(ms []Message, id string) bool {
 // path and the Reply path (a reply routed back to a chat channel the replying
 // agent is itself subscribed to) are exercised.
 func TestPublishExcludesAuthor(t *testing.T) {
+	t.Parallel()
 	t.Run("plain publish", func(t *testing.T) {
 		b := newBusSeconds(t)
 		ch := ChatChannel("room")
@@ -294,8 +300,10 @@ func TestPublishExcludesAuthor(t *testing.T) {
 // author-only exclusion (message silently dropped) and PASSES once the
 // exclusion is scoped to non-inbox channels.
 func TestPublishSelfInboxDeliveredToAuthor(t *testing.T) {
+	t.Parallel()
 	for _, typ := range []string{"budget.warn", "script.result", "request.timeout"} {
 		t.Run(typ, func(t *testing.T) {
+			t.Parallel()
 			b := newBusSeconds(t)
 			ch := InboxChannel("alice")
 			// alice is subscribed to her own inbox (as group members are:
@@ -316,6 +324,7 @@ func TestPublishSelfInboxDeliveredToAuthor(t *testing.T) {
 }
 
 func TestPublishFanoutAndPending(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := InboxChannel("bob")
 	if _, err := b.Subscribe("bob", ch, Matcher{"type": "deploy.*"}, nil); err != nil {
@@ -352,6 +361,7 @@ func TestPublishFanoutAndPending(t *testing.T) {
 }
 
 func TestPendingOrderAndTypeFilter(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := ChatChannel("room")
 	// type_filter narrows delivery even when matcher is empty.
@@ -373,6 +383,7 @@ func TestPendingOrderAndTypeFilter(t *testing.T) {
 // (agent,channel,matcher) and the second subscribe collapsed onto the first row,
 // silently swallowing its filter.
 func TestSubscribeDistinctTypeFiltersBothTakeEffect(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := ChatChannel("ci")
 	s1, err := b.Subscribe("bob", ch, Matcher{}, []string{"run.finished"})
@@ -414,6 +425,7 @@ func TestSubscribeDistinctTypeFiltersBothTakeEffect(t *testing.T) {
 // onto the bare (NULL type_filter) row and its filter was dropped. Also guards the
 // NULL-safe IS comparison against a NULL filter.
 func TestSubscribeBareThenTypedKeepsBoth(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := ChatChannel("ci2")
 	bare, err := b.Subscribe("bob", ch, Matcher{}, nil)
@@ -454,6 +466,7 @@ func TestSubscribeBareThenTypedKeepsBoth(t *testing.T) {
 }
 
 func TestPendingDedupesAcrossSubs(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := ChatChannel("multi")
 	b.Subscribe("bob", ch, Matcher{"type": "x.*"}, nil)
@@ -472,6 +485,7 @@ func TestPendingDedupesAcrossSubs(t *testing.T) {
 }
 
 func TestHasPendingAndHook(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	var hookMsg Message
 	var hookAgents []string
@@ -492,6 +506,7 @@ func TestHasPendingAndHook(t *testing.T) {
 }
 
 func TestPendingTotal(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := InboxChannel("bob")
 	b.Subscribe("bob", ch, Matcher{}, nil)
@@ -532,6 +547,7 @@ func ids(msgs []Message) []string {
 // page, is idempotent without ack, advances after ack, and NEVER pushes the
 // unread tail into the DLQ (the accounting-under-backlog bug).
 func TestPendingBacklogPagingAndNoDLQ(t *testing.T) {
+	t.Parallel()
 	b := newBusSeconds(t)
 	ch := ChatChannel("backlog")
 	if _, err := b.Subscribe("bob", ch, Matcher{}, nil); err != nil {
@@ -580,6 +596,7 @@ func TestPendingBacklogPagingAndNoDLQ(t *testing.T) {
 // Message ids are collision-safe and (ts, seq)-ordered even within one clock
 // second and across a prune of the oldest rows.
 func TestMessageIDsCollisionSafeAcrossPrune(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := ChatChannel("ids")
 
@@ -661,6 +678,7 @@ func seqOf(t *testing.T, id string) int {
 // chronological order; only a fixed-width ts format sorts Pending oldest-first
 // (spec §6).
 func TestPendingOrdersByTrueChronologyNotLexicalTS(t *testing.T) {
+	t.Parallel()
 	s := storetest.Open(t)
 
 	base := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
@@ -711,6 +729,7 @@ func TestPendingOrdersByTrueChronologyNotLexicalTS(t *testing.T) {
 // therefore guessable, so Unsubscribe must scope its DELETE to the calling
 // agent rather than trusting the id alone.
 func TestUnsubscribeScopedByAgent(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := InboxChannel("shared")
 	subA, err := b.Subscribe("alice", ch, Matcher{}, nil)
@@ -755,6 +774,7 @@ func TestUnsubscribeScopedByAgent(t *testing.T) {
 }
 
 func TestChannelsAndTail(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	ch := ChatChannel("room")
 	pub(t, b, ch, "a", "1", nil)
@@ -774,6 +794,7 @@ func TestChannelsAndTail(t *testing.T) {
 }
 
 func TestPublishAssignsMonotonicWorkflowIngressSequence(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	for _, channel := range []string{"chat:z", "chat:a"} {
 		if _, err := b.Publish(Message{Channel: channel, Source: "plugin:test", Type: "event"}); err != nil {
@@ -800,6 +821,7 @@ func TestPublishAssignsMonotonicWorkflowIngressSequence(t *testing.T) {
 }
 
 func TestUnsubscribeChannel(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if _, err := b.Subscribe("worker", "chat:room", nil, nil); err != nil {
 		t.Fatal(err)
@@ -829,6 +851,7 @@ func TestUnsubscribeChannel(t *testing.T) {
 // with no message or subscription (dev-t-dbu.1 materialize-on-bind), is
 // idempotent, and rejects a malformed name rather than seeding a junk row.
 func TestEnsureChannelMaterializesAndValidates(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if chans, _ := b.Channels(); len(chans) != 0 {
 		t.Fatalf("fresh bus has channels: %+v", chans)

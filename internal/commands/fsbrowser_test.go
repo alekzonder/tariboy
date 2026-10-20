@@ -14,6 +14,7 @@ import (
 // typed error codes map to the right HTTP statuses (bad_path 403, not_found 404,
 // not_dir 400) and that a valid listing returns directories only.
 func TestFsListStatusCodes(t *testing.T) {
+	// Sequential: sets TARIBOY_FS_ROOT with t.Setenv.
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "proj"), 0o700); err != nil {
 		t.Fatal(err)

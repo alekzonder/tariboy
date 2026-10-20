@@ -58,6 +58,7 @@ func taskRequest(t *testing.T, client *http.Client, method, url string, body any
 }
 
 func TestPoolAndTriggerOperatorHTTPKeepsTypedRoutesWithoutWorkflowEngine(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
@@ -171,6 +172,7 @@ func TestPoolAndTriggerOperatorHTTPKeepsTypedRoutesWithoutWorkflowEngine(t *test
 }
 
 func TestTasksHTTPDerivesCustomerScopesListsAndRejectsStaleRevision(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	taskService := tasks.NewService(st.DB, "customer", func() time.Time {
 		return time.Date(2026, 7, 31, 14, 0, 0, 0, time.UTC)
@@ -266,6 +268,7 @@ func TestTasksHTTPDerivesCustomerScopesListsAndRejectsStaleRevision(t *testing.T
 }
 
 func TestTasksHTTPFiltersStatusViewsBeforeBuildingTheResponse(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
@@ -324,6 +327,7 @@ func TestTasksHTTPFiltersStatusViewsBeforeBuildingTheResponse(t *testing.T) {
 }
 
 func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	taskService := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
@@ -420,6 +424,7 @@ func TestTasksHTTPExposesAndValidatesPriority(t *testing.T) {
 }
 
 func TestTaskCreateAndUpdateAcceptPullRequestAndWaitCustomer(t *testing.T) {
+	t.Parallel()
 	st := storetest.Open(t)
 	svc := tasks.NewService(st.DB, "customer", time.Now)
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{
@@ -465,6 +470,7 @@ func TestTaskCreateAndUpdateAcceptPullRequestAndWaitCustomer(t *testing.T) {
 }
 
 func TestTaskOpenAPIExposesCreateAndUpdatePullRequestAndWaitCustomer(t *testing.T) {
+	t.Parallel()
 	server := api.NewServer(BuildRegistry(), &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	httpServer := httptest.NewServer(server.Handler())
 	t.Cleanup(httpServer.Close)

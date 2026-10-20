@@ -41,6 +41,7 @@ func call(t *testing.T, c *registry.Ctx, path string, p registry.Params) map[str
 }
 
 func TestDaemonStatus(t *testing.T) {
+	t.Parallel()
 	c := ctx(t)
 	m := call(t, c, "daemon.status", registry.Params{})
 	if m["version"] != "v-test" || m["base_dir"] != "/base" {
@@ -52,6 +53,7 @@ func TestDaemonStatus(t *testing.T) {
 }
 
 func TestDaemonConfigRoundTrip(t *testing.T) {
+	t.Parallel()
 	c := ctx(t)
 	call(t, c, "daemon.config.set", registry.Params{"key": "log_level", "value": "debug"})
 	got := call(t, c, "daemon.config.get", registry.Params{"key": "log_level"})
@@ -71,6 +73,7 @@ func TestDaemonConfigRoundTrip(t *testing.T) {
 }
 
 func TestDaemonConfigSetValidates(t *testing.T) {
+	t.Parallel()
 	c := ctx(t)
 	reg := BuildRegistry()
 	cmd, _ := reg.Get("daemon.config.set")
@@ -80,6 +83,7 @@ func TestDaemonConfigSetValidates(t *testing.T) {
 }
 
 func TestDaemonConfigSetKeepsGenericStringBehaviorForUnrelatedKeys(t *testing.T) {
+	t.Parallel()
 	c := ctx(t)
 	got := call(t, c, "daemon.config.set", registry.Params{"key": "arbitrary", "value": "not json"})
 	if got["value"] != "not json" {
@@ -88,6 +92,7 @@ func TestDaemonConfigSetKeepsGenericStringBehaviorForUnrelatedKeys(t *testing.T)
 }
 
 func TestDaemonStatusIncludesHTTPAddr(t *testing.T) {
+	t.Parallel()
 	c := ctx(t)
 	c.HTTPAddr = "127.0.0.1:9990"
 	m := call(t, c, "daemon.status", registry.Params{})
@@ -100,6 +105,7 @@ func TestDaemonStatusIncludesHTTPAddr(t *testing.T) {
 // desktop app renders a "restart me with a listener" banner off this field, so
 // the key must be present and empty rather than absent.
 func TestDaemonStatusHTTPAddrEmptyWhenDisabled(t *testing.T) {
+	t.Parallel()
 	c := ctx(t)
 	m := call(t, c, "daemon.status", registry.Params{})
 	v, ok := m["http_addr"]
@@ -109,6 +115,7 @@ func TestDaemonStatusHTTPAddrEmptyWhenDisabled(t *testing.T) {
 }
 
 func TestBuildRegistryOmitsRetiredCommandAndRoute(t *testing.T) {
+	t.Parallel()
 	reg := BuildRegistry()
 	if _, ok := reg.Get("bd"); ok {
 		t.Fatal("retired command is still registered")
@@ -126,6 +133,7 @@ func TestBuildRegistryOmitsRetiredCommandAndRoute(t *testing.T) {
 }
 
 func TestUsageGroupFilterHelpDescribesFunctionalFilter(t *testing.T) {
+	t.Parallel()
 	cmd, ok := BuildRegistry().Get("usage")
 	if !ok {
 		t.Fatal("usage command not registered")
@@ -143,6 +151,7 @@ func TestUsageGroupFilterHelpDescribesFunctionalFilter(t *testing.T) {
 }
 
 func TestDaemonStatusReportsMissingTools(t *testing.T) {
+	// Sequential: sets PATH with t.Setenv.
 	t.Setenv("PATH", t.TempDir())
 	out, err := daemonStatus().Handler(&registry.Ctx{StartedAt: time.Now()}, nil)
 	if err != nil {

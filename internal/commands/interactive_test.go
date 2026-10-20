@@ -7,6 +7,7 @@ import (
 )
 
 func TestSendKeys_ItemsRouteRaw(t *testing.T) {
+	t.Parallel()
 	c, _, fc := ctxWithStore(t)
 	res, err := agentSendKeys().Handler(c, registry.Params{
 		"name":  "a1",
@@ -24,6 +25,7 @@ func TestSendKeys_ItemsRouteRaw(t *testing.T) {
 }
 
 func TestSendKeys_LegacyKeysRoute(t *testing.T) {
+	t.Parallel()
 	c, _, fc := ctxWithStore(t)
 	if _, err := agentSendKeys().Handler(c, registry.Params{"name": "a1", "keys": "ls"}); err != nil {
 		t.Fatal(err)
@@ -34,6 +36,7 @@ func TestSendKeys_LegacyKeysRoute(t *testing.T) {
 }
 
 func TestParseKeyItems_IgnoresEmptyAndNonObjects(t *testing.T) {
+	t.Parallel()
 	items, ok := parseKeyItems([]any{
 		map[string]any{"text": "a"},
 		map[string]any{}, // empty → dropped

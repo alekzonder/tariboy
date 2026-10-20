@@ -7,6 +7,7 @@ import (
 )
 
 func TestVersionCommandIsLocal(t *testing.T) {
+	t.Parallel()
 	cmd, ok := BuildRegistry().Get("version")
 	if !ok {
 		t.Fatal("version command is not registered")

@@ -8,6 +8,7 @@ import (
 )
 
 func TestPersistentTokenRegistrySurvivesReopen(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "aiproxy-handoff.json")
 	reg, err := OpenTokenRegistry(path, bytes.NewReader(bytes.Repeat([]byte{0xAB}, 1024)))
 	if err != nil {
@@ -52,6 +53,7 @@ func TestPersistentTokenRegistrySurvivesReopen(t *testing.T) {
 }
 
 func TestPersistentTokenRegistryRevokesIterationAcrossReopen(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "aiproxy-handoff.json")
 	random := append(bytes.Repeat([]byte{0xCD}, 24), bytes.Repeat([]byte{0xCE}, 24)...)
 	reg, err := OpenTokenRegistry(path, bytes.NewReader(random))
@@ -81,6 +83,7 @@ func TestPersistentTokenRegistryRevokesIterationAcrossReopen(t *testing.T) {
 }
 
 func TestPersistentTokenRegistryPrunesLeases(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "aiproxy-handoff.json")
 	random := append(bytes.Repeat([]byte{0xEF}, 24), bytes.Repeat([]byte{0xF0}, 24)...)
 	reg, err := OpenTokenRegistry(path, bytes.NewReader(random))
@@ -106,6 +109,7 @@ func TestPersistentTokenRegistryPrunesLeases(t *testing.T) {
 }
 
 func TestPersistentTokenRegistryRejectsMalformedState(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "aiproxy-handoff.json")
 	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
 		t.Fatal(err)

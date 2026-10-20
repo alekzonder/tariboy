@@ -25,6 +25,7 @@ func sampleReq(id, agent, image string, cost float64, ts time.Time) AIRequest {
 }
 
 func TestInsertAndAggregate(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	if err := s.Insert(sampleReq("r1", "alice", "basic", 0.10, base)); err != nil {
@@ -57,6 +58,7 @@ func TestInsertAndAggregate(t *testing.T) {
 }
 
 func TestAggregateFilterAndCostSince(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	s.Insert(sampleReq("r1", "alice", "basic", 0.10, base))
@@ -78,6 +80,7 @@ func TestAggregateFilterAndCostSince(t *testing.T) {
 }
 
 func TestDeleteAll(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	s.Insert(sampleReq("r1", "alice", "basic", 0.10, time.Now()))
 	if err := s.DeleteAll(); err != nil {
@@ -89,6 +92,7 @@ func TestDeleteAll(t *testing.T) {
 }
 
 func TestIterationUsage(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	rows := []AIRequest{
 		{ID: "a1", TS: "2026-07-06T10:00:00Z", Agent: "bot", Iteration: "bot-1-1", InputTokens: 100, OutputTokens: 50, CostUSD: 0.001},
@@ -115,6 +119,7 @@ func TestIterationUsage(t *testing.T) {
 }
 
 func TestNewRequestIDUnique(t *testing.T) {
+	t.Parallel()
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {
 		id := NewRequestID(nil)
@@ -126,6 +131,7 @@ func TestNewRequestIDUnique(t *testing.T) {
 }
 
 func TestStoreGroupSnapshotPersistsValuesAndNulls(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	tagged := sampleReq("r-grouped", "alice", "basic", 0.10, base)
@@ -157,6 +163,7 @@ func TestStoreGroupSnapshotPersistsValuesAndNulls(t *testing.T) {
 }
 
 func TestCurrentGroupSnapshotUsesAgentMembership(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	if _, err := s.db.Exec(`INSERT INTO agents(name, image_ref, "group") VALUES ('alice', 'basic:latest', 'alpha')`); err != nil {
 		t.Fatal(err)
@@ -180,6 +187,7 @@ func TestCurrentGroupSnapshotUsesAgentMembership(t *testing.T) {
 }
 
 func TestUsageGroupFilterRequestsCapsLimitAtStoreBoundary(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	rows := make([]AIRequest, 205)

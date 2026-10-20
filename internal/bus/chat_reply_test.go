@@ -7,6 +7,7 @@ import "testing"
 // agent:worker:inbox and came back to its author as a fresh unprocessed
 // message, so the conversation never saw the answer at all.
 func TestReplyWithoutReplyToLandsInTheChat(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	orig := publish(t, b, Message{
 		Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "ping",
@@ -33,6 +34,7 @@ func TestReplyWithoutReplyToLandsInTheChat(t *testing.T) {
 // existing inbox and origin rules, which is what group requests and plugin
 // sinks depend on.
 func TestReplyTargetFallsThroughForNonChatChannels(t *testing.T) {
+	t.Parallel()
 	b, _ := chatFixture(t)
 	orig := publish(t, b, Message{
 		Channel: "group:dev-team:direct:worker", Source: "agent:lead",
@@ -50,6 +52,7 @@ func TestReplyTargetFallsThroughForNonChatChannels(t *testing.T) {
 // An explicit reply_to still wins: external sinks such as the Telegram bundle
 // route their replies with it.
 func TestExplicitReplyToStillOverridesTheChat(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	orig := publish(t, b, Message{
 		Channel: chat.Channel, Source: "user:customer", Type: "message",
@@ -68,6 +71,7 @@ func TestExplicitReplyToStillOverridesTheChat(t *testing.T) {
 // customer message in a chat becomes a delivery and wakes the agent exactly as
 // an inbox message does.
 func TestChatParticipationDeliversToTheAgent(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	sent := publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "ping"})
 	pending, err := b.Pending("worker", 10)
@@ -86,6 +90,7 @@ func TestChatParticipationDeliversToTheAgent(t *testing.T) {
 // Review Focus item 2: removing a participant unsubscribes it, but deliveries
 // already created are outstanding work and must survive.
 func TestRemovingAParticipantKeepsItsPendingDeliveries(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "still mine"})
 	if err := b.RemoveParticipant(chat.ID, "agent:worker"); err != nil {
@@ -112,6 +117,7 @@ func TestRemovingAParticipantKeepsItsPendingDeliveries(t *testing.T) {
 // A per-agent chat is as protected as the agent's own inbox: an operator
 // unsubscribe must not be able to cut an agent out of its own conversation.
 func TestPerAgentChatSubscriptionsAreProtected(t *testing.T) {
+	t.Parallel()
 	for _, channel := range []string{"chat:dm:worker", "chat:tasks:worker", "chat:service:worker"} {
 		if !IsProtectedSubscription("worker", channel) {
 			t.Errorf("IsProtectedSubscription(worker, %q) = false, want true", channel)

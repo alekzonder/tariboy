@@ -14,6 +14,7 @@ import (
 )
 
 func TestImageSourceValidateAcceptsNewV2Source(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	if _, err := imageSourceStore(c).Create(imagesource.CreateRequest{Name: "reviewer", Prompt: "Review the task."}); err != nil {
 		t.Fatal(err)
@@ -30,6 +31,7 @@ func TestImageSourceValidateAcceptsNewV2Source(t *testing.T) {
 }
 
 func TestImageSourceBuildCopiesGitProvenanceIntoSnapshot(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	want := imagesource.Provenance{
 		RepositoryID: "production-agent-images",
@@ -57,6 +59,7 @@ func TestImageSourceBuildCopiesGitProvenanceIntoSnapshot(t *testing.T) {
 }
 
 func TestImageSourceBuildWaitsForPublicationGate(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	if _, err := imageSourceStore(c).Create(imagesource.CreateRequest{Name: "reviewer", Prompt: "Review the task."}); err != nil {
 		t.Fatal(err)
@@ -92,6 +95,7 @@ func TestImageSourceBuildWaitsForPublicationGate(t *testing.T) {
 }
 
 func TestImageSourceBuildRejectsDisabledExternalPlugin(t *testing.T) {
+	t.Parallel()
 	c := localCtx(t)
 	installDisabledPlugin(t, c, "widget")
 	if _, err := imageSourceStore(c).Create(imagesource.CreateRequest{Name: "reviewer", Prompt: "Review the task."}); err != nil {

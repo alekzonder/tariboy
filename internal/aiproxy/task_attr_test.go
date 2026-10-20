@@ -10,6 +10,7 @@ import (
 // TestMigration0018Applies checks the task_id/epic_id columns and their index
 // exist on a fresh DB (store.Open auto-applies embedded migrations).
 func TestMigration0018Applies(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	// Column presence: a SELECT naming both columns must not error.
 	if _, err := s.db.Exec(`SELECT task_id, epic_id FROM ai_requests LIMIT 0`); err != nil {
@@ -28,6 +29,7 @@ func TestMigration0018Applies(t *testing.T) {
 // TestInsertTaskAttribution: a request carrying task/epic lands with the columns
 // set; an untagged request lands with SQL NULL (not "").
 func TestInsertTaskAttribution(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 
@@ -61,6 +63,7 @@ func TestInsertTaskAttribution(t *testing.T) {
 // TestUpdateTaskResolves: UpdateTask by iteration id (and by token) mutates the
 // live token so Resolve reflects it; clearing with empty strings works too.
 func TestUpdateTaskResolves(t *testing.T) {
+	t.Parallel()
 	reg := NewTokenRegistry(nil)
 	tok, err := reg.Mint(Attribution{Agent: "alice", Iteration: "alice-1"})
 	if err != nil {
@@ -101,6 +104,7 @@ func TestUpdateTaskResolves(t *testing.T) {
 // TestUpdateTaskRace hammers UpdateTask against Resolve/Mint concurrently; run
 // with -race it proves the mutation shares the registry lock.
 func TestUpdateTaskRace(t *testing.T) {
+	t.Parallel()
 	reg := NewTokenRegistry(nil)
 	tok, err := reg.Mint(Attribution{Agent: "a", Iteration: "a-1"})
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 )
 
 func TestAgentShellScriptCommandsPersistAndRejectInvalidBash(t *testing.T) {
+	t.Parallel()
 	c, agents, _ := ctxWithStore(t)
 	if err := agents.Create(agent.Agent{Name: "a1", OnTimeout: "restart", OnError: "restart"}); err != nil {
 		t.Fatal(err)
@@ -32,6 +33,7 @@ func TestAgentShellScriptCommandsPersistAndRejectInvalidBash(t *testing.T) {
 }
 
 func TestGlobalShellScriptCommandsPersistAndRejectInvalidBash(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	valid := "export COLOR=green\n"
 	if _, err := h(t, "daemon.agent-shell-script.set")(c, registry.Params{"script": valid}); err != nil {
@@ -50,6 +52,7 @@ func TestGlobalShellScriptCommandsPersistAndRejectInvalidBash(t *testing.T) {
 }
 
 func TestShellScriptCommandsRegisterRoutes(t *testing.T) {
+	t.Parallel()
 	reg := BuildRegistry()
 	for _, want := range []struct{ path, method, route string }{
 		{"daemon.agent-shell-script.get", "GET", "/api/daemon/agent-shell-script"},

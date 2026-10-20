@@ -8,6 +8,7 @@ import (
 )
 
 func TestAgentColorSetReadClear(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	if _, err := agentColor().Handler(c, registry.Params{"name": "a1", "value": "#4f8cff"}); err != nil {
 		t.Fatal(err)
@@ -30,6 +31,7 @@ func TestAgentColorSetReadClear(t *testing.T) {
 }
 
 func TestAgentColorReadDoesNotWrite(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	if _, err := agentColor().Handler(c, registry.Params{"name": "a1", "value": "#ff8800"}); err != nil {
 		t.Fatal(err)
@@ -45,6 +47,7 @@ func TestAgentColorReadDoesNotWrite(t *testing.T) {
 }
 
 func TestAgentColorRejectsInvalidHex(t *testing.T) {
+	t.Parallel()
 	c, _ := seedAgent(t)
 	_, err := agentColor().Handler(c, registry.Params{"name": "a1", "value": "blue"})
 	if _, ok := err.(api.UserError); !ok {
@@ -58,6 +61,7 @@ func TestAgentColorRejectsInvalidHex(t *testing.T) {
 }
 
 func TestIsValidHex(t *testing.T) {
+	t.Parallel()
 	good := []string{"#000000", "#4f8cff", "#ABCDEF", "#ff8800"}
 	for _, s := range good {
 		if !isValidHex(s) {

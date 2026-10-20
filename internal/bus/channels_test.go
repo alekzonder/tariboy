@@ -3,6 +3,7 @@ package bus
 import "testing"
 
 func TestChannelHelpers(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		got, want, kind string
 	}{

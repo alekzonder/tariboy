@@ -27,6 +27,7 @@ func seedInbox(t *testing.T, b *bus.Bus, agent, channel string, texts ...string)
 }
 
 func TestAgentInboxClear(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	if err := agent.NewStore(c.Store).Create(agent.Agent{Name: "worker", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -49,6 +50,7 @@ func TestAgentInboxClear(t *testing.T) {
 }
 
 func TestAgentInboxListAndStatus(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	msgs := seedInbox(t, b, "worker", "chat:room", "one", "two")
 
@@ -94,6 +96,7 @@ func TestAgentInboxListAndStatus(t *testing.T) {
 }
 
 func TestAgentInboxProcessedValidation(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	msgs := seedInbox(t, b, "worker", "chat:room", "x")
 
@@ -110,6 +113,7 @@ func TestAgentInboxProcessedValidation(t *testing.T) {
 }
 
 func TestAgentInboxReply(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	msgs := seedInbox(t, b, "worker", "chat:room", "please answer")
 
@@ -147,6 +151,7 @@ func TestAgentInboxReply(t *testing.T) {
 }
 
 func TestAgentInboxRequeue(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	msgs := seedInbox(t, b, "worker", "chat:room", "x")
 
@@ -162,6 +167,7 @@ func TestAgentInboxRequeue(t *testing.T) {
 }
 
 func TestChannelWatches(t *testing.T) {
+	t.Parallel()
 	c, b := ctxWithBus(t)
 	params := map[string]any{"q": "status:open"}
 	if _, err := b.SubscribeParams("worker", "issue-provider:issues", nil, nil, params); err != nil {

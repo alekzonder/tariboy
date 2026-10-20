@@ -13,6 +13,7 @@ import (
 )
 
 func TestUsageAndBudget(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	now := time.Now().UTC()
 	ap := aiproxy.NewStore(c.Store, func() time.Time { return now })
@@ -50,6 +51,7 @@ func TestUsageAndBudget(t *testing.T) {
 }
 
 func TestUsageGroupFilterKeepsResponseProjectionsConsistent(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	ap := aiproxy.NewStore(c.Store, nil)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
@@ -141,6 +143,7 @@ func TestUsageGroupFilterKeepsResponseProjectionsConsistent(t *testing.T) {
 // matches enforcement (GroupCostSince), and does NOT fold in non-member/global
 // spend the way a naive CostSince("") would.
 func TestBudgetStatusShowsGroupScope(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	ap := aiproxy.NewStore(c.Store, nil)
 
@@ -192,6 +195,7 @@ func TestBudgetStatusShowsGroupScope(t *testing.T) {
 }
 
 func TestBudgetSetValidation(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 
 	countBudgets := func() int {
@@ -247,6 +251,7 @@ func TestBudgetSetValidation(t *testing.T) {
 }
 
 func TestUsageTimeBoundsValidateAndAcceptOffsets(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)

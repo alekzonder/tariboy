@@ -83,6 +83,7 @@ func userError(t *testing.T, err error, code string, status int) api.UserError {
 }
 
 func TestWorkflowImageCommandsRegisteredWithRoutes(t *testing.T) {
+	t.Parallel()
 	want := map[string]registry.HTTPRoute{
 		"workflow.validate": {Method: http.MethodPost, Path: "/api/workflow-images/validate"},
 		"workflow.build":    {Method: http.MethodPost, Path: "/api/workflow-images/build"},
@@ -106,6 +107,7 @@ func TestWorkflowImageCommandsRegisteredWithRoutes(t *testing.T) {
 }
 
 func TestWorkflowValidateReportsResultWithoutWriting(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	src := writeWorkflowSource(t, t.TempDir(), "1.0.0")
 	got, err := cmdHandler(t, "workflow.validate")(c, registry.Params{"path": src})
@@ -139,6 +141,7 @@ func TestWorkflowValidateReportsResultWithoutWriting(t *testing.T) {
 // TestWorkflowValidateReportsWhatBuildRefuses pins that validate runs the
 // same validation as build: every source build refuses, validate reports.
 func TestWorkflowValidateReportsWhatBuildRefuses(t *testing.T) {
+	t.Parallel()
 	cases := map[string]func(t *testing.T, src string){
 		"transition target names no status": func(t *testing.T, src string) {
 			m := strings.Replace(strings.ReplaceAll(workflowTestManifest, "VERSION", "1.0.0"), "to: finished", "to: nowhere", 1)
@@ -178,6 +181,7 @@ func TestWorkflowValidateReportsWhatBuildRefuses(t *testing.T) {
 }
 
 func TestWorkflowValidateUnparsableManifestIsWorkflowInvalid(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "Workflowfile.yaml"), []byte("bogus: 1\n"), 0o644); err != nil {
@@ -188,6 +192,7 @@ func TestWorkflowValidateUnparsableManifestIsWorkflowInvalid(t *testing.T) {
 }
 
 func TestWorkflowSourceSelection(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	for _, path := range []string{"workflow.validate", "workflow.build"} {
 		_, err := cmdHandler(t, path)(c, registry.Params{"source": "team/demo", "path": "/x"})
@@ -198,6 +203,7 @@ func TestWorkflowSourceSelection(t *testing.T) {
 }
 
 func TestWorkflowBuildFromStoreSelector(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	root := t.TempDir()
 	writeWorkflowSource(t, filepath.Join(root, "workflows", "demo"), "2.0.0")
@@ -218,6 +224,7 @@ func TestWorkflowBuildFromStoreSelector(t *testing.T) {
 }
 
 func TestWorkflowBuildLsInspectRm(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	src := writeWorkflowSource(t, t.TempDir(), "1.0.0")
 
@@ -293,6 +300,7 @@ func TestWorkflowBuildLsInspectRm(t *testing.T) {
 }
 
 func TestWorkflowBuildErrors(t *testing.T) {
+	t.Parallel()
 	c := workflowCtx(t)
 	src := writeWorkflowSource(t, t.TempDir(), "1.0.0")
 	if _, err := cmdHandler(t, "workflow.build")(c, registry.Params{"path": src}); err != nil {

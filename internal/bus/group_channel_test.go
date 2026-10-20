@@ -3,6 +3,7 @@ package bus
 import "testing"
 
 func TestGroupInboxNameAndKind(t *testing.T) {
+	t.Parallel()
 	if got := GroupInbox("research"); got != "group:research:inbox" {
 		t.Fatalf("GroupInbox = %q", got)
 	}
@@ -15,6 +16,7 @@ func TestGroupInboxNameAndKind(t *testing.T) {
 }
 
 func TestDeleteChannel(t *testing.T) {
+	t.Parallel()
 	b := newBus(t)
 	if _, err := b.Subscribe("scout", "group:research:broadcast", nil, nil); err != nil {
 		t.Fatal(err)

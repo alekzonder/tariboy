@@ -8,6 +8,7 @@ import (
 )
 
 func TestCost(t *testing.T) {
+	t.Parallel()
 	p := &Pricing{table: map[string]ModelPrice{
 		"claude-opus-4-8": {InputPerMtok: 5, OutputPerMtok: 25, CacheWritePerMtok: 6.25, CacheReadPerMtok: 0.5},
 	}}
@@ -30,6 +31,7 @@ func TestCost(t *testing.T) {
 }
 
 func TestPricingPriceReportsUnknownModel(t *testing.T) {
+	t.Parallel()
 	p := NewPricing(nil, nil, nil)
 	cost, known := p.Price("mystery", Usage{InputTokens: 1_000_000})
 	if known || cost != 0 {
@@ -38,6 +40,7 @@ func TestPricingPriceReportsUnknownModel(t *testing.T) {
 }
 
 func TestPricingPriceUsesCompleteGenerationDuringReplace(t *testing.T) {
+	t.Parallel()
 	old := ModelPrice{InputPerMtok: 1, OutputPerMtok: 2, CacheWritePerMtok: 4, CacheReadPerMtok: 8}
 	new := ModelPrice{InputPerMtok: 10, OutputPerMtok: 20, CacheWritePerMtok: 40, CacheReadPerMtok: 80}
 	p := NewPricing(map[string]ModelPrice{"model": old}, nil, nil)
@@ -70,6 +73,7 @@ func TestPricingPriceUsesCompleteGenerationDuringReplace(t *testing.T) {
 }
 
 func TestLoadFallbackRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := storetest.Open(t)
 	if err := SeedDefaults(s); err != nil {
 		t.Fatal(err)
@@ -96,6 +100,7 @@ func TestLoadFallbackRoundTrip(t *testing.T) {
 }
 
 func TestPricingSourcePrecedenceAndReplace(t *testing.T) {
+	t.Parallel()
 	fallback := map[string]ModelPrice{"same": {InputPerMtok: 1}, "fallback": {InputPerMtok: 2}}
 	p := NewPricing(fallback, map[string]ModelPrice{"same": {InputPerMtok: 3}, "remote": {InputPerMtok: 4}}, map[string]ModelPrice{"same": {InputPerMtok: 5}})
 	assertCost(t, p, "same", 5)
@@ -107,6 +112,7 @@ func TestPricingSourcePrecedenceAndReplace(t *testing.T) {
 }
 
 func TestPricingLoadAndReplaceLiteLLM(t *testing.T) {
+	t.Parallel()
 	s := storetest.Open(t)
 	if _, err := s.DB.Exec(`INSERT INTO ai_pricing(model, source, input_per_mtok) VALUES ('same', 'manual', 5)`); err != nil {
 		t.Fatal(err)

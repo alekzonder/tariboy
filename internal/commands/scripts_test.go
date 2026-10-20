@@ -94,6 +94,7 @@ func (f *fakeScriptControl) RemoveScript(owner, id string) error {
 }
 
 func TestScriptCommandsExposeDefinitionsAndRuns(t *testing.T) {
+	t.Parallel()
 	db := storetest.Open(t)
 	if err := agent.NewStore(db).Create(agent.Agent{Name: "alice", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)

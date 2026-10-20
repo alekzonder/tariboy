@@ -11,6 +11,7 @@ func msg() Message {
 }
 
 func TestMatcherMatch(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		m    Matcher
@@ -38,6 +39,7 @@ func TestMatcherMatch(t *testing.T) {
 }
 
 func TestMatchType(t *testing.T) {
+	t.Parallel()
 	if !MatchType(nil, "anything") {
 		t.Fatal("empty filter must match all")
 	}

@@ -6,6 +6,7 @@ import (
 )
 
 func TestTaskUsageGroupsTaggedRequestsByTaskAndAgentInWindow(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	must(t, s.InsertBatch([]AIRequest{

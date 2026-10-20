@@ -10,6 +10,7 @@ import (
 )
 
 func TestHarnessModelsRoute(t *testing.T) {
+	t.Parallel()
 	cmd, ok := BuildRegistry().Get("harness.models")
 	if !ok {
 		t.Fatal("harness.models not registered")
@@ -20,6 +21,7 @@ func TestHarnessModelsRoute(t *testing.T) {
 }
 
 func TestHarnessModelsReturnsCatalogAndCLIErrors(t *testing.T) {
+	// Sequential: sets PATH with t.Setenv.
 	c, _, _ := ctxWithStore(t)
 	dir := t.TempDir()
 	script := "#!/bin/sh\necho openai/gpt-5\n"
@@ -51,6 +53,7 @@ func TestHarnessModelsReturnsCatalogAndCLIErrors(t *testing.T) {
 }
 
 func TestHarnessCodexApprovalGetSet(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	get, set := h(t, "harness.codex-approval.get"), h(t, "harness.codex-approval.set")
 
@@ -81,6 +84,7 @@ func TestHarnessCodexApprovalGetSet(t *testing.T) {
 }
 
 func TestHarnessCodexApprovalRoutes(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	for path, want := range map[string]string{
 		"harness.codex-approval.get": "GET",

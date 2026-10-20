@@ -8,6 +8,7 @@ import (
 // The list is built from one summary query and one participants query for all
 // chats; each chat must still get only its own messages and participants.
 func TestChatListKeepsEachChatSeparate(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	tasks, err := b.GetChat(ChatIDTasks("worker"))
 	if err != nil {
@@ -65,6 +66,7 @@ func chatFixture(t *testing.T) (*Bus, Chat) {
 // that history lives on the two merged inboxes, and messages are never
 // rewritten onto the new chat channel.
 func TestChatFeedUnionsLegacyHistoryAndChatChannel(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	publish(t, b, Message{Channel: InboxChannel("worker"), Source: "user:customer", Type: "message", Text: "old customer"})
 	publish(t, b, Message{Channel: "user:customer", Source: "agent:worker", Type: "message", Text: "old agent"})
@@ -86,6 +88,7 @@ func TestChatFeedUnionsLegacyHistoryAndChatChannel(t *testing.T) {
 // A chat without pre-migration history reads only its own channel, so a
 // service or tasks chat never inherits the conversation.
 func TestChatFeedWithoutLegacyAgentReadsOnlyItsChannel(t *testing.T) {
+	t.Parallel()
 	b, _ := chatFixture(t)
 	service, err := b.GetChat(ChatIDService("worker"))
 	if err != nil {
@@ -106,6 +109,7 @@ func TestChatFeedWithoutLegacyAgentReadsOnlyItsChannel(t *testing.T) {
 // before pages backwards by timestamp across both sources, and limit caps the
 // page it returns.
 func TestChatFeedPagesBackwardsByTimestamp(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	publish(t, b, Message{Channel: InboxChannel("worker"), Source: "user:customer", Type: "message", Text: "first"})
 	second := publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "second"})
@@ -130,6 +134,7 @@ func TestChatFeedPagesBackwardsByTimestamp(t *testing.T) {
 // The chat list is per participant: it carries the chat identity, its last
 // message and the unread count measured against that participant read mark.
 func TestChatListCarriesIdentityAndUnread(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "mine"})
 	agentSaid := publish(t, b, Message{Channel: chat.Channel, Source: "agent:worker", Type: "message", Text: "theirs"})
@@ -176,6 +181,7 @@ func TestChatListCarriesIdentityAndUnread(t *testing.T) {
 // must not resurrect messages that were read. Marking unread is the one
 // deliberate exception and asks for it explicitly.
 func TestChatReadMarkOnlyMovesForward(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	if err := b.SetReadTS(chat.ID, "user:customer", "2026-09-22T10:00:00.000000000Z", false); err != nil {
 		t.Fatal(err)
@@ -197,6 +203,7 @@ func TestChatReadMarkOnlyMovesForward(t *testing.T) {
 // A chat nobody has written in yet has no last message, so it has no sender
 // either rather than an invented "system".
 func TestChatListLeavesAnEmptyChatWithoutASender(t *testing.T) {
+	t.Parallel()
 	b, _ := chatFixture(t)
 	list, err := b.ChatList("user:customer", DefaultChatTypes)
 	if err != nil {
@@ -217,6 +224,7 @@ func TestChatListLeavesAnEmptyChatWithoutASender(t *testing.T) {
 // workflow notice in the tasks chat is addressed to the agent, so it must not
 // light the sidebar badge; the agent own word in that chat still does.
 func TestChatListCountsOnlyParticipantsAsUnread(t *testing.T) {
+	t.Parallel()
 	b, _ := chatFixture(t)
 	tasks, err := b.GetChat(ChatIDTasks("worker"))
 	if err != nil {

@@ -19,6 +19,7 @@ func taskReq(id, agent string, cost float64, ts time.Time, task, epic string) AI
 }
 
 func TestAggregateByAllGroupings(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	// alice: two reqs on task T1/epic E1 (iterations it-1, it-2), one untagged on it-1.
@@ -62,6 +63,7 @@ func TestAggregateByAllGroupings(t *testing.T) {
 }
 
 func TestAggregateByUnknownGroupBy(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	if _, err := s.AggregateBy(UsageFilter{}, "nonsense"); !errors.Is(err, ErrBadGroupBy) {
 		t.Fatalf("want ErrBadGroupBy, got %v", err)
@@ -69,6 +71,7 @@ func TestAggregateByUnknownGroupBy(t *testing.T) {
 }
 
 func TestSeriesBucketing(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC) // 09:00:00
 	must(t, s.InsertBatch([]AIRequest{
@@ -109,6 +112,7 @@ func TestSeriesBucketing(t *testing.T) {
 //
 // The bounds must compare on real time, so only the in-window row survives.
 func TestWindowBoundsSubSecond(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	sec := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	// rIn:  .123456Z — inside [.123, .124), 6 frac digits vs 3-digit bound (0.11)
@@ -149,6 +153,7 @@ func TestWindowBoundsSubSecond(t *testing.T) {
 }
 
 func TestSeriesUnknownBucket(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	if _, err := s.Series(UsageFilter{}, "3m"); !errors.Is(err, ErrBadBucket) {
 		t.Fatalf("want ErrBadBucket, got %v", err)
@@ -156,6 +161,7 @@ func TestSeriesUnknownBucket(t *testing.T) {
 }
 
 func TestUsageGroupFilterAppliesToEveryProjection(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	base := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
 	grouped := func(id, group string, cost float64, ts time.Time) AIRequest {
@@ -254,6 +260,7 @@ func TestUsageGroupFilterAppliesToEveryProjection(t *testing.T) {
 }
 
 func TestUsageReportUsesSingleReadSnapshot(t *testing.T) {
+	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "usage-report.db")
 	readerDB := storetest.OpenAt(t, dbPath)
 	writerDB, err := store.Open(dbPath)
@@ -305,6 +312,7 @@ func TestUsageReportUsesSingleReadSnapshot(t *testing.T) {
 }
 
 func TestUsageGroupFilterRequestsOrdersRFC3339NanoExactlyAtCap(t *testing.T) {
+	t.Parallel()
 	requestAt := func(id, ts string) AIRequest {
 		r := sampleReq(id, "alice", "basic", 0.01, time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC))
 		r.TS = ts

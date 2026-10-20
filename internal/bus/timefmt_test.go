@@ -9,6 +9,7 @@ import (
 
 // Every time the bus writes is in the canonical stored format.
 func TestBusWritesCanonicalTimes(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	msg := publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "hi"})
 	if _, err := store.ParseTime(msg.TS); err != nil {
@@ -39,6 +40,7 @@ func TestBusWritesCanonicalTimes(t *testing.T) {
 // so the forward-only comparison still follows time order: 10ns is earlier
 // than 11ns although ".00000001Z" sorts after ".000000011Z" as text.
 func TestSetReadTSNormalizesBeforeComparing(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	base := time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC)
 	if err := b.SetReadTS(chat.ID, "user:customer", base.Add(11).Format(time.RFC3339Nano), false); err != nil {
@@ -61,6 +63,7 @@ func TestSetReadTSNormalizesBeforeComparing(t *testing.T) {
 
 // A paging cursor with an offset is the same instant as the canonical ts.
 func TestChatFeedNormalizesBeforeCursor(t *testing.T) {
+	t.Parallel()
 	b, chat := chatFixture(t)
 	publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "first"})
 	second := publish(t, b, Message{Channel: chat.Channel, Source: "user:customer", Type: "message", Text: "second"})

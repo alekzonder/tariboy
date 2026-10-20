@@ -15,6 +15,7 @@ import (
 // This fails if the agent-budget store stops treating absent rows as four
 // unlimited limits, or if it uses rolling rather than calendar windows.
 func TestAgentBudgetStatusUsesCalendarWindows(t *testing.T) {
+	t.Parallel()
 	loc := time.FixedZone("operator", -7*60*60)
 	now := time.Date(2026, time.August, 19, 10, 30, 0, 0, loc) // Wednesday
 	st := newStore(t)
@@ -55,6 +56,7 @@ func TestAgentBudgetStatusUsesCalendarWindows(t *testing.T) {
 }
 
 func TestSetAgentBudgetRejectsInvalidLimits(t *testing.T) {
+	t.Parallel()
 	st := newStore(t)
 	for _, budget := range []AgentBudget{{HourUSD: -1}, {DayUSD: math.Inf(1)}, {WeekUSD: math.NaN()}} {
 		if err := st.SetAgentBudget("alice", budget); err == nil {
@@ -67,6 +69,7 @@ func TestSetAgentBudgetRejectsInvalidLimits(t *testing.T) {
 // timestamp immediately after a whole-second calendar boundary sorts before
 // the boundary's trailing Z even though it belongs inside the window.
 func TestAgentBudgetStatusIncludesFractionalSecondAfterCalendarBoundary(t *testing.T) {
+	t.Parallel()
 	st := newStore(t)
 	now := time.Date(2026, time.July, 6, 10, 0, 1, 0, time.UTC)
 	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 0.50}); err != nil {
@@ -88,6 +91,7 @@ func TestAgentBudgetStatusIncludesFractionalSecondAfterCalendarBoundary(t *testi
 // This fails if the window sums stop normalizing timestamps with an offset
 // other than Z, or pick up another agent's spend.
 func TestAgentBudgetStatusNormalizesOffsetTimestamps(t *testing.T) {
+	t.Parallel()
 	st := newStore(t)
 	now := time.Date(2026, time.July, 6, 10, 30, 0, 0, time.UTC)
 	for _, row := range []AIRequest{
@@ -114,6 +118,7 @@ func TestAgentBudgetStatusNormalizesOffsetTimestamps(t *testing.T) {
 // request behind it, so the window sums must seek a bounded range of one
 // covering index.
 func TestAgentBudgetSpendSeeksCoveringIndexRange(t *testing.T) {
+	t.Parallel()
 	st := newStore(t)
 	query, args := agentWindowSpendQuery("alice", time.Date(2026, time.July, 6, 10, 30, 0, 0, time.UTC))
 	rows, err := st.db.Query(`EXPLAIN QUERY PLAN `+query, args...)
@@ -140,6 +145,7 @@ func TestAgentBudgetSpendSeeksCoveringIndexRange(t *testing.T) {
 }
 
 func TestBudgetStoreCRUD(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	if err := s.SetBudget(Budget{Scope: "agent:alice", LimitUSD: 1.0, PeriodS: 3600, Mode: "block"}); err != nil {
 		t.Fatal(err)
@@ -165,6 +171,7 @@ func TestBudgetStoreCRUD(t *testing.T) {
 }
 
 func TestBudgetCacheCheck(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t)
 	// Spend $0.80 in the last hour for alice.
@@ -188,6 +195,7 @@ func TestBudgetCacheCheck(t *testing.T) {
 // This fails if agent budget enforcement waits for the periodic cache refresh
 // after a newly persisted cost exhausts a calendar window.
 func TestBudgetCacheCheckUsesLatestAgentSpendWithoutRefresh(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t)
 	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 0.50}); err != nil {
@@ -213,6 +221,7 @@ func TestBudgetCacheCheckUsesLatestAgentSpendWithoutRefresh(t *testing.T) {
 // This fails if an already-cached agent block survives a later update that
 // raises the limit (including zero, which means unlimited).
 func TestBudgetCacheCheckUsesLatestAgentLimitsWithoutRefresh(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t)
 	if err := st.Insert(sampleReq("already-exhausted", "alice", "basic", 0.60, now)); err != nil {
@@ -237,6 +246,7 @@ func TestBudgetCacheCheckUsesLatestAgentLimitsWithoutRefresh(t *testing.T) {
 }
 
 func TestBudgetBlockMiddleware(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t)
 	st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute)))
@@ -268,6 +278,7 @@ func TestBudgetBlockMiddleware(t *testing.T) {
 // A Connect client (the cursor agent CLI) reads errors as Connect JSON, not
 // as an Anthropic error envelope.
 func TestBudgetBlockCursorConnectError(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t)
 	st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute)))
@@ -300,6 +311,7 @@ func TestBudgetBlockCursorConnectError(t *testing.T) {
 // This fails if the proxy stops applying a configured calendar agent limit
 // before reaching the upstream provider.
 func TestAgentCalendarBudgetBlockMiddleware(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 30, 0, 0, time.UTC)
 	st := newStore(t)
 	if err := st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute))); err != nil {
@@ -333,6 +345,7 @@ func TestAgentCalendarBudgetBlockMiddleware(t *testing.T) {
 }
 
 func TestBudgetWarnMiddlewareProceeds(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t)
 	st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute)))
@@ -369,6 +382,7 @@ func TestBudgetWarnMiddlewareProceeds(t *testing.T) {
 // TestBudgetCacheRace exercises the refresher goroutine writing the cache while
 // the request path reads it, so `go test -race` proves the RWMutex covers both.
 func TestBudgetCacheRace(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	st := newStore(t)
 	st.Insert(sampleReq("r1", "alice", "basic", 0.80, now.Add(-time.Minute)))
@@ -403,6 +417,7 @@ func TestBudgetCacheRace(t *testing.T) {
 // The agents list reads every agent's budget in one call; it must report
 // exactly what the per-agent read reports.
 func TestAgentBudgetStatusesMatchesPerAgentStatus(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, time.August, 19, 10, 30, 0, 0, time.UTC)
 	st := newStore(t)
 	if err := st.SetAgentBudget("alice", AgentBudget{HourUSD: 1, MonthUSD: 5}); err != nil {

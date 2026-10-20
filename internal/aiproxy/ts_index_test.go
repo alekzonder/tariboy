@@ -44,6 +44,7 @@ func explain(db *sql.DB, query string, args ...any) string {
 var tsIndexSeek = regexp.MustCompile(`INDEX idx_ai_requests_(ts|agent_ts_cost) \([^)]*ts[<>]`)
 
 func TestUsageQueriesUseTsIndex(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	since := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	for _, agent := range []string{"", "alice"} {
@@ -92,6 +93,7 @@ func TestUsageQueriesUseTsIndex(t *testing.T) {
 // including two values in one second whose RFC3339Nano text has a different
 // width (10ns and 11ns).
 func TestUsageBoundsAreExactToTheNanosecond(t *testing.T) {
+	t.Parallel()
 	s := newStore(t)
 	bound := time.Date(2026, 7, 6, 9, 0, 0, 11, time.UTC)
 	for id, ts := range map[string]time.Time{

@@ -11,6 +11,7 @@ import (
 )
 
 func TestIterationLsInspectLogs(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
@@ -46,6 +47,7 @@ func TestIterationLsInspectLogs(t *testing.T) {
 }
 
 func TestIterationProductiveInViews(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
@@ -113,6 +115,7 @@ func TestIterationProductiveInViews(t *testing.T) {
 }
 
 func TestIterationLogsNotFound(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	if _, err := h(t, "iteration.logs")(c, registry.Params{"name": "ghost", "id": "nope"}); err == nil {

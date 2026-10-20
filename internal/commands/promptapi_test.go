@@ -24,6 +24,7 @@ func imageSHA256(body string) string {
 }
 
 func TestContextGetSet(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 
@@ -49,6 +50,7 @@ func TestContextGetSet(t *testing.T) {
 }
 
 func TestContextGetUnknownAgent(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	if _, err := h(t, "context.get")(c, registry.Params{"name": "ghost"}); err == nil {
 		t.Fatal("expected not_found error")
@@ -56,6 +58,7 @@ func TestContextGetUnknownAgent(t *testing.T) {
 }
 
 func TestPromptGet(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", UserPrompt: "focus on X", OnTimeout: "restart", OnError: "restart"})
 
@@ -92,6 +95,7 @@ func TestPromptGet(t *testing.T) {
 }
 
 func TestPromptGetNotProvisioned(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 	if _, err := h(t, "prompt.get")(c, registry.Params{"name": "smoke"}); err == nil {
@@ -100,6 +104,7 @@ func TestPromptGetNotProvisioned(t *testing.T) {
 }
 
 func TestPromptPreviewBareHasNoTaskProcessingOrder(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "bare", ImageRef: image.BareRef.String()}); err != nil {
 		t.Fatal(err)
@@ -121,6 +126,7 @@ func TestPromptPreviewBareHasNoTaskProcessingOrder(t *testing.T) {
 }
 
 func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "v2", UserPrompt: "USER", Enabled: true, OnTimeout: "restart", OnError: "restart"})
 	taskService := tasks.NewService(c.Store.DB, "customer", time.Now)
@@ -171,6 +177,7 @@ func TestPromptPreviewV2UsesTemplateWithoutDrainingRuntimeMessages(t *testing.T)
 }
 
 func TestPromptPreviewV2RendersAuthoritativeGoal(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{
 		Name: "v2", Enabled: true,

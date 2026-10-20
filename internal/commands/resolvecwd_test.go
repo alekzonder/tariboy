@@ -8,6 +8,7 @@ import (
 // resolveCwd expands relative/~ against the fs root and honors absolute paths,
 // leaving existence/dir checks to agent.ValidateCwd.
 func TestResolveCwd(t *testing.T) {
+	// Sequential: sets TARIBOY_FS_ROOT with t.Setenv.
 	root := t.TempDir()
 	t.Setenv("TARIBOY_FS_ROOT", root)
 

@@ -3,6 +3,7 @@ package commands
 import "testing"
 
 func TestBuildRegistryValidates(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	if err := r.Validate(); err != nil {
 		t.Fatalf("BuildRegistry did not validate: %v", err)
@@ -10,6 +11,7 @@ func TestBuildRegistryValidates(t *testing.T) {
 }
 
 func TestRenamedDualNodePaths(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	for _, p := range []string{"agent.status.show", "agent.alias.set", "agent.notes.set"} {
 		if _, ok := r.Get(p); !ok {
@@ -27,6 +29,7 @@ func TestRenamedDualNodePaths(t *testing.T) {
 }
 
 func TestDaemonStatusCLIHidden(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	c, ok := r.Get("daemon.status")
 	if !ok {

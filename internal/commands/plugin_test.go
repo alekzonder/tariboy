@@ -78,6 +78,7 @@ func (f *fakePlugins) ApplyActionSubscriptions(name string, response map[string]
 }
 
 func TestPluginCommands(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	fp := &fakePlugins{}
 	c.Plugins = fp
@@ -126,6 +127,7 @@ func wantUserErr(t *testing.T, err error, code string) {
 // with a traversing name return api.UserError{Code:"bad_name"} and NEVER reach
 // the host (fp.removed stays empty).
 func TestPluginTraversalNameRejected(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	fp := &fakePlugins{}
 	c.Plugins = fp
@@ -156,6 +158,7 @@ func (r *runningPlugins) Inspect(name string) (map[string]any, error) {
 // TestPluginRmForce proves --force wiring: without --force a running plugin is
 // refused (Code:"running", host untouched); with --force it is removed.
 func TestPluginRmForce(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	rp := &runningPlugins{}
 	c.Plugins = rp
@@ -178,6 +181,7 @@ func TestPluginRmForce(t *testing.T) {
 // rejects a traversing name before the host is touched, and maps ErrNotFound to
 // a clean not_found UserError.
 func TestPluginRestart(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	fp := &fakePlugins{}
 	c.Plugins = fp
@@ -215,6 +219,7 @@ func TestPluginRestart(t *testing.T) {
 // TestPluginActionForwards proves --data is forwarded as an opaque object with
 // only the positional action added by core.
 func TestPluginActionForwards(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	var got map[string]any
 	c.Plugins = &fakePlugins{
@@ -245,6 +250,7 @@ func TestPluginActionForwards(t *testing.T) {
 }
 
 func TestPluginActionRejectsMalformedDataBeforeCallingPlugin(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	fp := &fakePlugins{}
 	c.Plugins = fp
@@ -260,6 +266,7 @@ func TestPluginActionRejectsMalformedDataBeforeCallingPlugin(t *testing.T) {
 }
 
 func TestPluginActionRejectsManifestInvalidDataBeforeCallingPlugin(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	fp := &fakePlugins{validateFn: func(_, _ string, body map[string]any) error {
 		if _, found := body["admin"]; found {
@@ -279,6 +286,7 @@ func TestPluginActionRejectsManifestInvalidDataBeforeCallingPlugin(t *testing.T)
 
 // TestPluginActionMapsErrors proves host/plugin errors become clean UserErrors.
 func TestPluginActionMapsErrors(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 
 	c.Plugins = &fakePlugins{actionFn: func(string, map[string]any) (map[string]any, error) {
@@ -296,6 +304,7 @@ func TestPluginActionMapsErrors(t *testing.T) {
 
 // TestPluginRoutesForwards proves the routes handler forwards to the host.
 func TestPluginRoutesForwards(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	c.Plugins = &fakePlugins{routesFn: func(name string) (map[string]any, error) {
 		return map[string]any{"routes": map[string]any{"c1": "chat:orders"}, "has_token": false}, nil
@@ -310,6 +319,7 @@ func TestPluginRoutesForwards(t *testing.T) {
 }
 
 func TestPluginContributionsForwardsSafeManifestData(t *testing.T) {
+	t.Parallel()
 	c, _, _ := ctxWithStore(t)
 	c.Plugins = &fakePlugins{contributions: []plugins.Contribution{{
 		Name:     "telegram",

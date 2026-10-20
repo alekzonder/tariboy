@@ -19,6 +19,7 @@ import (
 )
 
 func TestPullConfinement(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	work := filepath.Join(t.TempDir(), "work")
@@ -46,6 +47,7 @@ func TestPullConfinement(t *testing.T) {
 // workdir cannot be used to read (pull) outside of it, while a
 // legitimate real subdirectory still works and lexical escapes stay rejected.
 func TestSymlinkConfinement(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	c.BaseDir = t.TempDir()
 	work := filepath.Join(t.TempDir(), "work")
@@ -92,6 +94,7 @@ func TestSymlinkConfinement(t *testing.T) {
 }
 
 func TestParseCp(t *testing.T) {
+	t.Parallel()
 	name, remote, local, up, err := parseCp("./a.txt", "")
 	if err != nil || name != "" || remote != "" || local != "./a.txt" || !up {
 		t.Fatalf("upload parse: %q %q %q %v %v", name, remote, local, up, err)
@@ -112,6 +115,7 @@ func TestParseCp(t *testing.T) {
 }
 
 func TestServerUploadFiles(t *testing.T) {
+	t.Parallel()
 	c := &registry.Ctx{BaseDir: t.TempDir()}
 	upload := h(t, "files.upload")
 	var previous string
@@ -166,6 +170,7 @@ func TestServerUploadFiles(t *testing.T) {
 }
 
 func TestServerUploadRejectsDeclaredOversizedHTTPBodyBeforeReading(t *testing.T) {
+	t.Parallel()
 	c := &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	server := api.NewServer(BuildRegistry(), c)
 	body := `{"name":"large.txt","content":"aGk="}`
@@ -187,6 +192,7 @@ func TestServerUploadRejectsDeclaredOversizedHTTPBodyBeforeReading(t *testing.T)
 }
 
 func TestServerUploadRejectsOversizedStreamedHTTPBody(t *testing.T) {
+	t.Parallel()
 	c := &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	server := api.NewServer(BuildRegistry(), c)
 	body := `{"name":"large.txt","content":"` + strings.Repeat("A", 24<<20) + `"}`
@@ -210,6 +216,7 @@ func TestServerUploadRejectsOversizedStreamedHTTPBody(t *testing.T) {
 }
 
 func TestCpSharedUpload(t *testing.T) {
+	t.Parallel()
 	c := &registry.Ctx{BaseDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	c.Socket = filepath.Join(t.TempDir(), "api.sock")
 	listener, err := net.Listen("unix", c.Socket)
@@ -250,6 +257,7 @@ func TestCpSharedUpload(t *testing.T) {
 }
 
 func TestCpSharedUploadUsesRawBody(t *testing.T) {
+	t.Parallel()
 	type seenRequest struct {
 		path, name, contentType, body string
 		contentLength                 int64

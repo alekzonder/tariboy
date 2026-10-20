@@ -11,6 +11,7 @@ import (
 )
 
 func TestLoopIntervalGetSet(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", IntervalS: 60, OnTimeout: "restart", OnError: "restart"})
 
@@ -33,6 +34,7 @@ func TestLoopIntervalGetSet(t *testing.T) {
 }
 
 func TestLoopAIStallTimeoutGetSet(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)
@@ -52,6 +54,7 @@ func TestLoopAIStallTimeoutGetSet(t *testing.T) {
 // agent.start and agent.stop are the only on/off switch; the second loop flag
 // and its commands are gone.
 func TestLoopEnableDisableRemoved(t *testing.T) {
+	t.Parallel()
 	r := BuildRegistry()
 	for _, path := range []string{"loop.enable", "loop.disable"} {
 		if _, ok := r.Get(path); ok {
@@ -67,6 +70,7 @@ func TestLoopEnableDisableRemoved(t *testing.T) {
 }
 
 func TestLoopOnErrorValidation(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 	if _, err := h(t, "loop.on-error")(c, registry.Params{"name": "smoke", "value": "explode"}); err == nil {
@@ -81,6 +85,7 @@ func TestLoopOnErrorValidation(t *testing.T) {
 }
 
 func TestUserPromptGetSet(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 	if _, err := h(t, "user-prompt.set")(c, registry.Params{"name": "smoke", "text": "focus on X"}); err != nil {
@@ -93,6 +98,7 @@ func TestUserPromptGetSet(t *testing.T) {
 }
 
 func TestAgentExec(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	as.Create(agent.Agent{Name: "smoke", OnTimeout: "restart", OnError: "restart"})
 	if _, err := h(t, "agent.exec")(c, registry.Params{"name": "smoke", "prompt": "do it now"}); err != nil {
@@ -101,6 +107,7 @@ func TestAgentExec(t *testing.T) {
 }
 
 func TestLoopScheduleSetReadClear(t *testing.T) {
+	t.Parallel()
 	c, as, _ := ctxWithStore(t)
 	if err := as.Create(agent.Agent{Name: "smoke", ImageRef: "basic:latest"}); err != nil {
 		t.Fatal(err)

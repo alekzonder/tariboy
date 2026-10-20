@@ -8,6 +8,7 @@ import (
 )
 
 func TestFormatTimeIsFixedWidthUTC(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 10, 19, 6, 33, 58, 0, time.FixedZone("MSK", 3*3600))
 	for _, ns := range []int{0, 10, 11, 999_999_999} {
 		got := FormatTime(base.Add(time.Duration(ns)))
@@ -21,6 +22,7 @@ func TestFormatTimeIsFixedWidthUTC(t *testing.T) {
 }
 
 func TestFormatTimeSortsChronologically(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 10, 19, 6, 33, 58, 0, time.UTC)
 	var times []time.Time
 	for _, ns := range []int{11, 10, 999_999_999, 0, 100, 1} {
@@ -40,6 +42,7 @@ func TestFormatTimeSortsChronologically(t *testing.T) {
 }
 
 func TestParseTimeAcceptsOnlyCanonical(t *testing.T) {
+	t.Parallel()
 	want := time.Date(2026, 10, 19, 6, 33, 58, 10, time.UTC)
 	got, err := ParseTime("2026-10-19T06:33:58.000000010Z")
 	if err != nil || !got.Equal(want) || got.Location() != time.UTC {
@@ -60,6 +63,7 @@ func TestParseTimeAcceptsOnlyCanonical(t *testing.T) {
 }
 
 func TestParseInputTimeAcceptsRFC3339Offsets(t *testing.T) {
+	t.Parallel()
 	got, err := ParseInputTime("2026-10-19T09:33:58.5+03:00")
 	if err != nil {
 		t.Fatal(err)
@@ -73,6 +77,7 @@ func TestParseInputTimeAcceptsRFC3339Offsets(t *testing.T) {
 }
 
 func TestNormalizeTimeValue(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"":                                   "",
 		"2026-10-19T06:33:58.123Z":           "2026-10-19T06:33:58.123000000Z",
@@ -92,6 +97,7 @@ func TestNormalizeTimeValue(t *testing.T) {
 }
 
 func TestSQLNowIsCanonical(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	var now string
 	if err := s.DB.QueryRow(`SELECT ` + SQLNow).Scan(&now); err != nil {
@@ -105,6 +111,7 @@ func TestSQLNowIsCanonical(t *testing.T) {
 // TestTimeColumnsCoverSchema fails when a new time column is not registered,
 // so the backfill and backup restore keep every stored time canonical.
 func TestTimeColumnsCoverSchema(t *testing.T) {
+	t.Parallel()
 	s := open(t)
 	rows, err := s.DB.Query(`SELECT m.name, p.name, p.type FROM sqlite_schema m
 		JOIN pragma_table_info(m.name) p WHERE m.type = 'table'`)

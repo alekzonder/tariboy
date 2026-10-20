@@ -3,6 +3,7 @@ package bus
 import "testing"
 
 func TestValidChannel(t *testing.T) {
+	t.Parallel()
 	ok := []string{"chat:room", "chat:messenger:0-0-abc", "group:dev-team:inbox", "agent:worker:inbox", "user:alice", "plugin:issue-provider:query", "system:x"}
 	bad := []string{"", "room", "issue-provider:query", "chat:", "chat:Room", "chat:a b", "chat:*", "group:dev/team:inbox", "chat::x"}
 	for _, s := range ok {
@@ -18,6 +19,7 @@ func TestValidChannel(t *testing.T) {
 }
 
 func TestIsProtectedSubscription(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		agent, channel string
 		want           bool
