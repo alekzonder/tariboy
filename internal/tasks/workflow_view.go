@@ -155,14 +155,3 @@ func statusVisitsTx(ctx context.Context, q queryer, taskID int64) ([]StatusVisit
 	}
 	return visits, rows.Err()
 }
-
-// inPoolStatusTx reports whether a workflow task's current status is owned by
-// a pool.
-func inPoolStatusTx(ctx context.Context, q queryer, task Task) (bool, error) {
-	manifest, err := loadManifestTx(ctx, q, task.WorkflowDigest)
-	if err != nil {
-		return false, err
-	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
-	return ok && !status.Terminal && status.Owner.Kind == workflowfile.OwnerPool, nil
-}

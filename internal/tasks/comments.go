@@ -112,37 +112,25 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 		return CommentResult{}, err
 	}
 	previousStatus := task.Status
-	assignedAgentQuestion := task.Assignee == actor.Principal && !actor.IsCustomer &&
-		containsPrincipal(created, task.Customer) && task.Status != StatusDone && task.Status != StatusCancelled
-	lastCustomerWaitResolved := task.Status == StatusWaitCustomer &&
-		containsPrincipal(resolved, task.Customer) && len(customerWaits) == 0
-	// The customer mentioning the assignee hands the task back to it.
-	customerSummonedAssignee := actor.IsCustomer && task.Status == StatusWaitCustomer &&
-		task.Assignee != "" && slices.Contains(mentions, task.Assignee) && len(customerWaits) == 0
-	// A workflow task waiting on its customer status, a script, or a pause keeps
-	// its category; only its holder's question in a pool status moves it.
-	workflowWaiting := task.WorkflowDigest != "" && task.WaitingOn != ""
-	if workflowWaiting && task.WaitingOn == WaitingOnCustomer {
-		// The holder's own question in a pool status waits on the customer too,
-		// and its answer moves the category back.
-		pool, err := inPoolStatusTx(ctx, tx, task)
-		if err != nil {
-			return CommentResult{}, err
+	// The assignee's question to the customer moves the task to wait_customer;
+	// the customer's answer, or the customer mentioning the assignee, hands it
+	// back.
+	asks := task.Assignee == actor.Principal && !actor.IsCustomer && containsPrincipal(created, task.Customer)
+	answered := task.Status == StatusWaitCustomer && len(customerWaits) == 0 &&
+		(containsPrincipal(resolved, task.Customer) ||
+			actor.IsCustomer && task.Assignee != "" && slices.Contains(mentions, task.Assignee))
+	if task.Status != StatusDone && task.Status != StatusCancelled {
+		if task.WorkflowDigest != "" {
+			if err := commentWorkflowStateTx(ctx, tx, &task, asks, answered); err != nil {
+				return CommentResult{}, err
+			}
+		} else if asks {
+			task.Status = StatusWaitCustomer
+		} else if answered {
+			task.Status = StatusInProgress
 		}
-		workflowWaiting = !pool
 	}
-	switch {
-	case workflowWaiting:
-	case assignedAgentQuestion:
-		task.Status = StatusWaitCustomer
-	case lastCustomerWaitResolved, customerSummonedAssignee:
-		task.Status = StatusInProgress
-	}
-	task.Revision++
-	task.UpdatedAt = now
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE tasks SET status = ?, revision = revision + 1, updated_at = ? WHERE id = ?`,
-		task.Status, now, task.ID); err != nil {
+	if _, err := saveTaskStateTx(ctx, tx, &task, previousStatus, now, false); err != nil {
 		return CommentResult{}, err
 	}
 	if task.Status != previousStatus {
@@ -191,6 +179,25 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 	}
 	s.signal()
 	return response, nil
+}
+
+// commentWorkflowStateTx derives the state a comment leaves a workflow task
+// in. Only the holder's question in a pool status, and its answer, move the
+// category; a customer status, a script status, and a pause keep theirs.
+func commentWorkflowStateTx(ctx context.Context, tx *sql.Tx, task *Task, asks, answered bool) error {
+	var owner string
+	if err := tx.QueryRowContext(ctx, `SELECT workflow_owner_kind FROM tasks WHERE id = ?`, task.ID).Scan(&owner); err != nil {
+		return err
+	}
+	if owner == "" {
+		// A terminal status, or one the pinned manifest does not declare.
+		return nil
+	}
+	return applyState(task, taskState{
+		Status: task.WorkflowStatus, Owner: owner, Paused: task.WorkflowPausedReason != "",
+		Blocked: task.Blocked, Assignee: task.Assignee, Holder: task.Assignee,
+		HolderAsks: asks || task.Status == StatusWaitCustomer && !answered,
+	})
 }
 
 func (s *Service) parseMentions(body string) []string {

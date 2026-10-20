@@ -416,12 +416,9 @@ func (s *Service) CancelWorkflowTask(ctx context.Context, actor Actor, key strin
 		return Task{}, err
 	}
 	// The workflow status stays as the record of where the task stopped.
+	previousCategory := task.Status
 	task.Status, task.CompletedAt, task.WorkflowPausedReason = StatusCancelled, now, ""
-	task.Revision++
-	task.UpdatedAt = now
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = ?, completed_at = ?, workflow_paused_reason = '', revision = ?, updated_at = ?
-		WHERE id = ?`, task.Status, now, task.Revision, now, task.ID); err != nil {
+	if _, err := saveTaskStateTx(ctx, tx, &task, previousCategory, now, false); err != nil {
 		return Task{}, err
 	}
 	if _, err := appendEventTx(ctx, tx, task, "workflow.cancelled", actor, map[string]any{
