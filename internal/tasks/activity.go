@@ -61,14 +61,44 @@ func (s *TaskService) TaskActivity(ctx context.Context, actor Actor, f ActivityF
 	f.Until, _ = store.NormalizeTimeValue(f.Until)
 	q := s.reader()
 	cte, cteArgs := visibleCTE(actor)
-	byID := map[int64]*TaskActivity{}
-	row := func(id int64) *TaskActivity {
-		if byID[id] == nil {
-			byID[id] = &TaskActivity{Outcomes: []string{}, EnteredStatuses: []string{}, Agents: []string{}}
-		}
-		return byID[id]
+	byID := activityRows{}
+	if err := activityEventRows(ctx, q, cte, cteArgs, f, byID); err != nil {
+		return nil, err
 	}
+	if len(f.Keys) > 0 {
+		if err := activityKeyRows(ctx, q, cte, cteArgs, f.Keys, byID); err != nil {
+			return nil, err
+		}
+	}
+	if len(byID) == 0 {
+		return []TaskActivity{}, nil
+	}
+	if err := activityVisitRows(ctx, q, f, byID); err != nil {
+		return nil, err
+	}
+	return activityTaskRows(ctx, q, f, byID)
+}
 
+// activityRows holds the activity being summarized for each task id.
+type activityRows map[int64]*TaskActivity
+
+// row returns the activity of task id, starting an empty one when needed.
+func (byID activityRows) row(id int64) *TaskActivity {
+	if byID[id] == nil {
+		byID[id] = &TaskActivity{Outcomes: []string{}, EnteredStatuses: []string{}, Agents: []string{}}
+	}
+	return byID[id]
+}
+
+// activityEventRows folds the window's visible task events into byID.
+func activityEventRows(
+	ctx context.Context,
+	q queryer,
+	cte string,
+	cteArgs []any,
+	f ActivityFilter,
+	byID activityRows,
+) error {
 	where, args := activityWindow("e.created_at", f)
 	if f.Agent != "" {
 		where += " AND e.actor = ?"
@@ -79,16 +109,16 @@ func (s *TaskService) TaskActivity(ctx context.Context, actor Actor, f ActivityF
 		FROM task_events e JOIN visible_access v ON v.id = e.task_id
 		WHERE `+where+` ORDER BY e.sequence`, append(slices.Clone(cteArgs), args...)...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer events.Close()
 	for events.Next() {
 		var id int64
 		var kind, principal, payload, at string
 		if err := events.Scan(&id, &kind, &principal, &payload, &at); err != nil {
-			return nil, err
+			return err
 		}
-		r := row(id)
+		r := byID.row(id)
 		if r.FirstAt == "" || at < r.FirstAt {
 			r.FirstAt = at
 		}
@@ -110,61 +140,64 @@ func (s *TaskService) TaskActivity(ctx context.Context, actor Actor, f ActivityF
 			}
 		}
 	}
-	if err := events.Err(); err != nil {
-		return nil, err
-	}
-	events.Close()
+	return events.Err()
+}
 
-	if len(f.Keys) > 0 {
-		keysJSON, err := json.Marshal(f.Keys)
-		if err != nil {
-			return nil, err
-		}
-		ids, err := q.QueryContext(ctx, cte+`
-			SELECT t.id FROM tasks t JOIN visible_access v ON v.id = t.id
-			WHERE t.task_key IN (SELECT value FROM json_each(?))`, append(slices.Clone(cteArgs), string(keysJSON))...)
-		if err != nil {
-			return nil, err
-		}
-		for ids.Next() {
-			var id int64
-			if err := ids.Scan(&id); err != nil {
-				ids.Close()
-				return nil, err
-			}
-			row(id)
-		}
-		if err := ids.Err(); err != nil {
-			ids.Close()
-			return nil, err
-		}
-		ids.Close()
+// activityKeyRows adds to byID each visible task named in keys.
+func activityKeyRows(
+	ctx context.Context,
+	q queryer,
+	cte string,
+	cteArgs []any,
+	keys []string,
+	byID activityRows,
+) error {
+	keysJSON, err := json.Marshal(keys)
+	if err != nil {
+		return err
 	}
-	if len(byID) == 0 {
-		return []TaskActivity{}, nil
+	ids, err := q.QueryContext(ctx, cte+`
+		SELECT t.id FROM tasks t JOIN visible_access v ON v.id = t.id
+		WHERE t.task_key IN (SELECT value FROM json_each(?))`, append(slices.Clone(cteArgs), string(keysJSON))...)
+	if err != nil {
+		return err
 	}
+	defer ids.Close()
+	for ids.Next() {
+		var id int64
+		if err := ids.Scan(&id); err != nil {
+			return err
+		}
+		byID.row(id)
+	}
+	return ids.Err()
+}
 
-	where, args = activityWindow("entered_at", f)
+// activityVisitRows records the statuses each task in byID entered in the
+// window.
+func activityVisitRows(ctx context.Context, q queryer, f ActivityFilter, byID activityRows) error {
+	where, args := activityWindow("entered_at", f)
 	visits, err := q.QueryContext(ctx, `SELECT task_id, status_id FROM task_status_visits WHERE `+where+` ORDER BY task_id, sequence`, args...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer visits.Close()
 	for visits.Next() {
 		var id int64
 		var status string
 		if err := visits.Scan(&id, &status); err != nil {
-			return nil, err
+			return err
 		}
 		if r := byID[id]; r != nil {
 			r.EnteredStatuses = append(r.EnteredStatuses, status)
 		}
 	}
-	if err := visits.Err(); err != nil {
-		return nil, err
-	}
-	visits.Close()
+	return visits.Err()
+}
 
+// activityTaskRows loads the task of each activity in byID and returns the
+// activities in task key order.
+func activityTaskRows(ctx context.Context, q queryer, f ActivityFilter, byID activityRows) ([]TaskActivity, error) {
 	idList := make([]int64, 0, len(byID))
 	for id := range byID {
 		idList = append(idList, id)

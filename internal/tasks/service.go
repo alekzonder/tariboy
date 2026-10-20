@@ -80,73 +80,23 @@ func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor,
 	if err != nil {
 		return Task{}, err
 	}
-	queue := strings.ToUpper(strings.TrimSpace(in.Queue))
-	customer := userPrincipal(s.customer)
-	group := strings.TrimSpace(in.Group)
-	var parentID any
-	var parentKey string
-	if strings.TrimSpace(in.ParentKey) != "" {
-		parent, err := taskByKey(ctx, tx, strings.TrimSpace(in.ParentKey))
-		if err != nil {
-			return Task{}, err
-		}
-		if !actor.IsCustomer {
-			if err := requireWrite(ctx, tx, actor, parent); err != nil {
-				return Task{}, err
-			}
-		}
-		queue, customer, group = parent.Queue, parent.Customer, parent.Group
-		parentID, parentKey = parent.ID, parent.Key
-	} else if queue == "" {
-		return Task{}, domainError(http.StatusBadRequest, "missing_queue", "queue is required for a root task")
-	}
-	var exists int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, queue).Scan(&exists); err != nil {
+	place, err := s.createTaskPlacementTx(ctx, tx, actor, in)
+	if err != nil {
 		return Task{}, err
 	}
-	if exists == 0 {
-		return Task{}, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
-	}
-	// A task created in a bound queue pins the queue's workflow and the workflow
-	// assigns it, so an explicit assignee is refused.
-	binding, bound, err := queueWorkflowTx(ctx, tx, queue)
+	queue, customer, group := place.queue, place.customer, place.group
+	parentID, parentKey := place.parentID, place.parentKey
+	binding, bound, err := s.createTaskQueueTx(ctx, tx, queue, in.Assignee)
 	if err != nil {
 		return Task{}, err
 	}
 	var workflowDigest any
 	if bound {
-		if strings.TrimSpace(in.Assignee) != "" {
-			return Task{}, workflowManagedError()
-		}
-		// A binding made by a tag gives each new task the version the tag names now.
-		if binding, err = s.engine.followQueueWorkflowTx(ctx, tx, binding); err != nil {
-			return Task{}, err
-		}
 		workflowDigest = binding.Digest
 	}
-	// An unassigned root task from an agent that does not run the queue is a filed report:
-	// it is ungrouped and (through the visibility rules) invisible to its author afterwards,
-	// so triage belongs to whoever runs the queue. An explicit assignee instead owns only
-	// that task and its descendants; it does not gain access to the rest of the queue.
-	filed := false
-	crossQueueAssigned := false
-	if !actor.IsCustomer && parentKey == "" {
-		runsQueue, err := agentRunsQueue(ctx, tx, actor, queue)
-		if err != nil {
-			return Task{}, err
-		}
-		if !runsQueue {
-			if group != "" {
-				return Task{}, domainError(http.StatusBadRequest, "report_cannot_assign",
-					"a root task created in a queue you do not run cannot carry a group")
-			}
-			if strings.TrimSpace(in.Assignee) == "" {
-				filed = true
-			} else {
-				crossQueueAssigned = true
-			}
-		}
+	filed, crossQueueAssigned, err := createTaskReportTx(ctx, tx, actor, queue, group, parentKey, in.Assignee)
+	if err != nil {
+		return Task{}, err
 	}
 	var position int64
 	if err := tx.QueryRowContext(ctx, `
@@ -199,25 +149,143 @@ func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor,
 			return Task{}, err
 		}
 	}
+	if err := s.createTaskHandoffTx(ctx, tx, actor, &task, binding, bound, filed, sequence, now); err != nil {
+		return Task{}, err
+	}
+	return task, nil
+}
+
+// createTaskPlacement is where createTaskTx puts a new task: a child takes its
+// parent's queue, customer, and group.
+type createTaskPlacement struct {
+	queue, customer, group string
+	parentID               any
+	parentKey              string
+}
+
+// createTaskPlacementTx resolves the new task's parent, if any, and checks
+// that the actor may write under it.
+func (s *TaskService) createTaskPlacementTx(ctx context.Context, tx *sql.Tx, actor Actor, in CreateTaskInput) (createTaskPlacement, error) {
+	place := createTaskPlacement{
+		queue:    strings.ToUpper(strings.TrimSpace(in.Queue)),
+		customer: userPrincipal(s.customer),
+		group:    strings.TrimSpace(in.Group),
+	}
+	if strings.TrimSpace(in.ParentKey) != "" {
+		parent, err := taskByKey(ctx, tx, strings.TrimSpace(in.ParentKey))
+		if err != nil {
+			return createTaskPlacement{}, err
+		}
+		if !actor.IsCustomer {
+			if err := requireWrite(ctx, tx, actor, parent); err != nil {
+				return createTaskPlacement{}, err
+			}
+		}
+		place.queue, place.customer, place.group = parent.Queue, parent.Customer, parent.Group
+		place.parentID, place.parentKey = parent.ID, parent.Key
+	} else if place.queue == "" {
+		return createTaskPlacement{}, domainError(http.StatusBadRequest, "missing_queue", "queue is required for a root task")
+	}
+	return place, nil
+}
+
+// createTaskQueueTx checks that the queue exists and returns its workflow
+// binding, following a tag binding to the version it names now.
+func (s *TaskService) createTaskQueueTx(ctx context.Context, tx *sql.Tx, queue, assignee string) (QueueWorkflow, bool, error) {
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, queue).Scan(&exists); err != nil {
+		return QueueWorkflow{}, false, err
+	}
+	if exists == 0 {
+		return QueueWorkflow{}, false, domainError(http.StatusNotFound, "queue_not_found", "queue not found")
+	}
+	// A task created in a bound queue pins the queue's workflow and the workflow
+	// assigns it, so an explicit assignee is refused.
+	binding, bound, err := queueWorkflowTx(ctx, tx, queue)
+	if err != nil {
+		return QueueWorkflow{}, false, err
+	}
+	if bound {
+		if strings.TrimSpace(assignee) != "" {
+			return QueueWorkflow{}, false, workflowManagedError()
+		}
+		// A binding made by a tag gives each new task the version the tag names now.
+		if binding, err = s.engine.followQueueWorkflowTx(ctx, tx, binding); err != nil {
+			return QueueWorkflow{}, false, err
+		}
+	}
+	return binding, bound, nil
+}
+
+// createTaskReportTx reports whether a new root task is a filed report or a
+// task assigned across a queue the actor does not run.
+func createTaskReportTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	actor Actor,
+	queue string,
+	group string,
+	parentKey string,
+	assignee string,
+) (filed, crossQueueAssigned bool, err error) {
+	// An unassigned root task from an agent that does not run the queue is a filed report:
+	// it is ungrouped and (through the visibility rules) invisible to its author afterwards,
+	// so triage belongs to whoever runs the queue. An explicit assignee instead owns only
+	// that task and its descendants; it does not gain access to the rest of the queue.
+	if !actor.IsCustomer && parentKey == "" {
+		runsQueue, err := agentRunsQueue(ctx, tx, actor, queue)
+		if err != nil {
+			return false, false, err
+		}
+		if !runsQueue {
+			if group != "" {
+				return false, false, domainError(http.StatusBadRequest, "report_cannot_assign",
+					"a root task created in a queue you do not run cannot carry a group")
+			}
+			if strings.TrimSpace(assignee) == "" {
+				filed = true
+			} else {
+				crossQueueAssigned = true
+			}
+		}
+	}
+	return filed, crossQueueAssigned, nil
+}
+
+// createTaskHandoffTx hands a new task on: a bound task enters the workflow's
+// initial status, an assigned one notifies its assignee, and an unassigned one
+// notifies the queue's triager.
+func (s *TaskService) createTaskHandoffTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	actor Actor,
+	task *Task,
+	binding QueueWorkflow,
+	bound bool,
+	filed bool,
+	sequence int64,
+	now string,
+) error {
 	if bound {
 		// The workflow owns the task from here: entering the initial status assigns it.
 		manifest, err := loadManifestTx(ctx, tx, binding.Digest)
 		if err != nil {
-			return Task{}, err
+			return err
 		}
-		if err := s.engine.enterStatusTx(ctx, tx, &task, manifest, manifest.Definition.InitialStatus, actor.Principal, "", ""); err != nil {
-			return Task{}, err
+		if err := s.engine.enterStatusTx(ctx, tx, task, manifest, manifest.Definition.InitialStatus, actor.Principal, "", ""); err != nil {
+			return err
 		}
 	} else if task.Assignee != "" && task.Assignee != actor.Principal {
 		if err := enqueueNotificationTx(ctx, tx, sequence, task.Assignee, actor.Principal,
-			"task.assigned", task, "New task assigned: "+task.Key+" "+task.Title, now); err != nil {
-			return Task{}, err
+			"task.assigned", *task, "New task assigned: "+task.Key+" "+task.Title, now); err != nil {
+			return err
 		}
 	} else if task.Assignee == "" {
 		var responsible string
 		if err := tx.QueryRowContext(ctx,
-			`SELECT responsible_agent FROM task_queues WHERE prefix = ?`, queue).Scan(&responsible); err != nil {
-			return Task{}, err
+			`SELECT responsible_agent FROM task_queues WHERE prefix = ?`, task.Queue).Scan(&responsible); err != nil {
+			return err
 		}
 		triager := ""
 		if responsible != "" {
@@ -225,16 +293,16 @@ func (s *TaskService) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor,
 		} else if filed {
 			// A report nobody is on the hook for is a report nobody reads. With no responsible
 			// agent on the queue, the customer is the only remaining triager.
-			triager = customer
+			triager = task.Customer
 		}
 		if triager != "" {
 			if err := enqueueNotificationTx(ctx, tx, sequence, triager, actor.Principal,
-				"task.triage", task, "New unassigned task: "+task.Key+" "+task.Title, now); err != nil {
-				return Task{}, err
+				"task.triage", *task, "New unassigned task: "+task.Key+" "+task.Title, now); err != nil {
+				return err
 			}
 		}
 	}
-	return task, nil
+	return nil
 }
 
 func readTaskIdempotency[T any](
@@ -350,149 +418,19 @@ func (s *TaskService) ListTasks(ctx context.Context, actor Actor, filter ListFil
 	if err := validateActor(actor); err != nil {
 		return TaskPage{}, err
 	}
-	statuses := filter.Statuses
-	if filter.Status != "" {
-		statuses = append(slices.Clone(statuses), filter.Status)
+	plan, err := listFilterPlan(actor, filter)
+	if err != nil {
+		return TaskPage{}, err
 	}
-	statusView := filter.StatusView
-	if statusView == "" && len(statuses) == 0 {
-		statusView = "active"
-	}
-	if statusView != "" && statusView != "active" && statusView != "closed" && statusView != "all" {
-		return TaskPage{}, domainError(http.StatusBadRequest, "invalid_status_view", "status_view must be active, closed, or all")
-	}
-	for _, category := range filter.Categories {
-		switch category {
-		case StatusOpen, StatusInProgress, StatusWaitCustomer, StatusDone, StatusCancelled:
-		default:
-			return TaskPage{}, domainError(http.StatusBadRequest, "invalid_category", "category must be open, in_progress, wait_customer, done, or cancelled")
-		}
-	}
-	for _, priority := range filter.Priorities {
-		if _, err := NormalizePriority(priority); err != nil || priority == "" {
-			return TaskPage{}, domainError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
-		}
-	}
-	if filter.ParentKey != "" && filter.SubtreeKey != "" {
-		return TaskPage{}, domainError(http.StatusBadRequest, "invalid_filter", "parent and subtree cannot be combined")
-	}
-	sortName := filter.Sort
-	if sortName == "" {
-		sortName = "tree"
-	}
-	order, ok := listOrders[sortName]
-	if !ok {
-		return TaskPage{}, domainError(http.StatusBadRequest, "invalid_sort", "sort must be tree, updated, created, or priority")
-	}
-	visibilityActor := actor
-	if filter.ScopeAgent != "" {
-		if !actor.IsCustomer &&
-			actor.Principal != agentPrincipal(filter.ScopeAgent) {
-			return TaskPage{}, domainError(http.StatusForbidden, "forbidden", "agent scope cannot be expanded")
-		}
-		visibilityActor = AgentActor(filter.ScopeAgent)
-	}
-	cte, args := visibleCTE(visibilityActor)
-	query := cte + visibleTaskSelect + ` WHERE 1=1`
-	if filter.Queue != "" {
-		query += ` AND t.queue_prefix = ?`
-		args = append(args, strings.ToUpper(filter.Queue))
-	}
-	if len(statuses) > 0 {
-		marks := placeholders(len(statuses))
-		query += ` AND (t.status IN (` + marks + `) OR t.workflow_status IN (` + marks + `))`
-		for range 2 {
-			for _, status := range statuses {
-				args = append(args, status)
-			}
-		}
-	}
-	if len(filter.Categories) > 0 {
-		query += ` AND t.status IN (` + placeholders(len(filter.Categories)) + `)`
-		for _, category := range filter.Categories {
-			args = append(args, category)
-		}
-	}
-	if len(filter.Priorities) > 0 {
-		query += ` AND t.priority IN (` + placeholders(len(filter.Priorities)) + `)`
-		for _, priority := range filter.Priorities {
-			args = append(args, string(priority))
-		}
-	}
-	switch statusView {
-	case "active":
-		query += ` AND t.status IN ('open', 'in_progress', 'wait_customer')`
-	case "closed":
-		query += ` AND t.status IN ('done', 'cancelled')`
-	}
-	if filter.Customer != "" {
-		customer := strings.TrimSpace(filter.Customer)
-		if !strings.Contains(customer, ":") {
-			customer = agentPrincipal(customer)
-		}
-		query += ` AND t.customer = ?`
-		args = append(args, customer)
-	}
-	if filter.ParentKey != "" {
-		query += ` AND t.parent_id = (SELECT id FROM tasks WHERE task_key = ?)`
-		args = append(args, strings.TrimSpace(filter.ParentKey))
-	}
-	if filter.SubtreeKey != "" {
-		query += ` AND t.id IN (
-			WITH RECURSIVE subtree(id) AS (
-				SELECT child.id FROM tasks child
-				JOIN tasks root ON root.id = child.parent_id WHERE root.task_key = ?
-				UNION ALL
-				SELECT child.id FROM tasks child JOIN subtree ON child.parent_id = subtree.id
-			)
-			SELECT id FROM subtree
-		)`
-		args = append(args, strings.TrimSpace(filter.SubtreeKey))
-	}
-	if filter.Assignee != "" {
-		query += ` AND t.assignee = ?`
-		args = append(args, normalizeAssignee(filter.Assignee))
-	}
-	if filter.Author != "" {
-		author := strings.TrimSpace(filter.Author)
-		if !strings.Contains(author, ":") {
-			author = agentPrincipal(author)
-		}
-		query += ` AND t.author = ?`
-		args = append(args, author)
-	}
-	if filter.Group != "" {
-		query += ` AND t.group_name = ?`
-		args = append(args, filter.Group)
-	}
-	if filter.Text != "" {
-		query += ` AND (unicode_lower(t.title) LIKE ? OR unicode_lower(t.description) LIKE ? OR unicode_lower(t.task_key) LIKE ?)`
-		pattern := "%" + strings.ToLower(strings.TrimSpace(filter.Text)) + "%"
-		args = append(args, pattern, pattern, pattern)
-	}
-	if filter.WaitingFor != "" {
-		query += ` AND EXISTS (
-			SELECT 1 FROM task_waiting_for wf
-			WHERE wf.task_id = t.id AND wf.expected_principal = ? AND wf.resolved_at = ''
-		)`
-		args = append(args, filter.WaitingFor)
-	}
-	if filter.Blocked != nil {
-		if *filter.Blocked {
-			query += ` AND (t.manual_block_reason <> '' OR t.open_blockers > 0)`
-		} else {
-			query += ` AND t.manual_block_reason = '' AND t.open_blockers = 0`
-		}
-	}
-	if filter.AfterKey != "" {
-		query += ` AND EXISTS (SELECT 1 FROM tasks c WHERE c.task_key = ? AND ` + order.after + `)`
-		args = append(args, strings.TrimSpace(filter.AfterKey))
-	}
+	cte, cteArgs := visibleCTE(plan.visibility)
+	q := listTasksQuery{sql: cte + visibleTaskSelect + ` WHERE 1=1`, args: cteArgs}
+	listFilterClauses(&q, filter, plan)
+	query, args := q.sql, q.args
 	limit := filter.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
-	query += ` ORDER BY ` + order.by
+	query += ` ORDER BY ` + plan.order.by
 	query += ` LIMIT ?`
 	args = append(args, limit+1)
 	rows, err := s.reader().QueryContext(ctx, query, args...)
@@ -521,4 +459,171 @@ func (s *TaskService) ListTasks(ctx context.Context, actor Actor, filter ListFil
 		return TaskPage{}, err
 	}
 	return TaskPage{Tasks: out, NextCursor: nextCursor, Sequence: sequence}, nil
+}
+
+// listTasksPlan is a validated ListFilter: the statuses and status view it
+// selects, its sort order, and the actor whose visibility it lists.
+type listTasksPlan struct {
+	statuses   []string
+	statusView string
+	order      struct{ by, after string }
+	visibility Actor
+}
+
+// listFilterPlan validates filter for ListTasks and resolves its defaults.
+func listFilterPlan(actor Actor, filter ListFilter) (listTasksPlan, error) {
+	statuses := filter.Statuses
+	if filter.Status != "" {
+		statuses = append(slices.Clone(statuses), filter.Status)
+	}
+	statusView := filter.StatusView
+	if statusView == "" && len(statuses) == 0 {
+		statusView = "active"
+	}
+	if statusView != "" && statusView != "active" && statusView != "closed" && statusView != "all" {
+		return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_status_view", "status_view must be active, closed, or all")
+	}
+	for _, category := range filter.Categories {
+		switch category {
+		case StatusOpen, StatusInProgress, StatusWaitCustomer, StatusDone, StatusCancelled:
+		default:
+			return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_category", "category must be open, in_progress, wait_customer, done, or cancelled")
+		}
+	}
+	for _, priority := range filter.Priorities {
+		if _, err := NormalizePriority(priority); err != nil || priority == "" {
+			return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_priority", "priority must be P0, P1, P2, or P3")
+		}
+	}
+	if filter.ParentKey != "" && filter.SubtreeKey != "" {
+		return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_filter", "parent and subtree cannot be combined")
+	}
+	sortName := filter.Sort
+	if sortName == "" {
+		sortName = "tree"
+	}
+	order, ok := listOrders[sortName]
+	if !ok {
+		return listTasksPlan{}, domainError(http.StatusBadRequest, "invalid_sort", "sort must be tree, updated, created, or priority")
+	}
+	visibilityActor := actor
+	if filter.ScopeAgent != "" {
+		if !actor.IsCustomer &&
+			actor.Principal != agentPrincipal(filter.ScopeAgent) {
+			return listTasksPlan{}, domainError(http.StatusForbidden, "forbidden", "agent scope cannot be expanded")
+		}
+		visibilityActor = AgentActor(filter.ScopeAgent)
+	}
+	return listTasksPlan{statuses: statuses, statusView: statusView, order: order, visibility: visibilityActor}, nil
+}
+
+// listTasksQuery accumulates the SQL text and arguments of a ListTasks query.
+type listTasksQuery struct {
+	sql  string
+	args []any
+}
+
+// listFilterClauses appends the WHERE conditions of filter to q, ending with
+// the keyset condition that resumes after the cursor task.
+func listFilterClauses(q *listTasksQuery, filter ListFilter, plan listTasksPlan) {
+	if filter.Queue != "" {
+		q.sql += ` AND t.queue_prefix = ?`
+		q.args = append(q.args, strings.ToUpper(filter.Queue))
+	}
+	listFilterStatusClauses(q, filter, plan)
+	if filter.Customer != "" {
+		customer := strings.TrimSpace(filter.Customer)
+		if !strings.Contains(customer, ":") {
+			customer = agentPrincipal(customer)
+		}
+		q.sql += ` AND t.customer = ?`
+		q.args = append(q.args, customer)
+	}
+	if filter.ParentKey != "" {
+		q.sql += ` AND t.parent_id = (SELECT id FROM tasks WHERE task_key = ?)`
+		q.args = append(q.args, strings.TrimSpace(filter.ParentKey))
+	}
+	if filter.SubtreeKey != "" {
+		q.sql += ` AND t.id IN (
+			WITH RECURSIVE subtree(id) AS (
+				SELECT child.id FROM tasks child
+				JOIN tasks root ON root.id = child.parent_id WHERE root.task_key = ?
+				UNION ALL
+				SELECT child.id FROM tasks child JOIN subtree ON child.parent_id = subtree.id
+			)
+			SELECT id FROM subtree
+		)`
+		q.args = append(q.args, strings.TrimSpace(filter.SubtreeKey))
+	}
+	if filter.Assignee != "" {
+		q.sql += ` AND t.assignee = ?`
+		q.args = append(q.args, normalizeAssignee(filter.Assignee))
+	}
+	if filter.Author != "" {
+		author := strings.TrimSpace(filter.Author)
+		if !strings.Contains(author, ":") {
+			author = agentPrincipal(author)
+		}
+		q.sql += ` AND t.author = ?`
+		q.args = append(q.args, author)
+	}
+	if filter.Group != "" {
+		q.sql += ` AND t.group_name = ?`
+		q.args = append(q.args, filter.Group)
+	}
+	if filter.Text != "" {
+		q.sql += ` AND (unicode_lower(t.title) LIKE ? OR unicode_lower(t.description) LIKE ? OR unicode_lower(t.task_key) LIKE ?)`
+		pattern := "%" + strings.ToLower(strings.TrimSpace(filter.Text)) + "%"
+		q.args = append(q.args, pattern, pattern, pattern)
+	}
+	if filter.WaitingFor != "" {
+		q.sql += ` AND EXISTS (
+			SELECT 1 FROM task_waiting_for wf
+			WHERE wf.task_id = t.id AND wf.expected_principal = ? AND wf.resolved_at = ''
+		)`
+		q.args = append(q.args, filter.WaitingFor)
+	}
+	if filter.Blocked != nil {
+		if *filter.Blocked {
+			q.sql += ` AND (t.manual_block_reason <> '' OR t.open_blockers > 0)`
+		} else {
+			q.sql += ` AND t.manual_block_reason = '' AND t.open_blockers = 0`
+		}
+	}
+	if filter.AfterKey != "" {
+		q.sql += ` AND EXISTS (SELECT 1 FROM tasks c WHERE c.task_key = ? AND ` + plan.order.after + `)`
+		q.args = append(q.args, strings.TrimSpace(filter.AfterKey))
+	}
+}
+
+// listFilterStatusClauses appends the status, category, priority, and status
+// view conditions to q.
+func listFilterStatusClauses(q *listTasksQuery, filter ListFilter, plan listTasksPlan) {
+	if len(plan.statuses) > 0 {
+		marks := placeholders(len(plan.statuses))
+		q.sql += ` AND (t.status IN (` + marks + `) OR t.workflow_status IN (` + marks + `))`
+		for range 2 {
+			for _, status := range plan.statuses {
+				q.args = append(q.args, status)
+			}
+		}
+	}
+	if len(filter.Categories) > 0 {
+		q.sql += ` AND t.status IN (` + placeholders(len(filter.Categories)) + `)`
+		for _, category := range filter.Categories {
+			q.args = append(q.args, category)
+		}
+	}
+	if len(filter.Priorities) > 0 {
+		q.sql += ` AND t.priority IN (` + placeholders(len(filter.Priorities)) + `)`
+		for _, priority := range filter.Priorities {
+			q.args = append(q.args, string(priority))
+		}
+	}
+	switch plan.statusView {
+	case "active":
+		q.sql += ` AND t.status IN ('open', 'in_progress', 'wait_customer')`
+	case "closed":
+		q.sql += ` AND t.status IN ('done', 'cancelled')`
+	}
 }
