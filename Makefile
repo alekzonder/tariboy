@@ -84,11 +84,14 @@ uninstall:
 		rm -f $(INSTALLDIR)/$$name; \
 	done
 
+# make test adds -tags tmux when tmux is installed, so the shim tests that
+# drive a real tmux run there and stay out of a plain go test.
 test:
 	@test_tmp=$$(cd /tmp && pwd -P) || exit $$?; \
 	packages=$$($(GO) list ./...) || exit $$?; \
 	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d; /\/internal\/cli$$/d; /\/internal\/plugins$$/d'); \
-	TMPDIR="$$test_tmp" $(GO) test $$packages && \
+	tags=; if command -v tmux >/dev/null 2>&1; then tags=-tags=tmux; fi; \
+	TMPDIR="$$test_tmp" $(GO) test $$tags $$packages && \
 	TMPDIR=/tmp $(GO) test ./internal/cli && \
 	TMPDIR=/tmp $(GO) test ./internal/plugins -skip '^($(LONG_SOCKET_TESTS))$$' && \
 	TMPDIR=. $(GO) test ./internal/plugins -run '^($(LONG_SOCKET_TESTS))$$'
@@ -151,7 +154,7 @@ fmt-check:
 vet:
 	@packages=$$($(GO) list ./...) || exit $$?; \
 	packages=$$(printf '%s\n' "$$packages" | sed '/\/node_modules\//d'); \
-	$(GO) vet $$packages
+	$(GO) vet -tags=tmux $$packages
 
 e2e: build
 	./scripts/e2e.sh
