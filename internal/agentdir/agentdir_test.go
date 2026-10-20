@@ -40,6 +40,7 @@ func buildImage(t *testing.T, st *image.Store, name string) {
 }
 
 func TestProvisionAndLayout(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	buildImage(t, imgStore, "basic")
@@ -79,6 +80,7 @@ func TestProvisionAndLayout(t *testing.T) {
 }
 
 func TestLayoutPathsAndLive(t *testing.T) {
+	t.Parallel()
 	agents := t.TempDir()
 	l := New(agents, "smoke")
 	id := "smoke-20260706100000-1"
@@ -111,6 +113,7 @@ func TestLayoutPathsAndLive(t *testing.T) {
 }
 
 func TestListLiveMapsNewestIteration(t *testing.T) {
+	t.Parallel()
 	agents := t.TempDir()
 	l := New(agents, "smoke")
 	older := "smoke-20260706100000-1"
@@ -133,6 +136,7 @@ func TestListLiveMapsNewestIteration(t *testing.T) {
 }
 
 func TestLayoutAuditLog(t *testing.T) {
+	t.Parallel()
 	l := New("/agents", "manager")
 	if got := l.AuditLog(); got != "/agents/manager/audit.jsonl" {
 		t.Fatalf("AuditLog = %q", got)
@@ -140,6 +144,7 @@ func TestLayoutAuditLog(t *testing.T) {
 }
 
 func TestProvisionReconcilesConditionalTasksShim(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	imgStore := &image.Store{Dir: filepath.Join(base, "images")}
 	buildImage(t, imgStore, "basic")

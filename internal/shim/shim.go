@@ -44,6 +44,10 @@ var (
 	waitTmuxChildExit = waitChildExit
 	killTmuxGroup     = syscall.Kill
 	reapTmuxChild     = syscall.Wait4
+	// tmuxTermWait and tmuxKillWait bound how long RunTmuxSupervisor waits
+	// for the harness after SIGTERM and after SIGKILL; tests shorten them.
+	tmuxTermWait = 2 * time.Second
+	tmuxKillWait = 2 * time.Second
 )
 
 // activePTYs maps a tmux session to the SET of live ptmx of its in-progress
@@ -720,7 +724,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 			if err != nil {
 				return fmt.Errorf("observe harness exit after SIGTERM: %w", err)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(tmuxTermWait):
 			if err := signalTmuxGroup(pid, syscall.SIGKILL); err != nil {
 				return fmt.Errorf("kill harness: %w", err)
 			}
@@ -729,7 +733,7 @@ func RunTmuxSupervisor(_ string, statusPath string, argv []string) (retErr error
 				if err != nil {
 					return fmt.Errorf("observe harness exit after SIGKILL: %w", err)
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(tmuxKillWait):
 				return errors.New("observe harness exit after SIGKILL: deadline exceeded")
 			}
 		}

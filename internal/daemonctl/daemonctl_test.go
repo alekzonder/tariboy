@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // TestMain lets the test binary double as a fake tariboyd: when
@@ -26,7 +28,15 @@ func TestMain(m *testing.M) {
 		runFakeDaemon()
 		return
 	}
-	os.Exit(m.Run())
+	// EnsureUp's children inherit this environment; keep live TARIBOY_*
+	// variables and HOME out of them.
+	cleanup, err := testutil.IsolateEnv()
+	if err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
 }
 
 func runFakeDaemon() {
@@ -68,6 +78,8 @@ func reap(pid int) {
 
 // startFakeDaemonEnv points cfg.DaemonBin at this test binary and sets the env
 // the child inherits so it runs runFakeDaemon against cfg's socket/pidfile.
+// Tests that call it stay sequential: t.Setenv changes the process env that
+// every EnsureUp child inherits.
 func startFakeDaemonEnv(t *testing.T, cfg *Config) {
 	t.Helper()
 	exe, err := os.Executable()
@@ -92,6 +104,7 @@ func cfgIn(dir string) Config {
 }
 
 func TestResolveConfigAcceptsExplicitLoopbackHTTPAddr(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cfg, err := ResolveConfig(func(key string) string {
 		switch key {
@@ -153,6 +166,7 @@ func serveStatus(t *testing.T, sock string) func() {
 }
 
 func TestEnsureUpNoopWhenAlreadyRunning(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cfg := cfgIn(dir)
 	stop := serveStatus(t, cfg.Socket)
@@ -169,9 +183,14 @@ func TestEnsureUpNoopWhenAlreadyRunning(t *testing.T) {
 
 // A large daemon log from the previous run moves to tariboyd.log.1 before the
 // new daemon starts writing.
+// Sequential, like TestEnsureUpTimeoutSurfacesLog: the fake daemon script is
+// written and run at once, and a parallel test's fork can hold it open for
+// writing (ETXTBSY).
 func TestEnsureUpRotatesLargeLog(t *testing.T) {
 	dir := t.TempDir()
 	cfg := cfgIn(dir)
+	// Rotation happens before the start; the failing fake need not be awaited.
+	cfg.ReadyTimeout = 100 * time.Millisecond
 	if err := os.WriteFile(cfg.LogFile, []byte("OLD RUN OUTPUT\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -195,6 +214,8 @@ func TestEnsureUpRotatesLargeLog(t *testing.T) {
 func TestEnsureUpTimeoutSurfacesLog(t *testing.T) {
 	dir := t.TempDir()
 	cfg := cfgIn(dir)
+	// The fake exits at once; the timeout only has to outlast its log write.
+	cfg.ReadyTimeout = 500 * time.Millisecond
 	bin := filepath.Join(dir, "fakedaemon.sh")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho BOOT_FAILURE >&2\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -211,6 +232,7 @@ func TestEnsureUpTimeoutSurfacesLog(t *testing.T) {
 }
 
 func TestDownTerminatesPidAndClearsPidfile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cfg := cfgIn(dir)
 	cfg.ReadyTimeout = 2 * time.Second
@@ -228,10 +250,7 @@ func TestDownTerminatesPidAndClearsPidfile(t *testing.T) {
 		t.Fatalf("Down err = %v", err)
 	}
 	// give the kernel a moment to finish reaping before probing liveness
-	for i := 0; i < 50 && syscall.Kill(pid, 0) == nil; i++ {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if err := syscall.Kill(pid, 0); err == nil {
+	if !testutil.WaitFor(time.Second, func() bool { return syscall.Kill(pid, 0) != nil }) {
 		t.Fatal("process still alive after Down")
 	}
 	if _, err := os.Stat(cfg.PidFile); !os.IsNotExist(err) {
@@ -291,15 +310,13 @@ func TestRestartStopsThenStarts(t *testing.T) {
 		t.Fatalf("Restart reused pid %d; expected the old instance to be stopped and a new one started", pid1)
 	}
 	// The original process should be gone (SIGTERM'd by Down).
-	for i := 0; i < 50 && syscall.Kill(pid1, 0) == nil; i++ {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if err := syscall.Kill(pid1, 0); err == nil {
+	if !testutil.WaitFor(time.Second, func() bool { return syscall.Kill(pid1, 0) != nil }) {
 		t.Fatalf("old daemon pid %d still alive after Restart", pid1)
 	}
 }
 
 func TestWaitPidGone(t *testing.T) {
+	t.Parallel()
 	// A live process is not gone within the timeout.
 	child := exec.Command("sleep", "300")
 	if err := child.Start(); err != nil {
@@ -363,6 +380,7 @@ func TestRestartRecoversAfterSigkillEscalation(t *testing.T) {
 }
 
 func TestGetStatusReflectsSocket(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cfg := cfgIn(dir)
 	if s := GetStatus(cfg); s.Running {
@@ -376,6 +394,7 @@ func TestGetStatusReflectsSocket(t *testing.T) {
 }
 
 func TestTailLogReturnsLastLines(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	cfg := cfgIn(dir)
 	if err := os.WriteFile(cfg.LogFile, []byte("a\nb\nc\nd\n"), 0o644); err != nil {

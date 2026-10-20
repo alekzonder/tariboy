@@ -10,6 +10,7 @@ import (
 // The shim cannot import the store (it would link SQLite into the shim
 // binary), so it keeps its own copy of the layout. The copy must not drift.
 func TestShimTimeLayoutMatchesStore(t *testing.T) {
+	t.Parallel()
 	if timeLayout != store.TimeLayout {
 		t.Fatalf("shim timeLayout = %q, store.TimeLayout = %q", timeLayout, store.TimeLayout)
 	}
@@ -22,6 +23,7 @@ func TestShimTimeLayoutMatchesStore(t *testing.T) {
 // The daemon sends canonical deadlines, but an older daemon still on the other
 // end of the socket sends RFC 3339 with an offset and no fraction.
 func TestShimDeadlineAcceptsAnyRFC3339(t *testing.T) {
+	t.Parallel()
 	want := time.Date(2026, 9, 10, 2, 0, 0, 0, time.UTC)
 	for _, in := range []string{
 		store.FormatTime(want),

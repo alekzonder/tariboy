@@ -43,6 +43,7 @@ func writeSkillScriptsFor(t *testing.T, root string) string {
 }
 
 func TestWriteShimsUsesActiveImageLaunchers(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	active := writeSkillScriptsFor(t, filepath.Join(l.ImageDir(), "skills"))
 	external := writeSkillScriptsFor(t, filepath.Join(t.TempDir(), "skills"))
@@ -61,6 +62,7 @@ func TestWriteShimsUsesActiveImageLaunchers(t *testing.T) {
 }
 
 func TestDirectShimsForwardArgsToSkillLaunchers(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	skills := skillScriptsFor(t, l)
 	argsPath := filepath.Join(t.TempDir(), "args")
@@ -72,7 +74,6 @@ func TestDirectShimsForwardArgsToSkillLaunchers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("SHIM_ARGS", argsPath)
 	if err := WriteShims(l, agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,9 @@ func TestDirectShimsForwardArgsToSkillLaunchers(t *testing.T) {
 		if name == "tasks" {
 			args = []string{"show", "TARI-41"}
 		}
-		if output, err := exec.Command(filepath.Join(l.BinDir(), name), args...).CombinedOutput(); err != nil {
+		cmd := exec.Command(filepath.Join(l.BinDir(), name), args...)
+		cmd.Env = append(os.Environ(), "SHIM_ARGS="+argsPath)
+		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s: %v: %s", name, err, output)
 		}
 		got, err := os.ReadFile(argsPath)
@@ -95,6 +98,7 @@ func TestDirectShimsForwardArgsToSkillLaunchers(t *testing.T) {
 }
 
 func TestWriteShimsDispatchesDirectlyToOwningSkillScripts(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	skills := skillScriptsFor(t, l)
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}
@@ -125,6 +129,7 @@ func TestWriteShimsDispatchesDirectlyToOwningSkillScripts(t *testing.T) {
 	}
 }
 
+// Sequential: t.Setenv("PATH") changes the process environment.
 func TestWriteShimsDefersPython3CheckToIterationEnvironment(t *testing.T) {
 	l := binDirFor(t)
 	skillScriptsFor(t, l)
@@ -139,6 +144,7 @@ func TestWriteShimsDefersPython3CheckToIterationEnvironment(t *testing.T) {
 }
 
 func TestWriteShimsRequiresExecutableDirectScriptsBeforeWriting(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	skills := skillScriptsFor(t, l)
 	loop := filepath.Join(skills, "loop", "scripts", "loop.sh")
@@ -155,6 +161,7 @@ func TestWriteShimsRequiresExecutableDirectScriptsBeforeWriting(t *testing.T) {
 }
 
 func TestWriteShimsRepointsDirectSkillShimsAndRemovesManagedTools(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}
 	stale := "/home/u/.tariboy/store/versions/0.21.6/skills"
@@ -208,6 +215,7 @@ func TestWriteShimsRepointsDirectSkillShimsAndRemovesManagedTools(t *testing.T) 
 }
 
 func TestWriteShimsKeepsUserOwnedToolsShim(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	tools := filepath.Join(l.BinDir(), "tools")
 	body := "#!/bin/sh\necho user tool\n"
@@ -224,6 +232,7 @@ func TestWriteShimsKeepsUserOwnedToolsShim(t *testing.T) {
 }
 
 func TestWriteShimsKeepsCustomWrapperThatMentionsLegacyDispatcher(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	tools := filepath.Join(l.BinDir(), "tools")
 	body := "#!/usr/bin/env bash\n# exec python3 agent-tools/scripts/tools.py through a custom wrapper\nexec python3 -B /custom/tools.py \"$@\"\n"
@@ -240,6 +249,7 @@ func TestWriteShimsKeepsCustomWrapperThatMentionsLegacyDispatcher(t *testing.T) 
 }
 
 func TestWriteShimsKeepsCustomWrapperAroundLegacyGoClient(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	tools := filepath.Join(l.BinDir(), "tools")
 	body := "#!/usr/bin/env bash\necho invoking legacy client >&2\nexec \"/opt/tariboy/0.21.6/tariboy-tools\" \"$@\"\n"
@@ -257,6 +267,7 @@ func TestWriteShimsKeepsCustomWrapperAroundLegacyGoClient(t *testing.T) {
 
 // The tasks shim is conditional on the capability, in both directions.
 func TestWriteShimsReconcilesTasksCapability(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	skillScriptsFor(t, l)
 	tasksPath := filepath.Join(l.BinDir(), "tasks")
@@ -293,6 +304,7 @@ func TestWriteShimsReconcilesTasksCapability(t *testing.T) {
 }
 
 func TestWriteShimsReconcilesLoopCapability(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	skillScriptsFor(t, l)
 	donePath := filepath.Join(l.BinDir(), "i-am-done")
@@ -323,6 +335,7 @@ func TestWriteShimsReconcilesLoopCapability(t *testing.T) {
 // Re-running the daemon on the same version must leave the files untouched —
 // same bytes, same mode, and not even a rewrite (mtime is preserved).
 func TestWriteShimsIsIdempotent(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	skillScriptsFor(t, l)
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop", "tasks"}}
@@ -381,6 +394,7 @@ func TestWriteShimsIsIdempotent(t *testing.T) {
 
 // WriteShims writes shims and nothing else: no image unpack, no tree creation.
 func TestWriteShimsWritesOnlyShims(t *testing.T) {
+	t.Parallel()
 	l := binDirFor(t)
 	skillScriptsFor(t, l)
 	a := agent.Agent{Name: "worker", Plugins: []string{"loop"}}
@@ -406,6 +420,7 @@ func TestWriteShimsWritesOnlyShims(t *testing.T) {
 // A missing bin dir is an error the caller can log, not a directory WriteShims
 // silently conjures up.
 func TestWriteShimsFailsWithoutBinDir(t *testing.T) {
+	t.Parallel()
 	l := New(t.TempDir(), "ghost")
 	skillScriptsFor(t, l)
 	a := agent.Agent{Name: "ghost", Plugins: []string{"loop"}}

@@ -14,14 +14,24 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/harness"
+	"github.com/alekzonder/tariboy/internal/testutil"
 	"golang.org/x/sys/unix"
 )
 
 const shimTestProxyToken = "sk-tariboy-0123456789abcdef0123456789abcdef0123456789abcdef"
 
+// realHome is HOME before TestMain isolated it; tests that run the go
+// command hand it back so the build and module caches are reused.
+var realHome string
+
+// Tests in this package stay sequential when they swap package hooks
+// (execCommand, the tmux supervisor hooks, serverConnTimeoutNanos), call
+// t.Setenv or change TERM, or send SIGHUP to the test process, which every
+// in-process RunTmuxSupervisor would receive.
 func TestMain(m *testing.M) {
 	if len(os.Args) >= 6 && os.Args[1] == TmuxSupervisorMode && os.Args[4] == "--" {
 		if RunTmuxSupervisor(os.Args[2], os.Args[3], os.Args[5:]) != nil {
@@ -29,7 +39,50 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
-	os.Exit(m.Run())
+	// Harnesses, fake tmux and the supervisor inherit this environment; keep
+	// live TARIBOY_* variables and the user's HOME out of them.
+	realHome = os.Getenv("HOME")
+	cleanup, err := testutil.IsolateEnv()
+	if err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
+}
+
+// waitForPIDFile waits for path to hold a pid above 1 and returns it, or 0
+// when timeout passes first.
+func waitForPIDFile(path string, timeout time.Duration) int {
+	var pid int
+	testutil.WaitFor(timeout, func() bool {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
+		return err == nil && pid > 1
+	})
+	if pid <= 1 {
+		return 0
+	}
+	return pid
+}
+
+func processGone(pid int) bool { return syscall.Kill(pid, 0) != nil }
+
+// processStopped reports whether pid is in the stopped state, from
+// /proc/<pid>/stat on Linux and ps elsewhere.
+func processStopped(pid int) bool {
+	if data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat"); err == nil {
+		// The state follows the parenthesised command name.
+		if i := strings.LastIndexByte(string(data), ')'); i >= 0 && i+2 < len(data) {
+			return data[i+2] == 'T'
+		}
+		return false
+	}
+	out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+	return err == nil && strings.HasPrefix(strings.TrimSpace(string(out)), "T")
 }
 
 func codexHarnessArgv(t *testing.T, binDir string) []string {
@@ -82,6 +135,7 @@ func readNULTerminatedArgs(t *testing.T, path string) []string {
 }
 
 func TestRedactProxyTokenSegmentsPreservesURLBoundaries(t *testing.T) {
+	t.Parallel()
 	const tokenA = "sk-tariboy-0123456789abcdef0123456789abcdef0123456789abcdef"
 	const tokenB = "sk-tariboy-fedcba9876543210fedcba9876543210fedcba9876543210"
 	const base = "http://127.0.0.1:5555/_tariboy/"
@@ -104,6 +158,7 @@ func TestRedactProxyTokenSegmentsPreservesURLBoundaries(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := redactProxyTokenSegments(tc.in); got != tc.want {
 				t.Fatal("proxy token redaction did not preserve the expected structure")
 			}
@@ -125,17 +180,14 @@ func TestTmuxShimAttachEcho(t *testing.T) {
 
 	// Wait for the PTY to be registered so Resize can find it.
 	var ptmx *os.File
-	for i := 0; i < 200; i++ {
+	testutil.WaitFor(time.Second, func() bool {
 		activePTYsMu.Lock()
+		defer activePTYsMu.Unlock()
 		for f := range activePTYs["sess"] {
 			ptmx = f
 		}
-		activePTYsMu.Unlock()
-		if ptmx != nil {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		return ptmx != nil
+	})
 	if ptmx == nil {
 		t.Fatal("PTY was never registered in activePTYs")
 	}
@@ -193,14 +245,12 @@ func TestTmuxShimAttachMultiClientResize(t *testing.T) {
 
 	waitForCount := func(n int) {
 		t.Helper()
-		for i := 0; i < 200; i++ {
+		if testutil.WaitFor(time.Second, func() bool {
 			activePTYsMu.Lock()
-			got := len(activePTYs["sess"])
-			activePTYsMu.Unlock()
-			if got == n {
-				return
-			}
-			time.Sleep(5 * time.Millisecond)
+			defer activePTYsMu.Unlock()
+			return len(activePTYs["sess"]) == n
+		}) {
+			return
 		}
 		t.Fatalf("timed out waiting for activePTYs[sess] to reach %d entries", n)
 	}
@@ -254,6 +304,7 @@ func isTmuxAttachCommand(args []string) bool {
 }
 
 func TestTmuxShimResizeNoActivePTY(t *testing.T) {
+	t.Parallel()
 	s := &tmuxShim{session: "no-such-session"}
 	if err := s.Resize(ResizeParams{Cols: 80, Rows: 24}); err == nil {
 		t.Fatal("Resize with no active PTY should return an error, not panic")
@@ -448,6 +499,7 @@ func TestTmuxShimAttachRaceDoesNotLeakAttachError(t *testing.T) {
 }
 
 func TestSendKeysArgs_ItemsRawNoEnter(t *testing.T) {
+	t.Parallel()
 	items := []KeyItem{{Text: "hello world"}, {Key: "Enter"}, {Key: "C-c"}}
 	got := sendKeysCommands("sess", SendKeysParams{Items: items})
 	want := [][]string{
@@ -461,6 +513,7 @@ func TestSendKeysArgs_ItemsRawNoEnter(t *testing.T) {
 }
 
 func TestSendKeysArgs_LegacyKeysAppendEnter(t *testing.T) {
+	t.Parallel()
 	got := sendKeysCommands("sess", SendKeysParams{Keys: "ls -la"})
 	want := [][]string{{"send-keys", "-t", "sess", "--", "ls -la", "Enter"}}
 	if !reflect.DeepEqual(got, want) {
@@ -469,6 +522,7 @@ func TestSendKeysArgs_LegacyKeysAppendEnter(t *testing.T) {
 }
 
 func TestCaptureArgs_AnsiScrollback(t *testing.T) {
+	t.Parallel()
 	got := captureArgs("sess", 200)
 	want := []string{"capture-pane", "-e", "-p", "-S", "-200", "-t", "sess"}
 	if !reflect.DeepEqual(got, want) {
@@ -477,6 +531,7 @@ func TestCaptureArgs_AnsiScrollback(t *testing.T) {
 }
 
 func TestRunProcessModeWritesResult(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "logs"), 0o700); err != nil {
 		t.Fatal(err)
@@ -552,6 +607,7 @@ func TestRunProcessRedactsCodexProxyTokenOnlyFromShimLog(t *testing.T) {
 }
 
 func TestRunNonZeroExit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "logs"), 0o700)
 	if err := Run(Options{
@@ -569,6 +625,7 @@ func TestRunNonZeroExit(t *testing.T) {
 }
 
 func TestRunHardTimeoutKills(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "logs"), 0o700)
 	start := time.Now()
@@ -592,6 +649,7 @@ func TestRunHardTimeoutKills(t *testing.T) {
 }
 
 func TestRunProcessForcedStopKillsSignalResistantHarness(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "logs"), 0o700); err != nil {
 		t.Fatal(err)
@@ -610,19 +668,7 @@ func TestRunProcessForcedStopKillsSignalResistantHarness(t *testing.T) {
 		}, 100*time.Millisecond, 20*time.Millisecond, forceStop)
 	}()
 
-	var pid int
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		data, err := os.ReadFile(ready)
-		if err == nil {
-			pid, err = strconv.Atoi(string(data))
-			if err != nil {
-				t.Fatal(err)
-			}
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	pid := waitForPIDFile(ready, 2*time.Second)
 	if pid <= 0 {
 		t.Fatal("signal-resistant harness did not start")
 	}
@@ -637,17 +683,13 @@ func TestRunProcessForcedStopKillsSignalResistantHarness(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("forced stop did not terminate signal-resistant harness")
 	}
-	deadline = time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if err := syscall.Kill(-pid, 0); errors.Is(err, syscall.ESRCH) {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(time.Second, func() bool { return errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH) }) {
+		t.Fatal("harness process group still exists after forced stop")
 	}
-	t.Fatal("harness process group still exists after forced stop")
 }
 
 func TestInitialDeadlinePrefersPersistedAbsoluteDeadline(t *testing.T) {
+	t.Parallel()
 	persisted := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339Nano)
 	got := initialDeadline(Options{HardTimeoutS: 1, HardDeadline: persisted})
 	want, err := time.Parse(time.RFC3339Nano, persisted)
@@ -664,30 +706,35 @@ func TestInitialDeadlinePrefersPersistedAbsoluteDeadline(t *testing.T) {
 // deadline). This is what lets an interactive agent run until it exits or is
 // stopped instead of being killed by the default 60s timeout.
 func TestDeadlineWatchdogZeroDeadlineNeverFiresButCanBeArmed(t *testing.T) {
-	fired := make(chan struct{}, 1)
-	w := newDeadlineWatchdog(time.Time{}, func() { fired <- struct{}{} })
-	defer w.Stop()
-	select {
-	case <-fired:
-		t.Fatal("watchdog with a zero (disabled) deadline fired on its own")
-	case <-time.After(120 * time.Millisecond):
-	}
-	// A subsequent Set must still arm the watchdog.
-	deadline := time.Now().Add(40 * time.Millisecond).UTC().Format(time.RFC3339Nano)
-	if err := w.Set(deadline); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-fired:
-	case <-time.After(250 * time.Millisecond):
-		t.Fatal("watchdog did not fire after being armed via Set")
-	}
+	t.Parallel()
+	// The watchdog is timer-only code; the bubble's fake clock runs it instantly.
+	synctest.Test(t, func(t *testing.T) {
+		fired := make(chan struct{}, 1)
+		w := newDeadlineWatchdog(time.Time{}, func() { fired <- struct{}{} })
+		defer w.Stop()
+		select {
+		case <-fired:
+			t.Fatal("watchdog with a zero (disabled) deadline fired on its own")
+		case <-time.After(time.Hour):
+		}
+		// A subsequent Set must still arm the watchdog.
+		deadline := time.Now().Add(40 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+		if err := w.Set(deadline); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-fired:
+		case <-time.After(250 * time.Millisecond):
+			t.Fatal("watchdog did not fire after being armed via Set")
+		}
+	})
 }
 
 // tmuxDeadline (the interactive path) must NOT apply the 60s default: with no
 // explicit hard timeout/deadline it returns the zero time (no deadline). An
 // explicit HardTimeoutS or HardDeadline still arms it.
 func TestTmuxDeadlineNoDefaultForInteractive(t *testing.T) {
+	t.Parallel()
 	if got := tmuxDeadline(Options{}); !got.IsZero() {
 		t.Fatalf("tmuxDeadline with no timeout = %s, want zero (no deadline)", got)
 	}
@@ -702,26 +749,30 @@ func TestTmuxDeadlineNoDefaultForInteractive(t *testing.T) {
 }
 
 func TestDeadlineWatchdogResetHonorsLatestAbsoluteDeadline(t *testing.T) {
-	fired := make(chan struct{}, 1)
-	w := newDeadlineWatchdog(time.Now().Add(40*time.Millisecond), func() { fired <- struct{}{} })
-	defer w.Stop()
-	deadline := time.Now().Add(150 * time.Millisecond).UTC().Format(time.RFC3339Nano)
-	if err := w.Set(deadline); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-fired:
-		t.Fatal("watchdog fired at stale deadline after reset")
-	case <-time.After(80 * time.Millisecond):
-	}
-	select {
-	case <-fired:
-	case <-time.After(250 * time.Millisecond):
-		t.Fatal("watchdog did not fire at updated deadline")
-	}
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		fired := make(chan struct{}, 1)
+		w := newDeadlineWatchdog(time.Now().Add(40*time.Millisecond), func() { fired <- struct{}{} })
+		defer w.Stop()
+		deadline := time.Now().Add(150 * time.Millisecond).UTC().Format(time.RFC3339Nano)
+		if err := w.Set(deadline); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-fired:
+			t.Fatal("watchdog fired at stale deadline after reset")
+		case <-time.After(80 * time.Millisecond):
+		}
+		select {
+		case <-fired:
+		case <-time.After(250 * time.Millisecond):
+			t.Fatal("watchdog did not fire at updated deadline")
+		}
+	})
 }
 
 func TestShellJoinQuotesArgs(t *testing.T) {
+	t.Parallel()
 	got := shellJoin([]string{"claude", "--name", "a b", "it's ok", ""})
 	want := `'claude' '--name' 'a b' 'it'"'"'s ok' ''`
 	if got != want {
@@ -730,6 +781,7 @@ func TestShellJoinQuotesArgs(t *testing.T) {
 }
 
 func TestNonTerminalStdinErrorIncludesDarwinENODEV(t *testing.T) {
+	t.Parallel()
 	if !isNonTerminalStdinError(unix.ENODEV) {
 		t.Fatal("Darwin ENODEV was treated as a terminal inspection failure")
 	}
@@ -791,6 +843,8 @@ func TestRunTmuxSupervisorPreservesExitAndArgv(t *testing.T) {
 	}
 }
 
+// Sequential: it writes an executable and runs it at once; a parallel
+// test's fork can still hold the file open for writing (ETXTBSY).
 func TestRunTmuxSupervisorIgnoresStoppedHarness(t *testing.T) {
 	dir := t.TempDir()
 	harness := filepath.Join(dir, "stoppable-harness.sh")
@@ -815,17 +869,7 @@ exit 23
 	}()
 	waited := false
 
-	var pid int
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		data, err := os.ReadFile(pidPath)
-		if err == nil {
-			pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
-			if err == nil && pid > 1 {
-				break
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	pid := waitForPIDFile(pidPath, 2*time.Second)
 	if pid <= 1 {
 		t.Fatal("harness did not write a valid pid")
 	}
@@ -845,7 +889,10 @@ exit 23
 	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(50 * time.Millisecond)
+	// The supervisor's wait is notified once the harness is really stopped.
+	if !testutil.WaitFor(2*time.Second, func() bool { return processStopped(pid) }) {
+		t.Fatal("harness did not stop after SIGSTOP")
+	}
 	if err := syscall.Kill(pid, syscall.SIGCONT); err != nil && !errors.Is(err, syscall.ESRCH) {
 		t.Fatal(err)
 	}
@@ -952,21 +999,15 @@ func TestRunTmuxSupervisorHUPPreservesCooperativeExit(t *testing.T) {
 	statusPath := filepath.Join(dir, "status")
 	harness := filepath.Join(dir, "cooperative-harness.sh")
 	if err := os.WriteFile(harness, []byte(`#!/bin/sh
-printf '%s\n' "$$" > "$1"
 trap 'exit 23' TERM
+printf '%s\n' "$$" > "$1"
 while :; do /bin/sleep 1; done
 `), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
 	go func() { done <- RunTmuxSupervisor("supervised", statusPath, []string{harness, pidPath}) }()
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		if _, err := os.Stat(pidPath); err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if _, err := os.Stat(pidPath); err != nil {
+	if waitForPIDFile(pidPath, 2*time.Second) == 0 {
 		t.Fatal("harness did not become ready")
 	}
 	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
@@ -985,7 +1026,18 @@ while :; do /bin/sleep 1; done
 	}
 }
 
+// shortenTmuxSupervisorWaits lowers the supervisor's TERM and KILL waits to
+// wait for the rest of the test.
+func shortenTmuxSupervisorWaits(t *testing.T, wait time.Duration) {
+	t.Helper()
+	oldTerm, oldKill := tmuxTermWait, tmuxKillWait
+	tmuxTermWait, tmuxKillWait = wait, wait
+	t.Cleanup(func() { tmuxTermWait, tmuxKillWait = oldTerm, oldKill })
+}
+
 func TestRunTmuxSupervisorBoundedExitWaits(t *testing.T) {
+	const wait = 300 * time.Millisecond
+	shortenTmuxSupervisorWaits(t, wait)
 	t.Run("TERM wait expires before KILL observes exit", func(t *testing.T) {
 		oldWait, oldKill := waitTmuxChildExit, killTmuxGroup
 		killed := make(chan struct{})
@@ -1012,13 +1064,7 @@ func TestRunTmuxSupervisorBoundedExitWaits(t *testing.T) {
 		go func() {
 			done <- RunTmuxSupervisor("supervised", statusPath, []string{"/bin/sh", "-c", `trap '' TERM; printf '%s' "$$" > "$1"; while :; do /bin/sleep 1; done`, "harness", pidPath})
 		}()
-		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-			if _, err := os.Stat(pidPath); err == nil {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		if _, err := os.Stat(pidPath); err != nil {
+		if waitForPIDFile(pidPath, 2*time.Second) == 0 {
 			t.Fatal("harness did not become ready")
 		}
 		start := time.Now()
@@ -1028,8 +1074,8 @@ func TestRunTmuxSupervisorBoundedExitWaits(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Fatal(err)
 		}
-		if elapsed := time.Since(start); elapsed < 2*time.Second || elapsed > 3*time.Second {
-			t.Fatalf("TERM wait elapsed %v, want two-second expiry", elapsed)
+		if elapsed := time.Since(start); elapsed < wait || elapsed > wait+time.Second {
+			t.Fatalf("TERM wait elapsed %v, want %v expiry", elapsed, wait)
 		}
 		if got := readSupervisorStatus(t, statusPath); got != 137 {
 			t.Fatalf("status = %d, want 137", got)
@@ -1039,12 +1085,21 @@ func TestRunTmuxSupervisorBoundedExitWaits(t *testing.T) {
 	t.Run("KILL wait expires without status", func(t *testing.T) {
 		oldWait := waitTmuxChildExit
 		release := make(chan struct{})
+		entered := make(chan struct{})
 		waitTmuxChildExit = func(int) error {
+			close(entered)
 			<-release
 			return nil
 		}
 		t.Cleanup(func() {
 			close(release)
+			// The supervisor's observer goroutine reads the hook before it
+			// blocks; restoring it is ordered after that read only once the
+			// fake has been entered.
+			select {
+			case <-entered:
+			case <-time.After(2 * time.Second):
+			}
 			waitTmuxChildExit = oldWait
 		})
 
@@ -1055,17 +1110,7 @@ func TestRunTmuxSupervisorBoundedExitWaits(t *testing.T) {
 		go func() {
 			done <- RunTmuxSupervisor("supervised", statusPath, []string{"/bin/sh", "-c", `trap '' TERM; printf '%s' "$$" > "$1"; while :; do /bin/sleep 1; done`, "harness", pidPath})
 		}()
-		var pid int
-		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-			data, err := os.ReadFile(pidPath)
-			if err == nil {
-				pid, _ = strconv.Atoi(string(data))
-				if pid > 1 {
-					break
-				}
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+		pid := waitForPIDFile(pidPath, 2*time.Second)
 		if pid <= 1 {
 			t.Fatal("harness did not write a valid pid")
 		}
@@ -1074,8 +1119,8 @@ func TestRunTmuxSupervisorBoundedExitWaits(t *testing.T) {
 			t.Fatal(err)
 		}
 		err := <-done
-		if elapsed := time.Since(start); elapsed < 4*time.Second || elapsed > 5*time.Second {
-			t.Fatalf("bounded waits elapsed %v, want four seconds", elapsed)
+		if elapsed := time.Since(start); elapsed < 2*wait || elapsed > 2*wait+time.Second {
+			t.Fatalf("bounded waits elapsed %v, want %v", elapsed, 2*wait)
 		}
 		if err == nil {
 			t.Fatal("supervisor succeeded without confirmed child exit")
@@ -1090,6 +1135,8 @@ func TestRunTmuxSupervisorBoundedExitWaits(t *testing.T) {
 	})
 }
 
+// Sequential: it writes an executable and runs it at once; a parallel
+// test's fork can still hold the file open for writing (ETXTBSY).
 func TestRunTmuxSupervisorPreservesExitedHarnessStatusAndKillsDescendant(t *testing.T) {
 	dir := t.TempDir()
 	harness := filepath.Join(dir, "race-harness.sh")
@@ -1125,33 +1172,18 @@ exit 23
 		}
 		if data, err := os.ReadFile(childPIDPath); err == nil {
 			if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid > 1 {
-				for deadline := time.Now().Add(time.Second); time.Now().Before(deadline) && syscall.Kill(pid, 0) == nil; {
-					time.Sleep(10 * time.Millisecond)
-				}
+				testutil.WaitFor(time.Second, func() bool { return processGone(pid) })
 			}
 		}
 	})
 
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		if _, err := os.Stat(readyPath); err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if _, err := os.Stat(readyPath); err != nil {
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		_, err := os.Stat(readyPath)
+		return err == nil
+	}) {
 		t.Fatal("harness did not become ready")
 	}
-	childPID := 0
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		data, err := os.ReadFile(childPIDPath)
-		if err == nil {
-			childPID, err = strconv.Atoi(strings.TrimSpace(string(data)))
-			if err == nil && childPID > 1 {
-				break
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	childPID := waitForPIDFile(childPIDPath, 2*time.Second)
 	if childPID <= 1 {
 		t.Fatal("descendant did not write a valid pid")
 	}
@@ -1171,10 +1203,7 @@ exit 23
 	if err != nil || string(data) != "23\n" {
 		t.Fatalf("status = %q, error = %v; want 23", data, err)
 	}
-	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline) && syscall.Kill(childPID, 0) == nil; {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if syscall.Kill(childPID, 0) == nil {
+	if !testutil.WaitFor(time.Second, func() bool { return processGone(childPID) }) {
 		t.Fatal("descendant survived supervisor cleanup after leader exit")
 	}
 	if _, err := os.Stat(survivedPath); !os.IsNotExist(err) {
@@ -1183,7 +1212,9 @@ exit 23
 }
 
 func TestReadTmuxExitStatus(t *testing.T) {
+	t.Parallel()
 	t.Run("valid", func(t *testing.T) {
+		t.Parallel()
 		for _, tc := range []struct {
 			content string
 			want    int
@@ -1207,6 +1238,7 @@ func TestReadTmuxExitStatus(t *testing.T) {
 	})
 
 	t.Run("invalid", func(t *testing.T) {
+		t.Parallel()
 		tests := []struct {
 			name    string
 			content string
@@ -1220,6 +1252,7 @@ func TestReadTmuxExitStatus(t *testing.T) {
 		}
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
 				path := filepath.Join(t.TempDir(), "status")
 				if err := os.WriteFile(path, []byte(tc.content), 0o600); err != nil {
 					t.Fatal(err)
@@ -1232,6 +1265,7 @@ func TestReadTmuxExitStatus(t *testing.T) {
 	})
 
 	t.Run("missing", func(t *testing.T) {
+		t.Parallel()
 		path := filepath.Join(t.TempDir(), "missing")
 		if got, err := readTmuxExitStatus(path); err == nil || got != -1 {
 			t.Fatalf("readTmuxExitStatus(missing) = (%d, %v), want (-1, error)", got, err)
@@ -1240,6 +1274,7 @@ func TestReadTmuxExitStatus(t *testing.T) {
 }
 
 func TestTmuxBootstrapSessionArgsPassesEnv(t *testing.T) {
+	t.Parallel()
 	got := tmuxBootstrapSessionArgs("agent-iter", []string{
 		"ANTHROPIC_BASE_URL=http://127.0.0.1:1234/token",
 		"",
@@ -1514,282 +1549,6 @@ esac
 	assertSafeCodexShimLog(t, dir)
 }
 
-func TestKillTmuxSessionTerminatesAllPanesAndPreservesPrefixedSession(t *testing.T) {
-	tmux, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Skip("tmux unavailable")
-	}
-	tmuxTmp, err := os.MkdirTemp("/tmp", "tariboy-tmux-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tmuxTmp) })
-	t.Setenv("TMUX", "")
-	t.Setenv("TMUX_TMPDIR", tmuxTmp)
-
-	dir := t.TempDir()
-	shimBin := filepath.Join(dir, "tariboy-shim")
-	build := exec.Command("go", "build", "-o", shimBin, "./cmd/tariboy-shim")
-	build.Dir = filepath.Join("..", "..")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build tariboy-shim: %v\n%s", err, output)
-	}
-	harness := filepath.Join(dir, "bounded-harness.sh")
-	if err := os.WriteFile(harness, []byte(`#!/bin/sh
-printf '%s\n' "$$" > "$1"
-/bin/sh -c 'printf '\''%s\n'\'' "$$" > "$1"; trap '\'''\'' TERM HUP INT; i=0; while [ "$i" -lt 120 ]; do /bin/sleep 0.05; i=$((i + 1)); done' child "$2" &
-trap '' TERM HUP INT
-wait
-`), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	managed, decoy := "shim-kill", "shim-kill-decoy"
-	markers := []string{
-		filepath.Join(dir, "managed-1.pid"), filepath.Join(dir, "managed-1-child.pid"),
-		filepath.Join(dir, "managed-2.pid"), filepath.Join(dir, "managed-2-child.pid"),
-	}
-	statuses := []string{filepath.Join(dir, "managed-1.status"), filepath.Join(dir, "managed-2.status")}
-	runTmux := func(args ...string) error { return exec.Command(tmux, args...).Run() }
-	supervisorBinDir := t.TempDir()
-	supervisorTmuxCalled := filepath.Join(dir, "supervisor-tmux-called")
-	if err := os.WriteFile(filepath.Join(supervisorBinDir, "tmux"), []byte("#!/bin/sh\nprintf called > \"$SHIM_TEST_SUPERVISOR_TMUX_CALLED\"\nexit 2\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	supervisorCommand := func(status string, paneMarkers []string) string {
-		return shellJoin([]string{"/usr/bin/env", "PATH=" + supervisorBinDir, "SHIM_TEST_SUPERVISOR_TMUX_CALLED=" + supervisorTmuxCalled, shimBin, "__tmux-supervisor", managed, status, "--", harness, paneMarkers[0], paneMarkers[1]})
-	}
-	readPID := func(marker string) (int, bool) {
-		data, err := os.ReadFile(marker)
-		if err != nil {
-			return 0, false
-		}
-		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-		return pid, err == nil && pid > 1
-	}
-	var pids []int
-	decoyPID := 0
-	t.Cleanup(func() {
-		_ = runTmux("kill-session", "-t", "="+managed)
-		_ = runTmux("kill-session", "-t", "="+decoy)
-		_ = runTmux("kill-server")
-		cleanupPIDs := append([]int(nil), pids...)
-		if decoyPID > 1 {
-			cleanupPIDs = append(cleanupPIDs, decoyPID)
-		}
-		deadline := time.Now().Add(9 * time.Second)
-		for _, pid := range cleanupPIDs {
-			for time.Now().Before(deadline) && syscall.Kill(pid, 0) == nil {
-				time.Sleep(10 * time.Millisecond)
-			}
-			if syscall.Kill(pid, 0) == nil {
-				t.Errorf("bounded owned process %d survived cleanup", pid)
-			}
-		}
-	})
-	if err := runTmux("new-session", "-d", "-s", managed, supervisorCommand(statuses[0], markers[:2])); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTmux("split-window", "-d", "-t", "="+managed+":", supervisorCommand(statuses[1], markers[2:])); err != nil {
-		t.Fatal(err)
-	}
-	if err := runTmux("new-session", "-d", "-s", decoy, "/bin/sleep 8"); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, marker := range markers {
-		deadline := time.Now().Add(3 * time.Second)
-		found := false
-		for time.Now().Before(deadline) {
-			if pid, ok := readPID(marker); ok {
-				pids = append(pids, pid)
-				found = true
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		if !found {
-			t.Fatalf("pane did not write owned marker %s", marker)
-		}
-	}
-	output, err := exec.Command(tmux, "list-panes", "-t", "="+managed, "-F", "#{pane_pid}").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, field := range strings.Fields(string(output)) {
-		pid, err := strconv.Atoi(field)
-		if err != nil || pid <= 1 {
-			t.Fatalf("invalid supervisor pid %q", field)
-		}
-		pids = append(pids, pid)
-	}
-	decoyOutput, err := exec.Command(tmux, "list-panes", "-t", "="+decoy, "-F", "#{pane_pid}").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoyPID, err = strconv.Atoi(strings.TrimSpace(string(decoyOutput)))
-	if err != nil || decoyPID <= 1 {
-		t.Fatalf("invalid decoy pid %q", decoyOutput)
-	}
-
-	if err := KillTmuxSession(managed); err != nil {
-		t.Fatal(err)
-	}
-	for _, pid := range pids {
-		deadline := time.Now().Add(3 * time.Second)
-		for time.Now().Before(deadline) && syscall.Kill(pid, 0) == nil {
-			time.Sleep(10 * time.Millisecond)
-		}
-		if syscall.Kill(pid, 0) == nil {
-			t.Fatalf("managed supervisor or harness process %d survived Kill", pid)
-		}
-	}
-	for _, statusPath := range statuses {
-		status, err := os.ReadFile(statusPath)
-		if err != nil || string(status) != "137\n" {
-			t.Fatalf("supervisor status = %q, error = %v; want 137", status, err)
-		}
-	}
-	if _, err := os.Stat(supervisorTmuxCalled); !os.IsNotExist(err) {
-		t.Fatalf("pane supervisor invoked tmux: %v", err)
-	}
-	if err := KillTmuxSession(managed); err != nil {
-		t.Fatalf("second Kill of absent exact session: %v", err)
-	}
-	if err := runTmux("has-session", "-t", "="+decoy); err != nil {
-		t.Fatal("Kill of absent managed session removed prefixed decoy")
-	}
-	if err := syscall.Kill(decoyPID, 0); err != nil {
-		t.Fatal("prefixed decoy pane process was killed")
-	}
-}
-
-func TestTmuxSupervisorGivesHarnessForegroundTerminal(t *testing.T) {
-	tmux, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Skip("tmux unavailable")
-	}
-	t.Setenv("TMUX", "")
-	t.Setenv("TMUX_TMPDIR", t.TempDir())
-
-	dir := t.TempDir()
-	shimBin := filepath.Join(dir, "tariboy-shim")
-	build := exec.Command("go", "build", "-o", shimBin, "./cmd/tariboy-shim")
-	build.Dir = filepath.Join("..", "..")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build tariboy-shim: %v\n%s", err, output)
-	}
-	harness := filepath.Join(dir, "interactive-harness.sh")
-	if err := os.WriteFile(harness, []byte(`#!/bin/sh
-printf '%s\n' "$$" > "$1"
-trap 'printf int > "$3"; exit 23' INT
-trap 'printf ttin > "$4"; exit 24' TTIN
-IFS= read -r line
-printf '%s\n' "$line" > "$2"
-i=0
-while [ "$i" -lt 120 ]; do /bin/sleep 0.05; i=$((i + 1)); done
-`), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	session := "shim-foreground"
-	pidPath := filepath.Join(dir, "harness.pid")
-	inputPath := filepath.Join(dir, "input")
-	intPath := filepath.Join(dir, "int")
-	ttinPath := filepath.Join(dir, "ttin")
-	statusPath := filepath.Join(dir, "harness.status")
-	supervisorErrPath := filepath.Join(dir, "supervisor.stderr")
-	runTmux := func(args ...string) error { return exec.Command(tmux, args...).Run() }
-
-	var pids []int
-	t.Cleanup(func() {
-		if output, err := exec.Command(tmux, "list-panes", "-t", "="+session, "-F", "#{pane_pid}").Output(); err == nil {
-			if pid, err := strconv.Atoi(strings.TrimSpace(string(output))); err == nil && pid > 1 {
-				pids = append(pids, pid)
-			}
-		}
-		_ = runTmux("kill-session", "-t", "="+session)
-		_ = runTmux("kill-server")
-		deadline := time.Now().Add(8 * time.Second)
-		for _, pid := range pids {
-			for time.Now().Before(deadline) && syscall.Kill(pid, 0) == nil {
-				time.Sleep(10 * time.Millisecond)
-			}
-			if syscall.Kill(pid, 0) == nil {
-				t.Errorf("bounded interactive process %d survived cleanup", pid)
-			}
-		}
-	})
-	command := shellJoin([]string{shimBin, TmuxSupervisorMode, session, statusPath, "--", harness, pidPath, inputPath, intPath, ttinPath}) + " 2>" + shellQuote(supervisorErrPath)
-	if err := runTmux("new-session", "-d", "-s", session, command); err != nil {
-		t.Fatal(err)
-	}
-
-	readPID := func(path string) int {
-		t.Helper()
-		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-			data, err := os.ReadFile(path)
-			if err == nil {
-				pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-				if err == nil && pid > 1 {
-					return pid
-				}
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		t.Fatalf("missing valid pid marker %s", path)
-		return 0
-	}
-	harnessPID := readPID(pidPath)
-	pids = append(pids, harnessPID)
-	supervisorOutput, err := exec.Command(tmux, "list-panes", "-t", "="+session, "-F", "#{pane_pid}").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	supervisorPID, err := strconv.Atoi(strings.TrimSpace(string(supervisorOutput)))
-	if err != nil || supervisorPID <= 1 || supervisorPID == harnessPID {
-		t.Fatalf("supervisor pid = %q, harness pid = %d", supervisorOutput, harnessPID)
-	}
-	pids = append(pids, supervisorPID)
-	paneTarget := "=" + session + ":"
-
-	sendErr := runTmux("send-keys", "-t", paneTarget, "-l", "--", "typed input")
-	if sendErr == nil {
-		sendErr = runTmux("send-keys", "-t", paneTarget, "Enter")
-	}
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		if data, err := os.ReadFile(inputPath); err == nil && string(data) == "typed input\n" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if data, err := os.ReadFile(inputPath); err != nil || string(data) != "typed input\n" {
-		ttin, _ := os.ReadFile(ttinPath)
-		supervisorErr, _ := os.ReadFile(supervisorErrPath)
-		status, _ := os.ReadFile(statusPath)
-		pane, _ := exec.Command(tmux, "list-panes", "-t", "="+session, "-F", "dead=#{pane_dead} status=#{pane_dead_status} signal=#{pane_dead_signal}").Output()
-		t.Fatalf("harness did not read pane input (input=%q, ttin=%q, status=%q, read_error=%v, send_error=%v, supervisor_error=%q, pane=%q)", data, ttin, status, err, sendErr, supervisorErr, pane)
-	}
-	if syscall.Kill(supervisorPID, 0) != nil {
-		t.Fatal("supervisor exited before its harness")
-	}
-	if _, err := os.Stat(statusPath); !os.IsNotExist(err) {
-		t.Fatalf("supervisor wrote status before harness exit: %v", err)
-	}
-
-	if err := runTmux("send-keys", "-t", paneTarget, "C-c"); err != nil {
-		t.Fatal(err)
-	}
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-		data, statusErr := os.ReadFile(statusPath)
-		if _, intErr := os.Stat(intPath); intErr == nil && statusErr == nil && string(data) == "23\n" {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	data, statusErr := os.ReadFile(statusPath)
-	_, intErr := os.Stat(intPath)
-	t.Fatalf("terminal C-c did not reach harness (status=%q, status_error=%v, int_error=%v)", data, statusErr, intErr)
-}
-
 func TestKillTmuxSessionPropagatesTmuxOperationalError(t *testing.T) {
 	old := execCommand
 	t.Cleanup(func() { execCommand = old })
@@ -1804,12 +1563,16 @@ func TestKillTmuxSessionPropagatesTmuxOperationalError(t *testing.T) {
 }
 
 func TestRunTmuxSupervisorKillsOwnedHarnessGroupOnHUP(t *testing.T) {
+	// The harness ignores TERM, so only the TERM wait separates HUP from KILL.
+	shortenTmuxSupervisorWaits(t, 300*time.Millisecond)
 	dir := t.TempDir()
 	harness := filepath.Join(dir, "bounded-harness.sh")
+	// Each process ignores the signals before it writes its marker, so the HUP
+	// sent once both markers exist cannot end the leader through TERM.
 	if err := os.WriteFile(harness, []byte(`#!/bin/sh
-printf '%s\n' "$$" > "$1"
-/bin/sh -c 'printf '\''%s\n'\'' "$$" > "$1"; trap '\'''\'' TERM HUP INT; i=0; while [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done' child "$2" &
 trap '' TERM HUP INT
+printf '%s\n' "$$" > "$1"
+/bin/sh -c 'trap '\'''\'' TERM HUP INT; printf '\''%s\n'\'' "$$" > "$1"; i=0; while [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done' child "$2" &
 wait
 `), 0o755); err != nil {
 		t.Fatal(err)
@@ -1833,18 +1596,11 @@ wait
 
 	readPID := func(path string) int {
 		t.Helper()
-		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-			data, err := os.ReadFile(path)
-			if err == nil {
-				pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-				if err == nil && pid > 1 {
-					return pid
-				}
-			}
-			time.Sleep(10 * time.Millisecond)
+		pid := waitForPIDFile(path, 2*time.Second)
+		if pid <= 1 {
+			t.Fatalf("missing valid pid marker %s", path)
 		}
-		t.Fatalf("missing valid pid marker %s", path)
-		return 0
+		return pid
 	}
 	leaderPID := readPID(leaderMarker)
 	childPID := readPID(childMarker)
@@ -1860,10 +1616,7 @@ wait
 		t.Fatal(supervisorErr)
 	}
 	for _, pid := range []int{leaderPID, childPID} {
-		for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline) && syscall.Kill(pid, 0) == nil; {
-			time.Sleep(10 * time.Millisecond)
-		}
-		if syscall.Kill(pid, 0) == nil {
+		if !testutil.WaitFor(2*time.Second, func() bool { return processGone(pid) }) {
 			t.Fatalf("owned harness process %d survived supervisor", pid)
 		}
 	}

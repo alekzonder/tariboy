@@ -7,6 +7,7 @@ import (
 )
 
 func TestMaterializeSkills(t *testing.T) {
+	t.Parallel()
 	img := t.TempDir()
 	base := t.TempDir()
 	sub := filepath.Join(".claude", "skills")
@@ -41,6 +42,7 @@ func TestMaterializeSkills(t *testing.T) {
 }
 
 func TestMaterializeSkillsNoSkillsDirIsNoop(t *testing.T) {
+	t.Parallel()
 	if err := MaterializeSkills(t.TempDir(), t.TempDir(), "d"); err != nil {
 		t.Fatalf("absent skills dir must be a no-op, got %v", err)
 	}
@@ -51,6 +53,7 @@ func TestMaterializeSkillsNoSkillsDirIsNoop(t *testing.T) {
 // The M15 source is a semi-untrusted image, so confinement must be local and
 // not rely on Store.Unpack stripping symlinks.
 func TestMaterializeSkillsDoesNotDerefSourceSymlink(t *testing.T) {
+	t.Parallel()
 	img := t.TempDir()
 	secretDir := t.TempDir()
 	secret := filepath.Join(secretDir, "secret.txt")
@@ -93,6 +96,7 @@ func TestMaterializeSkillsDoesNotDerefSourceSymlink(t *testing.T) {
 // destDir/<name> as a symlink pointing outside, a re-materialize must not
 // escape. The outside target must remain untouched.
 func TestMaterializeSkillsDoesNotWriteThroughDestSymlink(t *testing.T) {
+	t.Parallel()
 	img := t.TempDir()
 	skill := filepath.Join(img, "skills", "greeter")
 	if err := os.MkdirAll(skill, 0o755); err != nil {
@@ -126,6 +130,7 @@ func TestMaterializeSkillsDoesNotWriteThroughDestSymlink(t *testing.T) {
 }
 
 func TestMaterializeSkillsRejectsUnsafeName(t *testing.T) {
+	t.Parallel()
 	img := t.TempDir()
 	// A skill dir whose name would escape destDir if joined naively.
 	bad := filepath.Join(img, "skills", "..evil")
@@ -151,6 +156,7 @@ func TestMaterializeSkillsRejectsUnsafeName(t *testing.T) {
 // MaterializeSkills refuses with an error and (b) the outside target is
 // UNTOUCHED — no skill content escaped through the symlinked ancestor.
 func TestMaterializeSkillsRefusesSymlinkedDestAncestor(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name        string // ancestor component planted as a symlink
 		sub         string
