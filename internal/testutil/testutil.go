@@ -4,6 +4,7 @@ package testutil
 import (
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -55,4 +56,14 @@ func WaitFor(timeout time.Duration, cond func() bool) bool {
 		// goroutine or process has no event a test could wait on instead.
 		time.Sleep(5 * time.Millisecond)
 	}
+}
+
+// WriteExecutable writes a script that a test runs next. It holds
+// syscall.ForkLock while the file is open, so a parallel test cannot fork a
+// child that keeps the write descriptor and makes the exec fail with "text
+// file busy" (golang.org/issue/22315).
+func WriteExecutable(path string, data []byte, perm os.FileMode) error {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	return os.WriteFile(path, data, perm)
 }

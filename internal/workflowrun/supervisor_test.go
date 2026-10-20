@@ -69,7 +69,7 @@ func supervisorImage(t *testing.T) (*workflowimage.Store, workflowimage.Manifest
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(content), mode); err != nil {
+		if err := testutil.WriteExecutable(p, []byte(content), mode); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -660,6 +660,9 @@ func TestLoopFiresOnWallClockAndSkipsLateWakes(t *testing.T) {
 	if err := svc.SetSettings(Settings{Enabled: false, Time: "03:00", KeepBackups: 7, RetentionDays: 90}); err != nil {
 		t.Fatal(err)
 	}
+	// The loop may have read the settings before SetSettings wrote them; a
+	// tick before the slot makes it read them again.
+	step(day(27, 2, 0))
 	step(day(27, 3, 0))
 	if got := started(); got != "2026-09-26T03:00:00.000000000Z" {
 		t.Fatalf("disabled run = %q", got)
