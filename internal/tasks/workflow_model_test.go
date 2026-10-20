@@ -38,7 +38,7 @@ func seedWorkflowTask(t *testing.T, svc *Service, actor Actor, digest, category,
 	}
 	forceTask(t, svc, task, `status = ?, workflow_digest = ?, workflow_status = ?, workflow_paused_reason = ?`,
 		category, digest, status, paused)
-	got, err := taskByID(svc.db, task.ID)
+	got, err := taskByID(context.Background(), svc.db, task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestTaskMarshalFlexibleTaskReportsStatusAsCategory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := taskByID(svc.db, task.ID)
+	got, err := taskByID(context.Background(), svc.db, task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestTaskJSONRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	flexible, err = taskByID(svc.db, flexible.ID)
+	flexible, err = taskByID(context.Background(), svc.db, flexible.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

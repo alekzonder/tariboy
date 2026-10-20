@@ -96,7 +96,7 @@ func enter(t *testing.T, svc *Service, key, statusID, outcome string) Task {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, key)
+	task, err := taskByKey(ctx, tx, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func enter(t *testing.T, svc *Service, key, statusID, outcome string) Task {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	stored, err := taskByKey(svc.db, key)
+	stored, err := taskByKey(ctx, svc.db, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestCreateTaskInBoundQueuePinsDigestAndEntersInitialStatus(t *testing.T) {
 	if signals == 0 {
 		t.Fatal("goal signal did not fire after the assignment")
 	}
-	stored, err := taskByKey(svc.db, created.Key)
+	stored, err := taskByKey(context.Background(), svc.db, created.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +348,7 @@ func TestEnterPoolStatusLeavesTaskOpenWhileTheOnlyMemberHasWork(t *testing.T) {
 			if n, err := svc.DispatchPending(ctx); err != nil || n != 1 {
 				t.Fatalf("dispatch after release = %d, %v", n, err)
 			}
-			if got, _ := taskByKey(svc.db, second.Key); got.Assignee != "agent:dev-1" || got.Status != StatusInProgress {
+			if got, _ := taskByKey(ctx, svc.db, second.Key); got.Assignee != "agent:dev-1" || got.Status != StatusInProgress {
 				t.Fatalf("second after dispatch = %#v", got)
 			}
 		})
@@ -415,7 +415,7 @@ func TestEnterCustomerStatusOpensOneSystemWait(t *testing.T) {
 	if _, err := svc.AddComment(context.Background(), actor, task.Key, AddCommentInput{Body: "looking"}); err != nil {
 		t.Fatal(err)
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(context.Background(), svc.db, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -555,7 +555,7 @@ func TestWorkflowTaskRefusesFlexibleLifecycleWrites(t *testing.T) {
 		updated.ManualBlockReason != block || updated.Status != StatusInProgress || updated.Assignee != "agent:dev-1" {
 		t.Fatalf("updated = %#v", updated)
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(ctx, svc.db, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -623,13 +623,13 @@ func TestCommentsKeepTheWorkflowQuestionAndHolderQuestionsWork(t *testing.T) {
 	if _, err := svc.AddComment(ctx, AgentActor("dev-1"), task.Key, AddCommentInput{Body: "@user:customer which API?"}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := taskByKey(svc.db, task.Key); got.Status != StatusWaitCustomer || got.WorkflowStatus != "develop" {
+	if got, _ := taskByKey(ctx, svc.db, task.Key); got.Status != StatusWaitCustomer || got.WorkflowStatus != "develop" {
 		t.Fatalf("after the holder's question = %#v", got)
 	}
 	if _, err := svc.AddComment(ctx, actor, task.Key, AddCommentInput{Body: "the v2 one"}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := taskByKey(svc.db, task.Key); got.Status != StatusInProgress {
+	if got, _ := taskByKey(ctx, svc.db, task.Key); got.Status != StatusInProgress {
 		t.Fatalf("after the answer = %#v", got)
 	}
 	// In a customer status, a mention does not take over the workflow's wait and
@@ -641,7 +641,7 @@ func TestCommentsKeepTheWorkflowQuestionAndHolderQuestionsWork(t *testing.T) {
 	if _, err := svc.AddComment(ctx, actor, task.Key, AddCommentInput{Body: "soon"}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := taskByKey(svc.db, task.Key)
+	got, _ := taskByKey(ctx, svc.db, task.Key)
 	waits, err := listOpenWaits(ctx, svc.db, got)
 	if err != nil {
 		t.Fatal(err)
@@ -670,7 +670,7 @@ func TestUpdateTaskAcceptsUnchangedWorkflowStatusAndAssignee(t *testing.T) {
 		}
 		revision = updated.Revision
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(ctx, svc.db, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}

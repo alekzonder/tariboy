@@ -370,7 +370,7 @@ func (s *Service) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason
 	}, now); err != nil {
 		return Task{}, err
 	}
-	moved, err := taskByID(tx, task.ID)
+	moved, err := taskByID(ctx, tx, task.ID)
 	if err != nil {
 		return Task{}, err
 	}
@@ -426,7 +426,7 @@ func (s *Service) CancelWorkflowTask(ctx context.Context, actor Actor, key strin
 	}, now); err != nil {
 		return Task{}, err
 	}
-	cancelled, err := taskByID(tx, task.ID)
+	cancelled, err := taskByID(ctx, tx, task.ID)
 	if err != nil {
 		return Task{}, err
 	}

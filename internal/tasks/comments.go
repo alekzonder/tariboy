@@ -31,7 +31,7 @@ func (s *Service) AddComment(ctx context.Context, actor Actor, key string, in Ad
 	} else if ok {
 		return replayed, nil
 	}
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return CommentResult{}, err
 	}

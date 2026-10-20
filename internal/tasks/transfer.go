@@ -83,7 +83,7 @@ func (s *Service) ExportTask(ctx context.Context, actor Actor, key string) (Tran
 	if err := validateActor(actor); err != nil {
 		return TransferBundle{}, err
 	}
-	task, err := taskByKey(s.db, key)
+	task, err := taskByKey(ctx, s.db, key)
 	if err != nil {
 		return TransferBundle{}, err
 	}
@@ -291,7 +291,7 @@ func (s *Service) ImportTask(ctx context.Context, actor Actor, bundle TransferBu
 				return Task{}, err
 			}
 		}
-		imported, err := taskByID(tx, id)
+		imported, err := taskByID(ctx, tx, id)
 		if err != nil {
 			return Task{}, err
 		}

@@ -66,7 +66,7 @@ func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) erro
 		return err
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, key)
+	task, err := taskByKey(ctx, tx, key)
 	if ErrorCode(err) == "not_found" {
 		return nil
 	}
@@ -302,7 +302,7 @@ func (s *Service) checkHolder(ctx context.Context, id int64, now time.Time) (boo
 		return false, err
 	}
 	defer tx.Rollback()
-	task, err := taskByID(tx, id)
+	task, err := taskByID(ctx, tx, id)
 	if err != nil {
 		return false, err
 	}

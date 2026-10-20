@@ -18,7 +18,7 @@ func (s *Service) MoveTask(ctx context.Context, actor Actor, key string, in Move
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return Task{}, err
 	}
@@ -67,7 +67,7 @@ func (s *Service) MoveTask(ctx context.Context, actor Actor, key string, in Move
 		return nil
 	}
 	if strings.TrimSpace(in.ParentKey) != "" {
-		targetParent, err = taskByKey(tx, strings.TrimSpace(in.ParentKey))
+		targetParent, err = taskByKey(ctx, tx, strings.TrimSpace(in.ParentKey))
 		if err != nil {
 			return Task{}, err
 		}
@@ -78,7 +78,7 @@ func (s *Service) MoveTask(ctx context.Context, actor Actor, key string, in Move
 
 	var beforeID int64
 	if strings.TrimSpace(in.BeforeKey) != "" {
-		before, err := taskByKey(tx, strings.TrimSpace(in.BeforeKey))
+		before, err := taskByKey(ctx, tx, strings.TrimSpace(in.BeforeKey))
 		if err != nil {
 			return Task{}, err
 		}
@@ -98,7 +98,7 @@ func (s *Service) MoveTask(ctx context.Context, actor Actor, key string, in Move
 		}
 		if in.ParentKey == "" {
 			if before.ParentKey != "" {
-				parent, err := taskByKey(tx, before.ParentKey)
+				parent, err := taskByKey(ctx, tx, before.ParentKey)
 				if err != nil {
 					return Task{}, err
 				}
@@ -115,7 +115,7 @@ func (s *Service) MoveTask(ctx context.Context, actor Actor, key string, in Move
 
 	sourceParentID := any(nil)
 	if task.ParentKey != "" {
-		parent, err := taskByKey(tx, task.ParentKey)
+		parent, err := taskByKey(ctx, tx, task.ParentKey)
 		if err != nil {
 			return Task{}, err
 		}
@@ -174,7 +174,7 @@ func (s *Service) MoveTask(ctx context.Context, actor Actor, key string, in Move
 		return Task{}, err
 	}
 	s.signal()
-	moved, err := taskByKey(s.db, task.Key)
+	moved, err := taskByKey(ctx, s.db, task.Key)
 	if err == nil {
 		moved.Access = "write"
 	}

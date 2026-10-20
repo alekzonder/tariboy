@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"database/sql"
 )
 
@@ -54,11 +55,9 @@ func scanVisibleTask(row rowScanner) (Task, error) {
 // taskByKey is the single key lookup for the whole service, so key spelling is
 // normalized here rather than at every caller, and a key retired by the random
 // key migration keeps resolving through its alias.
-func taskByKey(q interface {
-	QueryRow(query string, args ...any) *sql.Row
-}, key string) (Task, error) {
+func taskByKey(ctx context.Context, q queryer, key string) (Task, error) {
 	normalized := NormalizeKey(key)
-	t, err := scanTask(q.QueryRow(taskSelect+`
+	t, err := scanTask(q.QueryRowContext(ctx, taskSelect+`
 		WHERE t.task_key = ?
 		   OR t.id = (SELECT task_id FROM task_key_aliases WHERE old_key = ?)`,
 		normalized, normalized))
@@ -68,10 +67,8 @@ func taskByKey(q interface {
 	return t, err
 }
 
-func taskByID(q interface {
-	QueryRow(query string, args ...any) *sql.Row
-}, id int64) (Task, error) {
-	t, err := scanTask(q.QueryRow(taskSelect+` WHERE t.id = ?`, id))
+func taskByID(ctx context.Context, q queryer, id int64) (Task, error) {
+	t, err := scanTask(q.QueryRowContext(ctx, taskSelect+` WHERE t.id = ?`, id))
 	if err == sql.ErrNoRows {
 		return Task{}, notFound("")
 	}

@@ -26,7 +26,7 @@ func artifactFixture(t *testing.T) (*Service, Actor, Task) {
 		t.Fatal(err)
 	}
 	task := mustCreateDev(t, svc, actor, "artifacts")
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(context.Background(), svc.db, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestSetArtifactKeepsHistoryAndRecordsEventWithoutValue(t *testing.T) {
 		!strings.Contains(payload, `"author":"agent:`) || strings.Contains(payload, "first") {
 		t.Fatalf("payload = %s", payload)
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(ctx, svc.db, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
