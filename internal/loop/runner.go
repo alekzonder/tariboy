@@ -154,14 +154,6 @@ func messageAge(ts string, now time.Time) (time.Duration, bool) {
 // last. When proxyEnabled is set the harness is pointed at the local AI proxy,
 // while provider credentials remain the harness' responsibility and are
 // forwarded by the proxy as-is.
-// baseEnv returns a copy of env, or the process environment when env is nil.
-func baseEnv(env []string) []string {
-	if env == nil {
-		return os.Environ()
-	}
-	return slices.Clone(env)
-}
-
 func BuildEnv(base []string, agentBin, agentName, iterationID, toolsSock string, proxyEnabled bool, proxyURL, proxyToken string, env, secrets map[string]string) []string {
 	m := map[string]string{}
 	for _, kv := range base {
@@ -205,6 +197,14 @@ func BuildEnv(base []string, agentBin, agentName, iterationID, toolsSock string,
 		out = append(out, k+"="+m[k])
 	}
 	return out
+}
+
+// baseEnv returns a copy of env, or the process environment when env is nil.
+func baseEnv(env []string) []string {
+	if env == nil {
+		return os.Environ()
+	}
+	return slices.Clone(env)
 }
 
 const agentShellPrelude = `set -e
