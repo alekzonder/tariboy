@@ -173,7 +173,7 @@ func (s *Service) dispatchTask(ctx context.Context, id int64, busy map[string]bo
 		return "", err
 	}
 	defer tx.Rollback()
-	task, err := taskByID(tx, id)
+	task, err := taskByID(ctx, tx, id)
 	if err != nil {
 		return "", err
 	}

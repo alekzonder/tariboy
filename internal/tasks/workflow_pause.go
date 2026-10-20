@@ -245,7 +245,7 @@ func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision
 	if err := recordAssignmentTx(ctx, tx, task, previousAssignee, now); err != nil {
 		return Task{}, err
 	}
-	resumed, err := taskByID(tx, task.ID)
+	resumed, err := taskByID(ctx, tx, task.ID)
 	if err != nil {
 		return Task{}, err
 	}

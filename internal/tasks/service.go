@@ -265,7 +265,7 @@ func (s *Service) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in 
 	var parentID any
 	var parentKey string
 	if strings.TrimSpace(in.ParentKey) != "" {
-		parent, err := taskByKey(tx, strings.TrimSpace(in.ParentKey))
+		parent, err := taskByKey(ctx, tx, strings.TrimSpace(in.ParentKey))
 		if err != nil {
 			return Task{}, err
 		}
@@ -334,7 +334,7 @@ func (s *Service) createTaskTx(ctx context.Context, tx *sql.Tx, actor Actor, in 
 		return Task{}, err
 	}
 	now := s.now()
-	key, err := reserveTaskKey(tx, queue)
+	key, err := reserveTaskKey(ctx, tx, queue)
 	if err != nil {
 		return Task{}, err
 	}
@@ -474,7 +474,7 @@ func (s *Service) GetTask(ctx context.Context, actor Actor, key string) (TaskDet
 	if err := validateActor(actor); err != nil {
 		return TaskDetail{}, err
 	}
-	task, err := taskByKey(s.db, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, s.db, strings.TrimSpace(key))
 	if err != nil {
 		return TaskDetail{}, err
 	}
@@ -696,6 +696,8 @@ func (s *Service) ListTasks(ctx context.Context, actor Actor, filter ListFilter)
 		out = out[:limit]
 	}
 	var sequence int64
-	_ = s.reader().QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence), 0) FROM task_events`).Scan(&sequence)
+	if err := s.reader().QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence), 0) FROM task_events`).Scan(&sequence); err != nil {
+		return TaskPage{}, err
+	}
 	return TaskPage{Tasks: out, NextCursor: nextCursor, Sequence: sequence}, nil
 }

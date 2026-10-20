@@ -320,7 +320,7 @@ func TestCustomerMentionOfHolderKeepsWorkflowCustomerStatus(t *testing.T) {
 	if _, err := svc.AddComment(ctx, actor, task.Key, AddCommentInput{Body: "@agent:dev-1 continue"}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := taskByKey(svc.db, task.Key)
+	got, _ := taskByKey(ctx, svc.db, task.Key)
 	if got.WorkflowStatus != "approval" || got.Category != StatusWaitCustomer || got.WaitingOn != WaitingOnCustomer {
 		t.Fatalf("after the summon = %#v", got)
 	}

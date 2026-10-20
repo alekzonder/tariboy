@@ -155,7 +155,7 @@ func workflowReadTaskTx(ctx context.Context, q taskQueryer, actor Actor, key str
 func workflowTaskTx(ctx context.Context, q taskQueryer, actor Actor, key string,
 	accessOf func(context.Context, queryer, Actor, int64) (string, error)) (Task, workflowimage.Manifest, error) {
 	key = strings.TrimSpace(key)
-	task, err := taskByKey(q, key)
+	task, err := taskByKey(ctx, q, key)
 	if err != nil {
 		return Task{}, workflowimage.Manifest{}, err
 	}

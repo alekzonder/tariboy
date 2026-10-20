@@ -29,7 +29,7 @@ func TestDispatchPendingAssignsOnceAMemberBecomesEligible(t *testing.T) {
 	if signals == 0 {
 		t.Fatal("goal signal did not fire after dispatch")
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(ctx, svc.db, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +63,8 @@ func TestDispatchPendingOrdersByPriorityAndUsesEachAgentOnce(t *testing.T) {
 	if n, err := svc.DispatchPending(ctx); err != nil || n != 1 {
 		t.Fatalf("dispatch = %d, %v; want 1", n, err)
 	}
-	gotUrgent, _ := taskByKey(svc.db, urgent.Key)
-	gotOlder, _ := taskByKey(svc.db, older.Key)
+	gotUrgent, _ := taskByKey(ctx, svc.db, urgent.Key)
+	gotOlder, _ := taskByKey(ctx, svc.db, older.Key)
 	if gotUrgent.Assignee != "agent:dev-1" || gotOlder.Assignee != "" || gotOlder.Status != StatusOpen {
 		t.Fatalf("urgent = %q, older = %q/%s", gotUrgent.Assignee, gotOlder.Assignee, gotOlder.Status)
 	}
@@ -85,7 +85,7 @@ func TestDispatchPendingSkipsBlockedTasks(t *testing.T) {
 	if n, err := svc.DispatchPending(ctx); err != nil || n != 0 {
 		t.Fatalf("dispatch of a blocked task = %d, %v", n, err)
 	}
-	stored, _ := taskByKey(svc.db, task.Key)
+	stored, _ := taskByKey(ctx, svc.db, task.Key)
 	if stored.WorkflowStatus != "develop" || stored.Status != StatusOpen {
 		t.Fatalf("blocked task = %#v", stored)
 	}

@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"fmt"
@@ -96,7 +97,7 @@ func MigrateLegacyKeys(db *sql.DB, now func() time.Time) error {
 		return err
 	}
 	for _, item := range pending {
-		key, err := reserveTaskKey(tx, item.queue)
+		key, err := reserveTaskKey(context.Background(), tx, item.queue)
 		if err != nil {
 			return err
 		}
@@ -117,15 +118,11 @@ func MigrateLegacyKeys(db *sql.DB, now func() time.Time) error {
 	return tx.Commit()
 }
 
-type keyQuerier interface {
-	QueryRow(query string, args ...any) *sql.Row
-}
-
 // reserveTaskKey returns a key for the queue that no task and no alias uses.
 // Collisions are rare enough that a bounded retry is the whole mechanism; a
 // queue that cannot produce a free key is far past the point where a longer
 // suffix, not another attempt, is the answer.
-func reserveTaskKey(q keyQuerier, queue string) (string, error) {
+func reserveTaskKey(ctx context.Context, q queryer, queue string) (string, error) {
 	for attempt := 0; attempt < 10; attempt++ {
 		suffix, err := newTaskKeySuffix()
 		if err != nil {
@@ -133,7 +130,7 @@ func reserveTaskKey(q keyQuerier, queue string) (string, error) {
 		}
 		key := queue + "-" + suffix
 		var taken int
-		if err := q.QueryRow(`
+		if err := q.QueryRowContext(ctx, `
 			SELECT (SELECT COUNT(*) FROM tasks WHERE task_key = ?)
 			     + (SELECT COUNT(*) FROM task_key_aliases WHERE old_key = ?)`,
 			key, key).Scan(&taken); err != nil {

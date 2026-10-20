@@ -70,3 +70,17 @@ func BenchmarkListTasks50k(b *testing.B) {
 		})
 	}
 }
+
+// A failed read of the event sequence fails the list instead of returning
+// sequence 0, which a poller would take as a reset feed.
+func TestListTasksReturnsTheSequenceReadError(t *testing.T) {
+	svc := newTestService(t)
+	reader := storetest.Open(t).DB
+	if _, err := reader.Exec(`ALTER TABLE task_events RENAME TO task_events_gone`); err != nil {
+		t.Fatal(err)
+	}
+	svc.SetReader(reader)
+	if _, err := svc.ListTasks(context.Background(), CustomerActor("customer"), ListFilter{}); err == nil {
+		t.Fatal("ListTasks hid the failed sequence read")
+	}
+}

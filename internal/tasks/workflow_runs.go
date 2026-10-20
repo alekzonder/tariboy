@@ -293,7 +293,7 @@ func (s *Service) PendingRunJobs(ctx context.Context) ([]RunJob, error) {
 // runJob builds the job of one run. It reads through s.db one query at a time:
 // the database has a single connection.
 func (s *Service) runJob(ctx context.Context, run scriptRunRecord) (RunJob, error) {
-	task, err := taskByID(s.db, run.taskID)
+	task, err := taskByID(ctx, s.db, run.taskID)
 	if err != nil {
 		return RunJob{}, err
 	}
@@ -472,7 +472,7 @@ func (s *Service) CompleteScriptRun(ctx context.Context, id int64, done RunCompl
 		WHERE id = ?`, state, done.Verdict, exit, message, finishedAt, logPath, id); err != nil {
 		return err
 	}
-	task, err := taskByID(tx, run.taskID)
+	task, err := taskByID(ctx, tx, run.taskID)
 	if err != nil {
 		return err
 	}
@@ -908,7 +908,7 @@ func (s *Service) interruptRun(ctx context.Context, id int64) error {
 		UPDATE task_script_runs SET state = 'interrupted', finished_at = ? WHERE id = ?`, now, id); err != nil {
 		return err
 	}
-	task, err := taskByID(tx, run.taskID)
+	task, err := taskByID(ctx, tx, run.taskID)
 	if err != nil {
 		return err
 	}
@@ -1039,7 +1039,7 @@ func (s *Service) scheduleWatch(ctx context.Context, visitID int64, cutoff strin
 	if err := tx.QueryRowContext(ctx, `SELECT task_id FROM task_status_visits WHERE id = ?`, visitID).Scan(&taskID); err != nil {
 		return false, err
 	}
-	task, err := taskByID(tx, taskID)
+	task, err := taskByID(ctx, tx, taskID)
 	if err != nil {
 		return false, err
 	}

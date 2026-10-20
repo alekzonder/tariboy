@@ -39,7 +39,7 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return Task{}, err
 	}
@@ -162,7 +162,7 @@ func (s *Service) CompleteTask(ctx context.Context, actor Actor, key string, in 
 	if !in.CompleteAnyway {
 		// UpdateTask accepts an unchanged status on a workflow task, so a
 		// workflow task already closed is refused here rather than there.
-		if task, err := taskByKey(s.db, strings.TrimSpace(key)); err == nil && task.WorkflowDigest != "" {
+		if task, err := taskByKey(ctx, s.db, strings.TrimSpace(key)); err == nil && task.WorkflowDigest != "" {
 			if err := validateActor(actor); err != nil {
 				return Task{}, err
 			}
@@ -182,7 +182,7 @@ func (s *Service) CompleteTask(ctx context.Context, actor Actor, key string, in 
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return Task{}, err
 	}
@@ -238,11 +238,11 @@ func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in R
 	} else if ok {
 		return replayed, nil
 	}
-	source, err := taskByKey(tx, strings.TrimSpace(key))
+	source, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return Relation{}, err
 	}
-	target, err := taskByKey(tx, strings.TrimSpace(in.TargetKey))
+	target, err := taskByKey(ctx, tx, strings.TrimSpace(in.TargetKey))
 	if err != nil {
 		return Relation{}, err
 	}
@@ -345,7 +345,7 @@ func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, i
 	} else if ok {
 		return nil
 	}
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return err
 	}
@@ -369,11 +369,11 @@ func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, i
 		}
 		return err
 	}
-	source, err := taskByID(tx, sourceID)
+	source, err := taskByID(ctx, tx, sourceID)
 	if err != nil {
 		return err
 	}
-	target, err := taskByID(tx, targetID)
+	target, err := taskByID(ctx, tx, targetID)
 	if err != nil {
 		return err
 	}
