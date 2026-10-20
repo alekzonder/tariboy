@@ -46,23 +46,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, i
 	if err := requireWrite(ctx, tx, actor, task); err != nil {
 		return Task{}, err
 	}
-	// The workflow owns the status and the assignee of its task. A client that
-	// resends the current values (as status, the workflow status or the category)
-	// changes nothing, so only a real change is refused.
-	if task.WorkflowDigest != "" {
-		if in.Status != nil {
-			status := strings.TrimSpace(*in.Status)
-			if status != task.Status && status != task.WorkflowStatus {
-				return Task{}, workflowManagedErrorFor(ctx, tx, task)
-			}
-			in.Status = nil
-		}
-		if in.Assignee != nil {
-			if normalizeAssignee(*in.Assignee) != task.Assignee {
-				return Task{}, workflowManagedErrorFor(ctx, tx, task)
-			}
-			in.Assignee = nil
-		}
+	if err := updateTaskWorkflowGuardTx(ctx, tx, task, &in); err != nil {
+		return Task{}, err
 	}
 	if in.Revision <= 0 || in.Revision != task.Revision {
 		return Task{}, &Error{Status: http.StatusConflict, Code: "revision_conflict",
@@ -71,49 +56,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, i
 			}}
 	}
 	previousAssignee, previousStatus := task.Assignee, task.Status
-	if in.Title != nil {
-		task.Title = strings.TrimSpace(*in.Title)
-		if task.Title == "" {
-			return Task{}, domainError(http.StatusBadRequest, "missing_title", "task title is required")
-		}
-	}
-	if in.Description != nil {
-		task.Description = strings.TrimSpace(*in.Description)
-	}
-	if in.PullRequest != nil {
-		task.PullRequest, err = NormalizePullRequest(*in.PullRequest)
-		if err != nil {
-			return Task{}, err
-		}
-	}
-	if in.Assignee != nil {
-		task.Assignee = normalizeAssignee(*in.Assignee)
-	}
-	if in.ManualBlockReason != nil {
-		task.ManualBlockReason = strings.TrimSpace(*in.ManualBlockReason)
-	}
-	if in.Priority != nil {
-		priority, err := NormalizePriority(*in.Priority)
-		if err != nil {
-			return Task{}, err
-		}
-		task.Priority = priority
-	}
-	if in.Status != nil {
-		task.Status = strings.TrimSpace(*in.Status)
-		if !validStatus(task.Status) {
-			return Task{}, domainError(http.StatusBadRequest, "invalid_status", "invalid task status")
-		}
-		if task.Status == StatusDone {
-			_, count, err := descendantCounts(ctx, tx, task.ID)
-			if err != nil {
-				return Task{}, err
-			}
-			if count > 0 {
-				return Task{}, &Error{Status: http.StatusConflict, Code: "active_descendants",
-					Msg: "task has active descendants", Data: map[string]any{"active_descendants": count}}
-			}
-		}
+	if err := updateTaskFieldsTx(ctx, tx, &task, in); err != nil {
+		return Task{}, err
 	}
 	now := s.now()
 	task.Revision++
@@ -156,6 +100,81 @@ func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, i
 	s.signal()
 	task.Access = "write"
 	return task, nil
+}
+
+// updateTaskWorkflowGuardTx refuses a change to the status or the assignee of
+// a workflow task and drops the unchanged values it accepts.
+func updateTaskWorkflowGuardTx(ctx context.Context, tx *sql.Tx, task Task, in *UpdateTaskInput) error {
+	// The workflow owns the status and the assignee of its task. A client that
+	// resends the current values (as status, the workflow status or the category)
+	// changes nothing, so only a real change is refused.
+	if task.WorkflowDigest != "" {
+		if in.Status != nil {
+			status := strings.TrimSpace(*in.Status)
+			if status != task.Status && status != task.WorkflowStatus {
+				return workflowManagedErrorFor(ctx, tx, task)
+			}
+			in.Status = nil
+		}
+		if in.Assignee != nil {
+			if normalizeAssignee(*in.Assignee) != task.Assignee {
+				return workflowManagedErrorFor(ctx, tx, task)
+			}
+			in.Assignee = nil
+		}
+	}
+	return nil
+}
+
+// updateTaskFieldsTx applies the requested field changes to task and
+// validates them.
+func updateTaskFieldsTx(ctx context.Context, tx *sql.Tx, task *Task, in UpdateTaskInput) error {
+	if in.Title != nil {
+		task.Title = strings.TrimSpace(*in.Title)
+		if task.Title == "" {
+			return domainError(http.StatusBadRequest, "missing_title", "task title is required")
+		}
+	}
+	if in.Description != nil {
+		task.Description = strings.TrimSpace(*in.Description)
+	}
+	if in.PullRequest != nil {
+		pullRequest, err := NormalizePullRequest(*in.PullRequest)
+		if err != nil {
+			return err
+		}
+		task.PullRequest = pullRequest
+	}
+	if in.Assignee != nil {
+		task.Assignee = normalizeAssignee(*in.Assignee)
+	}
+	if in.ManualBlockReason != nil {
+		task.ManualBlockReason = strings.TrimSpace(*in.ManualBlockReason)
+	}
+	if in.Priority != nil {
+		priority, err := NormalizePriority(*in.Priority)
+		if err != nil {
+			return err
+		}
+		task.Priority = priority
+	}
+	if in.Status != nil {
+		task.Status = strings.TrimSpace(*in.Status)
+		if !validStatus(task.Status) {
+			return domainError(http.StatusBadRequest, "invalid_status", "invalid task status")
+		}
+		if task.Status == StatusDone {
+			_, count, err := descendantCounts(ctx, tx, task.ID)
+			if err != nil {
+				return err
+			}
+			if count > 0 {
+				return &Error{Status: http.StatusConflict, Code: "active_descendants",
+					Msg: "task has active descendants", Data: map[string]any{"active_descendants": count}}
+			}
+		}
+	}
+	return nil
 }
 
 func (s *TaskService) CompleteTask(ctx context.Context, actor Actor, key string, in CompleteInput) (Task, error) {
@@ -267,22 +286,8 @@ func (s *TaskService) AddRelation(ctx context.Context, actor Actor, key string, 
 		source, target = target, source
 	}
 	if in.Type == "blocks" {
-		var cycle bool
-		if err := tx.QueryRowContext(ctx, `
-			WITH RECURSIVE path(id) AS (
-				SELECT ?
-				UNION
-				SELECT r.target_id
-				FROM task_relations r JOIN path p ON r.source_id = p.id
-				WHERE r.type = 'blocks'
-			)
-			SELECT EXISTS(SELECT 1 FROM path WHERE id = ?)`,
-			target.ID, source.ID).Scan(&cycle); err != nil {
+		if err := relationCycleTx(ctx, tx, source, target); err != nil {
 			return Relation{}, err
-		}
-		if cycle {
-			return Relation{}, domainError(http.StatusConflict, "blocking_cycle",
-				"blocking relation would create a cycle")
 		}
 	}
 	now := s.now()
@@ -327,6 +332,29 @@ func (s *TaskService) AddRelation(ctx context.Context, actor Actor, key string, 
 	}
 	s.signal()
 	return relation, nil
+}
+
+// relationCycleTx refuses a blocking relation from source to target that
+// would close a cycle of blocking relations.
+func relationCycleTx(ctx context.Context, tx *sql.Tx, source, target Task) error {
+	var cycle bool
+	if err := tx.QueryRowContext(ctx, `
+		WITH RECURSIVE path(id) AS (
+			SELECT ?
+			UNION
+			SELECT r.target_id
+			FROM task_relations r JOIN path p ON r.source_id = p.id
+			WHERE r.type = 'blocks'
+		)
+		SELECT EXISTS(SELECT 1 FROM path WHERE id = ?)`,
+		target.ID, source.ID).Scan(&cycle); err != nil {
+		return err
+	}
+	if cycle {
+		return domainError(http.StatusConflict, "blocking_cycle",
+			"blocking relation would create a cycle")
+	}
+	return nil
 }
 
 func (s *TaskService) DeleteRelation(ctx context.Context, actor Actor, key string, in DeleteRelationInput) error {

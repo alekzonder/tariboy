@@ -176,18 +176,9 @@ func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, d
 	if err != nil {
 		return Task{}, err
 	}
-	if task.WorkflowPausedReason == "" {
-		return Task{}, domainError(http.StatusConflict, "workflow_not_paused", "task "+task.Key+" is not paused")
-	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
-	if !ok || status.Terminal {
-		return Task{}, domainError(http.StatusConflict, "status_unknown",
-			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
-	}
-	pool := status.Owner.Kind == workflowfile.OwnerPool
-	if decision == ResumeRelease && !pool {
-		return Task{}, domainError(http.StatusBadRequest, "invalid_decision",
-			"release applies only to a status owned by an agent pool; status "+status.ID+" is not")
+	status, pool, err := resumeDecisionStatus(task, manifest, decision)
+	if err != nil {
+		return Task{}, err
 	}
 	now := s.now()
 	if err := guardRevisionTx(ctx, tx, task); err != nil {
@@ -255,4 +246,24 @@ func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, d
 	s.signal()
 	resumed.Access = "write"
 	return resumed, nil
+}
+
+// resumeDecisionStatus returns the current status of paused task and whether
+// a pool owns it, refusing a task that is not paused, a status the workflow
+// does not declare, and a release outside a pool status.
+func resumeDecisionStatus(task Task, manifest workflowimage.Manifest, decision string) (workflowfile.Status, bool, error) {
+	if task.WorkflowPausedReason == "" {
+		return workflowfile.Status{}, false, domainError(http.StatusConflict, "workflow_not_paused", "task "+task.Key+" is not paused")
+	}
+	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	if !ok || status.Terminal {
+		return workflowfile.Status{}, false, domainError(http.StatusConflict, "status_unknown",
+			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
+	}
+	pool := status.Owner.Kind == workflowfile.OwnerPool
+	if decision == ResumeRelease && !pool {
+		return workflowfile.Status{}, false, domainError(http.StatusBadRequest, "invalid_decision",
+			"release applies only to a status owned by an agent pool; status "+status.ID+" is not")
+	}
+	return status, pool, nil
 }

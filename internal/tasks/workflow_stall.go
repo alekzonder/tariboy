@@ -73,10 +73,7 @@ func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEn
 	if err != nil {
 		return err
 	}
-	// In a pool status an unpaused task waits on its customer only while the
-	// holder's own question is open: waiting for the answer is not idleness.
-	if task.WorkflowDigest == "" || task.Status == StatusDone || task.Status == StatusCancelled ||
-		task.Status == StatusWaitCustomer || task.WorkflowPausedReason != "" || task.Assignee != agentPrincipal(end.Agent) {
+	if !iterationEndTaskCounts(task, end.Agent) {
 		return nil
 	}
 	manifest, err := loadManifestTx(ctx, tx, task.WorkflowDigest)
@@ -96,31 +93,9 @@ func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEn
 	if !holds {
 		return nil
 	}
-	var visitID int64
-	var enteredAt, resumedAt string
-	var idle int
-	if err := tx.QueryRowContext(ctx, `
-		SELECT id, entered_at, resumed_at, idle_iterations FROM task_status_visits WHERE task_id = ? AND left_at = ''`,
-		task.ID).Scan(&visitID, &enteredAt, &resumedAt, &idle); err != nil {
+	visitID, idle, inVisit, err := iterationEndVisitTx(ctx, tx, task, end)
+	if err != nil || !inVisit {
 		return err
-	}
-	entered, err := store.ParseTime(enteredAt)
-	if err != nil {
-		return fmt.Errorf("visit %d entered_at: %w", visitID, err)
-	}
-	if entered.After(end.StartedAt) {
-		return nil
-	}
-	// An iteration that started while the task was paused belongs to the
-	// pause, not to the resumed visit.
-	if resumedAt != "" {
-		resumed, err := store.ParseTime(resumedAt)
-		if err != nil {
-			return fmt.Errorf("visit %d resumed_at: %w", visitID, err)
-		}
-		if end.StartedAt.Before(resumed) {
-			return nil
-		}
 	}
 	requested, err := requestedDuringTx(ctx, tx, visitID, end.StartedAt, end.FinishedAt)
 	if err != nil || requested {
@@ -146,6 +121,49 @@ func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEn
 		s.signal()
 	}
 	return nil
+}
+
+// iterationEndTaskCounts reports whether an iteration of agent can count as
+// idle for task: an open workflow task assigned to the agent that is neither
+// paused nor waiting on its customer.
+func iterationEndTaskCounts(task Task, agent string) bool {
+	// In a pool status an unpaused task waits on its customer only while the
+	// holder's own question is open: waiting for the answer is not idleness.
+	return !(task.WorkflowDigest == "" || task.Status == StatusDone || task.Status == StatusCancelled ||
+		task.Status == StatusWaitCustomer || task.WorkflowPausedReason != "" || task.Assignee != agentPrincipal(agent))
+}
+
+// iterationEndVisitTx returns the task's current visit and its idle count,
+// and whether the iteration started within that visit and after its last
+// resume.
+func iterationEndVisitTx(ctx context.Context, tx *sql.Tx, task Task, end IterationEnd) (int64, int, bool, error) {
+	var visitID int64
+	var enteredAt, resumedAt string
+	var idle int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT id, entered_at, resumed_at, idle_iterations FROM task_status_visits WHERE task_id = ? AND left_at = ''`,
+		task.ID).Scan(&visitID, &enteredAt, &resumedAt, &idle); err != nil {
+		return 0, 0, false, err
+	}
+	entered, err := store.ParseTime(enteredAt)
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("visit %d entered_at: %w", visitID, err)
+	}
+	if entered.After(end.StartedAt) {
+		return 0, 0, false, nil
+	}
+	// An iteration that started while the task was paused belongs to the
+	// pause, not to the resumed visit.
+	if resumedAt != "" {
+		resumed, err := store.ParseTime(resumedAt)
+		if err != nil {
+			return 0, 0, false, fmt.Errorf("visit %d resumed_at: %w", visitID, err)
+		}
+		if end.StartedAt.Before(resumed) {
+			return 0, 0, false, nil
+		}
+	}
+	return visitID, idle, true, nil
 }
 
 // requestedDuringTx reports whether a transition request of the visit kept
