@@ -10,13 +10,7 @@ const taskColumns = `
 SELECT t.id, t.task_key, t.queue_prefix, COALESCE(p.task_key, ''),
        t.position, t.priority, t.title, t.description, t.status, t.pull_request, t.author, t.customer,
        t.group_name, t.assignee, t.manual_block_reason,
-       EXISTS (
-         SELECT 1
-         FROM task_relations r
-         JOIN tasks blocker ON blocker.id = r.source_id
-         WHERE r.target_id = t.id AND r.type = 'blocks'
-           AND blocker.status NOT IN ('done', 'cancelled')
-       ) OR t.manual_block_reason <> '',
+       t.open_blockers > 0 OR t.manual_block_reason <> '',
        t.revision, t.created_at, t.started_at, t.updated_at, t.completed_at,` + TaskWorkflowColumns
 
 const taskFrom = `
