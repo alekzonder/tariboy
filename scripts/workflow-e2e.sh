@@ -256,6 +256,19 @@ contains "$ERR" 'gate says no: set gate to pass' || fail "the script message did
 contains "$ERR" "hint: repeat with ttasks advance $KEY --outcome built --from build" || fail "no repeat hint: $ERR"
 status_is "$KEY" build || fail "a rejected check moved the task"
 [ "$(visit_counters "$BUILD_VISIT")" = "1|0|0" ] || fail "counters after a rejection: $(visit_counters "$BUILD_VISIT"), want 1|0|0"
+# The task JSON summarizes the trouble and the position for a list row.
+ATTENTION="$(op show "$KEY" --json | field task.workflow_attention)"
+[ "$(printf '%s' "$ATTENTION" | field kind)" = rejected ] || fail "workflow_attention after a rejection: $ATTENTION"
+[ "$(printf '%s' "$ATTENTION" | field count)" = 1 ] || fail "workflow_attention count: $ATTENTION"
+contains "$(printf '%s' "$ATTENTION" | field message)" 'gate says no' || fail "workflow_attention message: $ATTENTION"
+STEP="$(op show "$KEY" --json | field task.workflow_step)"
+[ "$STEP" = '{"index":1,"total":8}' ] || fail "workflow_step: $STEP"
+[ "$(view "$KEY" | field visits.0.rejected_requests)" = 1 ] || fail "the view's open visit lacks its counter: $(view "$KEY")"
+# The view describes each check with the image's description and the defaults resolved.
+[ "$(view "$KEY" | field outcomes.0.check_details.0.description)" = 'The queue secret and env reach a queue run.' ] || fail "check_details description: $(view "$KEY")"
+[ "$(view "$KEY" | field outcomes.0.check_details.1.run_as)" = agent ] || fail "check_details run_as: $(view "$KEY")"
+[ "$(view "$KEY" | field statuses.0.transitions.0.checks.0.timeout)" = 20s ] || fail "the status graph lacks its checks: $(view "$KEY")"
+[ "$(view "$KEY" | field statuses.0.limits.rejected_requests)" = 5 ] || fail "the status graph lacks its limits: $(view "$KEY")"
 
 step "--no-wait returns a pending request, and a second advance meanwhile is transition_pending"
 as_agent builder artifacts set "$KEY" gate slow >/dev/null
@@ -284,6 +297,11 @@ contains "$LOG" 'gate check broke on purpose' || fail "the holder cannot read th
 [ "$(run_field "$KEY" "$FAILED_RUN" exit_code)" = 3 ] || fail "the failed run's exit code is not 3"
 [ "$(visit_counters "$BUILD_VISIT")" = "2|1|0" ] || fail "counters after a failure: $(visit_counters "$BUILD_VISIT"), want 2|1|0"
 status_is "$KEY" build || fail "a failed check moved the task"
+ATTENTION="$(op show "$KEY" --json | field task.workflow_attention)"
+[ "$(printf '%s' "$ATTENTION" | field kind)" = failed ] || fail "workflow_attention after a failure: $ATTENTION"
+[ "$(printf '%s' "$ATTENTION" | field run_id)" = "$FAILED_RUN" ] || fail "workflow_attention names another run: $ATTENTION"
+contains "$(printf '%s' "$ATTENTION" | field message)" 'log:' && fail "workflow_attention carries the log line: $ATTENTION"
+[ "$(run_field "$KEY" "$FAILED_RUN" request_id)" != "" ] || fail "the failed run does not name its request"
 
 step "an agent that can read the task but is not a holder is refused the log"
 OUTSIDER_RUNS="$(as_agent outsider workflow runs "$KEY" --json)"
@@ -457,6 +475,7 @@ wait_for 20 "the pause by rejected_requests" is_paused "$KEY_P" rejected_request
 [ "$(view "$KEY_P" | field waiting_on)" = pause ] || fail "waiting_on is not pause: $(view "$KEY_P")"
 [ "$(view "$KEY_P" | field status)" = qa ] || fail "the pause changed the status"
 holder_is "$KEY_P" builder || fail "the pause changed the assignee"
+[ "$(task_field "$KEY_P" task.workflow_attention.kind)" = paused ] || fail "workflow_attention of a paused task: $(task_field "$KEY_P" task.workflow_attention)"
 [ "$(event_count "$KEY_P" workflow.paused)" = 1 ] || fail "want one workflow.paused event"
 SHOW="$(op show "$KEY_P" --json)"
 for want in "ttasks workflow resume $KEY_P --decision continue" "ttasks workflow resume $KEY_P --decision release" "ttasks cancel $KEY_P" 'rejected_requests' 'gate says no: set gate to pass'; do

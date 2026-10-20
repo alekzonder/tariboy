@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "playwright/test";
@@ -548,4 +548,133 @@ test("Tasks production workspace drives a workflow queue: bind, approve, secrets
   await page.getByRole("menuitem", { name: "Move to another server…" }).click({ timeout: 5_000 });
   await expect(page.getByRole("dialog", { name: "Move to another server" }), "step 7: the menu item opens its dialog").toBeVisible();
   step("7 flexible unchanged");
+});
+
+// A workflow with a pool status, a customer approval that can send the task
+// back, and a script status whose watch fails at once and pauses the task.
+const problemWorkflow = `schema_version: 1
+name: wfui2
+workflow_version: 0.1.0
+initial_status: approval
+limits: { script_failures: 1 }
+statuses:
+  - id: draft
+    owner: { pool: writers }
+    instructions: ./statuses/draft.md
+    transitions:
+      - on: drafted
+        to: approval
+        checks:
+          - script: ./scripts/check.sh
+            description: The draft has a heading.
+  - id: approval
+    owner: customer
+    instructions: ./statuses/approval.md
+    transitions:
+      - { on: approved, to: probe }
+      - { on: rework, to: draft }
+  - id: probe
+    owner: script
+    watch:
+      script: ./scripts/fail.sh
+      every: 1s
+      description: Probes the deployment.
+    transitions:
+      - { on: probed, to: done }
+  - id: done
+    terminal: true
+`;
+
+test("Tasks production workspace explains a workflow task's problem, maps its steps, and returns it to the agent", async ({ page, request }) => {
+  test.setTimeout(90_000);
+  const started = Date.now();
+  const step = (name: string) => console.log(`[workflow-problem-ui] ${((Date.now() - started) / 1000).toFixed(1)}s ${name}`);
+
+  // Step 1: publish the image with its scripts, give the pool an agent, and bind the queue.
+  const source = mkdtempSync(path.join(tmpdir(), "tasks-e2e-workflow-problem-"));
+  mkdirSync(path.join(source, "statuses"));
+  mkdirSync(path.join(source, "scripts"));
+  writeFileSync(path.join(source, "Workflowfile.yaml"), problemWorkflow);
+  writeFileSync(path.join(source, "statuses", "draft.md"), "Write the draft.\n");
+  writeFileSync(path.join(source, "statuses", "approval.md"), "Approve the draft, or send it back.\n");
+  writeFileSync(path.join(source, "scripts", "check.sh"), "#!/bin/sh\nexit 0\n");
+  writeFileSync(path.join(source, "scripts", "fail.sh"), "#!/bin/sh\necho 'the probe answered 502' >&2\nexit 1\n");
+  chmodSync(path.join(source, "scripts", "check.sh"), 0o755);
+  chmodSync(path.join(source, "scripts", "fail.sh"), 0o755);
+  let response = await request.post(`${daemonURL}/api/workflow-images/build`, { data: { path: source } });
+  rmSync(source, { recursive: true, force: true });
+  expect(response.ok(), "step 1: the fixture workflow image must build").toBe(true);
+  response = await request.post(`${daemonURL}/api/task-queues`, { data: { prefix: "WFPR", name: "Workflow problems" } });
+  expect(response.ok()).toBe(true);
+  const agent = await request.post(`${daemonURL}/api/agents`, { data: { name: "wfpr-writer", image: "bare:latest", cwd: "/tmp" } });
+  expect((await agent.json()).ok, "step 1: a pool needs an existing agent").toBe(true);
+  response = await request.patch(`${daemonURL}/api/task-queues/WFPR/pools/writers`, { data: { agents: ["wfpr-writer"], revision: 0, idempotency_key: "wfpr-pool" } });
+  expect(response.ok(), "step 1: the pool binds").toBe(true);
+  response = await request.put(`${daemonURL}/api/task-queues/WFPR/workflow`, { data: { ref: "wfui2:latest", revision: 0 } });
+  expect(response.ok(), "step 1: the queue binds the image").toBe(true);
+  response = await request.post(`${daemonURL}/api/tasks`, { data: { queue: "WFPR", title: "Probe the release", idempotency_key: "tasks-browser-wfpr" } });
+  expect(response.ok()).toBe(true);
+  const key = (await response.json()).result.key as string;
+  expect((await taskFromAPI(request, key)).status).toBe("approval");
+  step("1 published, bound, task created");
+
+  // Step 2: the row counts the step; the panel maps the workflow and opens a step.
+  await page.goto("/tests/tasks-fixture.html#/servers/local/tasks");
+  await expect(page.getByLabel("Search tasks")).toBeVisible();
+  const row = page.getByTestId(`task-row-${key}`);
+  await expect(row.getByTitle("Step 2 of 4"), "step 2: the row counts the step").toHaveText("2/4");
+  await row.locator(".task-row-main").click();
+  const detail = page.locator(".task-detail-panel");
+  await expect(detail.getByText("wfui2@0.1.0")).toBeVisible();
+  await expect(detail.getByText("step 2 of 4")).toBeVisible();
+  const steps = detail.getByRole("list", { name: "Workflow steps" });
+  await expect(steps.getByRole("button")).toHaveCount(4);
+  await expect(steps.getByRole("button", { name: /^approval/ })).toHaveAttribute("aria-current", "step");
+  await steps.getByRole("button", { name: /^draft/ }).click();
+  await expect(detail.getByTestId("step-detail"), "step 2: a step opens to its gates").toContainText("The draft has a heading.");
+  await expect(detail.getByTestId("step-detail")).toContainText("owned by pool writers");
+  step("2 step counter and stepper");
+
+  // Step 3: return the task to the agent through the declared outcome.
+  await detail.getByRole("button", { name: "Return to agent…" }).click();
+  await expect(detail.getByLabel("Return to status")).toHaveValue("draft");
+  await expect(detail.getByText("declares rework")).toBeVisible();
+  await detail.getByLabel("Message to the agent").fill("Please add a heading");
+  await detail.getByRole("button", { name: "Return to agent", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Return to agent" }).click({ timeout: 5_000 });
+  await expect.poll(async () => (await taskFromAPI(request, key)).status, "step 3: the outcome lands").toBe("draft");
+  response = await request.get(`${daemonURL}/api/tasks/${key}/workflow`);
+  const view = (await response.json()).result as { visits: { status: string; message?: string; left_at?: string }[] };
+  expect(view.visits.find((visit) => visit.status === "approval" && visit.left_at)?.message, "step 3: the message is the transition message").toBe("Please add a heading");
+  // The pool's agent is stopped, so nobody takes the task: the panel says so.
+  await expect(detail.getByText("Waiting for an agent"), "step 3: the problem block explains the open pool status").toBeVisible();
+  await expect(detail.getByText("step 1 of 4")).toBeVisible();
+  await expect(row.getByTitle("Step 1 of 4")).toHaveText("1/4");
+  step("3 returned by outcome");
+
+  // Step 4: a move into the script status; its watch fails and pauses the task.
+  await detail.getByRole("button", { name: "Move to status…" }).click();
+  await detail.getByLabel("Target status").selectOption("probe");
+  await detail.getByLabel("Reason", { exact: true }).fill("probe it");
+  await detail.getByRole("button", { name: "Move", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Move task" }).click({ timeout: 5_000 });
+  await expect.poll(async () => ((await taskFromAPI(request, key)) as { workflow_paused_reason?: string }).workflow_paused_reason,
+    { timeout: 20_000, message: "step 4: the failed watch pauses the task" }).toBe("script_failures");
+  await expect(row.getByText("paused", { exact: true }), "step 4: the row shows the pause").toBeVisible();
+  await expect(detail.getByText(/Scripts failed too many times/), "step 4: the banner says why").toBeVisible();
+  const runs = detail.getByText("Script runs").locator("xpath=ancestor::section[1]");
+  await expect(runs.locator("li[data-tone='danger']").first(), "step 4: the failed run reads as one").toContainText("failure");
+  step("4 watch failed and paused");
+
+  // Step 5: return the paused task to the agent by a move; the pause ends.
+  await detail.getByRole("button", { name: "Return to agent…" }).click();
+  await expect(detail.getByLabel("Return to status")).toHaveValue("draft");
+  await expect(detail.getByText("operator move")).toBeVisible();
+  await detail.getByLabel("Message to the agent").fill("The probe answers 502; fix the deployment first");
+  await detail.getByRole("button", { name: "Return to agent", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Return to agent" }).click({ timeout: 5_000 });
+  await expect.poll(async () => (await taskFromAPI(request, key)).status, "step 5: the move lands").toBe("draft");
+  expect(((await taskFromAPI(request, key)) as { workflow_paused_reason?: string }).workflow_paused_reason ?? "", "step 5: the pause is over").toBe("");
+  await expect(detail.getByText("Waiting for an agent")).toBeVisible();
+  step("5 returned by move");
 });
