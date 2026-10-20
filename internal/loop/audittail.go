@@ -11,7 +11,7 @@ import (
 
 // Recorder is the slice of *audit.Log the tailer needs. Defined here (no audit
 // import in the interface) so a single *audit.Log instance per agent can be
-// shared by the daemon's recordEvent, the engine's audit sink, and this tailer —
+// shared by the daemon's Recorder, the engine's audit sink, and this tailer —
 // they must share one instance so the seq counter stays consistent.
 type Recorder interface {
 	Record(typ, source, iterationID string, data map[string]any) int64

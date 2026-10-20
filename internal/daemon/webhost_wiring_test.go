@@ -11,7 +11,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/store/storetest"
-	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // A request with a spoofed Host is rejected (421) by the web listener; a request
@@ -31,16 +30,15 @@ func TestWebListenerRejectsForeignHost(t *testing.T) {
 	}()
 
 	client := &http.Client{Timeout: time.Second}
-	// Wait until the listener is up (correct Host succeeds).
-	if !testutil.WaitFor(5*time.Second, func() bool {
-		resp, err := client.Get("http://" + addr + "/api/daemon/status")
-		if err != nil {
-			return false
-		}
-		resp.Body.Close()
-		return resp.StatusCode == 200
-	}) {
-		t.Fatal("web listener never served the API with the real Host")
+	waitDaemonReady(t, base)
+	// The real loopback Host is served.
+	ok, err := client.Get("http://" + addr + "/api/daemon/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok.Body.Close()
+	if ok.StatusCode != 200 {
+		t.Fatalf("real host = %d, want 200", ok.StatusCode)
 	}
 
 	// Spoofed Host -> 421.
@@ -85,7 +83,7 @@ func TestWebBindFailureIsFatal(t *testing.T) {
 
 	select {
 	case rerr := <-errc:
-		if rerr == nil || !strings.Contains(rerr.Error(), "http listener serve") {
+		if rerr == nil || !strings.Contains(rerr.Error(), "http listener") {
 			t.Fatalf("Run err = %v, want an http-listener bind failure", rerr)
 		}
 	case <-time.After(30 * time.Second):

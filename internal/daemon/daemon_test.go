@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -388,7 +387,7 @@ func TestRecordEventAgentScopedGoesToAuditFile(t *testing.T) {
 		func() time.Time { return time.Unix(0, 0).UTC() },
 	)
 	log := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-	recordEvent(log, nil, reg, nil, "manager", "shim", `{"line":"boom"}`)
+	Recorder{log: log, audit: reg}.Record("manager", "shim", `{"line":"boom"}`)
 
 	evs, err := audit.ReadEvents(agentdir.New(agentsDir, "manager").AuditLog(), 0, 0)
 	if err != nil || len(evs) != 1 {
@@ -430,13 +429,10 @@ func TestRunServesAndShutsDown(t *testing.T) {
 
 	sock := paths.New(base).Socket()
 	c := client.New(sock)
-	var raw json.RawMessage
-	var err error
-	if !testutil.WaitFor(15*time.Second, func() bool {
-		raw, err = c.Call("GET", "/api/daemon/status", nil)
-		return err == nil
-	}) {
-		t.Fatalf("daemon never came up: %v", err)
+	waitDaemonReady(t, base)
+	raw, err := c.Call("GET", "/api/daemon/status", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 	var st map[string]any
 	json.Unmarshal(raw, &st)
@@ -593,13 +589,10 @@ func TestFreshDaemonStartsWithNoInstalledPlugins(t *testing.T) {
 	})
 
 	c := client.New(paths.New(base).Socket())
-	var raw json.RawMessage
-	var err error
-	if !testutil.WaitFor(15*time.Second, func() bool {
-		raw, err = c.Call("GET", "/api/plugins", nil)
-		return err == nil
-	}) {
-		t.Fatalf("daemon never came up: %v", err)
+	waitDaemonReady(t, base)
+	raw, err := c.Call("GET", "/api/plugins", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 	var listing struct {
 		Plugins []map[string]any `json:"plugins"`
@@ -626,7 +619,7 @@ func TestRecordEventLogsOnError(t *testing.T) {
 	s := storetest.Open(t)
 	s.Close() // subsequent AddEvent must fail (database is closed)
 	var buf bytes.Buffer
-	recordEvent(slog.New(slog.NewTextHandler(&buf, nil)), s, nil, nil, "", "daemon_start", "{}")
+	Recorder{log: slog.New(slog.NewTextHandler(&buf, nil)), store: s}.Record("", "daemon_start", "{}")
 	if !strings.Contains(buf.String(), "failed to record daemon event") ||
 		!strings.Contains(buf.String(), "kind=daemon_start") {
 		t.Fatalf("warn not logged: %q", buf.String())
@@ -643,15 +636,7 @@ func TestSecondDaemonRefusesWhenSocketLive(t *testing.T) {
 	go func() { done <- Run(ctx, daemonTestOptions(Options{BaseDir: base, Listen: "unix", LogLevel: "error"})) }()
 
 	p := paths.New(base)
-	if !testutil.WaitFor(10*time.Second, func() bool {
-		c, err := net.DialTimeout("unix", p.Socket(), 200*time.Millisecond)
-		if err == nil {
-			c.Close()
-		}
-		return err == nil
-	}) {
-		t.Fatal("first daemon never became ready")
-	}
+	waitDaemonReady(t, base)
 	if _, err := os.Stat(p.PidFile()); err != nil {
 		t.Fatalf("pidfile missing while running: %v", err)
 	}

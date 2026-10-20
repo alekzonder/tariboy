@@ -337,17 +337,8 @@ func TestDaemonRestartPreservesShimIterationAndProxyLease(t *testing.T) {
 			})
 		}
 		t.Cleanup(stop)
-		c := client.New(paths.New(base).Socket())
-		var err error
-		if testutil.WaitFor(5*time.Second, func() bool {
-			_, err = c.Call("GET", "/api/daemon/status", nil)
-			return err == nil
-		}) {
-			return c, stop
-		}
-		stop()
-		t.Fatalf("daemon did not become ready: %v", err)
-		return nil, nil
+		waitDaemonReady(t, base)
+		return client.New(paths.New(base).Socket()), stop
 	}
 
 	first, stopFirst := startDaemon()

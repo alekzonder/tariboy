@@ -82,7 +82,7 @@ type ManagerConfig struct {
 	Proxy               ProxyBinder
 	Groups              GroupProvisioner
 	// AuditFor returns the shared per-agent audit recorder. Wired by the daemon to
-	// its audit.Registry so recordEvent, the engine lifecycle sink, and the
+	// its audit.Registry so the daemon Recorder, the engine lifecycle sink, and the
 	// runner's log tailer all share one *audit.Log per agent. Nil disables audit.
 	AuditFor func(agent string) Recorder
 	// RecordCursorUsage persists token counts from a non-interactive cursor

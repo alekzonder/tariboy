@@ -73,24 +73,29 @@ func startDaemon(t *testing.T) (base, sock string, c *client.Client) {
 		cancel()
 		<-done
 	})
+	ready := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error"}))
+		_ = daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error",
+			Ready: func() { close(ready) }}))
 	}()
 	sock = filepath.Join(base, "tariboyd.sock")
 	c = client.New(sock)
-	if !daemonReady(c) {
-		t.Fatal("daemon did not become ready")
-	}
+	waitReady(t, ready, done)
 	return base, sock, c
 }
 
-// daemonReady reports whether the daemon behind c answers within 15 seconds.
-func daemonReady(c *client.Client) bool {
-	return testutil.WaitFor(15*time.Second, func() bool {
-		_, err := c.Call("GET", "/api/daemon/status", nil)
-		return err == nil
-	})
+// waitReady waits until the daemon called Options.Ready, failing if it exited
+// (done closed) first.
+func waitReady(t *testing.T, ready, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ready:
+	case <-done:
+		t.Fatal("daemon exited before it became ready")
+	case <-time.After(30 * time.Second):
+		t.Fatal("daemon did not become ready")
+	}
 }
 
 // syncBuf is a concurrency-safe writer so a follow goroutine can print while the
@@ -196,16 +201,16 @@ func TestCLITalksToDaemon(t *testing.T) {
 		cancel()
 		<-done // stop the daemon before TempDir removes its base
 	})
+	ready := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error"}))
+		_ = daemon.Run(ctx, inProcessDaemonOptions(daemon.Options{BaseDir: base, Listen: "unix", LogLevel: "error",
+			Ready: func() { close(ready) }}))
 	}()
 
 	sock := filepath.Join(base, "tariboyd.sock")
 	c := client.New(sock)
-	if !daemonReady(c) {
-		t.Fatal("daemon did not become ready")
-	}
+	waitReady(t, ready, done)
 
 	// daemon.status is CLIHidden (served by the CLI-local dispatchDaemon, not
 	// cli.Run); use a reachable registry GET to prove cli.Run reaches the socket.

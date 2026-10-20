@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 )
 
 type pricingHTTPClientFunc func(*http.Request) (*http.Response, error)
@@ -32,7 +34,33 @@ func daemonTestOptions(options Options) Options {
 			return nil, errors.New("pricing refresh disabled in daemon test")
 		})
 	}
+	if options.Ready == nil {
+		ready := readyChannel(options.BaseDir)
+		options.Ready = func() { close(ready) }
+	}
 	return options
+}
+
+// daemonReady maps a base dir to the Ready channel of its next daemon start.
+// Either side may create the entry first: Run often configures its options
+// inside the goroutine that the test waits on.
+var daemonReady sync.Map
+
+func readyChannel(base string) chan struct{} {
+	ready, _ := daemonReady.LoadOrStore(base, make(chan struct{}))
+	return ready.(chan struct{})
+}
+
+// waitDaemonReady waits until the next daemon started on base called Ready,
+// and consumes that start so a restart on the same base waits again.
+func waitDaemonReady(t *testing.T, base string) {
+	t.Helper()
+	select {
+	case <-readyChannel(base):
+		daemonReady.Delete(base)
+	case <-time.After(30 * time.Second):
+		t.Fatal("daemon never became ready")
+	}
 }
 
 // freeLoopbackAddr returns a loopback host:port that was free a moment ago, so
