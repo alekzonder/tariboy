@@ -198,11 +198,11 @@ func (*adoptedDoneGraceShim) SendKeys(shim.SendKeysParams) error { return nil }
 func (*adoptedDoneGraceShim) Report() shim.ReportResult          { return shim.ReportResult{} }
 
 func TestAdoptedIterationHonorsDoneGrace(t *testing.T) {
-	defer swapAdoptTiming(5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)()
 
 	for _, idle := range []bool{false, true} {
 		t.Run(map[bool]string{false: "productive", true: "idle"}[idle], func(t *testing.T) {
 			m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+			fastAdoptTiming(m, 5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)
 			m.cfg.DoneGrace = 20 * time.Millisecond
 			t.Cleanup(m.Shutdown)
 			ag := agent.Agent{Name: "adopted", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"loop"}}
@@ -267,9 +267,9 @@ func TestAdoptedIterationHonorsDoneGrace(t *testing.T) {
 }
 
 func TestAdoptedIterationDoneGraceAndSoftTimeoutSendOneKill(t *testing.T) {
-	defer swapAdoptTiming(5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)()
 
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	fastAdoptTiming(m, 5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)
 	m.cfg.DoneGrace = 20 * time.Millisecond
 	t.Cleanup(m.Shutdown)
 	base := time.Now().UTC()

@@ -1982,9 +1982,9 @@ func (*timeoutAdoptionShim) Report() shim.ReportResult          { return shim.Re
 func (*timeoutAdoptionShim) SetHardDeadline(string) error       { return nil }
 
 func TestAdoptionEnforcesExtendedPersistedSoftDeadlineOnce(t *testing.T) {
-	defer swapAdoptTiming(5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)()
 
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
+	fastAdoptTiming(m, 5*time.Millisecond, 10*time.Millisecond, 50*time.Millisecond)
 	base := time.Now().UTC()
 	var clockNanos atomic.Int64
 	clockNanos.Store(base.Add(29 * time.Second).UnixNano())
@@ -2225,11 +2225,10 @@ func TestReattachDelaysEngineUntilAdopted(t *testing.T) {
 // forever; adoption classifies it terminally as harness_error and removes the
 // dead socket.
 func TestReattachStaleShimClassifiesHarnessError(t *testing.T) {
-	// Shorten probe cadence so the dead socket is declared stale quickly.
-	defer swapAdoptTiming(10*time.Millisecond, 20*time.Millisecond, 50*time.Millisecond)()
 
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done"}}}
 	m, as, agentsDir, _ := newManager(t, r)
+	fastAdoptTiming(m, 10*time.Millisecond, 20*time.Millisecond, 50*time.Millisecond)
 
 	ag := agent.Agent{Name: "smoke", ImageRef: "basic:latest", HarnessType: "stub", Plugins: []string{"context"}}
 	if err := as.Create(ag); err != nil {
@@ -2629,12 +2628,9 @@ func iterationCount(t *testing.T, as *agent.Store, name string) int {
 	return len(its)
 }
 
-// swapAdoptTiming shortens the reattach probe cadence for a test and returns a
-// restore func.
-func swapAdoptTiming(poll, probe, timeout time.Duration) func() {
-	op, opr, ot := adoptPollInterval, adoptProbeInterval, adoptProbeTimeout
-	adoptPollInterval, adoptProbeInterval, adoptProbeTimeout = poll, probe, timeout
-	return func() { adoptPollInterval, adoptProbeInterval, adoptProbeTimeout = op, opr, ot }
+// fastAdoptTiming shortens the reattach probe cadence of m for a test.
+func fastAdoptTiming(m *Manager, poll, probe, timeout time.Duration) {
+	m.cfg.AdoptPollInterval, m.cfg.AdoptProbeInterval, m.cfg.AdoptProbeTimeout = poll, probe, timeout
 }
 
 func TestBuildImageForAgentResolvesRelativePathFromWorkdir(t *testing.T) {
