@@ -15,7 +15,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/script"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
@@ -582,11 +582,7 @@ func TestSourcesSortedWithoutProvider(t *testing.T) {
 // though subscription ids embed the owner's name (sub-<agent>-<ts>) and are
 // therefore guessable.
 func TestChannelUnsubscribeCrossAgentRejected(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	bs := bus.New(s, time.Now)
 
 	newAgentServer := func(agentName string) *Server {
@@ -908,11 +904,7 @@ func TestImageBuildGatedAndDispatched(t *testing.T) {
 // drive the Phase P messages surface end-to-end against real storage.
 func newBusServer(t *testing.T, agent string) (*Server, *bus.Bus) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "p4.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := storetest.Open(t)
 	bs := bus.New(st, time.Now)
 	s := NewServer(Deps{
 		Agent: agent, Cwd: "/w", Plugins: []string{"whoami", "loop", "messages"},

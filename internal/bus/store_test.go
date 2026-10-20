@@ -4,12 +4,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestPublishWithGuardSerializesGuardAndMessageInsert(t *testing.T) {
@@ -90,11 +89,7 @@ func TestPublishWithDeniedGuardWritesNothing(t *testing.T) {
 
 func newBus(t *testing.T) *Bus {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	tick := int64(0)
 	clk := func() time.Time {
 		tick++
@@ -108,11 +103,7 @@ func newBus(t *testing.T) *Bus {
 // trailing zeros, so sub-second-only ticks do not string-sort monotonically).
 func newBusSeconds(t *testing.T) *Bus {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	tick := int64(0)
 	clk := func() time.Time {
 		tick++
@@ -670,11 +661,7 @@ func seqOf(t *testing.T, id string) int {
 // chronological order; only a fixed-width ts format sorts Pending oldest-first
 // (spec §6).
 func TestPendingOrdersByTrueChronologyNotLexicalTS(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 
 	base := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	// One clock tick is consumed by Subscribe, one per Publish call (in this

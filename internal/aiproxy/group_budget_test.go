@@ -1,21 +1,17 @@
 package aiproxy
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newAIStore(t *testing.T) (*store.Store, *Store) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	return s, NewStore(s, func() time.Time { return time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC) })
 }
 

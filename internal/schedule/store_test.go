@@ -1,20 +1,16 @@
 package schedule
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newStore(t *testing.T, now time.Time) *Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	return NewStore(s, func() time.Time { return now })
 }
 

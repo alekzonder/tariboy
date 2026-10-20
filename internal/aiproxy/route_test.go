@@ -2,10 +2,9 @@ package aiproxy
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestRouterDefaultsAndRules(t *testing.T) {
@@ -36,11 +35,7 @@ func TestRouterDefaultsAndRules(t *testing.T) {
 }
 
 func TestLoadRouterEnvOverride(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s := storetest.Open(t)
 	getenv := func(k string) string {
 		if k == "TARIBOY_UPSTREAM_ANTHROPIC_BASE_URL" {
 			return "http://fake-upstream:9"
@@ -66,11 +61,7 @@ func TestLoadRouterEnvOverride(t *testing.T) {
 }
 
 func TestLoadRouterChatGPTEnvOverrideCannotInheritWildcardRuleCredential(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s := storetest.Open(t)
 	configured := proxyConfig{
 		Upstreams: map[string]Upstream{
 			"chatgpt": {BaseURL: "http://configured-chatgpt", KeyEnv: ""},

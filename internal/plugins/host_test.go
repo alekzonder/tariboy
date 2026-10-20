@@ -15,16 +15,12 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newHost(t *testing.T, runner Runner) (*Host, *bus.Bus, *Store) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	clock := func() time.Time { return time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC) }
 	b := bus.New(s, clock)
 	ps := NewStore(s, clock)

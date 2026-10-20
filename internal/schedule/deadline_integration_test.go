@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // wireDeadline reproduces the daemon's request-deadline seam (daemon.Run): a
@@ -56,11 +55,7 @@ func TestRequestDeadlineTimeoutFires(t *testing.T) {
 	now := base
 	clock := func() time.Time { return now }
 
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	b := bus.New(s, clock)
 	sched := NewStore(s, clock)
 	wireDeadline(b, sched, clock)
@@ -125,11 +120,7 @@ func TestRequestDeadlineReplyCancelsTimeout(t *testing.T) {
 	now := base
 	clock := func() time.Time { return now }
 
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	b := bus.New(s, clock)
 	sched := NewStore(s, clock)
 	wireDeadline(b, sched, clock)

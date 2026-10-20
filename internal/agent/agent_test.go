@@ -2,21 +2,17 @@ package agent
 
 import (
 	"errors"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func openStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	return NewStore(s)
 }
 

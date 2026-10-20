@@ -2,20 +2,16 @@ package script
 
 import (
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
 	basestore "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newContractStore(t *testing.T, now time.Time) *Store {
 	t.Helper()
-	db, err := basestore.Open(filepath.Join(t.TempDir(), "scripts.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
+	db := storetest.Open(t)
 	return NewStore(db, func() time.Time { return now })
 }
 

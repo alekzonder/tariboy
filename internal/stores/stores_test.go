@@ -2,6 +2,7 @@ package stores
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,11 +14,16 @@ import (
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func openCatalog(t *testing.T, base string) (*Catalog, *storedb.Store) {
 	t.Helper()
-	db, err := storedb.Open(filepath.Join(base, "tariboyd.db"))
+	path := filepath.Join(base, "tariboyd.db")
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		storetest.Seed(t, path)
+	}
+	db, err := storedb.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}

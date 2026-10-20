@@ -1,11 +1,10 @@
 package aiproxy
 
 import (
-	"path/filepath"
 	"sync"
 	"testing"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestCost(t *testing.T) {
@@ -71,11 +70,7 @@ func TestPricingPriceUsesCompleteGenerationDuringReplace(t *testing.T) {
 }
 
 func TestLoadFallbackRoundTrip(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s := storetest.Open(t)
 	if err := SeedDefaults(s); err != nil {
 		t.Fatal(err)
 	}
@@ -112,11 +107,7 @@ func TestPricingSourcePrecedenceAndReplace(t *testing.T) {
 }
 
 func TestPricingLoadAndReplaceLiteLLM(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "pricing.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s := storetest.Open(t)
 	if _, err := s.DB.Exec(`INSERT INTO ai_pricing(model, source, input_per_mtok) VALUES ('same', 'manual', 5)`); err != nil {
 		t.Fatal(err)
 	}

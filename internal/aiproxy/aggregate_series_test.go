@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 // taskReq is sampleReq with task/epic attribution stamped on.
@@ -254,11 +255,7 @@ func TestUsageGroupFilterAppliesToEveryProjection(t *testing.T) {
 
 func TestUsageReportUsesSingleReadSnapshot(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "usage-report.db")
-	readerDB, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { readerDB.Close() })
+	readerDB := storetest.OpenAt(t, dbPath)
 	writerDB, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatal(err)

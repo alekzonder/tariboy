@@ -1,19 +1,15 @@
 package imageprovenance
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
 	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestProvenanceRoundTripAndDynamicAvailability(t *testing.T) {
-	db, err := storedb.Open(filepath.Join(t.TempDir(), "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.Open(t)
 	s := Store{DB: db.DB}
 	source := t.TempDir()
 	record := Record{Ref: "demo:latest", Digest: "abc", SourceCWD: source, BuiltAt: storedb.FormatTime(time.Unix(1, 0))}
@@ -30,11 +26,7 @@ func TestProvenanceRoundTripAndDynamicAvailability(t *testing.T) {
 }
 
 func TestProvenanceStoresBuiltAtCanonical(t *testing.T) {
-	db, err := storedb.Open(filepath.Join(t.TempDir(), "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.Open(t)
 	s := Store{DB: db.DB}
 	if err := s.Upsert(Record{Ref: "old:latest", Digest: "abc", BuiltAt: "2026-01-02T05:04:05+03:00"}); err != nil {
 		t.Fatal(err)

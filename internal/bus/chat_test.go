@@ -1,21 +1,16 @@
 package bus
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func chatBus(t *testing.T) *Bus {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "chat.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := storetest.Open(t)
 	tick := time.Date(2026, 9, 15, 10, 0, 0, 0, time.UTC)
 	return New(st, func() time.Time {
 		tick = tick.Add(time.Second)

@@ -8,16 +8,12 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/bus"
-	"github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func newProvisioner(t *testing.T) (*Provisioner, *agent.Store, *bus.Bus, string) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "x.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s := storetest.Open(t)
 	// Advancing clock (one ns per call), matching the bus test convention: a
 	// fixed clock makes the bus mint colliding subscription ids when one agent
 	// subscribes to several channels in the same tick. Production uses time.Now.
