@@ -215,96 +215,137 @@ func (s *TaskService) ImportTask(ctx context.Context, actor Actor, bundle Transf
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	var exists int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, queue).Scan(&exists); err != nil {
+	if err := importTaskQueueTx(ctx, tx, queue); err != nil {
 		return Task{}, err
-	}
-	if exists == 0 {
-		return Task{}, domainError(http.StatusNotFound, "queue_not_found",
-			"this daemon has no queue "+queue)
-	}
-	// A task enters a bound queue only by being created there.
-	if _, bound, err := queueWorkflowTx(ctx, tx, queue); err != nil {
-		return Task{}, err
-	} else if bound {
-		return Task{}, workflowManagedError()
 	}
 	now := s.now()
 	ids := map[string]int64{}
 	var root Task
 	for _, item := range bundle.Tasks {
-		key := NormalizeKey(item.Key)
-		var taken int
-		if err := tx.QueryRowContext(ctx, `
-			SELECT (SELECT COUNT(*) FROM tasks WHERE task_key = ?)
-			     + (SELECT COUNT(*) FROM task_key_aliases WHERE old_key = ?)`,
-			key, key).Scan(&taken); err != nil {
-			return Task{}, err
-		}
-		if taken > 0 {
-			return Task{}, domainError(http.StatusConflict, "task_key_taken",
-				"key "+key+" already exists on this daemon")
-		}
-		var parentID any
-		if parent := NormalizeKey(item.ParentKey); parent != "" {
-			id, ok := ids[parent]
-			if !ok {
-				return Task{}, domainError(http.StatusBadRequest, "transfer_orphan",
-					"task "+key+" names a parent that is not in the bundle")
-			}
-			parentID = id
-		}
-		priority, err := NormalizePriority(item.Priority)
+		imported, err := importTaskItemTx(ctx, tx, actor, bundle.RootKey, queue, item, ids, now)
 		if err != nil {
-			return Task{}, err
-		}
-		var position int64
-		if err := tx.QueryRowContext(ctx, `
-			SELECT COALESCE(MAX(position), -1) + 1 FROM tasks
-			WHERE queue_prefix = ? AND parent_id IS ? AND priority = ?`,
-			queue, parentID, priority).Scan(&position); err != nil {
-			return Task{}, err
-		}
-		result, err := tx.ExecContext(ctx, `
-			INSERT INTO tasks(
-				task_key, queue_prefix, parent_id, position, priority, title, description, status,
-				pull_request, author, customer, group_name, assignee, manual_block_reason,
-				created_at, started_at, updated_at, completed_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			key, queue, parentID, position, priority, item.Title, item.Description, item.Status,
-			item.PullRequest, item.Author, item.Customer, item.Group, item.Assignee,
-			item.ManualBlockReason, item.CreatedAt, item.StartedAt, item.UpdatedAt, item.CompletedAt)
-		if err != nil {
-			return Task{}, err
-		}
-		id, err := result.LastInsertId()
-		if err != nil {
-			return Task{}, err
-		}
-		ids[key] = id
-		for _, comment := range item.Comments {
-			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO task_comments(task_id, author, body, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?)`,
-				id, comment.Author, comment.Body, comment.CreatedAt, comment.CreatedAt); err != nil {
-				return Task{}, err
-			}
-		}
-		imported, err := taskByID(ctx, tx, id)
-		if err != nil {
-			return Task{}, err
-		}
-		if _, err := appendEventTx(ctx, tx, imported, "task.imported", actor, map[string]any{
-			"task_key": key, "queue": queue, "source_root_key": bundle.RootKey,
-		}, now); err != nil {
 			return Task{}, err
 		}
 		if imported.ParentKey == "" {
 			root = imported
 		}
 	}
-	for _, relation := range bundle.Relations {
+	if err := importTaskRelationsTx(ctx, tx, bundle.Relations, ids); err != nil {
+		return Task{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Task{}, err
+	}
+	s.signal()
+	return root, nil
+}
+
+// importTaskQueueTx refuses an import into a queue this daemon lacks or into
+// one bound to a workflow.
+func importTaskQueueTx(ctx context.Context, tx *sql.Tx, queue string) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM task_queues WHERE prefix = ?`, queue).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return domainError(http.StatusNotFound, "queue_not_found",
+			"this daemon has no queue "+queue)
+	}
+	// A task enters a bound queue only by being created there.
+	if _, bound, err := queueWorkflowTx(ctx, tx, queue); err != nil {
+		return err
+	} else if bound {
+		return workflowManagedError()
+	}
+	return nil
+}
+
+// importTaskItemTx inserts one bundle task and its comments under the task's
+// original key, records its new id in ids, and returns it as stored.
+func importTaskItemTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	actor Actor,
+	sourceRootKey string,
+	queue string,
+	item TransferTask,
+	ids map[string]int64,
+	now string,
+) (Task, error) {
+	key := NormalizeKey(item.Key)
+	var taken int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT (SELECT COUNT(*) FROM tasks WHERE task_key = ?)
+		     + (SELECT COUNT(*) FROM task_key_aliases WHERE old_key = ?)`,
+		key, key).Scan(&taken); err != nil {
+		return Task{}, err
+	}
+	if taken > 0 {
+		return Task{}, domainError(http.StatusConflict, "task_key_taken",
+			"key "+key+" already exists on this daemon")
+	}
+	var parentID any
+	if parent := NormalizeKey(item.ParentKey); parent != "" {
+		id, ok := ids[parent]
+		if !ok {
+			return Task{}, domainError(http.StatusBadRequest, "transfer_orphan",
+				"task "+key+" names a parent that is not in the bundle")
+		}
+		parentID = id
+	}
+	priority, err := NormalizePriority(item.Priority)
+	if err != nil {
+		return Task{}, err
+	}
+	var position int64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(position), -1) + 1 FROM tasks
+		WHERE queue_prefix = ? AND parent_id IS ? AND priority = ?`,
+		queue, parentID, priority).Scan(&position); err != nil {
+		return Task{}, err
+	}
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO tasks(
+			task_key, queue_prefix, parent_id, position, priority, title, description, status,
+			pull_request, author, customer, group_name, assignee, manual_block_reason,
+			created_at, started_at, updated_at, completed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		key, queue, parentID, position, priority, item.Title, item.Description, item.Status,
+		item.PullRequest, item.Author, item.Customer, item.Group, item.Assignee,
+		item.ManualBlockReason, item.CreatedAt, item.StartedAt, item.UpdatedAt, item.CompletedAt)
+	if err != nil {
+		return Task{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Task{}, err
+	}
+	ids[key] = id
+	for _, comment := range item.Comments {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO task_comments(task_id, author, body, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?)`,
+			id, comment.Author, comment.Body, comment.CreatedAt, comment.CreatedAt); err != nil {
+			return Task{}, err
+		}
+	}
+	imported, err := taskByID(ctx, tx, id)
+	if err != nil {
+		return Task{}, err
+	}
+	if _, err := appendEventTx(ctx, tx, imported, "task.imported", actor, map[string]any{
+		"task_key": key, "queue": queue, "source_root_key": sourceRootKey,
+	}, now); err != nil {
+		return Task{}, err
+	}
+	return imported, nil
+}
+
+// importTaskRelationsTx inserts each bundle relation whose two ends were both
+// imported.
+func importTaskRelationsTx(ctx context.Context, tx *sql.Tx, relations []TransferRelation, ids map[string]int64) error {
+	for _, relation := range relations {
 		source, target := ids[NormalizeKey(relation.SourceKey)], ids[NormalizeKey(relation.TargetKey)]
 		if source == 0 || target == 0 {
 			continue
@@ -313,12 +354,8 @@ func (s *TaskService) ImportTask(ctx context.Context, actor Actor, bundle Transf
 			INSERT INTO task_relations(source_id, target_id, type, created_by, created_at)
 			VALUES (?, ?, ?, ?, ?)`,
 			source, target, relation.Type, relation.CreatedBy, relation.CreatedAt); err != nil {
-			return Task{}, err
+			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return Task{}, err
-	}
-	s.signal()
-	return root, nil
+	return nil
 }
