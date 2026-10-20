@@ -14,30 +14,7 @@ func (s *TaskService) AgentAction(ctx context.Context, actor Actor, action strin
 	}
 	switch action {
 	case "list", "mine":
-		waiting := actionString(body, "waiting_for")
-		if waiting == "me" {
-			waiting = actor.Principal
-		}
-		// The tools socket scrubs author and customer from every body, so those
-		// filters arrive as by_author and by_customer. scope_agent is never read:
-		// an agent lists only what it sees itself.
-		filter := ListFilter{
-			Queue: actionString(body, "queue"), Statuses: actionList(body, "status"),
-			Categories: actionList(body, "category"), StatusView: actionString(body, "status_view"),
-			Assignee: actionString(body, "assignee"), Author: actionString(body, "by_author"),
-			Customer: actionString(body, "by_customer"), Group: actionString(body, "group"),
-			WaitingFor: waiting, Text: actionString(body, "text"),
-			ParentKey: actionString(body, "parent"), SubtreeKey: actionString(body, "subtree"),
-			Sort: actionString(body, "sort"), Limit: actionInt(body, "limit"), AfterKey: actionString(body, "after"),
-		}
-		for _, priority := range actionList(body, "priority") {
-			filter.Priorities = append(filter.Priorities, Priority(priority))
-		}
-		if blocked := actionString(body, "blocked"); blocked != "" {
-			value := blocked == "true"
-			filter.Blocked = &value
-		}
-		return s.ListTasks(ctx, actor, filter)
+		return s.ListTasks(ctx, actor, agentActionListFilter(actor, body))
 	case "ready":
 		filter := ReadyFilter{Queue: actionString(body, "queue"), Limit: actionInt(body, "limit")}
 		if actionBool(body, "claim") {
@@ -78,17 +55,7 @@ func (s *TaskService) AgentAction(ctx context.Context, actor Actor, action strin
 			Body: actionString(body, "body"), IdempotencyKey: actionString(body, "idempotency_key"),
 		})
 	case "ask":
-		principal := actionString(body, "principal")
-		if principal != "" && !strings.Contains(principal, ":") {
-			principal = agentPrincipal(principal)
-		}
-		if principal == "" {
-			return nil, domainError(http.StatusBadRequest, "missing_principal", "question principal is required")
-		}
-		return s.AddComment(ctx, actor, actionString(body, "key"), AddCommentInput{
-			Body:           "@" + principal + "\n\n" + actionString(body, "body"),
-			IdempotencyKey: actionString(body, "idempotency_key"),
-		})
+		return s.agentActionAsk(ctx, actor, body)
 	case "move":
 		key := actionString(body, "key")
 		revision, err := s.actionRevision(ctx, actor, key, body)
@@ -130,6 +97,15 @@ func (s *TaskService) AgentAction(ctx context.Context, actor Actor, action strin
 		return s.CompleteTask(ctx, actor, key, CompleteInput{
 			Revision: revision, CompleteAnyway: actionBool(body, "complete_anyway"),
 		})
+	default:
+		return s.agentActionWorkflow(ctx, actor, action, body)
+	}
+}
+
+// agentActionWorkflow runs the workflow, artifact, and script run actions of
+// AgentAction, and rejects an unknown action.
+func (s *TaskService) agentActionWorkflow(ctx context.Context, actor Actor, action string, body map[string]any) (any, error) {
+	switch action {
 	case "advance":
 		return s.engine.Advance(ctx, actor, actionString(body, "key"), AdvanceInput{
 			Outcome: actionString(body, "outcome"), Message: actionRawString(body, "message"),
@@ -169,6 +145,51 @@ func (s *TaskService) AgentAction(ctx context.Context, actor Actor, action strin
 		return nil, domainError(http.StatusBadRequest, "invalid_action",
 			fmt.Sprintf("unknown task action %q", action))
 	}
+}
+
+// agentActionListFilter builds the ListTasks filter of the list and mine
+// actions.
+func agentActionListFilter(actor Actor, body map[string]any) ListFilter {
+	waiting := actionString(body, "waiting_for")
+	if waiting == "me" {
+		waiting = actor.Principal
+	}
+	// The tools socket scrubs author and customer from every body, so those
+	// filters arrive as by_author and by_customer. scope_agent is never read:
+	// an agent lists only what it sees itself.
+	filter := ListFilter{
+		Queue: actionString(body, "queue"), Statuses: actionList(body, "status"),
+		Categories: actionList(body, "category"), StatusView: actionString(body, "status_view"),
+		Assignee: actionString(body, "assignee"), Author: actionString(body, "by_author"),
+		Customer: actionString(body, "by_customer"), Group: actionString(body, "group"),
+		WaitingFor: waiting, Text: actionString(body, "text"),
+		ParentKey: actionString(body, "parent"), SubtreeKey: actionString(body, "subtree"),
+		Sort: actionString(body, "sort"), Limit: actionInt(body, "limit"), AfterKey: actionString(body, "after"),
+	}
+	for _, priority := range actionList(body, "priority") {
+		filter.Priorities = append(filter.Priorities, Priority(priority))
+	}
+	if blocked := actionString(body, "blocked"); blocked != "" {
+		value := blocked == "true"
+		filter.Blocked = &value
+	}
+	return filter
+}
+
+// agentActionAsk posts the ask action's question as a comment that mentions
+// the asked principal; a bare name is an agent.
+func (s *TaskService) agentActionAsk(ctx context.Context, actor Actor, body map[string]any) (any, error) {
+	principal := actionString(body, "principal")
+	if principal != "" && !strings.Contains(principal, ":") {
+		principal = agentPrincipal(principal)
+	}
+	if principal == "" {
+		return nil, domainError(http.StatusBadRequest, "missing_principal", "question principal is required")
+	}
+	return s.AddComment(ctx, actor, actionString(body, "key"), AddCommentInput{
+		Body:           "@" + principal + "\n\n" + actionString(body, "body"),
+		IdempotencyKey: actionString(body, "idempotency_key"),
+	})
 }
 
 // actionID is the positive numeric "id" of a request or run.
