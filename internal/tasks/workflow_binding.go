@@ -122,15 +122,8 @@ func (s *WorkflowEngine) RebindAgentPool(
 			Revision: 1, CreatedAt: now, UpdatedAt: now,
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM task_agent_pool_members WHERE pool_id = ?`, pool.ID); err != nil {
+	if err := rebindPoolMembersTx(ctx, tx, pool.ID, agents); err != nil {
 		return AgentPool{}, err
-	}
-	for position, agent := range agents {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO task_agent_pool_members(pool_id, agent, position)
-			VALUES (?, ?, ?)`, pool.ID, agent, position); err != nil {
-			return AgentPool{}, err
-		}
 	}
 	if _, err := appendQueueEventTx(ctx, tx, Queue{Prefix: queue, Revision: pool.Revision},
 		"task.agent_pool_rebound", actor, map[string]any{
@@ -148,6 +141,22 @@ func (s *WorkflowEngine) RebindAgentPool(
 	}
 	s.signal()
 	return pool, nil
+}
+
+// rebindPoolMembersTx replaces the members of pool poolID with agents, in
+// order.
+func rebindPoolMembersTx(ctx context.Context, tx *sql.Tx, poolID int64, agents []string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM task_agent_pool_members WHERE pool_id = ?`, poolID); err != nil {
+		return err
+	}
+	for position, agent := range agents {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO task_agent_pool_members(pool_id, agent, position)
+			VALUES (?, ?, ?)`, poolID, agent, position); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *WorkflowEngine) GetAgentPool(ctx context.Context, actor Actor, queue, pool string) (AgentPool, error) {
