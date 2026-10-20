@@ -22,7 +22,8 @@ import (
 	"github.com/alekzonder/tariboy/internal/imageportable"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/registry"
-	storedb "github.com/alekzonder/tariboy/internal/store"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 type imageBoundaryCall struct {
@@ -39,6 +40,7 @@ type imageBoundaryRunner struct {
 // the ref's current content. A pending assignment naming content that is not
 // stored still fails instead of silently substituting another generation.
 func TestPendingImageLaunchRejectsDigestDifferentFromStoredIdentity(t *testing.T) {
+	t.Parallel()
 	m, _, _, _ := newManager(t, &fakeRunner{})
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "prompt.md"), []byte("trusted"), 0o600); err != nil {
@@ -65,12 +67,9 @@ func TestPendingImageLaunchRejectsDigestDifferentFromStoredIdentity(t *testing.T
 }
 
 func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -130,6 +129,7 @@ func TestMutableRefActivatesAtNextLaunchGate(t *testing.T) {
 }
 
 func TestMutableRefIterationsSnapshotSourceVersion(t *testing.T) {
+	t.Parallel()
 	m, as, _, _ := newManager(t, &imageBoundaryRunner{calls: make(chan imageBoundaryCall, 2)})
 	t.Cleanup(m.Shutdown)
 	recorder := &captureRecorder{}
@@ -147,17 +147,15 @@ func TestMutableRefIterationsSnapshotSourceVersion(t *testing.T) {
 	}
 	wait := func(count int) []agent.Iteration {
 		t.Helper()
-		deadline := time.Now().Add(2 * time.Second)
-		for {
-			iterations, err := as.ListIterations("worker")
-			if err == nil && len(iterations) == count && iterations[count-1].Status == "done" {
-				return iterations
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("iterations = %#v, err = %v", iterations, err)
-			}
-			time.Sleep(10 * time.Millisecond)
+		var iterations []agent.Iteration
+		var err error
+		if !testutil.WaitFor(2*time.Second, func() bool {
+			iterations, err = as.ListIterations("worker")
+			return err == nil && len(iterations) == count && iterations[count-1].Status == "done"
+		}) {
+			t.Fatalf("iterations = %#v, err = %v", iterations, err)
 		}
+		return iterations
 	}
 
 	first := build("1.0.0")
@@ -191,11 +189,7 @@ func TestMutableRefIterationsSnapshotSourceVersion(t *testing.T) {
 
 func TestActivationWaitsForPublicationGate(t *testing.T) {
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -268,12 +262,9 @@ func TestActivationWaitsForPublicationGate(t *testing.T) {
 }
 
 func TestRecoveryClearsEmptyAssignmentError(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	ref := image.Ref{Name: "reviewer", Tag: "v1"}
@@ -310,12 +301,9 @@ func TestRecoveryClearsEmptyAssignmentError(t *testing.T) {
 }
 
 func TestRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	ref := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -375,12 +363,9 @@ func TestRefDiscoveryFailureRecordsRetryablePendingError(t *testing.T) {
 }
 
 func TestRecoveredSwapShimFailureRecordsPendingImageError(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	build := func(name string) (image.Ref, image.Manifest) {
@@ -431,12 +416,9 @@ func TestRecoveredSwapShimFailureRecordsPendingImageError(t *testing.T) {
 }
 
 func TestMutableRefreshLosesToExplicitPendingDuringStaging(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	mutableRef := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -544,12 +526,9 @@ func TestMutableRefreshLosesToExplicitPendingDuringStaging(t *testing.T) {
 }
 
 func TestImmutableRefRemainsPinned(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	ref := image.Ref{Name: "immutable", Tag: "v1"}
@@ -575,12 +554,9 @@ func TestImmutableRefRemainsPinned(t *testing.T) {
 }
 
 func TestExplicitPendingImageBeatsMutableRefresh(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	mutableRef := image.Ref{Name: "reviewer", Tag: "latest"}
@@ -631,6 +607,7 @@ func (r *imageBoundaryRunner) Run(_ context.Context, ag agent.Agent, _, _, _ str
 }
 
 func TestPendingImageActivationWaitsForActiveIterationAndSnapshotsNextImage(t *testing.T) {
+	t.Parallel()
 	runner := &imageBoundaryRunner{calls: make(chan imageBoundaryCall, 2), release: make(chan struct{})}
 	m, as, _, _ := newManager(t, runner)
 	sources := make(map[string]string)
@@ -673,16 +650,13 @@ func TestPendingImageActivationWaitsForActiveIterationAndSnapshotsNextImage(t *t
 		t.Fatalf("active image changed during iteration: %#v, %v", current, err)
 	}
 	close(runner.release)
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		iterations, err := as.ListIterations("worker")
-		if err == nil && len(iterations) == 1 && iterations[0].Status == "done" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("image A iteration did not finish: %#v, %v", iterations, err)
-		}
-		time.Sleep(10 * time.Millisecond)
+	var iterations []agent.Iteration
+	var err error
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		iterations, err = as.ListIterations("worker")
+		return err == nil && len(iterations) == 1 && iterations[0].Status == "done"
+	}) {
+		t.Fatalf("image A iteration did not finish: %#v, %v", iterations, err)
 	}
 	if _, err := m.Exec("worker", "next"); err != nil {
 		t.Fatal(err)
@@ -695,22 +669,17 @@ func TestPendingImageActivationWaitsForActiveIterationAndSnapshotsNextImage(t *t
 	case <-time.After(2 * time.Second):
 		t.Fatal("image B iteration did not start")
 	}
-	deadline = time.Now().Add(2 * time.Second)
-	for {
-		iterations, err := as.ListIterations("worker")
-		if err == nil && len(iterations) == 2 && iterations[1].Status == "done" {
-			if iterations[0].ImageRef != "image-a:latest" || iterations[0].ImageVersion != "1.0.0" || iterations[0].ImageDigest != aManifest.Digest {
-				t.Fatalf("first iteration snapshot = %#v", iterations[0])
-			}
-			if iterations[1].ImageRef != "image-b:latest" || iterations[1].ImageVersion != "2.0.0" || iterations[1].ImageDigest != bManifest.Digest || iterations[1].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
-				t.Fatalf("second iteration snapshot = %#v", iterations[1])
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("image B iteration did not finish: %#v, %v", iterations, err)
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		iterations, err = as.ListIterations("worker")
+		return err == nil && len(iterations) == 2 && iterations[1].Status == "done"
+	}) {
+		t.Fatalf("image B iteration did not finish: %#v, %v", iterations, err)
+	}
+	if iterations[0].ImageRef != "image-a:latest" || iterations[0].ImageVersion != "1.0.0" || iterations[0].ImageDigest != aManifest.Digest {
+		t.Fatalf("first iteration snapshot = %#v", iterations[0])
+	}
+	if iterations[1].ImageRef != "image-b:latest" || iterations[1].ImageVersion != "2.0.0" || iterations[1].ImageDigest != bManifest.Digest || iterations[1].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
+		t.Fatalf("second iteration snapshot = %#v", iterations[1])
 	}
 
 	// The same lifecycle continues through runnable-only portability: remove
@@ -752,29 +721,22 @@ func TestPendingImageActivationWaitsForActiveIterationAndSnapshotsNextImage(t *t
 	case <-time.After(2 * time.Second):
 		t.Fatal("imported runnable image did not launch")
 	}
-	deadline = time.Now().Add(2 * time.Second)
-	for {
-		iterations, listErr := targetAgents.ListIterations("imported-worker")
-		if listErr == nil && len(iterations) == 1 && iterations[0].Status == "done" {
-			if iterations[0].ImageRef != imported.Ref || iterations[0].ImageVersion != "2.0.0" || iterations[0].ImageDigest != imported.Digest || iterations[0].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
-				t.Fatalf("imported iteration snapshot = %#v", iterations[0])
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("imported iteration did not finish: %#v, %v", iterations, listErr)
-		}
-		time.Sleep(10 * time.Millisecond)
+	var listErr error
+	if !testutil.WaitFor(2*time.Second, func() bool {
+		iterations, listErr = targetAgents.ListIterations("imported-worker")
+		return listErr == nil && len(iterations) == 1 && iterations[0].Status == "done"
+	}) {
+		t.Fatalf("imported iteration did not finish: %#v, %v", iterations, listErr)
+	}
+	if iterations[0].ImageRef != imported.Ref || iterations[0].ImageVersion != "2.0.0" || iterations[0].ImageDigest != imported.Digest || iterations[0].PromptTemplateSHA256 != bManifest.PromptTemplateSHA256 {
+		t.Fatalf("imported iteration snapshot = %#v", iterations[0])
 	}
 }
 
 func TestPendingImageActivationSwapsOnlyImageAndPromotes(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	build := func(name, body string, pluginNames ...string) (image.Ref, image.Manifest) {
@@ -843,6 +805,7 @@ func TestPendingImageActivationSwapsOnlyImageAndPromotes(t *testing.T) {
 }
 
 func TestRecoverImageSwapRestoresDatabaseActiveImage(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	l := agentdir.New(root, "worker")
 	if err := os.MkdirAll(l.Root, 0o700); err != nil {
@@ -883,6 +846,7 @@ func TestRecoverImageSwapRestoresDatabaseActiveImage(t *testing.T) {
 }
 
 func TestRecoverImageSwapUsesDigestWhenManagedRefIsUnchanged(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	l := agentdir.New(root, "worker")
 	writeImage := func(dir, digest string) {
@@ -913,12 +877,9 @@ func TestRecoverImageSwapUsesDigestWhenManagedRefIsUnchanged(t *testing.T) {
 }
 
 func TestImageActivationCrashRecoveryReconcilesActiveShimsAfterCancel(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	build := func(name string, plugins ...string) (image.Ref, image.Manifest) {
@@ -971,15 +932,16 @@ func TestImageActivationCrashRecoveryReconcilesActiveShimsAfterCancel(t *testing
 }
 
 func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
+	// Each build gets its own creation second, as two daemon releases would.
+	built := time.Now().Truncate(time.Second)
 	managedArchive := func(version string) []byte {
+		built = built.Add(time.Second)
+		at := built
 		store := &image.Store{Dir: t.TempDir()}
 		ref := image.Ref{Name: "basic", Tag: "latest"}
 		source := t.TempDir()
@@ -989,7 +951,7 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 		}
 		if _, err := image.BuildV2(&imagefile.V2{
 			SchemaVersion: 2, Dir: source, Prompts: []imagefile.PromptEntry{{File: "./prompt.md"}},
-		}, imagefile.ResolveRoots{}, ref, store, time.Now, nil); err != nil {
+		}, imagefile.ResolveRoots{}, ref, store, func() time.Time { return at }, nil); err != nil {
 			t.Fatal(err)
 		}
 		archive, err := store.ArchiveBytes(ref)
@@ -1022,7 +984,6 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 	if err := as.SetPendingImage(ag.Name, basicRef.String(), pendingManifest.Digest); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)) + 10*time.Millisecond)
 	if _, err := images.InstallArchive(basicRef, managedArchive("1.1.0")); err != nil {
 		t.Fatal(err)
 	}
@@ -1044,6 +1005,7 @@ func TestPendingManagedImageSurvivesDaemonUpgradeBeforeActivation(t *testing.T) 
 }
 
 func TestPendingImageActivationFailuresPreserveActiveImageAndRecordError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		candidate     []imagefile.V2Plugin
@@ -1057,11 +1019,7 @@ func TestPendingImageActivationFailuresPreserveActiveImageAndRecordError(t *test
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
-			db, err := storedb.Open(filepath.Join(base, "state.db"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
+			db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 			as := agent.NewStore(db)
 			images := &image.Store{Dir: filepath.Join(base, "images")}
 			activeRef := image.Ref{Name: "active", Tag: "latest"}
@@ -1124,12 +1082,9 @@ func TestPendingImageActivationFailuresPreserveActiveImageAndRecordError(t *test
 }
 
 func TestPendingImageActivationBridgeFailurePreservesActiveImage(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	activeRef := image.Ref{Name: "active", Tag: "latest"}
@@ -1203,12 +1158,9 @@ func TestPendingImageActivationBridgeFailurePreservesActiveImage(t *testing.T) {
 }
 
 func TestPendingImageCompatibilityFailureDoesNotPublishBridge(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	activeRef := image.Ref{Name: "active", Tag: "latest"}
@@ -1275,12 +1227,9 @@ func TestPendingImageCompatibilityFailureDoesNotPublishBridge(t *testing.T) {
 }
 
 func TestImageBridgeRestartReusesPublishedBridge(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	source := t.TempDir()
@@ -1344,7 +1293,7 @@ func TestImageBridgeRestartReusesPublishedBridge(t *testing.T) {
 }
 
 func TestStubImageSkillsNeedNoBridge(t *testing.T) {
-	t.Setenv("TARIBOY_STUB_HARNESS", "/usr/bin/true")
+	t.Parallel()
 	called := false
 	m := &Manager{cfg: ManagerConfig{PrepareImageBridge: func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
 		called = true
@@ -1363,12 +1312,9 @@ func TestStubImageSkillsNeedNoBridge(t *testing.T) {
 }
 
 func TestActiveCodexImageSkillBridgeNeedsNoPluginProbe(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
-	db, err := storedb.Open(filepath.Join(base, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
 	as := agent.NewStore(db)
 	images := &image.Store{Dir: filepath.Join(base, "images")}
 	source := t.TempDir()

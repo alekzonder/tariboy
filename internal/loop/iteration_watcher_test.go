@@ -80,6 +80,7 @@ func (f *watcherFixture) watch(t *testing.T) (watchResult, error) {
 }
 
 func TestIterationWatcherReturnsResult(t *testing.T) {
+	t.Parallel()
 	f := newWatcherFixture(t)
 	f.writeResultAfter(t, 20*time.Millisecond, `{"exit_code":3,"termination_reason":"hard_timeout"}`)
 	res, err := f.watch(t)
@@ -95,6 +96,7 @@ func TestIterationWatcherReturnsResult(t *testing.T) {
 }
 
 func TestIterationWatcherSoftDeadlineAndDoneGraceSendOneKill(t *testing.T) {
+	t.Parallel()
 	f := newWatcherFixture(t)
 	if err := f.store.InitializeIterationTimeout(f.w.id, 1, 120, time.Now().Add(-time.Hour)); err != nil {
 		t.Fatal(err)
@@ -116,6 +118,7 @@ func TestIterationWatcherSoftDeadlineAndDoneGraceSendOneKill(t *testing.T) {
 }
 
 func TestIterationWatcherDoneGraceKillsOnce(t *testing.T) {
+	t.Parallel()
 	f := newWatcherFixture(t)
 	if err := f.store.SetIterationDone(f.w.id, true); err != nil {
 		t.Fatal(err)
@@ -131,6 +134,7 @@ func TestIterationWatcherDoneGraceKillsOnce(t *testing.T) {
 }
 
 func TestIterationWatcherProbeMissesMarkStale(t *testing.T) {
+	t.Parallel()
 	f := newWatcherFixture(t)
 	f.ln.Close()
 	f.w.probe = &livenessProbe{every: time.Millisecond, maxMisses: 3}
@@ -142,6 +146,7 @@ func TestIterationWatcherProbeMissesMarkStale(t *testing.T) {
 }
 
 func TestIterationWatcherDetachesOnCancel(t *testing.T) {
+	t.Parallel()
 	f := newWatcherFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(20*time.Millisecond, cancel)

@@ -19,6 +19,7 @@ func probe(v bool, calls *int) func() bool {
 }
 
 func TestMessageWakeQueue(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		state        uint32
@@ -56,6 +57,7 @@ func TestMessageWakeQueue(t *testing.T) {
 }
 
 func TestMessageWakeBeginMarksRunning(t *testing.T) {
+	t.Parallel()
 	w := newTestMessageWake(messageWakeQueued)
 	w.begin()
 	if got := w.state.Load(); got != messageWakeRunning {
@@ -64,6 +66,7 @@ func TestMessageWakeBeginMarksRunning(t *testing.T) {
 }
 
 func TestMessageWakeFinish(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		deferred    bool
@@ -92,6 +95,7 @@ func TestMessageWakeFinish(t *testing.T) {
 }
 
 func TestMessageWakePublishDuringRunningRequeuesOnce(t *testing.T) {
+	t.Parallel()
 	w := newTestMessageWake(messageWakeIdle)
 	w.queue()
 	<-w.ch
@@ -115,6 +119,7 @@ func TestMessageWakePublishDuringRunningRequeuesOnce(t *testing.T) {
 }
 
 func TestMessageWakeParkDropsDeferred(t *testing.T) {
+	t.Parallel()
 	w := newTestMessageWake(messageWakeRunning)
 	w.deferred.Store(true)
 	w.park()
@@ -130,6 +135,7 @@ func TestMessageWakeParkDropsDeferred(t *testing.T) {
 }
 
 func TestMessageWakeAbandonResetsIdle(t *testing.T) {
+	t.Parallel()
 	for _, state := range []uint32{messageWakeQueued, messageWakeRunning, messageWakeRetry} {
 		w := newTestMessageWake(state)
 		w.deferred.Store(true)
@@ -144,6 +150,7 @@ func TestMessageWakeAbandonResetsIdle(t *testing.T) {
 }
 
 func TestMessageWakeArmRetryCreatesAtMostOneTimer(t *testing.T) {
+	t.Parallel()
 	f := &fakeTimerFactory{}
 	w := newTestMessageWake(messageWakeRunning)
 	w.armRetry(f.newTimer)
@@ -163,6 +170,7 @@ func TestMessageWakeArmRetryCreatesAtMostOneTimer(t *testing.T) {
 }
 
 func TestMessageWakeStopRetry(t *testing.T) {
+	t.Parallel()
 	f := &fakeTimerFactory{}
 	w := newTestMessageWake(messageWakeRunning)
 	w.armRetry(f.newTimer)
@@ -178,6 +186,7 @@ func TestMessageWakeStopRetry(t *testing.T) {
 }
 
 func TestMessageWakeRetryFiredDetachesWithoutStop(t *testing.T) {
+	t.Parallel()
 	f := &fakeTimerFactory{}
 	w := newTestMessageWake(messageWakeRunning)
 	w.armRetry(f.newTimer)
@@ -192,6 +201,7 @@ func TestMessageWakeRetryFiredDetachesWithoutStop(t *testing.T) {
 }
 
 func TestMessageWakeOnConfigWake(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		armed         bool
@@ -254,6 +264,7 @@ func TestMessageWakeOnConfigWake(t *testing.T) {
 }
 
 func TestMessageWakeCoalesceWhileRetrying(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		blocked       bool
@@ -300,6 +311,7 @@ func TestMessageWakeCoalesceWhileRetrying(t *testing.T) {
 }
 
 func TestMessageWakeBlockAndSettle(t *testing.T) {
+	t.Parallel()
 	f := &fakeTimerFactory{}
 	w := newTestMessageWake(messageWakeRunning)
 	w.block(f.newTimer)

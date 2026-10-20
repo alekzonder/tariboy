@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agent"
+	"github.com/alekzonder/tariboy/internal/testutil"
 )
 
 // The engine clock in newEngine is 2026-07-06 10:00 UTC; this rule fires daily
@@ -15,17 +16,18 @@ const scheduleAt1005 = "DTSTART:20260706T000000Z\nRRULE:FREQ=DAILY;BYHOUR=10;BYM
 
 func waitUntil(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	if testutil.WaitFor(2*time.Second, cond) {
+		return
 	}
 	t.Fatalf("timed out waiting for %s", what)
 }
 
 func runScheduleEngine(t *testing.T, ag agent.Agent, rule string) (*Engine, *agent.Store, *fakeTimerFactory) {
+	e, as, f, _ := runScheduleEngineIdle(t, ag, rule)
+	return e, as, f
+}
+
+func runScheduleEngineIdle(t *testing.T, ag agent.Agent, rule string) (*Engine, *agent.Store, *fakeTimerFactory, *idleTracker) {
 	t.Helper()
 	r := &fakeRunner{outcomes: []Outcome{{Status: "done", DoneFlag: true}}}
 	e, as := newEngine(t, ag, r)
@@ -34,11 +36,12 @@ func runScheduleEngine(t *testing.T, ag agent.Agent, rule string) (*Engine, *age
 	}
 	f := &fakeTimerFactory{}
 	e.newTimer = f.newTimer
+	idle := trackIdle(e)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { e.Run(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
-	return e, as, f
+	return e, as, f, idle
 }
 
 func iterationTriggers(as *agent.Store) []string {
@@ -51,6 +54,7 @@ func iterationTriggers(as *agent.Store) []string {
 }
 
 func TestRunScheduleOnlyAgentStartsScheduleIteration(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0
 	_, as, f := runScheduleEngine(t, ag, scheduleAt1005)
@@ -67,6 +71,7 @@ func TestRunScheduleOnlyAgentStartsScheduleIteration(t *testing.T) {
 }
 
 func TestRunPicksNearestOfIntervalAndSchedule(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 3600
 	_, as, f := runScheduleEngine(t, ag, scheduleAt1005)
@@ -93,21 +98,24 @@ func TestRunPicksNearestOfIntervalAndSchedule(t *testing.T) {
 }
 
 func TestRunScheduleIgnoredForDisabledAgent(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0
 	ag.Enabled = false
-	e, _, f := runScheduleEngine(t, ag, scheduleAt1005)
+	e, _, f, idle := runScheduleEngineIdle(t, ag, scheduleAt1005)
 	e.Wake(WakeConfig)
-	time.Sleep(50 * time.Millisecond)
+	// Start, then the config wake.
+	idle.wait(t, 2)
 	if c := f.createdCount(); c != 0 {
 		t.Fatalf("disabled agent created %d timers", c)
 	}
 }
 
 func TestRunScheduleChangeRearmsTimer(t *testing.T) {
+	t.Parallel()
 	ag := baseAgent()
 	ag.IntervalS = 0
-	e, as, f := runScheduleEngine(t, ag, scheduleAt1005)
+	e, as, f, idle := runScheduleEngineIdle(t, ag, scheduleAt1005)
 	waitUntil(t, "schedule timer", func() bool { return f.createdCount() >= 1 })
 	first := f.lastTimer()
 
@@ -128,7 +136,8 @@ func TestRunScheduleChangeRearmsTimer(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Wake(WakeConfig)
-	time.Sleep(50 * time.Millisecond)
+	// Start and the two config wakes.
+	idle.wait(t, 3)
 	if c := f.createdCount(); c != 2 {
 		t.Fatalf("cleared schedule created timers: %d", c)
 	}

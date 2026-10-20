@@ -1,6 +1,7 @@
 package loop
 
 import (
+	"github.com/alekzonder/tariboy/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,18 +51,16 @@ func appendLine(t *testing.T, path, line string) {
 
 func waitFor(t *testing.T, rec *captureRecorder, n int) []capturedEvent {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if evs := rec.snapshot(); len(evs) >= n {
-			return evs
-		}
-		time.Sleep(5 * time.Millisecond)
+	var evs []capturedEvent
+	if testutil.WaitFor(3*time.Second, func() bool { evs = rec.snapshot(); return len(evs) >= n }) {
+		return evs
 	}
 	t.Fatalf("timed out waiting for %d events, got %d", n, len(rec.snapshot()))
 	return nil
 }
 
 func TestTailerTeesShimAndHarnessLines(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	rec := &captureRecorder{}
 	tl := StartTailer(rec, "it-1", dir, 5*time.Millisecond, false)
@@ -93,6 +92,7 @@ func TestTailerTeesShimAndHarnessLines(t *testing.T) {
 }
 
 func TestTailerOffsetNoDuplicates(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	rec := &captureRecorder{}
 	tl := StartTailer(rec, "it-1", dir, 5*time.Millisecond, false)
@@ -111,6 +111,7 @@ func TestTailerOffsetNoDuplicates(t *testing.T) {
 }
 
 func TestTailerFinalDrainOnStop(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	rec := &captureRecorder{}
 	// Long poll so the line is only picked up by the Stop() drain, not a tick.
@@ -124,6 +125,7 @@ func TestTailerFinalDrainOnStop(t *testing.T) {
 }
 
 func TestTailerRecordsLongLineWhole(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	rec := &captureRecorder{}
 	tl := StartTailer(rec, "it-1", dir, 5*time.Millisecond, false)
@@ -137,12 +139,14 @@ func TestTailerRecordsLongLineWhole(t *testing.T) {
 }
 
 func TestTailerStopIdempotent(t *testing.T) {
+	t.Parallel()
 	tl := StartTailer(&captureRecorder{}, "it", t.TempDir(), 5*time.Millisecond, false)
 	tl.Stop()
 	tl.Stop() // must not panic on a double close
 }
 
 func TestTailerInteractiveSkipsHarnessOutput(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	rec := &captureRecorder{}
 	tl := StartTailer(rec, "it-1", dir, 5*time.Millisecond, true) // interactive

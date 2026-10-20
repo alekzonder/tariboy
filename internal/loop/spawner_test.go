@@ -1,6 +1,7 @@
 package loop
 
 import (
+	"github.com/alekzonder/tariboy/internal/testutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,21 +39,15 @@ func zombieChildren(t *testing.T) int {
 
 func waitForCond(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if cond() {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(20 * time.Millisecond)
+	if !testutil.WaitFor(5*time.Second, cond) {
+		t.Fatalf("timed out waiting for %s", what)
 	}
 }
 
 // A shim that exits must not linger as a zombie: without an explicit wait the
 // daemon accumulates one dead child per iteration for its whole uptime.
 func TestExecSpawnerReapsExitedShim(t *testing.T) {
+	// Not parallel: zombieChildren counts every child of the test process.
 	if goruntime.GOOS == "windows" {
 		t.Skip("process states are POSIX-specific")
 	}
@@ -81,6 +76,7 @@ func TestExecSpawnerReapsExitedShim(t *testing.T) {
 // Start (the unmanaged path) delegates to StartManaged and drops the terminate
 // handle, so it must reap too.
 func TestExecSpawnerStartReapsExitedShim(t *testing.T) {
+	// Not parallel: zombieChildren counts every child of the test process.
 	if goruntime.GOOS == "windows" {
 		t.Skip("process states are POSIX-specific")
 	}
@@ -110,6 +106,7 @@ func TestExecSpawnerStartReapsExitedShim(t *testing.T) {
 // the pgid is free for reuse then, and a stray kill would hit an unrelated
 // group. It reports os.ErrProcessDone instead, as it already does for ESRCH.
 func TestExecSpawnerTerminateAfterReapReportsDone(t *testing.T) {
+	t.Parallel()
 	if goruntime.GOOS == "windows" {
 		t.Skip("process states are POSIX-specific")
 	}

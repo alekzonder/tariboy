@@ -92,6 +92,7 @@ func makeTreeWritable(dir string) {
 }
 
 func TestTaskWorkflowGoalsReadsTheViewAndTheInstructions(t *testing.T) {
+	t.Parallel()
 	svc, images, task := workflowGoalFixture(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	src := TaskWorkflowGoals{Tasks: svc, Images: images, Log: log}

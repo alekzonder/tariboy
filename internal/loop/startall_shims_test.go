@@ -53,6 +53,7 @@ func readShim(t *testing.T, l agentdir.Layout, name string) string {
 // Startup repoints every direct skill shim and removes the obsolete managed
 // dispatcher, including for disabled agents.
 func TestStartAllRefreshesShimsForEveryAgent(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 
@@ -120,6 +121,7 @@ func TestStartAllDefersPython3CheckToIterationEnvironment(t *testing.T) {
 // One unwritable agent dir must not take the daemon down or stop the other
 // agents from being refreshed; the failure is logged against the agent name.
 func TestStartAllSurvivesOneUnwritableAgentDir(t *testing.T) {
+	t.Parallel()
 	m, as, agentsDir, _ := newManager(t, &fakeRunner{})
 	t.Cleanup(m.Shutdown)
 	var logs bytes.Buffer

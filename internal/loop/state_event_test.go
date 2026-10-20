@@ -11,6 +11,7 @@ import (
 // The UI refetches an agent's state on a "state" event instead of polling it
 // often, so every manager path that changes the state must emit one.
 func TestManagerEmitsStateEvents(t *testing.T) {
+	t.Parallel()
 	m, as, _, _ := newManager(t, &fakeRunner{outcomes: []Outcome{{Status: "done"}}})
 	var mu sync.Mutex
 	var got []string
