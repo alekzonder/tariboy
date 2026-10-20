@@ -30,7 +30,7 @@ func descendantCounts(ctx context.Context, q queryer, taskID int64) (total int, 
 	return total, active, err
 }
 
-func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in UpdateTaskInput) (Task, error) {
+func (s *TaskService) UpdateTask(ctx context.Context, actor Actor, key string, in UpdateTaskInput) (Task, error) {
 	if err := validateActor(actor); err != nil {
 		return Task{}, err
 	}
@@ -39,30 +39,15 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return Task{}, err
 	}
 	if err := requireWrite(ctx, tx, actor, task); err != nil {
 		return Task{}, err
 	}
-	// The workflow owns the status and the assignee of its task. A client that
-	// resends the current values (as status, the workflow status or the category)
-	// changes nothing, so only a real change is refused.
-	if task.WorkflowDigest != "" {
-		if in.Status != nil {
-			status := strings.TrimSpace(*in.Status)
-			if status != task.Status && status != task.WorkflowStatus {
-				return Task{}, workflowManagedErrorFor(ctx, tx, task)
-			}
-			in.Status = nil
-		}
-		if in.Assignee != nil {
-			if normalizeAssignee(*in.Assignee) != task.Assignee {
-				return Task{}, workflowManagedErrorFor(ctx, tx, task)
-			}
-			in.Assignee = nil
-		}
+	if err := updateTaskWorkflowGuardTx(ctx, tx, task, &in); err != nil {
+		return Task{}, err
 	}
 	if in.Revision <= 0 || in.Revision != task.Revision {
 		return Task{}, &Error{Status: http.StatusConflict, Code: "revision_conflict",
@@ -71,49 +56,8 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 			}}
 	}
 	previousAssignee, previousStatus := task.Assignee, task.Status
-	if in.Title != nil {
-		task.Title = strings.TrimSpace(*in.Title)
-		if task.Title == "" {
-			return Task{}, domainError(http.StatusBadRequest, "missing_title", "task title is required")
-		}
-	}
-	if in.Description != nil {
-		task.Description = strings.TrimSpace(*in.Description)
-	}
-	if in.PullRequest != nil {
-		task.PullRequest, err = NormalizePullRequest(*in.PullRequest)
-		if err != nil {
-			return Task{}, err
-		}
-	}
-	if in.Assignee != nil {
-		task.Assignee = normalizeAssignee(*in.Assignee)
-	}
-	if in.ManualBlockReason != nil {
-		task.ManualBlockReason = strings.TrimSpace(*in.ManualBlockReason)
-	}
-	if in.Priority != nil {
-		priority, err := NormalizePriority(*in.Priority)
-		if err != nil {
-			return Task{}, err
-		}
-		task.Priority = priority
-	}
-	if in.Status != nil {
-		task.Status = strings.TrimSpace(*in.Status)
-		if !validStatus(task.Status) {
-			return Task{}, domainError(http.StatusBadRequest, "invalid_status", "invalid task status")
-		}
-		if task.Status == StatusDone {
-			_, count, err := descendantCounts(ctx, tx, task.ID)
-			if err != nil {
-				return Task{}, err
-			}
-			if count > 0 {
-				return Task{}, &Error{Status: http.StatusConflict, Code: "active_descendants",
-					Msg: "task has active descendants", Data: map[string]any{"active_descendants": count}}
-			}
-		}
+	if err := updateTaskFieldsTx(ctx, tx, &task, in); err != nil {
+		return Task{}, err
 	}
 	now := s.now()
 	task.Revision++
@@ -158,11 +102,86 @@ func (s *Service) UpdateTask(ctx context.Context, actor Actor, key string, in Up
 	return task, nil
 }
 
-func (s *Service) CompleteTask(ctx context.Context, actor Actor, key string, in CompleteInput) (Task, error) {
+// updateTaskWorkflowGuardTx refuses a change to the status or the assignee of
+// a workflow task and drops the unchanged values it accepts.
+func updateTaskWorkflowGuardTx(ctx context.Context, tx *sql.Tx, task Task, in *UpdateTaskInput) error {
+	// The workflow owns the status and the assignee of its task. A client that
+	// resends the current values (as status, the workflow status or the category)
+	// changes nothing, so only a real change is refused.
+	if task.WorkflowDigest != "" {
+		if in.Status != nil {
+			status := strings.TrimSpace(*in.Status)
+			if status != task.Status && status != task.WorkflowStatus {
+				return workflowManagedErrorFor(ctx, tx, task)
+			}
+			in.Status = nil
+		}
+		if in.Assignee != nil {
+			if normalizeAssignee(*in.Assignee) != task.Assignee {
+				return workflowManagedErrorFor(ctx, tx, task)
+			}
+			in.Assignee = nil
+		}
+	}
+	return nil
+}
+
+// updateTaskFieldsTx applies the requested field changes to task and
+// validates them.
+func updateTaskFieldsTx(ctx context.Context, tx *sql.Tx, task *Task, in UpdateTaskInput) error {
+	if in.Title != nil {
+		task.Title = strings.TrimSpace(*in.Title)
+		if task.Title == "" {
+			return domainError(http.StatusBadRequest, "missing_title", "task title is required")
+		}
+	}
+	if in.Description != nil {
+		task.Description = strings.TrimSpace(*in.Description)
+	}
+	if in.PullRequest != nil {
+		pullRequest, err := NormalizePullRequest(*in.PullRequest)
+		if err != nil {
+			return err
+		}
+		task.PullRequest = pullRequest
+	}
+	if in.Assignee != nil {
+		task.Assignee = normalizeAssignee(*in.Assignee)
+	}
+	if in.ManualBlockReason != nil {
+		task.ManualBlockReason = strings.TrimSpace(*in.ManualBlockReason)
+	}
+	if in.Priority != nil {
+		priority, err := NormalizePriority(*in.Priority)
+		if err != nil {
+			return err
+		}
+		task.Priority = priority
+	}
+	if in.Status != nil {
+		task.Status = strings.TrimSpace(*in.Status)
+		if !validStatus(task.Status) {
+			return domainError(http.StatusBadRequest, "invalid_status", "invalid task status")
+		}
+		if task.Status == StatusDone {
+			_, count, err := descendantCounts(ctx, tx, task.ID)
+			if err != nil {
+				return err
+			}
+			if count > 0 {
+				return &Error{Status: http.StatusConflict, Code: "active_descendants",
+					Msg: "task has active descendants", Data: map[string]any{"active_descendants": count}}
+			}
+		}
+	}
+	return nil
+}
+
+func (s *TaskService) CompleteTask(ctx context.Context, actor Actor, key string, in CompleteInput) (Task, error) {
 	if !in.CompleteAnyway {
 		// UpdateTask accepts an unchanged status on a workflow task, so a
 		// workflow task already closed is refused here rather than there.
-		if task, err := taskByKey(s.db, strings.TrimSpace(key)); err == nil && task.WorkflowDigest != "" {
+		if task, err := taskByKey(ctx, s.db, strings.TrimSpace(key)); err == nil && task.WorkflowDigest != "" {
 			if err := validateActor(actor); err != nil {
 				return Task{}, err
 			}
@@ -182,7 +201,7 @@ func (s *Service) CompleteTask(ctx context.Context, actor Actor, key string, in 
 		return Task{}, err
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return Task{}, err
 	}
@@ -218,7 +237,7 @@ func (s *Service) CompleteTask(ctx context.Context, actor Actor, key string, in 
 	return task, nil
 }
 
-func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in RelationInput) (Relation, error) {
+func (s *TaskService) AddRelation(ctx context.Context, actor Actor, key string, in RelationInput) (Relation, error) {
 	if err := validateActor(actor); err != nil {
 		return Relation{}, err
 	}
@@ -238,11 +257,11 @@ func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in R
 	} else if ok {
 		return replayed, nil
 	}
-	source, err := taskByKey(tx, strings.TrimSpace(key))
+	source, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return Relation{}, err
 	}
-	target, err := taskByKey(tx, strings.TrimSpace(in.TargetKey))
+	target, err := taskByKey(ctx, tx, strings.TrimSpace(in.TargetKey))
 	if err != nil {
 		return Relation{}, err
 	}
@@ -267,22 +286,8 @@ func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in R
 		source, target = target, source
 	}
 	if in.Type == "blocks" {
-		var cycle bool
-		if err := tx.QueryRowContext(ctx, `
-			WITH RECURSIVE path(id) AS (
-				SELECT ?
-				UNION
-				SELECT r.target_id
-				FROM task_relations r JOIN path p ON r.source_id = p.id
-				WHERE r.type = 'blocks'
-			)
-			SELECT EXISTS(SELECT 1 FROM path WHERE id = ?)`,
-			target.ID, source.ID).Scan(&cycle); err != nil {
+		if err := relationCycleTx(ctx, tx, source, target); err != nil {
 			return Relation{}, err
-		}
-		if cycle {
-			return Relation{}, domainError(http.StatusConflict, "blocking_cycle",
-				"blocking relation would create a cycle")
 		}
 	}
 	now := s.now()
@@ -329,7 +334,30 @@ func (s *Service) AddRelation(ctx context.Context, actor Actor, key string, in R
 	return relation, nil
 }
 
-func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, in DeleteRelationInput) error {
+// relationCycleTx refuses a blocking relation from source to target that
+// would close a cycle of blocking relations.
+func relationCycleTx(ctx context.Context, tx *sql.Tx, source, target Task) error {
+	var cycle bool
+	if err := tx.QueryRowContext(ctx, `
+		WITH RECURSIVE path(id) AS (
+			SELECT ?
+			UNION
+			SELECT r.target_id
+			FROM task_relations r JOIN path p ON r.source_id = p.id
+			WHERE r.type = 'blocks'
+		)
+		SELECT EXISTS(SELECT 1 FROM path WHERE id = ?)`,
+		target.ID, source.ID).Scan(&cycle); err != nil {
+		return err
+	}
+	if cycle {
+		return domainError(http.StatusConflict, "blocking_cycle",
+			"blocking relation would create a cycle")
+	}
+	return nil
+}
+
+func (s *TaskService) DeleteRelation(ctx context.Context, actor Actor, key string, in DeleteRelationInput) error {
 	if err := validateActor(actor); err != nil {
 		return err
 	}
@@ -345,7 +373,7 @@ func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, i
 	} else if ok {
 		return nil
 	}
-	task, err := taskByKey(tx, strings.TrimSpace(key))
+	task, err := taskByKey(ctx, tx, strings.TrimSpace(key))
 	if err != nil {
 		return err
 	}
@@ -369,11 +397,11 @@ func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, i
 		}
 		return err
 	}
-	source, err := taskByID(tx, sourceID)
+	source, err := taskByID(ctx, tx, sourceID)
 	if err != nil {
 		return err
 	}
-	target, err := taskByID(tx, targetID)
+	target, err := taskByID(ctx, tx, targetID)
 	if err != nil {
 		return err
 	}
@@ -418,7 +446,7 @@ func (s *Service) DeleteRelation(ctx context.Context, actor Actor, key string, i
 	return nil
 }
 
-func (s *Service) ClaimTask(ctx context.Context, actor Actor, key string, revision int64) (Task, error) {
+func (s *TaskService) ClaimTask(ctx context.Context, actor Actor, key string, revision int64) (Task, error) {
 	if actor.IsCustomer || !strings.HasPrefix(actor.Principal, "agent:") {
 		return Task{}, domainError(http.StatusForbidden, "forbidden", "only an agent can claim a task")
 	}
@@ -451,19 +479,17 @@ func workflowManagedError() error {
 }
 
 func listRelations(ctx context.Context, q queryer, actor Actor, task Task) ([]Relation, error) {
-	visible, err := visibleTaskIDs(ctx, q, actor)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := q.QueryContext(ctx, `
+	cte, args := visibleCTE(actor)
+	rows, err := q.QueryContext(ctx, cte+`
 		SELECT r.id, r.source_id, source.task_key, source.title, source.status,
 		       r.target_id, target.task_key, target.title, target.status,
 		       r.type, r.created_by, r.created_at
 		FROM task_relations r
 		JOIN tasks source ON source.id = r.source_id
 		JOIN tasks target ON target.id = r.target_id
-		WHERE r.source_id = ? OR r.target_id = ?
-		ORDER BY r.id`, task.ID, task.ID)
+		WHERE (r.source_id = ? OR r.target_id = ?)
+		  AND (CASE WHEN r.source_id = ? THEN r.target_id ELSE r.source_id END) IN (SELECT id FROM visible_access)
+		ORDER BY r.id`, append(args, task.ID, task.ID, task.ID)...)
 	if err != nil {
 		return nil, err
 	}
@@ -477,13 +503,6 @@ func listRelations(ctx context.Context, q queryer, actor Actor, task Task) ([]Re
 			&targetID, &relation.TargetKey, &relation.TargetTitle, &relation.TargetStatus,
 			&relation.Type, &relation.CreatedBy, &relation.CreatedAt); err != nil {
 			return nil, err
-		}
-		otherID := sourceID
-		if sourceID == task.ID {
-			otherID = targetID
-		}
-		if visible[otherID] == "" {
-			continue
 		}
 		out = append(out, relation)
 	}

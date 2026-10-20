@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (s *Service) requireCustomer(actor Actor) error {
+func (s *Admin) requireCustomer(actor Actor) error {
 	if err := validateActor(actor); err != nil {
 		return err
 	}
@@ -19,7 +19,7 @@ func (s *Service) requireCustomer(actor Actor) error {
 	return nil
 }
 
-func (s *Service) ListQueues(ctx context.Context, actor Actor) ([]Queue, error) {
+func (s *Admin) ListQueues(ctx context.Context, actor Actor) ([]Queue, error) {
 	if err := validateActor(actor); err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (s *Service) ListQueues(ctx context.Context, actor Actor) ([]Queue, error) 
 	return out, nil
 }
 
-func (s *Service) GetQueue(ctx context.Context, actor Actor, prefix string) (Queue, error) {
+func (s *Admin) GetQueue(ctx context.Context, actor Actor, prefix string) (Queue, error) {
 	if err := validateActor(actor); err != nil {
 		return Queue{}, err
 	}
@@ -121,7 +121,7 @@ func queueOwners(ctx context.Context, q queryer, prefix string) ([]string, error
 	return out, rows.Err()
 }
 
-func (s *Service) UpdateQueue(ctx context.Context, actor Actor, prefix string, in UpdateQueueInput) (Queue, error) {
+func (s *Admin) UpdateQueue(ctx context.Context, actor Actor, prefix string, in UpdateQueueInput) (Queue, error) {
 	if err := s.requireCustomer(actor); err != nil {
 		return Queue{}, err
 	}
@@ -231,7 +231,7 @@ func normalizeOwners(values []string) []string {
 	return out
 }
 
-func (s *Service) Principals(ctx context.Context, actor Actor) (PrincipalInfo, error) {
+func (s *Admin) Principals(ctx context.Context, actor Actor) (PrincipalInfo, error) {
 	if err := validateActor(actor); err != nil {
 		return PrincipalInfo{}, err
 	}
@@ -277,14 +277,14 @@ func (s *Service) Principals(ctx context.Context, actor Actor) (PrincipalInfo, e
 	return info, nil
 }
 
-func (s *Service) ListEvents(ctx context.Context, actor Actor, key string, after int64, limit int) ([]Event, error) {
+func (s *Admin) ListEvents(ctx context.Context, actor Actor, key string, after int64, limit int) ([]Event, error) {
 	if err := validateActor(actor); err != nil {
 		return nil, err
 	}
 	var task Task
 	var err error
 	if key != "" {
-		detail, getErr := s.GetTask(ctx, actor, key)
+		detail, getErr := s.taskSvc.GetTask(ctx, actor, key)
 		if getErr != nil {
 			return nil, getErr
 		}
@@ -304,17 +304,11 @@ func (s *Service) ListEvents(ctx context.Context, actor Actor, key string, after
 		query += ` AND e.task_id = ?`
 		args = append(args, task.ID)
 	} else if !actor.IsCustomer {
-		visible, visibleErr := visibleTaskIDs(ctx, s.db, actor)
-		if visibleErr != nil {
-			return nil, visibleErr
-		}
+		cte, cteArgs := visibleCTE(actor)
+		query = cte + query
+		args = append(cteArgs, args...)
 		agent := strings.TrimPrefix(actor.Principal, "agent:")
-		query += ` AND (`
-		if len(visible) > 0 {
-			query += `e.task_id IN (` + placeholders(len(visible)) + `) OR `
-			args = append(args, idsArgs(visible)...)
-		}
-		query += `(
+		query += ` AND (e.task_id IN (SELECT id FROM visible_access) OR (
 			e.task_id IS NULL AND EXISTS (
 				SELECT 1
 				FROM task_queues q
@@ -348,7 +342,7 @@ func (s *Service) ListEvents(ctx context.Context, actor Actor, key string, after
 	return out, rows.Err()
 }
 
-func (s *Service) ListNotifications(ctx context.Context, actor Actor, includeDismissed bool) ([]Notification, error) {
+func (s *Admin) ListNotifications(ctx context.Context, actor Actor, includeDismissed bool) ([]Notification, error) {
 	if err := s.requireCustomer(actor); err != nil {
 		return nil, err
 	}
@@ -387,7 +381,7 @@ func (s *Service) ListNotifications(ctx context.Context, actor Actor, includeDis
 	return out, rows.Err()
 }
 
-func (s *Service) MarkNotification(ctx context.Context, actor Actor, id, action string) (Notification, error) {
+func (s *Admin) MarkNotification(ctx context.Context, actor Actor, id, action string) (Notification, error) {
 	if err := s.requireCustomer(actor); err != nil {
 		return Notification{}, err
 	}
@@ -420,4 +414,97 @@ func (s *Service) MarkNotification(ctx context.Context, actor Actor, id, action 
 		}
 	}
 	return Notification{}, domainError(http.StatusNotFound, "notification_not_found", "notification not found")
+}
+
+func (s *Admin) CreateQueue(ctx context.Context, actor Actor, in CreateQueueInput) (Queue, error) {
+	if err := validateActor(actor); err != nil {
+		return Queue{}, err
+	}
+	if !actor.IsCustomer || actor.Principal != userPrincipal(s.customer) {
+		return Queue{}, domainError(http.StatusForbidden, "forbidden", "only the daemon customer can administer queues")
+	}
+	in.Prefix = strings.ToUpper(strings.TrimSpace(in.Prefix))
+	in.Name = strings.TrimSpace(in.Name)
+	if !queuePrefixRE.MatchString(in.Prefix) {
+		return Queue{}, domainError(http.StatusBadRequest, "invalid_queue_prefix",
+			"queue prefix must match ^[A-Z][A-Z0-9]{1,9}$")
+	}
+	if in.Name == "" {
+		return Queue{}, domainError(http.StatusBadRequest, "missing_name", "queue name is required")
+	}
+	now := s.now()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Queue{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO task_queues(prefix, name, description, responsible_agent, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		in.Prefix, in.Name, strings.TrimSpace(in.Description),
+		strings.TrimPrefix(normalizeAssignee(in.ResponsibleAgent), "agent:"), now, now); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return Queue{}, domainError(http.StatusConflict, "queue_exists", "queue prefix already exists")
+		}
+		return Queue{}, err
+	}
+	owners := make([]string, 0, len(in.Owners))
+	seen := map[string]bool{}
+	for _, owner := range in.Owners {
+		owner = strings.TrimPrefix(normalizeAssignee(owner), "agent:")
+		if owner == "" || seen[owner] {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO task_queue_owners(queue_prefix, agent) VALUES (?, ?)`,
+			in.Prefix, owner); err != nil {
+			return Queue{}, err
+		}
+		seen[owner] = true
+		owners = append(owners, owner)
+	}
+	queue := Queue{
+		Prefix: in.Prefix, Name: in.Name, Description: strings.TrimSpace(in.Description),
+		Owners: owners, ResponsibleAgent: strings.TrimPrefix(normalizeAssignee(in.ResponsibleAgent), "agent:"),
+		Revision: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	if _, err := appendQueueEventTx(ctx, tx, queue, "task.queue_created", actor,
+		map[string]any{"name": queue.Name}, now); err != nil {
+		return Queue{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Queue{}, err
+	}
+	s.signal()
+	return queue, nil
+}
+
+// EnsureDefaultQueue creates the TASK queue when it is absent, so every daemon
+// starts with one queue. An existing TASK queue is left untouched.
+func (s *Admin) EnsureDefaultQueue(ctx context.Context) error {
+	now := s.now()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	queue := Queue{Prefix: "TASK", Name: "Tasks", Owners: []string{}, Revision: 1, CreatedAt: now, UpdatedAt: now}
+	result, err := tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO task_queues(prefix, name, description, responsible_agent, created_at, updated_at)
+		VALUES (?, ?, '', '', ?, ?)`, queue.Prefix, queue.Name, now, now)
+	if err != nil {
+		return err
+	}
+	if n, err := result.RowsAffected(); err != nil || n == 0 {
+		return err
+	}
+	if _, err := appendQueueEventTx(ctx, tx, queue, "task.queue_created",
+		Actor{Principal: "system:tariboyd"}, map[string]any{"name": queue.Name}, now); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.signal()
+	return nil
 }

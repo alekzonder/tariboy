@@ -31,7 +31,7 @@ type AdvanceInput struct {
 // without checks applies in this call. A transition with checks is recorded
 // as a pending request with a pending run of its first check, and applies when
 // the last check passes.
-func (s *Service) Advance(ctx context.Context, actor Actor, key string, in AdvanceInput) (TransitionRequest, error) {
+func (s *WorkflowEngine) Advance(ctx context.Context, actor Actor, key string, in AdvanceInput) (TransitionRequest, error) {
 	if err := validateActor(actor); err != nil {
 		return TransitionRequest{}, err
 	}
@@ -43,7 +43,7 @@ func (s *Service) Advance(ctx context.Context, actor Actor, key string, in Advan
 // only for the task's latest request made in its open visit: a failure is a
 // broken script or environment the customer may have fixed since, while a
 // rejection is the holder's to answer.
-func (s *Service) RetryTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
+func (s *WorkflowEngine) RetryTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return TransitionRequest{}, err
 	}
@@ -52,7 +52,7 @@ func (s *Service) RetryTransitionRequest(ctx context.Context, actor Actor, key s
 
 // advance records a transition request. With retryOf set it repeats that
 // failed request in place of in, on behalf of its requester.
-func (s *Service) advance(ctx context.Context, actor Actor, key string, in AdvanceInput, retryOf int64) (TransitionRequest, error) {
+func (s *WorkflowEngine) advance(ctx context.Context, actor Actor, key string, in AdvanceInput, retryOf int64) (TransitionRequest, error) {
 	in.Outcome = strings.TrimSpace(in.Outcome)
 	if len(in.Message) > maxTransitionMessageBytes {
 		return TransitionRequest{}, domainError(http.StatusBadRequest, "invalid_message",
@@ -87,17 +87,8 @@ func (s *Service) advance(ctx context.Context, actor Actor, key string, in Advan
 		return TransitionRequest{}, domainError(http.StatusConflict, "status_unknown",
 			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
 	}
-	// A retry is the customer's override; the requester owned the status when
-	// it first asked.
-	owns := retryOf != 0
-	if !owns {
-		if owns, err = ownsStatusTx(ctx, tx, task, manifest, status, actor); err != nil {
-			return TransitionRequest{}, err
-		}
-	}
-	if !owns {
-		return TransitionRequest{}, domainError(http.StatusForbidden, "not_holder",
-			actor.Principal+" does not own status "+status.ID+" of "+task.Key)
+	if err := advanceRequireOwnerTx(ctx, tx, task, manifest, status, actor, retryOf); err != nil {
+		return TransitionRequest{}, err
 	}
 	transition, ok := statusTransition(status, in.Outcome)
 	if !ok {
@@ -106,62 +97,18 @@ func (s *Service) advance(ctx context.Context, actor Actor, key string, in Advan
 		unknown.Data = map[string]any{"outcomes": statusOutcomes(status)}
 		return TransitionRequest{}, unknown
 	}
-	artifacts, err := currentArtifactsTx(ctx, tx, task.ID)
-	if err != nil {
+	if err := advanceArtifactsTx(ctx, tx, task, transition, in.Outcome); err != nil {
 		return TransitionRequest{}, err
 	}
-	if missing := missingArtifacts(transition, artifactNames(artifacts)); len(missing) > 0 {
-		refused := domainError(http.StatusConflict, "artifact_missing",
-			"outcome "+in.Outcome+" requires artifacts with no value: "+strings.Join(missing, ", ")).(*Error)
-		refused.Data = map[string]any{"missing": missing}
-		return TransitionRequest{}, refused
-	}
-	var pending bool
-	if err := tx.QueryRowContext(ctx, `
-		SELECT EXISTS(SELECT 1 FROM task_transition_requests WHERE task_id = ? AND state = 'pending')`,
-		task.ID).Scan(&pending); err != nil {
+	if err := advanceChecksTx(ctx, tx, task, transition); err != nil {
 		return TransitionRequest{}, err
-	}
-	if pending {
-		return TransitionRequest{}, domainError(http.StatusConflict, "transition_pending",
-			"another transition request of "+task.Key+" is still running")
-	}
-	// Runs of one task never overlap: a run cancelled when the task left its
-	// previous status may still be stopping.
-	if len(transition.Checks) > 0 {
-		var active bool
-		if err := tx.QueryRowContext(ctx, `
-			SELECT EXISTS(SELECT 1 FROM task_script_runs WHERE task_id = ? AND state IN ('pending', 'running'))`,
-			task.ID).Scan(&active); err != nil {
-			return TransitionRequest{}, err
-		}
-		if active {
-			return TransitionRequest{}, domainError(http.StatusConflict, "script_running",
-				"a script run of "+task.Key+" is still stopping; retry the request shortly")
-		}
 	}
 	now := s.now()
 	if err := guardRevisionTx(ctx, tx, task); err != nil {
 		return TransitionRequest{}, err
 	}
-	var visitID int64
-	if err := tx.QueryRowContext(ctx, `SELECT id FROM task_status_visits WHERE task_id = ? AND left_at = ''`,
-		task.ID).Scan(&visitID); err != nil {
-		return TransitionRequest{}, err
-	}
-	result, err := tx.ExecContext(ctx, `
-		INSERT INTO task_transition_requests(task_id, visit_id, outcome, message, actor, state, created_at)
-		VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
-		task.ID, visitID, in.Outcome, in.Message, requester, now)
+	visitID, id, err := advanceInsertRequestTx(ctx, tx, task, in, requester, now)
 	if err != nil {
-		return TransitionRequest{}, err
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return TransitionRequest{}, err
-	}
-	// A request, whatever becomes of it, ends a run of idle iterations.
-	if _, err := tx.ExecContext(ctx, `UPDATE task_status_visits SET idle_iterations = 0 WHERE id = ?`, visitID); err != nil {
 		return TransitionRequest{}, err
 	}
 	request := TransitionRequest{ID: id, TaskKey: task.Key, Outcome: in.Outcome, Message: in.Message,
@@ -206,6 +153,97 @@ func (s *Service) advance(ctx context.Context, actor Actor, key string, in Advan
 	return request, nil
 }
 
+// advanceRequireOwnerTx refuses a request by an actor that does not own the
+// task's current status.
+func advanceRequireOwnerTx(ctx context.Context, tx *sql.Tx, task Task, manifest workflowimage.Manifest, status workflowfile.Status, actor Actor, retryOf int64) error {
+	// A retry is the customer's override; the requester owned the status when
+	// it first asked.
+	owns := retryOf != 0
+	if !owns {
+		var err error
+		if owns, err = ownsStatusTx(ctx, tx, task, manifest, status, actor); err != nil {
+			return err
+		}
+	}
+	if !owns {
+		return domainError(http.StatusForbidden, "not_holder",
+			actor.Principal+" does not own status "+status.ID+" of "+task.Key)
+	}
+	return nil
+}
+
+// advanceArtifactsTx refuses an outcome whose transition requires artifacts
+// the task has no value for.
+func advanceArtifactsTx(ctx context.Context, tx *sql.Tx, task Task, transition workflowfile.Transition, outcome string) error {
+	artifacts, err := currentArtifactsTx(ctx, tx, task.ID)
+	if err != nil {
+		return err
+	}
+	if missing := missingArtifacts(transition, artifactNames(artifacts)); len(missing) > 0 {
+		refused := domainError(http.StatusConflict, "artifact_missing",
+			"outcome "+outcome+" requires artifacts with no value: "+strings.Join(missing, ", ")).(*Error)
+		refused.Data = map[string]any{"missing": missing}
+		return refused
+	}
+	return nil
+}
+
+// advanceChecksTx refuses a request while another request of the task is
+// pending or, for a transition with checks, a script run is still active.
+func advanceChecksTx(ctx context.Context, tx *sql.Tx, task Task, transition workflowfile.Transition) error {
+	var pending bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(SELECT 1 FROM task_transition_requests WHERE task_id = ? AND state = 'pending')`,
+		task.ID).Scan(&pending); err != nil {
+		return err
+	}
+	if pending {
+		return domainError(http.StatusConflict, "transition_pending",
+			"another transition request of "+task.Key+" is still running")
+	}
+	// Runs of one task never overlap: a run cancelled when the task left its
+	// previous status may still be stopping.
+	if len(transition.Checks) > 0 {
+		var active bool
+		if err := tx.QueryRowContext(ctx, `
+			SELECT EXISTS(SELECT 1 FROM task_script_runs WHERE task_id = ? AND state IN ('pending', 'running'))`,
+			task.ID).Scan(&active); err != nil {
+			return err
+		}
+		if active {
+			return domainError(http.StatusConflict, "script_running",
+				"a script run of "+task.Key+" is still stopping; retry the request shortly")
+		}
+	}
+	return nil
+}
+
+// advanceInsertRequestTx records a pending request in the task's current
+// visit and returns the visit and the request ids.
+func advanceInsertRequestTx(ctx context.Context, tx *sql.Tx, task Task, in AdvanceInput, requester, now string) (int64, int64, error) {
+	var visitID int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM task_status_visits WHERE task_id = ? AND left_at = ''`,
+		task.ID).Scan(&visitID); err != nil {
+		return 0, 0, err
+	}
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO task_transition_requests(task_id, visit_id, outcome, message, actor, state, created_at)
+		VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+		task.ID, visitID, in.Outcome, in.Message, requester, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, 0, err
+	}
+	// A request, whatever becomes of it, ends a run of idle iterations.
+	if _, err := tx.ExecContext(ctx, `UPDATE task_status_visits SET idle_iterations = 0 WHERE id = ?`, visitID); err != nil {
+		return 0, 0, err
+	}
+	return visitID, id, nil
+}
+
 // retriedRequestTx returns the outcome, message and requester of failed
 // request id, refusing a request that is not the task's latest or was made in
 // an earlier visit.
@@ -243,7 +281,7 @@ func retriedRequestTx(ctx context.Context, tx *sql.Tx, task Task, id int64) (Adv
 // message. It is the one place a request becomes a status change; a caller
 // that applies a pending request later must first confirm the request's visit
 // is still the task's open visit.
-func (s *Service) applyTransitionTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, requestID int64, transition workflowfile.Transition, actor, message string) error {
+func (s *WorkflowEngine) applyTransitionTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, requestID int64, transition workflowfile.Transition, actor, message string) error {
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE task_transition_requests SET state = 'applied', finished_at = ? WHERE id = ?`,
 		s.now(), requestID); err != nil {
@@ -268,7 +306,7 @@ func checkWaitSeconds(transition workflowfile.Transition) int {
 
 // GetTransitionRequest returns one transition request of a task the actor may
 // read. A pending request carries WaitSeconds.
-func (s *Service) GetTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
+func (s *WorkflowEngine) GetTransitionRequest(ctx context.Context, actor Actor, key string, id int64) (TransitionRequest, error) {
 	if err := validateActor(actor); err != nil {
 		return TransitionRequest{}, err
 	}
@@ -306,7 +344,7 @@ func (s *Service) GetTransitionRequest(ctx context.Context, actor Actor, key str
 }
 
 // MoveWorkflow moves a task to any status without checks. Customer only.
-func (s *Service) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason string) (Task, error) {
+func (s *WorkflowEngine) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason string) (Task, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return Task{}, err
 	}
@@ -370,7 +408,7 @@ func (s *Service) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason
 	}, now); err != nil {
 		return Task{}, err
 	}
-	moved, err := taskByID(tx, task.ID)
+	moved, err := taskByID(ctx, tx, task.ID)
 	if err != nil {
 		return Task{}, err
 	}
@@ -383,7 +421,7 @@ func (s *Service) MoveWorkflow(ctx context.Context, actor Actor, key, to, reason
 }
 
 // CancelWorkflowTask closes a workflow task as cancelled. Customer only.
-func (s *Service) CancelWorkflowTask(ctx context.Context, actor Actor, key string) (Task, error) {
+func (s *WorkflowEngine) CancelWorkflowTask(ctx context.Context, actor Actor, key string) (Task, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return Task{}, err
 	}
@@ -416,12 +454,9 @@ func (s *Service) CancelWorkflowTask(ctx context.Context, actor Actor, key strin
 		return Task{}, err
 	}
 	// The workflow status stays as the record of where the task stopped.
+	previousCategory := task.Status
 	task.Status, task.CompletedAt, task.WorkflowPausedReason = StatusCancelled, now, ""
-	task.Revision++
-	task.UpdatedAt = now
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = ?, completed_at = ?, workflow_paused_reason = '', revision = ?, updated_at = ?
-		WHERE id = ?`, task.Status, now, task.Revision, now, task.ID); err != nil {
+	if _, err := saveTaskStateTx(ctx, tx, &task, previousCategory, now, false); err != nil {
 		return Task{}, err
 	}
 	if _, err := appendEventTx(ctx, tx, task, "workflow.cancelled", actor, map[string]any{
@@ -429,7 +464,7 @@ func (s *Service) CancelWorkflowTask(ctx context.Context, actor Actor, key strin
 	}, now); err != nil {
 		return Task{}, err
 	}
-	cancelled, err := taskByID(tx, task.ID)
+	cancelled, err := taskByID(ctx, tx, task.ID)
 	if err != nil {
 		return Task{}, err
 	}

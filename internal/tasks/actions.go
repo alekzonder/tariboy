@@ -8,36 +8,13 @@ import (
 	"strings"
 )
 
-func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, body map[string]any) (any, error) {
+func (s *TaskService) AgentAction(ctx context.Context, actor Actor, action string, body map[string]any) (any, error) {
 	if actor.IsCustomer || !strings.HasPrefix(actor.Principal, "agent:") {
 		return nil, domainError(http.StatusForbidden, "forbidden", "agent identity required")
 	}
 	switch action {
 	case "list", "mine":
-		waiting := actionString(body, "waiting_for")
-		if waiting == "me" {
-			waiting = actor.Principal
-		}
-		// The tools socket scrubs author and customer from every body, so those
-		// filters arrive as by_author and by_customer. scope_agent is never read:
-		// an agent lists only what it sees itself.
-		filter := ListFilter{
-			Queue: actionString(body, "queue"), Statuses: actionList(body, "status"),
-			Categories: actionList(body, "category"), StatusView: actionString(body, "status_view"),
-			Assignee: actionString(body, "assignee"), Author: actionString(body, "by_author"),
-			Customer: actionString(body, "by_customer"), Group: actionString(body, "group"),
-			WaitingFor: waiting, Text: actionString(body, "text"),
-			ParentKey: actionString(body, "parent"), SubtreeKey: actionString(body, "subtree"),
-			Sort: actionString(body, "sort"), Limit: actionInt(body, "limit"), AfterKey: actionString(body, "after"),
-		}
-		for _, priority := range actionList(body, "priority") {
-			filter.Priorities = append(filter.Priorities, Priority(priority))
-		}
-		if blocked := actionString(body, "blocked"); blocked != "" {
-			value := blocked == "true"
-			filter.Blocked = &value
-		}
-		return s.ListTasks(ctx, actor, filter)
+		return s.ListTasks(ctx, actor, agentActionListFilter(actor, body))
 	case "ready":
 		filter := ReadyFilter{Queue: actionString(body, "queue"), Limit: actionInt(body, "limit")}
 		if actionBool(body, "claim") {
@@ -78,17 +55,7 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 			Body: actionString(body, "body"), IdempotencyKey: actionString(body, "idempotency_key"),
 		})
 	case "ask":
-		principal := actionString(body, "principal")
-		if principal != "" && !strings.Contains(principal, ":") {
-			principal = agentPrincipal(principal)
-		}
-		if principal == "" {
-			return nil, domainError(http.StatusBadRequest, "missing_principal", "question principal is required")
-		}
-		return s.AddComment(ctx, actor, actionString(body, "key"), AddCommentInput{
-			Body:           "@" + principal + "\n\n" + actionString(body, "body"),
-			IdempotencyKey: actionString(body, "idempotency_key"),
-		})
+		return s.agentActionAsk(ctx, actor, body)
 	case "move":
 		key := actionString(body, "key")
 		revision, err := s.actionRevision(ctx, actor, key, body)
@@ -130,29 +97,38 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 		return s.CompleteTask(ctx, actor, key, CompleteInput{
 			Revision: revision, CompleteAnyway: actionBool(body, "complete_anyway"),
 		})
+	default:
+		return s.agentActionWorkflow(ctx, actor, action, body)
+	}
+}
+
+// agentActionWorkflow runs the workflow, artifact, and script run actions of
+// AgentAction, and rejects an unknown action.
+func (s *TaskService) agentActionWorkflow(ctx context.Context, actor Actor, action string, body map[string]any) (any, error) {
+	switch action {
 	case "advance":
-		return s.Advance(ctx, actor, actionString(body, "key"), AdvanceInput{
+		return s.engine.Advance(ctx, actor, actionString(body, "key"), AdvanceInput{
 			Outcome: actionString(body, "outcome"), Message: actionRawString(body, "message"),
 			From: actionString(body, "from"),
 		})
 	case "artifact_set":
-		return s.SetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"), actionRawString(body, "value"))
+		return s.engine.SetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"), actionRawString(body, "value"))
 	case "artifact_ls":
-		artifacts, err := s.ListArtifacts(ctx, actor, actionString(body, "key"))
+		artifacts, err := s.engine.ListArtifacts(ctx, actor, actionString(body, "key"))
 		return map[string]any{"artifacts": artifacts, "count": len(artifacts)}, err
 	case "artifact_show":
-		artifact, history, err := s.GetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"))
+		artifact, history, err := s.engine.GetArtifact(ctx, actor, actionString(body, "key"), actionString(body, "name"))
 		return map[string]any{"artifact": artifact, "history": history}, err
 	case "workflow_get":
-		return s.GetWorkflow(ctx, actor, actionString(body, "key"))
+		return s.engine.GetWorkflow(ctx, actor, actionString(body, "key"))
 	case "request_get":
 		id, err := actionID(body)
 		if err != nil {
 			return nil, err
 		}
-		return s.GetTransitionRequest(ctx, actor, actionString(body, "key"), id)
+		return s.engine.GetTransitionRequest(ctx, actor, actionString(body, "key"), id)
 	case "workflow_runs":
-		runs, err := s.ListScriptRuns(ctx, actor, actionString(body, "key"))
+		runs, err := s.runs.ListScriptRuns(ctx, actor, actionString(body, "key"))
 		return map[string]any{"runs": runs, "count": len(runs)}, err
 	case "workflow_run_log":
 		id, err := actionID(body)
@@ -163,12 +139,57 @@ func (s *Service) AgentAction(ctx context.Context, actor Actor, action string, b
 		if err != nil {
 			return nil, err
 		}
-		text, truncated, err := s.ScriptRunLog(ctx, actor, actionString(body, "key"), id, maxBytes)
+		text, truncated, err := s.runs.ScriptRunLog(ctx, actor, actionString(body, "key"), id, maxBytes)
 		return map[string]any{"run_id": id, "text": text, "truncated": truncated}, err
 	default:
 		return nil, domainError(http.StatusBadRequest, "invalid_action",
 			fmt.Sprintf("unknown task action %q", action))
 	}
+}
+
+// agentActionListFilter builds the ListTasks filter of the list and mine
+// actions.
+func agentActionListFilter(actor Actor, body map[string]any) ListFilter {
+	waiting := actionString(body, "waiting_for")
+	if waiting == "me" {
+		waiting = actor.Principal
+	}
+	// The tools socket scrubs author and customer from every body, so those
+	// filters arrive as by_author and by_customer. scope_agent is never read:
+	// an agent lists only what it sees itself.
+	filter := ListFilter{
+		Queue: actionString(body, "queue"), Statuses: actionList(body, "status"),
+		Categories: actionList(body, "category"), StatusView: actionString(body, "status_view"),
+		Assignee: actionString(body, "assignee"), Author: actionString(body, "by_author"),
+		Customer: actionString(body, "by_customer"), Group: actionString(body, "group"),
+		WaitingFor: waiting, Text: actionString(body, "text"),
+		ParentKey: actionString(body, "parent"), SubtreeKey: actionString(body, "subtree"),
+		Sort: actionString(body, "sort"), Limit: actionInt(body, "limit"), AfterKey: actionString(body, "after"),
+	}
+	for _, priority := range actionList(body, "priority") {
+		filter.Priorities = append(filter.Priorities, Priority(priority))
+	}
+	if blocked := actionString(body, "blocked"); blocked != "" {
+		value := blocked == "true"
+		filter.Blocked = &value
+	}
+	return filter
+}
+
+// agentActionAsk posts the ask action's question as a comment that mentions
+// the asked principal; a bare name is an agent.
+func (s *TaskService) agentActionAsk(ctx context.Context, actor Actor, body map[string]any) (any, error) {
+	principal := actionString(body, "principal")
+	if principal != "" && !strings.Contains(principal, ":") {
+		principal = agentPrincipal(principal)
+	}
+	if principal == "" {
+		return nil, domainError(http.StatusBadRequest, "missing_principal", "question principal is required")
+	}
+	return s.AddComment(ctx, actor, actionString(body, "key"), AddCommentInput{
+		Body:           "@" + principal + "\n\n" + actionString(body, "body"),
+		IdempotencyKey: actionString(body, "idempotency_key"),
+	})
 }
 
 // actionID is the positive numeric "id" of a request or run.
@@ -180,7 +201,7 @@ func actionID(body map[string]any) (int64, error) {
 	return id, nil
 }
 
-func (s *Service) actionRevision(ctx context.Context, actor Actor, key string, body map[string]any) (int64, error) {
+func (s *TaskService) actionRevision(ctx context.Context, actor Actor, key string, body map[string]any) (int64, error) {
 	if revision := int64(actionInt(body, "revision")); revision > 0 {
 		return revision, nil
 	}

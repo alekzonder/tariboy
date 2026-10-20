@@ -67,7 +67,7 @@ func statusOwner(status workflowfile.Status) string {
 }
 
 // GetWorkflow returns the workflow view of a task the actor may read.
-func (s *Service) GetWorkflow(ctx context.Context, actor Actor, key string) (WorkflowView, error) {
+func (s *WorkflowEngine) GetWorkflow(ctx context.Context, actor Actor, key string) (WorkflowView, error) {
 	if err := validateActor(actor); err != nil {
 		return WorkflowView{}, err
 	}
@@ -154,15 +154,4 @@ func statusVisitsTx(ctx context.Context, q queryer, taskID int64) ([]StatusVisit
 		visits = append(visits, v)
 	}
 	return visits, rows.Err()
-}
-
-// inPoolStatusTx reports whether a workflow task's current status is owned by
-// a pool.
-func inPoolStatusTx(ctx context.Context, q queryer, task Task) (bool, error) {
-	manifest, err := loadManifestTx(ctx, q, task.WorkflowDigest)
-	if err != nil {
-		return false, err
-	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
-	return ok && !status.Terminal && status.Owner.Kind == workflowfile.OwnerPool, nil
 }

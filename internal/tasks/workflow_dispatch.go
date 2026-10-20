@@ -79,11 +79,7 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 			WHERE t.assignee = 'agent:' || m.agent AND t.id <> ?
 			  AND t.status IN ('in_progress', 'open')
 			  AND t.manual_block_reason = ''
-			  AND NOT EXISTS (
-				SELECT 1 FROM task_relations r JOIN tasks b ON b.id = r.source_id
-				WHERE r.target_id = t.id AND r.type = 'blocks'
-				  AND b.status NOT IN ('done', 'cancelled')
-			  )
+			  AND t.open_blockers = 0
 		  )
 		ORDER BY COALESCE((
 			SELECT MAX(h.dispatched_at) FROM task_workflow_holders h
@@ -111,7 +107,7 @@ func pickHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool string, busy 
 // replacing a released holder. It is the only writer of
 // task_workflow_holders.dispatched_at; a dispatch starts the holder's
 // availability afresh, so it clears unavailable_since.
-func (s *Service) recordHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool, name string) error {
+func (s *WorkflowEngine) recordHolderTx(ctx context.Context, tx *sql.Tx, task Task, pool, name string) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO task_workflow_holders(task_id, pool, agent, dispatched_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT(task_id, pool) DO UPDATE SET agent = excluded.agent, dispatched_at = excluded.dispatched_at,
@@ -122,16 +118,11 @@ func (s *Service) recordHolderTx(ctx context.Context, tx *sql.Tx, task Task, poo
 
 // DispatchPending assigns holders to workflow tasks waiting in a pool status
 // without one. It returns how many tasks it assigned.
-func (s *Service) DispatchPending(ctx context.Context) (int, error) {
+func (s *WorkflowEngine) DispatchPending(ctx context.Context) (int, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT t.id FROM tasks t
 		WHERE t.workflow_digest IS NOT NULL AND t.status = 'open' AND t.workflow_paused_reason = ''
-		  AND t.manual_block_reason = '' AND NOT EXISTS (
-			SELECT 1 FROM task_relations r
-			JOIN tasks blocker ON blocker.id = r.source_id
-			WHERE r.target_id = t.id AND r.type = 'blocks'
-			  AND blocker.status NOT IN ('done', 'cancelled')
-		  )
+		  AND t.manual_block_reason = '' AND t.open_blockers = 0
 		ORDER BY t.priority, t.created_at, t.id`)
 	if err != nil {
 		return 0, err
@@ -176,13 +167,13 @@ func (s *Service) DispatchPending(ctx context.Context) (int, error) {
 // dispatchTask assigns one waiting workflow task in its own transaction and
 // returns the agent it assigned, or "" when the task needs nobody or nobody is
 // eligible.
-func (s *Service) dispatchTask(ctx context.Context, id int64, busy map[string]bool) (string, error) {
+func (s *WorkflowEngine) dispatchTask(ctx context.Context, id int64, busy map[string]bool) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback()
-	task, err := taskByID(tx, id)
+	task, err := taskByID(ctx, tx, id)
 	if err != nil {
 		return "", err
 	}
@@ -205,21 +196,13 @@ func (s *Service) dispatchTask(ctx context.Context, id int64, busy map[string]bo
 	if err := s.recordHolderTx(ctx, tx, task, status.Owner.Pool, name); err != nil {
 		return "", err
 	}
-	previousAssignee, previousRevision := task.Assignee, task.Revision
-	task.Status, task.Assignee = StatusInProgress, agentPrincipal(name)
-	if task.StartedAt == "" {
-		task.StartedAt = now
-	}
-	task.Revision++
-	task.UpdatedAt = now
-	result, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = ?, assignee = ?, revision = ?, updated_at = ?
-		WHERE id = ? AND revision = ?`,
-		task.Status, task.Assignee, task.Revision, now, task.ID, previousRevision)
-	if err != nil {
+	previousAssignee, previousCategory := task.Assignee, task.Status
+	state := stateIn(task, status)
+	state.Holder = agentPrincipal(name)
+	if err := applyState(&task, state); err != nil {
 		return "", err
 	}
-	if n, err := result.RowsAffected(); err != nil || n != 1 {
+	if saved, err := saveTaskStateTx(ctx, tx, &task, previousCategory, now, true); err != nil || !saved {
 		return "", err
 	}
 	if err := recordAssignmentTx(ctx, tx, task, previousAssignee, now); err != nil {

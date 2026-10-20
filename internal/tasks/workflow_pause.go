@@ -53,7 +53,7 @@ func pauseReasonText(reason string) string {
 // pending request stop, its category becomes wait_customer, and the customer
 // is asked for a decision through a wait authored by the workflow. The caller
 // commits and then signals.
-func (s *Service) pauseTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, reason, detail string) error {
+func (s *WorkflowEngine) pauseTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, reason, detail string) error {
 	if task.WorkflowPausedReason != "" || task.Status == StatusDone || task.Status == StatusCancelled {
 		return nil
 	}
@@ -73,12 +73,12 @@ func (s *Service) pauseTx(ctx context.Context, tx *sql.Tx, task *Task, manifest 
 	}
 	status, known := currentStatus(manifest, task.WorkflowStatus)
 	pool := known && !status.Terminal && status.Owner.Kind == workflowfile.OwnerPool
-	task.WorkflowPausedReason, task.Status = reason, StatusWaitCustomer
-	task.Revision++
-	task.UpdatedAt = now
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = ?, workflow_paused_reason = ?, revision = ?, updated_at = ? WHERE id = ?`,
-		task.Status, reason, task.Revision, now, task.ID); err != nil {
+	previousCategory := task.Status
+	task.WorkflowPausedReason = reason
+	if err := applyState(task, stateIn(*task, status)); err != nil {
+		return err
+	}
+	if _, err := saveTaskStateTx(ctx, tx, task, previousCategory, now, false); err != nil {
 		return err
 	}
 	if _, err := appendEventTx(ctx, tx, *task, "workflow.paused", Actor{Principal: workflowActor}, map[string]any{
@@ -86,16 +86,7 @@ func (s *Service) pauseTx(ctx context.Context, tx *sql.Tx, task *Task, manifest 
 	}, now); err != nil {
 		return err
 	}
-	if err := s.askCustomerTx(ctx, tx, *task, pauseComment(*task, reason, detail, asker, pool), now); err != nil {
-		return err
-	}
-	owner := ""
-	if known && !status.Terminal {
-		owner = status.Owner.Kind
-	}
-	task.WaitingOn = ""
-	finishWorkflowFields(task, owner)
-	return nil
+	return s.askCustomerTx(ctx, tx, *task, pauseComment(*task, reason, detail, asker, pool), now)
 }
 
 // pauseComment is the workflow's question to the customer on a paused task.
@@ -167,7 +158,7 @@ func quoteBlock(text string) string {
 // category of the current status with the same holder; release, only in a
 // pool status, marks the holder released and dispatches the task again to
 // another member. Both reset the visit's counters and answer the pause wait.
-func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision string) (Task, error) {
+func (s *WorkflowEngine) ResumeWorkflow(ctx context.Context, actor Actor, key, decision string) (Task, error) {
 	if err := requireWorkflowOperator(actor); err != nil {
 		return Task{}, err
 	}
@@ -185,18 +176,9 @@ func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision
 	if err != nil {
 		return Task{}, err
 	}
-	if task.WorkflowPausedReason == "" {
-		return Task{}, domainError(http.StatusConflict, "workflow_not_paused", "task "+task.Key+" is not paused")
-	}
-	status, ok := currentStatus(manifest, task.WorkflowStatus)
-	if !ok || status.Terminal {
-		return Task{}, domainError(http.StatusConflict, "status_unknown",
-			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
-	}
-	pool := status.Owner.Kind == workflowfile.OwnerPool
-	if decision == ResumeRelease && !pool {
-		return Task{}, domainError(http.StatusBadRequest, "invalid_decision",
-			"release applies only to a status owned by an agent pool; status "+status.ID+" is not")
+	status, pool, err := resumeDecisionStatus(task, manifest, decision)
+	if err != nil {
+		return Task{}, err
 	}
 	now := s.now()
 	if err := guardRevisionTx(ctx, tx, task); err != nil {
@@ -215,53 +197,30 @@ func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision
 	reason := task.WorkflowPausedReason
 	previousAssignee, previousCategory := task.Assignee, task.Status
 	task.WorkflowPausedReason = ""
-	switch status.Owner.Kind {
-	case workflowfile.OwnerPool:
-		if decision == ResumeRelease {
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE task_workflow_holders SET released = 1 WHERE task_id = ? AND pool = ?`,
-				task.ID, status.Owner.Pool); err != nil {
-				return Task{}, err
-			}
+	if pool && decision == ResumeRelease {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE task_workflow_holders SET released = 1 WHERE task_id = ? AND pool = ?`,
+			task.ID, status.Owner.Pool); err != nil {
+			return Task{}, err
 		}
-		// The previous holder is sticky unless released; otherwise this is the
-		// dispatch of entering the status.
-		agent := ""
-		if !task.Blocked {
-			if agent, err = pickHolderTx(ctx, tx, task, status.Owner.Pool, nil); err != nil {
-				return Task{}, err
-			}
-		}
-		if agent == "" {
-			task.Status, task.Assignee = StatusOpen, ""
-		} else {
-			if err := s.recordHolderTx(ctx, tx, task, status.Owner.Pool, agent); err != nil {
-				return Task{}, err
-			}
-			task.Status, task.Assignee = StatusInProgress, agentPrincipal(agent)
-		}
-	case workflowfile.OwnerCustomer:
-		task.Status = StatusWaitCustomer
-	case workflowfile.OwnerScript:
-		task.Status, task.Assignee = StatusWaitCustomer, ""
-		if status.Watch != nil {
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE task_status_visits SET next_watch_at = ? WHERE task_id = ? AND left_at = ''`,
-				store.FormatTime(s.clock()), task.ID); err != nil {
-				return Task{}, err
-			}
-		}
-	default:
-		return Task{}, fmt.Errorf("workflow status %q has no owner", status.ID)
 	}
-	if task.Status == StatusInProgress && previousCategory != StatusInProgress && task.StartedAt == "" {
-		task.StartedAt = now
+	// The previous holder is sticky unless released; otherwise this is the
+	// dispatch of entering the status.
+	state := stateIn(task, status)
+	if err := s.pickStateHolderTx(ctx, tx, task, &state); err != nil {
+		return Task{}, err
 	}
-	task.Revision++
-	task.UpdatedAt = now
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE tasks SET status = ?, assignee = ?, workflow_paused_reason = '', revision = ?, updated_at = ?
-		WHERE id = ?`, task.Status, task.Assignee, task.Revision, now, task.ID); err != nil {
+	if status.Owner.Kind == workflowfile.OwnerScript && status.Watch != nil {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE task_status_visits SET next_watch_at = ? WHERE task_id = ? AND left_at = ''`,
+			store.FormatTime(s.clock()), task.ID); err != nil {
+			return Task{}, err
+		}
+	}
+	if err := applyState(&task, state); err != nil {
+		return Task{}, err
+	}
+	if _, err := saveTaskStateTx(ctx, tx, &task, previousCategory, now, false); err != nil {
 		return Task{}, err
 	}
 	if _, err := appendEventTx(ctx, tx, task, "workflow.resumed", actor, map[string]any{
@@ -277,7 +236,7 @@ func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision
 	if err := recordAssignmentTx(ctx, tx, task, previousAssignee, now); err != nil {
 		return Task{}, err
 	}
-	resumed, err := taskByID(tx, task.ID)
+	resumed, err := taskByID(ctx, tx, task.ID)
 	if err != nil {
 		return Task{}, err
 	}
@@ -287,4 +246,24 @@ func (s *Service) ResumeWorkflow(ctx context.Context, actor Actor, key, decision
 	s.signal()
 	resumed.Access = "write"
 	return resumed, nil
+}
+
+// resumeDecisionStatus returns the current status of paused task and whether
+// a pool owns it, refusing a task that is not paused, a status the workflow
+// does not declare, and a release outside a pool status.
+func resumeDecisionStatus(task Task, manifest workflowimage.Manifest, decision string) (workflowfile.Status, bool, error) {
+	if task.WorkflowPausedReason == "" {
+		return workflowfile.Status{}, false, domainError(http.StatusConflict, "workflow_not_paused", "task "+task.Key+" is not paused")
+	}
+	status, ok := currentStatus(manifest, task.WorkflowStatus)
+	if !ok || status.Terminal {
+		return workflowfile.Status{}, false, domainError(http.StatusConflict, "status_unknown",
+			"task "+task.Key+" is in status "+task.WorkflowStatus+", which its workflow does not declare")
+	}
+	pool := status.Owner.Kind == workflowfile.OwnerPool
+	if decision == ResumeRelease && !pool {
+		return workflowfile.Status{}, false, domainError(http.StatusBadRequest, "invalid_decision",
+			"release applies only to a status owned by an agent pool; status "+status.ID+" is not")
+	}
+	return status, pool, nil
 }

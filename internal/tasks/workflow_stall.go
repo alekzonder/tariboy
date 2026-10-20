@@ -26,7 +26,7 @@ type IterationEnd struct {
 // pauseAtLimitTx pauses the task with reason when the visit's counter for
 // that reason reached its limit in the visit's status. A limit of 0 or less
 // never pauses. detail is untrusted text for the pause comment.
-func (s *Service) pauseAtLimitTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, visitID int64, reason, detail string) error {
+func (s *WorkflowEngine) pauseAtLimitTx(ctx context.Context, tx *sql.Tx, task *Task, manifest workflowimage.Manifest, visitID int64, reason, detail string) error {
 	var statusID string
 	var idle, rejected, failures int
 	if err := tx.QueryRowContext(ctx, `
@@ -56,7 +56,7 @@ func (s *Service) pauseAtLimitTx(ctx context.Context, tx *sql.Tx, task *Task, ma
 // agent is the holder of a pool status it already held when the iteration
 // started, the status did not change, and the agent made no transition
 // request during the iteration. It pauses the task at the limit.
-func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) error {
+func (s *WorkflowEngine) RecordIterationEnd(ctx context.Context, end IterationEnd) error {
 	key := strings.TrimSpace(end.GoalTaskKey)
 	if key == "" || strings.TrimSpace(end.Agent) == "" {
 		return nil
@@ -66,17 +66,14 @@ func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) erro
 		return err
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, key)
+	task, err := taskByKey(ctx, tx, key)
 	if ErrorCode(err) == "not_found" {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	// In a pool status an unpaused task waits on its customer only while the
-	// holder's own question is open: waiting for the answer is not idleness.
-	if task.WorkflowDigest == "" || task.Status == StatusDone || task.Status == StatusCancelled ||
-		task.Status == StatusWaitCustomer || task.WorkflowPausedReason != "" || task.Assignee != agentPrincipal(end.Agent) {
+	if !iterationEndTaskCounts(task, end.Agent) {
 		return nil
 	}
 	manifest, err := loadManifestTx(ctx, tx, task.WorkflowDigest)
@@ -96,31 +93,9 @@ func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) erro
 	if !holds {
 		return nil
 	}
-	var visitID int64
-	var enteredAt, resumedAt string
-	var idle int
-	if err := tx.QueryRowContext(ctx, `
-		SELECT id, entered_at, resumed_at, idle_iterations FROM task_status_visits WHERE task_id = ? AND left_at = ''`,
-		task.ID).Scan(&visitID, &enteredAt, &resumedAt, &idle); err != nil {
+	visitID, idle, inVisit, err := iterationEndVisitTx(ctx, tx, task, end)
+	if err != nil || !inVisit {
 		return err
-	}
-	entered, err := store.ParseTime(enteredAt)
-	if err != nil {
-		return fmt.Errorf("visit %d entered_at: %w", visitID, err)
-	}
-	if entered.After(end.StartedAt) {
-		return nil
-	}
-	// An iteration that started while the task was paused belongs to the
-	// pause, not to the resumed visit.
-	if resumedAt != "" {
-		resumed, err := store.ParseTime(resumedAt)
-		if err != nil {
-			return fmt.Errorf("visit %d resumed_at: %w", visitID, err)
-		}
-		if end.StartedAt.Before(resumed) {
-			return nil
-		}
 	}
 	requested, err := requestedDuringTx(ctx, tx, visitID, end.StartedAt, end.FinishedAt)
 	if err != nil || requested {
@@ -146,6 +121,49 @@ func (s *Service) RecordIterationEnd(ctx context.Context, end IterationEnd) erro
 		s.signal()
 	}
 	return nil
+}
+
+// iterationEndTaskCounts reports whether an iteration of agent can count as
+// idle for task: an open workflow task assigned to the agent that is neither
+// paused nor waiting on its customer.
+func iterationEndTaskCounts(task Task, agent string) bool {
+	// In a pool status an unpaused task waits on its customer only while the
+	// holder's own question is open: waiting for the answer is not idleness.
+	return !(task.WorkflowDigest == "" || task.Status == StatusDone || task.Status == StatusCancelled ||
+		task.Status == StatusWaitCustomer || task.WorkflowPausedReason != "" || task.Assignee != agentPrincipal(agent))
+}
+
+// iterationEndVisitTx returns the task's current visit and its idle count,
+// and whether the iteration started within that visit and after its last
+// resume.
+func iterationEndVisitTx(ctx context.Context, tx *sql.Tx, task Task, end IterationEnd) (int64, int, bool, error) {
+	var visitID int64
+	var enteredAt, resumedAt string
+	var idle int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT id, entered_at, resumed_at, idle_iterations FROM task_status_visits WHERE task_id = ? AND left_at = ''`,
+		task.ID).Scan(&visitID, &enteredAt, &resumedAt, &idle); err != nil {
+		return 0, 0, false, err
+	}
+	entered, err := store.ParseTime(enteredAt)
+	if err != nil {
+		return 0, 0, false, fmt.Errorf("visit %d entered_at: %w", visitID, err)
+	}
+	if entered.After(end.StartedAt) {
+		return 0, 0, false, nil
+	}
+	// An iteration that started while the task was paused belongs to the
+	// pause, not to the resumed visit.
+	if resumedAt != "" {
+		resumed, err := store.ParseTime(resumedAt)
+		if err != nil {
+			return 0, 0, false, fmt.Errorf("visit %d resumed_at: %w", visitID, err)
+		}
+		if end.StartedAt.Before(resumed) {
+			return 0, 0, false, nil
+		}
+	}
+	return visitID, idle, true, nil
 }
 
 // requestedDuringTx reports whether a transition request of the visit kept
@@ -200,7 +218,7 @@ func holderUnavailableText(name, pool, cause string) string {
 // CheckHolders records since when each holder of an active pool status cannot
 // work and pauses tasks whose holder has been unavailable for the grace.
 // Only the tasks unavailableHolderTasks selects get a transaction of their own.
-func (s *Service) CheckHolders(ctx context.Context, now time.Time) (int, error) {
+func (s *WorkflowEngine) CheckHolders(ctx context.Context, now time.Time) (int, error) {
 	ids, err := s.unavailableHolderTasks(ctx)
 	if err != nil {
 		return 0, err
@@ -233,7 +251,7 @@ func (s *Service) CheckHolders(ctx context.Context, now time.Time) (int, error) 
 // work by holderUnavailableCauseSQL or is marked unavailable_since: the only
 // tasks checkHolder may change. A task whose holder can work and carries no
 // mark is left alone.
-func (s *Service) unavailableHolderTasks(ctx context.Context) ([]int64, error) {
+func (s *WorkflowEngine) unavailableHolderTasks(ctx context.Context) ([]int64, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT DISTINCT t.id FROM tasks t
 		JOIN task_workflow_holders h ON h.task_id = t.id AND t.assignee = 'agent:' || h.agent AND h.released = 0
@@ -269,7 +287,7 @@ func (e manifestLoadError) Unwrap() error { return e.err }
 // firstHolderFailure reports whether err of the holder check of task id
 // should be logged: a manifest that cannot be loaded is logged once per task
 // and error text, every other error every time.
-func (s *Service) firstHolderFailure(id int64, err error) bool {
+func (s *WorkflowEngine) firstHolderFailure(id int64, err error) bool {
 	var load manifestLoadError
 	if !errors.As(err, &load) {
 		return true
@@ -288,7 +306,7 @@ func (s *Service) firstHolderFailure(id int64, err error) bool {
 
 // forgetHolderFailure clears the logged manifest failure of task id after a
 // check that loaded its manifest.
-func (s *Service) forgetHolderFailure(id int64) {
+func (s *WorkflowEngine) forgetHolderFailure(id int64) {
 	s.holderFailuresMu.Lock()
 	defer s.holderFailuresMu.Unlock()
 	delete(s.holderFailures, id)
@@ -296,13 +314,13 @@ func (s *Service) forgetHolderFailure(id int64) {
 
 // checkHolder checks the holder of one task in its own transaction and
 // reports whether it paused the task.
-func (s *Service) checkHolder(ctx context.Context, id int64, now time.Time) (bool, error) {
+func (s *WorkflowEngine) checkHolder(ctx context.Context, id int64, now time.Time) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
-	task, err := taskByID(tx, id)
+	task, err := taskByID(ctx, tx, id)
 	if err != nil {
 		return false, err
 	}

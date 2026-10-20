@@ -23,13 +23,7 @@ const goalTaskSelect = `
 SELECT t.id, t.task_key, t.queue_prefix, COALESCE(p.task_key, ''),
        t.position, t.priority, t.title, t.description, t.status, t.pull_request, t.author, t.customer,
        t.group_name, t.assignee, t.manual_block_reason,
-       EXISTS (
-         SELECT 1
-         FROM task_relations r
-         JOIN tasks blocker ON blocker.id = r.source_id
-         WHERE r.target_id = t.id AND r.type = 'blocks'
-           AND blocker.status NOT IN ('done', 'cancelled')
-       ) OR t.manual_block_reason <> '',
+       t.open_blockers > 0 OR t.manual_block_reason <> '',
        t.revision, t.created_at, t.started_at, t.updated_at, t.completed_at,` + tasks.TaskWorkflowColumns + `,
        COALESCE((
          SELECT waiting.requested_at
@@ -203,12 +197,7 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 					SELECT 1 FROM tasks t
 					WHERE t.assignee='agent:' || ?
 					  AND t.status IN ('in_progress','open') AND t.priority < ?
-					  AND t.manual_block_reason = '' AND NOT EXISTS (
-						SELECT 1 FROM task_relations r
-						JOIN tasks blocker ON blocker.id = r.source_id
-						WHERE r.target_id = t.id AND r.type = 'blocks'
-						  AND blocker.status NOT IN ('done', 'cancelled')
-					  )
+					  AND t.manual_block_reason = '' AND t.open_blockers = 0
 				)`, agent, task.Priority).Scan(&higherPriority)
 			}
 			if err != nil {
@@ -227,12 +216,7 @@ func reconcileAgent(tx *sql.Tx, agent string, now time.Time) (Goal, tasks.Task, 
 			FROM tasks t
 			WHERE t.assignee='agent:' || ?
 			  AND t.status IN ('in_progress','open')
-			  AND t.manual_block_reason = '' AND NOT EXISTS (
-				SELECT 1 FROM task_relations r
-				JOIN tasks blocker ON blocker.id = r.source_id
-				WHERE r.target_id = t.id AND r.type = 'blocks'
-				  AND blocker.status NOT IN ('done', 'cancelled')
-			  )
+			  AND t.manual_block_reason = '' AND t.open_blockers = 0
 			ORDER BY CASE t.priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 ELSE 3 END,
 			         CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
 			         t.created_at, t.task_key

@@ -19,7 +19,7 @@ func pause(t *testing.T, svc *Service, key, reason, detail string) Task {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	task, err := taskByKey(tx, key)
+	task, err := taskByKey(ctx, tx, key)
 	if err != nil {
 		t.Fatal(err)
 	}

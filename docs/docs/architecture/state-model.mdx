@@ -337,6 +337,15 @@ row (`task_workflow_images`) cannot be removed while a queue binds it or an
 unfinished task pins it. `tasks.workflow_status` holds the workflow status
 (and `tasks.workflow_paused_reason`, the pause reason, empty unless the task
 is paused), while `tasks.status` keeps holding the category for every task.
+Migration `0069` stores two values that every task read used to compute per
+row: `tasks.workflow_owner_kind`, the owner kind of the current status read
+from the pinned manifest, and `tasks.open_blockers`, the number of open tasks
+that block the task. Triggers keep both current on every write path: the owner
+kind when `workflow_status`, `workflow_digest`, or the image manifest changes,
+and the blocker count when a `blocks` relation is added or removed or a
+blocker moves into or out of `done` or `cancelled`. Task visibility is a
+recursive CTE that queries join, so no query binds a variable per visible
+task.
 Task JSON shows the
 workflow status as `status` and the stored value as `category`; for a task
 without a workflow both are the stored status. New tables: `task_queue_workflows`

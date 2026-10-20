@@ -38,7 +38,7 @@ func requestFixture(t *testing.T) (*Service, Actor, Task) {
 		t.Fatal(err)
 	}
 	created := mustCreateDev(t, svc, actor, "requests")
-	task, err := taskByKey(svc.db, created.Key)
+	task, err := taskByKey(context.Background(), svc.db, created.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestAdvanceAppliesATransitionWithoutChecks(t *testing.T) {
 		got.Actor != "agent:dev-1" || got.State != "applied" || got.CreatedAt == "" || got.FinishedAt == "" {
 		t.Fatalf("request = %#v", got)
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(ctx, svc.db, task.Key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestAdvanceByTheCustomerResolvesTheCustomerWait(t *testing.T) {
 	if n := countRows(t, svc, `SELECT COUNT(*) FROM task_waiting_for WHERE task_id = ? AND resolved_at = ''`, task.ID); n != 0 {
 		t.Fatalf("open waits = %d", n)
 	}
-	stored, _ := taskByKey(svc.db, task.Key)
+	stored, _ := taskByKey(ctx, svc.db, task.Key)
 	if stored.WorkflowStatus != "develop" || stored.Status != StatusInProgress || stored.Assignee != "agent:dev-1" {
 		t.Fatalf("stored = %#v", stored)
 	}
@@ -269,7 +269,7 @@ func TestMoveWorkflow(t *testing.T) {
 	if _, err := svc.MoveWorkflow(ctx, actor, task.Key, "dropped", "abandon"); err != nil {
 		t.Fatal(err)
 	}
-	closed, _ := taskByKey(svc.db, task.Key)
+	closed, _ := taskByKey(ctx, svc.db, task.Key)
 	if closed.Status != StatusCancelled || closed.CompletedAt == "" {
 		t.Fatalf("closed = %#v", closed)
 	}
@@ -291,7 +291,7 @@ func TestMoveWorkflow(t *testing.T) {
 	if unpaused.WorkflowPausedReason != "" || unpaused.Assignee != "agent:reviewer-1" || unpaused.Status != StatusInProgress {
 		t.Fatalf("unpaused = %#v", unpaused)
 	}
-	stored, _ := taskByKey(svc.db, task.Key)
+	stored, _ := taskByKey(ctx, svc.db, task.Key)
 	if stored.WorkflowPausedReason != "" || stored.Revision != unpaused.Revision {
 		t.Fatalf("stored = %#v", stored)
 	}
@@ -321,7 +321,7 @@ func TestCancelWorkflowTask(t *testing.T) {
 		cancelled.WorkflowStatus != "approval" || cancelled.WorkflowPausedReason != "" || cancelled.WaitingOn != "" {
 		t.Fatalf("cancelled = %#v", cancelled)
 	}
-	stored, _ := taskByKey(svc.db, task.Key)
+	stored, _ := taskByKey(ctx, svc.db, task.Key)
 	if stored.Status != StatusCancelled || stored.WorkflowStatus != "approval" || stored.CompletedAt == "" ||
 		stored.WorkflowPausedReason != "" || stored.Revision != cancelled.Revision {
 		t.Fatalf("stored = %#v", stored)
@@ -387,7 +387,7 @@ func TestAdvanceByAgentsThatDoNotOwnTheStatus(t *testing.T) {
 	ctx := context.Background()
 	unchanged := func(status string) {
 		t.Helper()
-		stored, err := taskByKey(svc.db, task.Key)
+		stored, err := taskByKey(ctx, svc.db, task.Key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -450,7 +450,7 @@ func TestDispatchPendingSkipsACancelledWorkflowTask(t *testing.T) {
 	if n, err := svc.DispatchPending(ctx); err != nil || n != 0 {
 		t.Fatalf("dispatched = %d, %v", n, err)
 	}
-	stored, _ := taskByKey(svc.db, waiting.Key)
+	stored, _ := taskByKey(ctx, svc.db, waiting.Key)
 	if stored.Status != StatusCancelled || stored.Assignee != "" {
 		t.Fatalf("stored = %#v", stored)
 	}
@@ -475,7 +475,7 @@ func holderAsks(t *testing.T, svc *Service, task Task) {
 	if openWaitsBy(t, svc, task, "agent:dev-1", "user:customer") != 1 || openWaitsBy(t, svc, task, "agent:dev-1", "agent:dev-2") != 1 {
 		t.Fatal("the holder's questions are not open")
 	}
-	if got, _ := taskByKey(svc.db, task.Key); got.Status != StatusWaitCustomer || got.WaitingOn != WaitingOnCustomer {
+	if got, _ := taskByKey(context.Background(), svc.db, task.Key); got.Status != StatusWaitCustomer || got.WaitingOn != WaitingOnCustomer {
 		t.Fatalf("after the question = %#v", got)
 	}
 }
@@ -492,7 +492,7 @@ func TestLeavingAPoolStatusResolvesTheHoldersQuestionsToTheCustomer(t *testing.T
 		if openWaitsBy(t, svc, task, "agent:dev-1", "user:customer") != 0 || openWaitsBy(t, svc, task, "agent:dev-1", "agent:dev-2") != 1 {
 			t.Fatal("waits after the advance")
 		}
-		got, _ := taskByKey(svc.db, task.Key)
+		got, _ := taskByKey(ctx, svc.db, task.Key)
 		if got.WorkflowStatus != "review" || got.Category != StatusInProgress || got.WaitingOn != "" {
 			t.Fatalf("after the advance = %#v", got)
 		}
@@ -507,7 +507,7 @@ func TestLeavingAPoolStatusResolvesTheHoldersQuestionsToTheCustomer(t *testing.T
 			openWaitsBy(t, svc, task, workflowActor, "user:customer") != 1 {
 			t.Fatal("waits after the move")
 		}
-		got, _ := taskByKey(svc.db, task.Key)
+		got, _ := taskByKey(ctx, svc.db, task.Key)
 		if got.WorkflowStatus != "approval" || got.Category != StatusWaitCustomer || got.WaitingOn != WaitingOnCustomer {
 			t.Fatalf("after the move = %#v", got)
 		}
@@ -521,7 +521,7 @@ func TestLeavingAPoolStatusResolvesTheHoldersQuestionsToTheCustomer(t *testing.T
 		if openWaitsBy(t, svc, task, "agent:dev-1", "user:customer") != 0 || openWaitsBy(t, svc, task, "agent:dev-1", "agent:dev-2") != 1 {
 			t.Fatal("waits after the cancel")
 		}
-		got, _ := taskByKey(svc.db, task.Key)
+		got, _ := taskByKey(ctx, svc.db, task.Key)
 		if got.Category != StatusCancelled || got.WaitingOn != "" {
 			t.Fatalf("after the cancel = %#v", got)
 		}
@@ -575,7 +575,7 @@ func TestApplyTransitionAppliesAPendingRequest(t *testing.T) {
 	if state != "applied" || finishedAt == "" {
 		t.Fatalf("request = %q finished %q", state, finishedAt)
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(ctx, svc.db, task.Key)
 	if err != nil || stored.WorkflowStatus != "review" || stored.Assignee != "agent:reviewer-1" {
 		t.Fatalf("stored = %#v, %v", stored, err)
 	}
@@ -680,7 +680,7 @@ func TestAdvanceFromGuardsTheStatusTheCallerSaw(t *testing.T) {
 			if _, err := svc.Advance(ctx, holder, task.Key, AdvanceInput{Outcome: "ask", From: from}); err != nil {
 				t.Fatal(err)
 			}
-			stored, err := taskByKey(svc.db, task.Key)
+			stored, err := taskByKey(ctx, svc.db, task.Key)
 			if err != nil || stored.WorkflowStatus != "approval" {
 				t.Fatalf("stored = %#v, %v", stored, err)
 			}
@@ -713,7 +713,7 @@ func TestAdvanceRetryWithFromAppliesOnce(t *testing.T) {
 	if ErrorCode(err) != "status_changed" || err.(*Error).Data["status"] != "second" {
 		t.Fatalf("retry: %#v", err)
 	}
-	stored, err := taskByKey(svc.db, task.Key)
+	stored, err := taskByKey(ctx, svc.db, task.Key)
 	if err != nil || stored.WorkflowStatus != "second" {
 		t.Fatalf("stored = %#v, %v", stored, err)
 	}

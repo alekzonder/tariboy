@@ -73,7 +73,7 @@ func listRuns(t *testing.T, svc *Service, actor Actor, task Task) []ScriptRun {
 
 func storedTask(t *testing.T, svc *Service, key string) Task {
 	t.Helper()
-	task, err := taskByKey(svc.db, key)
+	task, err := taskByKey(context.Background(), svc.db, key)
 	if err != nil {
 		t.Fatal(err)
 	}
