@@ -1,3 +1,49 @@
+## [0.89.0] - 2026-10-21
+
+### Added
+
+- The task workflow panel reads top down: a problem block explains a failed
+  check, rejection, failing watch, busy pool or idle holder with the script's
+  own message and what to do; a stepper maps the statuses in manifest order
+  with return counts; outcomes and the artifacts they need come first.
+  **Return to agent** sends a task back to its pool with a message the agent
+  reads in its Goal.
+- The task list shows a workflow task's step and its current problem. Task
+  reads carry `workflow_step` and `workflow_attention`, and the task view
+  describes every status with its transitions, checks, watch and limits.
+- Workflowfile checks, watches and sources accept a one-line `description`
+  shown in the task view, the agent Goal block and `ttasks workflow get`.
+
+### Changed
+
+- A queue bound to a workflow by `NAME` or `NAME:TAG` follows that tag:
+  new tasks, builds, imports and daemon start move the binding to the
+  tag's current digest after the bind checks, and a blocked move is
+  recorded as `queue.workflow_follow_blocked`. Existing tasks keep their
+  pinned version, and digest bindings stay pinned. Desktop shows the
+  followed tag (migration 0068).
+- The store writes every time in one canonical format and compares stored
+  times directly (migration 0067); tasks store their status owner kind and
+  open blocker count (migration 0069).
+
+### Fixed
+
+- Task lists, ready, the event feed, relations and activity no longer fail
+  with "too many SQL variables" past about 32k visible tasks.
+
+### Security
+
+- Daemon HTTP servers set header and idle timeouts and a 64 KiB header cap.
+  Command and agent tools API bodies are limited to 1 MiB (`413
+  too_large`), with larger limits for the file editor and image sources.
+  The terminal websocket checks the browser Origin on tokenless requests and
+  caps frames at 8 MiB. Registry downloads have timeouts and stop past the
+  64 MiB image limit. Backup restore rejects unknown archive columns.
+- The event hub counts dropped events and sends a reset, so clients
+  refetch instead of silently missing updates.
+
+[0.89.0]: https://github.com/alekzonder/tariboy/compare/v0.88.0...v0.89.0
+
 ## [0.88.0] - 2026-10-19
 
 ### Added
