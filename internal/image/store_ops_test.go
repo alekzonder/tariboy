@@ -1,12 +1,9 @@
 package image
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,16 +11,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/imagefile"
 )
-
-// archivePathFor resolves the file a ref currently points at.
-func archivePathFor(t *testing.T, st *Store, ref Ref) string {
-	t.Helper()
-	path, err := st.archiveFor(ref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
 
 // plantRawRef writes opaque bytes as the content of ref, bypassing validation.
 func plantRawRef(t *testing.T, st *Store, ref Ref, body string) {
@@ -238,30 +225,23 @@ func TestStoreReadFile(t *testing.T) {
 	}
 }
 
-// tarEntryNames lists every member name present in the archive.
-func tarEntryNames(t *testing.T, archive string) map[string]bool {
-	t.Helper()
-	f, err := os.Open(archive)
+// TestRetagArchiveReadsTheArchiveTwice proves RetagArchive parses the source
+// once and verifies the rewritten archive once, with no further passes.
+func TestRetagArchiveReadsTheArchiveTwice(t *testing.T) {
+	store := &Store{Dir: t.TempDir()}
+	source := Ref{Name: "reviewer", Tag: "latest"}
+	seed(t, store, source.Name)
+	archive, err := store.ArchiveBytes(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
+	passes := 0
+	archivePassHook = func() { passes++ }
+	t.Cleanup(func() { archivePassHook = nil })
+	if _, err := store.RetagArchive(source, Ref{Name: "reviewer", Tag: "v2"}, archive); err != nil {
 		t.Fatal(err)
 	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
-	out := map[string]bool{}
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		out[h.Name] = true
+	if passes != 2 {
+		t.Fatalf("RetagArchive read the archive %d times, want 2", passes)
 	}
-	return out
 }

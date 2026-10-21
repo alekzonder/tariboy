@@ -2,7 +2,6 @@ package image
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -214,34 +213,21 @@ func unpackArchive(archivePath string, ref Ref, destDir string) error {
 	if err != nil {
 		return err
 	}
-	manifest, err := validatePortableArchive(archive, ref)
+	manifest, parsed, err := validatePortableArchive(archive, ref)
 	if err != nil {
 		return fmt.Errorf("validate image before unpack: %w", err)
 	}
-	gz, err := gzip.NewReader(bytes.NewReader(archive))
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
+	for _, name := range parsed.order {
+		member := parsed.members[name]
+		if member.typ != tar.TypeReg {
+			return fmt.Errorf("invalid image archive member %q: regular files only", name)
 		}
-		if err != nil {
-			return err
-		}
-		clean, err := safefs.CleanRel(h.Name)
-		if err != nil {
-			return fmt.Errorf("unsafe path in archive: %s", h.Name)
-		}
-		target := filepath.Join(destDir, filepath.FromSlash(clean))
+		target := filepath.Join(destDir, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return err
 		}
 		mode := os.FileMode(0o600)
-		if strings.HasPrefix(clean, "skills/") && h.Mode == 0o700 {
+		if strings.HasPrefix(name, "skills/") && member.headerMode == 0o700 {
 			mode = 0o700
 		}
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
@@ -252,7 +238,7 @@ func unpackArchive(archivePath string, ref Ref, destDir string) error {
 			out.Close()
 			return err
 		}
-		if _, err := io.Copy(out, tr); err != nil {
+		if _, err := out.Write(member.body); err != nil {
 			out.Close()
 			return err
 		}
