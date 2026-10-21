@@ -121,15 +121,55 @@ it("moves to a declared status with a required reason after confirmation", async
   expect(api.getTaskWorkflow).toHaveBeenCalledTimes(2)
 })
 
-it("lists every declared artifact, so one with no value can be set", async () => {
+it("filters the artifacts by the current step, by the step clicked, and shows every declared artifact on reset", async () => {
   renderPanel()
   const artifacts = (await screen.findByText("Artifacts")).closest("section")!
-  // `notes` is needed by `approve`; the rest fold away until asked for.
-  expect(within(artifacts).getByRole("list", { name: "Artifacts needed now" })).toHaveTextContent("notes")
-  await userEvent.click(within(artifacts).getByRole("button", { name: "Other artifacts (2)" }))
-  const changelog = within(artifacts).getByText("changelog").closest("li")!
+  expect(screen.getByRole("button", { name: /^review/ })).toHaveAttribute("aria-pressed", "true")
+  expect(within(artifacts).getByTestId("artifact-filter")).toHaveTextContent("Step review · 2 of 3 artifacts")
+  const enter = within(artifacts).getByRole("list", { name: "Needed to enter review" })
+  expect(enter).toHaveTextContent("summary")
+  // `notes` is needed to enter and to leave: it shows once, with both transitions.
+  expect(enter).toHaveTextContent("required by review · approve → publish")
+  expect(within(artifacts).queryByText("changelog")).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole("button", { name: /^publish/ }))
+  expect(within(artifacts).getByTestId("artifact-filter")).toHaveTextContent("Step publish · 1 of 3 artifacts")
+  expect(within(artifacts).getByRole("list", { name: "Needed to enter publish" })).toHaveTextContent("required by review · approve → publish")
+  await userEvent.click(within(artifacts).getByRole("button", { name: "Show all artifacts" }))
+  expect(screen.getByRole("button", { name: /^publish/ })).toHaveAttribute("aria-pressed", "false")
+  const changelog = within(within(artifacts).getByRole("list", { name: "All artifacts" })).getByText("changelog").closest("li")!
   expect(within(changelog).getByText("no value")).toBeInTheDocument()
   expect(within(changelog).getByRole("button", { name: "Set" })).toBeInTheDocument()
+  // A click on a step filters again; a second click on it shows all.
+  await userEvent.click(screen.getByRole("button", { name: /^draft/ }))
+  expect(within(artifacts).getByRole("list", { name: "Needed to leave draft" })).toHaveTextContent("summary")
+  await userEvent.click(screen.getByRole("button", { name: /^draft/ }))
+  expect(within(artifacts).getByRole("list", { name: "All artifacts" })).toBeInTheDocument()
+})
+
+it("moves the default step with the task until a step is chosen", async () => {
+  const { rerender } = renderPanel()
+  await screen.findByTestId("artifact-filter")
+  api.getTaskWorkflow.mockResolvedValue(poolView)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} target={target} onTaskChanged={vi.fn()} />)
+  await waitFor(() => expect(screen.getByTestId("artifact-filter")).toHaveTextContent("Step draft"))
+  await userEvent.click(screen.getByRole("button", { name: /^publish/ }))
+  api.getTaskWorkflow.mockResolvedValue(customerView)
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 6 }} target={target} onTaskChanged={vi.fn()} />)
+  await waitFor(() => expect(api.getTaskWorkflow).toHaveBeenCalledTimes(3))
+  await waitFor(() => expect(screen.getByRole("button", { name: /^review/ })).toHaveAttribute("aria-current", "step"))
+  expect(screen.getByTestId("artifact-filter")).toHaveTextContent("Step publish")
+})
+
+it("falls back to the current step when the chosen one leaves the manifest, and to every artifact without one", async () => {
+  const { rerender } = renderPanel()
+  await userEvent.click(await screen.findByRole("button", { name: /^publish/ }))
+  const statuses = customerView.statuses.filter((status) => status.id !== "publish")
+  api.getTaskWorkflow.mockResolvedValue({ ...customerView, statuses })
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 5 }} target={target} onTaskChanged={vi.fn()} />)
+  await waitFor(() => expect(screen.getByTestId("artifact-filter")).toHaveTextContent("Step review"))
+  api.getTaskWorkflow.mockResolvedValue({ ...customerView, statuses, status: "gone", category: "done" })
+  rerender(<WorkflowPanel task={{ ...workflowTask, revision: 6 }} target={target} onTaskChanged={vi.fn()} />)
+  await waitFor(() => expect(screen.getByRole("list", { name: "All artifacts" })).toBeInTheDocument())
 })
 
 it("shows the step, the stepper, and the problem block above the header", async () => {

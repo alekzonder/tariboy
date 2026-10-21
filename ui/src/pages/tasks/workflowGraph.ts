@@ -71,7 +71,58 @@ export function stepMarks(view: WorkflowView): StepMark[] {
   }))
 }
 
-export interface Requirement { on: string; to: string; missing: boolean }
+export interface Requirement {
+  /** The status the transition leaves; absent where it is the current one. */
+  from?: string
+  on: string
+  to: string
+  missing: boolean
+}
+
+export interface StepArtifacts {
+  /** For each artifact name, the transitions into the step that require it. */
+  enter: Map<string, Requirement[]>
+  /** For each artifact name, the transitions out of the step that require it. */
+  leave: Map<string, Requirement[]>
+}
+
+/**
+ * What a step of the workflow needs: the artifacts a transition into it
+ * requires, and those a transition out of it requires. The current status of
+ * an open task reads its way out from the view's outcomes, as the daemon
+ * checks them; any other step reads the manifest's transitions, and an
+ * artifact is missing there when it has no value.
+ */
+export function stepArtifacts(view: WorkflowView, statusId: string): StepArtifacts {
+  const set = new Set(view.artifacts.map((artifact) => artifact.name))
+  const add = (map: Map<string, Requirement[]>, name: string, requirement: Requirement) =>
+    map.set(name, [...(map.get(name) ?? []), requirement])
+  const enter = new Map<string, Requirement[]>()
+  for (const status of view.statuses) {
+    for (const transition of status.transitions ?? []) {
+      if (transition.to !== statusId) continue
+      for (const name of transition.requires ?? []) {
+        add(enter, name, { from: status.id, on: transition.on, to: transition.to, missing: !set.has(name) })
+      }
+    }
+  }
+  const leave = new Map<string, Requirement[]>()
+  if (statusId === view.status && !isClosed(view)) {
+    for (const outcome of view.outcomes) {
+      const missing = new Set(outcome.missing ?? [])
+      for (const name of outcome.requires ?? []) {
+        add(leave, name, { from: statusId, on: outcome.on, to: outcome.to, missing: missing.has(name) })
+      }
+    }
+  } else {
+    for (const transition of view.statuses.find((status) => status.id === statusId)?.transitions ?? []) {
+      for (const name of transition.requires ?? []) {
+        add(leave, name, { from: statusId, on: transition.on, to: transition.to, missing: !set.has(name) })
+      }
+    }
+  }
+  return { enter, leave }
+}
 
 /** For each artifact name, the outcomes of the current status that require it. */
 export function requiredBy(view: WorkflowView): Map<string, Requirement[]> {

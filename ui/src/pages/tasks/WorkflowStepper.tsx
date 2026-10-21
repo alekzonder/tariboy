@@ -11,10 +11,17 @@ import { stepMarks, type StepMark } from "./workflowGraph"
  * and where it has been. A step opens to show what the status needs: its
  * owner, its instructions, the script that owns it, and each way out with
  * the artifacts and checks it requires. It wraps, so a phone never scrolls
- * sideways.
+ * sideways. A parent that passes `selected` and `onSelect` owns which step is
+ * open; the workflow panel filters the artifacts by it.
  */
-export default function WorkflowStepper({ view }: { view: WorkflowView }) {
-  const [open, setOpen] = useState<string | null>(null)
+export default function WorkflowStepper({ view, selected, onSelect }: {
+  view: WorkflowView
+  selected?: string | null
+  onSelect?: (id: string | null) => void
+}) {
+  const [own, setOwn] = useState<string | null>(null)
+  const open = selected === undefined ? own : selected
+  const setOpen = onSelect ?? setOwn
   const marks = stepMarks(view)
   const opened = marks.find((mark) => mark.status.id === open)
   return (
@@ -37,10 +44,10 @@ function Step({ mark, open, onToggle }: { mark: StepMark; open: boolean; onToggl
   const { status, state, returns } = mark
   const tone = state === "current" ? (status.terminal ? "quiet" : "live") : state === "visited" ? "quiet" : "faint"
   return (
-    <button type="button" aria-current={state === "current" ? "step" : undefined} aria-expanded={open} data-state={state}
+    <button type="button" aria-current={state === "current" ? "step" : undefined} aria-expanded={open} aria-pressed={open} data-state={state}
       onClick={onToggle}
       className={cn("flex min-w-0 max-w-full items-center gap-1.5 rounded-[7px] px-1.5 py-0.5 text-left hover:bg-accent",
-        state === "current" && "bg-muted", state === "ahead" && "text-muted-foreground opacity-70")}>
+        state === "current" && "bg-muted", open && "ring-1 ring-ring", state === "ahead" && "text-muted-foreground opacity-70")}>
       {state === "visited"
         ? <Check aria-hidden="true" className="size-3 shrink-0 text-status-running [stroke-width:2]" />
         : status.terminal

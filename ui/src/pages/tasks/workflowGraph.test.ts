@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { WorkflowView } from "@/lib/tasks"
-import { canReturnToAgent, counterText, currentVisit, defaultReturnTarget, inCurrentVisit, requiredBy, returnTargets, stepMarks, stepOf } from "./workflowGraph"
+import { canReturnToAgent, counterText, currentVisit, defaultReturnTarget, inCurrentVisit, requiredBy, returnTargets, stepArtifacts, stepMarks, stepOf } from "./workflowGraph"
 import { customerView, poolView } from "./workflowFixtures"
 
 describe("stepOf and stepMarks", () => {
@@ -46,6 +46,41 @@ describe("requiredBy", () => {
     expect(required.get("summary")).toEqual([{ on: "drafted", to: "review", missing: true }])
     expect(required.get("notes")).toEqual([{ on: "drafted", to: "review", missing: false }])
     expect(required.has("changelog")).toBe(false)
+  })
+})
+
+describe("stepArtifacts", () => {
+  it("collects what every way in requires and what the step's own transitions require", () => {
+    const review = stepArtifacts(customerView, "publish")
+    expect([...review.enter]).toEqual([["notes", [{ from: "review", on: "approve", to: "publish", missing: false }]]])
+    expect(review.leave.size).toBe(0)
+    const draft = stepArtifacts(customerView, "draft")
+    expect(draft.enter.size).toBe(0)
+    expect([...draft.leave]).toEqual([
+      ["notes", [{ from: "draft", on: "drafted", to: "review", missing: false }]],
+      ["summary", [{ from: "draft", on: "drafted", to: "review", missing: true }]],
+    ])
+  })
+
+  it("joins the ways in from several statuses under one artifact", () => {
+    const view: WorkflowView = { ...customerView, statuses: customerView.statuses.map((status) => status.id === "publish"
+      ? { ...status, transitions: [{ on: "redo", to: "review", requires: ["notes"] }] } : status) }
+    expect(stepArtifacts(view, "review").enter.get("notes")).toEqual([
+      { from: "draft", on: "drafted", to: "review", missing: false },
+      { from: "publish", on: "redo", to: "review", missing: false },
+    ])
+  })
+
+  it("reads the current status's way out from the outcomes the daemon checks", () => {
+    const view: WorkflowView = { ...poolView, outcomes: [{ on: "drafted", to: "review", requires: ["summary"], missing: ["summary"] }] }
+    expect([...stepArtifacts(view, "draft").leave]).toEqual([["summary", [{ from: "draft", on: "drafted", to: "review", missing: true }]]])
+  })
+
+  it("is empty for a step that requires nothing, or one the manifest does not declare", () => {
+    for (const id of ["done", "gone"]) {
+      const step = stepArtifacts(customerView, id)
+      expect([step.enter.size, step.leave.size]).toEqual([0, 0])
+    }
   })
 })
 
