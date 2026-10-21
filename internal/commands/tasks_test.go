@@ -516,3 +516,19 @@ func TestTaskOpenAPIExposesCreateAndUpdatePullRequestAndWaitCustomer(t *testing.
 	}
 	t.Fatalf("task update status values = %#v", values)
 }
+
+// TestQueueOwnersAcceptTheUIList keeps the queue dialogs working: the UI sends
+// owners as a JSON array and the CLI as a comma-separated string.
+func TestQueueOwnersAcceptTheUIList(t *testing.T) {
+	t.Parallel()
+	reg := BuildRegistry()
+	for _, path := range []string{"tasks.queue.create", "tasks.queue.update"} {
+		cmd, _ := reg.Get(path)
+		for _, owners := range []any{[]any{"alice", "agent:bob"}, []any{}, "alice, agent:bob"} {
+			raw := map[string]any{"prefix": "DEV", "name": "Dev", "revision": 1, "owners": owners}
+			if _, err := registry.Bind(cmd, raw); err != nil {
+				t.Errorf("%s owners %#v: %v", path, owners, err)
+			}
+		}
+	}
+}

@@ -153,7 +153,8 @@ func setPositional(f tasks.Field, input any, pos []string) error {
 
 // scanFlags parses args with a flag.FlagSet, taking a positional argument
 // wherever the flags stop and parsing the rest again; after "--" every
-// argument is positional. A boolean flag is set at once; the text of any other
+// argument is positional. Only a word with two dashes is a flag: a word such
+// as -42 or -v is text, so the FlagSet never sees it. A boolean flag is set at once; the text of any other
 // flag is returned by field index, so it is checked after the positionals.
 func scanFlags(command string, fields []tasks.Field, input any, args []string) (map[int]string, []string, error) {
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
@@ -176,18 +177,36 @@ func scanFlags(command string, fields []tasks.Field, input any, args []string) (
 	}
 	var pos []string
 	for {
-		if err := fs.Parse(args); err != nil {
+		end := textWord(args, valueFlags)
+		if err := fs.Parse(args[:end]); err != nil {
 			return nil, nil, flagError(err, badBool)
 		}
-		rest := fs.Args()
+		rest := append(fs.Args(), args[end:]...)
 		if len(rest) == 0 {
 			return texts, pos, nil
 		}
-		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
+		if consumed := end - len(fs.Args()); consumed > 0 && args[consumed-1] == "--" {
 			return texts, append(pos, rest...), nil
 		}
 		pos, args = append(pos, rest[0]), rest[1:]
 	}
+}
+
+// textWord returns the index of the first single-dash word in args that is
+// not the value of a preceding flag, or len(args).
+func textWord(args []string, valueFlags map[string]bool) int {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--":
+			return len(args)
+		case len(arg) > 1 && arg[0] == '-' && arg[1] != '-':
+			return i
+		case strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") && valueFlags[arg[2:]]:
+			i++
+		}
+	}
+	return len(args)
 }
 
 // checkFlagValues refuses a value flag followed by nothing or by another
@@ -199,8 +218,8 @@ func checkFlagValues(fs *flag.FlagSet, valueFlags map[string]bool, args []string
 		if arg == "--" {
 			return nil
 		}
-		name := strings.TrimLeft(arg, "-")
-		if !strings.HasPrefix(arg, "-") || name == "" || strings.Contains(name, "=") {
+		name := strings.TrimPrefix(arg, "--")
+		if !strings.HasPrefix(arg, "--") || name == "" || strings.Contains(name, "=") {
 			continue
 		}
 		if fs.Lookup(name) == nil {

@@ -406,6 +406,13 @@ func taskRoute(path, method, route, summary string, handler taskHandler) registr
 // taskWireArgs derives the arguments of a native task route from its request
 // in the tasks.Specs table, without the path parameters taskRoute adds. It
 // returns nil for a route the table does not own.
+// stringOrStrings is the schema of a list the CLI sends comma-separated and an
+// HTTP client may send as a JSON array.
+var stringOrStrings = map[string]any{"oneOf": []any{
+	map[string]any{"type": "string"},
+	map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+}}
+
 func taskWireArgs(method, route string) []registry.Arg {
 	spec, ok := tasks.SpecForRoute(method, route)
 	if !ok {
@@ -422,6 +429,8 @@ func taskWireArgs(method, route string) []registry.Arg {
 			arg.Type = registry.Int
 		case tasks.KindBool, tasks.KindOptBool:
 			arg.Type = registry.Bool
+		case tasks.KindStrings:
+			arg.Schema = stringOrStrings
 		}
 		if field.Enum != nil {
 			arg.Schema = map[string]any{"type": "string", "enum": field.Enum}
@@ -437,7 +446,7 @@ func taskHTTPArgs(path string) []registry.Arg {
 		return []registry.Arg{
 			{Name: "name", Help: "Queue name"},
 			{Name: "description", Help: "Queue description"},
-			{Name: "owners", Help: "Comma-separated owner agents"},
+			{Name: "owners", Help: "Owner agents, comma-separated or a list", Schema: stringOrStrings},
 			{Name: "responsible_agent", Help: "Responsible agent"},
 			{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"},
 		}
@@ -448,7 +457,7 @@ func taskHTTPArgs(path string) []registry.Arg {
 			{Name: "prefix", Required: true, Help: "Queue key prefix"},
 			{Name: "name", Required: true, Help: "Queue name"},
 			{Name: "description", Help: "Queue description"},
-			{Name: "owners", Help: "Comma-separated owner agents"},
+			{Name: "owners", Help: "Owner agents, comma-separated or a list", Schema: stringOrStrings},
 			{Name: "responsible_agent", Flag: "responsible-agent", Help: "Responsible agent"},
 		}
 	case "tasks.import":
