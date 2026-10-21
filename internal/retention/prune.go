@@ -208,13 +208,11 @@ func (p *Pruner) deleteRows(id string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM ai_requests WHERE iteration=?`, id); err != nil {
-		tx.Rollback()
-		return err
-	}
-	if _, err := tx.Exec(`DELETE FROM iterations WHERE id=?`, id); err != nil {
-		tx.Rollback()
-		return err
+	for _, it := range store.IterationTables {
+		if _, err := tx.Exec(`DELETE FROM `+it.Name+` WHERE `+it.Where, id); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -223,11 +221,9 @@ func (p *Pruner) deleteRows(id string) error {
 // as column -> value maps.
 func (p *Pruner) dbRows(id string) (map[string][]map[string]any, error) {
 	out := map[string][]map[string]any{}
-	for table, q := range map[string]string{
-		"iterations":  `SELECT * FROM iterations WHERE id=?`,
-		"ai_requests": `SELECT * FROM ai_requests WHERE iteration=?`,
-	} {
-		rows, err := p.db.Query(q, id)
+	for _, it := range store.IterationTables {
+		table := it.Name
+		rows, err := p.db.Query(`SELECT * FROM `+table+` WHERE `+it.Where, id)
 		if err != nil {
 			return nil, err
 		}

@@ -54,23 +54,27 @@ type tableSpec struct {
 	maskCols []string // blanked unless IncludeSecrets
 }
 
-// backupTables enumerates the agent-scoped tables. Every table has
+// backupTables enumerates the agent-scoped tables: the store.AgentTables rows
+// with a BackupOrder, in that order. Every table has
 // an explicit ORDER BY for determinism. messages are scoped to the ones this
 // agent PRODUCED (its footprint) — channel history is cross-agent and not owned
 // by any single agent, so it is intentionally not dumped. deliveries are scoped
 // to the agent's own subscriptions.
-var backupTables = []tableSpec{
-	{name: "agents", where: "name = ?", orderBy: "name", agentCol: "name"},
-	{name: "iterations", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-	{name: "ai_requests", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-	{name: "secrets", where: "agent = ?", orderBy: "key", agentCol: "agent", maskCols: []string{"value"}},
-	{name: "subscriptions", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-	{name: "schedules", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-	{name: "scripts", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-	{name: "script_runs", where: "agent = ?", orderBy: "id", agentCol: "agent"},
-	{name: "script_result_outbox", where: "agent = ?", orderBy: "idempotency_key", agentCol: "agent"},
-	{name: "messages", where: "produced_by_agent = ?", orderBy: "id", agentCol: "produced_by_agent"},
-	{name: "deliveries", where: "subscription_id IN (SELECT id FROM subscriptions WHERE agent = ?)", orderBy: "subscription_id, message_id"},
+var backupTables = registryBackupTables()
+
+func registryBackupTables() []tableSpec {
+	var tables []store.AgentTable
+	for _, at := range store.AgentTables {
+		if at.BackupOrder > 0 {
+			tables = append(tables, at)
+		}
+	}
+	sort.Slice(tables, func(i, j int) bool { return tables[i].BackupOrder < tables[j].BackupOrder })
+	out := make([]tableSpec, 0, len(tables))
+	for _, at := range tables {
+		out = append(out, tableSpec{name: at.Name, where: at.Where, orderBy: at.OrderBy, agentCol: at.AgentCol, maskCols: at.MaskCols})
+	}
+	return out
 }
 
 func Build(w io.Writer, s *store.Store, agentsDir, agentName string, opts Options, clock func() time.Time) (Manifest, error) {
