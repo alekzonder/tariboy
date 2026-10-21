@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 // Losing help dispatch must fail before any transport can be constructed.
@@ -14,8 +16,8 @@ func TestDetailedHelpIsLocalForEveryCommand(t *testing.T) {
 	t.Cleanup(func() { newCaller = old })
 	newCaller = func(string) Caller { t.Fatal("help constructed a transport"); return nil }
 	paths := []string{""}
-	for action := range taskCommandFlags() {
-		paths = append(paths, strings.Join(sharedHelpPath(action), " "))
+	for _, spec := range cliSpecs() {
+		paths = append(paths, strings.Join(spec.Words, " "))
 	}
 	reg, err := taskOperatorRegistry()
 	if err != nil {
@@ -83,9 +85,10 @@ func TestHelpExplainsTaskFormsAndFlags(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &tree); err != nil {
 		t.Fatal(err)
 	}
-	for action, flags := range taskCommandFlags() {
+	for _, spec := range cliSpecs() {
+		action, flags := spec.Action, commandFlags(spec)
 		node := tree
-		for _, part := range sharedHelpPath(action) {
+		for _, part := range spec.Words {
 			node = node[part].(map[string]any)
 		}
 		if node["summary"] == "Shared task command" || node["help"] == nil || node["examples"] == nil {
@@ -102,4 +105,15 @@ func TestHelpExplainsTaskFormsAndFlags(t *testing.T) {
 			}
 		}
 	}
+}
+
+// cliSpecs are the task commands ttasks parses.
+func cliSpecs() []tasks.Spec {
+	var out []tasks.Spec
+	for _, spec := range tasks.Specs() {
+		if len(spec.Words) > 0 {
+			out = append(out, spec)
+		}
+	}
+	return out
 }

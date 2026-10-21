@@ -41,7 +41,7 @@ func resolveArtifactValue(parsed *request, stderr io.Writer) int {
 	}
 	var source io.Reader = stdin
 	name := "stdin"
-	path, _ := parsed.payload["file"].(string)
+	path := parsed.input.(*tasks.ArtifactSetRequest).File
 	if path == "" && isTerminal(stdin) {
 		fmt.Fprintln(stderr, "tasks artifacts set: pass VALUE, --file PATH, or pipe the value on stdin")
 		return 2
@@ -56,7 +56,6 @@ func resolveArtifactValue(parsed *request, stderr io.Writer) int {
 		defer file.Close()
 		source = file
 	}
-	delete(parsed.payload, "file")
 	value, ok := readText(source, name, "tasks artifacts set", "artifacts", stderr)
 	if !ok {
 		return 2

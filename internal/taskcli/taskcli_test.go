@@ -69,7 +69,7 @@ func TestParseCurrentTasksSurface(t *testing.T) {
 		argv         []string
 		want         map[string]any
 	}{
-		{"mine", "mine", []string{"mine", "--queue=DEV"}, map[string]any{"queue": "DEV", "limit": "50"}},
+		{"mine", "mine", []string{"mine", "--queue=DEV"}, map[string]any{"queue": "DEV", "limit": 50}},
 		{"ready", "ready", []string{"ready", "--claim"}, map[string]any{"claim": true}},
 		{"show", "show", []string{"show", "DEV-1"}, map[string]any{"key": "DEV-1"}},
 		{"create", "create", []string{"create", "--queue", "DEV", "--title", "new"}, map[string]any{"queue": "DEV", "title": "new"}},

@@ -64,7 +64,7 @@ func Run(ctx context.Context, argv []string, getenv func(string) string, stdout,
 		return 2
 	}
 	if toolsSocket := getenv("TARIBOY_TOOLS_SOCKET"); toolsSocket != "" {
-		if operatorOnlyActions[parsed.action] {
+		if parsed.spec.OperatorOnly {
 			fmt.Fprintf(stderr, "tasks: unknown command %q\n", strings.ReplaceAll(parsed.action, "_", " "))
 			return 2
 		}

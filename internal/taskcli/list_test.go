@@ -12,8 +12,8 @@ func TestParseListFlags(t *testing.T) {
 	argv := []string{"list", "--queue", "DEV", "--status", "plan,review", "--category", "in_progress", "--priority", "P0,P1",
 		"--assignee", "worker", "--author", "user:me", "--customer", "user:me", "--group", "core", "--subtree", "DEV-1",
 		"--waiting-for", "me", "--blocked", "false", "--text", "search", "--view", "all", "--sort", "updated", "--limit", "10", "--after", "DEV-9"}
-	want := map[string]any{"after": "DEV-9", "assignee": "worker", "author": "user:me", "blocked": "false", "category": "in_progress",
-		"customer": "user:me", "group": "core", "limit": "10", "priority": "P0,P1", "queue": "DEV", "sort": "updated", "status": "plan,review",
+	want := map[string]any{"after": "DEV-9", "assignee": "worker", "author": "user:me", "blocked": false, "category": "in_progress",
+		"customer": "user:me", "group": "core", "limit": 10, "priority": "P0,P1", "queue": "DEV", "sort": "updated", "status": "plan,review",
 		"status_view": "all", "subtree": "DEV-1", "text": "search", "waiting_for": "me"}
 	for _, command := range []string{"list", "mine"} {
 		argv[0] = command
@@ -26,7 +26,7 @@ func TestParseListFlags(t *testing.T) {
 		}
 	}
 	got, err := parse([]string{"list"})
-	if err != nil || !sameJSON(got.payload, map[string]any{"limit": "50"}) {
+	if err != nil || !sameJSON(got.payload, map[string]any{"limit": 50}) {
 		t.Fatalf("parse(list) = %#v, %v; want the default limit 50", got, err)
 	}
 }
@@ -67,7 +67,7 @@ func TestListRoutesInBothModes(t *testing.T) {
 		t.Fatalf("agent code = %d", code)
 	}
 	if len(recorded.calls) != 1 || recorded.calls[0].route != "/tools/tasks/list" ||
-		!sameJSON(recorded.calls[0].body, map[string]any{"by_author": "user:me", "by_customer": "user:you", "limit": "50", "status_view": "closed"}) {
+		!sameJSON(recorded.calls[0].body, map[string]any{"by_author": "user:me", "by_customer": "user:you", "limit": 50, "status_view": "closed"}) {
 		t.Fatalf("agent calls = %#v", recorded.calls)
 	}
 }

@@ -51,45 +51,15 @@ func TaskOperatorCommands() []registry.Command {
 			}),
 		taskRoute("tasks.list", "GET", "/api/tasks", "List native tasks",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				filter := tasks.ListFilter{
-					Queue:      p.Trimmed("queue"),
-					Statuses:   p.Strings("status"),
-					Categories: p.Strings("category"),
-					StatusView: p.Trimmed("status_view"),
-					Assignee:   p.Trimmed("assignee"),
-					Author:     p.Trimmed("author"),
-					Customer:   p.Trimmed("customer"),
-					Group:      p.Trimmed("group"),
-					Text:       p.Trimmed("text"),
-					WaitingFor: p.Trimmed("waiting_for"),
-					ScopeAgent: p.Trimmed("scope_agent"),
-					ParentKey:  p.Trimmed("parent"),
-					SubtreeKey: p.Trimmed("subtree"),
-					Sort:       p.Trimmed("sort"),
-					Limit:      int(p.Int64("limit")),
-					AfterKey:   p.Trimmed("after"),
-				}
-				for _, priority := range p.Strings("priority") {
-					filter.Priorities = append(filter.Priorities, tasks.Priority(priority))
-				}
-				if value, ok := p.OptBool("blocked"); ok {
-					filter.Blocked = &value
-				}
-				return control.ListTasks(ctx, actor, filter)
+				var in tasks.ListRequest
+				tasks.Decode(p, &in)
+				return control.ListTasks(ctx, actor, in.Filter())
 			}),
 		taskRoute("tasks.create", "POST", "/api/tasks", "Create a native task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.CreateTask(ctx, actor, tasks.CreateTaskInput{
-					Queue:          p.Trimmed("queue"),
-					ParentKey:      p.Trimmed("parent_key"),
-					Title:          p.Trimmed("title"),
-					Description:    p.Trimmed("description"),
-					PullRequest:    p.Trimmed("pull_request"),
-					Assignee:       p.Trimmed("assignee"),
-					Group:          p.Trimmed("group"),
-					Priority:       tasks.Priority(p.Trimmed("priority")),
-					IdempotencyKey: p.Trimmed("idempotency_key"),
-				})
+				var in tasks.CreateRequest
+				tasks.Decode(p, &in)
+				return control.CreateTask(ctx, actor, in.Input())
 			}),
 		taskRoute("tasks.get", "GET", "/api/tasks/{key}", "Inspect a native task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -97,16 +67,9 @@ func TaskOperatorCommands() []registry.Command {
 			}),
 		taskRoute("tasks.update", "PATCH", "/api/tasks/{key}", "Update a native task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.UpdateTask(ctx, actor, p.Trimmed("key"), tasks.UpdateTaskInput{
-					Title:             p.OptString("title"),
-					Description:       p.OptString("description"),
-					Status:            p.OptString("status"),
-					PullRequest:       p.OptString("pull_request"),
-					Assignee:          p.OptString("assignee"),
-					ManualBlockReason: p.OptString("manual_block_reason"),
-					Priority:          (*tasks.Priority)(p.OptString("priority")),
-					Revision:          p.Int64("revision"),
-				})
+				var in tasks.UpdateRequest
+				tasks.Decode(p, &in)
+				return control.UpdateTask(ctx, actor, in.Key, in.Input())
 			}),
 		taskRoute("tasks.export", "GET", "/api/tasks/{key}/export", "Export a task tree for transfer to another daemon",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -126,18 +89,15 @@ func TaskOperatorCommands() []registry.Command {
 			}),
 		taskRoute("tasks.move", "POST", "/api/tasks/{key}/move", "Move a task in its queue tree",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.MoveTask(ctx, actor, p.Trimmed("key"), tasks.MoveInput{
-					ParentKey: p.Trimmed("parent_key"),
-					BeforeKey: p.Trimmed("before_key"),
-					Revision:  p.Int64("revision"),
-				})
+				var in tasks.MoveRequest
+				tasks.Decode(p, &in)
+				return control.MoveTask(ctx, actor, in.Key, in.Input())
 			}),
 		taskRoute("tasks.complete", "POST", "/api/tasks/{key}/complete", "Complete a task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				completeAnyway, _ := p.OptBool("complete_anyway")
-				return control.CompleteTask(ctx, actor, p.Trimmed("key"), tasks.CompleteInput{
-					Revision: p.Int64("revision"), CompleteAnyway: completeAnyway,
-				})
+				var in tasks.DoneRequest
+				tasks.Decode(p, &in)
+				return control.CompleteTask(ctx, actor, in.Key, in.Input())
 			}),
 		taskRoute("tasks.comments.list", "GET", "/api/tasks/{key}/comments", "List task comments",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -146,9 +106,9 @@ func TaskOperatorCommands() []registry.Command {
 			}),
 		taskRoute("tasks.comments.add", "POST", "/api/tasks/{key}/comments", "Add a task comment",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.AddComment(ctx, actor, p.Trimmed("key"), tasks.AddCommentInput{
-					Body: p.Trimmed("body"), IdempotencyKey: p.Trimmed("idempotency_key"),
-				})
+				var in tasks.CommentRequest
+				tasks.Decode(p, &in)
+				return control.AddComment(ctx, actor, in.Key, in.Input())
 			}),
 		taskRoute("tasks.relations.list", "GET", "/api/tasks/{key}/relations", "List task relations",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -157,10 +117,9 @@ func TaskOperatorCommands() []registry.Command {
 			}),
 		taskRoute("tasks.relations.add", "POST", "/api/tasks/{key}/relations", "Add a task relation",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.AddRelation(ctx, actor, p.Trimmed("key"), tasks.RelationInput{
-					TargetKey: p.Trimmed("target_key"), Type: p.Trimmed("type"),
-					Revision: p.Int64("revision"), IdempotencyKey: p.Trimmed("idempotency_key"),
-				})
+				var in tasks.RelateRequest
+				tasks.Decode(p, &in)
+				return control.AddRelation(ctx, actor, in.Key, in.Input())
 			}),
 		taskRoute("tasks.relations.delete", "DELETE", "/api/tasks/{key}/relations", "Delete a task relation",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -229,13 +188,15 @@ func TaskOperatorCommands() []registry.Command {
 			}),
 		taskRoute("tasks.advance", "POST", "/api/tasks/{key}/advance", "Declare an outcome for a workflow task's current status",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.Advance(ctx, actor, p.Trimmed("key"), tasks.AdvanceInput{
-					Outcome: p.Trimmed("outcome"), Message: p.String("message"), From: p.Trimmed("from"),
-				})
+				var in tasks.AdvanceRequest
+				tasks.Decode(p, &in)
+				return control.Advance(ctx, actor, in.Key, in.Input())
 			}),
 		taskRoute("tasks.artifacts.set", "PUT", "/api/tasks/{key}/artifacts/{name}", "Set a workflow task artifact",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.SetArtifact(ctx, actor, p.Trimmed("key"), p.Trimmed("name"), p.String("value"))
+				var in tasks.ArtifactSetRequest
+				tasks.Decode(p, &in)
+				return control.SetArtifact(ctx, actor, in.Key, in.Name, in.Text())
 			}),
 		taskRoute("tasks.artifacts.list", "GET", "/api/tasks/{key}/artifacts", "List the current artifacts of a workflow task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -280,11 +241,15 @@ func TaskOperatorCommands() []registry.Command {
 			}),
 		taskRoute("tasks.workflow.move", "POST", "/api/tasks/{key}/workflow/move", "Move a workflow task to another status",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.MoveWorkflow(ctx, actor, p.Trimmed("key"), p.Trimmed("to"), p.Trimmed("reason"))
+				var in tasks.WorkflowMoveRequest
+				tasks.Decode(p, &in)
+				return control.MoveWorkflow(ctx, actor, in.Key, in.To, in.Reason)
 			}),
 		taskRoute("tasks.workflow.resume", "POST", "/api/tasks/{key}/workflow/resume", "Resolve the pause of a workflow task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
-				return control.ResumeWorkflow(ctx, actor, p.Trimmed("key"), p.Trimmed("decision"))
+				var in tasks.ResumeRequest
+				tasks.Decode(p, &in)
+				return control.ResumeWorkflow(ctx, actor, in.Key, in.Decision)
 			}),
 		taskRoute("tasks.cancel", "POST", "/api/tasks/{key}/cancel", "Cancel a workflow task",
 			func(ctx context.Context, control registry.TaskControl, actor tasks.Actor, p registry.Params) (any, error) {
@@ -396,7 +361,10 @@ func withMaxBody(cmd registry.Command, limit int64) registry.Command {
 type taskHandler func(context.Context, registry.TaskControl, tasks.Actor, registry.Params) (any, error)
 
 func taskRoute(path, method, route, summary string, handler taskHandler) registry.Command {
-	bodyArgs := taskHTTPArgs(path)
+	bodyArgs := taskWireArgs(method, route)
+	if bodyArgs == nil {
+		bodyArgs = taskHTTPArgs(path)
+	}
 	var args []registry.Arg
 	for _, segment := range strings.Split(route, "/") {
 		if !strings.HasPrefix(segment, "{") || !strings.HasSuffix(segment, "}") {
@@ -435,6 +403,34 @@ func taskRoute(path, method, route, summary string, handler taskHandler) registr
 	}
 }
 
+// taskWireArgs derives the arguments of a native task route from its request
+// in the tasks.Specs table, without the path parameters taskRoute adds. It
+// returns nil for a route the table does not own.
+func taskWireArgs(method, route string) []registry.Arg {
+	spec, ok := tasks.SpecForRoute(method, route)
+	if !ok {
+		return nil
+	}
+	args := []registry.Arg{}
+	for _, field := range tasks.Fields(spec.Request) {
+		if !field.HTTP || strings.Contains(route, "{"+field.Name+"}") {
+			continue
+		}
+		arg := registry.Arg{Name: field.Name, Required: field.HTTPRequired, Help: field.Help}
+		switch field.Kind {
+		case tasks.KindInt, tasks.KindInt64:
+			arg.Type = registry.Int
+		case tasks.KindBool, tasks.KindOptBool:
+			arg.Type = registry.Bool
+		}
+		if field.Enum != nil {
+			arg.Schema = map[string]any{"type": "string", "enum": field.Enum}
+		}
+		args = append(args, arg)
+	}
+	return args
+}
+
 func taskHTTPArgs(path string) []registry.Arg {
 	switch path {
 	case "tasks.queue.update":
@@ -455,33 +451,6 @@ func taskHTTPArgs(path string) []registry.Arg {
 			{Name: "owners", Help: "Comma-separated owner agents"},
 			{Name: "responsible_agent", Flag: "responsible-agent", Help: "Responsible agent"},
 		}
-	case "tasks.create":
-		return []registry.Arg{
-			{Name: "queue", Help: "Queue prefix for a root task"},
-			{Name: "parent_key", Flag: "parent-key", Help: "Parent task key"},
-			{Name: "title", Required: true, Help: "Task title"},
-			{Name: "description", Help: "Task description"},
-			{Name: "pull_request", Flag: "pull-request", Help: "Canonical pull request URL"},
-			{Name: "assignee", Help: "Task assignee"},
-			{Name: "group", Help: "Task group"},
-			{Name: "priority", Help: "Task priority", Schema: map[string]any{
-				"type": "string", "enum": []string{string(tasks.PriorityP0), string(tasks.PriorityP1), string(tasks.PriorityP2), string(tasks.PriorityP3)},
-			}},
-			{Name: "idempotency_key", Flag: "idempotency-key", Help: "Stable retry key"},
-		}
-	case "tasks.update":
-		return []registry.Arg{
-			{Name: "title", Help: "Task title"},
-			{Name: "description", Help: "Task description"},
-			{Name: "status", Help: "Task status", Schema: map[string]any{
-				"type": "string", "enum": []string{tasks.StatusOpen, tasks.StatusInProgress, tasks.StatusWaitCustomer, tasks.StatusDone, tasks.StatusCancelled},
-			}},
-			{Name: "pull_request", Flag: "pull-request", Help: "Canonical pull request URL (empty clears it)"},
-			{Name: "assignee", Help: "Task assignee"},
-			{Name: "manual_block_reason", Flag: "manual-block-reason", Help: "Manual block reason"},
-			{Name: "priority", Help: "Task priority"},
-			{Name: "revision", Type: registry.Int, Required: true, Help: "Expected current revision"},
-		}
 	case "tasks.import":
 		return []registry.Arg{{Name: "bundle", Type: registry.JSONObject, Required: true,
 			Help:   "Bundle returned by tasks.export on the source daemon",
@@ -492,18 +461,8 @@ func taskHTTPArgs(path string) []registry.Arg {
 		return []registry.Arg{{Name: "pattern", Required: true, Help: "Allowed channel pattern"}, {Name: "correlation_key", Help: "Correlation selector"}, {Name: "action", Required: true, Help: "Declared workflow trigger action"}}
 	case "tasks.queue.trigger.delete":
 		return []registry.Arg{{Name: "id", Type: registry.Int, Required: true, Help: "Resource id"}}
-	case "tasks.advance":
-		return []registry.Arg{{Name: "outcome", Required: true, Help: "Outcome to declare"}, {Name: "message", Help: "Message recorded with the transition"}, {Name: "from", Help: "Status the caller believes the task is in; a different current status is refused with status_changed"}}
-	case "tasks.artifacts.set":
-		return []registry.Arg{{Name: "value", Help: "Artifact value, stored as given"}}
-	case "tasks.workflow.runs.log", "tasks.queue.source.log":
+	case "tasks.queue.source.log":
 		return []registry.Arg{{Name: "max_bytes", Type: registry.Int, Help: "Largest log tail to return in bytes (default 65536, maximum 1048576)"}}
-	case "tasks.workflow.move":
-		return []registry.Arg{{Name: "to", Required: true, Help: "Target status id"}, {Name: "reason", Required: true, Help: "Why the task is moved"}}
-	case "tasks.workflow.resume":
-		return []registry.Arg{{Name: "decision", Required: true, Help: "continue resumes the task in its current status with counters reset; release dispatches the task to another pool member", Schema: map[string]any{
-			"type": "string", "enum": []string{tasks.ResumeContinue, tasks.ResumeRelease},
-		}}}
 	case "tasks.queue.workflow.set":
 		return []registry.Arg{{Name: "ref", Required: true, Help: "Workflow image reference, name:tag"}, {Name: "revision", Type: registry.Int, Help: "Expected current binding revision (zero for a new binding)"}}
 	case "tasks.queue.workflow.clear":

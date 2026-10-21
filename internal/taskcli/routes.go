@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"sort"
 	"strconv"
@@ -19,143 +20,39 @@ import (
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
+// runOperator calls the operator HTTP route of a command, taken from the
+// tasks.Specs table: the path parameters come from the payload and the rest is
+// the body, or the query of a GET.
 func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut bool, stdout, stderr io.Writer) int {
-	method, route := "", ""
-	body := parsed.payload
-	key, _ := body["key"].(string)
-	switch parsed.action {
-	case "list", "mine":
-		method, route = "GET", "/api/tasks"
-	case "ready":
-		if claim, _ := body["claim"].(bool); claim {
+	if parsed.action == "ready" {
+		if claim, _ := parsed.payload["claim"].(bool); claim {
 			fmt.Fprintln(stderr, "tasks ready --claim requires agent mode")
 			return 2
 		}
 		return runReady(parsed, caller, jsonOut, stdout, stderr)
-	case "show":
-		method, route, body = "GET", "/api/tasks/"+key, nil
-	case "create":
-		method, route = "POST", "/api/tasks"
-	case "update", "assign":
-		if _, ok := body["revision"]; !ok {
-			revision, code := revisionFor(caller, key, stderr)
-			if code != 0 {
-				return code
-			}
-			body["revision"] = revision
+	}
+	route := parsed.spec
+	if route.Via != "" {
+		route, _ = tasks.SpecFor(route.Via)
+	}
+	key, _ := parsed.payload["key"].(string)
+	body := operatorBody(parsed)
+	if code := fillOperatorBody(parsed, caller, body, stderr); code != 0 {
+		return code
+	}
+	path := route.Path
+	for segment := range strings.SplitSeq(route.Path, "/") {
+		if name, ok := strings.CutPrefix(segment, "{"); ok {
+			name = strings.TrimSuffix(name, "}")
+			path = strings.Replace(path, segment, url.PathEscape(fmt.Sprint(body[name])), 1)
+			delete(body, name)
 		}
-		method, route = "PATCH", "/api/tasks/"+key
-		delete(body, "key")
-	case "comment":
-		method, route = "POST", "/api/tasks/"+key+"/comments"
-		delete(body, "key")
-	case "ask":
-		method, route = "POST", "/api/tasks/"+key+"/comments"
-		principal := strings.TrimSpace(fmt.Sprint(body["principal"]))
-		if !strings.Contains(principal, ":") {
-			principal = "agent:" + principal
-		}
-		body = map[string]any{"body": "@" + principal + "\n\n" + fmt.Sprint(body["body"]), "idempotency_key": body["idempotency_key"]}
-	case "move":
-		if _, ok := body["revision"]; !ok {
-			revision, code := revisionFor(caller, key, stderr)
-			if code != 0 {
-				return code
-			}
-			body["revision"] = revision
-		}
-		method, route = "POST", "/api/tasks/"+key+"/move"
-		delete(body, "key")
-	case "block":
-		blocker, _ := body["blocker_key"].(string)
-		if _, ok := body["revision"]; !ok {
-			revision, code := revisionFor(caller, blocker, stderr)
-			if code != 0 {
-				return code
-			}
-			body["revision"] = revision
-		}
-		method, route = "POST", "/api/tasks/"+blocker+"/relations"
-		body["target_key"], body["type"] = key, "blocks"
-		delete(body, "key")
-		delete(body, "blocker_key")
-	case "relate":
-		if _, ok := body["revision"]; !ok {
-			revision, code := revisionFor(caller, key, stderr)
-			if code != 0 {
-				return code
-			}
-			body["revision"] = revision
-		}
-		body["type"] = "related"
-		method, route = "POST", "/api/tasks/"+key+"/relations"
-		delete(body, "key")
-	case "done":
-		if _, ok := body["revision"]; !ok {
-			revision, code := revisionFor(caller, key, stderr)
-			if code != 0 {
-				return code
-			}
-			body["revision"] = revision
-		}
-		method, route = "POST", "/api/tasks/"+key+"/complete"
-		delete(body, "key")
-	case "advance":
-		method, route = "POST", "/api/tasks/"+url.PathEscape(key)+"/advance"
-		delete(body, "key")
-	case "artifact_set":
-		name, _ := body["name"].(string)
-		method, route = "PUT", "/api/tasks/"+url.PathEscape(key)+"/artifacts/"+url.PathEscape(name)
-		body = map[string]any{"value": body["value"]}
-	case "artifact_ls":
-		method, route, body = "GET", "/api/tasks/"+url.PathEscape(key)+"/artifacts", nil
-	case "artifact_show":
-		name, _ := body["name"].(string)
-		method, route, body = "GET", "/api/tasks/"+url.PathEscape(key)+"/artifacts/"+url.PathEscape(name), nil
-	case "workflow_get":
-		method, route, body = "GET", "/api/tasks/"+url.PathEscape(key)+"/workflow", nil
-	case "workflow_runs":
-		method, route, body = "GET", "/api/tasks/"+url.PathEscape(key)+"/workflow/runs", nil
-	case "workflow_run_log":
-		id, _ := body["id"].(int64)
-		method, route = "GET", "/api/tasks/"+url.PathEscape(key)+"/workflow/runs/"+strconv.FormatInt(id, 10)+"/log"
-		delete(body, "key")
-		delete(body, "id")
-	case "workflow_move":
-		method, route = "POST", "/api/tasks/"+url.PathEscape(key)+"/workflow/move"
-		delete(body, "key")
-	case "workflow_resume":
-		method, route = "POST", "/api/tasks/"+url.PathEscape(key)+"/workflow/resume"
-		delete(body, "key")
-	case "workflow_retry":
-		id, _ := body["id"].(int64)
-		if id == 0 {
-			// Without an id the retry names the task's latest request; the
-			// daemon refuses it unless it failed.
-			raw, err := caller.Call("GET", "/api/tasks/"+url.PathEscape(key)+"/workflow", map[string]string{})
-			if err != nil {
-				return operatorErrorFor(err, key, stderr)
-			}
-			var view tasks.WorkflowView
-			if json.Unmarshal(raw, &view) != nil || view.LastRequest == nil {
-				fmt.Fprintf(stderr, "tasks workflow retry: %s has no transition request\n", key)
-				return 1
-			}
-			id = view.LastRequest.ID
-		}
-		method, route, body = "POST", "/api/tasks/"+url.PathEscape(key)+"/workflow/requests/"+strconv.FormatInt(id, 10)+"/retry", map[string]any{}
-	case "cancel":
-		method, route = "POST", "/api/tasks/"+url.PathEscape(key)+"/cancel"
-		delete(body, "key")
-	default:
-		fmt.Fprintf(stderr, "tasks: unsupported operator command %s\n", parsed.action)
-		return 2
 	}
 	var requestBody any = body
-	if method == "GET" {
+	if route.Method == "GET" {
 		requestBody = query(body)
 	}
-	raw, err := caller.Call(method, route, requestBody)
+	raw, err := caller.Call(route.Method, path, requestBody)
 	if err != nil {
 		return operatorErrorFor(err, key, stderr)
 	}
@@ -165,6 +62,67 @@ func runOperator(ctx context.Context, parsed request, caller Caller, jsonOut boo
 		}, func(err error) int { return operatorErrorFor(err, key, stderr) }, jsonOut, stdout, stderr)
 	}
 	return printResult(parsed, raw, jsonOut, stdout, stderr)
+}
+
+// operatorBody is the payload in the shape of the route the command calls:
+// ask is a comment that mentions the principal, block a blocks relation of
+// the blocker, and relate a related relation.
+func operatorBody(parsed request) map[string]any {
+	body := maps.Clone(parsed.payload)
+	switch parsed.action {
+	case "ask":
+		principal := strings.TrimSpace(fmt.Sprint(body["principal"]))
+		if !strings.Contains(principal, ":") {
+			principal = "agent:" + principal
+		}
+		return map[string]any{"key": body["key"], "body": "@" + principal + "\n\n" + fmt.Sprint(body["body"]), "idempotency_key": body["idempotency_key"]}
+	case "block":
+		body["key"], body["target_key"], body["type"] = body["blocker_key"], body["key"], "blocks"
+		delete(body, "blocker_key")
+	case "relate":
+		body["type"] = "related"
+	}
+	return body
+}
+
+// fillOperatorBody adds what the daemon needs and the command left out: the
+// current revision of the task the route names, and the latest transition
+// request of a retry.
+func fillOperatorBody(parsed request, caller Caller, body map[string]any, stderr io.Writer) int {
+	key, _ := body["key"].(string)
+	if _, given := body["revision"]; !given && hasRevision(parsed.spec) {
+		revision, code := revisionFor(caller, key, stderr)
+		if code != 0 {
+			return code
+		}
+		body["revision"] = revision
+	}
+	if _, given := body["id"]; given || parsed.action != "workflow_retry" {
+		return 0
+	}
+	// Without an id the retry names the task's latest request; the daemon
+	// refuses it unless it failed.
+	raw, err := caller.Call("GET", "/api/tasks/"+url.PathEscape(key)+"/workflow", map[string]string{})
+	if err != nil {
+		return operatorErrorFor(err, key, stderr)
+	}
+	var view tasks.WorkflowView
+	if json.Unmarshal(raw, &view) != nil || view.LastRequest == nil {
+		fmt.Fprintf(stderr, "tasks workflow retry: %s has no transition request\n", key)
+		return 1
+	}
+	body["id"] = view.LastRequest.ID
+	return 0
+}
+
+// hasRevision reports whether a command takes the expected task revision.
+func hasRevision(spec tasks.Spec) bool {
+	for _, f := range tasks.Fields(spec.Request) {
+		if f.Name == "revision" {
+			return true
+		}
+	}
+	return false
 }
 
 func query(body map[string]any) map[string]string {
@@ -194,10 +152,8 @@ func revisionFor(caller Caller, key string, stderr io.Writer) (int64, int) {
 
 func runReady(parsed request, caller Caller, jsonOut bool, stdout, stderr io.Writer) int {
 	limit := 50
-	if text, _ := parsed.payload["limit"].(string); text != "" {
-		if n, err := strconv.Atoi(text); err == nil && n > 0 && n <= 200 {
-			limit = n
-		}
+	if n, _ := parsed.payload["limit"].(int); n > 0 && n <= 200 {
+		limit = n
 	}
 	readyQuery := map[string]string{"status": "open", "blocked": "false", "limit": "500"}
 	if queue, _ := parsed.payload["queue"].(string); queue != "" {
@@ -319,12 +275,10 @@ func runHelpJSON(ctx context.Context, stdout, stderr io.Writer) int {
 		entry := entries[command.Path]
 		node["summary"], node["help"], node["usage"], node["examples"] = entry.summary, entry.help, entry.usage, strings.Split(entry.examples, "\n")
 	}
-	for action, flags := range taskCommandFlags() {
-		path := sharedHelpPath(action)
-		if len(path) == 0 {
-			continue
+	for _, spec := range tasks.Specs() {
+		if len(spec.Words) > 0 {
+			insertSharedHelp(tree, spec.Words, commandFlags(spec), sharedHelp[spec.Action])
 		}
-		insertSharedHelp(tree, path, flags, sharedHelp[action])
 	}
 	encoded, err := json.MarshalIndent(tree, "", "  ")
 	if err != nil {
@@ -336,12 +290,8 @@ func runHelpJSON(ctx context.Context, stdout, stderr io.Writer) int {
 }
 
 func sharedHelpPath(action string) []string {
-	for group, words := range commandWords {
-		for word, name := range words {
-			if name == action {
-				return []string{group, word}
-			}
-		}
+	if spec, ok := tasks.SpecFor(action); ok && len(spec.Words) > 0 {
+		return spec.Words
 	}
 	return []string{action}
 }

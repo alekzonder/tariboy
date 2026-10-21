@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/registry"
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 type commandHelp struct {
@@ -174,14 +175,16 @@ func runTextHelp(args []string, stdout, stderr io.Writer) (int, bool) {
 func taskHelpEntries(reg *registry.Registry) map[string]commandHelp {
 	entries := map[string]commandHelp{}
 	for action, entry := range sharedHelp {
+		spec, _ := tasks.SpecFor(action)
+		flags := commandFlags(spec)
 		var names []string
-		for name := range taskCommandFlags()[action] {
+		for name := range flags {
 			names = append(names, name)
 		}
 		sort.Strings(names)
 		for _, name := range names {
 			value := " VALUE"
-			if boolFlags[name] {
+			if flags[name] {
 				value = ""
 			}
 			entry.arguments += fmt.Sprintf("\n--%s%s  %s", name, value, helpFlags[name])
