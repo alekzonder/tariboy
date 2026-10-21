@@ -55,8 +55,12 @@ func TestParseGoldenPayloads(t *testing.T) {
 		{[]string{"workflow", "retry", "DEV-1"}, "workflow_retry", `{"key":"DEV-1"}`, false},
 		{[]string{"workflow", "retry", "DEV-1", "41"}, "workflow_retry", `{"id":41,"key":"DEV-1"}`, false},
 		{[]string{"cancel", "DEV-1"}, "cancel", `{"key":"DEV-1"}`, false},
-		// flag.FlagSet also takes one dash, and every argument after -- is positional.
-		{[]string{"create", "-queue", "DEV", "-title=T"}, "create", `{"queue":"DEV","title":"T"}`, false},
+		// A word with one dash is text, as it always was; after -- every
+		// argument is positional.
+		{[]string{"artifacts", "set", "T-1", "delta", "-42"}, "artifact_set", `{"key":"T-1","name":"delta","value":"-42"}`, false},
+		{[]string{"comment", "T-1", "-1", "is", "wrong"}, "comment", `{"body":"-1 is wrong","key":"T-1"}`, false},
+		{[]string{"ask", "T-1", "alice", "-v", "flag?", "--idempotency-key", "k1"}, "ask", `{"body":"-v flag?","idempotency_key":"k1","key":"T-1","principal":"alice"}`, false},
+		{[]string{"comment", "T-1", "--idempotency-key", "-k", "text"}, "comment", `{"body":"text","idempotency_key":"-k","key":"T-1"}`, false},
 		{[]string{"comment", "DEV-1", "--idempotency-key", "k1", "--", "--not-a-flag", "-x"}, "comment", `{"body":"--not-a-flag -x","idempotency_key":"k1","key":"DEV-1"}`, false},
 	}
 	for _, tt := range tests {
