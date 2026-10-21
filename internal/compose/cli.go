@@ -2,7 +2,6 @@ package compose
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/daemonctl"
-	"github.com/alekzonder/tariboy/internal/teamportable"
 )
 
 // ensureDaemonUp is the auto-start seam (overridden in tests). It brings the
@@ -71,6 +69,8 @@ type Options struct {
 	Volumes bool   // down: also delete agent data and group shared dirs
 	NoStart bool   // up: do not start the daemon
 	Tail    int    // logs: events per member
+	// Stdin is where import reads its answer when Yes is false.
+	Stdin io.Reader
 }
 
 // Verbs lists every compose verb in the order its usage names them.
@@ -96,7 +96,7 @@ func VerbFirst(args []string) []string {
 
 // Run executes one compose verb: it loads the file and drives the Runner, or
 // writes or imports a team archive. It returns a process exit code.
-func Run(ctx context.Context, call Caller, imagesDir string, o Options, out, errOut io.Writer) int {
+func Run(ctx context.Context, call Caller, o Options, out, errOut io.Writer) int {
 	file := o.File
 	if file == "" {
 		file = DefaultFile
@@ -104,81 +104,11 @@ func Run(ctx context.Context, call Caller, imagesDir string, o Options, out, err
 	output, archive, yes, volumes, noStart, tail := o.Output, o.Archive, o.Yes, o.Volumes, o.NoStart, o.Tail
 	verb := o.Verb
 	verbArgs := o.Args
-	if verb == "archive" {
-		if output == "" {
-			fmt.Fprintln(errOut, "compose archive: --output is required")
-			return 2
-		}
-		archiveOut, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if err != nil {
-			fmt.Fprintf(errOut, "compose archive: %v\n", err)
-			return 1
-		}
-		if err := teamportable.CreateFromCompose(file, archiveOut); err != nil {
-			_ = archiveOut.Close()
-			_ = os.Remove(output)
-			fmt.Fprintf(errOut, "compose archive: %v\n", err)
-			return 1
-		}
-		if err := archiveOut.Close(); err != nil {
-			_ = os.Remove(output)
-			fmt.Fprintf(errOut, "compose archive: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(out, output)
-		return 0
-	}
-	if verb == "import" {
-		if archive == "" {
-			fmt.Fprintln(errOut, "compose import: --archive is required")
-			return 2
-		}
-		uploader, ok := call.(interface {
-			Upload(string, io.Reader, int64) (json.RawMessage, error)
-		})
-		if !ok {
-			fmt.Fprintln(errOut, "compose import: archive upload is not available")
-			return 2
-		}
-		in, err := os.Open(archive)
-		if err != nil {
-			fmt.Fprintf(errOut, "compose import: %v\n", err)
-			return 1
-		}
-		defer in.Close()
-		info, err := in.Stat()
-		if err != nil {
-			fmt.Fprintf(errOut, "compose import: %v\n", err)
-			return 1
-		}
-		preview, err := uploader.Upload("/api/team-imports", in, info.Size())
-		if err != nil {
-			fmt.Fprintf(errOut, "compose import: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(out, string(preview))
-		var planned struct {
-			ImportID string `json:"import_id"`
-		}
-		if err := json.Unmarshal(preview, &planned); err != nil || planned.ImportID == "" {
-			fmt.Fprintln(errOut, "compose import: preview did not return an import id")
-			return 1
-		}
-		if !yes {
-			fmt.Fprint(errOut, "Apply this import? [y/N] ")
-			var answer string
-			if _, err := fmt.Fscan(os.Stdin, &answer); err != nil || (answer != "y" && answer != "Y" && answer != "yes") {
-				fmt.Fprintln(errOut, "import not applied")
-				return 0
-			}
-		}
-		result, err := call.Call("POST", "/api/team-imports/"+planned.ImportID+"/apply", map[string]any{})
-		if err != nil {
-			fmt.Fprintf(errOut, "compose import: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(out, string(result))
-		return 0
+	switch verb {
+	case "archive":
+		return composeArchive(file, output, out, errOut)
+	case "import":
+		return composeImport(call, archive, yes, o.Stdin, out, errOut)
 	}
 
 	f, workdir, err := loadComposeFile(file)
@@ -190,7 +120,7 @@ func Run(ctx context.Context, call Caller, imagesDir string, o Options, out, err
 		fmt.Fprintf(errOut, "compose: %v\n", err)
 		return 1
 	}
-	r := NewRunner(call, imagesDir, workdir, out)
+	r := NewRunner(call, workdir, out)
 
 	// Auto-start the daemon before applying the file (default on). --no-start or
 	// TARIBOY_NO_AUTOSTART restores the plain "not running" error path below.

@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"path/filepath"
+	"os"
 
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/compose"
@@ -76,12 +76,12 @@ func composeLocal(verb string) registry.HandlerFunc {
 			Volumes: p.Bool("volumes"),
 			NoStart: p.Bool("no_start"),
 			Tail:    p.IntOr("tail", compose.DefaultTail),
+			Stdin:   os.Stdin,
 		}
 		for _, name := range []string{"member", "members", "prompt"} {
 			opts.Args = append(opts.Args, positionals(p.Params, name)...)
 		}
-		images := filepath.Join(c.BaseDir, "images")
-		if code := compose.Run(p.Ctx, client.New(c.Socket), images, opts, c.Out, c.ErrOut); code != 0 {
+		if code := compose.Run(p.Ctx, client.New(c.Socket), opts, c.Out, c.ErrOut); code != 0 {
 			return nil, registry.ExitCode(code)
 		}
 		return nil, nil

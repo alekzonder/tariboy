@@ -9,7 +9,7 @@ import (
 func TestExecTargetsNamedMember(t *testing.T) {
 	fc := newFake()
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Exec(f, []string{"scout", "do", "the", "thing"}); err != nil {
 		t.Fatal(err)
@@ -29,7 +29,7 @@ func TestLogsAllMembers(t *testing.T) {
 	}
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Logs(f, nil, 50); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestRmStoppedMember(t *testing.T) {
 	fc := newFake()
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "stopped", "group": "research-team"}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Rm(f, nil); err != nil {
 		t.Fatal(err)

@@ -92,6 +92,9 @@ type fakeCaller struct {
 	// filter/params triple), so a re-applied compose file creates no duplicate.
 	subs    map[string][]subRow
 	logsFor func(name string) json.RawMessage
+	// fail makes the named "METHOD route" call return its error, so a test
+	// can fail one action and watch the rest of the reconcile continue.
+	fail map[string]error
 }
 
 // subRow is a recorded subscription in the fake daemon: the channel plus the
@@ -113,6 +116,9 @@ func newFake() *fakeCaller {
 func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, error) {
 	f.calls = append(f.calls, method+" "+route)
 	f.bodies = append(f.bodies, body)
+	if err := f.fail[method+" "+route]; err != nil {
+		return nil, err
+	}
 	switch {
 	case method == "GET" && route == "/api/agents":
 		rows := []map[string]any{}
@@ -141,9 +147,32 @@ func (f *fakeCaller) Call(method, route string, body any) (json.RawMessage, erro
 		m := body.(map[string]any)
 		name := m["name"].(string)
 		// The daemon creates every agent stopped; compose starts it after.
+		harness, _ := m["harness"].(string)
+		if harness == "" {
+			harness = "claude" // the daemon's default harness
+		}
 		f.agents[name] = map[string]any{"name": name, "state": "stopped",
-			"group": m["group"], "image": m["image"], "cwd": m["cwd"], "enabled": false}
+			"group": m["group"], "image": m["image"], "cwd": m["cwd"], "enabled": false, "harness": harness}
 		return mustJSON(map[string]any{"name": name}), nil
+	case method == "POST" && strings.HasSuffix(route, "/harness"):
+		name := route[len("/api/agents/") : len(route)-len("/harness")]
+		if a := f.agents[name]; a != nil {
+			a["harness"] = body.(map[string]any)["value"]
+		}
+		return mustJSON(map[string]any{"name": name}), nil
+	case strings.HasPrefix(route, "/api/agents/") && strings.HasSuffix(route, "/image") && (method == "GET" || method == "POST"):
+		// The image is set as pending and adopted on the next iteration, so
+		// the live list view keeps the current image.
+		name := route[len("/api/agents/") : len(route)-len("/image")]
+		a := f.agents[name]
+		if a == nil {
+			return nil, fmt.Errorf("agent %s not found", name)
+		}
+		if method == "POST" {
+			a["pending_image"] = body.(map[string]any)["image"]
+		}
+		pending, _ := a["pending_image"].(string)
+		return mustJSON(map[string]any{"name": name, "pending": map[string]any{"ref": pending}}), nil
 	case method == "POST" && strings.HasSuffix(route, "/subscriptions"):
 		name := route[len("/api/agents/") : len(route)-len("/subscriptions")]
 		m := body.(map[string]any)
@@ -343,7 +372,7 @@ func taskQueueComposeFile() File {
 func TestReconcileTaskQueueIsIdempotentAndRebindsPoolDrift(t *testing.T) {
 	f := taskQueueComposeFile()
 	fc := newTaskQueueComposeCaller()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, f)
 	if got := fc.queues["DEV"].Name; got != "Development" {
 		t.Fatalf("queue name = %q", got)
@@ -374,7 +403,7 @@ func TestStatusReportsTaskQueueNameAndPoolDrift(t *testing.T) {
 	fc.queues["DEV"] = tasks.Queue{Prefix: "DEV", Name: "Old name", Revision: 1}
 	fc.pools["DEV"] = map[string]tasks.AgentPool{"developers": {Queue: "DEV", Name: "developers", Agents: []string{"other"}, Revision: 1}}
 	var out strings.Builder
-	r := NewRunner(fc, "", "", &out)
+	r := NewRunner(fc, "", &out)
 	if err := r.Status(f); err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +417,7 @@ func TestStatusReportsMissingTaskQueueWithoutFailing(t *testing.T) {
 	fc := newTaskQueueComposeCaller()
 	fc.agents["dev"] = map[string]any{"name": "dev", "state": "running", "image": "basic:latest"}
 	var out strings.Builder
-	r := NewRunner(fc, "", "", &out)
+	r := NewRunner(fc, "", &out)
 	if err := r.Status(f); err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -434,7 +463,7 @@ agents:
       interactive: true
 `
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(y))
 	upNoBuild(t, r, f)
 	body, ok := bodyFor(fc, "POST /api/agents").(map[string]any)
@@ -459,7 +488,7 @@ agents:
     image: img:latest
 `
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(y))
 	upNoBuild(t, r, f)
 	body, ok := bodyFor(fc, "POST /api/agents").(map[string]any)
@@ -474,7 +503,7 @@ func TestUpCreatesAndConvergesGoalSettings(t *testing.T) {
 		"worker": {Image: "basic:latest", Goal: &GoalSpec{Enabled: &off, WaitCustomerTimeout: "2m", DeliveryCooldown: "1m"}},
 	}}
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, f)
 	create := bodyFor(fc, "POST /api/agents").(map[string]any)
 	if create["goal_enabled"] != false || create["goal_wait_customer_timeout_s"] != 120 || create["goal_delivery_cooldown_s"] != 60 {
@@ -502,7 +531,7 @@ func TestUpOmittedGoalSettingsPreserveCurrentValues(t *testing.T) {
 		"name": "worker", "state": "running", "image": "basic:latest", "group": "", "cwd": "",
 		"goal_enabled": false, "goal_wait_customer_timeout_s": 17, "current_goal_task_key": "TARI-43",
 	}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, File{Version: 1, Agents: map[string]AgentSpec{"worker": {Image: "basic:latest"}}})
 	for _, call := range fc.calls {
 		if strings.Contains(call, "/goal-") {
@@ -516,7 +545,7 @@ func TestUpOmittedGoalSettingsPreserveCurrentValues(t *testing.T) {
 
 func TestUpCreatesAndIsIdempotent(t *testing.T) {
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	// Reference an already-built image so no local build is attempted.
 	upNoBuild(t, r, f)
@@ -549,13 +578,13 @@ func TestUpConvergesGroupLeadDrift(t *testing.T) {
 	fc := newFake()
 	// Pre-seed the group with a stale lead so only the lead needs converging.
 	fc.groups["research-team"] = map[string]any{"name": "research-team", "lead": "someone-else"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)
 	if n := countCalls(fc, "POST /api/groups"); n != 1 {
 		t.Fatalf("lead drift caused %d group POSTs, want exactly 1", n)
 	}
-	if got := fmt.Sprintf("%v", fc.groups["research-team"]["lead"]); got != "scout" {
+	if got := fmt.Sprint(fc.groups["research-team"]["lead"]); got != "scout" {
 		t.Fatalf("lead did not converge: lead=%q, want scout", got)
 	}
 }
@@ -565,7 +594,7 @@ func TestUpConvergesGroupLeadDrift(t *testing.T) {
 // reconciler must issue exactly one POST /api/budgets for that scope.
 func TestUpConvergesBudgetDrift(t *testing.T) {
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	// Converge once so all state exists.
 	upNoBuild(t, r, f)
@@ -583,7 +612,7 @@ func TestUpConvergesBudgetDrift(t *testing.T) {
 
 func TestUpAppliesBudgets(t *testing.T) {
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)
 	// group + per-agent budgets => 2 budget.set calls.
@@ -592,31 +621,31 @@ func TestUpAppliesBudgets(t *testing.T) {
 	}
 }
 
-// TestUpReportsDriftWithoutMutating pins the locked M8 decision: agent field
-// drift is GROUP-only. When an existing agent's group already matches desired
-// but a NON-group field (here model) drifts, the reconciler must NOT mutate it
-// (there is no agent.update in M8) — no create, no re-assign. Surfacing such
-// drift to the operator is the job of `compose status` via liveAgents, not Up.
+// TestUpReportsDriftWithoutMutating pins that a field compose has no converge
+// route for (here model, which agent.ps does not expose) is never mutated by
+// Up: an existing agent whose group, image and harness already match gets no
+// create and no re-assign. Image and harness drift converge (see plan_test.go).
 func TestUpReportsDriftWithoutMutating(t *testing.T) {
 	fc := newFake()
-	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team", "image": "analyst:latest", "model": "claude-sonnet"}
-	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team", "image": "analyst:latest"}
+	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team", "image": "analyst:latest", "harness": "claude", "model": "claude-sonnet"}
+	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team", "image": "analyst:latest", "harness": "claude"}
 	fc.groups["research-team"] = map[string]any{"name": "research-team", "lead": "scout"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)
 	if n := countCalls(fc, "POST /api/agents"); n != 0 {
-		t.Fatalf("drift caused %d agent creates, want 0 (no agent.update in M8)", n)
+		t.Fatalf("drift caused %d agent creates, want 0", n)
+	}
+	if n := countCalls(fc, "POST /api/agents/scout/harness"); n != 0 {
+		t.Fatalf("converged harness was set again: %v", fc.calls)
 	}
 	if n := countCalls(fc, "POST /api/groups/research-team/assign"); n != 0 {
 		t.Fatalf("group already converged but reconciler issued %d assign calls", n)
 	}
-	if got := fmt.Sprintf("%v", fc.agents["scout"]["model"]); got != "claude-sonnet" {
+	if got := fmt.Sprint(fc.agents["scout"]["model"]); got != "claude-sonnet" {
 		t.Fatalf("reconciler mutated a non-group field: model=%q", got)
 	}
 }
-
-var _ = fmt.Sprintf
 
 // TestUpAppliesAndConvergesCwd covers the three cwd paths: create sends the
 // resolved cwd; an existing agent whose live cwd drifts gets a converge POST;
@@ -629,29 +658,29 @@ func TestUpAppliesAndConvergesCwd(t *testing.T) {
 
 	// create: body carries the resolved cwd (= compose dir).
 	fc := newFake()
-	r := NewRunner(fc, "", dir, io.Discard)
+	r := NewRunner(fc, dir, io.Discard)
 	upNoBuild(t, r, f)
 	body, _ := bodyFor(fc, "POST /api/agents").(map[string]any)
-	if body == nil || fmt.Sprintf("%v", body["cwd"]) != dir {
+	if body == nil || fmt.Sprint(body["cwd"]) != dir {
 		t.Fatalf("create body cwd = %v, want %s", body, dir)
 	}
 
 	// converge: existing agent with drifting cwd -> exactly one POST .../cwd.
 	fc2 := newFake()
 	fc2.agents["a"] = map[string]any{"name": "a", "image": "img:latest", "cwd": "/old"}
-	r2 := NewRunner(fc2, "", dir, io.Discard)
+	r2 := NewRunner(fc2, dir, io.Discard)
 	upNoBuild(t, r2, f)
 	if n := countCalls(fc2, "POST /api/agents/a/cwd"); n != 1 {
 		t.Fatalf("cwd convergence POSTs = %d, want 1", n)
 	}
-	if got := fmt.Sprintf("%v", fc2.agents["a"]["cwd"]); got != dir {
+	if got := fmt.Sprint(fc2.agents["a"]["cwd"]); got != dir {
 		t.Fatalf("cwd did not converge: %q want %s", got, dir)
 	}
 
 	// converged: no cwd call when live already matches.
 	fc3 := newFake()
 	fc3.agents["a"] = map[string]any{"name": "a", "image": "img:latest", "cwd": dir}
-	r3 := NewRunner(fc3, "", dir, io.Discard)
+	r3 := NewRunner(fc3, dir, io.Discard)
 	upNoBuild(t, r3, f)
 	if n := countCalls(fc3, "POST /api/agents/a/cwd"); n != 0 {
 		t.Fatalf("converged cwd caused %d POSTs, want 0", n)
@@ -669,29 +698,29 @@ func TestUpAppliesAndConvergesTimeout(t *testing.T) {
 
 	// create: a fresh agent gets the parsed seconds (60m = 3600s).
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, f)
 	body, _ := bodyFor(fc, "POST /api/agents/a/loop/timeout").(map[string]any)
-	if body == nil || fmt.Sprintf("%v", body["value"]) != "3600" {
+	if body == nil || fmt.Sprint(body["value"]) != "3600" {
 		t.Fatalf("create timeout value = %v, want 3600", body)
 	}
 
 	// converge: existing agent with drifting timeout_s -> exactly one POST.
 	fc2 := newFake()
 	fc2.agents["a"] = map[string]any{"name": "a", "image": "img:latest", "timeout_s": float64(10)}
-	r2 := NewRunner(fc2, "", "", io.Discard)
+	r2 := NewRunner(fc2, "", io.Discard)
 	upNoBuild(t, r2, f)
 	if n := countCalls(fc2, "POST /api/agents/a/loop/timeout"); n != 1 {
 		t.Fatalf("timeout convergence POSTs = %d, want 1", n)
 	}
-	if got := fmt.Sprintf("%v", fc2.agents["a"]["timeout_s"]); got != "3600" {
+	if got := fmt.Sprint(fc2.agents["a"]["timeout_s"]); got != "3600" {
 		t.Fatalf("timeout did not converge: %q want 3600", got)
 	}
 
 	// converged: no timeout call when live already matches.
 	fc3 := newFake()
 	fc3.agents["a"] = map[string]any{"name": "a", "image": "img:latest", "timeout_s": float64(3600)}
-	r3 := NewRunner(fc3, "", "", io.Discard)
+	r3 := NewRunner(fc3, "", io.Discard)
 	upNoBuild(t, r3, f)
 	if n := countCalls(fc3, "POST /api/agents/a/loop/timeout"); n != 0 {
 		t.Fatalf("converged timeout caused %d POSTs, want 0", n)
@@ -700,7 +729,7 @@ func TestUpAppliesAndConvergesTimeout(t *testing.T) {
 	// omitted: an agent without timeout makes no timeout call.
 	fOmit := File{Version: 1, Agents: map[string]AgentSpec{"b": {Image: "img:latest"}}}
 	fc4 := newFake()
-	r4 := NewRunner(fc4, "", "", io.Discard)
+	r4 := NewRunner(fc4, "", io.Discard)
 	upNoBuild(t, r4, fOmit)
 	if n := countCalls(fc4, "POST /api/agents/b/loop/timeout"); n != 0 {
 		t.Fatalf("omitted timeout caused %d POSTs, want 0", n)
@@ -717,22 +746,22 @@ func TestUpDefaultsCwdToComposeDir(t *testing.T) {
 
 	// create: body carries the default cwd (= compose dir).
 	fc := newFake()
-	r := NewRunner(fc, "", dir, io.Discard)
+	r := NewRunner(fc, dir, io.Discard)
 	upNoBuild(t, r, f)
 	body, _ := bodyFor(fc, "POST /api/agents").(map[string]any)
-	if body == nil || fmt.Sprintf("%v", body["cwd"]) != dir {
+	if body == nil || fmt.Sprint(body["cwd"]) != dir {
 		t.Fatalf("create body cwd = %v, want %s", body, dir)
 	}
 
 	// converge: existing agent whose live cwd differs gets a converge POST.
 	fc2 := newFake()
 	fc2.agents["a"] = map[string]any{"name": "a", "image": "img:latest", "cwd": "/old"}
-	r2 := NewRunner(fc2, "", dir, io.Discard)
+	r2 := NewRunner(fc2, dir, io.Discard)
 	upNoBuild(t, r2, f)
 	if n := countCalls(fc2, "POST /api/agents/a/cwd"); n != 1 {
 		t.Fatalf("default-cwd convergence POSTs = %d, want 1", n)
 	}
-	if got := fmt.Sprintf("%v", fc2.agents["a"]["cwd"]); got != dir {
+	if got := fmt.Sprint(fc2.agents["a"]["cwd"]); got != dir {
 		t.Fatalf("cwd did not converge to compose dir: %q want %s", got, dir)
 	}
 }
@@ -746,7 +775,7 @@ func TestUpConvergesLoopOnCreate(t *testing.T) {
 	if err := r.Up(f); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/interval").(map[string]any); b == nil || fmt.Sprintf("%v", b["value"]) != "300" {
+	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/interval").(map[string]any); b == nil || fmt.Sprint(b["value"]) != "300" {
 		t.Errorf("interval not set to 300: %v", b)
 	}
 	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/on-timeout").(map[string]any); b == nil || b["value"] != "restart" {
@@ -755,7 +784,7 @@ func TestUpConvergesLoopOnCreate(t *testing.T) {
 	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/on-error").(map[string]any); b == nil || b["value"] != "stop" {
 		t.Errorf("on-error not set to stop: %v", b)
 	}
-	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/timeout").(map[string]any); b == nil || fmt.Sprintf("%v", b["value"]) != "3600" {
+	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/timeout").(map[string]any); b == nil || fmt.Sprint(b["value"]) != "3600" {
 		t.Errorf("timeout not set to 3600 (loop.timeout wins): %v", b)
 	}
 }
@@ -907,12 +936,12 @@ func TestUpConvergesMaxIdle(t *testing.T) {
 	f := File{Version: 1, Agents: map[string]AgentSpec{
 		"a": {Image: "i:latest", Loop: &LoopSpec{MaxIdleIterations: &three}},
 	}}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, f)
-	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/max-idle").(map[string]any); b == nil || fmt.Sprintf("%v", b["value"]) != "3" {
+	if b, _ := bodyFor(fc, "POST /api/agents/a/loop/max-idle").(map[string]any); b == nil || fmt.Sprint(b["value"]) != "3" {
 		t.Errorf("max-idle not set to 3: %v", b)
 	}
-	if got := fmt.Sprintf("%v", fc.agents["a"]["max_idle_iterations"]); got != "3" {
+	if got := fmt.Sprint(fc.agents["a"]["max_idle_iterations"]); got != "3" {
 		t.Errorf("agent max_idle_iterations did not converge to 3: %q", got)
 	}
 }
@@ -924,7 +953,7 @@ func TestUpOmittedMaxIdleMakesNoCall(t *testing.T) {
 	f := File{Version: 1, Agents: map[string]AgentSpec{
 		"a": {Image: "i:latest", Loop: &LoopSpec{Interval: "5m"}},
 	}}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, f)
 	if n := countCalls(fc, "POST /api/agents/a/loop/max-idle"); n != 0 {
 		t.Errorf("omitted max-idle caused %d POSTs, want 0", n)
@@ -943,19 +972,19 @@ func TestUpReconvergesMaxIdleDrift(t *testing.T) {
 	// drift: live value 1 != want 5 -> one converge POST, value re-converged.
 	fc := newFake()
 	fc.agents["a"] = map[string]any{"name": "a", "image": "i:latest", "max_idle_iterations": float64(1)}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, f)
 	if n := countCalls(fc, "POST /api/agents/a/loop/max-idle"); n != 1 {
 		t.Fatalf("max-idle drift POSTs = %d, want 1", n)
 	}
-	if got := fmt.Sprintf("%v", fc.agents["a"]["max_idle_iterations"]); got != "5" {
+	if got := fmt.Sprint(fc.agents["a"]["max_idle_iterations"]); got != "5" {
 		t.Fatalf("max_idle_iterations did not re-converge to 5: %q", got)
 	}
 
 	// converged: live already matches -> no POST.
 	fc2 := newFake()
 	fc2.agents["a"] = map[string]any{"name": "a", "image": "i:latest", "max_idle_iterations": float64(5)}
-	r2 := NewRunner(fc2, "", "", io.Discard)
+	r2 := NewRunner(fc2, "", io.Discard)
 	upNoBuild(t, r2, f)
 	if n := countCalls(fc2, "POST /api/agents/a/loop/max-idle"); n != 0 {
 		t.Errorf("converged max-idle caused %d POSTs, want 0", n)
@@ -973,7 +1002,7 @@ func TestStatusReportsMaxIdleDrift(t *testing.T) {
 		"a": {Image: "i:latest", Loop: &LoopSpec{MaxIdleIterations: &three}},
 	}}
 	var buf strings.Builder
-	r := NewRunner(fc, "", "", &buf)
+	r := NewRunner(fc, "", &buf)
 	if err := r.Status(f); err != nil {
 		t.Fatal(err)
 	}
@@ -1067,7 +1096,7 @@ agents:
           query: "Q1"
 `
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(y))
 	upNoBuild(t, r, f)
 
@@ -1132,7 +1161,7 @@ agents:
           query: "Q1"
 `
 	fc := newFake()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(y))
 	upNoBuild(t, r, f)
 	upNoBuild(t, r, f)

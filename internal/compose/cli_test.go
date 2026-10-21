@@ -43,7 +43,7 @@ func TestComposeArchiveWritesPortableTeamArchive(t *testing.T) {
 	}
 	output := filepath.Join(dir, "dev.tar.gz")
 	var stderr bytes.Buffer
-	if code := Run(context.Background(), newFake(), "", Options{Verb: "archive", File: composePath, Output: output}, io.Discard, &stderr); code != 0 {
+	if code := Run(context.Background(), newFake(), Options{Verb: "archive", File: composePath, Output: output}, io.Discard, &stderr); code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 	if info, err := os.Stat(output); err != nil || info.Size() == 0 {
@@ -58,7 +58,7 @@ func TestComposeImportYesUploadsThenAppliesPreview(t *testing.T) {
 	}
 	caller := &archiveImportCaller{fakeCaller: newFake()}
 	var stderr bytes.Buffer
-	if code := Run(context.Background(), caller, "", Options{Verb: "import", Archive: archivePath, Yes: true}, io.Discard, &stderr); code != 0 {
+	if code := Run(context.Background(), caller, Options{Verb: "import", Archive: archivePath, Yes: true}, io.Discard, &stderr); code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 	if string(caller.uploaded) != "archive" {
@@ -88,7 +88,7 @@ agents:
 	fc.pools["DEV"] = map[string]tasks.AgentPool{"developers": {Queue: "DEV", Name: "developers", Agents: []string{"other"}, Revision: 1}}
 	var out strings.Builder
 	var errOut strings.Builder
-	if code := Run(context.Background(), fc, "", Options{Verb: "status", File: composePath}, &out, &errOut); code != 0 {
+	if code := Run(context.Background(), fc, Options{Verb: "status", File: composePath}, &out, &errOut); code != 0 {
 		t.Fatalf("Run code=%d stderr=%s", code, errOut.String())
 	}
 	if got := out.String(); !strings.Contains(got, "pool developers drift") {
@@ -111,7 +111,7 @@ agents:
 			}
 			fc := newFake()
 			var errOut strings.Builder
-			if code := Run(context.Background(), fc, "", Options{Verb: verb, File: path}, io.Discard, &errOut); code == 0 || !strings.Contains(errOut.String(), "workflows") {
+			if code := Run(context.Background(), fc, Options{Verb: verb, File: path}, io.Discard, &errOut); code == 0 || !strings.Contains(errOut.String(), "workflows") {
 				t.Fatalf("%s code=%d stderr=%s; want a failure naming workflows", verb, code, errOut.String())
 			}
 			if len(fc.calls) != 0 {
@@ -126,7 +126,7 @@ func TestDownRemovesAgentsAndGroups(t *testing.T) {
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
 	fc.groups["research-team"] = map[string]any{"name": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Down(f, true); err != nil {
 		t.Fatal(err)
@@ -162,7 +162,7 @@ func TestDownWithoutVolumesKeepsData(t *testing.T) {
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
 	fc.groups["research-team"] = map[string]any{"name": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Down(f, false); err != nil {
 		t.Fatal(err)
@@ -207,7 +207,7 @@ func TestComposeUpAutostartsDaemon(t *testing.T) {
 	fc := newFake()
 	// The empty fake makes r.Up fail afterward; the assertion under test is that
 	// the auto-start seam ran (once) before the file was applied.
-	_ = Run(context.Background(), fc, t.TempDir(), Options{Verb: "up", File: path}, io.Discard, io.Discard)
+	_ = Run(context.Background(), fc, Options{Verb: "up", File: path}, io.Discard, io.Discard)
 	if called != 1 {
 		t.Fatalf("EnsureUp called %d times, want 1", called)
 	}
@@ -221,7 +221,7 @@ func TestComposeUpNoStartSkipsAutostart(t *testing.T) {
 
 	path := writeComposeFile(t, t.TempDir())
 	fc := newFake()
-	_ = Run(context.Background(), fc, t.TempDir(), Options{Verb: "up", NoStart: true, File: path}, io.Discard, io.Discard)
+	_ = Run(context.Background(), fc, Options{Verb: "up", NoStart: true, File: path}, io.Discard, io.Discard)
 	if called != 0 {
 		t.Fatalf("EnsureUp called %d times with --no-start, want 0", called)
 	}
@@ -238,7 +238,7 @@ func TestUpReprovisionsStoppedAgent(t *testing.T) {
 		"group": "research-team", "image": "analyst:latest", "enabled": false}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "stopped",
 		"group": "research-team", "image": "analyst:latest", "enabled": false}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)
 
@@ -273,7 +273,7 @@ func TestUpDoesNotReprovisionRunningAgent(t *testing.T) {
 		"group": "research-team", "image": "analyst:latest", "enabled": true}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running",
 		"group": "research-team", "image": "analyst:latest", "enabled": true}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	upNoBuild(t, r, f)
 
