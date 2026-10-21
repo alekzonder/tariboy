@@ -40,8 +40,9 @@ func imagePluginResolver(c *registry.Ctx, pluginsDir string) plugincaps.External
 
 func imageBuild() registry.Command {
 	return registry.Command{
-		Path:    "image.build",
-		Summary: "Build an agent image from a Tariboyfile.yaml",
+		Path:        "image.build",
+		AbsPathArgs: []string{"path"},
+		Summary:     "Build an agent image from a Tariboyfile.yaml",
 		Args: []registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/image)"},
 			{Name: "name", Flag: "name", Type: registry.String, Help: "target image name"},
@@ -329,6 +330,8 @@ func canonicalSourceDir(input string) (string, error) {
 func imageValidate() registry.Command {
 	return registry.Command{
 		Path: "image.validate", Summary: "Validate an image source directory",
+		AbsPathArgs:  []string{"path"},
+		ExitCodeFrom: invalidExitCode,
 		Args: []registry.Arg{
 			{Name: "name", Flag: "name", Type: registry.String, Required: true, Help: "target image name"},
 			{Name: "tag", Flag: "tag", Type: registry.String, Default: "latest", Help: "target image tag"},

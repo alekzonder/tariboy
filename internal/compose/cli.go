@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/alekzonder/tariboy/internal/client"
 	"github.com/alekzonder/tariboy/internal/daemonctl"
@@ -50,47 +51,59 @@ func loadComposeFile(path string) (File, string, error) {
 	return f, dir, nil
 }
 
-// Main is the `tariboy compose ...` entrypoint. It parses the verb + flags,
-// loads the file, and drives the Runner. Returns a process exit code.
-func Main(ctx context.Context, call Caller, imagesDir string, args []string, out, errOut io.Writer) int {
-	file := "tariboy-compose.yaml"
-	output := ""
-	archive := ""
-	yes := false
-	volumes := false
-	noStart := false
-	tail := 200
-	var rest []string
+// DefaultFile is the compose file a verb reads when -f is not given.
+const DefaultFile = "tariboy-compose.yaml"
+
+// DefaultTail is how many events `compose logs` asks for per member.
+const DefaultTail = 200
+
+// Options are the parsed arguments of one `tariboy compose VERB` call.
+type Options struct {
+	Verb string
+	// File is the compose file; empty means DefaultFile.
+	File string
+	// Args are the verb's positionals: the member or group names of a
+	// lifecycle verb, rm and logs, or the member and prompt words of exec.
+	Args    []string
+	Output  string // archive: the archive file to create
+	Archive string // import: the archive file to upload
+	Yes     bool   // import: apply without asking
+	Volumes bool   // down: also delete agent data and group shared dirs
+	NoStart bool   // up: do not start the daemon
+	Tail    int    // logs: events per member
+}
+
+// Verbs lists every compose verb in the order its usage names them.
+var Verbs = []string{"up", "down", "start", "stop", "restart", "kill", "exec", "ps", "status", "logs", "build", "rm", "archive", "import"}
+
+// VerbFirst moves the verb in front of the flags that precede it, so
+// `compose -f FILE up` resolves like `compose up -f FILE`. args follow
+// "compose"; a value after -f, --file, --output, --archive or --tail is not
+// the verb.
+func VerbFirst(args []string) []string {
 	for i := 0; i < len(args); i++ {
-		switch {
-		case (args[i] == "-f" || args[i] == "--file") && i+1 < len(args):
+		switch a := args[i]; {
+		case a == "-f" || a == "--file" || a == "--output" || a == "--archive" || a == "--tail":
 			i++
-			file = args[i]
-		case args[i] == "--output" && i+1 < len(args):
-			i++
-			output = args[i]
-		case args[i] == "--archive" && i+1 < len(args):
-			i++
-			archive = args[i]
-		case args[i] == "--yes":
-			yes = true
-		case args[i] == "--volumes" || args[i] == "-v":
-			volumes = true
-		case args[i] == "--no-start":
-			noStart = true
-		case args[i] == "--tail" && i+1 < len(args):
-			i++
-			fmt.Sscanf(args[i], "%d", &tail)
+		case strings.HasPrefix(a, "-"):
 		default:
-			rest = append(rest, args[i])
+			out := append([]string{a}, args[:i]...)
+			return append(out, args[i+1:]...)
 		}
 	}
-	if len(rest) == 0 {
-		fmt.Fprintln(errOut, "usage: tariboy compose <up|down|start|stop|restart|kill|exec|ps|status|logs|build|rm|archive|import> [-f file] [flags]")
-		return 2
+	return args
+}
+
+// Run executes one compose verb: it loads the file and drives the Runner, or
+// writes or imports a team archive. It returns a process exit code.
+func Run(ctx context.Context, call Caller, imagesDir string, o Options, out, errOut io.Writer) int {
+	file := o.File
+	if file == "" {
+		file = DefaultFile
 	}
-	verb := rest[0]
-	verbArgs := rest[1:]
+	output, archive, yes, volumes, noStart, tail := o.Output, o.Archive, o.Yes, o.Volumes, o.NoStart, o.Tail
+	verb := o.Verb
+	verbArgs := o.Args
 	if verb == "archive" {
 		if output == "" {
 			fmt.Fprintln(errOut, "compose archive: --output is required")

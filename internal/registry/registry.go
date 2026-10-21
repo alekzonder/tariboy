@@ -5,6 +5,7 @@ package registry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -43,7 +44,10 @@ type Arg struct {
 	Default    any
 	Required   bool
 	Repeatable bool
-	Help       string
+	// Rest takes every remaining positional as a []string. A Rest arg is a
+	// Repeatable string; args declared after it are filled only by their flag.
+	Rest bool
+	Help string
 	// Schema optionally supplies the OpenAPI JSON schema for HTTP-only object or
 	// array inputs that do not have a CLI scalar representation.
 	Schema map[string]any
@@ -78,6 +82,11 @@ type Ctx struct {
 	// WorkflowImages is the workflow image store; the prompt preview reads
 	// status instructions from it.
 	WorkflowImages *workflowimage.Store
+	// Out and ErrOut are the CLI's output streams, and JSON reports the global
+	// --json flag. The CLI sets them for a Local handler, which prints its own
+	// output.
+	Out, ErrOut io.Writer
+	JSON        bool
 }
 
 // FollowQueueWorkflows moves the queue bindings that follow a tag of the
@@ -293,6 +302,12 @@ type GroupControl interface {
 
 type HandlerFunc func(c *Ctx, p Request) (any, error)
 
+// ExitCode is the error a Local handler returns after it has reported its own
+// failure: the CLI prints nothing more and exits with this code.
+type ExitCode int
+
+func (e ExitCode) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
+
 // FollowFunc is a CLI-local streaming/polling composite. cli.Run invokes it —
 // with the daemon socket path — when a command's follow flag is set, instead of
 // the normal remote/local dispatch. It prints to out and returns when ctx is
@@ -313,6 +328,19 @@ type Command struct {
 	Schemas map[string]map[string]any
 	HTTP    *HTTPRoute
 	Handler HandlerFunc
+	// Local runs in the CLI process instead of the HTTP call; Handler and HTTP
+	// still serve the API. It prints its own output to Ctx.Out, and its result
+	// only feeds ExitCodeFrom. A command with only Local has no route and the
+	// daemon never runs it. Used for verbs that must work while the daemon is
+	// down: daemon start/stop/status, update and compose.
+	Local HandlerFunc
+	// AbsPathArgs names string args the CLI makes absolute against its own
+	// working directory before it sends them, because the daemon resolves
+	// paths against another one.
+	AbsPathArgs []string
+	// ExitCodeFrom derives the CLI exit code from a successful result, for a
+	// command that reports failure in its result rather than as an error.
+	ExitCodeFrom func(result json.RawMessage) int
 	// FollowFlag names a Bool arg that switches this (otherwise remote) command
 	// into follow mode; when that arg is true, cli.Run runs Follow (a CLI-local
 	// composite over Ctx.Socket) instead of the HTTP dispatch. Used by
@@ -348,8 +376,11 @@ func (r *Registry) Register(c Command) error {
 	if c.Summary == "" {
 		return fmt.Errorf("command %s: summary required", c.Path)
 	}
-	if c.Handler == nil {
+	if c.Handler == nil && c.Local == nil {
 		return fmt.Errorf("command %s: handler required", c.Path)
+	}
+	if c.Handler == nil && c.HTTP != nil {
+		return fmt.Errorf("command %s: an HTTP route needs a handler", c.Path)
 	}
 	if _, dup := r.byPath[c.Path]; dup {
 		return fmt.Errorf("duplicate command path %s", c.Path)
@@ -475,10 +506,14 @@ func (r *Registry) Tree() map[string]any {
 		}
 		args := []map[string]any{}
 		for _, a := range c.Args {
-			args = append(args, map[string]any{
+			arg := map[string]any{
 				"name": a.Name, "flag": a.Flag, "short": a.Short, "type": string(a.Type),
 				"required": a.Required, "repeatable": a.Repeatable, "default": a.Default, "help": a.Help,
-			})
+			}
+			if a.Rest {
+				arg["rest"] = true
+			}
+			args = append(args, arg)
 		}
 		leaf["args"] = args
 		node[parts[len(parts)-1]] = leaf

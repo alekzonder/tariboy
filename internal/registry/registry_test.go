@@ -190,3 +190,33 @@ func mustCmd(t *testing.T, r *Registry, path, summary string) {
 		t.Fatalf("Register(%s): %v", path, err)
 	}
 }
+
+func TestRegisterAcceptsLocalOnlyCommand(t *testing.T) {
+	r := New()
+	local := func(c *Ctx, p Request) (any, error) { return "local", nil }
+	if err := r.Register(Command{Path: "x", Summary: "s", Local: local}); err != nil {
+		t.Fatalf("local-only command rejected: %v", err)
+	}
+	if err := r.Register(Command{Path: "y", Summary: "s", Local: local, HTTP: &HTTPRoute{Method: "GET", Path: "/api/y"}}); err == nil {
+		t.Fatal("HTTP route without a Handler accepted")
+	}
+}
+
+func TestCallLocalRunsLocalAndCallSkipsIt(t *testing.T) {
+	c := Command{
+		Path: "x", Summary: "s",
+		Args:    []Arg{{Name: "n", Type: Int}},
+		Handler: func(c *Ctx, p Request) (any, error) { return "daemon", nil },
+		Local:   func(c *Ctx, p Request) (any, error) { return p.Int("n"), nil },
+	}
+	if got, err := CallLocal(&Ctx{}, nil, c, map[string]any{"n": "3"}); err != nil || got != 3 {
+		t.Fatalf("CallLocal = %v, %v", got, err)
+	}
+	if got, err := Call(&Ctx{}, nil, c, nil); err != nil || got != "daemon" {
+		t.Fatalf("Call = %v, %v", got, err)
+	}
+	c.Handler = nil
+	if _, err := Call(&Ctx{}, nil, c, nil); err == nil {
+		t.Fatal("Call ran a local-only command")
+	}
+}

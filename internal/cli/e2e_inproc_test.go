@@ -212,8 +212,8 @@ func TestCLITalksToDaemon(t *testing.T) {
 	c := client.New(sock)
 	waitReady(t, ready, done)
 
-	// daemon.status is CLIHidden (served by the CLI-local dispatchDaemon, not
-	// cli.Run); use a reachable registry GET to prove cli.Run reaches the socket.
+	// daemon status answers locally from the socket in TARIBOY_RUNTIME_DIR, not
+	// through this caller; use a registry GET to prove cli.Run reaches the socket.
 	var out, errOut bytes.Buffer
 	code := cli.Run(context.Background(), commands.BuildRegistry(), []string{"agent", "ps"}, c, nil, &out, &errOut)
 	if code != 0 {

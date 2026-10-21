@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,18 +21,27 @@ import (
 )
 
 func main() {
-	args := os.Args[1:]
+	// Ctrl-C / SIGTERM cancels follow-mode composites (logs -f, channel tail -f)
+	// and local verbs (daemon logs -f, compose) so they exit cleanly instead of
+	// being hard-killed mid-print.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
+}
+
+func run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	if len(args) == 1 && args[0] == "version" {
-		fmt.Println(version.Version)
-		return
+		fmt.Fprintln(out, version.Version)
+		return 0
 	}
 	sock := ""
 	rest := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--version":
-			fmt.Println(version.Version)
-			return
+			fmt.Fprintln(out, version.Version)
+			return 0
 		case args[i] == "--socket" && i+1 < len(args):
 			i++
 			sock = args[i]
@@ -40,58 +51,48 @@ func main() {
 	}
 	p, err := paths.Resolve(os.Getenv)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "tariboy:", err)
-		os.Exit(2)
+		fmt.Fprintln(errOut, "tariboy:", err)
+		return 2
 	}
 	if sock == "" {
 		sock = p.Socket()
 	}
+	// compose has always accepted its flags before the verb
+	// (`compose -f FILE up`); the registry resolves the verb first.
 	if len(rest) > 0 && rest[0] == "compose" {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		code := compose.Main(ctx, client.New(sock), p.ImagesDir(), rest[1:], os.Stdout, os.Stderr)
-		stop()
-		os.Exit(code)
-	}
-	// `update` replaces the daemon and CLI binaries themselves, so it is
-	// CLI-local too and must work while the daemon is down.
-	if len(rest) > 0 && rest[0] == "update" {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		handled, code := dispatchUpdate(ctx, rest, os.Getenv, os.Stdout, os.Stderr)
-		stop()
-		if handled {
-			os.Exit(code)
-		}
-	}
-	// Daemon lifecycle verbs (up/down/status/logs) are CLI-local: they spawn or
-	// signal the daemon and tail its log file, so they must not route over the
-	// socket (the daemon may be down). Other daemon.* verbs (config, reindex)
-	// fall through to the registry.
-	if len(rest) > 0 && rest[0] == "daemon" {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		if handled, code := dispatchDaemon(ctx, rest, os.Getenv, os.Stdout, os.Stderr); handled {
-			stop()
-			os.Exit(code)
-		}
-		stop()
+		rest = append([]string{"compose"}, compose.VerbFirst(rest[1:])...)
 	}
 	local := &registry.Ctx{
-		Log:       slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
+		Log:       slog.New(slog.NewTextHandler(errOut, &slog.HandlerOptions{Level: slog.LevelWarn})),
 		BaseDir:   p.Base,
 		Socket:    sock,
 		Version:   version.Version,
 		StartedAt: time.Now(),
 		// Store stays nil: CLI-local commands touch the filesystem, not the DB.
 	}
-	// Ctrl-C / SIGTERM cancels follow-mode composites (logs -f, channel tail -f)
-	// so they exit cleanly instead of being hard-killed mid-print.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	reg := commands.BuildRegistry()
 	caller := client.New(sock)
 	// Plugin discovery is best-effort so core help and local commands still work
 	// while the daemon is down. A contributed command itself necessarily needs
-	// the daemon that supplied its schema.
-	_ = cli.LoadPluginCommands(reg, caller, os.Stdin)
-	code := cli.Run(ctx, reg, rest, caller, local, os.Stdout, os.Stderr)
-	stop()
-	os.Exit(code)
+	// the daemon that supplied its schema. A core command skips it: plugins
+	// cannot claim a core name, and `daemon stop` must not wait on a wedged
+	// daemon.
+	if !isCoreCommand(reg, rest) {
+		_ = cli.LoadPluginCommands(reg, caller, os.Stdin)
+	}
+	return cli.Run(ctx, reg, rest, caller, local, out, errOut)
+}
+
+// isCoreCommand reports whether argv's first word names a core group or
+// command.
+func isCoreCommand(reg *registry.Registry, argv []string) bool {
+	for _, a := range argv {
+		if strings.HasPrefix(a, "-") || a == "help" {
+			continue
+		}
+		_, group := reg.Group(a)
+		_, command := reg.Get(a)
+		return group || command
+	}
+	return false
 }

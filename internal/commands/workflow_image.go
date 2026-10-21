@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -87,10 +88,27 @@ func parseWorkflowSource(path string) (*workflowfile.File, error) {
 	return f, nil
 }
 
+// invalidExitCode is 1 when a validate result says the source is invalid. The
+// route returns validation errors in its result, not as an HTTP error, so
+// without it a script could not gate on `image validate` or `workflow
+// validate`. Other commands with a `valid` field, such as `image source
+// validate`, keep exit 0.
+func invalidExitCode(raw json.RawMessage) int {
+	var result struct {
+		Valid *bool `json:"valid"`
+	}
+	if json.Unmarshal(raw, &result) == nil && result.Valid != nil && !*result.Valid {
+		return 1
+	}
+	return 0
+}
+
 func workflowValidate() registry.Command {
 	return registry.Command{
-		Path:    "workflow.validate",
-		Summary: "Validate a workflow source directory without building it",
+		Path:         "workflow.validate",
+		AbsPathArgs:  []string{"path"},
+		ExitCodeFrom: invalidExitCode,
+		Summary:      "Validate a workflow source directory without building it",
 		Args: []registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/workflow)"},
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Workflowfile.yaml or its directory"},
@@ -133,8 +151,9 @@ func nonNil(s []string) []string {
 
 func workflowBuild() registry.Command {
 	return registry.Command{
-		Path:    "workflow.build",
-		Summary: "Build a workflow image from a Workflowfile.yaml",
+		Path:        "workflow.build",
+		AbsPathArgs: []string{"path"},
+		Summary:     "Build a workflow image from a Workflowfile.yaml",
 		Args: []registry.Arg{
 			{Name: "source", Type: registry.String, Help: "Store selector (store/workflow)"},
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Workflowfile.yaml or its directory"},
