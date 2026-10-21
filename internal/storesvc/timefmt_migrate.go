@@ -6,8 +6,6 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
-const canonicalTimestampsMigration = "0002_canonical_timestamps.sql"
-
 // timeColumns lists every column of the Store-service database that holds a
 // time in store.TimeLayout.
 var timeColumns = []struct{ table, column string }{

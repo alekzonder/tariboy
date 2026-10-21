@@ -1,3 +1,4 @@
+-- tariboy: foreign_keys=off
 -- Agent Goals add per-agent selection state and task release fields. Rebuild
 -- tasks because SQLite cannot alter its status CHECK constraint in place.
 PRAGMA defer_foreign_keys = ON;

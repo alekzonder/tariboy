@@ -1,3 +1,4 @@
+-- tariboy: foreign_keys=off
 -- Rebuild tasks because SQLite cannot alter the legacy
 -- UNIQUE(queue_prefix, parent_id, position) constraint in place. Positions are
 -- now local to a priority bucket.

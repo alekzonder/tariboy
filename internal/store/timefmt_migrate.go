@@ -7,6 +7,8 @@ import (
 	"sort"
 )
 
+// canonicalTimestampsMigration runs canonicalizeTimestamps through its
+// "-- tariboy: step=canonical_timestamps" header.
 const canonicalTimestampsMigration = "0067_canonical_timestamps.sql"
 
 // Earlier migrations created these defaults with millisecond precision.

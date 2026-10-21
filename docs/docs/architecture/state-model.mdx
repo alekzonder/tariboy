@@ -63,6 +63,23 @@ digits. Examples are the Usage request `ts` and the task usage
 `first_ts`/`last_ts`, which earlier had three digits or a variable number.
 These are valid RFC 3339 values.
 
+## Schema migrations
+
+The daemon database and the Store service database use one migration runner,
+`internal/migrate`. It applies each `*.sql` file once, in name order, in its
+own transaction, and records the file name in `schema_migrations`. A file
+sets flags with header lines at its very top:
+
+- `-- tariboy: foreign_keys=off` turns off foreign key enforcement for the
+  migration, for example to rebuild a referenced table. The runner checks
+  `pragma_foreign_key_check` before commit and rolls back on a violation.
+- `-- tariboy: skip_if_column=TABLE.COLUMN` skips the body when the column
+  exists and still records the file as applied.
+- `-- tariboy: step=NAME` runs the named Go step after the body, in the same
+  transaction, such as `canonical_timestamps` for the stored-time migration.
+
+An unknown key or step name stops the migration with an error.
+
 ## Agent-owned tables
 
 The tables whose rows belong to one agent are listed once, in

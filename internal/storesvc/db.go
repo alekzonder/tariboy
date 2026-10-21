@@ -3,10 +3,9 @@ package storesvc
 import (
 	"database/sql"
 	"embed"
-	"fmt"
 	"net/url"
-	"sort"
 
+	"github.com/alekzonder/tariboy/internal/migrate"
 	"github.com/alekzonder/tariboy/internal/store"
 	_ "modernc.org/sqlite"
 )
@@ -38,55 +37,9 @@ func Open(path string) (*DB, error) {
 func (d *DB) Close() error { return d.sql.Close() }
 
 func (d *DB) migrate() error {
-	if _, err := d.sql.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-		name TEXT PRIMARY KEY,
-		applied_at TEXT NOT NULL DEFAULT (` + store.SQLNow + `))`); err != nil {
-		return err
-	}
-	entries, err := migrationsFS.ReadDir("migrations")
-	if err != nil {
-		return err
-	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		var n int
-		if err := d.sql.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, name).Scan(&n); err != nil {
-			return err
-		}
-		if n > 0 {
-			continue
-		}
-		body, err := migrationsFS.ReadFile("migrations/" + name)
-		if err != nil {
-			return err
-		}
-		tx, err := d.sql.Begin()
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(string(body)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("migration %s: %w", name, err)
-		}
-		if name == canonicalTimestampsMigration {
-			if err := canonicalizeTimestamps(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %s: %w", name, err)
-			}
-		}
-		if _, err := tx.Exec(`INSERT INTO schema_migrations(name) VALUES (?)`, name); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return migrate.Run(d.sql, migrationsFS, "migrations", map[string]migrate.Step{
+		"canonical_timestamps": canonicalizeTimestamps,
+	})
 }
 
 // PushRow is one row of a tag's digest history.
