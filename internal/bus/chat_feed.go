@@ -7,10 +7,16 @@ import (
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
-// messageColumns is the message projection scanMessages expects, in its order.
-const messageColumns = `id, channel, ts, source, type, subject, text, data,
-	produced_by_agent, produced_in_iteration, produced_by_plugin,
-	kind, correlation_id, in_reply_to, reply_to, deadline`
+// messageColumns is the message projection scanMessage expects, in its order;
+// messageColumnsM is the same projection qualified by the alias m.
+const (
+	messageColumns = `id, channel, ts, source, type, subject, text, data, ` +
+		`produced_by_agent, produced_in_iteration, produced_by_plugin, ` +
+		`kind, correlation_id, in_reply_to, reply_to, deadline`
+	messageColumnsM = `m.id, m.channel, m.ts, m.source, m.type, m.subject, m.text, m.data, ` +
+		`m.produced_by_agent, m.produced_in_iteration, m.produced_by_plugin, ` +
+		`m.kind, m.correlation_id, m.in_reply_to, m.reply_to, m.deadline`
+)
 
 // ChatFeed returns one chat's messages, oldest first: the chat channel plus,
 // for a chat that carries pre-migration history, the legacy two-inbox

@@ -341,9 +341,7 @@ func (b *Bus) publishTx(tx *sql.Tx, msg Message, now time.Time, guard func(*sql.
 	data := marshalMapNullable(msg.Data)
 	text := nullableStr(msg.Text)
 	if _, err := tx.Exec(`INSERT INTO messages
-		(id, channel, ts, source, type, subject, text, data,
-		 produced_by_agent, produced_in_iteration, produced_by_plugin,
-		 kind, correlation_id, in_reply_to, reply_to, deadline, idempotency_key)
+		(`+messageColumns+`, idempotency_key)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		msg.ID, msg.Channel, msg.TS, msg.Source, msg.Type, subject, text, data,
 		nullableStr(msg.ProducedByAgent), nullableStr(msg.ProducedInIteration), nullableStr(msg.ProducedByPlugin),
@@ -453,26 +451,15 @@ func (b *Bus) emitPublish(msg Message, delivered []string) {
 }
 
 func messageByIdempotency(x dbtx, key string) (Message, bool, error) {
-	var m Message
-	var subject string
-	var text, data, pa, pi, pp sql.NullString
-	var kind string
-	var cid, irt, rt, dl, idempotency sql.NullString
-	err := x.QueryRow(`SELECT id, channel, ts, source, type, subject, text, data,
-		produced_by_agent, produced_in_iteration, produced_by_plugin,
-		kind, correlation_id, in_reply_to, reply_to, deadline, idempotency_key
-		FROM messages WHERE idempotency_key = ?`, key).Scan(
-		&m.ID, &m.Channel, &m.TS, &m.Source, &m.Type, &subject, &text, &data,
-		&pa, &pi, &pp, &kind, &cid, &irt, &rt, &dl, &idempotency)
+	var idempotency sql.NullString
+	m, err := scanMessage(x.QueryRow(`SELECT `+messageColumns+`, idempotency_key
+		FROM messages WHERE idempotency_key = ?`, key), &idempotency)
 	if err == sql.ErrNoRows {
 		return Message{}, false, nil
 	}
 	if err != nil {
 		return Message{}, false, err
 	}
-	unmarshalMessage(&m, subject, text, data, pa, pi, pp)
-	m.Kind, m.CorrelationID, m.InReplyTo, m.ReplyTo, m.Deadline =
-		kind, cid.String, irt.String, rt.String, dl.String
 	m.IdempotencyKey = idempotency.String
 	return m, true, nil
 }
@@ -658,10 +645,7 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.Query(`SELECT m.id, m.channel, m.ts, m.source, m.type, m.subject, m.text, m.data,
-		m.produced_by_agent, m.produced_in_iteration, m.produced_by_plugin,
-		m.kind, m.correlation_id, m.in_reply_to, m.reply_to, m.deadline,
-		d.attempts, d.subscription_id
+	rows, err := tx.Query(`SELECT `+messageColumnsM+`, d.attempts, d.subscription_id
 		FROM deliveries d
 		JOIN subscriptions s ON s.id = d.subscription_id
 		JOIN messages m ON m.id = d.message_id
@@ -680,22 +664,22 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 	type mark struct {
 		subID, msgID string
 		attempts     int
+		decodeErr    error
 	}
 	var marks []mark
+	// broken holds messages whose stored row does not decode: their deliveries
+	// go to the DLQ instead of stopping the whole queue.
+	broken := map[string]error{}
 	for rows.Next() {
-		var m Message
-		var subject, subID string
-		var text, data, pa, pi, pp sql.NullString
-		var kind string
-		var cid, irt, rt, dl sql.NullString
+		var subID string
 		var attempts int
-		if err := rows.Scan(&m.ID, &m.Channel, &m.TS, &m.Source, &m.Type, &subject, &text, &data,
-			&pa, &pi, &pp, &kind, &cid, &irt, &rt, &dl, &attempts, &subID); err != nil {
+		m, err := scanMessage(rows, &attempts, &subID)
+		if err != nil && !errors.Is(err, errMessageDecode) {
 			return nil, err
 		}
-		if returned[m.ID] {
-			// Another delivery row for a message we already returned: account it.
-			marks = append(marks, mark{subID: subID, msgID: m.ID, attempts: attempts})
+		if returned[m.ID] || broken[m.ID] != nil {
+			// Another delivery row for a message already handled: account it.
+			marks = append(marks, mark{subID: subID, msgID: m.ID, attempts: attempts, decodeErr: broken[m.ID]})
 			continue
 		}
 		if len(out) >= limit {
@@ -703,8 +687,11 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 			// are grouped by (ts, id), no returned message has rows left below.
 			break
 		}
-		unmarshalMessage(&m, subject, text, data, pa, pi, pp)
-		m.Kind, m.CorrelationID, m.InReplyTo, m.ReplyTo, m.Deadline = kind, cid.String, irt.String, rt.String, dl.String
+		if err != nil {
+			broken[m.ID] = err
+			marks = append(marks, mark{subID: subID, msgID: m.ID, attempts: attempts, decodeErr: err})
+			continue
+		}
 		out = append(out, m)
 		returned[m.ID] = true
 		marks = append(marks, mark{subID: subID, msgID: m.ID, attempts: attempts})
@@ -719,7 +706,9 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 	}
 	// Account ONLY the returned messages' delivery rows.
 	for _, mk := range marks {
-		if mk.attempts+1 > maxAttempts {
+		if mk.decodeErr != nil {
+			_, err = tx.Exec(`UPDATE deliveries SET dlq=1, result='decode_error' WHERE subscription_id=? AND message_id=?`, mk.subID, mk.msgID)
+		} else if mk.attempts+1 > maxAttempts {
 			_, err = tx.Exec(`UPDATE deliveries SET dlq=1 WHERE subscription_id=? AND message_id=?`, mk.subID, mk.msgID)
 		} else {
 			_, err = tx.Exec(`UPDATE deliveries SET delivered_at=?, attempts=attempts+1
@@ -731,6 +720,11 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
+	}
+	for id, decodeErr := range broken {
+		b.emitAudit(agent, "message_dead_lettered", auditJSON(map[string]string{
+			"message_id": id, "result": "decode_error", "error": decodeErr.Error(),
+		}))
 	}
 	return out, nil
 }
@@ -825,9 +819,7 @@ func (b *Bus) Tail(channel string, limit int) ([]Message, error) {
 		limit = 50
 	}
 	// Newest `limit` rows, returned oldest-first.
-	rows, err := b.db.Query(`SELECT id, channel, ts, source, type, subject, text, data,
-		produced_by_agent, produced_in_iteration, produced_by_plugin,
-		kind, correlation_id, in_reply_to, reply_to, deadline FROM messages
+	rows, err := b.db.Query(`SELECT `+messageColumns+` FROM messages
 		WHERE channel=? ORDER BY ts DESC, id DESC LIMIT ?`, channel, limit)
 	if err != nil {
 		return nil, err
@@ -847,9 +839,7 @@ func (b *Bus) MessagesSince(channel, afterID string, limit int) ([]Message, erro
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := b.db.Query(`SELECT id, channel, ts, source, type, subject, text, data,
-		produced_by_agent, produced_in_iteration, produced_by_plugin,
-		kind, correlation_id, in_reply_to, reply_to, deadline FROM messages
+	rows, err := b.db.Query(`SELECT `+messageColumns+` FROM messages
 		WHERE channel=? AND id>? ORDER BY ts, id LIMIT ?`, channel, afterID, limit)
 	if err != nil {
 		return nil, err
@@ -936,14 +926,20 @@ func scanSubscription(row scanner) (Subscription, error) {
 	}
 	s.Matcher = Matcher{}
 	if matcher != "" {
-		_ = json.Unmarshal([]byte(matcher), &s.Matcher)
+		if err := json.Unmarshal([]byte(matcher), &s.Matcher); err != nil {
+			return Subscription{}, fmt.Errorf("subscription %s: decode matcher: %w", s.ID, err)
+		}
 	}
 	if tf.Valid && tf.String != "" {
-		_ = json.Unmarshal([]byte(tf.String), &s.TypeFilter)
+		if err := json.Unmarshal([]byte(tf.String), &s.TypeFilter); err != nil {
+			return Subscription{}, fmt.Errorf("subscription %s: decode type filter: %w", s.ID, err)
+		}
 	}
 	if params.Valid && params.String != "" {
 		s.Params = map[string]any{}
-		_ = json.Unmarshal([]byte(params.String), &s.Params)
+		if err := json.Unmarshal([]byte(params.String), &s.Params); err != nil {
+			return Subscription{}, fmt.Errorf("subscription %s: decode params: %w", s.ID, err)
+		}
 	}
 	s.Watch = watch.String
 	s.Locked = locked != 0
@@ -954,35 +950,45 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	defer rows.Close()
 	var out []Message
 	for rows.Next() {
-		var m Message
-		var subject string
-		var text, data, pa, pi, pp sql.NullString
-		var kind string
-		var cid, irt, rt, dl sql.NullString
-		if err := rows.Scan(&m.ID, &m.Channel, &m.TS, &m.Source, &m.Type, &subject, &text, &data, &pa, &pi, &pp,
-			&kind, &cid, &irt, &rt, &dl); err != nil {
+		m, err := scanMessage(rows)
+		if err != nil {
 			return nil, err
 		}
-		unmarshalMessage(&m, subject, text, data, pa, pi, pp)
-		m.Kind, m.CorrelationID, m.InReplyTo, m.ReplyTo, m.Deadline = kind, cid.String, irt.String, rt.String, dl.String
 		out = append(out, m)
 	}
 	return out, rows.Err()
 }
 
-func unmarshalMessage(m *Message, subject string, text, data, pa, pi, pp sql.NullString) {
+// errMessageDecode marks a stored message whose JSON columns do not decode.
+var errMessageDecode = errors.New("decode stored message")
+
+// scanMessage reads one messageColumns row, then the extra columns that follow
+// it. A row whose subject or data does not decode returns the message with its
+// id set and an error wrapping errMessageDecode.
+func scanMessage(row scanner, extra ...any) (Message, error) {
+	var m Message
+	var subject string
+	var text, data, pa, pi, pp, cid, irt, rt, dl sql.NullString
+	dest := append([]any{&m.ID, &m.Channel, &m.TS, &m.Source, &m.Type, &subject, &text, &data,
+		&pa, &pi, &pp, &m.Kind, &cid, &irt, &rt, &dl}, extra...)
+	if err := row.Scan(dest...); err != nil {
+		return Message{}, err
+	}
+	m.Text, m.ProducedByAgent, m.ProducedInIteration, m.ProducedByPlugin = text.String, pa.String, pi.String, pp.String
+	m.CorrelationID, m.InReplyTo, m.ReplyTo, m.Deadline = cid.String, irt.String, rt.String, dl.String
 	m.Subject = map[string]any{}
 	if subject != "" {
-		_ = json.Unmarshal([]byte(subject), &m.Subject)
+		if err := json.Unmarshal([]byte(subject), &m.Subject); err != nil {
+			return m, fmt.Errorf("message %s: subject: %w: %w", m.ID, errMessageDecode, err)
+		}
 	}
 	if data.Valid && data.String != "" {
 		m.Data = map[string]any{}
-		_ = json.Unmarshal([]byte(data.String), &m.Data)
+		if err := json.Unmarshal([]byte(data.String), &m.Data); err != nil {
+			return m, fmt.Errorf("message %s: data: %w: %w", m.ID, errMessageDecode, err)
+		}
 	}
-	m.Text = text.String
-	m.ProducedByAgent = pa.String
-	m.ProducedInIteration = pi.String
-	m.ProducedByPlugin = pp.String
+	return m, nil
 }
 
 func marshalMap(m map[string]any, empty string) string {

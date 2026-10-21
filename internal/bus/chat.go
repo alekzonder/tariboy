@@ -50,9 +50,7 @@ const fromSQL = `COALESCE(
 const chatRowsSQL = `
 	SELECT CASE WHEN channel = ? THEN substr(sender, 7)
 	            ELSE substr(channel, 7, length(channel) - 12) END AS agent,
-	       id, channel, ts, source, type, subject, text, data,
-	       produced_by_agent, produced_in_iteration, produced_by_plugin,
-	       kind, correlation_id, in_reply_to, reply_to, deadline, sender
+	       ` + messageColumns + `, sender
 	FROM messages
 	WHERE ((channel = ? AND sender GLOB 'agent:*')
 	    OR (channel IN (SELECT 'agent:' || key || ':inbox' FROM json_each(?)) AND sender = ?))`
