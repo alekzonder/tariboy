@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -134,6 +135,21 @@ func reserveWorkflowIngressWriter(ctx context.Context, tx *sql.Tx) error {
 type workflowSequenceExecer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
+
+// RecordWorkflowMessageSequence numbers a new bus message for workflow ingress.
+// The daemon wires it as the bus publish transaction hook, so the number is
+// committed with the message and follows commit order.
+func RecordWorkflowMessageSequence(tx *sql.Tx, msg bus.Message) error {
+	_, err := tx.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES (?)`, msg.ID)
+	return err
+}
+
+// WorkflowMessageRetainedSQL holds a bus message (by messages.id) that
+// workflow ingress has not consumed yet: it has no sequence number or one past
+// the ingress cursor. The bus and maintenance keep such messages.
+const WorkflowMessageRetainedSQL = `NOT EXISTS (SELECT 1 FROM task_workflow_message_sequence q
+	JOIN task_workflow_ingress_state i ON i.singleton = 1
+	WHERE q.message_id = messages.id AND q.sequence <= i.last_message_sequence)`
 
 func repairWorkflowMessageSequences(ctx context.Context, execer workflowSequenceExecer) error {
 	_, err := execer.ExecContext(ctx, `INSERT OR IGNORE INTO task_workflow_message_sequence(message_id) SELECT m.id FROM messages m LEFT JOIN task_workflow_message_sequence s ON s.message_id=m.id WHERE s.message_id IS NULL ORDER BY m.rowid`)

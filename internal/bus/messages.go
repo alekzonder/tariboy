@@ -84,15 +84,13 @@ func (b *Bus) ClearPending(agent string) (ClearPendingResult, error) {
 	if err != nil {
 		return ClearPendingResult{}, err
 	}
+	retained := ""
+	if b.retainedSQL != "" {
+		retained = ` AND NOT (` + b.retainedSQL + `)`
+	}
 	res, err = tx.Exec(`DELETE FROM messages
 		WHERE id IN (SELECT message_id FROM clear_pending_candidates)
-		AND NOT EXISTS (SELECT 1 FROM deliveries WHERE message_id=messages.id)
-		AND EXISTS (
-			SELECT 1 FROM task_workflow_message_sequence sequence
-			JOIN task_workflow_ingress_state ingress ON ingress.singleton=1
-			WHERE sequence.message_id=messages.id
-			AND sequence.sequence<=ingress.last_message_sequence
-		)`)
+		AND NOT EXISTS (SELECT 1 FROM deliveries WHERE message_id=messages.id)` + retained)
 	if err != nil {
 		return ClearPendingResult{}, err
 	}

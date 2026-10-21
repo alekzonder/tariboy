@@ -79,7 +79,6 @@ func TestPublishWithDeniedGuardWritesNothing(t *testing.T) {
 	}
 	for table, query := range map[string]string{
 		"messages":   `SELECT COUNT(*) FROM messages WHERE channel='chat:denied'`,
-		"sequence":   `SELECT COUNT(*) FROM task_workflow_message_sequence`,
 		"deliveries": `SELECT COUNT(*) FROM deliveries`,
 	} {
 		var count int
@@ -790,33 +789,6 @@ func TestChannelsAndTail(t *testing.T) {
 	_, count, err := b.InspectChannel(ch)
 	if err != nil || count != 2 {
 		t.Fatalf("inspect: count=%d err=%v", count, err)
-	}
-}
-
-func TestPublishAssignsMonotonicWorkflowIngressSequence(t *testing.T) {
-	t.Parallel()
-	b := newBus(t)
-	for _, channel := range []string{"chat:z", "chat:a"} {
-		if _, err := b.Publish(Message{Channel: channel, Source: "plugin:test", Type: "event"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	rows, err := b.db.Query(`SELECT s.sequence,m.channel FROM task_workflow_message_sequence s JOIN messages m ON m.id=s.message_id ORDER BY s.sequence`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var channels []string
-	for rows.Next() {
-		var sequence int64
-		var channel string
-		if err := rows.Scan(&sequence, &channel); err != nil {
-			t.Fatal(err)
-		}
-		channels = append(channels, channel)
-	}
-	if len(channels) != 2 || channels[0] != "chat:z" || channels[1] != "chat:a" {
-		t.Fatalf("sequenced channels = %#v", channels)
 	}
 }
 

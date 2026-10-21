@@ -206,6 +206,10 @@ func openStore(ctx context.Context, proc *process, stack *shutdownStack) (*coreP
 
 	as := agent.NewStore(st)
 	channelBus := bus.New(st, time.Now)
+	// Wired before any publish: workflow ingress numbers every message in its
+	// publish transaction and keeps messages it has not consumed yet.
+	channelBus.SetPublishTxHook(tasks.RecordWorkflowMessageSequence)
+	channelBus.SetMessageRetention(tasks.WorkflowMessageRetainedSQL)
 	if err := reconcileAgentInboxes(as, channelBus); err != nil {
 		return nil, fmt.Errorf("reconcile agent inboxes: %w", err)
 	}
