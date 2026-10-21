@@ -43,7 +43,7 @@ func TestComposeArchiveWritesPortableTeamArchive(t *testing.T) {
 	}
 	output := filepath.Join(dir, "dev.tar.gz")
 	var stderr bytes.Buffer
-	if code := Main(context.Background(), newFake(), "", []string{"archive", "-f", composePath, "--output", output}, io.Discard, &stderr); code != 0 {
+	if code := Run(context.Background(), newFake(), "", Options{Verb: "archive", File: composePath, Output: output}, io.Discard, &stderr); code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 	if info, err := os.Stat(output); err != nil || info.Size() == 0 {
@@ -58,7 +58,7 @@ func TestComposeImportYesUploadsThenAppliesPreview(t *testing.T) {
 	}
 	caller := &archiveImportCaller{fakeCaller: newFake()}
 	var stderr bytes.Buffer
-	if code := Main(context.Background(), caller, "", []string{"import", "--archive", archivePath, "--yes"}, io.Discard, &stderr); code != 0 {
+	if code := Run(context.Background(), caller, "", Options{Verb: "import", Archive: archivePath, Yes: true}, io.Discard, &stderr); code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 	if string(caller.uploaded) != "archive" {
@@ -88,8 +88,8 @@ agents:
 	fc.pools["DEV"] = map[string]tasks.AgentPool{"developers": {Queue: "DEV", Name: "developers", Agents: []string{"other"}, Revision: 1}}
 	var out strings.Builder
 	var errOut strings.Builder
-	if code := Main(context.Background(), fc, "", []string{"status", "-f", composePath}, &out, &errOut); code != 0 {
-		t.Fatalf("Main code=%d stderr=%s", code, errOut.String())
+	if code := Run(context.Background(), fc, "", Options{Verb: "status", File: composePath}, &out, &errOut); code != 0 {
+		t.Fatalf("Run code=%d stderr=%s", code, errOut.String())
 	}
 	if got := out.String(); !strings.Contains(got, "pool developers drift") {
 		t.Fatalf("status output:\n%s", got)
@@ -111,7 +111,7 @@ agents:
 			}
 			fc := newFake()
 			var errOut strings.Builder
-			if code := Main(context.Background(), fc, "", []string{verb, "-f", path}, io.Discard, &errOut); code == 0 || !strings.Contains(errOut.String(), "workflows") {
+			if code := Run(context.Background(), fc, "", Options{Verb: verb, File: path}, io.Discard, &errOut); code == 0 || !strings.Contains(errOut.String(), "workflows") {
 				t.Fatalf("%s code=%d stderr=%s; want a failure naming workflows", verb, code, errOut.String())
 			}
 			if len(fc.calls) != 0 {
@@ -207,7 +207,7 @@ func TestComposeUpAutostartsDaemon(t *testing.T) {
 	fc := newFake()
 	// The empty fake makes r.Up fail afterward; the assertion under test is that
 	// the auto-start seam ran (once) before the file was applied.
-	_ = Main(context.Background(), fc, t.TempDir(), []string{"up", "-f", path}, io.Discard, io.Discard)
+	_ = Run(context.Background(), fc, t.TempDir(), Options{Verb: "up", File: path}, io.Discard, io.Discard)
 	if called != 1 {
 		t.Fatalf("EnsureUp called %d times, want 1", called)
 	}
@@ -221,7 +221,7 @@ func TestComposeUpNoStartSkipsAutostart(t *testing.T) {
 
 	path := writeComposeFile(t, t.TempDir())
 	fc := newFake()
-	_ = Main(context.Background(), fc, t.TempDir(), []string{"up", "--no-start", "-f", path}, io.Discard, io.Discard)
+	_ = Run(context.Background(), fc, t.TempDir(), Options{Verb: "up", NoStart: true, File: path}, io.Discard, io.Discard)
 	if called != 0 {
 		t.Fatalf("EnsureUp called %d times with --no-start, want 0", called)
 	}
@@ -279,5 +279,23 @@ func TestUpDoesNotReprovisionRunningAgent(t *testing.T) {
 
 	if n := countCalls(fc, "POST /api/agents/scout/reprovision"); n != 0 {
 		t.Fatalf("running agent scout was reprovisioned %d times: %v", n, fc.calls)
+	}
+}
+
+// TestVerbFirst pins that flags given before the verb, as in
+// `tariboy compose -f FILE --no-start down`, keep working once the verb is a
+// registry command.
+func TestVerbFirst(t *testing.T) {
+	for in, want := range map[string]string{
+		"-f c.yaml up":                  "up -f c.yaml",
+		"-f c.yaml --no-start down -v":  "down -f c.yaml --no-start -v",
+		"--tail 5 --file c.yaml logs a": "logs --tail 5 --file c.yaml a",
+		"up -f c.yaml":                  "up -f c.yaml",
+		"--help":                        "--help",
+		"":                              "",
+	} {
+		if got := strings.Join(VerbFirst(strings.Fields(in)), " "); got != want {
+			t.Fatalf("VerbFirst(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

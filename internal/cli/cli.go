@@ -23,14 +23,13 @@ type Caller interface {
 }
 
 func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller, local *registry.Ctx, out, errOut io.Writer) int {
-	jsonOut := false
+	// Every --json is dropped to find the command; once it is known,
+	// commandArgs decides which --json tokens are the global flag.
 	rest := make([]string, 0, len(argv))
 	for _, a := range argv {
-		if a == "--json" {
-			jsonOut = true
-			continue
+		if a != "--json" {
+			rest = append(rest, a)
 		}
-		rest = append(rest, a)
 	}
 	if len(rest) > 0 && rest[0] == "--help-json" {
 		b, _ := json.MarshalIndent(reg.Tree(), "", "  ")
@@ -62,6 +61,7 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 	}
 	// kind == "command": execute or print detail help.
 	cmd, _ := reg.Get(path)
+	args, jsonOut := commandArgs(cmd, argv, len(strings.Split(path, ".")))
 	if hasHelpFlag(args) {
 		printCommandHelp(cmd, out)
 		return 0
@@ -73,14 +73,14 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 		printCommandHelp(cmd, errOut)
 		return 2
 	}
-	if cmd.Path == "image.build" || cmd.Path == "image.validate" || cmd.Path == "workflow.build" || cmd.Path == "workflow.validate" {
-		if path, ok := params["path"].(string); ok && path != "" {
+	for _, name := range cmd.AbsPathArgs {
+		if path, ok := params[name].(string); ok && path != "" {
 			absolutePath, absErr := filepath.Abs(path)
 			if absErr != nil {
-				fmt.Fprintf(errOut, "%s: resolve --path: %v\n", strings.ReplaceAll(cmd.Path, ".", " "), absErr)
+				fmt.Fprintf(errOut, "%s: resolve --%s: %v\n", strings.ReplaceAll(cmd.Path, ".", " "), name, absErr)
 				return 1
 			}
-			params["path"] = absolutePath
+			params[name] = absolutePath
 		}
 	}
 
@@ -103,6 +103,19 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 			return 0
 		}
 	}
+	// A Local command runs in this process and prints its own output; its
+	// result only feeds ExitCodeFrom. Without a local context its HTTP route,
+	// if any, still serves it.
+	if cmd.Local != nil && local != nil {
+		lc := *local
+		lc.Out, lc.ErrOut, lc.JSON = out, errOut, jsonOut
+		result, err := registry.CallLocal(&lc, ctx, cmd, params)
+		if err != nil {
+			return printCLIError(err, errOut)
+		}
+		raw, _ := json.Marshal(result)
+		return resultExitCode(cmd, raw)
+	}
 	if cmd.HTTP == nil {
 		if local == nil {
 			fmt.Fprintf(errOut, "command %s is not available here\n", strings.ReplaceAll(cmd.Path, ".", " "))
@@ -122,7 +135,7 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 		} else {
 			printHuman(raw, out)
 		}
-		return resultExitCode(cmd.Path, raw)
+		return resultExitCode(cmd, raw)
 	}
 	route := cmd.HTTP.Path
 	for _, wc := range wildcardNames(cmd.HTTP.Path) {
@@ -151,30 +164,71 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 	} else {
 		printHuman(raw, out)
 	}
-	return resultExitCode(cmd.Path, raw)
+	return resultExitCode(cmd, raw)
 }
 
-// resultExitCode is 1 for `image validate` or `workflow validate` when the
-// result says the source is invalid. The route returns validation errors in its
-// result, not as an HTTP error, so without this a script could not gate on the
-// command. Other commands with a `valid` field, such as `image source
-// validate`, keep exit 0.
-func resultExitCode(path string, raw json.RawMessage) int {
-	if path != "image.validate" && path != "workflow.validate" {
+// resultExitCode is the command's ExitCodeFrom applied to a successful
+// result, or 0.
+func resultExitCode(cmd registry.Command, raw json.RawMessage) int {
+	if cmd.ExitCodeFrom == nil {
 		return 0
 	}
-	var result struct {
-		Valid *bool `json:"valid"`
+	return cmd.ExitCodeFrom(raw)
+}
+
+// commandArgs returns the argv after the command's depth path tokens without
+// the global --json flag, and whether that flag was given. A --json that is
+// the value of a flag taking one stays an argument.
+func commandArgs(cmd registry.Command, argv []string, depth int) (args []string, jsonOut bool) {
+	i := 0
+	for seen := 0; i < len(argv) && seen < depth; i++ {
+		if argv[i] == "--json" {
+			jsonOut = true
+			continue
+		}
+		seen++
 	}
-	if json.Unmarshal(raw, &result) == nil && result.Valid != nil && !*result.Valid {
-		return 1
+	for ; i < len(argv); i++ {
+		a := argv[i]
+		if a == "--json" {
+			jsonOut = true
+			continue
+		}
+		args = append(args, a)
+		if takesValue(cmd, a) && i+1 < len(argv) {
+			i++
+			args = append(args, argv[i])
+		}
 	}
-	return 0
+	return args, jsonOut
+}
+
+// takesValue reports whether token is a flag of cmd that consumes the next
+// token as its value, as parseArgs reads it.
+func takesValue(cmd registry.Command, token string) bool {
+	var name string
+	switch {
+	case strings.HasPrefix(token, "--"):
+		name = token[2:]
+	case len(token) > 1 && token[0] == '-':
+		name = token[1:]
+	default:
+		return false
+	}
+	if strings.Contains(name, "=") {
+		return false
+	}
+	arg, ok := findArg(cmd, name)
+	return ok && arg.Type != registry.Bool
 }
 
 // printCLIError renders a handler/transport error to errOut and returns the
 // process exit code (2 for "daemon down", 1 otherwise).
 func printCLIError(err error, errOut io.Writer) int {
+	var code registry.ExitCode
+	if errors.As(err, &code) {
+		return int(code)
+	}
 	var ue api.UserError
 	if errors.As(err, &ue) {
 		fmt.Fprintf(errOut, "error (%s): %s\n", ue.Code, ue.Msg)
@@ -283,11 +337,18 @@ func parseArgs(cmd registry.Command, args []string) (registry.Params, error) {
 		i++
 	}
 	pi := 0
+	flagsOnly := false
 	for _, arg := range cmd.Args {
+		if arg.Rest && pi < len(positional) {
+			values, _ := p[arg.Name].([]string)
+			p[arg.Name] = append(values, positional[pi:]...)
+			pi = len(positional)
+		}
 		if _, set := p[arg.Name]; set {
+			flagsOnly = flagsOnly || arg.Rest
 			continue
 		}
-		if pi < len(positional) {
+		if pi < len(positional) && !flagsOnly {
 			v, err := convert(arg, positional[pi])
 			if err != nil {
 				return nil, err
@@ -296,6 +357,7 @@ func parseArgs(cmd registry.Command, args []string) (registry.Params, error) {
 			pi++
 			continue
 		}
+		flagsOnly = flagsOnly || arg.Rest
 		if arg.Required {
 			return nil, fmt.Errorf("missing required argument: %s", arg.Name)
 		}
@@ -487,7 +549,9 @@ func printGroupHelp(reg *registry.Registry, path string, out io.Writer) {
 func printCommandHelp(cmd registry.Command, out io.Writer) {
 	fmt.Fprintf(out, "Usage: tariboy %s", strings.ReplaceAll(cmd.Path, ".", " "))
 	for _, a := range cmd.Args {
-		if a.Required {
+		if a.Rest {
+			fmt.Fprintf(out, " [%s...]", a.Name)
+		} else if a.Required {
 			fmt.Fprintf(out, " <%s>", a.Name)
 		} else {
 			fmt.Fprintf(out, " [--%s %s]", flagName(a), a.Type)
@@ -503,6 +567,10 @@ func printCommandHelp(cmd registry.Command, out io.Writer) {
 			req := ""
 			if a.Required {
 				req = " (required)"
+			}
+			if a.Rest {
+				fmt.Fprintf(out, "  %-18s %s%s\n", a.Name+"...", a.Help, req)
+				continue
 			}
 			fmt.Fprintf(out, "  --%-16s %s%s\n", flagName(a), a.Help, req)
 		}

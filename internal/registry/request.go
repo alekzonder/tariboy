@@ -57,6 +57,18 @@ func Bind(cmd Command, raw map[string]any) (Params, error) {
 
 // Call binds raw and runs the command's handler with ctx.
 func Call(c *Ctx, ctx context.Context, cmd Command, raw map[string]any) (any, error) {
+	return run(c, ctx, cmd, cmd.Handler, raw)
+}
+
+// CallLocal binds raw and runs the command's Local handler, in the CLI process.
+func CallLocal(c *Ctx, ctx context.Context, cmd Command, raw map[string]any) (any, error) {
+	return run(c, ctx, cmd, cmd.Local, raw)
+}
+
+func run(c *Ctx, ctx context.Context, cmd Command, h HandlerFunc, raw map[string]any) (any, error) {
+	if h == nil {
+		return nil, fmt.Errorf("command %s cannot run here", cmd.Path)
+	}
 	p, err := Bind(cmd, raw)
 	if err != nil {
 		return nil, err
@@ -64,7 +76,7 @@ func Call(c *Ctx, ctx context.Context, cmd Command, raw map[string]any) (any, er
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return cmd.Handler(c, Request{Ctx: ctx, Params: p})
+	return h(c, Request{Ctx: ctx, Params: p})
 }
 
 // isEmptyScalarText treats an empty query value such as ?limit= as an omitted

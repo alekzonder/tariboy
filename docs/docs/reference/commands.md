@@ -14,8 +14,9 @@ tariboy has three command surfaces:
    convenience alias you define yourself, e.g. `alias sa=tariboy`; the build
    ships no such symlink), run by a
    human or CI against the daemon. Global flags: `--json`, `--help`,
-   `--help-json`, `--version`. This is the authoritative list, generated from the
-   binary's registry (`tariboy --help-json`).
+   `--help-json`, `--version`. `--json` counts as the global flag wherever a
+   flag may appear, but not as the value of another flag. The list below is
+   generated from the binary's registry (`tariboy --help-json`).
 2. **Agent capability scripts** — the applicable packaged skill's
    `scripts/*.sh` launcher, run *inside* an agent over `$TARIBOY_TOOLS_SOCKET`.
 3. **Native Tasks** — `tariboy-tasks`, installed as `ttasks`, runs shared task
@@ -26,116 +27,241 @@ tariboy has three command surfaces:
 
 | Command | Summary |
 | --- | --- |
-| `tariboy agent exec` | Run a manual iteration now, with an optional one-shot prompt |
-| `tariboy agent inspect` | Show one agent's full config |
-| `tariboy agent kill` | Kill the current iteration via its shim |
+| `tariboy agent alias get NAME` | Read the agent display alias |
+| `tariboy agent alias set NAME` | Get or set the agent display alias (omit value to read, empty to clear) |
+| `tariboy agent budget get NAME` | Show an agent's calendar USD budget |
+| `tariboy agent budget set NAME HOUR-USD DAY-USD WEEK-USD MONTH-USD` | Set an agent's calendar USD budget |
+| `tariboy agent color get NAME` | Read the agent accent color |
+| `tariboy agent color set NAME` | Get or set the agent accent color (omit value to read, empty to clear) |
+| `tariboy agent cwd NAME` | Get or set the agent working directory (omit value to read, empty to clear); applies next iteration |
+| `tariboy agent effort NAME` | Get or set the agent effort (omit value to read); applies next iteration |
+| `tariboy agent exec NAME` | Run a manual iteration now, with an optional one-shot prompt |
+| `tariboy agent file create NAME PATH` | Create a file or folder in an agent's cwd (jailed) |
+| `tariboy agent file delete NAME PATH` | Delete a file or folder in an agent's cwd (jailed) |
+| `tariboy agent file list NAME` | List a directory in an agent's cwd (jailed) |
+| `tariboy agent file read NAME PATH` | Read a file from an agent's cwd (text; binary/large =\> marker) |
+| `tariboy agent file rename NAME FROM TO` | Rename/move a file within an agent's cwd (jailed) |
+| `tariboy agent file write NAME PATH CONTENT` | Overwrite/save a file in an agent's cwd (jailed) |
+| `tariboy agent goal-delivery-cooldown NAME SECONDS` | Set the Goal delivery cooldown |
+| `tariboy agent goal-enabled NAME` | Enable or disable Native Task goal selection |
+| `tariboy agent goal-wait-customer-timeout NAME` | Set the Goal customer-wait grace period |
+| `tariboy agent harness NAME` | Get or set the agent harness type (omit value to read); restart the agent to apply |
+| `tariboy agent image cancel NAME` | Cancel a pending agent image |
+| `tariboy agent image set NAME IMAGE` | Select an image for the agent's next iteration |
+| `tariboy agent image status NAME` | Show current, pending, and next agent image |
+| `tariboy agent inbox clear NAME` | Physically clear an agent's pending inbox queue |
+| `tariboy agent inbox ls NAME` | List an agent's inbox (operator), newest first |
+| `tariboy agent inbox processed NAME ID` | Mark an inbox message processed (operator ack) |
+| `tariboy agent inbox reply NAME ID` | Reply to an inbox message (operator); auto-processes the row |
+| `tariboy agent inbox requeue NAME ID` | Requeue a DLQ'd inbox message (operator) |
+| `tariboy agent inspect NAME` | Show one agent's full config |
+| `tariboy agent interactive NAME` | Get or set interactive mode (bool); restart the agent to apply |
+| `tariboy agent kill NAME` | Kill the current iteration via its shim |
+| `tariboy agent messages batch NAME VALUE` | Set the agent messages batch |
+| `tariboy agent messages max-queue NAME VALUE` | Set the agent messages max queue |
+| `tariboy agent model NAME` | Get or set the agent model (omit value to read); applies next iteration |
+| `tariboy agent notes get NAME` | Read the agent notes |
+| `tariboy agent notes set NAME` | Get or set the agent notes (omit value to read, empty to clear) |
 | `tariboy agent ps` | List agents |
-| `tariboy agent pull` | Read a base64 file from an agent's cwd (used by 'cp') |
-| `tariboy agent restart` | Restart an agent and run one iteration now |
-| `tariboy agent rm` | Remove an agent (stop it first, or --force) |
-| `tariboy agent run` | Create and start an agent from an image (image:tag); interactive by default, `--interactive=false` for headless |
-| `tariboy agent screen` | Capture the interactive screen (tmux capture-pane) |
-| `tariboy agent send-keys` | Send keys into the interactive session (tmux send-keys) |
-| `tariboy agent start` | Start (enable) an agent's loop |
-| `tariboy agent status history` | List newest-first status messages from the audit log, including each event's iteration ID when present |
-| `tariboy agent status show` | Show one agent's runtime status |
-| `tariboy agent stop` | Stop an agent's loop (current iteration lives) |
-| `tariboy backup` | Back up an agent (or 'all') to a portable tar.gz |
+| `tariboy agent pull NAME PATH` | Read a base64 file from an agent's cwd (used by 'cp') |
+| `tariboy agent reprovision NAME` | Re-unpack an agent's image tree in place and restart its loop, keeping its data |
+| `tariboy agent restart NAME` | Restart an agent and run one iteration now |
+| `tariboy agent rm NAME` | Remove an agent (stop it first, or --force) |
+| `tariboy agent run IMAGE` | Create an agent from an image (image:tag); starts stopped — enable with 'agent start' |
+| `tariboy agent screen NAME` | Capture the interactive screen (tmux capture-pane) |
+| `tariboy agent send-keys NAME` | Send keys into the interactive session (raw items, or a line+Enter) |
+| `tariboy agent shell-script get NAME` | Read an agent shell script |
+| `tariboy agent shell-script set NAME` | Set an agent shell script |
+| `tariboy agent start NAME` | Start (enable) an agent's loop |
+| `tariboy agent status history NAME` | List an agent's status-message history (from the audit log) |
+| `tariboy agent status show NAME` | Show one agent's runtime status |
+| `tariboy agent stop NAME` | Stop an agent's loop (current iteration lives) |
+| `tariboy agent subscribe NAME CHANNEL` | Subscribe an agent to a channel (operator) |
+| `tariboy agent subscriptions NAME` | List the channels one agent is subscribed to |
+| `tariboy agent unsubscribe NAME CHANNEL` | Unsubscribe an agent from a channel (operator) |
+| `tariboy agent usage NAME` | Per-agent AI usage: grouped rows + time-bucketed series |
+| `tariboy backup TARGET` | Back up an agent (or 'all') to a portable tar.gz |
 | `tariboy budget ls` | List configured budgets |
 | `tariboy budget set` | Set a cost budget (scope agent:\<name\>\|group:\<g\>\|global) |
 | `tariboy budget status` | Show current spend vs limit for each budget |
-| `tariboy channel inspect` | Show a channel's kind and message count |
+| `tariboy channel inspect CHANNEL` | Show a channel's kind and message count |
 | `tariboy channel ls` | List channels |
-| `tariboy channel tail` | Print recent messages on a channel (-f to follow) |
+| `tariboy channel tail CHANNEL` | Print recent messages on a channel (-f to follow) |
+| `tariboy channel watches CHANNEL` | List a channel's distinct watches (watch, params, subscribers) |
+| `tariboy chat create ID` | Create a chat and put the customer and the named principals in it |
+| `tariboy chat join CHAT PRINCIPAL` | Add a principal to a chat |
+| `tariboy chat leave CHAT PRINCIPAL` | Remove a principal from a chat, keeping its outstanding deliveries |
+| `tariboy chat ls` | List the customer's chats, most recently active first |
+| `tariboy chat messages AGENT` | Read one chat, oldest first, by chat id or agent name |
+| `tariboy chat participants CHAT` | List the principals taking part in a chat |
+| `tariboy chat read AGENT` | Mark a chat read up to a message timestamp, by chat id or agent name |
+| `tariboy chat unanswered CHAT` | List the chat messages a principal has not answered yet |
 | `tariboy compose archive` | Create a compose-only portable team archive; transfer runnable images separately |
+| `tariboy compose build` | Build the file's images |
+| `tariboy compose down` | Remove the file's agents and groups; --volumes also deletes their data |
+| `tariboy compose exec MEMBER [PROMPT...]` | Run an iteration of one of the file's agents now, with an optional prompt |
 | `tariboy compose import` | Preview and import compose-only team/runtime configuration |
-| `tariboy files upload` | Upload up to 16 MiB of base64 content to the server and return its absolute path |
-| `tariboy cp` | Stream a file up to 1 GiB to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
+| `tariboy compose kill [MEMBERS...]` | Kill the current iteration of the file's agents, or the named agents and groups |
+| `tariboy compose logs [MEMBERS...]` | Print recent events of the file's agents, or the named agents and groups |
+| `tariboy compose ps` | List the file's agents and their live state |
+| `tariboy compose restart [MEMBERS...]` | Restart the file's agents, or the named agents and groups |
+| `tariboy compose rm [MEMBERS...]` | Remove the file's stopped agents, or the named agents and groups |
+| `tariboy compose start [MEMBERS...]` | Start the file's agents, or the named agents and groups |
+| `tariboy compose status` | Compare the file with the daemon and report drift |
+| `tariboy compose stop [MEMBERS...]` | Stop the file's agents, or the named agents and groups |
+| `tariboy compose up` | Build, create and start the file's images, groups and agents; start the daemon first |
+| `tariboy context get NAME` | Read the agent's CONTEXT.md |
+| `tariboy context set NAME` | Overwrite the agent's CONTEXT.md |
+| `tariboy cp SRC` | Upload a file to the server: cp LOCAL_FILE; download: cp AGENT:SRC LOCAL_DST |
+| `tariboy daemon agent-shell-script get` | Read the global agent shell script |
+| `tariboy daemon agent-shell-script set` | Set the global agent shell script |
 | `tariboy daemon config get` | Read daemon config (all keys, or one with --key) |
-| `tariboy daemon config set` | Set a daemon config key (runtime-mutable) |
+| `tariboy daemon config set KEY VALUE` | Set a daemon config key (runtime-mutable) |
+| `tariboy daemon logs` | Tail ~/.tariboyd/tariboyd.log |
 | `tariboy daemon reindex` | Rebuild ai_requests metadata from proxy-transcript.jsonl files |
-| `tariboy daemon status` | Show daemon version, uptime, base directory and missing host tools |
-| `tariboy group assign` | Assign an agent to a group (empty group leaves) |
-| `tariboy group create` | Create (or update) a group with an optional lead |
-| `tariboy group inspect` | Show a group's lead, members, channels and shared dir |
+| `tariboy daemon restart` | Restart the daemon (stop then start) |
+| `tariboy daemon start` | Start tariboyd detached (no-op if already running) |
+| `tariboy daemon status` | Show whether the daemon runs (exit 0) or is stopped (exit 1); --json prints its full status |
+| `tariboy daemon stop` | Stop the daemon (SIGTERM, then SIGKILL on timeout) |
+| `tariboy files upload NAME CONTENT` | Upload a file to the server and return its absolute path |
+| `tariboy fs list` | List directories under the daemon filesystem root ($HOME-jailed) |
+| `tariboy group assign NAME AGENT` | Assign an agent to a group (empty group leaves) |
+| `tariboy group create NAME` | Create (or update) a group with an optional lead |
+| `tariboy group inspect NAME` | Show a group's lead, members, channels and shared dir |
+| `tariboy group lead set NAME LEAD` | Set a group's lead to a current member |
 | `tariboy group ls` | List groups (name/lead/member count) |
-| `tariboy group rm` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
-| `tariboy harness codex-approval get` | Show how this daemon starts codex: `yolo` (default, `--yolo`) or `approve-for-me` (`--approve-for-me`) |
-| `tariboy harness codex-approval set MODE` | Set the codex approval mode (`yolo` or `approve-for-me`) for this daemon's next codex iterations |
-| `tariboy harness models TYPE [--refresh]` | List the models and efforts the harness CLI on the daemon host supports; CLI failures are reported in `error` |
-| `tariboy image build --path DIR --name NAME [--tag TAG] [--repository-id ID --git-commit SHA]` | Build one ref and move every requested tag onto it, plus a frozen source snapshot; repeat explicit tags, or omit them to publish image_version plus latest (only latest when unversioned); an existing tag is moved, not refused; Git provenance must be paired |
-| `tariboy image build STORE/IMAGE [--name NAME] [--tag TAG]` | Restore available skill locks and build from the selected daemon's Store; default name is IMAGE and an omitted tag publishes image_version plus latest, or only latest when unversioned |
-| `tariboy image validate --path DIR --name NAME [--tag TAG]` | Validate the source and target ref without publishing; tag defaults to `latest`; prints the result and exits 1 when it is invalid |
-| `tariboy image version get [--path FILE_OR_DIR]` | Print the local image_version; defaults to ./Tariboyfile.yaml; no daemon required |
-| `tariboy image version update <major\|minor\|patch> [--path FILE_OR_DIR]` | Increment the local SemVer, reset lower components and remove suffixes; preserve YAML fields/comments |
-| `tariboy image inspect` | Show an image manifest |
+| `tariboy group member rm NAME AGENT` | Remove an agent from a group without deleting it |
+| `tariboy group rename NAME NEW-NAME` | Rename a group without deleting its agents |
+| `tariboy group rm NAME` | Remove a group (detach members, delete channels; --volumes drops the shared dir) |
+| `tariboy harness codex-approval get` | Read the codex approval mode of this daemon (yolo\|approve-for-me) |
+| `tariboy harness codex-approval set MODE` | Set the codex approval mode of this daemon for the next iterations |
+| `tariboy harness models TYPE` | List the models and efforts a harness supports on the daemon host |
+| `tariboy image build` | Build an agent image from a Tariboyfile.yaml |
+| `tariboy image file REF PATH` | Read a single file packed into an image |
+| `tariboy image files REF` | List the files packed into an image |
+| `tariboy image inspect REF` | Show an image manifest |
 | `tariboy image ls` | List built agent images |
-| `tariboy image prompt` | Print an image's assembled prompt |
-| `tariboy image provenance REF` | Show local source and frozen snapshot Git provenance |
-| `tariboy image template` | Show the ordered schema-v2 static/runtime template |
-| `tariboy image rm` | Remove a built image |
-| `tariboy iteration inspect` | Show one iteration, including its snapshotted image ref, source version, digest, prompt-template hash, and tags |
-| `tariboy iteration logs` | Print an iteration's harness logs |
-| `tariboy iteration ls` | List an agent's iterations; `--tag`, `--started-after` and `--started-before` narrow the list |
-| `tariboy iteration tag add` | Add tags to one or more iterations |
-| `tariboy iteration tag rm` | Remove tags from one or more iterations |
-| `tariboy iteration tag set` | Replace the tags of one or more iterations |
-| `tariboy logs` | Stream or print an agent's events (-f to follow) |
-| `tariboy loop hard-timeout` | Get or set loop hard-timeout (seconds); omit value to read |
-| `tariboy loop interval` | Get or set loop interval (seconds); omit value to read |
-| `tariboy loop on-error` | Get or set loop on-error policy; omit value to read |
-| `tariboy loop on-timeout` | Get or set loop on-timeout policy; omit value to read |
-| `tariboy loop schedule` | Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read |
-| `tariboy loop timeout` | Get or set loop timeout (seconds); omit value to read |
+| `tariboy image prompt REF` | Print an image's assembled prompt |
+| `tariboy image provenance REF` | Show local image source provenance |
+| `tariboy image rm REF` | Remove a built image |
+| `tariboy image source build NAME` | Build an image from an editable image source |
+| `tariboy image source create NAME` | Create an editable image source |
+| `tariboy image source file get NAME PATH` | Read an editable image source file |
+| `tariboy image source files NAME` | List editable files in an image source |
+| `tariboy image source inspect NAME` | Show editable image source metadata |
+| `tariboy image source ls` | List editable image sources |
+| `tariboy image source rm NAME` | Remove an editable image source without removing built images |
+| `tariboy image source validate NAME` | Validate an editable image source |
+| `tariboy image template REF` | Show an image prompt template |
+| `tariboy image validate` | Validate an image source directory |
+| `tariboy image version get` | Print image_version from a local Tariboyfile.yaml |
+| `tariboy image version update PART` | Bump image_version in a local Tariboyfile.yaml |
+| `tariboy iteration extend-timeout NAME ID` | Extend a running iteration timeout |
+| `tariboy iteration inspect NAME ID` | Show one iteration |
+| `tariboy iteration logs NAME ID` | Print an iteration's harness logs |
+| `tariboy iteration ls NAME` | List an agent's iterations |
+| `tariboy iteration tag add NAME` | Add tags to one or more iterations |
+| `tariboy iteration tag rm NAME` | Remove tags from one or more iterations |
+| `tariboy iteration tag set NAME` | Replace the tags of one or more iterations |
+| `tariboy login REGISTRY` | Store a bearer token for a tariboy-store registry |
+| `tariboy logs NAME` | Stream or print an agent's events (-f to follow) |
+| `tariboy loop ai-stall-timeout NAME` | Get or set loop ai-stall-timeout (seconds); omit value to read |
+| `tariboy loop hard-timeout NAME` | Get or set loop hard-timeout (seconds); omit value to read |
+| `tariboy loop interval NAME` | Get or set loop interval (seconds); omit value to read |
+| `tariboy loop max-idle NAME` | Get or set loop max-idle (seconds); omit value to read |
+| `tariboy loop on-error NAME` | Get or set loop on-error policy; omit value to read |
+| `tariboy loop on-timeout NAME` | Get or set loop on-timeout policy; omit value to read |
+| `tariboy loop schedule NAME` | Get, set or clear the loop schedule (RFC 5545 RRULE, whole minutes); omit value to read |
+| `tariboy loop timeout NAME` | Get or set loop timeout (seconds); omit value to read |
 | `tariboy maintenance get` | Show database maintenance settings and the last run |
 | `tariboy maintenance run` | Back up the database, delete expired data, and compact it now |
 | `tariboy maintenance set` | Change database maintenance settings; unset flags keep their value |
 | `tariboy message send` | Publish a message to a channel (operator) |
-| `tariboy plugin inspect` | Show one plugin's manifest, state and socket |
-| `tariboy plugin install` | Install and start a plugin from a directory with plugin.json |
-| `tariboy plugin logs` | Show captured plugin stdout/stderr |
+| `tariboy plugin action NAME ACTION` | Invoke a generic action on a running plugin |
+| `tariboy plugin contributions` | List enabled plugin CLI and settings contributions |
+| `tariboy plugin inspect NAME` | Show one plugin's manifest, state and socket |
+| `tariboy plugin install PATH` | Install and start a plugin from a directory with plugin.json |
+| `tariboy plugin logs NAME` | Show captured plugin stdout/stderr |
 | `tariboy plugin ls` | List installed plugins (name/version/types/state/health) |
-| `tariboy plugin rm` | Stop and remove a plugin |
-| `tariboy prune` | Prune old iterations for an agent now (or 'all'); --dry-run lists victims |
-| `tariboy restore` | Restore an agent from a backup tar.gz (optionally under a new name) |
-| `tariboy retention get` | Show the effective retention policy for an agent, with its own override and the default (or 'default') |
-| `tariboy retention set` | Set the retention policy for an agent (0 = use the default) or 'default' (0 = unlimited) |
-| `tariboy schedule ls` | List an agent's schedules (read-only) |
-| `tariboy secret ls` | List secret keys (values are never shown) |
-| `tariboy secret rm` | Remove a secret |
-| `tariboy secret set` | Set a secret; value from --value or stdin |
-| `tariboy store add NAME SOURCE` | Register a Git URL or absolute local directory on the daemon host |
-| `tariboy store list` | List this daemon's Store registrations |
-| `tariboy store show NAME` | Read current images, versions and diagnostics from disk |
-| `tariboy store refresh NAME` | Reset a managed Git clone to its upstream, discarding local changes; fast-forward pull a local Git checkout; or reread a non-Git local directory |
-| `tariboy store auto NAME [--interval MINUTES] [--image IMAGE]` | Set the automatic refresh-and-build policy; the daemon refreshes every interval and rebuilds the selected images that need an update, and `--interval 0` disables it |
-| `tariboy store remove NAME` | Unregister a Store and remove only its managed clone; preserve local sources and built images |
-| `tariboy workflow validate [STORE/NAME] [--path DIR]` | Validate a workflow source directory without building it; reports every error with a stable code and path, and exits 1 when the source is invalid |
-| `tariboy workflow build [STORE/NAME] [--path DIR]` | Validate and publish a workflow image under its `workflow_version` and `latest`; an identical rebuild is a no-op, different content for a published version fails with `workflow_version_published` |
-| `tariboy workflow ls` | List built workflow images, one row per tag |
-| `tariboy workflow inspect NAME [TAG]` | Show a workflow image manifest; TAG is a tag or full digest and defaults to `latest` |
-| `tariboy workflow rm NAME TAG` | Remove one tag, and the stored content when no tag remains |
-| `tariboy workflow version get [--path FILE_OR_DIR]` | Print the local workflow_version; defaults to the current directory; no daemon required |
-| `tariboy workflow version update <major\|minor\|patch> [--path FILE_OR_DIR]` | Increment the local SemVer, reset lower components and remove suffixes; no daemon required |
-| `ttasks queue create` | Create a task queue |
-| `tariboy tasks activity` | Summarize work on tasks in a time window (`--since`, `--until` RFC3339; `--agent` for one agent) |
+| `tariboy plugin restart NAME` | Restart a single plugin in place (stop + start) without touching others |
+| `tariboy plugin rm NAME` | Stop and remove a plugin |
+| `tariboy plugin routes NAME` | Show a plugin's external channel routes |
+| `tariboy prompt get NAME` | Preview the agent's assembled next-iteration prompt |
+| `tariboy prune AGENT` | Prune old iterations for an agent now (or 'all'); --dry-run lists victims |
+| `tariboy pull REF` | Pull an image from a tariboy-store registry into the local image store |
+| `tariboy push REF` | Push a local image to a tariboy-store registry |
+| `tariboy restore FILE` | Restore an agent from a backup tar.gz (optionally under a new name) |
+| `tariboy retention get AGENT` | Show the effective retention policy for an agent, with its own override and the default (or 'default') |
+| `tariboy retention set AGENT` | Set the retention policy for an agent (0 = use the default) or 'default' (0 = unlimited) |
+| `tariboy schedule ls NAME` | List an agent's schedules (read-only) |
+| `tariboy script cancel NAME ID` | Cancel a script or one run |
+| `tariboy script logs NAME ID` | Read a bounded script run log tail |
+| `tariboy script ls NAME` | List an agent's local scripts |
+| `tariboy script rerun NAME ID` | Run a stored script now, resuming a stopped schedule |
+| `tariboy script rm NAME ID` | Remove an inactive script |
+| `tariboy script run NAME DESCRIPTION COMMAND` | Run a local command once |
+| `tariboy script run-get NAME ID` | Get one script run |
+| `tariboy script runs NAME ID` | List a script's runs |
+| `tariboy script schedule NAME DESCRIPTION COMMAND` | Schedule a fixed-interval local command |
+| `tariboy secret ls NAME` | List secret keys (values are never shown) |
+| `tariboy secret rm NAME KEY` | Remove a secret |
+| `tariboy secret set NAME KEY` | Set a secret; value from --value or stdin |
+| `tariboy store add NAME SOURCE` | Register a local or Git Store |
+| `tariboy store auto NAME` | Set a Store's automatic refresh and build policy |
+| `tariboy store list` | List registered Stores |
+| `tariboy store refresh NAME` | Refresh a Store |
+| `tariboy store remove NAME` | Remove a Store registration |
+| `tariboy store show NAME` | Show a Store and its images |
+| `tariboy tasks activity` | Summarize work on tasks in a time window |
+| `tariboy tasks queue create` | Create a task queue |
+| `tariboy team compose NAME` | Render a group as tariboy-compose.yaml |
+| `tariboy team import archive apply ID` | Build images and create a staged portable team |
+| `tariboy team import archive plan ID` | Validate and plan a staged portable team import |
+| `tariboy team import archive status ID` | Inspect portable team import progress |
+| `tariboy team import yaml YAML` | Preview pasted tariboy-compose.yaml |
+| `tariboy transcript NAME ID` | Show the AI proxy transcript for an iteration (parsed; ?raw=1 for bytes) |
+| `tariboy update` | Install a published release over this installer-managed installation |
 | `tariboy usage` | Aggregate AI usage and cost from ai_requests |
-| `tariboy user-prompt get` | Read the agent's standing user-prompt |
-| `tariboy user-prompt set` | Set the agent's standing user-prompt |
-| `tariboy version` | Print the Tariboy version locally without a daemon |
+| `tariboy user-prompt get NAME` | Read the agent's standing user-prompt |
+| `tariboy user-prompt set NAME TEXT` | Set the agent's standing user-prompt |
+| `tariboy version` | Print the Tariboy version |
+| `tariboy workflow build` | Build a workflow image from a Workflowfile.yaml |
+| `tariboy workflow inspect NAME` | Show a workflow image manifest |
+| `tariboy workflow ls` | List built workflow images |
+| `tariboy workflow rm NAME TAG` | Remove a workflow image tag, and its content when no tag remains |
+| `tariboy workflow validate` | Validate a workflow source directory without building it |
+| `tariboy workflow version get` | Print workflow_version from a local Workflowfile.yaml |
+| `tariboy workflow version update PART` | Bump workflow_version in a local Workflowfile.yaml |
 
-> Regenerate after adding/removing a command: `make build && ./bin/tariboy --help-json`.
+A test keeps this table equal to `tariboy --help-json`. Each row shows the
+command's required positional arguments; `tariboy COMMAND --help` lists its
+flags. After adding, removing or renaming a command, regenerate the table:
+
+```bash
+go test ./cmd/tariboy -run TestCommandsDocMatchesHelpJSON -update
+```
 
 ### Host-local commands
 
-These verbs never route through the daemon, so they are absent from the
-registry listing above. They act on the host the CLI runs on and work while the
-daemon is down.
+Some of the commands above run in the CLI process instead of calling the
+daemon API. They act on the host the CLI runs on and work while the daemon is
+down:
 
-| Command | Summary |
-| --- | --- |
-| `tariboy daemon start\|stop\|restart\|status\|logs` | Control and inspect the local daemon process |
-| `tariboy update [VERSION\|latest] [--force] [--cleanup [--keep N]]` | Install a published release over this installer-managed installation, restart a running daemon, and with `--cleanup` delete all but the newest N releases (default 5) |
+- `tariboy daemon start|stop|restart|status|logs` control and inspect the local
+  daemon process. `daemon status` prints `running (pid N, version V)` and exits
+  0, or prints `stopped` and exits 1; with `--json` it prints the daemon's full
+  status, or `{"running":false}`. The API still serves
+  `GET /api/daemon/status`. `daemon logs [-f] [--tail N]` prints the last N
+  lines (default 200) of `~/.tariboyd/tariboyd.log`.
+- `tariboy update [VERSION|latest] [--force] [--cleanup [--keep N]]` installs a
+  published release over this installer-managed installation, restarts a
+  running daemon, and with `--cleanup` deletes all but the newest N releases
+  (default 5).
+- `tariboy compose VERB` reads a compose file (`-f FILE`, default
+  `tariboy-compose.yaml`) and drives the daemon API; `compose up` starts the
+  daemon first unless `--no-start` or `TARIBOY_NO_AUTOSTART` is set. The
+  compose flags may also come before the verb, as in
+  `tariboy compose -f FILE up`.
 
 `tariboy update` updates only an installer-managed `linux-x86_64` or
 `linux-aarch64` installation

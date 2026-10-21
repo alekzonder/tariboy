@@ -17,6 +17,14 @@ func BuildRegistry() *registry.Registry {
 	r := registry.New()
 	mustRegister(r, versionCommand())
 	mustRegister(r, daemonStatus())
+	mustRegister(r, daemonStart())
+	mustRegister(r, daemonStop())
+	mustRegister(r, daemonRestart())
+	mustRegister(r, daemonLogs())
+	mustRegister(r, update())
+	for _, command := range composeCommands() {
+		mustRegister(r, command)
+	}
 	mustRegister(r, daemonConfigGet())
 	mustRegister(r, daemonConfigSet())
 	mustRegister(r, globalShellScriptGet())
@@ -227,6 +235,7 @@ func BuildRegistry() *registry.Registry {
 	mustGroup(r, "daemon", "Control the tariboy daemon")
 	mustGroup(r, "daemon.agent-shell-script", "Manage the global pre-iteration shell script")
 	mustGroup(r, "daemon.config", "Read and set daemon config")
+	mustGroup(r, "compose", "Run a team from a tariboy-compose.yaml file")
 	mustGroup(r, "user-prompt", "Per-agent user prompt")
 	mustGroup(r, "context", "Per-agent context document")
 	mustGroup(r, "iteration", "Inspect agent iterations")
@@ -291,10 +300,14 @@ func mustValidate(r *registry.Registry) {
 
 func daemonStatus() registry.Command {
 	return registry.Command{
-		Path:      "daemon.status",
-		Summary:   "Show daemon version, uptime, base directory and missing host tools",
-		CLIHidden: true,
-		HTTP:      &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
+		Path:    "daemon.status",
+		Summary: "Show whether the daemon runs (exit 0) or is stopped (exit 1); --json prints its full status",
+		Help:    "The API returns the daemon version, uptime, base directory and missing host tools. The CLI probes the daemon socket itself, so it works while the daemon is down.",
+		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
+		// The CLI answers locally so a stopped daemon reads "stopped", not an
+		// error; the HTTP route serves the API.
+		Local:        daemonStatusLocal,
+		ExitCodeFrom: stoppedExitCode,
 		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			schema := 0
 			if c.Store != nil {
