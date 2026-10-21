@@ -401,7 +401,7 @@ func TestImageBuildUpdatesImportedRefAfterRefRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	portable := imageportable.Service{
-		Snapshots: imageSnapshotStore(c), BaseDir: c.BaseDir,
+		Provenance: imageprovenance.Store{DB: c.Store.DB}, BaseDir: c.BaseDir,
 		StagingRoot: filepath.Join(c.BaseDir, "image-imports"),
 	}
 	var artifact bytes.Buffer
@@ -454,7 +454,7 @@ func TestArtifactImportOverBuildHidesStaleProvenance(t *testing.T) {
 	if err := (imageportable.Service{BaseDir: origin, StagingRoot: filepath.Join(origin, "imports")}).Export(context.Background(), ref.String(), &artifact); err != nil {
 		t.Fatal(err)
 	}
-	portable := imageportable.Service{Snapshots: imageSnapshotStore(c), BaseDir: c.BaseDir, StagingRoot: filepath.Join(c.BaseDir, "image-imports")}
+	portable := imageportable.Service{Provenance: imageprovenance.Store{DB: c.Store.DB}, BaseDir: c.BaseDir, StagingRoot: filepath.Join(c.BaseDir, "image-imports")}
 	preview, err := portable.Preview(context.Background(), bytes.NewReader(artifact.Bytes()), int64(artifact.Len()))
 	if err != nil {
 		t.Fatal(err)

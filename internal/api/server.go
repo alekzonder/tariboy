@@ -21,7 +21,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/auditexport"
 	"github.com/alekzonder/tariboy/internal/events"
 	"github.com/alekzonder/tariboy/internal/imageportable"
-	"github.com/alekzonder/tariboy/internal/imagesnapshot"
+	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/tasks"
@@ -324,9 +324,7 @@ func (s *Server) serveTeamImportPreview(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) imagePortableService() imageportable.Service {
 	return imageportable.Service{
-		Snapshots: &imagesnapshot.Store{
-			DB: s.cctx.Store.DB, Root: filepath.Join(s.cctx.BaseDir, "image-source-snapshots"),
-		},
+		Provenance:      imageprovenance.Store{DB: s.cctx.Store.DB},
 		StagingRoot:     filepath.Join(s.cctx.BaseDir, "image-imports"),
 		BaseDir:         s.cctx.BaseDir,
 		ExternalPlugins: s.externalPlugins,

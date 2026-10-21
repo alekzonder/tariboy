@@ -11,7 +11,9 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
+	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
 
 func TestArtifactExportImportRunsWithoutSources(t *testing.T) {
@@ -286,5 +288,35 @@ func TestArtifactImportSupportsExplicitRetag(t *testing.T) {
 	reused, err := importer.Apply(context.Background(), preview.ImportID, target.String())
 	if err != nil || !reused.Reused || reused.Digest != result.Digest {
 		t.Fatalf("repeated retag = %#v, %v", reused, err)
+	}
+}
+
+func TestArtifactImportClearsStaleProvenanceForNewTarget(t *testing.T) {
+	origin := t.TempDir()
+	ref := image.Ref{Name: "demo", Tag: "v1"}
+	store := &image.Store{Dir: filepath.Join(origin, "images")}
+	if _, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: origin}, imagefile.ResolveRoots{}, ref, store, time.Now, nil); err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	if err := (Service{BaseDir: origin, StagingRoot: filepath.Join(origin, "imports")}).Export(context.Background(), ref.String(), &archive); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	db := storetest.OpenAt(t, filepath.Join(target, "state.db"))
+	provenance := imageprovenance.Store{DB: db.DB}
+	if err := provenance.Upsert(imageprovenance.Record{Ref: ref.String(), Digest: "stale", SourceCWD: "/gone", BuiltAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+		t.Fatal(err)
+	}
+	importer := Service{BaseDir: target, StagingRoot: filepath.Join(target, "imports"), Provenance: provenance}
+	preview, err := importer.Preview(context.Background(), bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := importer.Apply(context.Background(), preview.ImportID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := provenance.Get(ref.String()); err != nil || ok {
+		t.Fatalf("stale provenance survived import: ok=%v err=%v", ok, err)
 	}
 }

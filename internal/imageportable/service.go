@@ -17,17 +17,16 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
-	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/portablearchive"
 	"github.com/alekzonder/tariboy/internal/version"
 )
 
-// Deprecated compatibility fields remain so older daemon wiring compiles; the
-// runnable format never reads snapshots or plugin/source data.
+// Service moves runnable image archives. Provenance is optional; when its DB is
+// set, importing a new target ref clears any stale local provenance row.
 type Service struct {
-	Snapshots       *imagesnapshot.Store
+	Provenance      imageprovenance.Store
 	StagingRoot     string
 	BaseDir         string
 	ExternalPlugins plugincaps.ExternalResolver
@@ -235,8 +234,8 @@ func (s Service) apply(ctx context.Context, importID, refOverride string) (Resul
 			return Result{Ref: target.String(), Digest: manifest.Digest, Reused: true}, nil
 		}
 	}
-	if !targetExists && s.Snapshots != nil && s.Snapshots.DB != nil {
-		if err := (imageprovenance.Store{DB: s.Snapshots.DB}).Delete(target.String()); err != nil {
+	if !targetExists && s.Provenance.DB != nil {
+		if err := s.Provenance.Delete(target.String()); err != nil {
 			return Result{}, err
 		}
 	}
