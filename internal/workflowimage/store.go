@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -15,7 +14,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/refstore"
@@ -119,30 +117,16 @@ func (s *Store) FilePath(name, digest, rel string) (string, error) {
 // type, size, and mode come from the opened descriptor, and the read stops
 // one byte past limit.
 func readRegular(path string, limit int64) ([]byte, fs.FileMode, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		return nil, 0, fmt.Errorf("cannot be opened as a regular file: %w", err)
-	}
-	defer f.Close()
-	fi, err := f.Stat()
+	content, info, err := safefs.ReadRegular(path, limit)
 	if err != nil {
 		return nil, 0, err
 	}
-	if !fi.Mode().IsRegular() {
-		return nil, 0, errors.New("is not a regular file")
-	}
-	if fi.Size() > limit {
-		return nil, 0, fmt.Errorf("is larger than %d bytes", limit)
-	}
-	content, err := io.ReadAll(io.LimitReader(f, limit+1))
-	if err != nil {
-		return nil, 0, err
-	}
-	if int64(len(content)) > limit {
-		return nil, 0, fmt.Errorf("is larger than %d bytes", limit)
-	}
-	return content, fi.Mode(), nil
+	return content, info.Mode(), nil
 }
+
+// readSourceFile is readRegular; tests replace it to simulate a file that
+// grew between the walk and the read.
+var readSourceFile = readRegular
 
 // scanError keeps this package's texts for the entries and limits safefs
 // refuses while scanning a source.
@@ -172,6 +156,9 @@ func scan(root string) ([]sourceFile, error) {
 		return nil, invalidf("source directory: %v", err)
 	}
 	var files []sourceFile
+	// MaxTotal is an early check on Lstat sizes; total counts the bytes
+	// actually read, so a file that grew after the walk is still bounded.
+	var total int64
 	opts := safefs.WalkOptions{Dirs: true, MaxFiles: maxFiles, MaxFileSize: maxFileSize, MaxTotal: maxTotalSize}
 	err = safefs.WalkRegular(root, opts, func(rel string, d fs.DirEntry, _ fs.FileInfo) error {
 		if d.IsDir() {
@@ -183,9 +170,13 @@ func scan(root string) ([]sourceFile, error) {
 		if rel == manifestName {
 			return invalidf("%q is reserved for the stored manifest", rel)
 		}
-		content, mode, err := readRegular(filepath.Join(root, filepath.FromSlash(rel)), maxFileSize)
+		content, mode, err := readSourceFile(filepath.Join(root, filepath.FromSlash(rel)), maxFileSize)
 		if err != nil {
 			return invalidf("%q: %v", rel, err)
+		}
+		total += int64(len(content))
+		if total > maxTotalSize {
+			return invalidf("source is larger than %d bytes", maxTotalSize)
 		}
 		sum := sha256.Sum256(content)
 		files = append(files, sourceFile{

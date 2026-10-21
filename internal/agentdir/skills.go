@@ -146,9 +146,11 @@ func copyTree(src, dst string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return err
 		}
-		data, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(rel)))
+		// Open without following links or blocking, in case the entry was
+		// swapped for a symlink or FIFO after the walk checked it.
+		data, _, err := safefs.ReadRegular(filepath.Join(src, filepath.FromSlash(rel)), 0)
 		if err != nil {
-			return err
+			return fmt.Errorf("skill file %s %w", rel, err)
 		}
 		return os.WriteFile(target, data, 0o600)
 	})

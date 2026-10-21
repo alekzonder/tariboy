@@ -617,3 +617,21 @@ func TestStoreNameErrorsNameTheManifestField(t *testing.T) {
 		t.Fatalf("valid names: %#v", errs)
 	}
 }
+
+// TestScanCountsBytesReadAgainstTotal proves the total size limit counts the
+// bytes actually read, not the sizes the walk saw: here every small file
+// "grows" to the per-file limit between the walk and the read.
+func TestScanCountsBytesReadAgainstTotal(t *testing.T) {
+	dir := t.TempDir()
+	n := int(maxTotalSize/maxFileSize) + 1
+	for i := 0; i < n; i++ {
+		put(t, dir, fmt.Sprintf("f%02d.txt", i), "x", 0o644)
+	}
+	grown := make([]byte, maxFileSize)
+	readSourceFile = func(string, int64) ([]byte, fs.FileMode, error) { return grown, 0o644, nil }
+	t.Cleanup(func() { readSourceFile = readRegular })
+	_, err := scan(dir)
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), fmt.Sprintf("source is larger than %d bytes", maxTotalSize)) {
+		t.Fatalf("scan error = %v, want the total size limit", err)
+	}
+}

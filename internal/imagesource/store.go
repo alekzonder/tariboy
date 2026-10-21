@@ -244,7 +244,7 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 		if info.IsDir() {
 			return os.MkdirAll(destination, 0o700)
 		}
-		data, err := os.ReadFile(filepath.Join(incoming, filepath.FromSlash(rel)))
+		data, err := readSourceFile(incoming, rel)
 		if err != nil {
 			return err
 		}
@@ -286,6 +286,24 @@ func sourceTarget(root, path string) (string, string, error) {
 	return rel, filepath.Join(root, rel), nil
 }
 
+// readSourceFile reads the walked regular file root/rel with
+// safefs.ReadRegular, so an entry swapped for a symlink or FIFO, or grown,
+// after the walk is refused instead of followed, blocked on or read whole.
+func readSourceFile(root, rel string) ([]byte, error) {
+	data, _, err := safefs.ReadRegular(filepath.Join(root, filepath.FromSlash(rel)), MaxFileSize)
+	switch {
+	case errors.Is(err, safefs.ErrFileTooLarge):
+		return nil, fmt.Errorf("%w: %s", ErrFileTooLarge, rel)
+	case errors.Is(err, safefs.ErrUnsafeFile):
+		return nil, fmt.Errorf("%w: non-regular file %s", ErrUnsafeFile, rel)
+	case errors.Is(err, os.ErrNotExist):
+		return nil, err
+	case err != nil:
+		return nil, fmt.Errorf("%w: %s %v", ErrUnsafeFile, rel, err)
+	}
+	return data, nil
+}
+
 // walkError maps a safefs refusal onto this package's errors and texts.
 func walkError(err error) error {
 	var pathErr *safefs.PathError
@@ -312,7 +330,7 @@ func (s *Store) ListFiles(name string) ([]FileEntry, error) {
 	var out []FileEntry
 	skipMetadata := func(rel string) bool { return rel == MetadataFilename }
 	err = safefs.WalkRegular(dir, safefs.WalkOptions{Skip: skipMetadata, MaxFileSize: MaxFileSize}, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
-		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		data, err := readSourceFile(dir, rel)
 		if err != nil {
 			return err
 		}
@@ -483,9 +501,14 @@ func readRegularUTF8(path string) ([]byte, error) {
 	if st.Size() > MaxFileSize {
 		return nil, fmt.Errorf("%w: %s", ErrFileTooLarge, path)
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
+	data, _, err := safefs.ReadRegular(path, MaxFileSize)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
 		return nil, err
+	case errors.Is(err, safefs.ErrFileTooLarge):
+		return nil, fmt.Errorf("%w: %s", ErrFileTooLarge, path)
+	case err != nil:
+		return nil, fmt.Errorf("%w: %s", ErrUnsafeFile, path)
 	}
 	if !utf8.Valid(data) {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidUTF8, path)

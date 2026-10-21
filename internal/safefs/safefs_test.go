@@ -318,3 +318,58 @@ func TestDecodeStrictJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestReadRegular(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{"ten.txt": "0123456789"})
+	if err := os.Symlink(filepath.Join(dir, "ten.txt"), filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(dir, "pipe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body, info, err := ReadRegular(filepath.Join(dir, "ten.txt"), 10)
+	if err != nil || string(body) != "0123456789" || !info.Mode().IsRegular() || info.Size() != 10 {
+		t.Fatalf("ReadRegular = %q, %v, %v", body, info, err)
+	}
+	if body, _, err := ReadRegular(filepath.Join(dir, "ten.txt"), 0); err != nil || len(body) != 10 {
+		t.Fatalf("unlimited ReadRegular = %q, %v", body, err)
+	}
+	cases := []struct {
+		name    string
+		file    string
+		limit   int64
+		wantErr error
+		wantMsg string
+	}{
+		{"too large", "ten.txt", 9, ErrFileTooLarge, "is larger than 9 bytes"},
+		{"FIFO", "pipe", 10, ErrNonRegular, "is not a regular file"},
+		{"symlink", "link", 10, nil, "cannot be opened as a regular file"},
+		{"missing", "missing", 10, fs.ErrNotExist, "cannot be opened as a regular file"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			done := make(chan error, 1)
+			go func() {
+				_, _, err := ReadRegular(filepath.Join(dir, tc.file), tc.limit)
+				done <- err
+			}()
+			var err error
+			select {
+			case err = <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("ReadRegular hung")
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Fatalf("error = %v, want %q", err, tc.wantMsg)
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+	if _, _, err := ReadRegular(filepath.Join(dir, "pipe"), 10); !errors.Is(err, ErrUnsafeFile) {
+		t.Fatalf("FIFO error %v does not match ErrUnsafeFile", err)
+	}
+}

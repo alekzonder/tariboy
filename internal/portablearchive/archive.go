@@ -73,14 +73,14 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 			return Manifest{}, fmt.Errorf("portable archive: duplicate path %s", name)
 		}
 		seen[name] = true
+		// archivePath already enforced the path length, so the checker's
+		// ErrMemberPath cannot occur here.
 		if err := checker.Check(h); err != nil {
 			switch {
 			case errors.Is(err, ErrMemberCount):
 				return Manifest{}, errors.New("portable archive: too many entries")
 			case errors.Is(err, ErrMemberSize):
 				return Manifest{}, errors.New("portable archive: expanded size exceeded")
-			case errors.Is(err, ErrMemberPath):
-				return Manifest{}, fmt.Errorf("portable archive: invalid path %q", h.Name)
 			}
 			return Manifest{}, fmt.Errorf("portable archive: unsupported entry type for %s", name)
 		}

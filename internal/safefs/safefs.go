@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // ErrInvalidPath reports a relative path that CleanRel rejects.
@@ -154,6 +155,55 @@ func WalkRegular(root string, opts WalkOptions, fn func(rel string, d fs.DirEntr
 		}
 		return fn(rel, d, info)
 	})
+}
+
+// readError keeps ReadRegular's short text while matching its kind (and so
+// ErrUnsafeFile for ErrNonRegular) with errors.Is.
+type readError struct {
+	msg  string
+	kind error
+}
+
+func (e *readError) Error() string { return e.msg }
+func (e *readError) Unwrap() error { return e.kind }
+
+// ReadRegular reads the regular file at path without following a symbolic
+// link and without blocking on a FIFO: it opens with O_NOFOLLOW|O_NONBLOCK,
+// takes type, size and mode from the opened descriptor, and stops reading one
+// byte past limit. A limit of zero or less means no limit. It closes the gap
+// between a walk's Lstat and the read, when the entry may have been swapped
+// or grown. Errors: "cannot be opened as a regular file: <cause>" (wrapping
+// the open error), "is not a regular file" (matches ErrNonRegular), and
+// "is larger than <limit> bytes" (matches ErrFileTooLarge).
+func ReadRegular(path string, limit int64) ([]byte, fs.FileInfo, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot be opened as a regular file: %w", err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, nil, &readError{msg: "is not a regular file", kind: ErrNonRegular}
+	}
+	tooLarge := &readError{msg: fmt.Sprintf("is larger than %d bytes", limit), kind: ErrFileTooLarge}
+	var r io.Reader = f
+	if limit > 0 {
+		if info.Size() > limit {
+			return nil, nil, tooLarge
+		}
+		r = io.LimitReader(f, limit+1)
+	}
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return nil, nil, err
+	}
+	if limit > 0 && int64(len(content)) > limit {
+		return nil, nil, tooLarge
+	}
+	return content, info, nil
 }
 
 // ErrTrailingData reports data after the single JSON value DecodeStrictJSON
