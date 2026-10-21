@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { COUNT, DANGER_FILL, EMPTY, LABEL, MONO, QUIET_ACTION } from "./panelStyles"
 import { MarkdownContent, MarkdownModeSegment, type MarkdownMode } from "./TaskMarkdown"
 import { formatTaskTime } from "./taskTime"
-import type { Requirement } from "./workflowGraph"
+import type { Requirement, StepArtifacts } from "./workflowGraph"
 import { errorText } from "./workflowShared"
 
 /** A value longer than this many lines, or characters, starts collapsed. */
@@ -18,11 +18,14 @@ const COLLAPSED_CHARS = 600
  * The task's artifacts: the current value of each, its author and time, the
  * history on demand, and for the customer an edit action. The daemon never
  * parses a value: it renders as Markdown, or as plain text when switched.
- * Given the requirements of the current status, the artifacts an outcome
- * needs come first, missing ones before set ones, each naming the outcome;
- * the rest fold away until asked for.
+ * Given a step of the workflow, only the artifacts a transition into or out
+ * of it requires show, in those two groups, until **Show all artifacts**;
+ * one needed both ways shows once, under the way in.
+ * Otherwise every artifact shows in one list, the ones an outcome of the
+ * current status needs first; in both, missing ones come before set ones and
+ * each names the transition that requires it.
  */
-export default function WorkflowArtifacts({ taskKey, artifacts, declared, editable, required, target, onChanged }: {
+export default function WorkflowArtifacts({ taskKey, artifacts, declared, editable, required, step, onShowAll, target, onChanged }: {
   taskKey: string
   artifacts: WorkflowArtifact[]
   /** Every artifact the manifest declares, so one with no value can be set. */
@@ -30,39 +33,54 @@ export default function WorkflowArtifacts({ taskKey, artifacts, declared, editab
   editable: boolean
   /** The outcomes of the current status that require each artifact, by name. */
   required?: Map<string, Requirement[]>
+  /** The selected step and what it needs; absent shows every artifact. */
+  step?: { status: string } & StepArtifacts
+  onShowAll?: () => void
   target?: ApiTarget
   onChanged: () => void
 }) {
-  const [othersOpen, setOthersOpen] = useState(false)
   const unset = declared.filter((item) => !artifacts.some((artifact) => artifact.name === item.name))
   const describe = (name: string) => declared.find((item) => item.name === name)?.description
-  const item = (name: string, artifact?: WorkflowArtifact) => <ArtifactItem key={name} taskKey={taskKey} name={name}
-    artifact={artifact} description={describe(name)} requirements={required?.get(name)} editable={editable} target={target} onChanged={onChanged} />
-  const all: { name: string; artifact?: WorkflowArtifact }[] = [
-    ...artifacts.map((artifact) => ({ name: artifact.name, artifact })), ...unset.map(({ name }) => ({ name }))]
-  const needed = all.filter(({ name }) => required?.has(name))
-  const others = all.filter(({ name }) => !required?.has(name))
-  // Missing first: what blocks the outcome is what to look at.
-  needed.sort((a, b) => Number(!!a.artifact) - Number(!!b.artifact))
-  const grouped = needed.length > 0
+  const value = (name: string) => artifacts.find((artifact) => artifact.name === name)
+  const item = (name: string, requirements?: Requirement[]) => <ArtifactItem key={name} taskKey={taskKey} name={name}
+    artifact={value(name)} description={describe(name)} requirements={requirements} editable={editable} target={target} onChanged={onChanged} />
+  const all = [...artifacts.map((artifact) => artifact.name), ...unset.map(({ name }) => name)]
+  // Missing first: what blocks the transition is what to look at.
+  const missingFirst = (names: string[]) => [...names].sort((a, b) => Number(!!value(a)) - Number(!!value(b)))
+  const header = <div className="flex items-center gap-1.5">
+    <span className={LABEL}>Artifacts</span>
+    <span className={COUNT}>{artifacts.length}</span>
+  </div>
+  if (step) {
+    const shown = new Set([...step.enter.keys(), ...step.leave.keys()])
+    // An artifact needed both ways shows once, under the way in, with every label.
+    const both = (name: string) => [...step.enter.get(name) ?? [], ...step.leave.get(name) ?? []]
+    const group = (title: string, names: string[]) => names.length > 0 && <>
+      <span className="text-[11.5px] text-muted-foreground">{title}</span>
+      <ul aria-label={title} className="flex min-w-0 flex-col gap-2.5">
+        {missingFirst(names).map((name) => item(name, both(name)))}
+      </ul>
+    </>
+    return (
+      <section className="flex min-w-0 flex-col gap-1.5">
+        {header}
+        <div data-testid="artifact-filter" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted-foreground">
+          <span className="min-w-0">Step <span className={cn(MONO, "break-all text-foreground")}>{step.status}</span> · {shown.size} of {all.length} artifacts</span>
+          <Button type="button" variant="ghost" className={QUIET_ACTION} onClick={onShowAll}>Show all artifacts</Button>
+        </div>
+        {shown.size === 0 && <span className={EMPTY}>No artifact is required to enter or leave {step.status}.</span>}
+        {group(`Needed to enter ${step.status}`, [...step.enter.keys()])}
+        {group(`Needed to leave ${step.status}`, [...step.leave.keys()].filter((name) => !step.enter.has(name)))}
+      </section>
+    )
+  }
+  const needed = missingFirst(all.filter((name) => required?.has(name)))
   return (
     <section className="flex min-w-0 flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
-        <span className={LABEL}>Artifacts</span>
-        <span className={COUNT}>{artifacts.length}</span>
-      </div>
+      {header}
       {all.length === 0 && <span className={EMPTY}>No artifact has a value yet.</span>}
-      {grouped && <>
-        <span className="text-[11.5px] text-muted-foreground">Needed to leave this status</span>
-        <ul aria-label="Artifacts needed now" className="flex min-w-0 flex-col gap-2.5">
-          {needed.map(({ name, artifact }) => item(name, artifact))}
-        </ul>
-        {others.length > 0 && <Button type="button" variant="ghost" className={cn(QUIET_ACTION, "self-start")} aria-expanded={othersOpen}
-          onClick={() => setOthersOpen(!othersOpen)}>
-          {othersOpen ? "Hide other artifacts" : `Other artifacts (${others.length})`}</Button>}
-      </>}
-      {(!grouped || othersOpen) && others.length > 0 && <ul aria-label="Other artifacts" className="flex min-w-0 flex-col gap-2.5">
-        {others.map(({ name, artifact }) => item(name, artifact))}
+      {all.length > 0 && <ul aria-label="All artifacts" className="flex min-w-0 flex-col gap-2.5">
+        {[...needed, ...all.filter((name) => !required?.has(name))].map((name) => item(name, required?.get(name)))}
       </ul>}
     </section>
   )
@@ -74,7 +92,7 @@ function ArtifactItem({ taskKey, name, artifact, description, requirements, edit
   artifact?: WorkflowArtifact
   /** The manifest's description. */
   description?: string
-  /** The outcomes of the current status that require the artifact. */
+  /** The transitions that require the artifact. */
   requirements?: Requirement[]
   editable: boolean
   target?: ApiTarget
@@ -121,9 +139,9 @@ function ArtifactItem({ taskKey, name, artifact, description, requirements, edit
       </div>
       {(description || (requirements ?? []).length > 0) && <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
         {description && <span className="min-w-0 text-[12px] break-words text-muted-foreground">{description}</span>}
-        {(requirements ?? []).map((requirement) => <span key={requirement.on} data-requirement={requirement.missing ? "missing" : "set"}
+        {(requirements ?? []).map((requirement) => <span key={`${requirement.from}:${requirement.on}`} data-requirement={requirement.missing ? "missing" : "set"}
           className={cn(MONO, "rounded-[5px] px-1.5", requirement.missing ? DANGER_FILL : "bg-muted text-muted-foreground")}>
-          required by {requirement.on} → {requirement.to}</span>)}
+          required by {requirement.from && `${requirement.from} · `}{requirement.on} → {requirement.to}</span>)}
       </div>}
       {draft !== null ? <div className="flex min-w-0 flex-col gap-1.5">
         <Textarea aria-label={`Value of ${name}`} value={draft} disabled={saving} onChange={(event) => setDraft(event.target.value)}

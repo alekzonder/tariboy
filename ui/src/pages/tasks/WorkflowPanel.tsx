@@ -9,7 +9,7 @@ import ReturnToAgent from "./ReturnToAgent"
 import { formatTaskTime } from "./taskTime"
 import WorkflowArtifacts from "./WorkflowArtifacts"
 import { useWorkflowConfirm } from "./WorkflowConfirm"
-import { canReturnToAgent, isClosed, requiredBy, stepOf } from "./workflowGraph"
+import { canReturnToAgent, isClosed, requiredBy, stepArtifacts, stepOf } from "./workflowGraph"
 import WorkflowOutcomes from "./WorkflowOutcomes"
 import WorkflowPauseBanner from "./WorkflowPauseBanner"
 import WorkflowProblem from "./WorkflowProblem"
@@ -45,6 +45,9 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
   const [form, setForm] = useState<OpenForm>(null)
   const [canceling, setCanceling] = useState(false)
   const [cancelError, setCancelError] = useState("")
+  // The step the artifacts are filtered by: undefined follows the task's
+  // status, null shows every artifact.
+  const [chosen, setChosen] = useState<string | null | undefined>(undefined)
   const { confirm, dialog } = useWorkflowConfirm()
   const mountedRef = useMounted()
   // Only the newest request may set the view: an older response that
@@ -83,6 +86,8 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
   const closed = isClosed(view)
   const editable = task.access !== "context" && task.access !== "respond"
   const step = stepOf(view)
+  const declares = (id: string | null | undefined) => !!id && view.statuses.some((status) => status.id === id)
+  const selected = chosen === null ? null : declares(chosen) ? chosen! : declares(view.status) ? view.status : null
   const cancel = () => confirm({
     title: "Cancel this task?",
     description: "The task closes as cancelled and its scripts stop. The workflow status stays where it stopped.",
@@ -112,7 +117,7 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
         reason={view.paused_reason ?? task.workflow_paused_reason ?? ""} pool={view.owner.startsWith("pool:")}
         target={target} onChanged={changed} />}
       <WorkflowProblem taskKey={task.key} view={view} target={target} onChanged={changed} onRefresh={refresh} />
-      <WorkflowStepper view={view} />
+      <WorkflowStepper view={view} selected={selected} onSelect={setChosen} />
       <div className="flex min-w-0 items-center gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px] text-muted-foreground">
           <span className={cn(MONO, "font-medium text-foreground")} title={view.digest}>{view.name}@{view.version}</span>
@@ -139,7 +144,8 @@ export function WorkflowPanel({ task, eventSequence = 0, target, onTaskChanged }
       {form === "return" && <ReturnToAgent taskKey={task.key} view={view} target={target} onChanged={changed} onDone={() => setForm(null)} />}
       <WorkflowOutcomes taskKey={task.key} view={view} target={target} onChanged={changed} onRefresh={refresh} />
       <WorkflowArtifacts taskKey={task.key} artifacts={view.artifacts} declared={view.declared_artifacts ?? []}
-        required={closed ? undefined : requiredBy(view)} editable={editable && !closed} target={target} onChanged={changed} />
+        required={closed ? undefined : requiredBy(view)} step={selected ? { status: selected, ...stepArtifacts(view, selected) } : undefined}
+        onShowAll={() => setChosen(null)} editable={editable && !closed} target={target} onChanged={changed} />
       <WorkflowRuns taskKey={task.key} runs={view.runs ?? []} target={target} />
       <section className="flex min-w-0 flex-col gap-1">
         <span className={LABEL}>Visits</span>

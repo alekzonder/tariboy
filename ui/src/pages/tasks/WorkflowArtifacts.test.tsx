@@ -35,22 +35,63 @@ it("lists every declared artifact with no value yet, with its description and a 
   expect(screen.getAllByRole("listitem")).toHaveLength(2)
 })
 
-it("puts the artifacts an outcome needs first, missing ones before set ones, and folds the rest away", () => {
+it("lists every artifact in one list, the ones the current status needs first, missing before set", () => {
   const required = new Map([
     ["notes", [{ on: "drafted", to: "review", missing: false }]],
     ["summary", [{ on: "drafted", to: "review", missing: true }]],
   ])
-  renderArtifacts({ required, declared: [{ name: "notes", description: "The notes." }, { name: "summary", description: "One paragraph." }, { name: "changelog", description: "" }] })
-  const needed = within(screen.getByRole("list", { name: "Artifacts needed now" })).getAllByRole("listitem")
-  expect(needed.map((item) => item.querySelector("span")!.textContent)).toEqual(["summary", "notes"])
-  expect(within(needed[0]).getByText("required by drafted → review")).toHaveAttribute("data-requirement", "missing")
-  expect(within(needed[1]).getByText("required by drafted → review")).toHaveAttribute("data-requirement", "set")
-  expect(within(needed[1]).getByText("The notes.")).toBeInTheDocument()
-  expect(screen.queryByText("changelog")).not.toBeInTheDocument()
-  const others = screen.getByRole("button", { name: "Other artifacts (1)" })
-  expect(others).toHaveAttribute("aria-expanded", "false")
-  fireEvent.click(others)
-  expect(within(screen.getByRole("list", { name: "Other artifacts" })).getByText("changelog")).toBeInTheDocument()
+  renderArtifacts({ required, declared: [{ name: "changelog", description: "" }, { name: "notes", description: "The notes." }, { name: "summary", description: "One paragraph." }] })
+  const all = within(screen.getByRole("list", { name: "All artifacts" })).getAllByRole("listitem")
+  expect(all.map((item) => item.querySelector("span")!.textContent)).toEqual(["summary", "notes", "changelog"])
+  expect(within(all[0]).getByText("required by drafted → review")).toHaveAttribute("data-requirement", "missing")
+  expect(within(all[1]).getByText("required by drafted → review")).toHaveAttribute("data-requirement", "set")
+  expect(within(all[1]).getByText("The notes.")).toBeInTheDocument()
+  expect(screen.queryByRole("button", { name: /Other artifacts/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole("button", { name: "Show all artifacts" })).not.toBeInTheDocument()
+})
+
+it("shows only what a selected step needs, by the way in and the way out, and resets to all", () => {
+  const onShowAll = vi.fn()
+  const step = {
+    status: "review",
+    enter: new Map([
+      ["notes", [{ from: "draft", on: "drafted", to: "review", missing: false }]],
+      ["summary", [{ from: "draft", on: "drafted", to: "review", missing: true }]],
+    ]),
+    leave: new Map([["changelog", [{ from: "review", on: "approve", to: "publish", missing: true }]]]),
+  }
+  renderArtifacts({ step, onShowAll, declared: [{ name: "notes", description: "The notes." }, { name: "summary", description: "" }, { name: "changelog", description: "" }, { name: "extra", description: "" }] })
+  expect(screen.getByTestId("artifact-filter")).toHaveTextContent("Step review · 3 of 4 artifacts")
+  expect(screen.queryByText("extra")).not.toBeInTheDocument()
+  const enter = within(screen.getByRole("list", { name: "Needed to enter review" })).getAllByRole("listitem")
+  expect(enter.map((item) => item.querySelector("span")!.textContent)).toEqual(["summary", "notes"])
+  expect(within(enter[0]).getByText("required by draft · drafted → review")).toHaveAttribute("data-requirement", "missing")
+  const leave = within(screen.getByRole("list", { name: "Needed to leave review" })).getAllByRole("listitem")
+  expect(leave.map((item) => item.querySelector("span")!.textContent)).toEqual(["changelog"])
+  expect(within(leave[0]).getByText("required by review · approve → publish")).toHaveAttribute("data-requirement", "missing")
+  fireEvent.click(screen.getByRole("button", { name: "Show all artifacts" }))
+  expect(onShowAll).toHaveBeenCalledTimes(1)
+})
+
+it("shows an artifact needed both ways once, under the way in, with both labels", () => {
+  const step = {
+    status: "review",
+    enter: new Map([["notes", [{ from: "draft", on: "drafted", to: "review", missing: false }]]]),
+    leave: new Map([["notes", [{ from: "review", on: "approve", to: "publish", missing: false }]]]),
+  }
+  renderArtifacts({ step, onShowAll: vi.fn() })
+  expect(screen.getAllByRole("listitem")).toHaveLength(1)
+  const notes = within(screen.getByRole("list", { name: "Needed to enter review" })).getByRole("listitem")
+  expect(within(notes).getByText("required by draft · drafted → review")).toBeInTheDocument()
+  expect(within(notes).getByText("required by review · approve → publish")).toBeInTheDocument()
+  expect(screen.queryByRole("list", { name: "Needed to leave review" })).not.toBeInTheDocument()
+})
+
+it("says so when a selected step needs no artifact", () => {
+  renderArtifacts({ step: { status: "done", enter: new Map(), leave: new Map() }, onShowAll: vi.fn() })
+  expect(screen.getByText("No artifact is required to enter or leave done.")).toBeInTheDocument()
+  expect(screen.queryByRole("listitem")).not.toBeInTheDocument()
+  expect(screen.getByRole("button", { name: "Show all artifacts" })).toBeInTheDocument()
 })
 
 it("lets a long author wrap", () => {

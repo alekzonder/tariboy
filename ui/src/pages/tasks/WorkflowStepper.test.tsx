@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
-import { expect, it } from "vitest"
+import { expect, it, vi } from "vitest"
 import WorkflowStepper from "./WorkflowStepper"
 import { customerView } from "./workflowFixtures"
 
@@ -55,4 +55,19 @@ it("wraps and clips a long status ID while keeping it readable on hover", () => 
   render(<WorkflowStepper view={{ ...customerView, status: id, statuses: [{ id, owner: "customer", terminal: false }] }} />)
   expect(screen.getByRole("list", { name: "Workflow steps" })).toHaveClass("flex-wrap")
   expect(screen.getByTitle(id)).toHaveClass("truncate")
+})
+
+it("marks and opens the selected step and reports a click as the new selection", () => {
+  const onSelect = vi.fn()
+  render(<WorkflowStepper view={customerView} selected="review" onSelect={onSelect} />)
+  const review = screen.getByRole("button", { name: /^review/ })
+  expect(review).toHaveAttribute("aria-pressed", "true")
+  expect(screen.getByRole("button", { name: /^draft/ })).toHaveAttribute("aria-pressed", "false")
+  expect(screen.getByTestId("step-detail")).toHaveTextContent("owned by the customer")
+  fireEvent.click(screen.getByRole("button", { name: /^draft/ }))
+  expect(onSelect).toHaveBeenLastCalledWith("draft")
+  fireEvent.click(review)
+  expect(onSelect).toHaveBeenLastCalledWith(null)
+  // The parent owns the selection: a click alone changes nothing.
+  expect(review).toHaveAttribute("aria-pressed", "true")
 })

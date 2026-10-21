@@ -479,10 +479,16 @@ a response older than the newest) and composes, top down,
 `WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
 picks from the view, with `retryTransitionRequest` behind **Retry** and the
 run's log through `RunRow` with `autoLoad`), `WorkflowStepper` (the view's
-`statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`), the header
-with `stepOf`, `WorkflowOutcomes` (`advanceTask`), `WorkflowArtifacts`
-(`setTaskArtifact`, `getTaskArtifactHistory`; every entry of the view's
-`declared_artifacts`, grouped by `requiredBy`), `WorkflowRuns`
+`statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`; the panel
+owns the selected step, which starts at the current status and follows it
+until the customer picks a step), the header with `stepOf`,
+`WorkflowOutcomes` (`advanceTask`), `WorkflowArtifacts`
+(`setTaskArtifact`, `getTaskArtifactHistory`; for the selected step only the
+artifacts `stepArtifacts` finds in the `requires` of a transition into it,
+then out of it, each naming its transition; **Show all artifacts**, or a
+second click on the step, clears the selection and lists every entry of the
+view's `declared_artifacts` in one list, those `requiredBy` names for the
+current status first), `WorkflowRuns`
 (`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
 and the header's labeled **Return to agent…**, **Move to status…**, and
 **Cancel task** buttons: `ReturnToAgent` picks its targets with
