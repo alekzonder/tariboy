@@ -32,8 +32,10 @@ operations.
 2. An operator **binds** the image to a queue, gives every pool the image names
    at least one agent, and stores the **queue secrets** the image requires.
 3. A task created in the bound queue **pins** the image version (its digest)
-   and enters the image's `initial_status`. Moving a tag later changes nothing
-   for existing tasks, and a task is never migrated to another version.
+   and enters the image's `initial_status`. A binding made by a tag, such as
+   `latest`, follows that tag: when a new build moves the tag, tasks created
+   after it pin the new version. Existing tasks keep their version, and a task
+   is never migrated to another version.
 4. Every non-terminal **status** has one owner, who leaves it by naming an
    **outcome**; the status declares a **transition** per outcome.
    - A **pool** status is worked by one agent, the **holder**, which the daemon
@@ -255,6 +257,13 @@ Nobody sets a category; the daemon derives it from the status owner:
 | Terminal status | `done`, or `cancelled` when the status declares `cancelled: true` | unchanged | |
 | Cancelled with `ttasks cancel` | `cancelled`; the status stays where the task stopped | unchanged | |
 
+One function derives this table, from the owner kind of the status, the
+holder, the pause, and whether the holder's question is open. Entering a
+status, resuming a pause, pausing, dispatching, and a comment all use it, and
+one statement writes the result. A pool status picks a holder only when the
+task is neither paused nor blocked; a blocked task stays `open` with no
+holder until the daemon dispatches it after the blocker closes.
+
 `waiting_on` is non-empty only while the category is `wait_customer`. It takes
 the values `customer`, `script`, and `pause`; `pause` marks a task the daemon
 paused and is described under [Pauses](#pauses). A flexible task has `category` equal to `status`
@@ -263,6 +272,33 @@ and an empty `waiting_on`.
 In the task JSON a workflow task also carries `workflow_digest`,
 `workflow_name`, `workflow_version`, and `workflow_paused_reason`, which holds
 the pause reason while the task is paused and is empty otherwise.
+
+### Attention summary
+
+An open workflow task also carries two derived objects, so a list of tasks can
+show where each one is and whether it needs a person without reading every
+task's view. Both are absent on a flexible task and on a closed one.
+
+`workflow_step` is `{"index": 3, "total": 6}`: the position of the current
+status in the manifest, counted from 1, and the number of statuses the manifest
+declares.
+
+`workflow_attention` is present only while something needs a person. It is
+derived from the task's open visit: its counters, its latest transition
+request, and its latest finished script run. The first kind that applies wins:
+
+| `kind` | When | `message` | `count` | Ids |
+| --- | --- | --- | --- | --- |
+| `paused` | The task is paused; see [Pauses](#pauses). | What the pause reason means. | | |
+| `failed` | The latest request of the visit is `failed`: a check could not run. | The first line of the request's `result_message`, without the `log:` line. | `script_failures` of the visit | `request_id`, and `run_id` when the run is the latest finished one |
+| `rejected` | The latest request of the visit is `rejected`. | The first line of the check's message. | `rejected_requests` of the visit | `request_id`, and `run_id` as above |
+| `script_failed` | The latest finished run of the visit is a watch that failed. | The first line of the run's message. | `script_failures` of the visit | `run_id` |
+| `idle` | The holder ended one or more iterations in a row without requesting a transition. | A sentence with the count. | `idle_iterations` of the visit | |
+
+A pending request is not attention: the checks are still running. A message
+is cut to 200 characters with `… (cut)`. The same object is returned by every
+route that returns a task, including the list and the tree, and by `ttasks
+show --json`.
 
 On a workflow task `ttasks done`, `ttasks update --status`, `ttasks assign`
 (and `--assignee` on update or create), and `ttasks ready --claim` are refused
@@ -283,14 +319,35 @@ ttasks queue workflow get DEV
 ttasks queue workflow clear DEV --revision 1
 ```
 
-The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>` and is resolved to a
-digest when the binding is set; `NAME` means `latest`. To move a queue to a
-newer version, run `queue workflow set` again with the current binding
-revision: tasks already created keep their version, and only tasks created
-afterwards pin the new one. `--revision` is `0` for a first binding and the
+The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
+`latest`. The binding stores the digest the reference names now and the tag it
+was made by, shown as `tag` by `queue workflow get`:
+
+| Reference | `tag` | When the tag moves |
+| --- | --- | --- |
+| `NAME` or `NAME:latest` | `latest` | The binding follows `latest` to each new build. |
+| `NAME:0.3.0` | `0.3.0` | A version tag names one build, so the binding stays. |
+| `NAME:<digest>` | empty | The binding is pinned to the digest. |
+
+A binding with a tag moves to the digest the tag names after a
+`tariboy workflow build` or a workflow import, when the daemon starts, and when
+a task is created in the queue. Only tasks created afterwards pin the new
+version: tasks already created keep their version. Each move increments the
+revision and emits `queue.workflow_bound` with `followed: true`. The move
+checks pools and secrets like a bind. If a pool of the new version is empty or
+a secret is missing, the binding stays on the old version, new tasks keep
+pinning it, and the queue event `queue.workflow_follow_blocked` gives the
+`reason` (`workflow_pool_empty` or `workflow_secret_missing`) and the `names`.
+The next task, build, or daemon start tries again. A removed tag keeps the
+binding where it is.
+
+To pin a queue to another version, run `queue workflow set` again with the
+current binding revision. `--revision` is `0` for a first binding and the
 revision shown by `queue workflow get` for a rebind or a `clear`. Binding the
-digest that is already bound changes nothing and keeps the revision, whatever
-revision is given, so a retried bind succeeds.
+digest and tag that are already bound changes nothing and keeps the revision,
+whatever revision is given, so a retried bind succeeds. The same digest under
+another tag is a change. Bindings made before this column existed have an empty
+tag and stay pinned: bind them again as `NAME:latest` to follow `latest`.
 
 A bind checks pools first, then secrets:
 
@@ -307,7 +364,8 @@ A bind checks pools first, then secrets:
 | `forbidden` | The caller is not the daemon customer; agents cannot administer workflows. |
 
 A binding emits `queue.workflow_bound` and `queue.workflow_cleared` queue
-events carrying the image name, version, and digest.
+events carrying the image name, version, and digest; `queue.workflow_bound` also
+carries the `tag`.
 
 Removing a workflow image that a queue binds, or that any task pins, open or
 closed, is refused with `workflow_in_use`; nightly task retention removes closed
@@ -859,7 +917,8 @@ ttasks queue source log DEV 12
 ttasks queue source log DEV 12 --max-bytes 4096
 ```
 
-`queue source ls` shows each source of the bound image: script, `every`, when it
+`queue source ls` shows each source of the bound image: script, `every`, its
+`description` when the image gives one, when it
 runs next, the failures in a row, the last run with its verdict (`items`,
 `quiet`, or `failure`), message, and the number of tasks it created, and the
 newest 20 runs, newest first, in `runs`; their ids are what `queue source log`
@@ -965,7 +1024,9 @@ The block is rendered in this order:
    image, cut at a fixed byte limit with a marker when longer, and closed by
    the fixed line `End of status instructions.`
 5. `### Outcomes`: each outcome with its target, the artifacts it `requires`, the
-   ones still `missing`, and its `checks`.
+   ones still `missing`, and its `checks`, each named by its script path
+   followed by its manifest `description` in parentheses when the image gives
+   one.
 6. `### Artifacts`: each current artifact with its author.
 7. `### Last transition request`: only when the last request of the current
    visit was `rejected` or `failed`, with the script's message and, for a failure,
@@ -1223,13 +1284,13 @@ and what it may do next. Agents and the operator can read it.
 | `owner` | `pool:<name>`, `customer`, `script`, or empty for a finished task. |
 | `holder` | The assigned `agent:<name>` of a pool status. |
 | `instructions_path` | The status instruction file inside the image. |
-| `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), and `checks` (script paths). A finished task has none. |
+| `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), `checks` (script paths), and `check_details`: the same checks, in order, each with `script`, `description` (when the image gives one), and the resolved `run_as` and `timeout`. A finished task has none. |
 | `artifacts` | The current value of each artifact. |
-| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message. |
+| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message, plus the visit's counters `idle_iterations`, `rejected_requests`, and `script_failures` (absent when zero); compare them with the `limits` of the status to see how close the task is to a pause. |
 | `last_request` | The latest transition request: `id`, `outcome`, `message`, `actor`, `state`, `result_message`, times, and `wait_seconds` while pending. |
-| `runs` | The 20 most recent script runs, newest first. |
+| `runs` | The 20 most recent script runs, newest first. A check run carries the `request_id` of the transition request it belongs to. |
 | `declared_artifacts` | Every artifact the manifest declares, in manifest order, as `name` and `description`, whether or not it has a value. |
-| `statuses` | Every status the manifest declares, in manifest order, as `id`, `owner` (as in `owner` above: `pool:<name>`, `customer`, `script`, or empty for a terminal status), and `terminal`. A finished task lists them too. |
+| `statuses` | Every status the manifest declares, in manifest order, as `id`, `owner` (as in `owner` above: `pool:<name>`, `customer`, `script`, or empty for a terminal status), and `terminal`. A non-terminal status also carries `initial`, `instructions_path`, its `transitions` (`on`, `to`, `requires`, and `checks` as `check_details` above), its `watch` (`script`, `description`, `every`, and the resolved `timeout`), and its effective `limits`; a terminal status carries `cancelled` when it declares it. A finished task lists them too. |
 
 ## Commands
 
@@ -1308,7 +1369,9 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `tasks.workflow_digest` | The pinned image digest; `NULL` for a flexible task. |
 | `tasks.workflow_status` | The current workflow status. |
 | `tasks.workflow_paused_reason` | The pause reason; empty unless the task is paused. |
-| `task_queue_workflows` | One binding per queue: digest, revision, update time. |
+| `tasks.workflow_owner_kind` | The owner kind of the current status (`pool`, `customer`, or `script`), copied from the pinned manifest; empty for a terminal or undeclared status and for a flexible task. Triggers keep it current when the status, the digest, or the manifest changes (migration `0069`). |
+| `tasks.open_blockers` | How many `blocks` relations point at the task from a task that is not `done` or `cancelled`. A task is blocked while this is above zero or it has a manual block reason. Triggers on relations and on the blocker's status keep it current, for flexible and workflow tasks alike (migration `0069`). |
+| `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
 | `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), and `resumed_at`, when a pause of the visit was last resumed (migration `0062`). |
@@ -1522,56 +1585,92 @@ How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
 ### The workflow panel
 
 Opening a workflow task shows a **Workflow** panel in the task sheet in place of
-the status select. The header gives `name@version`, the status, the owner, and
-the holder; a pause banner comes first when the task is paused. The task's
-assignee is read-only, because the workflow assigns pool work, and the sheet
-has no **Move to another server…**, because the daemon refuses to export a
-workflow task. The panel follows the task's events as well as its revision: a
-rejected request, a script run, or another event refetches the view while the
-sheet is open, and an older response never replaces a newer one. The panel has
-these sections:
+the status select. It reads top down: what is wrong, where the task is, what
+may happen next, what it produced, and what ran. The task's assignee is
+read-only, because the workflow assigns pool work, and the sheet has no
+**Move to another server…**, because the daemon refuses to export a workflow
+task. The panel follows the task's events as well as its revision: a rejected
+request, a script run, or another event refetches the view while the sheet is
+open, and an older response never replaces a newer one. The panel has these
+sections:
 
-- **Pause banner.** Appears when the task is paused. It explains the reason and
-  offers **Continue** and **Cancel task**, plus **Release holder** when the
-  status is a pool status. **Continue** keeps the same holder in a pool status
-  and resumes the task in its current status otherwise. Each asks for
-  confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the cancel
-  route.
-- **Outcomes.** Each outcome shows its target status, the artifacts it
-  requires (a name with no value is highlighted), and its checks. In a customer
-  status each outcome is a button, with an optional message of up to 4096
-  characters; Desktop sends the advance request and polls it until the checks
-  finish, then shows an `applied` result by reloading the task or a refusal
-  with the daemon's message. A button is disabled while a request is checking,
-  while a request made elsewhere is still pending (with **Refresh**), while the
-  task is paused, and while a required artifact has no value. A rejected or
-  failed last request is shown only when it was made in the current visit of an
-  open task, and a "still checking" notice goes once the request settles. A
-  failed last request has **Retry**, in any status, unless the task is paused or
-  a request is checking: it sends
+- **Pause banner.** Appears first when the task is paused. It explains the
+  reason and offers **Continue** and **Cancel task**, plus **Release holder**
+  when the status is a pool status. **Continue** keeps the same holder in a
+  pool status and resumes the task in its current status otherwise. Each asks
+  for confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the
+  cancel route.
+- **Problem.** Appears when something needs a person and the task is not
+  paused, with a title, the script's own message as text, how close the task
+  is to a pause (`2 of 5 rejections`, from the visit counters and the status
+  limits), and a line that says what to do. The first that applies is shown:
+  a **failed** request of the current visit (a check could not run: the run's
+  log opens by itself, and **Retry** sends
   `POST /api/tasks/{key}/workflow/requests/{id}/retry` and follows the new
-  request like an outcome button. In a pool or script status the outcomes are
-  listed for reference, because the agent or the watch script decides.
-- **Artifacts.** Every artifact the image declares: the current value,
-  rendered as Markdown with a **Markdown** / **Text** switch for plain text,
-  collapsed to six lines or 600 characters when long and shown in full once
-  expanded, with **Edit** and **History**, which loads the earlier values on
-  demand in the same mode; a declared artifact with no value shows its
-  description and **Set**. Editing is disabled once the task is closed.
+  request like an outcome button, unless the task is paused); a **rejected**
+  request of the current visit (the advice names the agent in a pool status
+  and the artifact or a return to the agent in a customer status; the run's
+  **Log** is on demand); a **failed watch** in a script status, with its log
+  open; a pool status with **no agent** free; and, quietly, a holder that
+  ended iterations without a transition request. A request from an earlier
+  visit, a closed task, and a pending request show nothing here.
+- **Workflow.** The statuses of the pinned image in manifest order: the
+  current one marked, the visited ones ticked, and a return count on a status
+  the task came back to from a later one. A status opens to show its owner,
+  its instruction file, its watch script with the image's `description`,
+  schedule, and timeout, each way out with the artifacts it requires and its
+  checks (script, `description`, `run_as`, and timeout), and the effective
+  limits. The row wraps on a narrow screen.
+- **Header.** `name@version`, `step k of n`, the status, the owner, and the
+  holder, with the labeled actions **Return to agent…**, **Move to status…**,
+  and **Cancel task**; see below.
+- **Outcomes.** Each outcome shows its target status, the artifacts it
+  requires (a set one ticked, a missing one highlighted), and its checks with
+  what each verifies, when the image describes it, and the resolved `run_as`
+  and timeout. In a customer status each outcome is a button, with an optional
+  message of up to 4096 characters; Desktop sends the advance request and
+  polls it until the checks finish, then shows an `applied` result by
+  reloading the task or a refusal with the daemon's message. A button is
+  disabled while a request is checking, while a request made elsewhere is
+  still pending (with **Refresh**), while the task is paused, and while a
+  required artifact has no value. A result that settled without applying is
+  shown here until the refetched view carries it; from then on the Problem
+  section explains it. In a pool or script status the outcomes are listed for
+  reference, because the agent or the watch script decides.
+- **Artifacts.** The artifacts an outcome of the current status requires come
+  first under **Needed to leave this status**, missing ones before set ones,
+  each with a `required by outcome → status` chip; the other declared
+  artifacts fold away behind **Other artifacts (n)**. Each shows its
+  description, the current value rendered as Markdown with a **Markdown** /
+  **Text** switch for plain text, collapsed to six lines or 600 characters
+  when long and shown in full once expanded, with **Edit** and **History**,
+  which loads the earlier values on demand in the same mode; a declared
+  artifact with no value shows **Set**. Editing is disabled once the task is
+  closed.
 - **Runs.** The latest 20 script runs with kind, script, state, verdict, exit
-  code, and times, and a **Log** toggle that loads the log on demand and says
-  when it is truncated; while a run is pending or running, an open log has
-  **Refresh**. Who may read a log is described in
+  code, and times. The verdict carries the tone: a failure or rejection is
+  red, a pass or outcome green, a quiet run dim. A **Log** toggle loads the
+  log on demand and says when it is truncated; while a run is pending or
+  running, an open log has **Refresh**. Who may read a log is described in
   [Runs and logs](#runs-and-logs); a refusal is shown in place of the log.
 - **Visits.** Every stay in a status, with who entered it, when it was left and
   by which outcome, and the message.
-- **Move and cancel.** The panel header has two labeled buttons: **Move to
-  status…** (every declared status but the current one, terminal statuses
-  grouped last, and a required reason) and **Cancel task**, which is hidden once
-  the task is closed. A move to a terminal status closes the task.
-  Both ask for confirmation, because they skip outcomes, checks, and required
-  artifacts and stop the current scripts. They are shown only to a principal
-  that may edit the task.
+- **Return to agent.** Sends the task back to a pool status with a message
+  the agent reads in its Goal as the transition message. The targets are the
+  pool statuses a declared outcome of the current status leads to, the pool
+  statuses the task visited before, newest first, and, for a paused pool
+  status, the status itself as a restart; the most recently visited one is
+  chosen first. In a customer status a declared outcome is sent as an advance
+  with the message; everywhere else, and for a paused task, the operator's
+  move is sent with the message as its reason, after a confirmation that says
+  so. The action is hidden on a closed task and on an unpaused pool status an
+  agent already holds.
+- **Move and cancel.** **Move to status…** offers every declared status but
+  the current one, terminal statuses grouped last, and needs a reason; a move
+  to a terminal status closes the task. **Cancel task** is hidden once the
+  task is closed. Both ask for confirmation, because they skip outcomes,
+  checks, and required artifacts and stop the current scripts. The three
+  actions are shown only to a principal that may edit the task.
 
 Messages and logs are text; Desktop never interprets them as Markdown or HTML.
 Artifact values render as Markdown without raw HTML, or as text when switched. After an action in the sheet the task list reloads as well,
@@ -1592,8 +1691,10 @@ dialog drops every unsaved edit.
 - **Workflow.** The bound image's name, version, and the first 12 characters of
   its digest, or **No workflow**. The name links to the image's page in
   **Workflow images**, by its version tag when one names the bound content and
-  by digest otherwise. Choose an image as `name:tag` and press
-  **Bind**; **Clear** asks for confirmation and unbinds. A binding changed
+  by digest otherwise. A binding made by a tag ends with **follows** and the
+  tag, for example `follows latest`: new tasks get the version that tag names.
+  Choose an image as `name:tag` and press **Bind**. Choose `name:latest` to
+  follow each new build; **Clear** asks for confirmation and unbinds. A binding changed
   elsewhere (`revision_conflict`) is reloaded with a notice so you can retry.
   Below the binding, **Statuses** lists every status of the bound image in
   manifest order: its owner and its outcomes as `outcome → status`. A pool

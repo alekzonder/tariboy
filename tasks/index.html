@@ -158,9 +158,15 @@ workflow status, for example <strong>Approval</strong>, instead of one of the fi
 labels; a long status ID is clipped and its full text is the tooltip. The
 colour of the label follows the task’s category (<code>open</code>, <code>in_progress</code>,
 <code>wait_customer</code>, <code>done</code>, <code>cancelled</code>), not the status ID, so a closed workflow
-task reads as closed whatever its last status was. Beside the label a small
-<strong>customer</strong> or <strong>script</strong> marker says who the task waits on, and a red
-<strong>paused</strong> marker replaces it when the daemon paused the task (its tooltip
+task reads as closed whatever its last status was. Beside the label an open
+task shows its step as <code>3/6</code>, its position among the workflow’s statuses
+(hidden on a phone), then a small <strong>customer</strong> or <strong>script</strong> marker that says
+who the task waits on. A problem mark takes the marker’s place when something
+needs a person: red when a check could not run or the status’s watch script
+failed, accent-coloured when a check rejected the request; its tooltip carries
+the script’s words and the count behind it (see
+<a href="/tariboy/docs/task-workflows#attention-summary">Attention summary</a>). A red
+<strong>paused</strong> marker outranks both when the daemon paused the task (its tooltip
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.</p>
 <p>Clicking a task opens a right-side sheet over the tree with its description,

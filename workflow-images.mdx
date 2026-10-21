@@ -149,20 +149,27 @@ Status IDs, outcome names (`on`), artifact names, and pool names match
 | `id` | all | Unique status ID. |
 | `owner` | non-terminal | `{pool: NAME}`, `customer`, or `script`. |
 | `instructions` | pool, customer | Source-relative Markdown file shown to the owner. Not allowed on a `script` status. |
-| `watch` | script | `script`, `every`, and `timeout` of the watch script. |
+| `watch` | script | `script`, `every`, `timeout`, and `description` of the watch script. |
 | `transitions` | non-terminal | List of `on`, `to`, and, for pool statuses, `requires` and `checks`. |
 | `limits` | non-terminal | Per-status overrides of the workflow limits. |
 | `terminal` | terminal | `true`. A terminal status has no owner, transitions, watch, instructions, or limits. |
 | `cancelled` | terminal | `true` when the result counts as cancelled rather than done. Allowed only on a terminal status. |
 
 A watch has a required `script`, a required `every` duration of at least `1s`,
-and an optional positive `timeout` (default `60s`, maximum `30m`). The daemon
-runs it once when a task enters the status, then `every` after each run
-finishes.
+an optional positive `timeout` (default `60s`, maximum `30m`), and an optional
+`description`. The daemon runs it once when a task enters the status, then
+`every` after each run finishes.
 
 A check has a required `script`, an optional `run_as` (`queue`, the default, or
-`agent`), and an optional `timeout` (default `60s`, maximum `30m`). The checks of
-a transition run in declared order when the holder requests it.
+`agent`), an optional `timeout` (default `60s`, maximum `30m`), and an optional
+`description`. The checks of a transition run in declared order when the holder
+requests it.
+
+A `description` is one line of plain text of at most 200 characters that says
+what the script verifies or waits for. Desktop shows it next to the script's
+name, and the agent's Goal block names each check with it, so write it for the
+reader who sees the script fail: "The pull request exists and is open", not
+"runs pr-open.py".
 
 How scripts are run, their exit codes, result file, environment, and run modes
 are described under [Script protocol](/docs/task-workflows#script-protocol).
@@ -189,6 +196,7 @@ sources:
 | `script` | yes | Source-relative executable; follows the [path rule](#paths). |
 | `every` | yes | Duration of at least `10s` between the end of one run and the start of the next. |
 | `timeout` | no | Positive duration, default `60s`, maximum `30m`. |
+| `description` | no | One line of plain text, at most 200 characters, shown next to the source in Desktop and by `queue source ls`. |
 
 The result file, the environment, and the commands that show a source's runs
 are described under [Sources](/docs/task-workflows#sources).
@@ -258,6 +266,7 @@ then code.
 | `checks_not_allowed` | `checks` appear on a transition out of a `customer` or `script` status. |
 | `run_as_invalid` | A check's `run_as` is neither `queue` nor `agent`. |
 | `timeout_too_long` | A check `timeout`, `watch.timeout`, or source `timeout` exceeds `30m`. |
+| `description_invalid` | A check, watch, or source `description` exceeds 200 characters or is not one line of plain text. |
 | `source_name_invalid` | A source name does not match the identifier rule. |
 | `source_duplicate` | A source name is used twice. |
 | `path_invalid` | A path breaks the [path rule](#paths). |
@@ -483,7 +492,9 @@ Every agent of the `developers` pool must:
 
 A published image is bound to a queue with `ttasks queue workflow set`, or from
 Compose with `task_queues.<PREFIX>.workflow`; tasks created in that queue pin
-the version and follow its statuses. See [Task workflows](/docs/task-workflows)
+the version and follow its statuses. A queue bound by `NAME` or `NAME:latest`
+follows `latest`: after a new build, new tasks pin the new version, while
+existing tasks keep theirs. See [Task workflows](/docs/task-workflows)
 for binding, queue secrets, the [Desktop](/docs/task-workflows#desktop) panel,
 dispatch, artifacts, outcomes, scripts, and the operator commands, and
 [Compose](/docs/binaries/compose#queue-workflows) for the Compose form.

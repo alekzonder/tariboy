@@ -180,6 +180,17 @@ the host, so the UI refetches the agents list and the agent status. The loop
 manager emits <code>state</code> when an agent is started or stopped, when its status line
 changes, and when its loop halts or stops for idleness. The route
 is not under <code>/api/agents/</code> because an agent may be named <code>ws</code>.</p>
+<p>These sockets and the agent SSE stream <code>GET /api/agents/{name}/events</code> read
+from one in-memory event hub. The hub never blocks a publisher: each
+subscriber has a buffer of 64 events, and an event for a full buffer is
+dropped. The hub gives every event a rising sequence number <code>seq</code> and counts
+each drop in the OpenTelemetry counter <code>tariboy.events.dropped</code>. When a
+subscriber that lost events has room again, the hub first sends it a <code>reset</code>
+event with <code>data.dropped</code> set to the number of lost events. The SSE stream
+writes each event as <code>id: &lt;seq&gt;</code> and <code>event: &lt;type&gt;</code>, so it forwards
+<code>event: reset</code>. A hint socket closes with status 1013 (try again later) on a
+reset; the client reconnects and refetches, which recovers what it missed.
+The hub keeps no history, so neither stream replays the lost events.</p>
 <p>The bundled Telegram process remains outside the daemon. It authorizes and
 maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto <code>chat:telegram:&lt;agent&gt;</code>. Agent replies return through the

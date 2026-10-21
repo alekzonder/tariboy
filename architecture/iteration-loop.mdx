@@ -320,3 +320,40 @@ preview at read time and can change before the launch gate runs. A changed
 digest triggers activation even if the source version stays the same. A failed
 inspection is returned explicitly, and the separate pending error preserves
 activation failures even without a pending ref.
+
+## Manager internals and lock order
+
+The loop manager (`internal/loop`) keeps one engine per running agent. It is a
+facade over these parts:
+
+| Part | Owns |
+| --- | --- |
+| Agent runtimes (`runtimes.go`) | The in-memory registry: running engines, tools servers bound before an engine starts, iterations being adopted, a Restart pending after adoption, and stale-kill markers. It also holds each agent's lifecycle gate and handoff lock. |
+| Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent, cancel, and record the result. |
+| Tools facade (`tools_facade.go`) | The per-agent tools socket API. It reaches the manager only through narrow interfaces, so the API does not depend on a loop engine. |
+| Image activation (`image_activation.go`) | Pending image activation, the Reprovision swap, the skill bridge, and crash recovery of an interrupted swap. |
+| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. The runner and adoption both use it. |
+
+The manager takes its locks in one order:
+
+1. The agent's **lifecycle gate**. It serializes the lifecycle of one agent:
+   start, Stop, Remove, Reprovision, and a Restart launch after adoption from
+   its decision until its iteration row exists. A wait for it ends when the
+   daemon shuts down.
+2. The image **publication gate**. Image builds, image activation, Run, and
+   Reprovision take it.
+3. The registry lock. It guards only the registry maps. No database call,
+   socket operation, or callback runs while it is held.
+
+A path that holds a later lock never waits for an earlier one. For example,
+Reprovision takes the agent's lifecycle gate before the publication gate, the
+same order as a Restart launch that activates an image. Run never starts an
+agent, so it never takes a lifecycle gate while it holds the publication gate.
+A normal iteration launch takes only the publication gate. The agent's handoff
+lock (see [the shim](/docs/architecture/shim)) is taken while no gate is held.
+
+Image activation can take long: it unpacks the image, prepares the skill
+bridge, and probes the harness. While a Restart launch waits in it, only the
+lifecycle operations of that same agent wait for it: Start, Stop, Restart,
+Remove, Reprovision, and the agent's own `loop start` and `loop stop`. Kill,
+state reads, wakes, other tools calls, and every other agent continue.

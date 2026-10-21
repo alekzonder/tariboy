@@ -148,14 +148,36 @@ sequenceDiagram
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
   D->>P: bind proxy and prepare plugin host
-  D->>C: serve operator API, capability sockets, and optional HTTP/WS
   D->>D: refresh stale prices without blocking clients; run background workers
-  O->>D: cancellation or controlled stop
-  D->>C: stop API and proxy listeners
+  D->>C: bind the API listener and optional HTTP/WS listener, then serve them
+  O->>D: cancellation, controlled stop, or a listener failure
+  D->>C: stop API listeners, then the proxy, and wait for them
   D->>D: cancel and drain background workers
-  D->>M: stop managed loops and capability servers
+  D->>M: stop plugins, then managed loops and capability servers
   D->>S: flush and close durable state
 ```
+
+`daemon.Run` (`internal/daemon`) is a short sequence of phases, each in its own
+function with a typed result: process setup (logger, `PATH`, paths, the socket
+guard and PID file), store and telemetry, tasks, AI proxy, plugins, loop
+manager, runtime start, background workers, and serving. Each phase pushes the
+stop of every resource it creates onto one shutdown stack right after it
+creates the resource. The stack runs last-pushed first on every return path, so
+a resource always stops before the resources it uses. The order is:
+
+1. API servers (Unix socket or TCP, and the HTTP/WS listener), awaited.
+2. The access log.
+3. The AI proxy, awaited.
+4. Background workers, canceled and awaited.
+5. Plugins, then the loop manager.
+6. Telemetry flush, then the SQLite store, then the PID file.
+
+All listeners bind before the daemon reports itself started, so a busy HTTP
+port fails startup synchronously. If any API listener fails later, the daemon
+takes the same path as a controlled stop: every server is shut down and its
+goroutine awaited before the manager and the store stop. An embedder or an
+in-process test can pass `Options.Ready`; the daemon calls it once all
+listeners are bound and the workers run.
 
 The daemon fails before serving if it cannot prepare the data directory, bind a
 safe socket, detects an already-live Unix daemon, cannot parse the requested
@@ -181,10 +203,10 @@ run means in one transaction. On shutdown the worker kills its scripts and
 leaves their records `running` for the next start to mark `interrupted`. See
 [Task workflows](/docs/task-workflows#script-protocol).
 
-Shutdown stops the proxy first, then cancels and awaits the pricing worker and
-the other workers before loops/plugins and SQLite stop. That ordering prevents
-a catalog publication, final outbox, or usage write from racing a closed
-database.
+Shutdown stops the API listeners and the proxy first, then cancels and awaits
+the pricing worker and the other workers before plugins, loops and SQLite stop.
+That ordering prevents a request, a catalog publication, a final outbox, or a
+usage write from racing a closed database.
 
 ## Harness model catalog
 

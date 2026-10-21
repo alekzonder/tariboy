@@ -505,14 +505,36 @@ sequenceDiagram
   D->>S: replace managed price rows when the cache is valid
   D->>M: refresh shims; adopt and reconcile live iterations
   D->>P: bind proxy and prepare plugin host
-  D->>C: serve operator API, capability sockets, and optional HTTP/WS
   D->>D: refresh stale prices without blocking clients; run background workers
-  O->>D: cancellation or controlled stop
-  D->>C: stop API and proxy listeners
+  D->>C: bind the API listener and optional HTTP/WS listener, then serve them
+  O->>D: cancellation, controlled stop, or a listener failure
+  D->>C: stop API listeners, then the proxy, and wait for them
   D->>D: cancel and drain background workers
-  D->>M: stop managed loops and capability servers
+  D->>M: stop plugins, then managed loops and capability servers
   D->>S: flush and close durable state
 ```
+
+`daemon.Run` (`internal/daemon`) is a short sequence of phases, each in its own
+function with a typed result: process setup (logger, `PATH`, paths, the socket
+guard and PID file), store and telemetry, tasks, AI proxy, plugins, loop
+manager, runtime start, background workers, and serving. Each phase pushes the
+stop of every resource it creates onto one shutdown stack right after it
+creates the resource. The stack runs last-pushed first on every return path, so
+a resource always stops before the resources it uses. The order is:
+
+1. API servers (Unix socket or TCP, and the HTTP/WS listener), awaited.
+2. The access log.
+3. The AI proxy, awaited.
+4. Background workers, canceled and awaited.
+5. Plugins, then the loop manager.
+6. Telemetry flush, then the SQLite store, then the PID file.
+
+All listeners bind before the daemon reports itself started, so a busy HTTP
+port fails startup synchronously. If any API listener fails later, the daemon
+takes the same path as a controlled stop: every server is shut down and its
+goroutine awaited before the manager and the store stop. An embedder or an
+in-process test can pass `Options.Ready`; the daemon calls it once all
+listeners are bound and the workers run.
 
 The daemon fails before serving if it cannot prepare the data directory, bind a
 safe socket, detects an already-live Unix daemon, cannot parse the requested
@@ -538,10 +560,10 @@ run means in one transaction. On shutdown the worker kills its scripts and
 leaves their records `running` for the next start to mark `interrupted`. See
 [Task workflows](/docs/task-workflows#script-protocol).
 
-Shutdown stops the proxy first, then cancels and awaits the pricing worker and
-the other workers before loops/plugins and SQLite stop. That ordering prevents
-a catalog publication, final outbox, or usage write from racing a closed
-database.
+Shutdown stops the API listeners and the proxy first, then cancels and awaits
+the pricing worker and the other workers before plugins, loops and SQLite stop.
+That ordering prevents a request, a catalog publication, a final outbox, or a
+usage write from racing a closed database.
 
 ## Harness model catalog
 
@@ -1250,6 +1272,43 @@ digest triggers activation even if the source version stays the same. A failed
 inspection is returned explicitly, and the separate pending error preserves
 activation failures even without a pending ref.
 
+## Manager internals and lock order
+
+The loop manager (`internal/loop`) keeps one engine per running agent. It is a
+facade over these parts:
+
+| Part | Owns |
+| --- | --- |
+| Agent runtimes (`runtimes.go`) | The in-memory registry: running engines, tools servers bound before an engine starts, iterations being adopted, a Restart pending after adoption, and stale-kill markers. It also holds each agent's lifecycle gate and handoff lock. |
+| Script supervisor (`scripts.go`) | Durable script runs: claim, start as the agent, cancel, and record the result. |
+| Tools facade (`tools_facade.go`) | The per-agent tools socket API. It reaches the manager only through narrow interfaces, so the API does not depend on a loop engine. |
+| Image activation (`image_activation.go`) | Pending image activation, the Reprovision swap, the skill bridge, and crash recovery of an interrupted swap. |
+| Iteration watcher (`iteration_watcher.go`) | The one polling loop that waits for `result.json`. It resyncs the hard deadline, enforces the soft deadline and the done grace with at most one Kill, and, for adoption, probes the shim. The runner and adoption both use it. |
+
+The manager takes its locks in one order:
+
+1. The agent's **lifecycle gate**. It serializes the lifecycle of one agent:
+   start, Stop, Remove, Reprovision, and a Restart launch after adoption from
+   its decision until its iteration row exists. A wait for it ends when the
+   daemon shuts down.
+2. The image **publication gate**. Image builds, image activation, Run, and
+   Reprovision take it.
+3. The registry lock. It guards only the registry maps. No database call,
+   socket operation, or callback runs while it is held.
+
+A path that holds a later lock never waits for an earlier one. For example,
+Reprovision takes the agent's lifecycle gate before the publication gate, the
+same order as a Restart launch that activates an image. Run never starts an
+agent, so it never takes a lifecycle gate while it holds the publication gate.
+A normal iteration launch takes only the publication gate. The agent's handoff
+lock (see [the shim](/docs/architecture/shim)) is taken while no gate is held.
+
+Image activation can take long: it unpacks the image, prepares the skill
+bridge, and probes the harness. While a Restart launch waits in it, only the
+lifecycle operations of that same agent wait for it: Start, Stop, Restart,
+Remove, Reprovision, and the agent's own `loop start` and `loop stop`. Kill,
+state reads, wakes, other tools calls, and every other agent continue.
+
 ---
 
 # The channel bus & messaging
@@ -1432,6 +1491,18 @@ manager emits `state` when an agent is started or stopped, when its status line
 changes, and when its loop halts or stops for idleness. The route
 is not under `/api/agents/` because an agent may be named `ws`.
 
+These sockets and the agent SSE stream `GET /api/agents/{name}/events` read
+from one in-memory event hub. The hub never blocks a publisher: each
+subscriber has a buffer of 64 events, and an event for a full buffer is
+dropped. The hub gives every event a rising sequence number `seq` and counts
+each drop in the OpenTelemetry counter `tariboy.events.dropped`. When a
+subscriber that lost events has room again, the hub first sends it a `reset`
+event with `data.dropped` set to the number of lost events. The SSE stream
+writes each event as `id: <seq>` and `event: <type>`, so it forwards
+`event: reset`. A hint socket closes with status 1013 (try again later) on a
+reset; the client reconnects and refetches, which recovers what it missed.
+The hub keeps no history, so neither stream replays the lost events.
+
 The bundled Telegram process remains outside the daemon. It authorizes and
 maps forum updates, then publishes ordinary text through the authenticated
 plugin API onto `chat:telegram:<agent>`. Agent replies return through the
@@ -1553,15 +1624,19 @@ same socket, and Start or Exec cannot create a second engine or tmux session.
 An `i-am-done` call also survives the handoff: after the same two-second grace
 used by the original runner, adoption sends at most one cooperative Kill if no
 `result.json` has appeared, then finalizes the original row from that result.
-Each control request connects while the handoff lock is held, so later reuse of
-the stable per-agent socket pathname cannot redirect it to a replacement
-iteration; that connection attempt has a finite timeout so a wedged Unix accept
-queue cannot hold daemon lifecycle operations indefinitely. When adoption
-finishes, the daemon reloads the current Enabled value before starting the
-normal loop engine. Restart also carries one explicit interactive-run intent
-across the handoff. A short launch gate shared with Stop is acquired only after
-tmux collision checks, covers the durable launch or manual-collision outcome,
-and is released before runner preparation. If Stop races the final detached
+Each control request connects while the agent's handoff lock is held for
+reading, and adoption takes it for writing before it ends. Later reuse of the
+stable per-agent socket pathname therefore cannot redirect a request to a
+replacement iteration. The connection attempt has a finite timeout, so a wedged
+Unix accept queue cannot hold the end of adoption indefinitely; other agents and
+other lifecycle operations do not wait for it. When adoption finishes, the
+daemon reloads the current Enabled value before starting the normal loop
+engine. Restart also carries one explicit interactive-run intent across the
+handoff. The launch uses the agent's lifecycle gate, which Stop also takes. The
+launch acquires it only after tmux collision checks, holds it through image
+activation and the durable launch or manual-collision outcome, and releases it
+before runner preparation. See
+[Manager internals and lock order](/docs/architecture/iteration-loop#manager-internals-and-lock-order). If Stop races the final detached
 process creation after winning stale-shim recovery, the runner briefly retries
 the shim socket and requests cooperative Kill so the shim terminates its owned
 harness process group or tmux session. If no shim becomes reachable, it kills
@@ -1623,6 +1698,40 @@ The loop schedule is the `agents.schedule_rrule` column: the normalized
 `0065_agent_schedule.sql`). Only `loop schedule` writes it. The next start is
 computed from it on demand and is not stored, so the daemon does not replay
 occurrences missed while it was off.
+
+## Stored times
+
+Every time in the database uses one text format: UTC with exactly nine
+fractional digits, for example `2026-10-19T06:33:58.123000000Z`. This is
+`store.TimeLayout` in `internal/store/timefmt.go`. All values have the same
+width and the same zone, so SQLite sorts the text in time order. Queries
+compare time columns directly (`ts >= ?`), and the indexes on those columns
+serve range filters such as the Usage `since` and `until` bounds.
+
+Only the `store` package knows the format:
+
+- `store.FormatTime` writes a time.
+- `store.ParseTime` reads a stored time and rejects every other format.
+- `store.ParseInputTime` reads a time from outside the database, such as an
+  API or CLI parameter, a worker report or a manifest. It accepts any RFC 3339
+  value with any offset and converts it to UTC.
+- `store.SQLNow` is the SQL expression for the current time. SQL column
+  defaults use it. SQLite has millisecond precision, so the last six digits of
+  a default value are zero.
+
+Migration `0067_canonical_timestamps.sql` rewrites every registered time
+column to this format and changes the old millisecond SQL defaults. A value
+that is not a time stays as it is, and the migration logs its table and
+column. The registry of time columns is `timeColumns` in
+`internal/store/timefmt.go`; a test fails when a new time column is missing
+from it. Backup restore also converts old-format values in those columns, so
+an old backup does not bring old formats back. The Store service database
+has the same format and its own migration.
+
+API responses return stored times as they are, so they have nine fractional
+digits. Examples are the Usage request `ts` and the task usage
+`first_ts`/`last_ts`, which earlier had three digits or a variable number.
+These are valid RFC 3339 values.
 
 ## Filesystem-backed shell scripts
 
@@ -1898,11 +2007,21 @@ row (`task_workflow_images`) cannot be removed while a queue binds it or an
 unfinished task pins it. `tasks.workflow_status` holds the workflow status
 (and `tasks.workflow_paused_reason`, the pause reason, empty unless the task
 is paused), while `tasks.status` keeps holding the category for every task.
+Migration `0069` stores two values that every task read used to compute per
+row: `tasks.workflow_owner_kind`, the owner kind of the current status read
+from the pinned manifest, and `tasks.open_blockers`, the number of open tasks
+that block the task. Triggers keep both current on every write path: the owner
+kind when `workflow_status`, `workflow_digest`, or the image manifest changes,
+and the blocker count when a `blocks` relation is added or removed or a
+blocker moves into or out of `done` or `cancelled`. Task visibility is a
+recursive CTE that queries join, so no query binds a variable per visible
+task.
 Task JSON shows the
 workflow status as `status` and the stored value as `category`; for a task
 without a workflow both are the stored status. New tables: `task_queue_workflows`
 (one binding per queue, with a revision and an `ON DELETE RESTRICT` reference to
-the image), `task_workflow_holders` (the last holder per task and pool),
+the image; migration `0068` adds `workflow_tag`, the tag the binding follows,
+empty for a pinned binding and for every binding made before it), `task_workflow_holders` (the last holder per task and pool),
 `task_status_visits`, `task_transition_requests` (at most one `pending` per
 task), and `task_artifacts`. Workflow mutations append `workflow.transitioned`,
 `workflow.transition_requested`, `workflow.moved`, `workflow.cancelled`, and
@@ -2543,8 +2662,13 @@ fallback, tested by `isWorkflowTask`) is presented by category; the daemon's
 `status_view` (Active, Closed, All) selects by category too, and a flexible
 task's category equals its status. `TaskRow` takes its tone from `task.category` and its
 label from `taskStatusLabel(task)`: the workflow status ID, humanised, in a
-clipped pill whose title is the ID, plus a `waiting_on` marker (`customer`,
-`script`, or a danger `paused` whose title is the pause reason). `TaskDetail`
+clipped pill whose title is the ID, then the task's `workflow_step` as `k/n`
+(hidden on a phone), plus a `waiting_on` marker (`customer`, `script`, or a
+danger `paused` whose title is the pause reason). A `workflow_attention` of
+kind `failed`, `script_failed`, or `rejected` replaces the `customer`/`script`
+marker with a problem mark whose title is the message; the pause pill
+outranks it, and `idle` earns no mark. The row needs no request of its own:
+both objects come with the task JSON. `TaskDetail`
 compares `status` only with `category` for its dirty check and tone, and sends
 no `status` or `assignee` on Save for a workflow task; it hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
@@ -2553,17 +2677,25 @@ select it renders `WorkflowPanel`, which loads the view with `getTaskWorkflow`
 (on mount, on a new task revision, on a new event sequence passed down by
 `TaskDetail` as `eventSequence`, which in the chat `TaskDrawer` also follows
 the last socket hint about the task through `liveSequence`, and after each change; a request counter drops
-a response older than the newest) and composes
+a response older than the newest) and composes, top down,
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
-`WorkflowOutcomes` (`advanceTask`, or `retryTransitionRequest` from the
-**Retry** of a failed last request, then `getTransitionRequest` once a second
-until the request settles or `wait_seconds` passes), `WorkflowArtifacts`
+`WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
+picks from the view, with `retryTransitionRequest` behind **Retry** and the
+run's log through `RunRow` with `autoLoad`), `WorkflowStepper` (the view's
+`statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`), the header
+with `stepOf`, `WorkflowOutcomes` (`advanceTask`), `WorkflowArtifacts`
 (`setTaskArtifact`, `getTaskArtifactHistory`; every entry of the view's
-`declared_artifacts`), `WorkflowRuns` (`getTaskScriptRunLog`), the visit list,
-and the header's labeled **Move to status…** and **Cancel task** buttons with
-`moveTaskWorkflow` (targets from the view's `statuses`) and
-`cancelWorkflowTask`. Destructive actions confirm through
-the controlled alert dialog of `useWorkflowConfirm`; `workflowShared.ts` holds
+`declared_artifacts`, grouped by `requiredBy`), `WorkflowRuns`
+(`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
+and the header's labeled **Return to agent…**, **Move to status…**, and
+**Cancel task** buttons: `ReturnToAgent` picks its targets with
+`returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the move form
+uses `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
+`cancelWorkflowTask`. Outcomes, the problem block, and the return form follow
+a transition request through `useFollowRequest` in `workflowShared.ts`
+(`getTransitionRequest` once a second until the request settles or
+`wait_seconds` passes). Destructive actions confirm through
+the controlled alert dialog of `useWorkflowConfirm`; `workflowShared.ts` also holds
 `errorText` and `useMounted`. Messages and logs render as React text;
 artifact values render through `MarkdownContent`, or as React text when an
 artifact is switched to **Text**. Every call passes the `ApiTarget` of the surrounding
@@ -2579,7 +2711,8 @@ with **Retry** instead of a guess. `listTaskPrincipals` supplies the agent
 suggestions. The dialog keeps the pools as the one source the tabs share. The
 **Workflow** tab, `QueueWorkflowSettings` (`getQueueWorkflow`,
 `setQueueWorkflow`, `clearQueueWorkflow`, `listWorkflowImages`,
-`getWorkflowImage`), shows the binding and `WorkflowStatusMap`: the statuses of
+`getWorkflowImage`), shows the binding, with the tag it follows when it has
+one, and `WorkflowStatusMap`: the statuses of
 the bound image, or of the image chosen in the select before **Bind**, with
 their owners and outcomes; a pool chip opens the **Pools** tab. A refused bind
 lists the empty pools, which shrink as pools gain agents, or the missing
@@ -3629,16 +3762,18 @@ task_queues:
 
 | Value | `compose up` |
 | --- | --- |
-| `NAME` | Binds the already built `NAME:latest`. |
-| `NAME:TAG` | Binds the already built `NAME:TAG`. |
-| `STORE/NAME` | Builds the workflow source `NAME` from the registered Store `STORE`, then binds the version that build produced. |
-| `STORE/NAME:TAG` | Builds `STORE/NAME`, then binds `NAME:TAG`. |
+| `NAME` | Binds the already built `NAME:latest`. The queue follows `latest`. |
+| `NAME:TAG` | Binds the already built `NAME:TAG`. The queue follows the tag. |
+| `STORE/NAME` | Builds the workflow source `NAME` from the registered Store `STORE`, then binds the digest that build produced. The binding is pinned. |
+| `STORE/NAME:TAG` | Builds `STORE/NAME`, then binds `NAME:TAG`. The queue follows the tag. |
 
 A tag of `.` or `..` is a validation error.
 
 Each Store workflow is built once per run, before any queue is bound, and a
 bind runs after the queue's pools exist, since a bind needs the pools the
-workflow names. A queue already bound to the resolved digest is left alone. A
+workflow names. A queue already bound to the resolved digest and tag is left
+alone. A queue that follows a tag moves to each new build of that tag; see
+[Binding a queue](/docs/task-workflows#binding-a-queue). A
 form without a Store prefix fails when the image is not built. Rebinding a
 queue to a newer version leaves its existing tasks on the version they pinned.
 
@@ -4450,6 +4585,37 @@ A second daemon using the live base directory shares the SQLite database and
 loop managers. It can double-execute iterations, reconcile the same agents, and
 reap live sessions. Isolation is a data-safety requirement.
 :::
+
+### Go test isolation and speed
+
+Go tests follow these rules so the suite stays fast, parallel, and away from
+live state:
+
+- **Test databases come from `internal/store/storetest`.** `storetest.Open(t)`
+  returns a migrated database in a temporary directory, and
+  `storetest.OpenAt(t, path)` does the same at a given path.
+  `storetest.Seed(t, path)` writes a migrated file for code that opens the
+  database itself, such as `daemon.Run`. The first call in a test binary
+  runs the real migrations once; every later call copies that template. Call
+  `store.Open` directly only to reopen an existing file or to test migrations.
+- **Packages whose tests start a daemon, a loop manager, or the CLI call
+  `testutil.IsolateEnv()` from `TestMain`.** It removes every `TARIBOY_`
+  variable and points `HOME` at a temporary directory. The suite passes with
+  `TARIBOY_RUNTIME_DIR` and `TARIBOY_BASE_DIR` set to paths that do not
+  exist. `loop.NewManager` never reads the environment: tests pass
+  `RuntimeDir` (use `testutil.ShortDir(t)` for socket paths) and may pass
+  `BaseEnv`.
+- **Wait for state, not for time.** Use `testutil.WaitFor` instead of a
+  `time.Sleep` loop, and prove that something did not happen with a hook, a
+  fake timer, or `testing/synctest`. A `time.Sleep` that must stay in a test
+  has a comment that says why. A test that starts `daemon.Run` waits on
+  `Options.Ready` instead of polling the daemon socket.
+- **Mark independent tests with `t.Parallel()`.** Tests that use `t.Setenv`,
+  `os.Chdir`, or package-level state stay sequential.
+- **Tests that drive a real `tmux` have the `tmux` build tag**
+  (`internal/shim/shim_tmux_test.go`). `make test` adds `-tags tmux` when
+  `tmux` is installed, and `make vet` always vets them. Run them alone with
+  `go test -tags tmux ./internal/shim/`.
 
 ## Generated artifacts
 
@@ -6827,13 +6993,13 @@ image.
 # Ten-minute quickstart
 Source: https://alekzonder.github.io/tariboy/quickstart
 
-This path is for the `0.88.0` alpha on an Apple Silicon Mac.
+This path is for the `0.89.1` alpha on an Apple Silicon Mac.
 Allow ten minutes after the DMG is available.
 
 ## Before you begin
 
 - macOS 12 or newer on Apple Silicon;
-- a verified `Tariboy_0.88.0_aarch64.dmg`;
+- a verified `Tariboy_0.89.1_aarch64.dmg`;
 - for remote use, an SSH config alias resolving to Linux x86_64/aarch64 or Apple Silicon macOS;
 - a writable `~/.local`, `flock`, and `python3` on that remote host;
 - at least one supported harness installed where the agent will run.
@@ -8197,6 +8363,25 @@ persisted `otlp_endpoint` daemon setting.
   `*.localhost` to loopback, so the Android origin is that app's WebView or a
   loopback port-80 page, which `http://localhost` already covered. The Host
   check is unchanged.
+- Every daemon HTTP server (the unix socket, daemon TCP, the loopback web
+  listener, the agent tools socket, and the AI proxy) closes a connection whose
+  request headers take more than 10 seconds, closes idle keep-alive
+  connections after 120 seconds, and refuses headers larger than 64 KiB. The
+  servers set no read or write timeout for the whole request, because SSE,
+  websockets, terminals and model responses stay open for a long time.
+- A command request body is limited to 1 MiB and a larger body gets HTTP 413
+  `too_large`. A route raises its own limit only where it needs to: file
+  uploads, queue secrets (512 KiB), and the two text-file editors (the agent
+  file editor and image source files), whose limit fits their largest file
+  after JSON escaping. The agent tools API limits every body to 1 MiB.
+- Every websocket route (Tasks, message and agent-state hints, and the agent
+  terminal) checks the browser `Origin` when the request has no bearer token:
+  only the web listener's allowed origins above may open it, and any other
+  origin gets HTTP 403 `forbidden_origin`. A request with a valid bearer token
+  may come from any origin, because a federated `/terminals` page on one
+  daemon opens sockets on another. A terminal websocket accepts frames of at
+  most 8 MiB (one paste); a larger frame closes the socket with "message too
+  big".
 - The Android app permits cleartext only to `127.0.0.1`, `localhost`, and
   `::1` through its network security config, and its WebView has no Tauri IPC
   permissions. It keeps server tokens in WebView session storage, not a
@@ -8405,7 +8590,7 @@ runtime lifecycle.
 
 ## Alpha signing and Gatekeeper
 
-`0.88.0` is ad-hoc signed, not Developer ID signed or notarized. Verify
+`0.89.1` is ad-hoc signed, not Developer ID signed or notarized. Verify
 `SHA256SUMS` before opening it. If Gatekeeper blocks it, Control-click only the
 named `/Applications/Tariboy.app`, choose **Open**, and confirm.
 If Control-click Open is unavailable, use **System Settings → Privacy &
@@ -8508,7 +8693,7 @@ Source: https://alekzonder.github.io/tariboy/support
    selected harness on the remote host.
 5. For a daemon older than `0.10.1`, finish active work before updating it.
 
-The app and bundled daemons must report `0.88.0`. Resolve a local mismatch with
+The app and bundled daemons must report `0.89.1`. Resolve a local mismatch with
 the menu-bar **Install/Update CLI** action and a remote mismatch with the host
 Update action; do not copy or repoint individual binaries.
 
@@ -8688,8 +8873,10 @@ operations.
 2. An operator **binds** the image to a queue, gives every pool the image names
    at least one agent, and stores the **queue secrets** the image requires.
 3. A task created in the bound queue **pins** the image version (its digest)
-   and enters the image's `initial_status`. Moving a tag later changes nothing
-   for existing tasks, and a task is never migrated to another version.
+   and enters the image's `initial_status`. A binding made by a tag, such as
+   `latest`, follows that tag: when a new build moves the tag, tasks created
+   after it pin the new version. Existing tasks keep their version, and a task
+   is never migrated to another version.
 4. Every non-terminal **status** has one owner, who leaves it by naming an
    **outcome**; the status declares a **transition** per outcome.
    - A **pool** status is worked by one agent, the **holder**, which the daemon
@@ -8911,6 +9098,13 @@ Nobody sets a category; the daemon derives it from the status owner:
 | Terminal status | `done`, or `cancelled` when the status declares `cancelled: true` | unchanged | |
 | Cancelled with `ttasks cancel` | `cancelled`; the status stays where the task stopped | unchanged | |
 
+One function derives this table, from the owner kind of the status, the
+holder, the pause, and whether the holder's question is open. Entering a
+status, resuming a pause, pausing, dispatching, and a comment all use it, and
+one statement writes the result. A pool status picks a holder only when the
+task is neither paused nor blocked; a blocked task stays `open` with no
+holder until the daemon dispatches it after the blocker closes.
+
 `waiting_on` is non-empty only while the category is `wait_customer`. It takes
 the values `customer`, `script`, and `pause`; `pause` marks a task the daemon
 paused and is described under [Pauses](#pauses). A flexible task has `category` equal to `status`
@@ -8919,6 +9113,33 @@ and an empty `waiting_on`.
 In the task JSON a workflow task also carries `workflow_digest`,
 `workflow_name`, `workflow_version`, and `workflow_paused_reason`, which holds
 the pause reason while the task is paused and is empty otherwise.
+
+### Attention summary
+
+An open workflow task also carries two derived objects, so a list of tasks can
+show where each one is and whether it needs a person without reading every
+task's view. Both are absent on a flexible task and on a closed one.
+
+`workflow_step` is `{"index": 3, "total": 6}`: the position of the current
+status in the manifest, counted from 1, and the number of statuses the manifest
+declares.
+
+`workflow_attention` is present only while something needs a person. It is
+derived from the task's open visit: its counters, its latest transition
+request, and its latest finished script run. The first kind that applies wins:
+
+| `kind` | When | `message` | `count` | Ids |
+| --- | --- | --- | --- | --- |
+| `paused` | The task is paused; see [Pauses](#pauses). | What the pause reason means. | | |
+| `failed` | The latest request of the visit is `failed`: a check could not run. | The first line of the request's `result_message`, without the `log:` line. | `script_failures` of the visit | `request_id`, and `run_id` when the run is the latest finished one |
+| `rejected` | The latest request of the visit is `rejected`. | The first line of the check's message. | `rejected_requests` of the visit | `request_id`, and `run_id` as above |
+| `script_failed` | The latest finished run of the visit is a watch that failed. | The first line of the run's message. | `script_failures` of the visit | `run_id` |
+| `idle` | The holder ended one or more iterations in a row without requesting a transition. | A sentence with the count. | `idle_iterations` of the visit | |
+
+A pending request is not attention: the checks are still running. A message
+is cut to 200 characters with `… (cut)`. The same object is returned by every
+route that returns a task, including the list and the tree, and by `ttasks
+show --json`.
 
 On a workflow task `ttasks done`, `ttasks update --status`, `ttasks assign`
 (and `--assignee` on update or create), and `ttasks ready --claim` are refused
@@ -8939,14 +9160,35 @@ ttasks queue workflow get DEV
 ttasks queue workflow clear DEV --revision 1
 ```
 
-The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>` and is resolved to a
-digest when the binding is set; `NAME` means `latest`. To move a queue to a
-newer version, run `queue workflow set` again with the current binding
-revision: tasks already created keep their version, and only tasks created
-afterwards pin the new one. `--revision` is `0` for a first binding and the
+The reference is `NAME`, `NAME:TAG`, or `NAME:<digest>`; `NAME` means
+`latest`. The binding stores the digest the reference names now and the tag it
+was made by, shown as `tag` by `queue workflow get`:
+
+| Reference | `tag` | When the tag moves |
+| --- | --- | --- |
+| `NAME` or `NAME:latest` | `latest` | The binding follows `latest` to each new build. |
+| `NAME:0.3.0` | `0.3.0` | A version tag names one build, so the binding stays. |
+| `NAME:<digest>` | empty | The binding is pinned to the digest. |
+
+A binding with a tag moves to the digest the tag names after a
+`tariboy workflow build` or a workflow import, when the daemon starts, and when
+a task is created in the queue. Only tasks created afterwards pin the new
+version: tasks already created keep their version. Each move increments the
+revision and emits `queue.workflow_bound` with `followed: true`. The move
+checks pools and secrets like a bind. If a pool of the new version is empty or
+a secret is missing, the binding stays on the old version, new tasks keep
+pinning it, and the queue event `queue.workflow_follow_blocked` gives the
+`reason` (`workflow_pool_empty` or `workflow_secret_missing`) and the `names`.
+The next task, build, or daemon start tries again. A removed tag keeps the
+binding where it is.
+
+To pin a queue to another version, run `queue workflow set` again with the
+current binding revision. `--revision` is `0` for a first binding and the
 revision shown by `queue workflow get` for a rebind or a `clear`. Binding the
-digest that is already bound changes nothing and keeps the revision, whatever
-revision is given, so a retried bind succeeds.
+digest and tag that are already bound changes nothing and keeps the revision,
+whatever revision is given, so a retried bind succeeds. The same digest under
+another tag is a change. Bindings made before this column existed have an empty
+tag and stay pinned: bind them again as `NAME:latest` to follow `latest`.
 
 A bind checks pools first, then secrets:
 
@@ -8963,7 +9205,8 @@ A bind checks pools first, then secrets:
 | `forbidden` | The caller is not the daemon customer; agents cannot administer workflows. |
 
 A binding emits `queue.workflow_bound` and `queue.workflow_cleared` queue
-events carrying the image name, version, and digest.
+events carrying the image name, version, and digest; `queue.workflow_bound` also
+carries the `tag`.
 
 Removing a workflow image that a queue binds, or that any task pins, open or
 closed, is refused with `workflow_in_use`; nightly task retention removes closed
@@ -9515,7 +9758,8 @@ ttasks queue source log DEV 12
 ttasks queue source log DEV 12 --max-bytes 4096
 ```
 
-`queue source ls` shows each source of the bound image: script, `every`, when it
+`queue source ls` shows each source of the bound image: script, `every`, its
+`description` when the image gives one, when it
 runs next, the failures in a row, the last run with its verdict (`items`,
 `quiet`, or `failure`), message, and the number of tasks it created, and the
 newest 20 runs, newest first, in `runs`; their ids are what `queue source log`
@@ -9621,7 +9865,9 @@ The block is rendered in this order:
    image, cut at a fixed byte limit with a marker when longer, and closed by
    the fixed line `End of status instructions.`
 5. `### Outcomes`: each outcome with its target, the artifacts it `requires`, the
-   ones still `missing`, and its `checks`.
+   ones still `missing`, and its `checks`, each named by its script path
+   followed by its manifest `description` in parentheses when the image gives
+   one.
 6. `### Artifacts`: each current artifact with its author.
 7. `### Last transition request`: only when the last request of the current
    visit was `rejected` or `failed`, with the script's message and, for a failure,
@@ -9879,13 +10125,13 @@ and what it may do next. Agents and the operator can read it.
 | `owner` | `pool:<name>`, `customer`, `script`, or empty for a finished task. |
 | `holder` | The assigned `agent:<name>` of a pool status. |
 | `instructions_path` | The status instruction file inside the image. |
-| `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), and `checks` (script paths). A finished task has none. |
+| `outcomes` | Each outcome with `to`, `requires`, `missing` (required artifacts with no value), `checks` (script paths), and `check_details`: the same checks, in order, each with `script`, `description` (when the image gives one), and the resolved `run_as` and `timeout`. A finished task has none. |
 | `artifacts` | The current value of each artifact. |
-| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message. |
+| `visits` | Every stay in a status with who entered it, when it was left, and by which outcome and message, plus the visit's counters `idle_iterations`, `rejected_requests`, and `script_failures` (absent when zero); compare them with the `limits` of the status to see how close the task is to a pause. |
 | `last_request` | The latest transition request: `id`, `outcome`, `message`, `actor`, `state`, `result_message`, times, and `wait_seconds` while pending. |
-| `runs` | The 20 most recent script runs, newest first. |
+| `runs` | The 20 most recent script runs, newest first. A check run carries the `request_id` of the transition request it belongs to. |
 | `declared_artifacts` | Every artifact the manifest declares, in manifest order, as `name` and `description`, whether or not it has a value. |
-| `statuses` | Every status the manifest declares, in manifest order, as `id`, `owner` (as in `owner` above: `pool:<name>`, `customer`, `script`, or empty for a terminal status), and `terminal`. A finished task lists them too. |
+| `statuses` | Every status the manifest declares, in manifest order, as `id`, `owner` (as in `owner` above: `pool:<name>`, `customer`, `script`, or empty for a terminal status), and `terminal`. A non-terminal status also carries `initial`, `instructions_path`, its `transitions` (`on`, `to`, `requires`, and `checks` as `check_details` above), its `watch` (`script`, `description`, `every`, and the resolved `timeout`), and its effective `limits`; a terminal status carries `cancelled` when it declares it. A finished task lists them too. |
 
 ## Commands
 
@@ -9964,7 +10210,9 @@ See [State model](/docs/architecture/state-model) for the tables.
 | `tasks.workflow_digest` | The pinned image digest; `NULL` for a flexible task. |
 | `tasks.workflow_status` | The current workflow status. |
 | `tasks.workflow_paused_reason` | The pause reason; empty unless the task is paused. |
-| `task_queue_workflows` | One binding per queue: digest, revision, update time. |
+| `tasks.workflow_owner_kind` | The owner kind of the current status (`pool`, `customer`, or `script`), copied from the pinned manifest; empty for a terminal or undeclared status and for a flexible task. Triggers keep it current when the status, the digest, or the manifest changes (migration `0069`). |
+| `tasks.open_blockers` | How many `blocks` relations point at the task from a task that is not `done` or `cancelled`. A task is blocked while this is above zero or it has a manual block reason. Triggers on relations and on the blocker's status keep it current, for flexible and workflow tasks alike (migration `0069`). |
+| `task_queue_workflows` | One binding per queue: digest, the tag it follows (`workflow_tag`, empty when pinned), revision, update time. |
 | `task_queue_secrets` | Queue secret values in plaintext, per queue and key (migration `0056`). |
 | `task_workflow_holders` | The last holder of each task and pool, with the dispatch time, `released` (set by a `release` decision; migration `0060`), and `unavailable_since`, when the holder was first seen unable to work (migration `0061`). |
 | `task_status_visits` | One row per stay in a status, with its outcome and message, the `rejected_requests`, `script_failures`, and `idle_iterations` counters, `next_watch_at`, when a script status's watch runs next (migration `0057`), and `resumed_at`, when a pause of the visit was last resumed (migration `0062`). |
@@ -10178,56 +10426,92 @@ How the list shows these tasks is in [Tasks](/docs/tasks#desktop).
 ### The workflow panel
 
 Opening a workflow task shows a **Workflow** panel in the task sheet in place of
-the status select. The header gives `name@version`, the status, the owner, and
-the holder; a pause banner comes first when the task is paused. The task's
-assignee is read-only, because the workflow assigns pool work, and the sheet
-has no **Move to another server…**, because the daemon refuses to export a
-workflow task. The panel follows the task's events as well as its revision: a
-rejected request, a script run, or another event refetches the view while the
-sheet is open, and an older response never replaces a newer one. The panel has
-these sections:
+the status select. It reads top down: what is wrong, where the task is, what
+may happen next, what it produced, and what ran. The task's assignee is
+read-only, because the workflow assigns pool work, and the sheet has no
+**Move to another server…**, because the daemon refuses to export a workflow
+task. The panel follows the task's events as well as its revision: a rejected
+request, a script run, or another event refetches the view while the sheet is
+open, and an older response never replaces a newer one. The panel has these
+sections:
 
-- **Pause banner.** Appears when the task is paused. It explains the reason and
-  offers **Continue** and **Cancel task**, plus **Release holder** when the
-  status is a pool status. **Continue** keeps the same holder in a pool status
-  and resumes the task in its current status otherwise. Each asks for
-  confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the cancel
-  route.
-- **Outcomes.** Each outcome shows its target status, the artifacts it
-  requires (a name with no value is highlighted), and its checks. In a customer
-  status each outcome is a button, with an optional message of up to 4096
-  characters; Desktop sends the advance request and polls it until the checks
-  finish, then shows an `applied` result by reloading the task or a refusal
-  with the daemon's message. A button is disabled while a request is checking,
-  while a request made elsewhere is still pending (with **Refresh**), while the
-  task is paused, and while a required artifact has no value. A rejected or
-  failed last request is shown only when it was made in the current visit of an
-  open task, and a "still checking" notice goes once the request settles. A
-  failed last request has **Retry**, in any status, unless the task is paused or
-  a request is checking: it sends
+- **Pause banner.** Appears first when the task is paused. It explains the
+  reason and offers **Continue** and **Cancel task**, plus **Release holder**
+  when the status is a pool status. **Continue** keeps the same holder in a
+  pool status and resumes the task in its current status otherwise. Each asks
+  for confirmation and sends `POST /api/tasks/{key}/workflow/resume` or the
+  cancel route.
+- **Problem.** Appears when something needs a person and the task is not
+  paused, with a title, the script's own message as text, how close the task
+  is to a pause (`2 of 5 rejections`, from the visit counters and the status
+  limits), and a line that says what to do. The first that applies is shown:
+  a **failed** request of the current visit (a check could not run: the run's
+  log opens by itself, and **Retry** sends
   `POST /api/tasks/{key}/workflow/requests/{id}/retry` and follows the new
-  request like an outcome button. In a pool or script status the outcomes are
-  listed for reference, because the agent or the watch script decides.
-- **Artifacts.** Every artifact the image declares: the current value,
-  rendered as Markdown with a **Markdown** / **Text** switch for plain text,
-  collapsed to six lines or 600 characters when long and shown in full once
-  expanded, with **Edit** and **History**, which loads the earlier values on
-  demand in the same mode; a declared artifact with no value shows its
-  description and **Set**. Editing is disabled once the task is closed.
+  request like an outcome button, unless the task is paused); a **rejected**
+  request of the current visit (the advice names the agent in a pool status
+  and the artifact or a return to the agent in a customer status; the run's
+  **Log** is on demand); a **failed watch** in a script status, with its log
+  open; a pool status with **no agent** free; and, quietly, a holder that
+  ended iterations without a transition request. A request from an earlier
+  visit, a closed task, and a pending request show nothing here.
+- **Workflow.** The statuses of the pinned image in manifest order: the
+  current one marked, the visited ones ticked, and a return count on a status
+  the task came back to from a later one. A status opens to show its owner,
+  its instruction file, its watch script with the image's `description`,
+  schedule, and timeout, each way out with the artifacts it requires and its
+  checks (script, `description`, `run_as`, and timeout), and the effective
+  limits. The row wraps on a narrow screen.
+- **Header.** `name@version`, `step k of n`, the status, the owner, and the
+  holder, with the labeled actions **Return to agent…**, **Move to status…**,
+  and **Cancel task**; see below.
+- **Outcomes.** Each outcome shows its target status, the artifacts it
+  requires (a set one ticked, a missing one highlighted), and its checks with
+  what each verifies, when the image describes it, and the resolved `run_as`
+  and timeout. In a customer status each outcome is a button, with an optional
+  message of up to 4096 characters; Desktop sends the advance request and
+  polls it until the checks finish, then shows an `applied` result by
+  reloading the task or a refusal with the daemon's message. A button is
+  disabled while a request is checking, while a request made elsewhere is
+  still pending (with **Refresh**), while the task is paused, and while a
+  required artifact has no value. A result that settled without applying is
+  shown here until the refetched view carries it; from then on the Problem
+  section explains it. In a pool or script status the outcomes are listed for
+  reference, because the agent or the watch script decides.
+- **Artifacts.** The artifacts an outcome of the current status requires come
+  first under **Needed to leave this status**, missing ones before set ones,
+  each with a `required by outcome → status` chip; the other declared
+  artifacts fold away behind **Other artifacts (n)**. Each shows its
+  description, the current value rendered as Markdown with a **Markdown** /
+  **Text** switch for plain text, collapsed to six lines or 600 characters
+  when long and shown in full once expanded, with **Edit** and **History**,
+  which loads the earlier values on demand in the same mode; a declared
+  artifact with no value shows **Set**. Editing is disabled once the task is
+  closed.
 - **Runs.** The latest 20 script runs with kind, script, state, verdict, exit
-  code, and times, and a **Log** toggle that loads the log on demand and says
-  when it is truncated; while a run is pending or running, an open log has
-  **Refresh**. Who may read a log is described in
+  code, and times. The verdict carries the tone: a failure or rejection is
+  red, a pass or outcome green, a quiet run dim. A **Log** toggle loads the
+  log on demand and says when it is truncated; while a run is pending or
+  running, an open log has **Refresh**. Who may read a log is described in
   [Runs and logs](#runs-and-logs); a refusal is shown in place of the log.
 - **Visits.** Every stay in a status, with who entered it, when it was left and
   by which outcome, and the message.
-- **Move and cancel.** The panel header has two labeled buttons: **Move to
-  status…** (every declared status but the current one, terminal statuses
-  grouped last, and a required reason) and **Cancel task**, which is hidden once
-  the task is closed. A move to a terminal status closes the task.
-  Both ask for confirmation, because they skip outcomes, checks, and required
-  artifacts and stop the current scripts. They are shown only to a principal
-  that may edit the task.
+- **Return to agent.** Sends the task back to a pool status with a message
+  the agent reads in its Goal as the transition message. The targets are the
+  pool statuses a declared outcome of the current status leads to, the pool
+  statuses the task visited before, newest first, and, for a paused pool
+  status, the status itself as a restart; the most recently visited one is
+  chosen first. In a customer status a declared outcome is sent as an advance
+  with the message; everywhere else, and for a paused task, the operator's
+  move is sent with the message as its reason, after a confirmation that says
+  so. The action is hidden on a closed task and on an unpaused pool status an
+  agent already holds.
+- **Move and cancel.** **Move to status…** offers every declared status but
+  the current one, terminal statuses grouped last, and needs a reason; a move
+  to a terminal status closes the task. **Cancel task** is hidden once the
+  task is closed. Both ask for confirmation, because they skip outcomes,
+  checks, and required artifacts and stop the current scripts. The three
+  actions are shown only to a principal that may edit the task.
 
 Messages and logs are text; Desktop never interprets them as Markdown or HTML.
 Artifact values render as Markdown without raw HTML, or as text when switched. After an action in the sheet the task list reloads as well,
@@ -10248,8 +10532,10 @@ dialog drops every unsaved edit.
 - **Workflow.** The bound image's name, version, and the first 12 characters of
   its digest, or **No workflow**. The name links to the image's page in
   **Workflow images**, by its version tag when one names the bound content and
-  by digest otherwise. Choose an image as `name:tag` and press
-  **Bind**; **Clear** asks for confirmation and unbinds. A binding changed
+  by digest otherwise. A binding made by a tag ends with **follows** and the
+  tag, for example `follows latest`: new tasks get the version that tag names.
+  Choose an image as `name:tag` and press **Bind**. Choose `name:latest` to
+  follow each new build; **Clear** asks for confirmation and unbinds. A binding changed
   elsewhere (`revision_conflict`) is reloaded with a notice so you can retry.
   Below the binding, **Statuses** lists every status of the bound image in
   manifest order: its owner and its outcomes as `outcome → status`. A pool
@@ -10472,9 +10758,15 @@ workflow status, for example **Approval**, instead of one of the five fixed
 labels; a long status ID is clipped and its full text is the tooltip. The
 colour of the label follows the task's category (`open`, `in_progress`,
 `wait_customer`, `done`, `cancelled`), not the status ID, so a closed workflow
-task reads as closed whatever its last status was. Beside the label a small
-**customer** or **script** marker says who the task waits on, and a red
-**paused** marker replaces it when the daemon paused the task (its tooltip
+task reads as closed whatever its last status was. Beside the label an open
+task shows its step as `3/6`, its position among the workflow's statuses
+(hidden on a phone), then a small **customer** or **script** marker that says
+who the task waits on. A problem mark takes the marker's place when something
+needs a person: red when a check could not run or the status's watch script
+failed, accent-coloured when a check rejected the request; its tooltip carries
+the script's words and the count behind it (see
+[Attention summary](/docs/task-workflows#attention-summary)). A red
+**paused** marker outranks both when the daemon paused the task (its tooltip
 gives the reason). Active, Closed, and All use the category too. There is no
 filter by workflow status. Flexible tasks keep the labels described above.
 
@@ -10876,20 +11168,27 @@ Status IDs, outcome names (`on`), artifact names, and pool names match
 | `id` | all | Unique status ID. |
 | `owner` | non-terminal | `{pool: NAME}`, `customer`, or `script`. |
 | `instructions` | pool, customer | Source-relative Markdown file shown to the owner. Not allowed on a `script` status. |
-| `watch` | script | `script`, `every`, and `timeout` of the watch script. |
+| `watch` | script | `script`, `every`, `timeout`, and `description` of the watch script. |
 | `transitions` | non-terminal | List of `on`, `to`, and, for pool statuses, `requires` and `checks`. |
 | `limits` | non-terminal | Per-status overrides of the workflow limits. |
 | `terminal` | terminal | `true`. A terminal status has no owner, transitions, watch, instructions, or limits. |
 | `cancelled` | terminal | `true` when the result counts as cancelled rather than done. Allowed only on a terminal status. |
 
 A watch has a required `script`, a required `every` duration of at least `1s`,
-and an optional positive `timeout` (default `60s`, maximum `30m`). The daemon
-runs it once when a task enters the status, then `every` after each run
-finishes.
+an optional positive `timeout` (default `60s`, maximum `30m`), and an optional
+`description`. The daemon runs it once when a task enters the status, then
+`every` after each run finishes.
 
 A check has a required `script`, an optional `run_as` (`queue`, the default, or
-`agent`), and an optional `timeout` (default `60s`, maximum `30m`). The checks of
-a transition run in declared order when the holder requests it.
+`agent`), an optional `timeout` (default `60s`, maximum `30m`), and an optional
+`description`. The checks of a transition run in declared order when the holder
+requests it.
+
+A `description` is one line of plain text of at most 200 characters that says
+what the script verifies or waits for. Desktop shows it next to the script's
+name, and the agent's Goal block names each check with it, so write it for the
+reader who sees the script fail: "The pull request exists and is open", not
+"runs pr-open.py".
 
 How scripts are run, their exit codes, result file, environment, and run modes
 are described under [Script protocol](/docs/task-workflows#script-protocol).
@@ -10916,6 +11215,7 @@ sources:
 | `script` | yes | Source-relative executable; follows the [path rule](#paths). |
 | `every` | yes | Duration of at least `10s` between the end of one run and the start of the next. |
 | `timeout` | no | Positive duration, default `60s`, maximum `30m`. |
+| `description` | no | One line of plain text, at most 200 characters, shown next to the source in Desktop and by `queue source ls`. |
 
 The result file, the environment, and the commands that show a source's runs
 are described under [Sources](/docs/task-workflows#sources).
@@ -10985,6 +11285,7 @@ then code.
 | `checks_not_allowed` | `checks` appear on a transition out of a `customer` or `script` status. |
 | `run_as_invalid` | A check's `run_as` is neither `queue` nor `agent`. |
 | `timeout_too_long` | A check `timeout`, `watch.timeout`, or source `timeout` exceeds `30m`. |
+| `description_invalid` | A check, watch, or source `description` exceeds 200 characters or is not one line of plain text. |
 | `source_name_invalid` | A source name does not match the identifier rule. |
 | `source_duplicate` | A source name is used twice. |
 | `path_invalid` | A path breaks the [path rule](#paths). |
@@ -11210,7 +11511,9 @@ Every agent of the `developers` pool must:
 
 A published image is bound to a queue with `ttasks queue workflow set`, or from
 Compose with `task_queues.<PREFIX>.workflow`; tasks created in that queue pin
-the version and follow its statuses. See [Task workflows](/docs/task-workflows)
+the version and follow its statuses. A queue bound by `NAME` or `NAME:latest`
+follows `latest`: after a new build, new tasks pin the new version, while
+existing tasks keep theirs. See [Task workflows](/docs/task-workflows)
 for binding, queue secrets, the [Desktop](/docs/task-workflows#desktop) panel,
 dispatch, artifacts, outcomes, scripts, and the operator commands, and
 [Compose](/docs/binaries/compose#queue-workflows) for the Compose form.

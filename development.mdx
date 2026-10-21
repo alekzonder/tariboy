@@ -691,6 +691,37 @@ loop managers. It can double-execute iterations, reconcile the same agents, and
 reap live sessions. Isolation is a data-safety requirement.
 :::
 
+### Go test isolation and speed
+
+Go tests follow these rules so the suite stays fast, parallel, and away from
+live state:
+
+- **Test databases come from `internal/store/storetest`.** `storetest.Open(t)`
+  returns a migrated database in a temporary directory, and
+  `storetest.OpenAt(t, path)` does the same at a given path.
+  `storetest.Seed(t, path)` writes a migrated file for code that opens the
+  database itself, such as `daemon.Run`. The first call in a test binary
+  runs the real migrations once; every later call copies that template. Call
+  `store.Open` directly only to reopen an existing file or to test migrations.
+- **Packages whose tests start a daemon, a loop manager, or the CLI call
+  `testutil.IsolateEnv()` from `TestMain`.** It removes every `TARIBOY_`
+  variable and points `HOME` at a temporary directory. The suite passes with
+  `TARIBOY_RUNTIME_DIR` and `TARIBOY_BASE_DIR` set to paths that do not
+  exist. `loop.NewManager` never reads the environment: tests pass
+  `RuntimeDir` (use `testutil.ShortDir(t)` for socket paths) and may pass
+  `BaseEnv`.
+- **Wait for state, not for time.** Use `testutil.WaitFor` instead of a
+  `time.Sleep` loop, and prove that something did not happen with a hook, a
+  fake timer, or `testing/synctest`. A `time.Sleep` that must stay in a test
+  has a comment that says why. A test that starts `daemon.Run` waits on
+  `Options.Ready` instead of polling the daemon socket.
+- **Mark independent tests with `t.Parallel()`.** Tests that use `t.Setenv`,
+  `os.Chdir`, or package-level state stay sequential.
+- **Tests that drive a real `tmux` have the `tmux` build tag**
+  (`internal/shim/shim_tmux_test.go`). `make test` adds `-tags tmux` when
+  `tmux` is installed, and `make vet` always vets them. Run them alone with
+  `go test -tags tmux ./internal/shim/`.
+
 ## Generated artifacts
 
 The two UI targets have different Git contracts:

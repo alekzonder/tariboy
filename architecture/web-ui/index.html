@@ -420,8 +420,13 @@ fallback, tested by <code>isWorkflowTask</code>) is presented by category; the d
 <code>status_view</code> (Active, Closed, All) selects by category too, and a flexible
 task’s category equals its status. <code>TaskRow</code> takes its tone from <code>task.category</code> and its
 label from <code>taskStatusLabel(task)</code>: the workflow status ID, humanised, in a
-clipped pill whose title is the ID, plus a <code>waiting_on</code> marker (<code>customer</code>,
-<code>script</code>, or a danger <code>paused</code> whose title is the pause reason). <code>TaskDetail</code>
+clipped pill whose title is the ID, then the task’s <code>workflow_step</code> as <code>k/n</code>
+(hidden on a phone), plus a <code>waiting_on</code> marker (<code>customer</code>, <code>script</code>, or a
+danger <code>paused</code> whose title is the pause reason). A <code>workflow_attention</code> of
+kind <code>failed</code>, <code>script_failed</code>, or <code>rejected</code> replaces the <code>customer</code>/<code>script</code>
+marker with a problem mark whose title is the message; the pause pill
+outranks it, and <code>idle</code> earns no mark. The row needs no request of its own:
+both objects come with the task JSON. <code>TaskDetail</code>
 compares <code>status</code> only with <code>category</code> for its dirty check and tone, and sends
 no <code>status</code> or <code>assignee</code> on Save for a workflow task; it hides <strong>Move to
 another server…</strong> for one, and neither its banner nor a comment chip asks for
@@ -430,17 +435,25 @@ select it renders <code>WorkflowPanel</code>, which loads the view with <code>ge
 (on mount, on a new task revision, on a new event sequence passed down by
 <code>TaskDetail</code> as <code>eventSequence</code>, which in the chat <code>TaskDrawer</code> also follows
 the last socket hint about the task through <code>liveSequence</code>, and after each change; a request counter drops
-a response older than the newest) and composes
+a response older than the newest) and composes, top down,
 <code>WorkflowPauseBanner</code> (<code>resumeTaskWorkflow</code>, <code>cancelWorkflowTask</code>),
-<code>WorkflowOutcomes</code> (<code>advanceTask</code>, or <code>retryTransitionRequest</code> from the
-<strong>Retry</strong> of a failed last request, then <code>getTransitionRequest</code> once a second
-until the request settles or <code>wait_seconds</code> passes), <code>WorkflowArtifacts</code>
+<code>WorkflowProblem</code> (the one problem <code>explainProblem</code> in <code>explainWorkflowProblem.ts</code>
+picks from the view, with <code>retryTransitionRequest</code> behind <strong>Retry</strong> and the
+run’s log through <code>RunRow</code> with <code>autoLoad</code>), <code>WorkflowStepper</code> (the view’s
+<code>statuses</code> as steps, marked by <code>stepMarks</code> in <code>workflowGraph.ts</code>), the header
+with <code>stepOf</code>, <code>WorkflowOutcomes</code> (<code>advanceTask</code>), <code>WorkflowArtifacts</code>
 (<code>setTaskArtifact</code>, <code>getTaskArtifactHistory</code>; every entry of the view’s
-<code>declared_artifacts</code>), <code>WorkflowRuns</code> (<code>getTaskScriptRunLog</code>), the visit list,
-and the header’s labeled <strong>Move to status…</strong> and <strong>Cancel task</strong> buttons with
-<code>moveTaskWorkflow</code> (targets from the view’s <code>statuses</code>) and
-<code>cancelWorkflowTask</code>. Destructive actions confirm through
-the controlled alert dialog of <code>useWorkflowConfirm</code>; <code>workflowShared.ts</code> holds
+<code>declared_artifacts</code>, grouped by <code>requiredBy</code>), <code>WorkflowRuns</code>
+(<code>getTaskScriptRunLog</code>; <code>runTone</code> gives each row its tone), the visit list,
+and the header’s labeled <strong>Return to agent…</strong>, <strong>Move to status…</strong>, and
+<strong>Cancel task</strong> buttons: <code>ReturnToAgent</code> picks its targets with
+<code>returnTargets</code> and sends <code>advanceTask</code> or <code>moveTaskWorkflow</code>, the move form
+uses <code>moveTaskWorkflow</code> (targets from the view’s <code>statuses</code>), and cancel uses
+<code>cancelWorkflowTask</code>. Outcomes, the problem block, and the return form follow
+a transition request through <code>useFollowRequest</code> in <code>workflowShared.ts</code>
+(<code>getTransitionRequest</code> once a second until the request settles or
+<code>wait_seconds</code> passes). Destructive actions confirm through
+the controlled alert dialog of <code>useWorkflowConfirm</code>; <code>workflowShared.ts</code> also holds
 <code>errorText</code> and <code>useMounted</code>. Messages and logs render as React text;
 artifact values render through <code>MarkdownContent</code>, or as React text when an
 artifact is switched to <strong>Text</strong>. Every call passes the <code>ApiTarget</code> of the surrounding
@@ -456,7 +469,8 @@ with <strong>Retry</strong> instead of a guess. <code>listTaskPrincipals</code> 
 suggestions. The dialog keeps the pools as the one source the tabs share. The
 <strong>Workflow</strong> tab, <code>QueueWorkflowSettings</code> (<code>getQueueWorkflow</code>,
 <code>setQueueWorkflow</code>, <code>clearQueueWorkflow</code>, <code>listWorkflowImages</code>,
-<code>getWorkflowImage</code>), shows the binding and <code>WorkflowStatusMap</code>: the statuses of
+<code>getWorkflowImage</code>), shows the binding, with the tag it follows when it has
+one, and <code>WorkflowStatusMap</code>: the statuses of
 the bound image, or of the image chosen in the select before <strong>Bind</strong>, with
 their owners and outcomes; a pool chip opens the <strong>Pools</strong> tab. A refused bind
 lists the empty pools, which shrink as pools gain agents, or the missing

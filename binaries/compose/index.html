@@ -79,26 +79,28 @@ Existing compose files without <code>task_queues</code> keep their previous beha
 <tbody>
 <tr>
 <td><code>NAME</code></td>
-<td>Binds the already built <code>NAME:latest</code>.</td>
+<td>Binds the already built <code>NAME:latest</code>. The queue follows <code>latest</code>.</td>
 </tr>
 <tr>
 <td><code>NAME:TAG</code></td>
-<td>Binds the already built <code>NAME:TAG</code>.</td>
+<td>Binds the already built <code>NAME:TAG</code>. The queue follows the tag.</td>
 </tr>
 <tr>
 <td><code>STORE/NAME</code></td>
-<td>Builds the workflow source <code>NAME</code> from the registered Store <code>STORE</code>, then binds the version that build produced.</td>
+<td>Builds the workflow source <code>NAME</code> from the registered Store <code>STORE</code>, then binds the digest that build produced. The binding is pinned.</td>
 </tr>
 <tr>
 <td><code>STORE/NAME:TAG</code></td>
-<td>Builds <code>STORE/NAME</code>, then binds <code>NAME:TAG</code>.</td>
+<td>Builds <code>STORE/NAME</code>, then binds <code>NAME:TAG</code>. The queue follows the tag.</td>
 </tr>
 </tbody>
 </table></div>
 <p>A tag of <code>.</code> or <code>..</code> is a validation error.</p>
 <p>Each Store workflow is built once per run, before any queue is bound, and a
 bind runs after the queue’s pools exist, since a bind needs the pools the
-workflow names. A queue already bound to the resolved digest is left alone. A
+workflow names. A queue already bound to the resolved digest and tag is left
+alone. A queue that follows a tag moves to each new build of that tag; see
+<a href="/tariboy/docs/task-workflows#binding-a-queue">Binding a queue</a>. A
 form without a Store prefix fails when the image is not built. Rebinding a
 queue to a newer version leaves its existing tasks on the version they pinned.</p>
 <p>Compose never clears a binding: removing <code>workflow</code> from the file leaves the

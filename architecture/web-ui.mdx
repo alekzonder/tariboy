@@ -459,8 +459,13 @@ fallback, tested by `isWorkflowTask`) is presented by category; the daemon's
 `status_view` (Active, Closed, All) selects by category too, and a flexible
 task's category equals its status. `TaskRow` takes its tone from `task.category` and its
 label from `taskStatusLabel(task)`: the workflow status ID, humanised, in a
-clipped pill whose title is the ID, plus a `waiting_on` marker (`customer`,
-`script`, or a danger `paused` whose title is the pause reason). `TaskDetail`
+clipped pill whose title is the ID, then the task's `workflow_step` as `k/n`
+(hidden on a phone), plus a `waiting_on` marker (`customer`, `script`, or a
+danger `paused` whose title is the pause reason). A `workflow_attention` of
+kind `failed`, `script_failed`, or `rejected` replaces the `customer`/`script`
+marker with a problem mark whose title is the message; the pause pill
+outranks it, and `idle` earns no mark. The row needs no request of its own:
+both objects come with the task JSON. `TaskDetail`
 compares `status` only with `category` for its dirty check and tone, and sends
 no `status` or `assignee` on Save for a workflow task; it hides **Move to
 another server…** for one, and neither its banner nor a comment chip asks for
@@ -469,17 +474,25 @@ select it renders `WorkflowPanel`, which loads the view with `getTaskWorkflow`
 (on mount, on a new task revision, on a new event sequence passed down by
 `TaskDetail` as `eventSequence`, which in the chat `TaskDrawer` also follows
 the last socket hint about the task through `liveSequence`, and after each change; a request counter drops
-a response older than the newest) and composes
+a response older than the newest) and composes, top down,
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
-`WorkflowOutcomes` (`advanceTask`, or `retryTransitionRequest` from the
-**Retry** of a failed last request, then `getTransitionRequest` once a second
-until the request settles or `wait_seconds` passes), `WorkflowArtifacts`
+`WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
+picks from the view, with `retryTransitionRequest` behind **Retry** and the
+run's log through `RunRow` with `autoLoad`), `WorkflowStepper` (the view's
+`statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`), the header
+with `stepOf`, `WorkflowOutcomes` (`advanceTask`), `WorkflowArtifacts`
 (`setTaskArtifact`, `getTaskArtifactHistory`; every entry of the view's
-`declared_artifacts`), `WorkflowRuns` (`getTaskScriptRunLog`), the visit list,
-and the header's labeled **Move to status…** and **Cancel task** buttons with
-`moveTaskWorkflow` (targets from the view's `statuses`) and
-`cancelWorkflowTask`. Destructive actions confirm through
-the controlled alert dialog of `useWorkflowConfirm`; `workflowShared.ts` holds
+`declared_artifacts`, grouped by `requiredBy`), `WorkflowRuns`
+(`getTaskScriptRunLog`; `runTone` gives each row its tone), the visit list,
+and the header's labeled **Return to agent…**, **Move to status…**, and
+**Cancel task** buttons: `ReturnToAgent` picks its targets with
+`returnTargets` and sends `advanceTask` or `moveTaskWorkflow`, the move form
+uses `moveTaskWorkflow` (targets from the view's `statuses`), and cancel uses
+`cancelWorkflowTask`. Outcomes, the problem block, and the return form follow
+a transition request through `useFollowRequest` in `workflowShared.ts`
+(`getTransitionRequest` once a second until the request settles or
+`wait_seconds` passes). Destructive actions confirm through
+the controlled alert dialog of `useWorkflowConfirm`; `workflowShared.ts` also holds
 `errorText` and `useMounted`. Messages and logs render as React text;
 artifact values render through `MarkdownContent`, or as React text when an
 artifact is switched to **Text**. Every call passes the `ApiTarget` of the surrounding
@@ -495,7 +508,8 @@ with **Retry** instead of a guess. `listTaskPrincipals` supplies the agent
 suggestions. The dialog keeps the pools as the one source the tabs share. The
 **Workflow** tab, `QueueWorkflowSettings` (`getQueueWorkflow`,
 `setQueueWorkflow`, `clearQueueWorkflow`, `listWorkflowImages`,
-`getWorkflowImage`), shows the binding and `WorkflowStatusMap`: the statuses of
+`getWorkflowImage`), shows the binding, with the tag it follows when it has
+one, and `WorkflowStatusMap`: the statuses of
 the bound image, or of the image chosen in the select before **Bind**, with
 their owners and outcomes; a pool chip opens the **Pools** tab. A refused bind
 lists the empty pools, which shrink as pools gain agents, or the missing

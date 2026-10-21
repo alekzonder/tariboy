@@ -76,15 +76,19 @@ same socket, and Start or Exec cannot create a second engine or tmux session.
 An <code>i-am-done</code> call also survives the handoff: after the same two-second grace
 used by the original runner, adoption sends at most one cooperative Kill if no
 <code>result.json</code> has appeared, then finalizes the original row from that result.
-Each control request connects while the handoff lock is held, so later reuse of
-the stable per-agent socket pathname cannot redirect it to a replacement
-iteration; that connection attempt has a finite timeout so a wedged Unix accept
-queue cannot hold daemon lifecycle operations indefinitely. When adoption
-finishes, the daemon reloads the current Enabled value before starting the
-normal loop engine. Restart also carries one explicit interactive-run intent
-across the handoff. A short launch gate shared with Stop is acquired only after
-tmux collision checks, covers the durable launch or manual-collision outcome,
-and is released before runner preparation. If Stop races the final detached
+Each control request connects while the agent’s handoff lock is held for
+reading, and adoption takes it for writing before it ends. Later reuse of the
+stable per-agent socket pathname therefore cannot redirect a request to a
+replacement iteration. The connection attempt has a finite timeout, so a wedged
+Unix accept queue cannot hold the end of adoption indefinitely; other agents and
+other lifecycle operations do not wait for it. When adoption finishes, the
+daemon reloads the current Enabled value before starting the normal loop
+engine. Restart also carries one explicit interactive-run intent across the
+handoff. The launch uses the agent’s lifecycle gate, which Stop also takes. The
+launch acquires it only after tmux collision checks, holds it through image
+activation and the durable launch or manual-collision outcome, and releases it
+before runner preparation. See
+<a href="/tariboy/docs/architecture/iteration-loop#manager-internals-and-lock-order">Manager internals and lock order</a>. If Stop races the final detached
 process creation after winning stale-shim recovery, the runner briefly retries
 the shim socket and requests cooperative Kill so the shim terminates its owned
 harness process group or tmux session. If no shim becomes reachable, it kills

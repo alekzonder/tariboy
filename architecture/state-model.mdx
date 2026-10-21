@@ -29,6 +29,40 @@ The loop schedule is the `agents.schedule_rrule` column: the normalized
 computed from it on demand and is not stored, so the daemon does not replay
 occurrences missed while it was off.
 
+## Stored times
+
+Every time in the database uses one text format: UTC with exactly nine
+fractional digits, for example `2026-10-19T06:33:58.123000000Z`. This is
+`store.TimeLayout` in `internal/store/timefmt.go`. All values have the same
+width and the same zone, so SQLite sorts the text in time order. Queries
+compare time columns directly (`ts >= ?`), and the indexes on those columns
+serve range filters such as the Usage `since` and `until` bounds.
+
+Only the `store` package knows the format:
+
+- `store.FormatTime` writes a time.
+- `store.ParseTime` reads a stored time and rejects every other format.
+- `store.ParseInputTime` reads a time from outside the database, such as an
+  API or CLI parameter, a worker report or a manifest. It accepts any RFC 3339
+  value with any offset and converts it to UTC.
+- `store.SQLNow` is the SQL expression for the current time. SQL column
+  defaults use it. SQLite has millisecond precision, so the last six digits of
+  a default value are zero.
+
+Migration `0067_canonical_timestamps.sql` rewrites every registered time
+column to this format and changes the old millisecond SQL defaults. A value
+that is not a time stays as it is, and the migration logs its table and
+column. The registry of time columns is `timeColumns` in
+`internal/store/timefmt.go`; a test fails when a new time column is missing
+from it. Backup restore also converts old-format values in those columns, so
+an old backup does not bring old formats back. The Store service database
+has the same format and its own migration.
+
+API responses return stored times as they are, so they have nine fractional
+digits. Examples are the Usage request `ts` and the task usage
+`first_ts`/`last_ts`, which earlier had three digits or a variable number.
+These are valid RFC 3339 values.
+
 ## Filesystem-backed shell scripts
 
 The global pre-iteration script at `<base-dir>/global-agent-shell.sh` and an
@@ -303,11 +337,21 @@ row (`task_workflow_images`) cannot be removed while a queue binds it or an
 unfinished task pins it. `tasks.workflow_status` holds the workflow status
 (and `tasks.workflow_paused_reason`, the pause reason, empty unless the task
 is paused), while `tasks.status` keeps holding the category for every task.
+Migration `0069` stores two values that every task read used to compute per
+row: `tasks.workflow_owner_kind`, the owner kind of the current status read
+from the pinned manifest, and `tasks.open_blockers`, the number of open tasks
+that block the task. Triggers keep both current on every write path: the owner
+kind when `workflow_status`, `workflow_digest`, or the image manifest changes,
+and the blocker count when a `blocks` relation is added or removed or a
+blocker moves into or out of `done` or `cancelled`. Task visibility is a
+recursive CTE that queries join, so no query binds a variable per visible
+task.
 Task JSON shows the
 workflow status as `status` and the stored value as `category`; for a task
 without a workflow both are the stored status. New tables: `task_queue_workflows`
 (one binding per queue, with a revision and an `ON DELETE RESTRICT` reference to
-the image), `task_workflow_holders` (the last holder per task and pool),
+the image; migration `0068` adds `workflow_tag`, the tag the binding follows,
+empty for a pinned binding and for every binding made before it), `task_workflow_holders` (the last holder per task and pool),
 `task_status_visits`, `task_transition_requests` (at most one `pending` per
 task), and `task_artifacts`. Workflow mutations append `workflow.transitioned`,
 `workflow.transition_requested`, `workflow.moved`, `workflow.cancelled`, and
