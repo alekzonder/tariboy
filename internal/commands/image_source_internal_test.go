@@ -20,7 +20,7 @@ func TestImageSourceValidateAcceptsNewV2Source(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := imageSourceValidate().Handler(c, registry.Params{"name": "reviewer"})
+	result, err := registry.Call(c, context.Background(), imageSourceValidate(), registry.Params{"name": "reviewer"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestImageSourceBuildCopiesGitProvenanceIntoSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := imageSourceBuild().Handler(c, registry.Params{"name": "reviewer", "tag": "v7"})
+	result, err := registry.Call(c, context.Background(), imageSourceBuild(), registry.Params{"name": "reviewer", "tag": "v7"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestImageSourceBuildWaitsForPublicationGate(t *testing.T) {
 	<-entered
 	done := make(chan error, 1)
 	go func() {
-		_, err := imageSourceBuild().Handler(c, registry.Params{"name": "reviewer", "tag": "v1"})
+		_, err := registry.Call(c, context.Background(), imageSourceBuild(), registry.Params{"name": "reviewer", "tag": "v1"})
 		done <- err
 	}()
 	select {
@@ -106,7 +106,7 @@ func TestImageSourceBuildRejectsDisabledExternalPlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := imageSourceBuild().Handler(c, registry.Params{"name": "reviewer", "tag": "v1"}); err == nil || !strings.Contains(err.Error(), `unknown plugin "widget"`) {
+	if _, err := registry.Call(c, context.Background(), imageSourceBuild(), registry.Params{"name": "reviewer", "tag": "v1"}); err == nil || !strings.Contains(err.Error(), `unknown plugin "widget"`) {
 		t.Fatalf("image source build error = %v", err)
 	}
 }

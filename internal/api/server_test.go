@@ -27,28 +27,28 @@ func testServer(t *testing.T) (*Server, *http.Client) {
 	reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			return map[string]any{"version": c.Version}, nil
 		},
 	})
 	reg.Register(registry.Command{
 		Path: "wild", Summary: "wildcard capture",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/wild/{ref}/files/{path...}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			return map[string]any{"ref": p["ref"], "path": p["path"]}, nil
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			return map[string]any{"ref": p.Params["ref"], "path": p.Params["path"]}, nil
 		},
 	})
 	reg.Register(registry.Command{
 		Path: "echo", Summary: "echo",
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/echo"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			if p["boom"] == true {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			if p.Params["boom"] == true {
 				return nil, UserError{Code: "boom", Msg: "boom requested"}
 			}
-			if p["crash"] == true {
+			if p.Params["crash"] == true {
 				return nil, errors.New("internal detail")
 			}
-			return p, nil
+			return p.Params, nil
 		},
 	})
 	cctx := &registry.Ctx{Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil)), StartedAt: time.Now()}
@@ -144,6 +144,41 @@ func TestPostParamsAndErrors(t *testing.T) {
 	}
 	if strings.Contains(m["error"].(map[string]any)["message"].(string), "internal detail") {
 		t.Fatal("internal error message leaked")
+	}
+}
+
+func TestDispatchBindsDeclaredArguments(t *testing.T) {
+	t.Parallel()
+	reg := registry.New()
+	called := false
+	reg.Register(registry.Command{
+		Path: "typed", Summary: "typed",
+		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "limit", Type: registry.Int}},
+		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/typed"},
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			called = true
+			return map[string]any{"limit": p.Int("limit")}, nil
+		},
+	})
+	srv := NewServer(reg, &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	for body, want := range map[string]string{`{}`: "missing_param", `{"name":"a","limit":"abc"}`: "invalid_param"} {
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/api/typed", strings.NewReader(body)))
+		var env struct {
+			Error struct{ Code string } `json:"error"`
+		}
+		_ = json.Unmarshal(rr.Body.Bytes(), &env)
+		if rr.Code != http.StatusBadRequest || env.Error.Code != want {
+			t.Fatalf("%s: status %d body %s, want 400 %s", body, rr.Code, rr.Body, want)
+		}
+	}
+	if called {
+		t.Fatal("an invalid request reached the handler")
+	}
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/api/typed", strings.NewReader(`{"name":"a","limit":"3"}`)))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"limit":3`) {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body)
 	}
 }
 
@@ -245,8 +280,10 @@ func TestDispatchMergesPathValue(t *testing.T) {
 	reg := registry.New()
 	reg.Register(registry.Command{
 		Path: "agent.status", Summary: "s",
-		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return map[string]any{"name": p["name"]}, nil },
+		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/status"},
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			return map[string]any{"name": p.Params["name"]}, nil
+		},
 	})
 	cctx := &registry.Ctx{Version: "t", Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	srv := NewServer(reg, cctx)

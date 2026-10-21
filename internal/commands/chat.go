@@ -26,7 +26,7 @@ func customerPrincipal(c *registry.Ctx) string {
 // chatTypes resolves the requested message-type filter, falling back to the
 // default conversation types when the caller sends none.
 func chatTypes(p registry.Params) []string {
-	if requested := splitCommaList(str(p, "types")); len(requested) > 0 {
+	if requested := splitCommaList(p.String("types")); len(requested) > 0 {
 		return requested
 	}
 	return bus.DefaultChatTypes
@@ -91,13 +91,13 @@ func chatLs() registry.Command {
 			{Name: "types", Flag: "types", Type: registry.String, Help: "comma-separated message type globs"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/chats"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
 			customer := customerPrincipal(c)
-			summaries, err := b.ChatList(customer, chatTypes(p))
+			summaries, err := b.ChatList(customer, chatTypes(p.Params))
 			if err != nil {
 				return nil, err
 			}
@@ -128,23 +128,23 @@ func chatMessages() registry.Command {
 			{Name: "before", Flag: "before", Type: registry.String, Help: "page older: only messages before this timestamp"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/chats/{agent}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
 			limit := 0
-			if raw := str(p, "limit"); raw != "" {
+			if raw := p.String("limit"); raw != "" {
 				if parsed, convErr := strconv.Atoi(raw); convErr == nil && parsed > 0 {
 					limit = parsed
 				}
 			}
 			customer := customerPrincipal(c)
-			chat, err := resolveChat(b, str(p, "agent"))
+			chat, err := resolveChat(b, p.String("agent"))
 			if err != nil {
 				return nil, err
 			}
-			msgs, err := b.ChatFeed(chat, customer, chatTypes(p), limit, str(p, "before"))
+			msgs, err := b.ChatFeed(chat, customer, chatTypes(p.Params), limit, p.String("before"))
 			if err != nil {
 				return nil, err
 			}
@@ -177,8 +177,8 @@ func chatRead() registry.Command {
 			{Name: "exact", Flag: "exact", Type: registry.Bool, Help: "set the mark to ts even when that moves it backwards (mark unread)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/chats/{agent}/read"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			agent, ts := str(p, "agent"), strings.TrimSpace(str(p, "ts"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			agent, ts := p.String("agent"), strings.TrimSpace(p.String("ts"))
 			if agent == "" || ts == "" {
 				return nil, api.UserError{Code: "missing_ts", Msg: "agent and ts are required"}
 			}
@@ -193,7 +193,7 @@ func chatRead() registry.Command {
 			// The mark only moves forward: a late or duplicated request from a
 			// second window must not resurrect messages already seen. Marking a
 			// chat unread is the one deliberate exception, and says so.
-			exact, _ := boolParam(p, "exact")
+			exact, _ := p.OptBool("exact")
 			customer := customerPrincipal(c)
 			if err := b.SetReadTS(chat.ID, customer, ts, exact); err != nil {
 				return nil, err
@@ -220,12 +220,12 @@ func chatUnanswered() registry.Command {
 				Help: "user:<login> or agent:<name>"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/chats/{chat}/unanswered"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			chat, principal := str(p, "chat"), str(p, "principal")
+			chat, principal := p.String("chat"), p.String("principal")
 			if chat == "" || principal == "" {
 				return nil, api.UserError{Code: "missing_principal", Msg: "chat and principal are required"}
 			}
@@ -252,12 +252,12 @@ func chatParticipants() registry.Command {
 			{Name: "chat", Type: registry.String, Required: true, Help: "chat id"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/chats/{chat}/participants"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			chat := str(p, "chat")
+			chat := p.String("chat")
 			parts, err := b.Participants(chat)
 			if err != nil {
 				return nil, err
@@ -302,12 +302,12 @@ func chatCreate() registry.Command {
 				Help: "comma-separated user:<login> or agent:<name> principals"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/chats"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			id := strings.TrimSpace(str(p, "id"))
+			id := strings.TrimSpace(p.String("id"))
 			if id == "" {
 				return nil, api.UserError{Code: "missing_id", Msg: "id is required"}
 			}
@@ -319,14 +319,14 @@ func chatCreate() registry.Command {
 				return nil, api.UserError{Code: "bad_chat_id",
 					Msg: "chat id must be lowercase letters, digits, '-' or '_'"}
 			}
-			title := strings.TrimSpace(str(p, "title"))
+			title := strings.TrimSpace(p.String("title"))
 			if title == "" {
 				title = id
 			}
 			// Every participant is checked before the chat exists, so a typo
 			// leaves no half-built chat behind.
 			principals := []string{customerPrincipal(c)}
-			for _, principal := range splitCommaList(str(p, "participants")) {
+			for _, principal := range splitCommaList(p.String("participants")) {
 				if !bus.ValidPrincipal(principal) {
 					return nil, api.UserError{Code: "bad_principal",
 						Msg: "participant " + principal + " must be user:<login> or agent:<name>"}
@@ -368,12 +368,12 @@ func chatJoin() registry.Command {
 			{Name: "role", Flag: "role", Type: registry.String, Help: "member (default) or observer"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/chats/{chat}/participants"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			b, chat, principal, err := chatAndPrincipal(c, p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			b, chat, principal, err := chatAndPrincipal(c, p.Params)
 			if err != nil {
 				return nil, err
 			}
-			role := strings.TrimSpace(str(p, "role"))
+			role := strings.TrimSpace(p.String("role"))
 			if role != "" && role != "member" && role != "observer" && role != "owner" {
 				return nil, api.UserError{Code: "bad_role", Msg: "role must be member, observer or owner"}
 			}
@@ -397,8 +397,8 @@ func chatLeave() registry.Command {
 			{Name: "principal", Type: registry.String, Required: true, Help: "user:<login> or agent:<name>"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/chats/{chat}/participants/{principal}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			b, chat, principal, err := chatAndPrincipal(c, p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			b, chat, principal, err := chatAndPrincipal(c, p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -416,12 +416,12 @@ func chatAndPrincipal(c *registry.Ctx, p registry.Params) (*bus.Bus, bus.Chat, s
 	if err != nil {
 		return nil, bus.Chat{}, "", err
 	}
-	principal := strings.TrimSpace(str(p, "principal"))
+	principal := strings.TrimSpace(p.String("principal"))
 	if !bus.ValidPrincipal(principal) {
 		return nil, bus.Chat{}, "", api.UserError{Code: "bad_principal",
 			Msg: "principal must be user:<login> or agent:<name>"}
 	}
-	chat, err := b.GetChat(strings.TrimSpace(str(p, "chat")))
+	chat, err := b.GetChat(strings.TrimSpace(p.String("chat")))
 	if errors.Is(err, bus.ErrNotFound) {
 		return nil, bus.Chat{}, "", api.UserError{Code: "not_found", Msg: "chat not found"}
 	}

@@ -31,16 +31,16 @@ func fileList() registry.Command {
 			{Name: "path", Type: registry.String, Help: "directory relative to cwd (empty => root)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/file/list"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			root, err := agentCwdFor(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			entries, err := filebrowser.List(root, str(p, "path"))
+			entries, err := filebrowser.List(root, p.String("path"))
 			if err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": str(p, "path"), "entries": entries}, nil
+			return map[string]any{"path": p.String("path"), "entries": entries}, nil
 		},
 	}
 }
@@ -54,12 +54,12 @@ func fileRead() registry.Command {
 			{Name: "path", Type: registry.String, Required: true, Help: "file relative to cwd"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/file"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			root, err := agentCwdFor(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			content, err := filebrowser.Read(root, str(p, "path"))
+			content, err := filebrowser.Read(root, p.String("path"))
 			if err != nil {
 				return nil, fbErr(err)
 			}
@@ -78,15 +78,15 @@ func fileWrite() registry.Command {
 			{Name: "content", Type: registry.String, Required: true, Help: "new file content (text)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "PUT", Path: "/api/agents/{name}/file"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			root, err := agentCwdFor(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if err := filebrowser.Write(root, str(p, "path"), []byte(str(p, "content"))); err != nil {
+			if err := filebrowser.Write(root, p.String("path"), []byte(p.String("content"))); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": str(p, "path"), "saved": true}, nil
+			return map[string]any{"path": p.String("path"), "saved": true}, nil
 		},
 	}, jsonEscapedBodyLimit(filebrowser.MaxReadBytes))
 }
@@ -101,15 +101,15 @@ func fileCreate() registry.Command {
 			{Name: "type", Type: registry.String, Help: "file (default) or dir"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/file"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			root, err := agentCwdFor(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if err := filebrowser.Create(root, str(p, "path"), str(p, "type")); err != nil {
+			if err := filebrowser.Create(root, p.String("path"), p.String("type")); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": str(p, "path"), "created": true}, nil
+			return map[string]any{"path": p.String("path"), "created": true}, nil
 		},
 	}
 }
@@ -124,15 +124,15 @@ func fileRename() registry.Command {
 			{Name: "to", Type: registry.String, Required: true, Help: "destination path relative to cwd"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/file/rename"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			root, err := agentCwdFor(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if err := filebrowser.Rename(root, str(p, "from"), str(p, "to")); err != nil {
+			if err := filebrowser.Rename(root, p.String("from"), p.String("to")); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"from": str(p, "from"), "to": str(p, "to"), "renamed": true}, nil
+			return map[string]any{"from": p.String("from"), "to": p.String("to"), "renamed": true}, nil
 		},
 	}
 }
@@ -146,15 +146,15 @@ func fileDelete() registry.Command {
 			{Name: "path", Type: registry.String, Required: true, Help: "path relative to cwd"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/agents/{name}/file"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			root, err := agentCwdFor(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if err := filebrowser.Delete(root, str(p, "path")); err != nil {
+			if err := filebrowser.Delete(root, p.String("path")); err != nil {
 				return nil, fbErr(err)
 			}
-			return map[string]any{"path": str(p, "path"), "deleted": true}, nil
+			return map[string]any{"path": p.String("path"), "deleted": true}, nil
 		},
 	}
 }

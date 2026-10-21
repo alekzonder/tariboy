@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"strings"
@@ -29,7 +30,7 @@ func call(t *testing.T, c *registry.Ctx, path string, p registry.Params) map[str
 	if !ok {
 		t.Fatalf("command %s not registered", path)
 	}
-	res, err := cmd.Handler(c, p)
+	res, err := registry.Call(c, context.Background(), cmd, p)
 	if err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}
@@ -77,7 +78,7 @@ func TestDaemonConfigSetValidates(t *testing.T) {
 	c := ctx(t)
 	reg := BuildRegistry()
 	cmd, _ := reg.Get("daemon.config.set")
-	if _, err := cmd.Handler(c, registry.Params{"value": "x"}); err == nil {
+	if _, err := registry.Call(c, context.Background(), cmd, registry.Params{"value": "x"}); err == nil {
 		t.Fatal("missing key accepted")
 	}
 }
@@ -153,7 +154,7 @@ func TestUsageGroupFilterHelpDescribesFunctionalFilter(t *testing.T) {
 func TestDaemonStatusReportsMissingTools(t *testing.T) {
 	// Sequential: sets PATH with t.Setenv.
 	t.Setenv("PATH", t.TempDir())
-	out, err := daemonStatus().Handler(&registry.Ctx{StartedAt: time.Now()}, nil)
+	out, err := registry.Call(&registry.Ctx{StartedAt: time.Now()}, context.Background(), daemonStatus(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,7 +27,7 @@ func TestFsListStatusCodes(t *testing.T) {
 
 	cmd := fsList()
 	call := func(path string) (any, error) {
-		return cmd.Handler(&registry.Ctx{}, registry.Params{"path": path})
+		return registry.Call(&registry.Ctx{}, context.Background(), cmd, registry.Params{"path": path})
 	}
 
 	// Happy path: directories only, files filtered out.

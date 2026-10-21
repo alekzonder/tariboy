@@ -17,10 +17,10 @@ func parseFloat(s string) (float64, error) { return strconv.ParseFloat(s, 64) }
 // usageWindow validates the optional since and until bounds of a usage query
 // and returns them in the stored time format.
 func usageWindow(p registry.Params) (since, until string, err error) {
-	if since, err = activityBound(str(p, "since")); err != nil {
+	if since, err = activityBound(p.String("since")); err != nil {
 		return "", "", err
 	}
-	if until, err = activityBound(str(p, "until")); err != nil {
+	if until, err = activityBound(p.String("until")); err != nil {
 		return "", "", err
 	}
 	return since, until, nil
@@ -38,15 +38,15 @@ func usageCommand() registry.Command {
 			{Name: "group", Flag: "group", Short: "g", Type: registry.String, Help: "filter by request-time group snapshot; use __ungrouped__ for no group"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/usage"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			since, until, err := usageWindow(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			since, until, err := usageWindow(p.Params)
 			if err != nil {
 				return nil, err
 			}
 			usage := aiproxy.NewStore(c.Store, nil)
 			f := aiproxy.UsageFilter{
-				Agent: str(p, "agent"), Image: str(p, "image"), Since: since, Until: until,
-				Group: str(p, "group"),
+				Agent: p.String("agent"), Image: p.String("image"), Since: since, Until: until,
+				Group: p.String("group"),
 			}
 			rows, series, requests, err := usage.Report(f, "1d", 200)
 			if err != nil {
@@ -108,21 +108,21 @@ func agentUsage() registry.Command {
 			{Name: "bucket", Flag: "bucket", Short: "b", Type: registry.String, Help: "series bucket 5m|15m|1h|1d (default 1h)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/usage"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err // api.UserError not_found
 			}
-			groupBy := str(p, "group_by")
+			groupBy := p.String("group_by")
 			if groupBy == "" {
 				groupBy = "iteration"
 			}
-			bucket := str(p, "bucket")
+			bucket := p.String("bucket")
 			if bucket == "" {
 				bucket = "1h"
 			}
 
-			since, until, err := usageWindow(p)
+			since, until, err := usageWindow(p.Params)
 			if err != nil {
 				return nil, err
 			}

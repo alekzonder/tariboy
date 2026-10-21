@@ -22,7 +22,7 @@ import (
 // It runs in the CLI process, so it needs no Store.
 func followAgentLogs(ctx context.Context, sock string, p registry.Params, out io.Writer) error {
 	c := client.New(sock)
-	route := "/api/agents/" + url.PathEscape(str(p, "name")) + "/logs"
+	route := "/api/agents/" + url.PathEscape(p.String("name")) + "/logs"
 	var last int64
 	ticker := time.NewTicker(tailPollInterval)
 	defer ticker.Stop()
@@ -68,8 +68,8 @@ var tailPollInterval = 500 * time.Millisecond
 // poll prints the recent backlog; subsequent polls fetch only new messages.
 func followChannelTail(ctx context.Context, sock string, p registry.Params, out io.Writer) error {
 	c := client.New(sock)
-	route := "/api/channels/" + url.PathEscape(str(p, "channel")) + "/messages"
-	last := str(p, "since")
+	route := "/api/channels/" + url.PathEscape(p.String("channel")) + "/messages"
+	last := p.String("since")
 	ticker := time.NewTicker(tailPollInterval)
 	defer ticker.Stop()
 	for {

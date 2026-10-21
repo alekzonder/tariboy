@@ -22,8 +22,8 @@ func validateBash(script string) error {
 }
 
 func shellScriptGet(path func(*registry.Ctx, registry.Params) (string, error)) registry.HandlerFunc {
-	return func(c *registry.Ctx, p registry.Params) (any, error) {
-		file, err := path(c, p)
+	return func(c *registry.Ctx, p registry.Request) (any, error) {
+		file, err := path(c, p.Params)
 		if err != nil {
 			return nil, err
 		}
@@ -36,15 +36,15 @@ func shellScriptGet(path func(*registry.Ctx, registry.Params) (string, error)) r
 }
 
 func shellScriptSet(path func(*registry.Ctx, registry.Params) (string, error)) registry.HandlerFunc {
-	return func(c *registry.Ctx, p registry.Params) (any, error) {
-		if err := validateBash(str(p, "script")); err != nil {
+	return func(c *registry.Ctx, p registry.Request) (any, error) {
+		if err := validateBash(p.String("script")); err != nil {
 			return nil, err
 		}
-		file, err := path(c, p)
+		file, err := path(c, p.Params)
 		if err != nil {
 			return nil, err
 		}
-		if err := writeFileAtomic(file, []byte(str(p, "script"))); err != nil {
+		if err := writeFileAtomic(file, []byte(p.String("script"))); err != nil {
 			return nil, err
 		}
 		return map[string]any{"saved": true}, nil
@@ -56,7 +56,7 @@ func globalShellScriptPath(c *registry.Ctx, _ registry.Params) (string, error) {
 }
 
 func agentShellScriptPath(c *registry.Ctx, p registry.Params) (string, error) {
-	a, err := getAgent(c, str(p, "name"))
+	a, err := getAgent(c, p.String("name"))
 	if err != nil {
 		return "", err
 	}

@@ -38,7 +38,7 @@ func tcpServer(t *testing.T, token string) string {
 	reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			return map[string]any{"version": c.Version}, nil
 		},
 	})
@@ -156,7 +156,7 @@ func TestCORSScopedToTCP(t *testing.T) {
 		reg.Register(registry.Command{
 			Path: "daemon.status", Summary: "status",
 			HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-			Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+			Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 				return map[string]any{"version": c.Version}, nil
 			},
 		})
@@ -224,7 +224,7 @@ func webServer(t *testing.T) string {
 	reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			return map[string]any{"version": c.Version}, nil
 		},
 	})

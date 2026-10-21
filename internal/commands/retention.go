@@ -54,12 +54,12 @@ func retentionGet() registry.Command {
 		Summary: "Show the effective retention policy for an agent, with its own override and the default (or 'default')",
 		Args:    []registry.Arg{{Name: "agent", Type: registry.String, Required: true, Help: "agent name, or 'default'"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{agent}/retention"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			r, err := requireRetention(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "agent")
+			name := p.String("agent")
 			if err := checkAgentOrKeyword(name, "default"); err != nil {
 				return nil, err
 			}
@@ -101,12 +101,12 @@ func retentionSet() registry.Command {
 			{Name: "max-bytes", Flag: "max-bytes", Short: "b", Type: registry.Int, Help: "cap total iteration bytes (0: agent inherits the default; default is unlimited)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{agent}/retention"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			r, err := requireRetention(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "agent")
+			name := p.String("agent")
 			if err := checkAgentOrKeyword(name, "default"); err != nil {
 				return nil, err
 			}
@@ -120,14 +120,14 @@ func retentionSet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			if _, ok := p["keep-iterations"]; ok {
-				cur.KeepIterations = intOf(p, "keep-iterations", cur.KeepIterations)
+			if p.Has("keep-iterations") {
+				cur.KeepIterations = p.IntOr("keep-iterations", cur.KeepIterations)
 			}
-			if _, ok := p["keep-days"]; ok {
-				cur.KeepDays = intOf(p, "keep-days", cur.KeepDays)
+			if p.Has("keep-days") {
+				cur.KeepDays = p.IntOr("keep-days", cur.KeepDays)
 			}
-			if _, ok := p["max-bytes"]; ok {
-				cur.MaxBytes = int64(intOf(p, "max-bytes", int(cur.MaxBytes)))
+			if p.Has("max-bytes") {
+				cur.MaxBytes = int64(p.IntOr("max-bytes", int(cur.MaxBytes)))
 			}
 			// A negative limit is nonsensical: the pruner treats <=0 as unlimited,
 			// so storing -5 silently means "unlimited" and misleads the operator.
@@ -158,16 +158,16 @@ func pruneCommand() registry.Command {
 			{Name: "dry-run", Flag: "dry-run", Short: "n", Type: registry.Bool, Help: "list what would be removed without deleting"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{agent}/prune"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			r, err := requireRetention(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "agent")
+			name := p.String("agent")
 			if err := checkAgentOrKeyword(name, "all"); err != nil {
 				return nil, err
 			}
-			dry, _ := p["dry-run"].(bool)
+			dry := p.Bool("dry-run")
 			if name == "all" {
 				reps, err := r.Pruner.PruneAll(dry)
 				if err != nil {

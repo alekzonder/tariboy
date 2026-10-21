@@ -12,8 +12,8 @@ func agentScreen() registry.Command {
 		Summary: "Capture the interactive screen (tmux capture-pane)",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/screen"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			out, err := c.Control.Screen(str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			out, err := c.Control.Screen(p.String("name"))
 			if err != nil {
 				return nil, api.UserError{Code: "screen_failed", Msg: err.Error()}
 			}
@@ -31,18 +31,18 @@ func agentSendKeys() registry.Command {
 			{Name: "keys", Type: registry.String, Help: "line to send (a trailing Enter is added)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/send-keys"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			// The web UI sends raw per-keystroke items ({text}|{key}), transmitted
 			// with NO trailing Enter. The CLI still sends a single `keys` line,
 			// which keeps the legacy line+Enter behavior.
-			if items, ok := parseKeyItems(p["items"]); ok {
+			if items, ok := parseKeyItems(p.Params["items"]); ok {
 				if err := c.Control.SendKeysItems(name, items); err != nil {
 					return nil, api.UserError{Code: "send_keys_failed", Msg: err.Error()}
 				}
 				return map[string]any{"name": name, "sent": len(items)}, nil
 			}
-			if err := c.Control.SendKeys(name, str(p, "keys")); err != nil {
+			if err := c.Control.SendKeys(name, p.String("keys")); err != nil {
 				return nil, api.UserError{Code: "send_keys_failed", Msg: err.Error()}
 			}
 			return map[string]any{"name": name, "sent": true}, nil

@@ -80,13 +80,17 @@ func handler(t *testing.T, path string) registry.HandlerFunc {
 
 // cmdHandler returns any registered command's handler without asserting on its
 // HTTP disposition.
-func cmdHandler(t *testing.T, path string) registry.HandlerFunc {
+// cmdHandler returns the command's handler behind registry.Call, so a test sees
+// the same argument binding as the daemon.
+func cmdHandler(t *testing.T, path string) func(*registry.Ctx, registry.Params) (any, error) {
 	t.Helper()
 	cmd, ok := BuildRegistry().Get(path)
 	if !ok {
 		t.Fatalf("command %s not registered", path)
 	}
-	return cmd.Handler
+	return func(c *registry.Ctx, p registry.Params) (any, error) {
+		return registry.Call(c, context.Background(), cmd, p)
+	}
 }
 
 func writeExample(t *testing.T) string {

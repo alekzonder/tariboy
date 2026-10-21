@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 
 // routed returns a now-HTTP-routed command's handler (mirrors handler() but for
 // commands that DO carry an HTTPRoute).
-func routed(t *testing.T, path string) registry.HandlerFunc {
+func routed(t *testing.T, path string) func(*registry.Ctx, registry.Params) (any, error) {
 	t.Helper()
 	cmd, ok := BuildRegistry().Get(path)
 	if !ok {
@@ -19,7 +20,9 @@ func routed(t *testing.T, path string) registry.HandlerFunc {
 	if cmd.HTTP == nil {
 		t.Fatalf("%s should now carry an HTTPRoute", path)
 	}
-	return cmd.Handler
+	return func(c *registry.Ctx, p registry.Params) (any, error) {
+		return registry.Call(c, context.Background(), cmd, p)
+	}
 }
 
 func TestImageRoutesRegistered(t *testing.T) {

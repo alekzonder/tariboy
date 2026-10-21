@@ -224,7 +224,11 @@ func TestRunLogRouteValidatesMaxBytes(t *testing.T) {
 		if status != wantStatus {
 			t.Errorf("%q: status %d envelope %+v", query, status, env)
 		}
-		if wantStatus == 400 && (env.Error == nil || env.Error.Code != "invalid_request" || len(stub.calls) != 0) {
+		wantCode := "invalid_request"
+		if query == "?max_bytes=abc" || query == "?max_bytes=1.5" {
+			wantCode = "invalid_param"
+		}
+		if wantStatus == 400 && (env.Error == nil || env.Error.Code != wantCode || len(stub.calls) != 0) {
 			t.Errorf("%q: envelope %+v calls %v", query, env, stub.calls)
 		}
 	}

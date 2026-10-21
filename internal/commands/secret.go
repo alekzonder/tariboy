@@ -26,14 +26,14 @@ func secretStore() registry.Command {
 			{Name: "value", Type: registry.String, Required: true, Help: "secret value"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/secrets"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			if _, err := getAgent(c, str(p, "name")); err != nil {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			if _, err := getAgent(c, p.String("name")); err != nil {
 				return nil, err
 			}
-			if err := agentStore(c).SecretSet(str(p, "name"), str(p, "key"), str(p, "value")); err != nil {
+			if err := agentStore(c).SecretSet(p.String("name"), p.String("key"), p.String("value")); err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": str(p, "name"), "key": str(p, "key"), "stored": true}, nil
+			return map[string]any{"name": p.String("name"), "key": p.String("key"), "stored": true}, nil
 		},
 	}
 }
@@ -44,8 +44,8 @@ func secretLs() registry.Command {
 		Summary: "List secret keys (values are never shown)",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/secrets"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			keys, err := agentStore(c).SecretKeys(str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			keys, err := agentStore(c).SecretKeys(p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -66,14 +66,14 @@ func secretRm() registry.Command {
 			{Name: "key", Type: registry.String, Required: true, Help: "secret key"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/agents/{name}/secrets"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			if err := agentStore(c).SecretRemove(str(p, "name"), str(p, "key")); err != nil {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			if err := agentStore(c).SecretRemove(p.String("name"), p.String("key")); err != nil {
 				if errors.Is(err, agent.ErrNotFound) {
 					return nil, api.UserError{Code: "not_found", Msg: "secret not found"}
 				}
 				return nil, err // propagate real DB errors distinctly
 			}
-			return map[string]any{"removed": str(p, "key")}, nil
+			return map[string]any{"removed": p.String("key")}, nil
 		},
 	}
 }
@@ -89,19 +89,19 @@ func secretSet() registry.Command {
 			{Name: "key", Type: registry.String, Required: true, Help: "secret key"},
 			{Name: "value", Flag: "value", Type: registry.String, Help: "secret value (default: read stdin)"},
 		},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			value, err := resolveSecretValue(str(p, "value"), os.Stdin)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			value, err := resolveSecretValue(p.String("value"), os.Stdin)
 			if err != nil {
 				return nil, api.UserError{Code: "no_value", Msg: err.Error()}
 			}
 			cl := client.New(c.Socket)
-			route := "/api/agents/" + str(p, "name") + "/secrets"
+			route := "/api/agents/" + p.String("name") + "/secrets"
 			if _, err := cl.Call("POST", route, map[string]string{
-				"name": str(p, "name"), "key": str(p, "key"), "value": value,
+				"name": p.String("name"), "key": p.String("key"), "value": value,
 			}); err != nil {
 				return nil, err
 			}
-			return map[string]any{"name": str(p, "name"), "key": str(p, "key"), "stored": true}, nil
+			return map[string]any{"name": p.String("name"), "key": p.String("key"), "stored": true}, nil
 		},
 	}
 }

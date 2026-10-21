@@ -24,12 +24,12 @@ func testAccessLogSplitsRequestsFromApplicationLog(t *testing.T) {
 	_ = reg.Register(registry.Command{
 		Path: "fast", Summary: "fast",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/fast"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return 1, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return 1, nil },
 	})
 	_ = reg.Register(registry.Command{
 		Path: "slow", Summary: "slow",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/slow"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			// Advances the synctest bubble's fake clock past slowRequest; no real wait.
 			time.Sleep(30 * time.Millisecond)
 			return 1, nil

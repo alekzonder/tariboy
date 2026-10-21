@@ -67,14 +67,14 @@ func backupCommand() registry.Command {
 			{Name: "include-secrets", Flag: "include-secrets", Type: registry.Bool, Help: "include secret values (default masked)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/backup"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			target := str(p, "target")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			target := p.String("target")
 			if target == "" {
 				return nil, api.UserError{Code: "missing_target", Msg: "target is required"}
 			}
 			opts := backup.Options{}
-			opts.IncludeWorkdir, _ = p["include-workdir"].(bool)
-			opts.IncludeSecrets, _ = p["include-secrets"].(bool)
+			opts.IncludeWorkdir = p.Bool("include-workdir")
+			opts.IncludeSecrets = p.Bool("include-secrets")
 			backupsDir := filepath.Join(c.BaseDir, "backups")
 			ts := time.Now().UTC().Format("20060102T150405Z")
 			if target == "all" {
@@ -82,7 +82,7 @@ func backupCommand() registry.Command {
 				if err != nil {
 					return nil, err
 				}
-				dir := str(p, "output")
+				dir := p.String("output")
 				if dir == "" {
 					dir = backupsDir
 				}
@@ -96,7 +96,7 @@ func backupCommand() registry.Command {
 				}
 				return map[string]any{"archives": archives, "count": len(archives)}, nil
 			}
-			out := str(p, "output")
+			out := p.String("output")
 			if out == "" {
 				out = filepath.Join(backupsDir, fmt.Sprintf("%s-%s.tar.gz", target, ts))
 			}
@@ -119,8 +119,8 @@ func restoreCommand() registry.Command {
 			{Name: "force", Flag: "force", Short: "f", Type: registry.Bool, Help: "overwrite an existing agent"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/restore"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			file := str(p, "file")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			file := p.String("file")
 			if file == "" {
 				return nil, api.UserError{Code: "missing_file", Msg: "file is required"}
 			}
@@ -129,13 +129,13 @@ func restoreCommand() registry.Command {
 				return nil, api.UserError{Code: "open_failed", Msg: err.Error()}
 			}
 			defer f.Close()
-			force, _ := p["force"].(bool)
-			man, err := backup.Restore(f, c.Store, agentsDir(c), backup.RestoreOptions{NewName: str(p, "name"), Force: force})
+			force := p.Bool("force")
+			man, err := backup.Restore(f, c.Store, agentsDir(c), backup.RestoreOptions{NewName: p.String("name"), Force: force})
 			if err != nil {
 				return nil, api.UserError{Code: "restore_failed", Msg: err.Error()}
 			}
 			name := man.Agent
-			if nn := str(p, "name"); nn != "" {
+			if nn := p.String("name"); nn != "" {
 				name = nn
 			}
 			return map[string]any{"agent": name, "source_agent": man.Agent, "schema_version": man.SchemaVersion}, nil

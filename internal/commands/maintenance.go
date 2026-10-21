@@ -20,7 +20,7 @@ func maintenanceGet() registry.Command {
 		Path:    "maintenance.get",
 		Summary: "Show database maintenance settings and the last run",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/maintenance"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			m, err := requireMaintenance(c)
 			if err != nil {
 				return nil, err
@@ -56,7 +56,7 @@ func maintenanceSet() registry.Command {
 			{Name: "compact-threshold-pct", Flag: "compact-threshold-pct", Type: registry.Int, Help: "VACUUM only when at least this percent of pages is free"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/maintenance"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			m, err := requireMaintenance(c)
 			if err != nil {
 				return nil, err
@@ -65,19 +65,19 @@ func maintenanceSet() registry.Command {
 			if err != nil {
 				return nil, err
 			}
-			if v, ok := p["enabled"].(bool); ok {
+			if v, ok := p.OptBool("enabled"); ok {
 				set.Enabled = v
 			}
-			if v, ok := p["compact"].(bool); ok {
+			if v, ok := p.OptBool("compact"); ok {
 				set.Compact = v
 			}
-			if _, ok := p["time"]; ok {
-				set.Time = str(p, "time")
+			if p.Has("time") {
+				set.Time = p.String("time")
 			}
-			set.KeepBackups = intOf(p, "keep-backups", set.KeepBackups)
-			set.RetentionDays = intOf(p, "retention-days", set.RetentionDays)
-			set.ChatRetentionDays = intOf(p, "chat-retention-days", set.ChatRetentionDays)
-			set.CompactThresholdPct = intOf(p, "compact-threshold-pct", set.CompactThresholdPct)
+			set.KeepBackups = p.IntOr("keep-backups", set.KeepBackups)
+			set.RetentionDays = p.IntOr("retention-days", set.RetentionDays)
+			set.ChatRetentionDays = p.IntOr("chat-retention-days", set.ChatRetentionDays)
+			set.CompactThresholdPct = p.IntOr("compact-threshold-pct", set.CompactThresholdPct)
 			if err := set.Validate(); err != nil {
 				return nil, api.UserError{Code: "bad_value", Msg: err.Error()}
 			}
@@ -94,7 +94,7 @@ func maintenanceRun() registry.Command {
 		Path:    "maintenance.run",
 		Summary: "Back up the database, delete expired data, and compact it now",
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/maintenance/run"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			m, err := requireMaintenance(c)
 			if err != nil {
 				return nil, err

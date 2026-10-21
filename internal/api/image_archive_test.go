@@ -96,10 +96,10 @@ func TestTeamArchiveExportAndUploadPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg := registry.New()
-	if err := reg.Register(registry.Command{Path: "team.compose", Summary: "test compose", Handler: func(*registry.Ctx, registry.Params) (any, error) { return map[string]any{"yaml": "version: 1\n"}, nil }}); err != nil {
+	if err := reg.Register(registry.Command{Path: "team.compose", Summary: "test compose", Handler: func(*registry.Ctx, registry.Request) (any, error) { return map[string]any{"yaml": "version: 1\n"}, nil }}); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Register(registry.Command{Path: "team.import.archive.plan", Summary: "test plan", Handler: func(*registry.Ctx, registry.Params) (any, error) {
+	if err := reg.Register(registry.Command{Path: "team.import.archive.plan", Summary: "test plan", Handler: func(*registry.Ctx, registry.Request) (any, error) {
 		return map[string]any{"import_id": "planned", "team": "team", "yaml": "version: 1\n", "images": []map[string]any{{"ref": "demo:v1"}}}, nil
 	}}); err != nil {
 		t.Fatal(err)
@@ -135,10 +135,10 @@ func TestTeamArchiveExportAndUploadPreview(t *testing.T) {
 		t.Fatalf("preview=%+v", env)
 	}
 	badRegistry := registry.New()
-	if err := badRegistry.Register(registry.Command{Path: "team.compose", Summary: "invalid compose", Handler: func(*registry.Ctx, registry.Params) (any, error) { return map[string]any{"yaml": "version: 2\n"}, nil }}); err != nil {
+	if err := badRegistry.Register(registry.Command{Path: "team.compose", Summary: "invalid compose", Handler: func(*registry.Ctx, registry.Request) (any, error) { return map[string]any{"yaml": "version: 2\n"}, nil }}); err != nil {
 		t.Fatal(err)
 	}
-	if err := badRegistry.Register(registry.Command{Path: "team.import.archive.plan", Summary: "reject plan", Handler: func(*registry.Ctx, registry.Params) (any, error) {
+	if err := badRegistry.Register(registry.Command{Path: "team.import.archive.plan", Summary: "reject plan", Handler: func(*registry.Ctx, registry.Request) (any, error) {
 		return nil, errors.New("unsupported compose version")
 	}}); err != nil {
 		t.Fatal(err)

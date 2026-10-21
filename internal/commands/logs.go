@@ -35,14 +35,14 @@ func logsCommand() registry.Command {
 		HTTP:       &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/logs"},
 		FollowFlag: "follow",
 		Follow:     followAgentLogs,
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			// Runs in the daemon: agent-scoped events from the per-agent audit.jsonl.
 			// With ?since=<seq> returns events after that seq in chronological order
 			// (the follow cursor); without it, the recent 50 newest-first.
-			name := str(p, "name")
+			name := p.String("name")
 			// distinct=types: the "from real data" preset list for the audit-log
 			// type filter. Checked first as it ignores the cursor params.
-			if str(p, "distinct") == "types" {
+			if p.String("distinct") == "types" {
 				types, err := distinctTypes(c, name)
 				if err != nil {
 					return nil, err
@@ -52,24 +52,24 @@ func logsCommand() registry.Command {
 			// A type and/or full-text filter scans the whole log (like before=)
 			// and returns matches newest-first, capped so a broad query can't
 			// return an unbounded payload. capped=true flags a truncated result.
-			if t := str(p, "type"); t != "" || str(p, "q") != "" {
-				rows, capped, err := filteredEvents(c, name, t, str(p, "q"), 500)
+			if t := p.String("type"); t != "" || p.String("q") != "" {
+				rows, capped, err := filteredEvents(c, name, t, p.String("q"), 500)
 				if err != nil {
 					return nil, err
 				}
 				return map[string]any{"events": rows, "count": len(rows), "capped": capped}, nil
 			}
-			if id := str(p, "iteration"); id != "" {
+			if id := p.String("iteration"); id != "" {
 				rows, err := eventsForIteration(c, name, id)
 				if err != nil {
 					return nil, err
 				}
 				return map[string]any{"events": rows, "count": len(rows)}, nil
 			}
-			if b := str(p, "before"); b != "" {
+			if b := p.String("before"); b != "" {
 				before, _ := strconv.ParseInt(b, 10, 64)
 				limit := 50
-				if ls := str(p, "limit"); ls != "" {
+				if ls := p.String("limit"); ls != "" {
 					if n, err := strconv.Atoi(ls); err == nil && n > 0 {
 						limit = n
 					}
@@ -83,7 +83,7 @@ func logsCommand() registry.Command {
 				}
 				return map[string]any{"events": rows, "count": len(rows)}, nil
 			}
-			if s := str(p, "since"); s != "" {
+			if s := p.String("since"); s != "" {
 				since, _ := strconv.ParseInt(s, 10, 64)
 				rows, err := eventsSince(c, name, since)
 				if err != nil {

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agentdir"
@@ -20,7 +21,7 @@ func TestAgentStatusHistoryFiltersStatusEvents(t *testing.T) {
 	log.Record("audit", "harness", "", map[string]any{"noise": 1})
 	log.Record("status", "agent", "iteration-2", map[string]any{"message": "second"})
 
-	res, err := agentStatusHistory().Handler(c, registry.Params{"name": "a1"})
+	res, err := registry.Call(c, context.Background(), agentStatusHistory(), registry.Params{"name": "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}

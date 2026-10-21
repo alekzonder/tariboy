@@ -265,7 +265,7 @@ func (s *Server) serveTeamExport(w http.ResponseWriter, r *http.Request) {
 		WriteErr(w, http.StatusNotImplemented, "unavailable", "team export unavailable")
 		return
 	}
-	value, err := command.Handler(s.cctx, registry.Params{"name": r.PathValue("name")})
+	value, err := registry.Call(s.cctx, r.Context(), command, map[string]any{"name": r.PathValue("name")})
 	if err != nil {
 		WriteErr(w, http.StatusBadRequest, "team_export_failed", err.Error())
 		return
@@ -322,7 +322,7 @@ func (s *Server) serveTeamImportPreview(w http.ResponseWriter, r *http.Request) 
 		WriteErr(w, http.StatusInternalServerError, "internal", "team import planner unavailable")
 		return
 	}
-	plan, err := planner.Handler(s.cctx, registry.Params{"id": preview.ImportID})
+	plan, err := registry.Call(s.cctx, r.Context(), planner, map[string]any{"id": preview.ImportID})
 	if err != nil {
 		_ = os.RemoveAll(preview.StagedDir)
 		WriteErr(w, http.StatusBadRequest, "bad_compose", err.Error())
@@ -536,9 +536,13 @@ func (s *Server) dispatch(cmd registry.Command, w http.ResponseWriter, r *http.R
 			p[name] = v
 		}
 	}
-	p[registry.RequestContextParam] = r.Context()
-	result, err := cmd.Handler(s.cctx, p)
+	result, err := registry.Call(s.cctx, r.Context(), cmd, p)
 	if err != nil {
+		var pe *registry.ParamError
+		if errors.As(err, &pe) {
+			WriteErr(w, http.StatusBadRequest, pe.Code, pe.Msg)
+			return
+		}
 		var ue UserError
 		if errors.As(err, &ue) {
 			status := ue.Status

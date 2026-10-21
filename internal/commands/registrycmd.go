@@ -40,17 +40,17 @@ func pushCmd() registry.Command {
 			{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"},
 			{Name: "registry", Flag: "registry", Type: registry.String, Required: true, Help: "store base URL, e.g. https://host:8443"},
 		},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
-			regURL, _ := p["registry"].(string)
+			regURL := p.String("registry")
 			cl, err := clientFor(c, regURL)
 			if err != nil {
 				return nil, err
 			}
-			res, err := regclient.Push(registry.RequestContext(p), imagesDirFor(c), ref, cl)
+			res, err := regclient.Push(p.Ctx, imagesDirFor(c), ref, cl)
 			if err != nil {
 				return nil, api.UserError{Code: "push_failed", Msg: err.Error()}
 			}
@@ -67,17 +67,17 @@ func pullCmd() registry.Command {
 			{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"},
 			{Name: "registry", Flag: "registry", Type: registry.String, Required: true, Help: "store base URL, e.g. https://host:8443"},
 		},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
-			regURL, _ := p["registry"].(string)
+			regURL := p.String("registry")
 			cl, err := clientFor(c, regURL)
 			if err != nil {
 				return nil, err
 			}
-			res, err := regclient.Pull(registry.RequestContext(p), imagesDirFor(c), ref, cl)
+			res, err := regclient.Pull(p.Ctx, imagesDirFor(c), ref, cl)
 			if err != nil {
 				return nil, api.UserError{Code: "pull_failed", Msg: err.Error()}
 			}
@@ -96,9 +96,9 @@ func loginCmd() registry.Command {
 			{Name: "token-file", Flag: "token-file", Type: registry.String, Help: "file holding the bearer token (stdin if omitted)"},
 			{Name: "ca", Flag: "ca", Type: registry.String, Help: "path to a CA/cert PEM to trust for this registry"},
 		},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			regURL, _ := p["registry"].(string)
-			tokenFile, _ := p["token-file"].(string)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			regURL := p.String("registry")
+			tokenFile := p.String("token-file")
 			var tok string
 			if tokenFile != "" {
 				b, err := os.ReadFile(tokenFile)
@@ -116,7 +116,7 @@ func loginCmd() registry.Command {
 			if tok == "" {
 				return nil, api.UserError{Code: "empty_token", Msg: "no token provided (use --token-file or pipe it on stdin)"}
 			}
-			ca, _ := p["ca"].(string)
+			ca := p.String("ca")
 			rs, err := regclient.LoadRegistries(c.BaseDir)
 			if err != nil {
 				return nil, err

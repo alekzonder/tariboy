@@ -27,7 +27,7 @@ func channelLs() registry.Command {
 		Path:    "channel.ls",
 		Summary: "List channels",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/channels"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
@@ -51,12 +51,12 @@ func agentSubscriptions() registry.Command {
 		Summary: "List the channels one agent is subscribed to",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/subscriptions"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			subs, err := b.ListSubscriptions(str(p, "name"))
+			subs, err := b.ListSubscriptions(p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -72,7 +72,7 @@ func agentSubscriptions() registry.Command {
 				rows = append(rows, map[string]any{
 					"name":      s.Channel,
 					"kind":      bus.ChannelKind(s.Channel),
-					"protected": bus.IsProtectedSubscription(str(p, "name"), s.Channel),
+					"protected": bus.IsProtectedSubscription(p.String("name"), s.Channel),
 				})
 			}
 			return map[string]any{"channels": rows, "count": len(rows)}, nil
@@ -88,16 +88,16 @@ func agentSubscribe() registry.Command {
 			{Name: "name", Type: registry.String, Required: true, Help: "agent name"},
 			{Name: "channel", Type: registry.String, Required: true, Help: "channel name"},
 			{Name: "type", Flag: "type", Type: registry.String, Help: "comma-separated message type globs"},
-			{Name: "matcher", Flag: "matcher", Type: registry.String, Help: "content matcher as JSON (dotted paths -> globs)"},
-			{Name: "params", Flag: "params", Type: registry.String, Help: "provider params as JSON"},
+			{Name: "matcher", Flag: "matcher", Type: registry.String, Help: "content matcher as JSON (dotted paths -> globs)", Schema: jsonObjectOrString},
+			{Name: "params", Flag: "params", Type: registry.String, Help: "provider params as JSON", Schema: jsonObjectOrString},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/subscriptions"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			name, channel := str(p, "name"), str(p, "channel")
+			name, channel := p.String("name"), p.String("channel")
 			if _, err := agent.NewStore(c.Store).Get(name); err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "agent not found"}
 			}
@@ -109,15 +109,15 @@ func agentSubscribe() registry.Command {
 			// coerceMatcher / coerceParams accept both. A parameterized sub routes
 			// through SubscribeParams so the daemon validates params against the
 			// channel's provider schema at this apply time.
-			matcher, err := coerceMatcher(p["matcher"])
+			matcher, err := coerceMatcher(p.Params["matcher"])
 			if err != nil {
 				return nil, api.UserError{Code: "bad_matcher", Msg: err.Error()}
 			}
-			params, err := coerceParams(p["params"])
+			params, err := coerceParams(p.Params["params"])
 			if err != nil {
 				return nil, api.UserError{Code: "bad_params", Msg: err.Error()}
 			}
-			typeFilter := splitCommaList(str(p, "type"))
+			typeFilter := splitCommaList(p.String("type"))
 			sub, err := b.SubscribeParams(name, channel, matcher, typeFilter, params)
 			if err != nil {
 				return nil, err
@@ -138,6 +138,12 @@ func agentSubscribe() registry.Command {
 // accepts nil (no matcher), a JSON object (map[string]any from a decoded REST
 // body), or a JSON string (the CLI --matcher flag). Values are stringified so
 // numeric/bool globs survive. Returns nil for an absent/empty matcher.
+// jsonObjectOrString is the schema of an argument the CLI sends as JSON text
+// and an HTTP client as a decoded object.
+var jsonObjectOrString = map[string]any{"oneOf": []any{
+	map[string]any{"type": "string"}, map[string]any{"type": "object"},
+}}
+
 func coerceMatcher(v any) (bus.Matcher, error) {
 	m, err := coerceStringMap(v, "matcher")
 	if err != nil || len(m) == 0 {
@@ -228,12 +234,12 @@ func agentUnsubscribe() registry.Command {
 			{Name: "channel", Type: registry.String, Required: true, Help: "channel name"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/agents/{name}/subscriptions"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			name, channel := str(p, "name"), str(p, "channel")
+			name, channel := p.String("name"), p.String("channel")
 			if channel == "" {
 				return nil, api.UserError{Code: "bad_channel", Msg: "channel is required"}
 			}
@@ -255,12 +261,12 @@ func channelInspect() registry.Command {
 		Summary: "Show a channel's kind and message count",
 		Args:    []registry.Arg{{Name: "channel", Type: registry.String, Required: true, Help: "channel name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/channels/{channel}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			ch, count, err := b.InspectChannel(str(p, "channel"))
+			ch, count, err := b.InspectChannel(p.String("channel"))
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "channel not found"}
 			}
@@ -281,16 +287,16 @@ func channelTail() registry.Command {
 		HTTP:       &registry.HTTPRoute{Method: "GET", Path: "/api/channels/{channel}/messages"},
 		FollowFlag: "follow",
 		Follow:     followChannelTail,
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
 			var msgs []bus.Message
-			if since := str(p, "since"); since != "" {
-				msgs, err = b.MessagesSince(str(p, "channel"), since, 200)
+			if since := p.String("since"); since != "" {
+				msgs, err = b.MessagesSince(p.String("channel"), since, 200)
 			} else {
-				msgs, err = b.Tail(str(p, "channel"), 50)
+				msgs, err = b.Tail(p.String("channel"), 50)
 			}
 			if err != nil {
 				return nil, err
@@ -313,7 +319,7 @@ func messageSend() registry.Command {
 			{Name: "reply_to", Flag: "reply-to", Type: registry.String, Help: "channel an agent reply should land on"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/messages"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
@@ -321,12 +327,12 @@ func messageSend() registry.Command {
 			// An operator publish is the customer speaking. Attributing it to the
 			// customer principal — rather than the opaque "operator" — is what
 			// lets the agent's own inbox be read back as one side of a chat.
-			msg := bus.Message{Channel: str(p, "channel"), Type: str(p, "type"), Text: str(p, "text"),
-				Source: customerPrincipal(c), ReplyTo: str(p, "reply_to")}
-			if sub := str(p, "subject"); sub != "" {
+			msg := bus.Message{Channel: p.String("channel"), Type: p.String("type"), Text: p.String("text"),
+				Source: customerPrincipal(c), ReplyTo: p.String("reply_to")}
+			if sub := p.String("subject"); sub != "" {
 				msg.Subject = kvToAny(parseKV(sub))
 			}
-			if d := str(p, "data"); d != "" {
+			if d := p.String("data"); d != "" {
 				parsed, derr := decodeJSONObject(d)
 				if derr != nil {
 					return nil, api.UserError{Code: "bad_data", Msg: "data is not a JSON object"}
@@ -356,22 +362,22 @@ func agentInbox() registry.Command {
 			{Name: "before", Flag: "before", Type: registry.String, Help: "page the archive: only ids before this cursor"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/inbox"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			status := str(p, "status")
+			status := p.String("status")
 			if status == "" {
 				status = "all"
 			}
 			limit := 0
-			if ls := str(p, "limit"); ls != "" {
+			if ls := p.String("limit"); ls != "" {
 				if n, aerr := strconv.Atoi(ls); aerr == nil && n > 0 {
 					limit = n
 				}
 			}
-			items, err := b.Inbox(str(p, "name"), status, limit, str(p, "before"))
+			items, err := b.Inbox(p.String("name"), status, limit, p.String("before"))
 			if err != nil {
 				return nil, api.UserError{Code: "bad_status", Msg: err.Error()}
 			}
@@ -391,18 +397,18 @@ func agentInboxProcessed() registry.Command {
 			{Name: "result", Flag: "result", Type: registry.String, Required: true, Help: "handling result (mandatory)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/inbox/{id}/processed"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			result := str(p, "result")
+			result := p.String("result")
 			if strings.TrimSpace(result) == "" {
 				return nil, api.UserError{Code: "missing_result", Msg: "result is required"}
 			}
 			// Attribute the ack to the operator so the audit trail distinguishes
 			// human vs agent processing (§8.2).
-			item, err := b.MarkProcessed(str(p, "name"), str(p, "id"), "operator: "+result)
+			item, err := b.MarkProcessed(p.String("name"), p.String("id"), "operator: "+result)
 			if err != nil {
 				if errors.Is(err, bus.ErrNotFound) {
 					return nil, api.UserError{Code: "not_found", Msg: "no such message in this agent's inbox"}
@@ -420,12 +426,12 @@ func agentInboxClear() registry.Command {
 		Summary: "Physically clear an agent's pending inbox queue",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/inbox/clear"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			result, err := b.ClearPending(str(p, "name"))
+			result, err := b.ClearPending(p.String("name"))
 			if errors.Is(err, bus.ErrNotFound) {
 				return nil, api.UserError{Code: "not_found", Msg: "agent not found"}
 			}
@@ -450,16 +456,16 @@ func agentInboxReply() registry.Command {
 			{Name: "text", Flag: "text", Type: registry.String, Help: "reply text"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/inbox/{id}/reply"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			name, id := str(p, "name"), str(p, "id")
+			name, id := p.String("name"), p.String("id")
 			// Publish the reply as the operator. bus.Reply auto-processes the
 			// actor's own delivery, but "operator" holds none, so we mark the
 			// agent's row processed explicitly with operator attribution (§8.2).
-			reply, err := b.Reply("operator", id, str(p, "text"), nil, "")
+			reply, err := b.Reply("operator", id, p.String("text"), nil, "")
 			if err != nil {
 				if errors.Is(err, bus.ErrNotFound) {
 					return nil, api.UserError{Code: "not_found", Msg: "no such message: " + id}
@@ -487,12 +493,12 @@ func agentInboxRequeue() registry.Command {
 			{Name: "id", Type: registry.String, Required: true, Help: "message id"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/inbox/{id}/requeue"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			name, id := str(p, "name"), str(p, "id")
+			name, id := p.String("name"), p.String("id")
 			if err := b.Requeue(name, id); err != nil {
 				if errors.Is(err, bus.ErrNotFound) {
 					return nil, api.UserError{Code: "not_found", Msg: "no such message in this agent's inbox"}
@@ -510,12 +516,12 @@ func channelWatches() registry.Command {
 		Summary: "List a channel's distinct watches (watch, params, subscribers)",
 		Args:    []registry.Arg{{Name: "channel", Type: registry.String, Required: true, Help: "channel name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/channels/{channel}/watches"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			b, err := requireBus(c)
 			if err != nil {
 				return nil, err
 			}
-			watches, err := b.WatchList(str(p, "channel"))
+			watches, err := b.WatchList(p.String("channel"))
 			if err != nil {
 				return nil, err
 			}
@@ -536,8 +542,8 @@ func scheduleLs() registry.Command {
 		Summary: "List an agent's schedules (read-only)",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/schedules"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			list, err := schedule.NewStore(c.Store, nil).List(str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			list, err := schedule.NewStore(c.Store, nil).List(p.String("name"))
 			if err != nil {
 				return nil, err
 			}

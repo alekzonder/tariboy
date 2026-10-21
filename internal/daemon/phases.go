@@ -803,7 +803,7 @@ func startWorkers(ctx context.Context, o Options, proc *process, c *coreParts, t
 			if !ok {
 				return errors.New("image.build command is unavailable")
 			}
-			_, err := command.Handler(mg.cctx, registry.Params{registry.RequestContextParam: ctx, "source": selector})
+			_, err := registry.Call(mg.cctx, ctx, command, map[string]any{"source": selector})
 			return err
 		}, log)
 	})

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -9,7 +10,7 @@ import (
 func TestSendKeys_ItemsRouteRaw(t *testing.T) {
 	t.Parallel()
 	c, _, fc := ctxWithStore(t)
-	res, err := agentSendKeys().Handler(c, registry.Params{
+	res, err := registry.Call(c, context.Background(), agentSendKeys(), registry.Params{
 		"name":  "a1",
 		"items": []any{map[string]any{"text": "hi"}, map[string]any{"key": "Enter"}},
 	})
@@ -27,7 +28,7 @@ func TestSendKeys_ItemsRouteRaw(t *testing.T) {
 func TestSendKeys_LegacyKeysRoute(t *testing.T) {
 	t.Parallel()
 	c, _, fc := ctxWithStore(t)
-	if _, err := agentSendKeys().Handler(c, registry.Params{"name": "a1", "keys": "ls"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentSendKeys(), registry.Params{"name": "a1", "keys": "ls"}); err != nil {
 		t.Fatal(err)
 	}
 	if fc.itemsSent != nil {

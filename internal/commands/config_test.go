@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/agent"
@@ -18,7 +19,7 @@ func seedAgent(t *testing.T) (*registry.Ctx, *agent.Store) {
 func TestAgentModelSet(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	res, err := agentModel().Handler(c, registry.Params{"name": "a1", "value": "opus"})
+	res, err := registry.Call(c, context.Background(), agentModel(), registry.Params{"name": "a1", "value": "opus"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,10 +36,10 @@ func TestAgentModelReadOnlyWhenNoValue(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
 	// seed a value, then read with no value
-	if _, err := agentModel().Handler(c, registry.Params{"name": "a1", "value": "sonnet"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentModel(), registry.Params{"name": "a1", "value": "sonnet"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := agentModel().Handler(c, registry.Params{"name": "a1"})
+	res, err := registry.Call(c, context.Background(), agentModel(), registry.Params{"name": "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +51,7 @@ func TestAgentModelReadOnlyWhenNoValue(t *testing.T) {
 func TestAgentEffortSet(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentEffort().Handler(c, registry.Params{"name": "a1", "value": "high"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentEffort(), registry.Params{"name": "a1", "value": "high"}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := getAgent(c, "a1")
@@ -62,7 +63,7 @@ func TestAgentEffortSet(t *testing.T) {
 func TestAgentInteractiveSet(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentInteractive().Handler(c, registry.Params{"name": "a1", "value": true}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentInteractive(), registry.Params{"name": "a1", "value": true}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := getAgent(c, "a1")
@@ -74,7 +75,7 @@ func TestAgentInteractiveSet(t *testing.T) {
 func TestAgentInteractiveRejectsNonBool(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentInteractive().Handler(c, registry.Params{"name": "a1", "value": "yes"}); err == nil {
+	if _, err := registry.Call(c, context.Background(), agentInteractive(), registry.Params{"name": "a1", "value": "yes"}); err == nil {
 		t.Fatal("string value should be rejected")
 	}
 }
@@ -82,7 +83,7 @@ func TestAgentInteractiveRejectsNonBool(t *testing.T) {
 func TestAgentHarnessSet(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	res, err := agentHarness().Handler(c, registry.Params{"name": "a1", "value": "codex"})
+	res, err := registry.Call(c, context.Background(), agentHarness(), registry.Params{"name": "a1", "value": "codex"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,10 +100,10 @@ func TestAgentHarnessRejectsInvalidAndDoesNotPersist(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
 	// seed a valid value first
-	if _, err := agentHarness().Handler(c, registry.Params{"name": "a1", "value": "claude"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentHarness(), registry.Params{"name": "a1", "value": "claude"}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := agentHarness().Handler(c, registry.Params{"name": "a1", "value": "bogus"})
+	_, err := registry.Call(c, context.Background(), agentHarness(), registry.Params{"name": "a1", "value": "bogus"})
 	if err == nil {
 		t.Fatal("invalid harness should be rejected")
 	}
@@ -117,10 +118,10 @@ func TestAgentHarnessRejectsInvalidAndDoesNotPersist(t *testing.T) {
 func TestAgentHarnessReadOnlyWhenNoValue(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentHarness().Handler(c, registry.Params{"name": "a1", "value": "opencode"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentHarness(), registry.Params{"name": "a1", "value": "opencode"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := agentHarness().Handler(c, registry.Params{"name": "a1"})
+	res, err := registry.Call(c, context.Background(), agentHarness(), registry.Params{"name": "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +180,7 @@ func TestAgentCwdSetReadClear(t *testing.T) {
 	c, _ := seedAgent(t)
 	dir := t.TempDir()
 	// set
-	res, err := agentCwd().Handler(c, registry.Params{"name": "a1", "value": dir})
+	res, err := registry.Call(c, context.Background(), agentCwd(), registry.Params{"name": "a1", "value": dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +191,7 @@ func TestAgentCwdSetReadClear(t *testing.T) {
 		t.Fatalf("cwd not persisted: %q", a.Cwd)
 	}
 	// read (no value) returns current
-	res, err = agentCwd().Handler(c, registry.Params{"name": "a1"})
+	res, err = registry.Call(c, context.Background(), agentCwd(), registry.Params{"name": "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,14 +199,14 @@ func TestAgentCwdSetReadClear(t *testing.T) {
 		t.Fatalf("read = %v", res)
 	}
 	// relative -> bad_cwd error, value unchanged
-	if _, err := agentCwd().Handler(c, registry.Params{"name": "a1", "value": "rel/path"}); err == nil {
+	if _, err := registry.Call(c, context.Background(), agentCwd(), registry.Params{"name": "a1", "value": "rel/path"}); err == nil {
 		t.Fatal("want error for relative cwd")
 	}
 	if a, _ := getAgent(c, "a1"); a.Cwd != dir {
 		t.Fatalf("cwd changed on invalid set: %q", a.Cwd)
 	}
 	// clear (empty value)
-	if _, err := agentCwd().Handler(c, registry.Params{"name": "a1", "value": ""}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentCwd(), registry.Params{"name": "a1", "value": ""}); err != nil {
 		t.Fatal(err)
 	}
 	if a, _ := getAgent(c, "a1"); a.Cwd != "" {

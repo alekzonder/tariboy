@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -232,7 +233,7 @@ func TestCpSharedUpload(t *testing.T) {
 	if err := os.WriteFile(src, []byte("shared"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := cpCommand().Handler(c, registry.Params{"src": src})
+	result, err := registry.Call(c, context.Background(), cpCommand(), registry.Params{"src": src})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +283,7 @@ func TestCpSharedUploadUsesRawBody(t *testing.T) {
 	if err := os.WriteFile(src, []byte("shared"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cpCommand().Handler(&registry.Ctx{Socket: socket}, registry.Params{"src": src}); err != nil {
+	if _, err := registry.Call(&registry.Ctx{Socket: socket}, context.Background(), cpCommand(), registry.Params{"src": src}); err != nil {
 		t.Fatal(err)
 	}
 	got := <-seen

@@ -60,13 +60,13 @@ func agentCwd() registry.Command {
 			{Name: "value", Type: registry.String, Help: "new cwd, absolute path (omit to read, empty to clear)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/cwd"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if _, present := p["value"]; present {
-				v, err := resolveCwd(str(p, "value"))
+			if p.Has("value") {
+				v, err := resolveCwd(p.String("value"))
 				if err != nil {
 					return nil, api.UserError{Code: "bad_cwd", Msg: err.Error()}
 				}
@@ -94,12 +94,12 @@ func agentModel() registry.Command {
 			{Name: "value", Type: registry.String, Help: "new model (omit to read)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/model"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if v := str(p, "value"); v != "" {
+			if v := p.String("value"); v != "" {
 				a.Model = v
 				if err := agentStore(c).Update(a); err != nil {
 					return nil, err
@@ -120,12 +120,12 @@ func agentEffort() registry.Command {
 			{Name: "value", Type: registry.String, Help: "new effort (omit to read)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/effort"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if v := str(p, "value"); v != "" {
+			if v := p.String("value"); v != "" {
 				a.Effort = v
 				if err := agentStore(c).Update(a); err != nil {
 					return nil, err
@@ -145,12 +145,12 @@ func agentMessageSetting(path, field string) registry.Command {
 			{Name: "value", Type: registry.Int, Required: true, Help: "positive whole number"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/messages/" + strings.TrimPrefix(path, "agent.messages.")},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			value, err := agentIntParam(p, "value", "bad_"+field, 1)
+			value, err := intAtLeast(p.Params, "value", "bad_"+field, 1)
 			if err != nil {
 				return nil, err
 			}
@@ -181,13 +181,13 @@ func agentAlias() registry.Command {
 			{Name: "value", Type: registry.String, Help: "new alias (omit to read, empty to clear)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/alias"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if _, present := p["value"]; present {
-				a.Alias = str(p, "value")
+			if p.Has("value") {
+				a.Alias = p.String("value")
 				if err := agentStore(c).SetAlias(a.Name, a.Alias); err != nil {
 					return nil, err
 				}
@@ -204,8 +204,8 @@ func agentAliasGet() registry.Command {
 		Summary: "Read the agent display alias",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/alias"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -225,13 +225,13 @@ func agentNotes() registry.Command {
 			{Name: "value", Type: registry.String, Help: "new notes (omit to read, empty to clear)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/notes"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if _, present := p["value"]; present {
-				a.Notes = str(p, "value")
+			if p.Has("value") {
+				a.Notes = p.String("value")
 				if err := agentStore(c).SetNotes(a.Name, a.Notes); err != nil {
 					return nil, err
 				}
@@ -248,8 +248,8 @@ func agentNotesGet() registry.Command {
 		Summary: "Read the agent notes",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/notes"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -280,13 +280,13 @@ func agentColor() registry.Command {
 			{Name: "value", Type: registry.String, Help: "hex color #rrggbb (omit to read, empty to clear)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/color"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if _, present := p["value"]; present {
-				color := str(p, "value")
+			if p.Has("value") {
+				color := p.String("value")
 				if color != "" && !isValidHex(color) {
 					return nil, api.UserError{Code: "bad_value", Msg: "value must be a hex color like #4f8cff"}
 				}
@@ -307,8 +307,8 @@ func agentColorGet() registry.Command {
 		Summary: "Read the agent accent color",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/color"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -329,16 +329,12 @@ func agentInteractive() registry.Command {
 			{Name: "value", Type: registry.Bool, Help: "true/false (omit to read)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/interactive"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if v, ok := p["value"]; ok {
-				b, ok := v.(bool)
-				if !ok {
-					return nil, api.UserError{Code: "bad_value", Msg: "value must be a boolean"}
-				}
+			if b, ok := p.OptBool("value"); ok {
 				a.Interactive = b
 				if err := agentStore(c).Update(a); err != nil {
 					return nil, err
@@ -371,12 +367,12 @@ func agentHarness() registry.Command {
 			{Name: "value", Type: registry.String, Help: "new harness type claude|codex|opencode|cursor|stub (omit to read)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/harness"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if v := str(p, "value"); v != "" {
+			if v := p.String("value"); v != "" {
 				if !validHarnessTypes[v] {
 					return nil, api.UserError{Code: "bad_value", Msg: "value must be one of claude|codex|opencode|cursor|stub"}
 				}

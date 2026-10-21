@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/api"
@@ -10,10 +11,10 @@ import (
 func TestAgentColorSetReadClear(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentColor().Handler(c, registry.Params{"name": "a1", "value": "#4f8cff"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentColor(), registry.Params{"name": "a1", "value": "#4f8cff"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := agentColorGet().Handler(c, registry.Params{"name": "a1"})
+	res, err := registry.Call(c, context.Background(), agentColorGet(), registry.Params{"name": "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +22,7 @@ func TestAgentColorSetReadClear(t *testing.T) {
 		t.Fatalf("read=%v", res)
 	}
 	// clear with empty
-	if _, err := agentColor().Handler(c, registry.Params{"name": "a1", "value": ""}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentColor(), registry.Params{"name": "a1", "value": ""}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := getAgent(c, "a1")
@@ -33,11 +34,11 @@ func TestAgentColorSetReadClear(t *testing.T) {
 func TestAgentColorReadDoesNotWrite(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentColor().Handler(c, registry.Params{"name": "a1", "value": "#ff8800"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentColor(), registry.Params{"name": "a1", "value": "#ff8800"}); err != nil {
 		t.Fatal(err)
 	}
 	// POST with NO value key = read, must not clear.
-	if _, err := agentColor().Handler(c, registry.Params{"name": "a1"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentColor(), registry.Params{"name": "a1"}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := getAgent(c, "a1")
@@ -49,7 +50,7 @@ func TestAgentColorReadDoesNotWrite(t *testing.T) {
 func TestAgentColorRejectsInvalidHex(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	_, err := agentColor().Handler(c, registry.Params{"name": "a1", "value": "blue"})
+	_, err := registry.Call(c, context.Background(), agentColor(), registry.Params{"name": "a1", "value": "blue"})
 	if _, ok := err.(api.UserError); !ok {
 		t.Fatalf("want UserError for invalid hex, got %v", err)
 	}

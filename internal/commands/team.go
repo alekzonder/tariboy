@@ -49,8 +49,8 @@ func rewriteTeamComposeRefs(input []byte, refs map[string]string) ([]byte, error
 func registryError(code string, err error) error { return api.UserError{Code: code, Msg: err.Error()} }
 
 func teamCompose() registry.Command {
-	return registry.Command{Path: "team.compose", Summary: "Render a group as tariboy-compose.yaml", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/groups/{name}/compose"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		name := str(p, "name")
+	return registry.Command{Path: "team.compose", Summary: "Render a group as tariboy-compose.yaml", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/groups/{name}/compose"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+		name := p.String("name")
 		if err := checkGroupName(name); err != nil {
 			return nil, err
 		}
@@ -90,8 +90,8 @@ func teamCompose() registry.Command {
 }
 
 func teamApplyYAML() registry.Command {
-	return registry.Command{Path: "team.import.yaml.apply-internal", Summary: "Apply validated team compose YAML", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		file, err := compose.Parse([]byte(str(p, "yaml")))
+	return registry.Command{Path: "team.import.yaml.apply-internal", Summary: "Apply validated team compose YAML", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+		file, err := compose.Parse([]byte(p.String("yaml")))
 		if err != nil {
 			return nil, registryError("bad_compose", err)
 		}
@@ -151,8 +151,8 @@ func teamApplyYAML() registry.Command {
 }
 
 func teamImportYAML() registry.Command {
-	return registry.Command{Path: "team.import.yaml", Summary: "Preview pasted tariboy-compose.yaml", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/preview-yaml"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		raw := []byte(str(p, "yaml"))
+	return registry.Command{Path: "team.import.yaml", Summary: "Preview pasted tariboy-compose.yaml", Args: []registry.Arg{{Name: "yaml", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/preview-yaml"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+		raw := []byte(p.String("yaml"))
 		file, err := compose.Parse(raw)
 		if err == nil {
 			err = file.Validate()
@@ -302,9 +302,9 @@ func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (any, error) 
 }
 
 func teamImportArchivePlan() registry.Command {
-	return registry.Command{Path: "team.import.archive.plan", Summary: "Validate and plan a staged portable team import", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+	return registry.Command{Path: "team.import.archive.plan", Summary: "Validate and plan a staged portable team import", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		service := teamportable.Service{Snapshots: imageSnapshotStore(c), StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
-		preview, err := service.Load(str(p, "id"))
+		preview, err := service.Load(p.String("id"))
 		if err != nil {
 			return nil, registryError("import_not_found", err)
 		}
@@ -313,9 +313,9 @@ func teamImportArchivePlan() registry.Command {
 }
 
 func teamImportArchiveApply() registry.Command {
-	return registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+	return registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		service := teamportable.Service{Snapshots: imageSnapshotStore(c), StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
-		preview, err := service.Load(str(p, "id"))
+		preview, err := service.Load(p.String("id"))
 		if err != nil {
 			return nil, registryError("import_not_found", err)
 		}
@@ -323,7 +323,7 @@ func teamImportArchiveApply() registry.Command {
 		if err != nil {
 			return nil, registryError("import_not_found", err)
 		}
-		editedYAML := str(p, "yaml")
+		editedYAML := p.String("yaml")
 		if editedYAML == "" {
 			editedYAML = operation.ComposeYAML
 		}
@@ -341,7 +341,7 @@ func teamImportArchiveApply() registry.Command {
 		for original, replacement := range operation.ResolvedRefs {
 			resolvedRefs[original] = replacement
 		}
-		for original, value := range nestedMap(p["refs"]) {
+		for original, value := range nestedMap(p.Params["refs"]) {
 			if replacement, ok := value.(string); ok && replacement != "" {
 				resolvedRefs[original] = replacement
 			}
@@ -358,7 +358,7 @@ func teamImportArchiveApply() registry.Command {
 			}
 		}
 		updateExisting := operation.UpdateExisting
-		if value, ok := p["update_existing"].(bool); ok {
+		if value, ok := p.OptBool("update_existing"); ok {
 			updateExisting = value
 		}
 		plannedResult, planErr := planTeamImport(c, preview)
@@ -433,7 +433,7 @@ func teamImportArchiveApply() registry.Command {
 			operation.Steps[index].Status = "complete"
 			_ = service.SaveOperation(operation)
 		}
-		result, err := teamApplyYAML().Handler(c, registry.Params{"yaml": string(preview.ComposeYAML)})
+		result, err := registry.Call(c, p.Ctx, teamApplyYAML(), map[string]any{"yaml": string(preview.ComposeYAML)})
 		if err != nil {
 			operation.Status, operation.Error = "failed", err.Error()
 			_ = service.SaveOperation(operation)
@@ -463,9 +463,9 @@ func teamImportArchiveApply() registry.Command {
 }
 
 func teamImportArchiveStatus() registry.Command {
-	return registry.Command{Path: "team.import.archive.status", Summary: "Inspect portable team import progress", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/team-imports/{id}"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+	return registry.Command{Path: "team.import.archive.status", Summary: "Inspect portable team import progress", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/team-imports/{id}"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
-		operation, err := service.RecoverOperation(str(p, "id"), time.Now(), 5*time.Minute)
+		operation, err := service.RecoverOperation(p.String("id"), time.Now(), 5*time.Minute)
 		if err != nil {
 			return nil, registryError("import_not_found", err)
 		}

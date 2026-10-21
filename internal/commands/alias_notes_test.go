@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -9,10 +10,10 @@ import (
 func TestAgentAliasSetReadClear(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentAlias().Handler(c, registry.Params{"name": "a1", "value": "Nice"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentAlias(), registry.Params{"name": "a1", "value": "Nice"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := agentAliasGet().Handler(c, registry.Params{"name": "a1"})
+	res, err := registry.Call(c, context.Background(), agentAliasGet(), registry.Params{"name": "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +21,7 @@ func TestAgentAliasSetReadClear(t *testing.T) {
 		t.Fatalf("read=%v", res)
 	}
 	// clear with empty
-	if _, err := agentAlias().Handler(c, registry.Params{"name": "a1", "value": ""}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentAlias(), registry.Params{"name": "a1", "value": ""}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := getAgent(c, "a1")
@@ -32,11 +33,11 @@ func TestAgentAliasSetReadClear(t *testing.T) {
 func TestAgentAliasReadDoesNotWrite(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentAlias().Handler(c, registry.Params{"name": "a1", "value": "keep"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentAlias(), registry.Params{"name": "a1", "value": "keep"}); err != nil {
 		t.Fatal(err)
 	}
 	// POST with NO value key = read, must not clear.
-	if _, err := agentAlias().Handler(c, registry.Params{"name": "a1"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentAlias(), registry.Params{"name": "a1"}); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := getAgent(c, "a1")
@@ -48,10 +49,10 @@ func TestAgentAliasReadDoesNotWrite(t *testing.T) {
 func TestAgentNotesSetRead(t *testing.T) {
 	t.Parallel()
 	c, _ := seedAgent(t)
-	if _, err := agentNotes().Handler(c, registry.Params{"name": "a1", "value": "scratch"}); err != nil {
+	if _, err := registry.Call(c, context.Background(), agentNotes(), registry.Params{"name": "a1", "value": "scratch"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := agentNotesGet().Handler(c, registry.Params{"name": "a1"})
+	res, err := registry.Call(c, context.Background(), agentNotesGet(), registry.Params{"name": "a1"})
 	if err != nil {
 		t.Fatal(err)
 	}

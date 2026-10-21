@@ -295,7 +295,7 @@ func daemonStatus() registry.Command {
 		Summary:   "Show daemon version, uptime, base directory and missing host tools",
 		CLIHidden: true,
 		HTTP:      &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			schema := 0
 			if c.Store != nil {
 				schema, _ = c.Store.SchemaVersion()
@@ -325,9 +325,9 @@ func daemonConfigGet() registry.Command {
 			{Name: "key", Flag: "key", Type: registry.String, Help: "config key to read"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/config"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			out := map[string]any{}
-			if key, _ := p["key"].(string); key != "" {
+			if key := p.String("key"); key != "" {
 				v, ok, err := c.Store.ConfigGet(key)
 				if err != nil {
 					return nil, err
@@ -363,9 +363,9 @@ func daemonConfigSet() registry.Command {
 			{Name: "value", Type: registry.String, Required: true, Help: "new value"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/daemon/config"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			key, _ := p["key"].(string)
-			value, _ := p["value"].(string)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			key := p.String("key")
+			value := p.String("value")
 			if key == "" {
 				return nil, api.UserError{Code: "missing_key", Msg: "key is required"}
 			}

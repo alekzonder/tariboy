@@ -92,8 +92,8 @@ func serverUpload() registry.Command {
 			{Name: "content", Type: registry.String, Required: true, Help: "base64 file content (at most 16 MiB decoded)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "PUT", Path: "/api/files", MaxBodyBytes: int64(base64.StdEncoding.EncodedLen(maxUpload)) + 4096},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			encoded := str(p, "content")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			encoded := p.String("content")
 			if len(encoded) > base64.StdEncoding.EncodedLen(maxUpload) {
 				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 16 MiB"}
 			}
@@ -104,7 +104,7 @@ func serverUpload() registry.Command {
 			if len(raw) > maxUpload {
 				return nil, api.UserError{Code: "too_large", Msg: "file exceeds 16 MiB"}
 			}
-			result, err := api.SaveUploadedFile(c.BaseDir, str(p, "name"), bytes.NewReader(raw), maxUpload)
+			result, err := api.SaveUploadedFile(c.BaseDir, p.String("name"), bytes.NewReader(raw), maxUpload)
 			if err != nil {
 				return nil, err
 			}
@@ -122,12 +122,12 @@ func agentPull() registry.Command {
 			{Name: "path", Type: registry.String, Required: true, Help: "source path (relative to cwd)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/files"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			root, err := agentCwdFor(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			root, err := agentCwdFor(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			target, err := confine(root, str(p, "path"))
+			target, err := confine(root, p.String("path"))
 			if err != nil {
 				return nil, err
 			}
@@ -135,7 +135,7 @@ func agentPull() registry.Command {
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "file not found"}
 			}
-			return map[string]any{"path": str(p, "path"), "content": base64.StdEncoding.EncodeToString(raw)}, nil
+			return map[string]any{"path": p.String("path"), "content": base64.StdEncoding.EncodeToString(raw)}, nil
 		},
 	}
 }
@@ -149,8 +149,8 @@ func cpCommand() registry.Command {
 			{Name: "src", Type: registry.String, Required: true, Help: "source (local path or AGENT:path)"},
 			{Name: "dst", Type: registry.String, Help: "local destination (downloads only)"},
 		},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name, remote, local, upload, err := parseCp(str(p, "src"), str(p, "dst"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name, remote, local, upload, err := parseCp(p.String("src"), p.String("dst"))
 			if err != nil {
 				return nil, api.UserError{Code: "bad_args", Msg: err.Error()}
 			}

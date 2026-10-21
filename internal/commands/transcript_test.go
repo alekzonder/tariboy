@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ func TestTranscriptHandler(t *testing.T) {
 	cmd := transcriptCommand()
 	ctx := &registry.Ctx{BaseDir: base}
 
-	out, err := cmd.Handler(ctx, registry.Params{"name": agent, "id": iter})
+	out, err := registry.Call(ctx, context.Background(), cmd, registry.Params{"name": agent, "id": iter})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestTranscriptHandler(t *testing.T) {
 		t.Fatalf("marshaled output missing response text: %s", b)
 	}
 
-	rawOut, err := cmd.Handler(ctx, registry.Params{"name": agent, "id": iter, "raw": "true"})
+	rawOut, err := registry.Call(ctx, context.Background(), cmd, registry.Params{"name": agent, "id": iter, "raw": "true"})
 	if err != nil {
 		t.Fatal(err)
 	}

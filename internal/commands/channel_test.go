@@ -207,9 +207,14 @@ func TestAgentSubscribeParams(t *testing.T) {
 }
 
 // isCode reports whether err is an api.UserError carrying the given code.
+// isCode reports whether err is a UserError or a registry.ParamError with code.
 func isCode(err error, code string) bool {
 	var ue api.UserError
-	return errors.As(err, &ue) && ue.Code == code
+	if errors.As(err, &ue) {
+		return ue.Code == code
+	}
+	var pe *registry.ParamError
+	return errors.As(err, &pe) && pe.Code == code
 }
 
 // TestChannelLsListsBoundIdleChannel proves dev-t-dbu.1: a channel materialized
