@@ -1,3 +1,4 @@
+-- tariboy: step=canonical_timestamps
 -- 0002_canonical_timestamps.sql -- one stored time format (store.TimeLayout).
 -- The work runs in Go (canonicalizeTimestamps in timefmt_migrate.go): it
 -- rewrites every time column to fixed-width UTC with nine fractional digits
