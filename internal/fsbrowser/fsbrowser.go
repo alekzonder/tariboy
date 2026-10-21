@@ -6,7 +6,7 @@
 // real target lands outside the root are all rejected.
 //
 // It mirrors the path-safety model of internal/filebrowser (Resolve /
-// resolveExisting / symlink-escape checks) but differs in two ways that matter
+// pathjail.ResolveExisting / symlink-escape checks) but differs in two ways that matter
 // for a cwd picker: the root is the daemon user's $HOME rather than a single
 // agent's workdir, and an absolute path is honored as-is (and refused if it
 // falls outside the root) instead of being re-based onto the root. The package
@@ -27,10 +27,6 @@ import (
 // api JSON error envelope and an HTTP status: bad_path (403), not_found (404),
 // not_dir (400).
 type Error = pathjail.Error
-
-func badPath(msg string) *Error  { return pathjail.BadPath(msg) }
-func notFound(msg string) *Error { return pathjail.NotFound(msg) }
-func notDir(msg string) *Error   { return pathjail.NotDir(msg) }
 
 // within keeps the package-local name; the logic lives in pathjail.
 func within(root, target string) bool { return pathjail.Within(root, target) }
@@ -59,7 +55,7 @@ func Root() (string, error) {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return "", badPath("cannot determine filesystem root")
+		return "", pathjail.BadPath("cannot determine filesystem root")
 	}
 	return filepath.Clean(home), nil
 }
@@ -98,21 +94,21 @@ func resolve(root, path string) (string, error) {
 	// .Join/Clean above have already collapsed any .., so an escaping relative or
 	// out-of-root absolute path lands outside root here.
 	if !within(root, target) {
-		return "", badPath("path escapes the filesystem root")
+		return "", pathjail.BadPath("path escapes the filesystem root")
 	}
 
 	// Symlink containment: follow symlinks on the deepest existing ancestor and
 	// re-check, so a symlink inside root pointing out is refused.
 	realRoot, err := pathjail.ResolveExisting(root)
 	if err != nil {
-		return "", badPath("cannot resolve filesystem root")
+		return "", pathjail.BadPath("cannot resolve filesystem root")
 	}
 	realTarget, err := pathjail.ResolveExisting(target)
 	if err != nil {
-		return "", badPath("cannot resolve path")
+		return "", pathjail.BadPath("cannot resolve path")
 	}
 	if !within(realRoot, realTarget) {
-		return "", badPath("path escapes the filesystem root (symlink)")
+		return "", pathjail.BadPath("path escapes the filesystem root (symlink)")
 	}
 	return target, nil
 }
@@ -129,15 +125,15 @@ func List(root, path string) (Listing, error) {
 	info, err := os.Stat(target)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Listing{}, notFound("directory not found")
+			return Listing{}, pathjail.NotFound("directory not found")
 		}
 		if pathjail.IsNotDir(err) {
-			return Listing{}, notDir("path is not a directory")
+			return Listing{}, pathjail.NotDir("path is not a directory")
 		}
 		return Listing{}, err
 	}
 	if !info.IsDir() {
-		return Listing{}, notDir("path is not a directory")
+		return Listing{}, pathjail.NotDir("path is not a directory")
 	}
 	des, err := os.ReadDir(target)
 	if err != nil {

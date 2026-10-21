@@ -83,3 +83,13 @@ func TestErrorConstructors(t *testing.T) {
 		t.Fatal("codes")
 	}
 }
+
+func TestResolveExistingFilesystemRoot(t *testing.T) {
+	got, err := ResolveExisting("/")
+	if err != nil || got != "/" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if !Within(got, "/tmp") {
+		t.Fatal("children of / must be within /")
+	}
+}
