@@ -56,8 +56,7 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 	written := map[string]File{}
 	var manifest Manifest
 	manifestSeen := false
-	var expanded int64
-	var count int
+	checker := MemberChecker{Format: FormatPortable, Limits: MemberLimits{MaxPathBytes: limits.MaxPathBytes, MaxMembers: limits.MaxFiles, MaxExpanded: limits.MaxExpandedBytes}}
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -74,15 +73,15 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 			return Manifest{}, fmt.Errorf("portable archive: duplicate path %s", name)
 		}
 		seen[name] = true
-		count++
-		if count > limits.MaxFiles {
-			return Manifest{}, errors.New("portable archive: too many entries")
-		}
-		if h.Size < 0 || expanded > limits.MaxExpandedBytes-h.Size {
-			return Manifest{}, errors.New("portable archive: expanded size exceeded")
-		}
-		expanded += h.Size
-		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir {
+		if err := checker.Check(h); err != nil {
+			switch {
+			case errors.Is(err, ErrMemberCount):
+				return Manifest{}, errors.New("portable archive: too many entries")
+			case errors.Is(err, ErrMemberSize):
+				return Manifest{}, errors.New("portable archive: expanded size exceeded")
+			case errors.Is(err, ErrMemberPath):
+				return Manifest{}, fmt.Errorf("portable archive: invalid path %q", h.Name)
+			}
 			return Manifest{}, fmt.Errorf("portable archive: unsupported entry type for %s", name)
 		}
 		if name == "manifest.json" {
