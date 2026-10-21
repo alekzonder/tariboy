@@ -17,10 +17,9 @@ func TestBuildPublishesDeclaredImagesThroughDaemon(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(ctxDir, "Tariboyfile.yaml"), []byte(tariboyfile), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	imagesDir := t.TempDir()
 
 	fc := newFake()
-	r := NewRunner(fc, imagesDir, workdir, io.Discard)
+	r := NewRunner(fc, workdir, io.Discard)
 	f, err := Parse([]byte(goodYAML))
 	if err != nil {
 		t.Fatal(err)
@@ -35,8 +34,5 @@ func TestBuildPublishesDeclaredImagesThroughDaemon(t *testing.T) {
 	body, ok := bodyFor(fc, "POST /api/images/build").(map[string]any)
 	if !ok || body["name"] != "analyst" || body["tag"] != "latest" || body["path"] != ctxDir {
 		t.Fatalf("image build body = %#v", body)
-	}
-	if entries, err := os.ReadDir(imagesDir); err != nil || len(entries) != 0 {
-		t.Fatalf("compose wrote shared image store directly: entries=%v err=%v", entries, err)
 	}
 }

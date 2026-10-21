@@ -183,7 +183,7 @@ func callIndex(calls []string, want string) int {
 func TestUpBuildsStoreWorkflowAndBindsItsDigestAfterPools(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.publish("official/development", "development", "0.1.0", digestA, "0.1.0", "latest")
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, workflowComposeFile("official/development"))
 	pool := callIndex(fc.calls, "PATCH /api/task-queues/DEV/pools/developers")
 	build := callIndex(fc.calls, "POST /api/workflow-images/build")
@@ -203,7 +203,7 @@ func TestUpStoreWorkflowWithTagResolvesTheTagAfterTheBuild(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.publish("official/development", "development", "0.2.0", digestB, "0.2.0", "latest")
 	fc.images["development:0.1.0"] = map[string]any{"name": "development", "version": "0.1.0", "digest": digestA}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, workflowComposeFile("official/development:0.1.0"))
 	if got := fc.bound["DEV"]; got.Digest != digestA {
 		t.Fatalf("bound = %+v; want the 0.1.0 digest", got)
@@ -217,7 +217,7 @@ func TestUpStoreWorkflowWithTagResolvesTheTagAfterTheBuild(t *testing.T) {
 func TestUpStoreWorkflowTagMissingAfterBuildIsAnError(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.publish("official/development", "development", "0.2.0", digestB, "0.2.0", "latest")
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	r.skipBuild = true
 	err := r.Up(workflowComposeFile("official/development:9.9.9"))
 	if err == nil || !strings.Contains(err.Error(), "development:9.9.9") {
@@ -232,7 +232,7 @@ func TestUpPublishedRefBindsWithoutBuild(t *testing.T) {
 	for _, tc := range []struct{ value, image string }{{"development", "development:latest"}, {"development:0.1.0", "development:0.1.0"}} {
 		fc := newWorkflowComposeCaller()
 		fc.images[tc.image] = map[string]any{"name": "development", "version": "0.1.0", "digest": digestA}
-		r := NewRunner(fc, "", "", io.Discard)
+		r := NewRunner(fc, "", io.Discard)
 		upNoBuild(t, r, workflowComposeFile(tc.value))
 		if callIndex(fc.calls, "POST /api/workflow-images/build") >= 0 {
 			t.Fatalf("%s: built a workflow without a Store prefix", tc.value)
@@ -249,7 +249,7 @@ func TestUpPublishedRefBindsTheTag(t *testing.T) {
 	fc.images["development:latest"] = map[string]any{"name": "development", "version": "0.1.0", "digest": digestA}
 	// Bound to the same digest before, pinned: the tag is a change.
 	fc.bound["DEV"] = tasks.QueueWorkflow{Queue: "DEV", Name: "development", Version: "0.1.0", Digest: digestA, Revision: 1}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f := workflowComposeFile("development")
 	upNoBuild(t, r, f)
 	bind := callIndex(fc.calls, "PUT /api/task-queues/DEV/workflow")
@@ -265,7 +265,7 @@ func TestUpPublishedRefBindsTheTag(t *testing.T) {
 
 func TestUpMissingPublishedRefNamesTheRefAndTheFix(t *testing.T) {
 	fc := newWorkflowComposeCaller()
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	r.skipBuild = true
 	err := r.Up(workflowComposeFile("development:0.1.0"))
 	if err == nil || !strings.Contains(err.Error(), "development:0.1.0") || !strings.Contains(err.Error(), "Store prefix") {
@@ -276,7 +276,7 @@ func TestUpMissingPublishedRefNamesTheRefAndTheFix(t *testing.T) {
 func TestUpWithoutWorkflowLeavesBindingUntouched(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.bound["DEV"] = tasks.QueueWorkflow{Queue: "DEV", Name: "development", Version: "0.1.0", Digest: digestA, Revision: 1}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, workflowComposeFile(""))
 	for _, c := range fc.calls {
 		if strings.Contains(c, "/workflow") {
@@ -289,7 +289,7 @@ func TestUpSecondRunMakesNoBindCallAndReportsUnchanged(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.publish("official/development", "development", "0.1.0", digestA, "0.1.0", "latest")
 	var out strings.Builder
-	r := NewRunner(fc, "", "", &out)
+	r := NewRunner(fc, "", &out)
 	f := workflowComposeFile("official/development")
 	upNoBuild(t, r, f)
 	before, outBefore := len(fc.calls), out.Len()
@@ -306,7 +306,7 @@ func TestUpRebindsWhenAnotherDigestIsBound(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.publish("official/development", "development", "0.2.0", digestB, "0.2.0", "latest")
 	fc.bound["DEV"] = tasks.QueueWorkflow{Queue: "DEV", Name: "development", Version: "0.1.0", Digest: digestA, Revision: 3}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	upNoBuild(t, r, workflowComposeFile("official/development"))
 	bind := callIndex(fc.calls, "PUT /api/task-queues/DEV/workflow")
 	if bind < 0 {
@@ -321,7 +321,7 @@ func TestUpRebindsWhenAnotherDigestIsBound(t *testing.T) {
 func TestUpReportsPublishedVersionConflictFromTheBuild(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.buildErr["official/development"] = &client.APIError{Code: "workflow_version_published", Msg: "version 0.1.0 is published with other content"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	r.skipBuild = true
 	err := r.Up(workflowComposeFile("official/development"))
 	var apiErr *client.APIError
@@ -334,7 +334,7 @@ func TestUpSecretMissingNamesSecretsAndTheCommandWithoutAValue(t *testing.T) {
 	fc := newWorkflowComposeCaller()
 	fc.publish("official/development", "development", "0.1.0", digestA, "0.1.0", "latest")
 	fc.bindErr = &client.APIError{Code: "workflow_secret_missing", Msg: "workflow secrets have no value: GH_TOKEN, NPM_TOKEN", Details: map[string]any{"secrets": []any{"GH_TOKEN", "NPM_TOKEN"}}}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	r.skipBuild = true
 	err := r.Up(workflowComposeFile("official/development"))
 	var apiErr *client.APIError
@@ -355,7 +355,7 @@ func TestStatusShowsBoundDriftedPendingAndUndeclaredWorkflows(t *testing.T) {
 		fc.queues["DEV"] = tasks.Queue{Prefix: "DEV", Name: "Development", Revision: 1}
 		fc.pools["DEV"] = map[string]tasks.AgentPool{"developers": {Queue: "DEV", Name: "developers", Agents: []string{"dev"}, Revision: 1}}
 		var out strings.Builder
-		if err := NewRunner(fc, "", "", &out).Status(workflowComposeFile(workflow)); err != nil {
+		if err := NewRunner(fc, "", &out).Status(workflowComposeFile(workflow)); err != nil {
 			t.Fatal(err)
 		}
 		return out.String()

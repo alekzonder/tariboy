@@ -11,7 +11,7 @@ func TestLifecycleAllMembers(t *testing.T) {
 	fc := newFake()
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Lifecycle(f, "stop", nil); err != nil {
 		t.Fatal(err)
@@ -25,7 +25,7 @@ func TestLifecycleNamedMember(t *testing.T) {
 	fc := newFake()
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
 	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Lifecycle(f, "kill", []string{"scout"}); err != nil {
 		t.Fatal(err)
@@ -42,7 +42,7 @@ func TestLifecycleNamedMember(t *testing.T) {
 func TestPsAndStatusRun(t *testing.T) {
 	fc := newFake()
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
-	r := NewRunner(fc, "", "", io.Discard)
+	r := NewRunner(fc, "", io.Discard)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Ps(f); err != nil {
 		t.Fatalf("ps: %v", err)
@@ -56,20 +56,19 @@ func TestPsAndStatusRun(t *testing.T) {
 	}
 }
 
-// TestStatusReportsFieldDriftWithConvergedGroupAndBudget pins the M8 status
-// drift model: group membership/lead and budgets converge on `up` and are
-// shown as OK when they already match; a non-group field (image — the only
-// per-agent field agent.ps's live view exposes besides state/harness/group)
-// is reported as drift since there is no agent.update to converge it.
+// TestStatusReportsFieldDriftWithConvergedGroupAndBudget pins the status drift
+// model: group membership/lead and budgets are shown as OK when they already
+// match, and an agent's image drift is reported (up converges it as the
+// pending image).
 func TestStatusReportsFieldDriftWithConvergedGroupAndBudget(t *testing.T) {
 	fc := newFake()
-	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team", "image": "analyst:old"}
-	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team", "image": "analyst:latest"}
+	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team", "image": "analyst:old", "harness": "claude"}
+	fc.agents["writer"] = map[string]any{"name": "writer", "state": "running", "group": "research-team", "image": "analyst:latest", "harness": "claude"}
 	fc.groups["research-team"] = map[string]any{"name": "research-team", "lead": "scout"}
 	fc.budgets["group:research-team"] = map[string]any{"scope": "group:research-team", "limit_usd": 50.0, "period_s": 86400, "mode": "block"}
 	fc.budgets["agent:scout"] = map[string]any{"scope": "agent:scout", "limit_usd": 10.0, "period_s": 86400, "mode": "warn"}
 	var buf bytes.Buffer
-	r := NewRunner(fc, "", "", &buf)
+	r := NewRunner(fc, "", &buf)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Status(f); err != nil {
 		t.Fatalf("status: %v", err)
@@ -110,7 +109,7 @@ func TestStatusReportsHarnessDrift(t *testing.T) {
 		"name": "scout", "state": "running", "image": "analyst:latest", "harness": "codex",
 	}
 	var buf bytes.Buffer
-	r := NewRunner(fc, "", "", &buf)
+	r := NewRunner(fc, "", &buf)
 	f, err := Parse([]byte(harnessYAML))
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +137,7 @@ func TestStatusDisclosesUncheckedFields(t *testing.T) {
 	fc := newFake()
 	fc.agents["scout"] = map[string]any{"name": "scout", "state": "running", "group": "research-team"}
 	var buf bytes.Buffer
-	r := NewRunner(fc, "", "", &buf)
+	r := NewRunner(fc, "", &buf)
 	f, _ := Parse([]byte(goodYAML))
 	if err := r.Status(f); err != nil {
 		t.Fatalf("status: %v", err)
