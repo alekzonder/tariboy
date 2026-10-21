@@ -16,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/harness"
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
@@ -1123,7 +1124,7 @@ func TestPendingImageActivationBridgeFailurePreservesActiveImage(t *testing.T) {
 	bridgeCalled := false
 	m := &Manager{cfg: ManagerConfig{
 		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images,
-		PrepareImageBridge: func(sourceDir, finalDir string, skills []image.ManifestSkill, plan agentdir.BridgePlan) error {
+		PrepareImageBridge: func(sourceDir, finalDir string, skills []agentskills.Metadata, plan agentdir.BridgePlan) error {
 			bridgeCalled = true
 			if sourceDir == filepath.Join(l.ImageDir(), "skills") {
 				t.Fatal("pending bridge was prepared from the active image directory")
@@ -1201,7 +1202,7 @@ func TestPendingImageCompatibilityFailureDoesNotPublishBridge(t *testing.T) {
 	bridgeCalled := false
 	m := &Manager{cfg: ManagerConfig{
 		AgentsDir: filepath.Join(base, "agents"), Store: as, ImgStore: images,
-		PrepareImageBridge: func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
+		PrepareImageBridge: func(string, string, []agentskills.Metadata, agentdir.BridgePlan) error {
 			bridgeCalled = true
 			return nil
 		},
@@ -1295,13 +1296,13 @@ func TestImageBridgeRestartReusesPublishedBridge(t *testing.T) {
 func TestStubImageSkillsNeedNoBridge(t *testing.T) {
 	t.Parallel()
 	called := false
-	m := &Manager{cfg: ManagerConfig{PrepareImageBridge: func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
+	m := &Manager{cfg: ManagerConfig{PrepareImageBridge: func(string, string, []agentskills.Metadata, agentdir.BridgePlan) error {
 		called = true
 		return nil
 	}}}
 	got, err := m.prepareImageSkillBridge(agent.Agent{Name: "worker", HarnessType: "stub"}, image.Manifest{
 		SchemaVersion: 2,
-		Skills:        []image.ManifestSkill{{Name: "review"}},
+		Skills:        []agentskills.Metadata{{Name: "review"}},
 	}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)

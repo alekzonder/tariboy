@@ -18,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentapi"
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
@@ -107,7 +108,7 @@ type ManagerConfig struct {
 	UsageFlush func()
 	// PrepareImageBridge is injectable for activation boundary tests. Nil uses
 	// agentdir.PrepareImageBridge.
-	PrepareImageBridge func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error
+	PrepareImageBridge func(string, string, []agentskills.Metadata, agentdir.BridgePlan) error
 	// OnIterationClose, if set, is invoked exactly once per finished iteration
 	// (every terminal outcome) with (agent, iterationID), after the iteration's
 	// final status is persisted. The daemon wires this to gzip the AI-proxy

@@ -1,0 +1,12 @@
+[
+  {
+    "name": "code-review",
+    "description": "Use this skill for image tests.",
+    "source": "./skills/code-review",
+    "category": "source",
+    "archive_root": "skills/code-review",
+    "file_count": 2,
+    "size": 96,
+    "tree_sha256": "104c48d99ed126be11c0ed38d646d33e8cba0346dafcf5b3da46da7f85beeea3"
+  }
+]

@@ -354,7 +354,7 @@ func imageValidate() registry.Command {
 				diagnostic = "image " + ref.String() + " is managed by tariboyd"
 			}
 			if diagnostic != "" {
-				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "name/tag", "message": diagnostic}}, "warnings": []any{}}, nil
+				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []agentskills.Metadata{}, "template": nil, "diagnostics": []map[string]string{{"path": "name/tag", "message": diagnostic}}, "warnings": []any{}}, nil
 			}
 			parsed, err := imagefile.ParseV2(p.String("path"))
 			if err == nil && len(parsed.Extends) > 0 {
@@ -367,7 +367,7 @@ func imageValidate() registry.Command {
 				}
 			}
 			if err != nil {
-				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": err.Error()}}, "warnings": []any{}}, nil
+				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []agentskills.Metadata{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": err.Error()}}, "warnings": []any{}}, nil
 			}
 			layout := paths.Paths{Base: c.BaseDir}
 			var pluginStore *plugins.Store
@@ -380,7 +380,7 @@ func imageValidate() registry.Command {
 				pluginNames = append(pluginNames, plugin.Name)
 			}
 			if validateErr != nil {
-				return map[string]any{"valid": false, "schema_version": 2, "plugins": pluginNames, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": validateErr.Error()}}, "warnings": []any{}}, nil
+				return map[string]any{"valid": false, "schema_version": 2, "plugins": pluginNames, "skills": []agentskills.Metadata{}, "template": nil, "diagnostics": []map[string]string{{"path": "Tariboyfile.yaml", "message": validateErr.Error()}}, "warnings": []any{}}, nil
 			}
 			return map[string]any{"valid": true, "schema_version": 2, "plugins": pluginNames, "skills": validated.Skills, "template": validated.Template, "diagnostics": []any{}, "warnings": v2ValidationWarnings(parsed, validated, pluginStore)}, nil
 		},
