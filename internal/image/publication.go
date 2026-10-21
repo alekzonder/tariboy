@@ -38,7 +38,7 @@ func (s *Store) BeginPublication(refs []Ref) (*Publication, error) {
 }
 
 func (p *Publication) recordContent(name string) error {
-	entries, err := os.ReadDir(p.store.refsDir(name))
+	entries, err := os.ReadDir(p.store.refs().RefsDir(name))
 	if os.IsNotExist(err) {
 		return nil
 	}
@@ -61,7 +61,7 @@ func (p *Publication) Restore() error {
 	for ref, id := range p.tags {
 		var err error
 		if id == "" {
-			err = os.Remove(p.store.tagPath(ref))
+			err = p.store.refs().RemoveTag(ref.Name, ref.Tag)
 			if os.IsNotExist(err) {
 				err = nil
 			}
@@ -77,7 +77,7 @@ func (p *Publication) Restore() error {
 		names[ref.Name] = true
 	}
 	for name := range names {
-		entries, err := os.ReadDir(p.store.refsDir(name))
+		entries, err := os.ReadDir(p.store.refs().RefsDir(name))
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -92,13 +92,11 @@ func (p *Publication) Restore() error {
 			if p.content[filepath.Join(name, entry.Name())] {
 				continue
 			}
-			if err := os.Remove(filepath.Join(p.store.refsDir(name), entry.Name())); err != nil {
+			if err := os.Remove(filepath.Join(p.store.refs().RefsDir(name), entry.Name())); err != nil {
 				failures = append(failures, err)
 			}
 		}
-		_ = os.Remove(p.store.tagsDir(name))
-		_ = os.Remove(p.store.refsDir(name))
-		_ = os.Remove(p.store.nameDir(name))
+		p.store.refs().PruneEmpty(name)
 	}
 	return errors.Join(failures...)
 }

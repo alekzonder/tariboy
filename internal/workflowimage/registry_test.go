@@ -39,7 +39,7 @@ func TestRegistryRollbackRestoresTags(t *testing.T) {
 	if _, err := r.Store.Resolve("demo", "1.1.0"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("1.1.0 tag survived: %v", err)
 	}
-	entries, err := os.ReadDir(r.Store.refsDir("demo"))
+	entries, err := os.ReadDir(r.Store.refs().RefsDir("demo"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestRegistryRollbackFailureIsReported(t *testing.T) {
 	if _, err := db.Exec(failInsertTrigger); err != nil {
 		t.Fatal(err)
 	}
-	tags := r.Store.tagsDir("demo")
+	tags := r.Store.refs().TagsDir("demo")
 	beforeRecord = func() { _ = os.Chmod(tags, 0o500) }
 	t.Cleanup(func() {
 		beforeRecord = func() {}
@@ -310,7 +310,7 @@ func TestRegistryRemoveDiskFailureKeepsRow(t *testing.T) {
 	if _, _, err := r.Remove("demo", "latest"); err != nil {
 		t.Fatal(err)
 	}
-	tags := r.Store.tagsDir("demo")
+	tags := r.Store.refs().TagsDir("demo")
 	if err := os.Chmod(tags, 0o500); err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestRegistryReconcilePrunesRowsWithoutContent(t *testing.T) {
 	}
 	// Content and its tag deleted by hand, as a crash between the disk step
 	// and the row delete would leave them.
-	if err := os.Remove(r.Store.tagPath("demo", "1.0.0")); err != nil {
+	if err := os.Remove(r.Store.refs().TagPath("demo", "1.0.0")); err != nil {
 		t.Fatal(err)
 	}
 	if err := removeAll(r.Store.ContentDir("demo", gone.Digest)); err != nil {
@@ -366,7 +366,7 @@ func TestRegistryReconcileKeepsUntaggedContentRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tag := range []string{"1.0.0", "latest"} {
-		if err := os.Remove(r.Store.tagPath("demo", tag)); err != nil {
+		if err := os.Remove(r.Store.refs().TagPath("demo", tag)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -405,7 +405,7 @@ func TestRegistryVersionImmutableAfterTagRemoval(t *testing.T) {
 	if err != nil || string(b) != "#!/bin/sh\nexit 0\n" {
 		t.Fatalf("stored check.sh = %q, %v", b, err)
 	}
-	if entries, _ := os.ReadDir(r.Store.refsDir("demo")); len(entries) != 1 {
+	if entries, _ := os.ReadDir(r.Store.refs().RefsDir("demo")); len(entries) != 1 {
 		t.Fatalf("refs = %v, want only %s", entries, first.Digest)
 	}
 	if n := rowCount(t, db); n != 1 {
@@ -550,7 +550,7 @@ func TestRegistryReconcileKeepsPinnedRowsWithoutContent(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, tag := range []string{"1.0.0", "latest"} {
-				if err := os.Remove(r.Store.tagPath("demo", tag)); err != nil {
+				if err := os.Remove(r.Store.refs().TagPath("demo", tag)); err != nil {
 					t.Fatal(err)
 				}
 			}

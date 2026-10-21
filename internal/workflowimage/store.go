@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/refstore"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
@@ -69,18 +70,17 @@ func invalidf(format string, args ...any) error {
 }
 
 // checkName rejects values that could escape the store when joined into a
-// path.
+// path, with this package's error text.
 func checkName(kind, v string) error {
-	if v == "" || v == "." || v == ".." || strings.ContainsAny(v, "/\\\x00") {
+	if refstore.CheckName(v) != nil {
 		return invalidf("%s %q is not a valid name", kind, v)
 	}
 	return nil
 }
 
-func (s *Store) nameDir(name string) string    { return filepath.Join(s.Dir, name) }
-func (s *Store) refsDir(name string) string    { return filepath.Join(s.Dir, name, "refs") }
-func (s *Store) tagsDir(name string) string    { return filepath.Join(s.Dir, name, "tags") }
-func (s *Store) tagPath(name, t string) string { return filepath.Join(s.tagsDir(name), t) }
+// refs is the shared name and tag layer under Dir. The unpacked tree kept at
+// refs/<digest>/ is this package's own.
+func (s *Store) refs() refstore.Store { return refstore.Store{Dir: s.Dir} }
 
 // ContentDir returns the absolute path of the unpacked tree, or "" when name
 // or digest is not a valid path component.
@@ -88,7 +88,7 @@ func (s *Store) ContentDir(name, digest string) string {
 	if checkName("name", name) != nil || !digestPattern.MatchString(digest) {
 		return ""
 	}
-	p := filepath.Join(s.refsDir(name), digest)
+	p := filepath.Join(s.refs().RefsDir(name), digest)
 	if abs, err := filepath.Abs(p); err == nil {
 		return abs
 	}
@@ -384,7 +384,7 @@ func (s *Store) publishLocked(src *workflowfile.File, want string, now time.Time
 // version but is not digest, or "" when there is none. It reads every
 // refs/<digest>/manifest.json, whether or not a tag names it.
 func (s *Store) storedVersionDigest(name, version, digest string) (string, error) {
-	refs, err := os.ReadDir(s.refsDir(name))
+	refs, err := os.ReadDir(s.refs().RefsDir(name))
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", nil
 	}
@@ -409,7 +409,7 @@ func (s *Store) storedVersionDigest(name, version, digest string) (string, error
 // install writes the tree into a temporary sibling directory, makes it
 // read-only, and renames it into place.
 func (s *Store) install(m Manifest, files []sourceFile) (err error) {
-	refs := s.refsDir(m.Name)
+	refs := s.refs().RefsDir(m.Name)
 	if err := os.MkdirAll(refs, 0o700); err != nil {
 		return err
 	}
@@ -481,9 +481,6 @@ var errRestoreTags = errors.New("restore tags")
 // moveTags points every tag at digest. If one fails it puts the earlier tags
 // back as they were; when that also fails the error matches errRestoreTags.
 func (s *Store) moveTags(name, digest string, tags ...string) error {
-	if err := os.MkdirAll(s.tagsDir(name), 0o700); err != nil {
-		return err
-	}
 	var done []tagState
 	for _, tag := range tags {
 		beforeTagWrite(tag)
@@ -514,45 +511,32 @@ func (s *Store) restoreTags(name string, states []tagState) error {
 	for _, st := range states {
 		if st.had {
 			errs = append(errs, s.writeTag(name, st.tag, st.digest))
-		} else if err := os.Remove(s.tagPath(name, st.tag)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		} else if err := s.refs().RemoveTag(name, st.tag); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
 }
 
+// writeTag points tag at digest through refstore's atomic, synced write.
 func (s *Store) writeTag(name, tag, digest string) error {
-	f, err := os.CreateTemp(s.tagsDir(name), tmpPrefix)
-	if err != nil {
-		return err
-	}
-	_, werr := f.WriteString(digest + "\n")
-	cerr := f.Close()
-	if err := errors.Join(werr, cerr); err != nil {
-		_ = os.Remove(f.Name())
-		return err
-	}
-	if err := os.Rename(f.Name(), s.tagPath(name, tag)); err != nil {
-		_ = os.Remove(f.Name())
-		return err
-	}
-	return nil
+	return s.refs().WriteTag(name, tag, digest)
 }
 
-// readTag returns the digest a tag names, or ErrNotFound.
+// readTag returns the digest a tag names, or ErrNotFound. A name or tag that
+// cannot be a path component cannot exist and reads as not found.
 func (s *Store) readTag(name, tag string) (string, error) {
-	data, err := os.ReadFile(s.tagPath(name, tag))
-	if errors.Is(err, fs.ErrNotExist) {
+	digest, err := s.refs().Resolve(name, tag)
+	var pointer *refstore.PointerError
+	switch {
+	case err == nil:
+		return digest, nil
+	case errors.Is(err, refstore.ErrNotFound), errors.Is(err, refstore.ErrInvalidName):
 		return "", fmt.Errorf("%w: %s %s", ErrNotFound, name, tag)
+	case errors.As(err, &pointer):
+		return "", fmt.Errorf("tag %s of %s holds %q, not a digest", tag, name, pointer.Value)
 	}
-	if err != nil {
-		return "", err
-	}
-	digest := strings.TrimSpace(string(data))
-	if !digestPattern.MatchString(digest) {
-		return "", fmt.Errorf("tag %s of %s holds %q, not a digest", tag, name, digest)
-	}
-	return digest, nil
+	return "", err
 }
 
 func (s *Store) readManifest(name, digest string) (Manifest, error) {
@@ -608,28 +592,22 @@ func (s *Store) Inspect(name, tagOrDigest string) (Manifest, error) {
 
 // List returns one entry per name and tag, sorted by name and then tag.
 func (s *Store) List() ([]Listing, error) {
-	names, err := os.ReadDir(s.Dir)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
+	names, err := s.refs().List()
 	if err != nil {
 		return nil, err
 	}
 	var out []Listing
-	for _, n := range names {
-		if !n.IsDir() || checkName("name", n.Name()) != nil {
-			continue
-		}
-		tags, err := s.tagNames(n.Name())
+	for _, name := range names {
+		tags, err := s.refs().Tags(name)
 		if err != nil {
 			return nil, err
 		}
 		for _, tag := range tags {
-			digest, err := s.readTag(n.Name(), tag)
+			digest, err := s.readTag(name, tag)
 			if err != nil {
 				return nil, err
 			}
-			m, err := s.readManifest(n.Name(), digest)
+			m, err := s.readManifest(name, digest)
 			if err != nil {
 				return nil, err
 			}
@@ -645,30 +623,12 @@ func (s *Store) List() ([]Listing, error) {
 	return out, nil
 }
 
-// tagNames returns the tag file names of name, sorted.
-func (s *Store) tagNames(name string) ([]string, error) {
-	entries, err := os.ReadDir(s.tagsDir(name))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, e := range entries {
-		if e.Type().IsRegular() && !strings.HasPrefix(e.Name(), tmpPrefix) {
-			out = append(out, e.Name())
-		}
-	}
-	return out, nil
-}
-
 // Tags returns the tags of name that point at digest, sorted.
 func (s *Store) Tags(name, digest string) ([]string, error) {
 	if err := checkName("name", name); err != nil {
 		return nil, err
 	}
-	names, err := s.tagNames(name)
+	names, err := s.refs().Tags(name)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +666,7 @@ func (s *Store) removeTagLocked(name, tag string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	if err := os.Remove(s.tagPath(name, tag)); err != nil {
+	if err := s.refs().RemoveTag(name, tag); err != nil {
 		return "", false, err
 	}
 	rest, err := s.Tags(name, digest)

@@ -13,10 +13,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"sync"
 
 	"github.com/alekzonder/tariboy/internal/portablearchive"
+	"github.com/alekzonder/tariboy/internal/refstore"
 )
 
 // Store is an on-disk image store rooted at Dir (paths.ImagesDir()).
@@ -57,28 +57,27 @@ func RefID(name, imageVersion string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (s *Store) nameDir(name string) string { return filepath.Join(s.Dir, name) }
-func (s *Store) refsDir(name string) string { return filepath.Join(s.Dir, name, "refs") }
-func (s *Store) tagsDir(name string) string { return filepath.Join(s.Dir, name, "tags") }
-func (s *Store) tagPath(ref Ref) string     { return filepath.Join(s.tagsDir(ref.Name), ref.Tag) }
+// refs is the shared name and tag layer under Dir. The content kept at
+// refs/<id>.tar.gz is this package's own.
+func (s *Store) refs() refstore.Store { return refstore.Store{Dir: s.Dir} }
+
 func (s *Store) contentPath(name, id string) string {
-	return filepath.Join(s.refsDir(name), id+".tar.gz")
+	return filepath.Join(s.refs().RefsDir(name), id+".tar.gz")
 }
 
-// Resolve reports the ref id a tag currently points at.
+// Resolve reports the ref id a tag currently points at. A name or tag that
+// cannot be a path component cannot exist here and reads as not found.
 func (s *Store) Resolve(ref Ref) (string, error) {
-	data, err := os.ReadFile(s.tagPath(ref))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("image %s not found", ref.String())
-		}
-		return "", err
-	}
-	id := strings.TrimSpace(string(data))
-	if !refIDPattern.MatchString(id) {
+	id, err := s.refs().Resolve(ref.Name, ref.Tag)
+	switch {
+	case err == nil:
+		return id, nil
+	case errors.Is(err, refstore.ErrNotFound), errors.Is(err, refstore.ErrInvalidName):
+		return "", fmt.Errorf("image %s not found", ref.String())
+	case errors.Is(err, refstore.ErrInvalidPointer):
 		return "", fmt.Errorf("image %s has an invalid tag pointer", ref.String())
 	}
-	return id, nil
+	return "", err
 }
 
 // archiveFor resolves the tag and returns the path of its content.
@@ -98,13 +97,14 @@ func (s *Store) archiveFor(ref Ref) (string, error) {
 // that was never built here from one whose content cannot be read. A stat
 // failure other than "not exist" is returned rather than reported as absent.
 func (s *Store) TagExists(ref Ref) (bool, error) {
-	if _, err := os.Stat(s.tagPath(ref)); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
+	_, err := s.refs().Resolve(ref.Name, ref.Tag)
+	switch {
+	case err == nil, errors.Is(err, refstore.ErrInvalidPointer):
+		return true, nil
+	case errors.Is(err, refstore.ErrNotFound), errors.Is(err, refstore.ErrInvalidName):
+		return false, nil
 	}
-	return true, nil
+	return false, err
 }
 
 func (s *Store) Exists(ref Ref) bool {
@@ -132,34 +132,7 @@ func (s *Store) SetTag(ref Ref, id string) error {
 	if _, err := os.Stat(s.contentPath(ref.Name, id)); err != nil {
 		return fmt.Errorf("image %s content %s is unavailable", ref.String(), id)
 	}
-	if err := os.MkdirAll(s.tagsDir(ref.Name), 0o700); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(s.tagsDir(ref.Name), "."+ref.Tag+"-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := io.WriteString(tmp, id+"\n"); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, s.tagPath(ref)); err != nil {
-		return err
-	}
-	return syncDirectory(s.tagsDir(ref.Name))
+	return s.refs().WriteTag(ref.Name, ref.Tag, id)
 }
 
 // InstallArchive publishes validated archive bytes as the content of their ref
@@ -199,10 +172,11 @@ func (s *Store) RetagArchive(source, target Ref, archive []byte) (Manifest, erro
 }
 
 func (s *Store) stageBytes(ref Ref, kind string, archive []byte) (string, error) {
-	if err := os.MkdirAll(s.nameDir(ref.Name), 0o700); err != nil {
+	stageDir := s.refs().NameDir(ref.Name)
+	if err := os.MkdirAll(stageDir, 0o700); err != nil {
 		return "", err
 	}
-	tmp, err := os.CreateTemp(s.nameDir(ref.Name), "."+kind+"-*.tmp")
+	tmp, err := os.CreateTemp(stageDir, "."+kind+"-*.tmp")
 	if err != nil {
 		return "", err
 	}
@@ -234,13 +208,14 @@ func (s *Store) install(ref Ref, id, tmpName string) error {
 	if !refIDPattern.MatchString(id) {
 		return fmt.Errorf("invalid image ref id for %s", ref.String())
 	}
-	if err := os.MkdirAll(s.refsDir(ref.Name), 0o700); err != nil {
+	contentDir := s.refs().RefsDir(ref.Name)
+	if err := os.MkdirAll(contentDir, 0o700); err != nil {
 		return err
 	}
 	if err := os.Rename(tmpName, s.contentPath(ref.Name, id)); err != nil {
 		return fmt.Errorf("publish image %s: %w", ref.String(), err)
 	}
-	if err := syncDirectory(s.refsDir(ref.Name)); err != nil {
+	if err := syncDirectory(contentDir); err != nil {
 		return err
 	}
 	return s.SetTag(ref, id)
