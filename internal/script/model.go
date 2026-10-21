@@ -7,6 +7,9 @@ var (
 	ErrActive   = errors.New("script is active")
 	ErrMode     = errors.New("operation is not supported for this script mode")
 	ErrConflict = errors.New("script state conflict")
+	// ErrInvalid marks a script request the caller must correct; its text is
+	// meant for the caller.
+	ErrInvalid = errors.New("invalid script")
 )
 
 const (

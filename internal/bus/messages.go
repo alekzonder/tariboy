@@ -442,7 +442,7 @@ func (b *Bus) Request(fromAgent, targetChannel, text, deadline string) (Message,
 	// defensively once the request id exists inside that transaction.
 	if deadline != "" && b.validateDeadline != nil {
 		if err := b.validateDeadline(deadline); err != nil {
-			return Message{}, err
+			return Message{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 	}
 	now := b.clock().UTC()
@@ -546,7 +546,7 @@ func (b *Bus) SubscribeParams(agent, channel string, m Matcher, typeFilter []str
 	// row, so a bad params object fails the subscribe loudly.
 	if b.paramsValidator != nil {
 		if err := b.paramsValidator(channel, params); err != nil {
-			return Subscription{}, err
+			return Subscription{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 	}
 	watch, err := ComputeWatch(channel, params)

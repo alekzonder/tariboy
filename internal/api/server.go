@@ -509,26 +509,17 @@ func (s *Server) dispatch(cmd registry.Command, w http.ResponseWriter, r *http.R
 				p[k] = vs[0]
 			}
 		}
-	} else if r.Body != nil {
-		defer r.Body.Close()
+	} else {
 		limit := cmd.HTTP.MaxBodyBytes
 		if limit <= 0 {
 			limit = defaultMaxBodyBytes
 		}
-		if r.ContentLength > limit {
-			WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds the upload limit")
+		// An empty body means "no params".
+		if !DecodeJSONBody(w, r, limit, &p) {
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, limit)
-		// An empty body (io.EOF) means "no params"; any other decode error is a bad request.
-		if err := json.NewDecoder(r.Body).Decode(&p); err != nil && !errors.Is(err, io.EOF) {
-			var tooLarge *http.MaxBytesError
-			if errors.As(err, &tooLarge) {
-				WriteErr(w, http.StatusRequestEntityTooLarge, "too_large", "request body exceeds the upload limit")
-				return
-			}
-			WriteErr(w, http.StatusBadRequest, "bad_json", "request body is not a JSON object: "+err.Error())
-			return
+		if p == nil { // a literal null body
+			p = registry.Params{}
 		}
 	}
 	for _, name := range wildcardNames(cmd.HTTP.Path) {
@@ -538,22 +529,7 @@ func (s *Server) dispatch(cmd registry.Command, w http.ResponseWriter, r *http.R
 	}
 	result, err := registry.Call(s.cctx, r.Context(), cmd, p)
 	if err != nil {
-		var pe *registry.ParamError
-		if errors.As(err, &pe) {
-			WriteErr(w, http.StatusBadRequest, pe.Code, pe.Msg)
-			return
-		}
-		var ue UserError
-		if errors.As(err, &ue) {
-			status := ue.Status
-			if status == 0 {
-				status = http.StatusBadRequest
-			}
-			WriteErrData(w, status, ue.Code, ue.Msg, ue.Data)
-			return
-		}
-		s.cctx.Log.Error("handler failed", "command", cmd.Path, "err", err)
-		WriteErr(w, http.StatusInternalServerError, "internal", "internal error, see daemon log")
+		WriteError(w, s.cctx.Log, cmd.Path, err)
 		return
 	}
 	WriteOK(w, result)

@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -431,17 +430,7 @@ func taskRoute(path, method, route, summary string, handler taskHandler) registr
 					Code: "tasks_unavailable", Msg: "native Tasks service is unavailable"}
 			}
 			actor := tasks.CustomerActor(c.Tasks.CustomerLogin())
-			result, err := handler(p.Ctx, c.Tasks, actor, p.Params)
-			if err == nil {
-				return result, nil
-			}
-			var domain *tasks.Error
-			if errors.As(err, &domain) {
-				return nil, api.UserError{
-					Status: domain.Status, Code: domain.Code, Msg: domain.Msg, Data: domain.Data,
-				}
-			}
-			return nil, err
+			return handler(p.Ctx, c.Tasks, actor, p.Params)
 		},
 	}
 }

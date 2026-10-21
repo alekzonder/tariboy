@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"errors"
-
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/script"
@@ -26,7 +24,7 @@ func scriptLs() registry.Command {
 			}
 			definitions, err := sc.ListScripts(p.String("name"))
 			if err != nil {
-				return nil, scriptUserError(err)
+				return nil, err
 			}
 			rows := make([]map[string]any, 0, len(definitions))
 			for _, definition := range definitions {
@@ -48,7 +46,7 @@ func scriptRunOnce() registry.Command {
 			}
 			definition, run, err := sc.RunOnce(name, script.CreateOnce{Name: p.String("script_name"), Description: p.String("description"), Command: p.String("command")})
 			if err != nil {
-				return nil, scriptUserError(err)
+				return nil, err
 			}
 			return map[string]any{"script": scriptDefinitionView(definition), "run": scriptRunView(run)}, nil
 		},
@@ -72,7 +70,7 @@ func scriptSchedule() registry.Command {
 			}
 			definition, run, err := sc.ScheduleScript(name, script.CreateSchedule{Name: p.String("script_name"), Description: p.String("description"), Command: p.String("command"), IntervalSeconds: p.IntOr("interval_seconds", 0), QuietExit: quietExit})
 			if err != nil {
-				return nil, scriptUserError(err)
+				return nil, err
 			}
 			return map[string]any{"script": scriptDefinitionView(definition), "run": scriptRunView(run)}, nil
 		},
@@ -162,7 +160,7 @@ func scriptRunAction(path, summary, method, route string, action func(registry.S
 			}
 			result, err := action(sc, p.String("name"), p.String("id"))
 			if err != nil {
-				return nil, scriptUserError(err)
+				return nil, err
 			}
 			return result, nil
 		},
@@ -176,21 +174,6 @@ func scriptAction(path, summary, method, route, result string, action func(regis
 		}
 		return map[string]any{"id": id, result: true}, nil
 	})
-}
-
-func scriptUserError(err error) error {
-	switch {
-	case errors.Is(err, script.ErrNotFound):
-		return api.UserError{Code: "not_found", Msg: "script or run not found"}
-	case errors.Is(err, script.ErrActive):
-		return api.UserError{Code: "script_active", Msg: err.Error()}
-	case errors.Is(err, script.ErrMode):
-		return api.UserError{Code: "script_mode", Msg: err.Error()}
-	case errors.Is(err, script.ErrConflict):
-		return api.UserError{Code: "script_conflict", Msg: err.Error()}
-	default:
-		return api.UserError{Code: "invalid_script", Msg: err.Error()}
-	}
 }
 
 func scriptDefinitionView(definition script.Definition) map[string]any {
