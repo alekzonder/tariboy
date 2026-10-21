@@ -256,7 +256,7 @@ func safeAttachmentPart(value string) string {
 }
 
 func (s *Server) teamPortableService() teamportable.Service {
-	return teamportable.Service{Snapshots: &imagesnapshot.Store{DB: s.cctx.Store.DB, Root: filepath.Join(s.cctx.BaseDir, "image-source-snapshots")}, StagingRoot: filepath.Join(s.cctx.BaseDir, "team-imports")}
+	return teamportable.Service{StagingRoot: filepath.Join(s.cctx.BaseDir, "team-imports")}
 }
 
 func (s *Server) serveTeamExport(w http.ResponseWriter, r *http.Request) {
@@ -272,15 +272,6 @@ func (s *Server) serveTeamExport(w http.ResponseWriter, r *http.Request) {
 	}
 	result, _ := value.(map[string]any)
 	yamlText, _ := result["yaml"].(string)
-	members, err := agent.NewStore(s.cctx.Store).ListByGroup(r.PathValue("name"))
-	if err != nil {
-		WriteErr(w, http.StatusInternalServerError, "internal", "cannot list team")
-		return
-	}
-	refs := make([]string, 0, len(members))
-	for _, member := range members {
-		refs = append(refs, member.ImageRef)
-	}
 	temp, err := os.CreateTemp(s.cctx.BaseDir, ".team-export-*.tar.gz")
 	if err != nil {
 		WriteErr(w, http.StatusInternalServerError, "internal", "cannot stage export")
@@ -288,7 +279,7 @@ func (s *Server) serveTeamExport(w http.ResponseWriter, r *http.Request) {
 	}
 	name := temp.Name()
 	defer os.Remove(name)
-	if err := s.teamPortableService().Export(r.Context(), r.PathValue("name"), []byte(yamlText), refs, temp); err != nil {
+	if err := s.teamPortableService().Export(r.Context(), r.PathValue("name"), []byte(yamlText), temp); err != nil {
 		temp.Close()
 		WriteErr(w, http.StatusConflict, "team_not_exportable", err.Error())
 		return

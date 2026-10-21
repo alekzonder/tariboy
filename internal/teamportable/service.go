@@ -15,39 +15,25 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
-	"github.com/alekzonder/tariboy/internal/imagesnapshot"
-	"github.com/alekzonder/tariboy/internal/imagesource"
 	"github.com/alekzonder/tariboy/internal/portablearchive"
 	"gopkg.in/yaml.v3"
 )
 
-type Image struct {
-	Ref                 string `json:"ref"`
-	SourceName          string `json:"source_name"`
-	SourceDigest        string `json:"source_digest"`
-	OriginalImageDigest string `json:"original_image_digest"`
-}
+// metadata is the archive metadata. Images stays in the format so a non-empty
+// list written by an older exporter is detected and rejected; it is never read.
 type metadata struct {
-	Team   string  `json:"team"`
-	Images []Image `json:"images"`
+	Team   string            `json:"team"`
+	Images []json.RawMessage `json:"images"`
 }
 type Service struct {
-	Snapshots   *imagesnapshot.Store
 	StagingRoot string
 }
 type Preview struct {
 	ImportID    string
 	Team        string
 	ComposeYAML []byte
-	Images      []Image
 	StagedDir   string
-}
-
-type sourceFile struct {
-	rel  string
-	data []byte
 }
 
 type archiveCompose struct {
@@ -87,10 +73,6 @@ func CreateFromCompose(composePath string, w io.Writer) error {
 	for name := range file.Groups {
 		team = name
 	}
-	root, err := filepath.Abs(filepath.Dir(composePath))
-	if err != nil {
-		return err
-	}
 	temp, err := os.MkdirTemp("", "tariboy-team-compose-")
 	if err != nil {
 		return err
@@ -102,87 +84,13 @@ func CreateFromCompose(composePath string, w io.Writer) error {
 		return err
 	}
 
-	_ = root
-	meta := metadata{Team: team, Images: []Image{}}
-	sort.Slice(meta.Images, func(i, j int) bool { return meta.Images[i].Ref < meta.Images[j].Ref })
+	meta := metadata{Team: team, Images: []json.RawMessage{}}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	metaRaw, err := json.Marshal(meta)
 	if err != nil {
 		return err
 	}
 	return portablearchive.Write(w, temp, portablearchive.Manifest{Format: "tariboy-portable", Version: 1, Kind: "team", Files: files, Metadata: metaRaw}, paths)
-}
-
-func composeContext(root, context string) (string, error) {
-	if context == "" || filepath.IsAbs(context) {
-		return "", errors.New("team portable: image context must be a relative path")
-	}
-	full, err := filepath.Abs(filepath.Join(root, context))
-	if err != nil {
-		return "", err
-	}
-	if full != root && !strings.HasPrefix(full, root+string(filepath.Separator)) {
-		return "", errors.New("team portable: image context escapes compose directory")
-	}
-	return full, nil
-}
-
-func readSourceTree(root string) ([]sourceFile, string, error) {
-	info, err := os.Lstat(root)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return nil, "", errors.New("team portable: unsafe image context")
-	}
-	files := []sourceFile{}
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == root {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if rel == imagesource.MetadataFilename {
-			return nil
-		}
-		entryInfo, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if entryInfo.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("team portable: symlink %s", rel)
-		}
-		if entryInfo.IsDir() {
-			return nil
-		}
-		if !entryInfo.Mode().IsRegular() {
-			return fmt.Errorf("team portable: non-regular file %s", rel)
-		}
-		if entryInfo.Size() > imagesource.MaxFileSize {
-			return fmt.Errorf("team portable: file too large %s", rel)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		files = append(files, sourceFile{rel: rel, data: data})
-		return nil
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	sort.Slice(files, func(i, j int) bool { return files[i].rel < files[j].rel })
-	h := sha256.New()
-	for _, file := range files {
-		fmt.Fprintf(h, "%s\x00%d\x00", file.rel, len(file.data))
-		if _, err := h.Write(file.data); err != nil {
-			return nil, "", err
-		}
-	}
-	return files, "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func (s Service) PreviewYAML(team string, composeYAML []byte) (Preview, error) {
@@ -207,10 +115,7 @@ func (s Service) PreviewYAML(team string, composeYAML []byte) (Preview, error) {
 			_ = os.RemoveAll(destination)
 		}
 	}()
-	stored, err := json.Marshal(struct {
-		Team   string  `json:"team"`
-		Images []Image `json:"images"`
-	}{Team: team, Images: []Image{}})
+	stored, err := json.Marshal(metadata{Team: team, Images: []json.RawMessage{}})
 	if err != nil {
 		return Preview{}, err
 	}
@@ -225,7 +130,7 @@ func (s Service) PreviewYAML(team string, composeYAML []byte) (Preview, error) {
 		return Preview{}, err
 	}
 	remove = false
-	return Preview{ImportID: id, Team: team, ComposeYAML: append([]byte(nil), composeYAML...), Images: []Image{}, StagedDir: destination}, nil
+	return Preview{ImportID: id, Team: team, ComposeYAML: append([]byte(nil), composeYAML...), StagedDir: destination}, nil
 }
 
 func (s Service) Load(importID string) (Preview, error) {
@@ -240,10 +145,7 @@ func (s Service) Load(importID string) (Preview, error) {
 	if err != nil {
 		return Preview{}, errors.New("team portable: preview not found")
 	}
-	var stored struct {
-		Team   string  `json:"team"`
-		Images []Image `json:"images"`
-	}
+	var stored metadata
 	if err := json.Unmarshal(data, &stored); err != nil {
 		return Preview{}, err
 	}
@@ -254,7 +156,7 @@ func (s Service) Load(importID string) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	return Preview{ImportID: importID, Team: stored.Team, Images: stored.Images, ComposeYAML: composeYAML, StagedDir: destination}, nil
+	return Preview{ImportID: importID, Team: stored.Team, ComposeYAML: composeYAML, StagedDir: destination}, nil
 }
 
 func validateStagedTeamMembers(root string) error {
@@ -303,7 +205,7 @@ func addFile(root, archivePath string, data []byte, files *[]portablearchive.Fil
 	return nil
 }
 
-func (s Service) Export(ctx context.Context, team string, composeYAML []byte, refs []string, w io.Writer) error {
+func (s Service) Export(ctx context.Context, team string, composeYAML []byte, w io.Writer) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -324,9 +226,7 @@ func (s Service) Export(ctx context.Context, team string, composeYAML []byte, re
 	if err := addFile(temp, "tariboy-compose.yaml", composeYAML, &files, &paths); err != nil {
 		return err
 	}
-	_ = refs
-	meta := metadata{Team: team, Images: []Image{}}
-	sort.Slice(meta.Images, func(i, j int) bool { return meta.Images[i].Ref < meta.Images[j].Ref })
+	meta := metadata{Team: team, Images: []json.RawMessage{}}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	metaRaw, err := json.Marshal(meta)
 	if err != nil {
@@ -403,13 +303,9 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 	if err := os.WriteFile(filepath.Join(destination, ".team-preview.json"), stored, 0o600); err != nil {
 		return Preview{}, err
 	}
-	steps := make([]OperationStep, 0, len(meta.Images))
-	for _, planned := range meta.Images {
-		steps = append(steps, OperationStep{Kind: "image", Name: planned.Ref, Status: "pending"})
-	}
-	if err := s.SaveOperation(Operation{ImportID: id, Team: meta.Team, Status: "pending", Steps: steps}); err != nil {
+	if err := s.SaveOperation(Operation{ImportID: id, Team: meta.Team, Status: "pending", Steps: []OperationStep{}}); err != nil {
 		return Preview{}, err
 	}
 	remove = false
-	return Preview{ImportID: id, Team: meta.Team, ComposeYAML: composeYAML, Images: meta.Images, StagedDir: destination}, nil
+	return Preview{ImportID: id, Team: meta.Team, ComposeYAML: composeYAML, StagedDir: destination}, nil
 }

@@ -1,19 +1,10 @@
 package commands
 
 import (
-	"context"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/alekzonder/tariboy/internal/compose"
-	"github.com/alekzonder/tariboy/internal/image"
-	"github.com/alekzonder/tariboy/internal/imagefile"
-	"github.com/alekzonder/tariboy/internal/imagesnapshot"
-	"github.com/alekzonder/tariboy/internal/registry"
-	"github.com/alekzonder/tariboy/internal/store/storetest"
 	"github.com/alekzonder/tariboy/internal/teamportable"
 )
 
@@ -59,21 +50,6 @@ func TestBuiltInTeamTemplateRoutesAreAbsent(t *testing.T) {
 	}
 }
 
-func TestTeamSourceImportPlanReusesSourceWithinOneArchive(t *testing.T) {
-	t.Parallel()
-	imported := map[string]string{}
-	first := teamportable.Image{SourceName: "shared", SourceDigest: "digest"}
-	if reuse, err := planTeamSource(imported, first); err != nil || reuse {
-		t.Fatalf("first plan reuse=%v err=%v", reuse, err)
-	}
-	if reuse, err := planTeamSource(imported, first); err != nil || !reuse {
-		t.Fatalf("second plan reuse=%v err=%v", reuse, err)
-	}
-	if _, err := planTeamSource(imported, teamportable.Image{SourceName: "shared", SourceDigest: "other"}); err == nil {
-		t.Fatal("expected source-name conflict")
-	}
-}
-
 func TestAgentTimeoutOverrideRequiresDurationAndReturnsSeconds(t *testing.T) {
 	t.Parallel()
 	if seconds, err := parseAgentTimeout("2h"); err != nil || seconds != 7200 {
@@ -116,159 +92,5 @@ func TestYAMLPreviewReportsMissingAgentImageBeforeApply(t *testing.T) {
 	agents := result.(map[string]any)["agents"].([]map[string]any)
 	if len(agents) != 1 || agents[0]["action"] != "blocked" || agents[0]["conflict"] != true {
 		t.Fatalf("agent plans = %#v", agents)
-	}
-}
-
-func TestTeamImportDoesNotReuseSnapshotForChangedImageDigest(t *testing.T) {
-	t.Parallel()
-	c, _, _ := ctxWithStore(t)
-	c.BaseDir = t.TempDir()
-	c.Groups = &fakeGroups{}
-	ref := image.Ref{Name: "shared", Tag: "v1"}
-	current, err := image.BuildV2(&imagefile.V2{SchemaVersion: 2, Dir: t.TempDir()}, imagefile.ResolveRoots{}, ref, imageStore(c), time.Now, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := t.TempDir()
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	snapshot, err := imageSnapshotStore(c).Capture(context.Background(), ref.String(), "previous-digest", "shared", source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if snapshot.ImageDigest == current.Digest {
-		t.Fatal("test snapshot unexpectedly matches current image")
-	}
-	preview := teamportable.Preview{
-		ComposeYAML: []byte("version: 1\ngroups:\n  team: {}\n"),
-		Images:      []teamportable.Image{{Ref: ref.String(), SourceName: "shared", SourceDigest: snapshot.SourceDigest}},
-	}
-	result, err := planTeamImport(c, preview)
-	if err != nil {
-		t.Fatal(err)
-	}
-	images := result.(map[string]any)["images"].([]map[string]any)
-	if len(images) != 1 || images[0]["action"] != "retag" || images[0]["conflict"] != true {
-		t.Fatalf("image plans = %#v", images)
-	}
-	if err := applyTeamImage(c, preview, preview.Images[0], false, func() {}); err == nil {
-		t.Fatal("team import reused a snapshot for different image bytes")
-	}
-}
-
-func TestApplyTeamImageBuildsTwoRefsFromOneImportedSource(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
-	source := filepath.Join(base, "team-imports", "id", "images", "shared")
-	if err := os.MkdirAll(source, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nprompts:\n  - file: ./PROMPT.md\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "PROMPT.md"), []byte("shared\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	snapshots := imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}
-	seed, err := snapshots.Capture(context.Background(), "seed:v1", "seed-built", "seed", source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := &registry.Ctx{Store: db, BaseDir: base}
-	preview := teamportable.Preview{StagedDir: filepath.Join(base, "team-imports", "id")}
-	for index, ref := range []string{"shared:v1", "shared:v2"} {
-		planned := teamportable.Image{Ref: ref, SourceName: "shared", SourceDigest: seed.SourceDigest}
-		if err := applyTeamImage(c, preview, planned, index > 0, func() {}); err != nil {
-			t.Fatalf("apply %s: %v", ref, err)
-		}
-		parsed, _ := image.ParseRef(ref)
-		if !imageStore(c).Exists(parsed) {
-			t.Fatalf("image %s was not built", ref)
-		}
-	}
-	if err := os.RemoveAll(filepath.Join(base, "image-sources", "shared")); err != nil {
-		t.Fatal(err)
-	}
-	for index, ref := range []string{"shared:v1", "shared:v4"} {
-		planned := teamportable.Image{Ref: ref, SourceName: "shared", SourceDigest: seed.SourceDigest}
-		if err := applyTeamImage(c, preview, planned, index > 0, func() {}); err != nil {
-			t.Fatalf("reuse existing then apply %s: %v", ref, err)
-		}
-	}
-	if err := applyTeamImage(c, preview, teamportable.Image{Ref: "shared:v3", SourceName: "shared", SourceDigest: "sha256:wrong"}, true, func() {}); err == nil {
-		t.Fatal("accepted staged source whose digest did not match archive metadata")
-	}
-}
-
-func TestApplyTeamImageRejectsDisabledExternalPlugin(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
-	c := &registry.Ctx{Store: db, BaseDir: base}
-	installDisabledPlugin(t, c, "widget")
-	source := filepath.Join(base, "team-imports", "id", "images", "shared")
-	if err := os.MkdirAll(source, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\nplugins:\n  - name: widget\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	snapshot, err := (imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}).Capture(context.Background(), "seed:v1", "seed", "seed", source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	preview := teamportable.Preview{StagedDir: filepath.Join(base, "team-imports", "id")}
-	planned := teamportable.Image{Ref: "shared:v1", SourceName: "shared", SourceDigest: snapshot.SourceDigest}
-
-	if err := applyTeamImage(c, preview, planned, false, func() {}); err == nil || !strings.Contains(err.Error(), `unknown plugin "widget"`) {
-		t.Fatalf("team image build error = %v", err)
-	}
-}
-
-func TestApplyTeamImageWaitsForPublicationGate(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
-	source := filepath.Join(base, "team-imports", "id", "images", "shared")
-	if err := os.MkdirAll(source, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	snapshots := imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "image-source-snapshots")}
-	seed, err := snapshots.Capture(context.Background(), "seed:v1", "seed-built", "seed", source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := &registry.Ctx{Store: db, BaseDir: base}
-	preview := teamportable.Preview{StagedDir: filepath.Join(base, "team-imports", "id")}
-	planned := teamportable.Image{Ref: "shared:v1", SourceName: "shared", SourceDigest: seed.SourceDigest}
-	entered, release, locked := make(chan struct{}), make(chan struct{}), make(chan error, 1)
-	go func() {
-		locked <- image.WithPublicationGate(func() error {
-			close(entered)
-			<-release
-			return nil
-		})
-	}()
-	<-entered
-	done := make(chan error, 1)
-	go func() { done <- applyTeamImage(c, preview, planned, false, func() {}) }()
-	select {
-	case err := <-done:
-		close(release)
-		<-locked
-		t.Fatalf("team publisher ignored publication gate: %v", err)
-	case <-time.After(100 * time.Millisecond):
-	}
-	close(release)
-	if err := <-locked; err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
 	}
 }

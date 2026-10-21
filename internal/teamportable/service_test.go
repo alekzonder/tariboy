@@ -9,47 +9,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alekzonder/tariboy/internal/imagesnapshot"
 	"github.com/alekzonder/tariboy/internal/portablearchive"
-	"github.com/alekzonder/tariboy/internal/store/storetest"
 )
-
-func TestImagePreviewUsesStableLowercaseJSONFields(t *testing.T) {
-	data, err := json.Marshal(Image{Ref: "img:v1", SourceName: "src", SourceDigest: "digest", OriginalImageDigest: "built"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := `{"ref":"img:v1","source_name":"src","source_digest":"digest","original_image_digest":"built"}`
-	if string(data) != want {
-		t.Fatalf("JSON = %s, want %s", data, want)
-	}
-}
 
 func TestExportAndPreviewCarryComposeWithoutImageSources(t *testing.T) {
 	base := t.TempDir()
-	db := storetest.OpenAt(t, filepath.Join(base, "state.db"))
-	source := filepath.Join(base, "source")
-	if err := os.Mkdir(source, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "Tariboyfile.yaml"), []byte("schema_version: 2\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	snapshots := &imagesnapshot.Store{DB: db.DB, Root: filepath.Join(base, "snapshots")}
-	if _, err := snapshots.Capture(context.Background(), "demo:v1", "built", "demo", source); err != nil {
-		t.Fatal(err)
-	}
-	service := Service{Snapshots: snapshots, StagingRoot: filepath.Join(base, "imports")}
+	service := Service{StagingRoot: filepath.Join(base, "imports")}
 	composeYAML := "version: 1\ngroups:\n  team:\n    lead: lead\n"
 	var archive bytes.Buffer
-	if err := service.Export(context.Background(), "team", []byte(composeYAML), []string{"demo:v1"}, &archive); err != nil {
+	if err := service.Export(context.Background(), "team", []byte(composeYAML), &archive); err != nil {
 		t.Fatal(err)
 	}
 	preview, err := service.Preview(context.Background(), bytes.NewReader(archive.Bytes()), int64(archive.Len()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Team != "team" || !bytes.Contains(preview.ComposeYAML, []byte("groups:")) || len(preview.Images) != 0 {
+	if preview.Team != "team" || !bytes.Contains(preview.ComposeYAML, []byte("groups:")) {
 		t.Fatalf("preview = %+v", preview)
 	}
 	operation, err := service.Operation(preview.ImportID)
@@ -102,7 +77,7 @@ func TestCreateFromComposeBuildsArchiveAcceptedByPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Team != "dev" || len(preview.Images) != 0 || bytes.Contains(preview.ComposeYAML, []byte("context:")) {
+	if preview.Team != "dev" || bytes.Contains(preview.ComposeYAML, []byte("context:")) {
 		t.Fatalf("preview = %+v", preview)
 	}
 }
@@ -118,7 +93,7 @@ func TestPreviewRejectsLegacySourceBearingTeamArchive(t *testing.T) {
 	if err := addFile(root, "images/source/Tariboyfile.yaml", []byte("schema_version: 2\n"), &files, &paths); err != nil {
 		t.Fatal(err)
 	}
-	meta, err := json.Marshal(metadata{Team: "team", Images: []Image{{Ref: "demo:v1", SourceName: "source", SourceDigest: "sha256:legacy"}}})
+	meta, err := json.Marshal(metadata{Team: "team", Images: []json.RawMessage{json.RawMessage(`{"ref":"demo:v1","source_name":"source","source_digest":"sha256:legacy"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +117,7 @@ func TestPreviewRejectsUnadvertisedImageArchiveMember(t *testing.T) {
 	if err := addFile(root, "images/source/Tariboyfile.yaml", []byte("schema_version: 2\n"), &files, &paths); err != nil {
 		t.Fatal(err)
 	}
-	meta, err := json.Marshal(metadata{Team: "team", Images: []Image{}})
+	meta, err := json.Marshal(metadata{Team: "team", Images: []json.RawMessage{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +137,7 @@ func TestLoadRejectsPreviouslyStagedSourceBearingTeamPreview(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	meta, err := json.Marshal(metadata{Team: "team", Images: []Image{{Ref: "demo:v1", SourceName: "source", SourceDigest: "sha256:legacy"}}})
+	meta, err := json.Marshal(metadata{Team: "team", Images: []json.RawMessage{json.RawMessage(`{"ref":"demo:v1","source_name":"source","source_digest":"sha256:legacy"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +158,7 @@ func TestLoadRejectsPreviouslyStagedExtraImageMember(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "images", "source"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	meta, err := json.Marshal(metadata{Team: "team", Images: []Image{}})
+	meta, err := json.Marshal(metadata{Team: "team", Images: []json.RawMessage{}})
 	if err != nil {
 		t.Fatal(err)
 	}
