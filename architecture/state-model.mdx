@@ -63,6 +63,53 @@ digits. Examples are the Usage request `ts` and the task usage
 `first_ts`/`last_ts`, which earlier had three digits or a variable number.
 These are valid RFC 3339 values.
 
+## Bus queue index and message ids
+
+The partial index `idx_deliveries_pending` holds only deliveries that are not
+acknowledged and not dead-lettered. The queue-depth gauge and the per-agent
+pending reads use it, so their cost follows the backlog, not the delivery
+history.
+
+A message id is `<channel>-<yyyymmddhhmmss>-<seq>`. The channel row stores the
+second of its last id in `id_second` and that id's sequence number in
+`id_seq`, so a publish reads one row by key. The stored ids are read only when
+`id_second` is NULL (an upgraded or recreated channel) or the clock stepped
+back before `id_second`. The `messages` primary key still rejects a duplicate
+id.
+
+## Schema migrations
+
+The daemon database and the Store service database use one migration runner,
+`internal/migrate`. It applies each `*.sql` file once, in name order, in its
+own transaction, and records the file name in `schema_migrations`. A file
+sets flags with header lines at its very top:
+
+- `-- tariboy: foreign_keys=off` turns off foreign key enforcement for the
+  migration, for example to rebuild a referenced table. The runner checks
+  `pragma_foreign_key_check` before commit and rolls back on a violation.
+- `-- tariboy: skip_if_column=TABLE.COLUMN` skips the body when the column
+  exists and still records the file as applied.
+- `-- tariboy: step=NAME` runs the named Go step after the body, in the same
+  transaction, such as `canonical_timestamps` for the stored-time migration.
+
+An unknown key or step name stops the migration with an error.
+
+## Agent-owned tables
+
+The tables whose rows belong to one agent are listed once, in
+`store.AgentTables` in `internal/store/agent_tables.go`. Each row gives the
+table's scoping condition, the removal step that deletes it, and its place in
+an agent backup. `agent.Store.Delete` deletes the core rows (the agent,
+its iterations, secrets and AI budget) in one transaction, and
+`PurgeAgentData` deletes the side-table rows in a second one. Agent backup
+and restore use the rows with a backup position. Iteration retention deletes
+the tables in `store.IterationTables`.
+
+A new table with an `agent`, `agent_name` or `produced_by_agent` column, or a
+foreign key to a registry table without `ON DELETE CASCADE`, needs a registry
+row or an exemption with a reason in `agentKeyedExempt`. Otherwise the schema
+test in `internal/store` fails.
+
 ## Filesystem-backed shell scripts
 
 The global pre-iteration script at `<base-dir>/global-agent-shell.sh` and an
@@ -206,7 +253,8 @@ when retention is `0`:
   rows from retained transcripts; the next run deletes them again.
 - **Messages** — messages whose every delivery is acknowledged or
   dead-lettered, with those deliveries. Unacknowledged work, and messages that
-  queue-trigger ingress has not consumed yet, are never deleted.
+  queue-trigger ingress has not consumed yet, are never deleted. A message
+  with no ingress number yet counts as not consumed.
   The cutoff is the more recent of the retention period and
   `chat_retention_days` (any value `>= 0`; `0` leaves messages to the retention
   period), which covers the history of every chat and every agent at once.

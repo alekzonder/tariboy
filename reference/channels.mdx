@@ -284,7 +284,10 @@ A message that is not processed stays pending and is rendered again in the next
 iteration. Combined with `Pending`'s `attempts++` and the DLQ-after-5 rule, this
 gives re-prompt-until-processed semantics: a harness error, timeout, or killed
 iteration cannot silently acknowledge work, and a message the agent keeps
-ignoring eventually dead-letters instead of looping forever.
+ignoring eventually dead-letters instead of looping forever. `Pending` reads
+and counts in one transaction: if the count fails, it returns the error and
+hands out nothing. A delivery whose stored message does not decode goes to the
+DLQ with result `decode_error` and a `message_dead_lettered` audit event.
 
 `Requeue` returns a message to the pending queue: it clears `dlq`, `attempts`,
 `acked_at`, `processed_at`, and `result` on all of the agent's deliveries.

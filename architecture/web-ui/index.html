@@ -440,10 +440,16 @@ a response older than the newest) and composes, top down,
 <code>WorkflowProblem</code> (the one problem <code>explainProblem</code> in <code>explainWorkflowProblem.ts</code>
 picks from the view, with <code>retryTransitionRequest</code> behind <strong>Retry</strong> and the
 run’s log through <code>RunRow</code> with <code>autoLoad</code>), <code>WorkflowStepper</code> (the view’s
-<code>statuses</code> as steps, marked by <code>stepMarks</code> in <code>workflowGraph.ts</code>), the header
-with <code>stepOf</code>, <code>WorkflowOutcomes</code> (<code>advanceTask</code>), <code>WorkflowArtifacts</code>
-(<code>setTaskArtifact</code>, <code>getTaskArtifactHistory</code>; every entry of the view’s
-<code>declared_artifacts</code>, grouped by <code>requiredBy</code>), <code>WorkflowRuns</code>
+<code>statuses</code> as steps, marked by <code>stepMarks</code> in <code>workflowGraph.ts</code>; the panel
+owns the selected step, which starts at the current status and follows it
+until the customer picks a step), the header with <code>stepOf</code>,
+<code>WorkflowOutcomes</code> (<code>advanceTask</code>), <code>WorkflowArtifacts</code>
+(<code>setTaskArtifact</code>, <code>getTaskArtifactHistory</code>; for the selected step only the
+artifacts <code>stepArtifacts</code> finds in the <code>requires</code> of a transition into it,
+then out of it, each naming its transition; <strong>Show all artifacts</strong>, or a
+second click on the step, clears the selection and lists every entry of the
+view’s <code>declared_artifacts</code> in one list, those <code>requiredBy</code> names for the
+current status first), <code>WorkflowRuns</code>
 (<code>getTaskScriptRunLog</code>; <code>runTone</code> gives each row its tone), the visit list,
 and the header’s labeled <strong>Return to agent…</strong>, <strong>Move to status…</strong>, and
 <strong>Cancel task</strong> buttons: <code>ReturnToAgent</code> picks its targets with

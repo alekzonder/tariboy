@@ -49,6 +49,14 @@ pending and is rendered again next iteration, until it reaches the DLQ (max 5
 attempts). Publishing and processing are distinct durable operations, so a
 harness error, timeout, or kill can never silently acknowledge work.
 
+Draining and its attempt count are one SQLite transaction. If the count
+cannot be written, the drain returns the error and hands out no message, so
+a message is never rendered without its attempt being counted toward the DLQ
+cap. A delivery whose stored message row does not decode goes to the DLQ with
+result `decode_error` and a `message_dead_lettered` audit event; the other
+messages are still drained. An acknowledgement of several messages is also
+one transaction: all of them are acknowledged or none.
+
 `messages_max_queue` defaults to 100 for new agents. Reaching it keeps the
 existing overflow behavior: later deliveries for that agent are stored in DLQ
 with result `queue_limit`, so the limit bounds runnable pending work rather than
@@ -61,6 +69,13 @@ The bus removes that agent's unacknowledged, non-DLQ deliveries in one SQLite
 transaction and deletes only message rows orphaned by that operation. Processed
 and DLQ deliveries, shared messages, other agents' deliveries, and messages not
 yet consumed by queue-trigger ingress are retained.
+
+The bus does not know the Native Tasks tables. Native Tasks numbers each new
+message for queue-trigger ingress through a hook that runs inside the publish
+transaction, and gives the bus the retention condition that keeps messages
+ingress has not consumed yet. A message without an ingress number is kept
+until ingress repair numbers and consumes it. The daemon wires both before
+the first publish.
 
 ## Channel names
 

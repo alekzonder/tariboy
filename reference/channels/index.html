@@ -220,7 +220,10 @@ transaction, so a reply needs no separate <code>processed</code> call.</p>
 iteration. Combined with <code>Pending</code>’s <code>attempts++</code> and the DLQ-after-5 rule, this
 gives re-prompt-until-processed semantics: a harness error, timeout, or killed
 iteration cannot silently acknowledge work, and a message the agent keeps
-ignoring eventually dead-letters instead of looping forever.</p>
+ignoring eventually dead-letters instead of looping forever. <code>Pending</code> reads
+and counts in one transaction: if the count fails, it returns the error and
+hands out nothing. A delivery whose stored message does not decode goes to the
+DLQ with result <code>decode_error</code> and a <code>message_dead_lettered</code> audit event.</p>
 <p><code>Requeue</code> returns a message to the pending queue: it clears <code>dlq</code>, <code>attempts</code>,
 <code>acked_at</code>, <code>processed_at</code>, and <code>result</code> on all of the agent’s deliveries.
 Clearing <code>acked_at</code> matters — <code>Pending</code> drains only rows where it is NULL.</p>
