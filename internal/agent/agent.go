@@ -582,26 +582,31 @@ func (s *Store) List() ([]Agent, error) {
 	return out, rows.Err()
 }
 
+// Delete removes the agent row and its core rows (store.PhaseCore) in one
+// transaction. A missing agent row still clears orphaned core rows and then
+// reports ErrNotFound.
 func (s *Store) Delete(name string) error {
-	if _, err := s.db.Exec(`DELETE FROM iterations WHERE agent=?`, name); err != nil {
-		return err
-	}
-	if _, err := s.db.Exec(`DELETE FROM secrets WHERE agent=?`, name); err != nil {
-		return err
-	}
-	if _, err := s.db.Exec(`DELETE FROM agent_budgets WHERE agent_name=?`, name); err != nil {
-		return err
-	}
-	res, err := s.db.Exec(`DELETE FROM agents WHERE name=?`, name)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	return affected(res)
+	defer tx.Rollback()
+	deleted, err := store.DeleteAgentRows(tx, name, store.PhaseCore)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if deleted["agents"] == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // PurgeAgentData deletes every agent-keyed row Delete leaves behind, so a real
-// (purge) remove leaves nothing orphaned. Delete only clears iterations/secrets/
-// agents; these side-tables key by the agent name (subscriptions/schedules/
+// (purge) remove leaves nothing orphaned: the store.PhaseData tables of
+// store.AgentTables, keyed by the agent name (subscriptions/schedules/
 // scripts/script_result_outbox/ai_requests/retention_policies,
 // plus subscription deliveries) or by the scope "agent:<name>"
 // (budgets). All live in
@@ -610,30 +615,13 @@ func (s *Store) Delete(name string) error {
 // and any statement failure rolls the entire purge back. It is a no-op-safe
 // superset: rows that never existed simply match nothing.
 func (s *Store) PurgeAgentData(name string) error {
-	scope := "agent:" + name
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	stmts := []struct {
-		sql  string
-		args []any
-	}{
-		// deliveries reference subscriptions by id, so clear them first.
-		{`DELETE FROM deliveries WHERE subscription_id IN (SELECT id FROM subscriptions WHERE agent=?)`, []any{name}},
-		{`DELETE FROM subscriptions WHERE agent=?`, []any{name}},
-		{`DELETE FROM schedules WHERE agent=?`, []any{name}},
-		{`DELETE FROM scripts WHERE agent=?`, []any{name}},
-		{`DELETE FROM script_result_outbox WHERE agent=?`, []any{name}},
-		{`DELETE FROM ai_requests WHERE agent=?`, []any{name}},
-		{`DELETE FROM retention_policies WHERE agent=?`, []any{name}},
-		{`DELETE FROM budgets WHERE scope=?`, []any{scope}},
-	}
-	for _, st := range stmts {
-		if _, err := tx.Exec(st.sql, st.args...); err != nil {
-			return err
-		}
+	if _, err := store.DeleteAgentRows(tx, name, store.PhaseData); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

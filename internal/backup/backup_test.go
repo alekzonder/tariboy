@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -282,5 +283,26 @@ func TestBuildDeterministic(t *testing.T) {
 	Build(&b, s, agentsDir, "bot", Options{}, clk)
 	if !bytes.Equal(a.Bytes(), b.Bytes()) {
 		t.Fatal("backup is not byte-deterministic")
+	}
+}
+
+// TestBackupTablesComeFromRegistry pins the backup table list built from
+// store.AgentTables to the list backup used before the registry existed.
+func TestBackupTablesComeFromRegistry(t *testing.T) {
+	want := []tableSpec{
+		{name: "agents", where: "name = ?", orderBy: "name", agentCol: "name"},
+		{name: "iterations", where: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "ai_requests", where: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "secrets", where: "agent = ?", orderBy: "key", agentCol: "agent", maskCols: []string{"value"}},
+		{name: "subscriptions", where: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "schedules", where: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "scripts", where: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "script_runs", where: "agent = ?", orderBy: "id", agentCol: "agent"},
+		{name: "script_result_outbox", where: "agent = ?", orderBy: "idempotency_key", agentCol: "agent"},
+		{name: "messages", where: "produced_by_agent = ?", orderBy: "id", agentCol: "produced_by_agent"},
+		{name: "deliveries", where: "subscription_id IN (SELECT id FROM subscriptions WHERE agent = ?)", orderBy: "subscription_id, message_id"},
+	}
+	if got := registryBackupTables(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("backup tables from registry =\n%#v\nwant\n%#v", got, want)
 	}
 }

@@ -141,6 +141,57 @@ func TestPurgeAgentDataRollsBackAllRowsWhenADeleteFails(t *testing.T) {
 	}
 }
 
+func TestDeleteRollsBackAllRowsWhenTheAgentDeleteFails(t *testing.T) {
+	st := openStore(t)
+	if err := st.Create(sampleAgent()); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateIteration(Iteration{ID: "smoke-1", Agent: "smoke", Status: "ok", StartedAt: "2026-08-20T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SecretSet("smoke", "TOKEN", "v"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`INSERT INTO agent_budgets(agent_name, day_usd) VALUES (?, 1)`, "smoke"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`CREATE TRIGGER reject_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(FAIL, 'boom'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.Delete("smoke"); err == nil {
+		t.Fatal("Delete succeeded despite rejecting the agents row")
+	}
+	for table, where := range map[string]string{
+		"agents": "name=?", "iterations": "agent=?", "secrets": "agent=?", "agent_budgets": "agent_name=?",
+	} {
+		var count int
+		if err := st.db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE `+where, "smoke").Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s rows after rollback = %d, want 1", table, count)
+		}
+	}
+}
+
+func TestDeleteMissingAgentStillClearsOrphansAndReportsNotFound(t *testing.T) {
+	st := openStore(t)
+	if err := st.SecretSet("ghost", "TOKEN", "v"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Delete("ghost"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete missing agent = %v, want ErrNotFound", err)
+	}
+	var count int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM secrets WHERE agent=?`, "ghost").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("orphan secrets after Delete = %d, want 0", count)
+	}
+}
+
 func TestIterationTimeoutSnapshotAndExtensions(t *testing.T) {
 	st := openStore(t)
 	if err := st.Create(sampleAgent()); err != nil {

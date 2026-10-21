@@ -63,6 +63,22 @@ digits. Examples are the Usage request `ts` and the task usage
 `first_ts`/`last_ts`, which earlier had three digits or a variable number.
 These are valid RFC 3339 values.
 
+## Agent-owned tables
+
+The tables whose rows belong to one agent are listed once, in
+`store.AgentTables` in `internal/store/agent_tables.go`. Each row gives the
+table's scoping condition, the removal step that deletes it, and its place in
+an agent backup. `agent.Store.Delete` deletes the core rows (the agent,
+its iterations, secrets and AI budget) in one transaction, and
+`PurgeAgentData` deletes the side-table rows in a second one. Agent backup
+and restore use the rows with a backup position. Iteration retention deletes
+the tables in `store.IterationTables`.
+
+A new table with an `agent`, `agent_name` or `produced_by_agent` column, or a
+foreign key to a registry table without `ON DELETE CASCADE`, needs a registry
+row or an exemption with a reason in `agentKeyedExempt`. Otherwise the schema
+test in `internal/store` fails.
+
 ## Filesystem-backed shell scripts
 
 The global pre-iteration script at `<base-dir>/global-agent-shell.sh` and an
