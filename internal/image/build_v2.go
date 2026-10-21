@@ -197,10 +197,11 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 }
 
 func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, archiveOut *[]byte) (string, error) {
-	if err := os.MkdirAll(s.nameDir(ref.Name), 0o700); err != nil {
+	stageDir := s.refs().NameDir(ref.Name)
+	if err := os.MkdirAll(stageDir, 0o700); err != nil {
 		return "", err
 	}
-	tmp, err := os.CreateTemp(s.nameDir(ref.Name), "."+ref.Tag+"-*.tmp")
+	tmp, err := os.CreateTemp(stageDir, "."+ref.Tag+"-*.tmp")
 	if err != nil {
 		return "", err
 	}

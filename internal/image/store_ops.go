@@ -23,30 +23,22 @@ type FileEntry struct {
 }
 
 func (s *Store) List() ([]Manifest, error) {
-	entries, err := os.ReadDir(s.Dir)
+	names, err := s.refs().List()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
 	var out []Manifest
-	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+	for _, name := range names {
+		// Dot directories hold legacy history and staging, not images.
+		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		tags, err := os.ReadDir(s.tagsDir(e.Name()))
-		if os.IsNotExist(err) {
-			continue
-		}
+		tags, err := s.refs().Tags(name)
 		if err != nil {
 			return nil, err
 		}
-		for _, tf := range tags {
-			if tf.IsDir() || strings.HasPrefix(tf.Name(), ".") {
-				continue
-			}
-			m, err := s.Inspect(Ref{Name: e.Name(), Tag: tf.Name()})
+		for _, tag := range tags {
+			m, err := s.Inspect(Ref{Name: name, Tag: tag})
 			if err != nil {
 				return nil, err
 			}
@@ -163,10 +155,7 @@ func (s *Store) Remove(ref Ref) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(s.tagPath(ref)); err != nil {
-		return err
-	}
-	if err := syncDirectory(s.tagsDir(ref.Name)); err != nil {
+	if err := s.refs().RemoveTag(ref.Name, ref.Tag); err != nil {
 		return err
 	}
 	used, err := s.tagReferences(ref.Name, id)
@@ -178,27 +167,18 @@ func (s *Store) Remove(ref Ref) error {
 			return err
 		}
 	}
-	// best-effort: drop the directories once they become empty
-	_ = os.Remove(s.tagsDir(ref.Name))
-	_ = os.Remove(s.refsDir(ref.Name))
-	_ = os.Remove(s.nameDir(ref.Name))
+	s.refs().PruneEmpty(ref.Name)
 	return syncDirectory(s.Dir)
 }
 
 // tagReferences reports whether any tag of name still points at id.
 func (s *Store) tagReferences(name, id string) (bool, error) {
-	entries, err := os.ReadDir(s.tagsDir(name))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
+	tags, err := s.refs().Tags(name)
 	if err != nil {
 		return false, err
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-		other, err := s.Resolve(Ref{Name: name, Tag: entry.Name()})
+	for _, tag := range tags {
+		other, err := s.Resolve(Ref{Name: name, Tag: tag})
 		if err != nil {
 			continue
 		}

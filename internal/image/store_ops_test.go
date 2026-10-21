@@ -30,7 +30,7 @@ func plantRawRef(t *testing.T, st *Store, ref Ref, body string) {
 	t.Helper()
 	sum := sha256.Sum256([]byte(body))
 	id := hex.EncodeToString(sum[:])
-	if err := os.MkdirAll(st.refsDir(ref.Name), 0o700); err != nil {
+	if err := os.MkdirAll(st.refs().RefsDir(ref.Name), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(st.contentPath(ref.Name, id), []byte(body), 0o600); err != nil {

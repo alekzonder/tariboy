@@ -45,7 +45,8 @@ func (s *Store) Migrate() error {
 // migrateImage moves <name>/<tag>.tar.gz to <name>/refs/<digest>.tar.gz and
 // writes the tag pointer, dropping the digest and mutable sidecars.
 func (s *Store) migrateImage(name string) error {
-	entries, err := os.ReadDir(s.nameDir(name))
+	legacyDir := s.refs().NameDir(name)
+	entries, err := os.ReadDir(legacyDir)
 	if err != nil {
 		return err
 	}
@@ -56,11 +57,11 @@ func (s *Store) migrateImage(name string) error {
 		file := entry.Name()
 		switch {
 		case strings.HasSuffix(file, ".tar.gz"):
-			if err := s.adoptLegacyArchive(name, strings.TrimSuffix(file, ".tar.gz"), filepath.Join(s.nameDir(name), file)); err != nil {
+			if err := s.adoptLegacyArchive(name, strings.TrimSuffix(file, ".tar.gz"), filepath.Join(legacyDir, file)); err != nil {
 				return err
 			}
 		case strings.HasSuffix(file, ".digest"), strings.HasSuffix(file, ".mutable"), strings.HasSuffix(file, ".tmp"):
-			if err := os.Remove(filepath.Join(s.nameDir(name), file)); err != nil {
+			if err := os.Remove(filepath.Join(legacyDir, file)); err != nil {
 				return err
 			}
 		}
@@ -113,7 +114,8 @@ func (s *Store) adoptLegacyArchive(name, tag, path string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.refsDir(name), 0o700); err != nil {
+	contentDir := s.refs().RefsDir(name)
+	if err := os.MkdirAll(contentDir, 0o700); err != nil {
 		return err
 	}
 	target := s.contentPath(name, id)
@@ -124,7 +126,7 @@ func (s *Store) adoptLegacyArchive(name, tag, path string) error {
 	} else if err := os.Remove(path); err != nil {
 		return err
 	}
-	if err := syncDirectory(s.refsDir(name)); err != nil {
+	if err := syncDirectory(contentDir); err != nil {
 		return err
 	}
 	if tag == "" {
