@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/store"
@@ -599,7 +600,14 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := b.db.Query(`SELECT m.id, m.channel, m.ts, m.source, m.type, m.subject, m.text, m.data,
+	// Reading and accounting share one transaction: a message is handed out only
+	// if its attempts were counted, so a failed UPDATE cannot bypass the DLQ cap.
+	tx, err := b.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT m.id, m.channel, m.ts, m.source, m.type, m.subject, m.text, m.data,
 		m.produced_by_agent, m.produced_in_iteration, m.produced_by_plugin,
 		m.kind, m.correlation_id, m.in_reply_to, m.reply_to, m.deadline,
 		d.attempts, d.subscription_id
@@ -653,18 +661,25 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// Release the connection before issuing updates: the store pins a single
-	// connection (SetMaxOpenConns(1)), and after an early break the row iterator
-	// still holds it, so the UPDATEs below would otherwise deadlock.
-	rows.Close()
+	// Close the cursor before updating on the same transaction: after an early
+	// break the row iterator is still open.
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	// Account ONLY the returned messages' delivery rows.
 	for _, mk := range marks {
 		if mk.attempts+1 > maxAttempts {
-			_, _ = b.db.Exec(`UPDATE deliveries SET dlq=1 WHERE subscription_id=? AND message_id=?`, mk.subID, mk.msgID)
-			continue
+			_, err = tx.Exec(`UPDATE deliveries SET dlq=1 WHERE subscription_id=? AND message_id=?`, mk.subID, mk.msgID)
+		} else {
+			_, err = tx.Exec(`UPDATE deliveries SET delivered_at=?, attempts=attempts+1
+				WHERE subscription_id=? AND message_id=?`, now, mk.subID, mk.msgID)
 		}
-		_, _ = b.db.Exec(`UPDATE deliveries SET delivered_at=?, attempts=attempts+1
-			WHERE subscription_id=? AND message_id=?`, now, mk.subID, mk.msgID)
+		if err != nil {
+			return nil, fmt.Errorf("pending: account delivery of %s: %w", mk.msgID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -691,15 +706,28 @@ func (b *Bus) Ack(agent string, messageIDs []string) error {
 		return nil
 	}
 	now := store.FormatTime(b.clock())
-	for _, id := range messageIDs {
-		if _, err := b.db.Exec(`UPDATE deliveries SET acked_at=?
-			WHERE message_id=? AND acked_at IS NULL AND subscription_id IN
-			  (SELECT id FROM subscriptions WHERE agent=?)`, now, id, agent); err != nil {
+	tx, err := b.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for start := 0; start < len(messageIDs); start += ackBatch {
+		batch := messageIDs[start:min(start+ackBatch, len(messageIDs))]
+		args := []any{now, agent}
+		for _, id := range batch {
+			args = append(args, id)
+		}
+		if _, err := tx.Exec(`UPDATE deliveries SET acked_at=?
+			WHERE acked_at IS NULL AND subscription_id IN (SELECT id FROM subscriptions WHERE agent=?)
+			  AND message_id IN (?`+strings.Repeat(",?", len(batch)-1)+`)`, args...); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
+
+// ackBatch keeps one Ack statement well under SQLite's bound-variable limit.
+const ackBatch = 500
 
 func (b *Bus) Announce(agent, channel string) error {
 	_, err := b.db.Exec(`UPDATE deliveries SET acked_at=NULL, delivered_at=NULL, attempts=0, dlq=0
