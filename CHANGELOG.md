@@ -1,3 +1,15 @@
+## [0.89.1] - 2026-10-21
+
+### Fixed
+
+- The macOS Desktop build succeeds again. A Web UI helper module whose
+  name differed from a component only in letter case broke the build on
+  case-insensitive file systems, so 0.89.0 shipped no Desktop release.
+  0.89.1 delivers the 0.89.0 changes. A new check fails the build when
+  two UI modules differ only in case.
+
+[0.89.1]: https://github.com/alekzonder/tariboy/compare/v0.89.0...v0.89.1
+
 ## [0.89.0] - 2026-10-21
 
 ### Added
