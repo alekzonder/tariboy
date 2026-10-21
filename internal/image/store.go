@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/alekzonder/tariboy/internal/portablearchive"
 	"github.com/alekzonder/tariboy/internal/refstore"
 )
 
@@ -144,10 +143,16 @@ func (s *Store) SetTag(ref Ref, id string) error {
 // InstallArchive publishes validated archive bytes as the content of their ref
 // and moves ref onto it. Existing content of the same id is replaced.
 func (s *Store) InstallArchive(ref Ref, archive []byte) (Manifest, error) {
-	manifest, err := validatePortableArchive(archive, ref)
+	manifest, _, err := validatePortableArchive(archive, ref)
 	if err != nil {
 		return Manifest{}, fmt.Errorf("validate image %s: %w", ref.String(), err)
 	}
+	return s.installValidated(ref, archive, manifest)
+}
+
+// installValidated publishes archive bytes that already passed
+// validatePortableArchive for ref, with manifest as its result.
+func (s *Store) installValidated(ref Ref, archive []byte, manifest Manifest) (Manifest, error) {
 	tmpName, err := s.stageBytes(ref, "install", archive)
 	if err != nil {
 		return Manifest{}, err
@@ -168,13 +173,14 @@ func (s *Store) PublishArchiveFile(ref Ref, path string) (string, error) {
 
 // RetagArchive publishes a runnable archive under another image name by
 // rewriting only its manifest identity. Payload bytes and their declared order
-// are preserved.
+// are preserved. The archive is read twice: once to parse the source and once
+// to verify the rewritten result, which is then published as verified.
 func (s *Store) RetagArchive(source, target Ref, archive []byte) (Manifest, error) {
-	retagged, _, err := RetagArchiveBytes(source, target, archive)
+	retagged, manifest, err := RetagArchiveBytes(source, target, archive)
 	if err != nil {
 		return Manifest{}, err
 	}
-	return s.InstallArchive(target, retagged)
+	return s.installValidated(target, retagged, manifest)
 }
 
 func (s *Store) stageBytes(ref Ref, kind string, archive []byte) (string, error) {
@@ -233,41 +239,21 @@ func (s *Store) install(ref Ref, id, tmpName string) error {
 	return s.SetTag(ref, id)
 }
 
-// RetagArchiveBytes rewrites manifest identity without touching a store.
+// RetagArchiveBytes rewrites manifest identity without touching a store. It
+// writes the result from the members parsed during validation and reads the
+// archive bytes only to validate the source and the result.
 func RetagArchiveBytes(source, target Ref, archive []byte) ([]byte, Manifest, error) {
-	if _, err := validatePortableArchive(archive, source); err != nil {
+	_, parsed, err := validatePortableArchive(archive, source)
+	if err != nil {
 		return nil, Manifest{}, fmt.Errorf("validate imported image: %w", err)
 	}
-	in, err := gzip.NewReader(bytes.NewReader(archive))
-	if err != nil {
-		return nil, Manifest{}, err
-	}
-	defer in.Close()
 	var out bytes.Buffer
 	gz := gzip.NewWriter(&out)
 	tw := tar.NewWriter(gz)
-	tr := tar.NewReader(in)
-	seenManifest := false
-	for {
-		header, nextErr := tr.Next()
-		if nextErr == io.EOF {
-			break
-		}
-		if nextErr != nil {
-			return nil, Manifest{}, nextErr
-		}
-		if err := portablearchive.CheckMemberType(portablearchive.FormatImage, header); err != nil {
-			return nil, Manifest{}, fmt.Errorf("invalid image archive member %q", header.Name)
-		}
-		body, readErr := io.ReadAll(tr)
-		if readErr != nil {
-			return nil, Manifest{}, readErr
-		}
-		if header.Name == "manifest.json" {
-			if seenManifest {
-				return nil, Manifest{}, errors.New("duplicate image manifest")
-			}
-			seenManifest = true
+	for _, name := range parsed.order {
+		member := parsed.members[name]
+		body := member.body
+		if name == "manifest.json" {
 			var fields map[string]any
 			if err := json.Unmarshal(body, &fields); err != nil {
 				return nil, Manifest{}, err
@@ -286,12 +272,9 @@ func RetagArchiveBytes(source, target Ref, archive []byte) ([]byte, Manifest, er
 				return nil, Manifest{}, err
 			}
 		}
-		if err := writeTarFileMode(tw, header.Name, body, header.Mode&0o7777); err != nil {
+		if err := writeTarFileMode(tw, name, body, member.mode); err != nil {
 			return nil, Manifest{}, err
 		}
-	}
-	if !seenManifest {
-		return nil, Manifest{}, errors.New("image manifest is missing")
 	}
 	if err := tw.Close(); err != nil {
 		return nil, Manifest{}, err
@@ -300,7 +283,7 @@ func RetagArchiveBytes(source, target Ref, archive []byte) ([]byte, Manifest, er
 		return nil, Manifest{}, err
 	}
 	retagged := out.Bytes()
-	manifest, err := validatePortableArchive(retagged, target)
+	manifest, _, err := validatePortableArchive(retagged, target)
 	if err != nil {
 		return nil, Manifest{}, fmt.Errorf("validate retagged image: %w", err)
 	}

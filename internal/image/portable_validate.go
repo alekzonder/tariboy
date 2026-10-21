@@ -74,28 +74,68 @@ type v2PortablePlugin struct {
 	Name string `json:"name"`
 }
 
+// archivePassHook, when set by a test in this package, is called once for every
+// pass that decompresses and reads an image archive.
+var archivePassHook func()
+
+func noteArchivePass() {
+	if archivePassHook != nil {
+		archivePassHook()
+	}
+}
+
+// portableImageMember is one regular file of a validated image archive. body
+// is the member's bytes in the decompressed archive held in memory.
 type portableImageMember struct {
-	body []byte
-	mode int64
+	name       string
+	typ        byte
+	mode       int64 // permission bits of the tar header mode
+	headerMode int64 // the tar header mode as written
+	body       []byte
+}
+
+// portableArchive is the parsed form of a validated image archive. Callers
+// that unpack or rewrite the archive work from it instead of reading the
+// archive again.
+type portableArchive struct {
+	members map[string]portableImageMember
+	order   []string // member names in archive order
 }
 
 // validatePortableArchive validates the runnable inner archive before it can
-// enter the immutable Store or be unpacked into an agent directory.
-func validatePortableArchive(archive []byte, ref Ref) (Manifest, error) {
+// enter the immutable Store or be unpacked into an agent directory, and
+// returns its parsed members.
+func validatePortableArchive(archive []byte, ref Ref) (Manifest, portableArchive, error) {
 	return validatePortableArchiveContract(archive, ref, nil, false)
 }
 
-func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecontract.ExternalResolver, enforceContract bool) (Manifest, error) {
-	if int64(len(archive)) > MaxPortableImageCompressed {
-		return Manifest{}, errors.New("image archive exceeds compressed size limit")
+func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecontract.ExternalResolver, enforceContract bool) (Manifest, portableArchive, error) {
+	members, order, err := readPortableMembers(archive)
+	if err != nil {
+		return Manifest{}, portableArchive{}, err
 	}
+	manifest, err := validatePortableMembers(archive, members, ref, resolver, enforceContract)
+	if err != nil {
+		return Manifest{}, portableArchive{}, err
+	}
+	return manifest, portableArchive{members: members, order: order}, nil
+}
+
+// readPortableMembers decompresses archive once and checks every member
+// against the image member rules.
+func readPortableMembers(archive []byte) (map[string]portableImageMember, []string, error) {
+	if int64(len(archive)) > MaxPortableImageCompressed {
+		return nil, nil, errors.New("image archive exceeds compressed size limit")
+	}
+	noteArchivePass()
 	gz, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
-		return Manifest{}, err
+		return nil, nil, err
 	}
 	defer gz.Close()
 
 	members := make(map[string]portableImageMember)
+	var order []string
 	tr := tar.NewReader(gz)
 	checker := portablearchive.MemberChecker{Format: portablearchive.FormatImage, Limits: portableImageLimits}
 	for {
@@ -104,27 +144,34 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 			break
 		}
 		if nextErr != nil {
-			return Manifest{}, nextErr
+			return nil, nil, nextErr
 		}
 		if err := checker.Check(h); err != nil {
-			return Manifest{}, portableMemberError(h, err)
+			return nil, nil, portableMemberError(h, err)
 		}
 		clean, cleanErr := safefs.CleanRel(h.Name)
 		if cleanErr != nil {
-			return Manifest{}, fmt.Errorf("invalid image archive member path %q", h.Name)
+			return nil, nil, fmt.Errorf("invalid image archive member path %q", h.Name)
 		}
 		if _, duplicate := members[clean]; duplicate {
-			return Manifest{}, fmt.Errorf("duplicate image archive member %q", clean)
+			return nil, nil, fmt.Errorf("duplicate image archive member %q", clean)
 		}
 		body, readErr := io.ReadAll(io.LimitReader(tr, h.Size+1))
 		if readErr != nil {
-			return Manifest{}, readErr
+			return nil, nil, readErr
 		}
 		if int64(len(body)) != h.Size {
-			return Manifest{}, fmt.Errorf("image archive member %q size mismatch", clean)
+			return nil, nil, fmt.Errorf("image archive member %q size mismatch", clean)
 		}
-		members[clean] = portableImageMember{body: body, mode: h.Mode & 0o7777}
+		members[clean] = portableImageMember{name: clean, typ: h.Typeflag, mode: h.Mode & 0o7777, headerMode: h.Mode, body: body}
+		order = append(order, clean)
 	}
+	return members, order, nil
+}
+
+// validatePortableMembers checks the manifest and the member set of a parsed
+// archive and returns the manifest the archive declares for ref.
+func validatePortableMembers(archive []byte, members map[string]portableImageMember, ref Ref, resolver imagecontract.ExternalResolver, enforceContract bool) (Manifest, error) {
 
 	manifestMember, ok := members["manifest.json"]
 	if !ok {
@@ -171,13 +218,15 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 }
 
 func ValidatePortableArchive(archive []byte, ref Ref) (Manifest, error) {
-	return validatePortableArchive(archive, ref)
+	manifest, _, err := validatePortableArchive(archive, ref)
+	return manifest, err
 }
 
 // ValidatePortableArchiveContract additionally checks daemon/plugin
 // compatibility before an archive may be imported on a destination.
 func ValidatePortableArchiveContract(archive []byte, ref Ref, resolver imagecontract.ExternalResolver) (Manifest, error) {
-	return validatePortableArchiveContract(archive, ref, resolver, true)
+	manifest, _, err := validatePortableArchiveContract(archive, ref, resolver, true)
+	return manifest, err
 }
 
 func validateV2PortableMembers(manifestBody []byte, members map[string]portableImageMember, ref Ref, manifest *Manifest, resolver imagecontract.ExternalResolver, enforceContract bool) error {
