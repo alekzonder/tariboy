@@ -1,3 +1,36 @@
+## [0.90.0] - 2026-10-21
+
+### Added
+
+- The task workflow panel filters artifacts by step. The current step is
+  selected by default and follows the task. Picking another step lists only
+  the artifacts a transition into or out of it requires, each labeled with
+  its transition. **Show all artifacts**, or a second click on the step,
+  lists every declared artifact in one list, with the ones the current status
+  needs first. The folded "Other artifacts" group is gone.
+
+### Changed
+
+- The message bus keeps a partial index of pending deliveries and a message
+  id counter on each channel row, so the queue-depth gauge and publishing no
+  longer scan the whole delivery history (migration 0070).
+- Deleting an agent removes its data in one transaction, and agent purge,
+  backups and retention share one list of agent-owned tables.
+
+### Fixed
+
+- Handing out and acknowledging deliveries is transactional. A failed
+  attempts increment can no longer let a message escape the dead-letter cap,
+  and a failed Ack acknowledges none of its batch.
+- A message row that does not decode is reported as an error naming its id.
+  Its pending delivery moves to the dead-letter queue with result
+  `decode_error` and a `message_dead_lettered` audit event, so one broken row
+  no longer stops the queue. Before, it read back as empty data.
+- Maintenance no longer deletes a workflow message before ingress repair has
+  numbered and consumed it.
+
+[0.90.0]: https://github.com/alekzonder/tariboy/compare/v0.89.1...v0.90.0
+
 ## [0.89.1] - 2026-10-21
 
 ### Fixed
