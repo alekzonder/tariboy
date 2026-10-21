@@ -84,7 +84,7 @@ func (r *Registry) Import(archive io.Reader, size int64, stagingRoot string, now
 		return Manifest{}, false, fmt.Errorf("%w: archive kind is %q", ErrBadArchive, pm.Kind)
 	}
 	var meta archiveMetadata
-	if err := safefs.DecodeStrictJSON(bytes.NewReader(pm.Metadata), &meta); err != nil || !digestPattern.MatchString(meta.Digest) {
+	if err := safefs.DecodeStrictJSON(bytes.NewReader(pm.Metadata), &meta); err != nil || !IsDigest(meta.Digest) {
 		return Manifest{}, false, fmt.Errorf("%w: invalid metadata", ErrBadArchive)
 	}
 	listed := make(map[string]bool, len(pm.Files))

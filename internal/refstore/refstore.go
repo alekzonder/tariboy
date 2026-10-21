@@ -140,7 +140,7 @@ func (s Store) WriteTag(name, tag, id string) error {
 	if err := os.Rename(tmpName, s.TagPath(name, tag)); err != nil {
 		return err
 	}
-	return syncDir(dir)
+	return SyncDir(dir)
 }
 
 // RemoveTag deletes a tag and syncs the tags directory. A missing tag
@@ -152,7 +152,7 @@ func (s Store) RemoveTag(name, tag string) error {
 	if err := os.Remove(s.TagPath(name, tag)); err != nil {
 		return err
 	}
-	return syncDir(s.TagsDir(name))
+	return SyncDir(s.TagsDir(name))
 }
 
 // Tags returns the tags of name, sorted: the regular files in its tags
@@ -209,7 +209,8 @@ func (s Store) PruneEmpty(name string) {
 	_ = os.Remove(s.NameDir(name))
 }
 
-func syncDir(path string) error {
+// SyncDir fsyncs a directory so a rename or removal inside it is durable.
+func SyncDir(path string) error {
 	dir, err := os.Open(path)
 	if err != nil {
 		return err
