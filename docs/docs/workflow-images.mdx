@@ -206,7 +206,8 @@ are described under [Sources](/docs/task-workflows#sources).
 A path in `instructions`, `watch.script`, `checks[].script`, or
 `sources[].script`:
 
-- starts with `./`, is not absolute, and stays inside the source directory;
+- starts with `./`, is not absolute, contains no backslash or NUL byte, and
+  stays inside the source directory;
 - is not inside the top-level `.git` directory, which a build does not store;
 - names a regular file; a symlink anywhere on the path is rejected;
 - for a script, has an executable bit.

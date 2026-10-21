@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -20,6 +19,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -93,8 +93,8 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 		if len(h.Name) == 0 || len(h.Name) > maxPortableImagePathBytes {
 			return Manifest{}, fmt.Errorf("invalid image archive member path %q", h.Name)
 		}
-		clean, cleanErr := cleanTarPath(h.Name)
-		if cleanErr != nil || clean != path.Clean(h.Name) || strings.HasPrefix(clean, "../") {
+		clean, cleanErr := safefs.CleanRel(h.Name)
+		if cleanErr != nil {
 			return Manifest{}, fmt.Errorf("invalid image archive member path %q", h.Name)
 		}
 		if _, duplicate := members[clean]; duplicate {
@@ -170,12 +170,7 @@ func ValidatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 
 func validateV2PortableMembers(manifestBody []byte, members map[string]portableImageMember, ref Ref, manifest *Manifest, resolver imagecontract.ExternalResolver, enforceContract bool) error {
 	var strict v2PortableManifest
-	dec := json.NewDecoder(bytes.NewReader(manifestBody))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&strict); err != nil {
-		return fmt.Errorf("invalid schema-v2 manifest: %w", err)
-	}
-	if err := requireJSONEOF(dec); err != nil {
+	if err := decodeStrictMember(manifestBody, &strict); err != nil {
 		return fmt.Errorf("invalid schema-v2 manifest: %w", err)
 	}
 	if strict.SchemaVersion != 2 || strict.Name != ref.Name || strict.PromptTemplateSHA256 == "" {
@@ -207,12 +202,7 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 		return errors.New("schema-v2 prompt template has invalid mode")
 	}
 	var template PromptTemplate
-	dec = json.NewDecoder(bytes.NewReader(templateMember.body))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&template); err != nil {
-		return fmt.Errorf("invalid schema-v2 prompt template: %w", err)
-	}
-	if err := requireJSONEOF(dec); err != nil {
+	if err := decodeStrictMember(templateMember.body, &template); err != nil {
 		return fmt.Errorf("invalid schema-v2 prompt template: %w", err)
 	}
 	if err := ValidatePromptTemplate(template); err != nil {
@@ -362,13 +352,12 @@ func validSkillCategory(category string) bool {
 	}
 }
 
-func requireJSONEOF(dec *json.Decoder) error {
-	var trailing any
-	if err := dec.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			return errors.New("multiple JSON values")
-		}
-		return err
+// decodeStrictMember decodes one strict JSON archive member, keeping this
+// package's "multiple JSON values" text for trailing data.
+func decodeStrictMember(body []byte, v any) error {
+	err := safefs.DecodeStrictJSON(bytes.NewReader(body), v)
+	if errors.Is(err, safefs.ErrTrailingData) {
+		return fmt.Errorf("multiple JSON values: %w", err)
 	}
-	return nil
+	return err
 }

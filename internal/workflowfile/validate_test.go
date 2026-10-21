@@ -293,3 +293,36 @@ func TestFiles(t *testing.T) {
 		t.Fatalf("Files = %v, want %v", got, want)
 	}
 }
+
+func TestCleanSourcePath(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in   string
+		want string // empty means rejected
+	}{
+		{"./a.sh", "a.sh"},
+		{"./scripts//run.sh", "scripts/run.sh"},
+		{"./scripts/../run.sh", "run.sh"},
+		{"./..foo", "..foo"},
+		{"a.sh", ""},
+		{"./", ""},
+		{"./..", ""},
+		{"./a/../..", ""},
+		{"./.git/hooks/x", ""},
+		{"./.git", ""},
+		{`./a\b.sh`, ""},
+		{"./a\x00b", ""},
+	}
+	for _, tc := range cases {
+		got, ok := cleanSourcePath(tc.in)
+		if tc.want == "" {
+			if ok {
+				t.Errorf("cleanSourcePath(%q) = %q, want rejection", tc.in, got)
+			}
+			continue
+		}
+		if !ok || got != tc.want {
+			t.Errorf("cleanSourcePath(%q) = %q, %v; want %q", tc.in, got, ok, tc.want)
+		}
+	}
+}

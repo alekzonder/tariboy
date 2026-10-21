@@ -2,14 +2,13 @@ package workflowrun
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/script"
 	"github.com/alekzonder/tariboy/internal/tasks"
 )
@@ -65,14 +64,11 @@ func readSourceResult(raw []byte, readErr error, declared Declared) ([]tasks.Sou
 	if trimmed[0] != '{' {
 		return nil, errors.New("the result file is not a JSON object")
 	}
-	dec := json.NewDecoder(bytes.NewReader(trimmed))
-	dec.DisallowUnknownFields()
 	var res sourceResult
-	if err := dec.Decode(&res); err != nil {
-		return nil, fmt.Errorf("the result file is not valid: %s", cutRunes(err.Error(), maxDecodeErrorBytes))
-	}
-	if _, err := dec.Token(); err != io.EOF {
+	if err := safefs.DecodeStrictJSON(bytes.NewReader(trimmed), &res); errors.Is(err, safefs.ErrTrailingData) {
 		return nil, errors.New("the result file has data after the JSON object")
+	} else if err != nil {
+		return nil, fmt.Errorf("the result file is not valid: %s", cutRunes(err.Error(), maxDecodeErrorBytes))
 	}
 	if len(res.Items) > MaxSourceItems {
 		return nil, fmt.Errorf("the result reports %d items, at most %d", len(res.Items), MaxSourceItems)

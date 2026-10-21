@@ -1,11 +1,15 @@
 package agentdir
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/safefs"
 )
 
 // safeSkillName matches a packed skill directory name. It forbids "/", "..",
@@ -108,43 +112,49 @@ func ensureConfinedDir(baseDir, subDir string) (string, error) {
 // iterations. Two symlink vectors are closed here rather than relying on any
 // upstream invariant (e.g. Store.Unpack stripping symlinks):
 //
-//  1. Source deref: filepath.Walk uses Lstat, so a symlink in the source tree
-//     is reported (info.Mode()&os.ModeSymlink != 0) rather than followed. We
-//     refuse it, so its target's content is never read or copied.
+//  1. Source deref and special files: safefs.WalkRegular refuses a symlink or
+//     any non-regular file (a FIFO would block os.ReadFile forever) in the
+//     source tree with an error, so a symlink target's content is never read
+//     or copied and a planted special file stops the copy.
 //  2. Destination TOCTOU: a pre-planted symlinked dest component would let a
-//     MkdirAll/WriteFile write escape outside dst. Because Walk visits every
-//     source dir level (and thus every dest component maps to a callback), we
-//     Lstat each target first and refuse to write through an existing symlink.
+//     MkdirAll/WriteFile write escape outside dst. Because the walk visits
+//     every source dir level (and thus every dest component maps to a
+//     callback), we Lstat each target first and refuse to write through an
+//     existing symlink.
 func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, werr error) error {
-		if werr != nil {
-			return werr
-		}
-		// (1) Refuse to dereference a symlink in the SOURCE tree. Walk uses
-		// Lstat, so a symlink is reported rather than followed; we skip it
-		// (never read or copy its target) and keep copying the rest.
-		if info.Mode()&os.ModeSymlink != 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		// (2) Refuse to write through an existing symlinked DEST component.
+	// (2) Refuse to write through an existing symlinked DEST component.
+	writable := func(target string) error {
 		if fi, lerr := os.Lstat(target); lerr == nil && fi.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("refusing symlinked skill dest: %s", target)
 		}
-		if info.IsDir() {
+		return nil
+	}
+	if err := writable(dst); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dst, 0o700); err != nil {
+		return err
+	}
+	err := safefs.WalkRegular(src, safefs.WalkOptions{Dirs: true}, func(rel string, d fs.DirEntry, _ fs.FileInfo) error {
+		target := filepath.Join(dst, filepath.FromSlash(rel))
+		if err := writable(target); err != nil {
+			return err
+		}
+		if d.IsDir() {
 			return os.MkdirAll(target, 0o700)
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(rel)))
 		if err != nil {
 			return err
 		}
 		return os.WriteFile(target, data, 0o600)
 	})
+	var unsafe *safefs.PathError
+	if errors.As(err, &unsafe) {
+		return fmt.Errorf("unsafe skill file in %s: %w", filepath.Base(src), err)
+	}
+	return err
 }

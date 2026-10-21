@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -604,20 +606,7 @@ func (h *Host) Install(sourcePath string) (map[string]any, error) {
 	// shipping a symlink whose target lies outside the plugin dir would let a
 	// later exec or read escape containment once copied into PluginsDir — this
 	// is the install-time defense layer alongside ResolveExec's spawn-time gate.
-	if sym, err := firstSymlink(sourcePath); err != nil {
-		return nil, err
-	} else if sym != "" {
-		return nil, fmt.Errorf("plugin source %s contains a symlink (%s); symlinks are not permitted in a plugin package", sourcePath, sym)
-	}
-	if err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if !info.IsDir() && !info.Mode().IsRegular() {
-			return fmt.Errorf("plugin source %s contains non-regular file %s", sourcePath, path)
-		}
-		return nil
-	}); err != nil {
+	if err := checkPluginSource(sourcePath); err != nil {
 		return nil, err
 	}
 	m, err := LoadManifest(sourcePath)
@@ -840,29 +829,19 @@ func manifestFromRecord(r Record) Manifest {
 		Types: r.Types, Exec: r.Exec, Channels: r.Channels}
 }
 
-// errSymlinkFound is the Walk-abort sentinel used by firstSymlink; it is never
-// returned to a caller of firstSymlink itself.
-var errSymlinkFound = errors.New("symlink found")
-
-// firstSymlink walks the entire tree rooted at root and returns the path of the
-// first symlink encountered (empty if none). It uses Lstat semantics (via
-// filepath.Walk) so symlinks are detected rather than followed.
-func firstSymlink(root string) (string, error) {
-	var found string
-	err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			found = p
-			return errSymlinkFound
-		}
-		return nil
-	})
-	if err != nil && !errors.Is(err, errSymlinkFound) {
-		return "", err
+// checkPluginSource rejects the whole source tree if it holds a symlink
+// (the root included) or any other non-regular file, anywhere.
+func checkPluginSource(sourcePath string) error {
+	err := safefs.WalkRegular(sourcePath, safefs.WalkOptions{}, func(string, fs.DirEntry, fs.FileInfo) error { return nil })
+	var pathErr *safefs.PathError
+	if !errors.As(err, &pathErr) {
+		return err
 	}
-	return found, nil
+	full := filepath.Join(sourcePath, filepath.FromSlash(pathErr.Rel))
+	if errors.Is(err, safefs.ErrSymlink) {
+		return fmt.Errorf("plugin source %s contains a symlink (%s); symlinks are not permitted in a plugin package", sourcePath, full)
+	}
+	return fmt.Errorf("plugin source %s contains non-regular file %s", sourcePath, full)
 }
 
 // copyTree recursively copies src into dst (files 0600, dirs 0700).

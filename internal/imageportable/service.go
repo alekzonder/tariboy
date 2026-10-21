@@ -3,6 +3,7 @@
 package imageportable
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,13 +14,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imageprovenance"
 	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/portablearchive"
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/version"
 )
 
@@ -121,14 +122,10 @@ func (s Service) Preview(ctx context.Context, r io.Reader, compressedSize int64)
 		return Preview{}, errors.New("image portable: archive is not a runnable image artifact")
 	}
 	var meta metadata
-	dec := json.NewDecoder(strings.NewReader(string(manifest.Metadata)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&meta); err != nil || meta.Ref == "" || meta.Digest == "" || meta.ProducerVersion == "" || meta.Plugins == nil {
-		return Preview{}, errors.New("image portable: incomplete metadata")
-	}
-	var trailing any
-	if err := dec.Decode(&trailing); err != io.EOF {
+	if err := safefs.DecodeStrictJSON(bytes.NewReader(manifest.Metadata), &meta); errors.Is(err, safefs.ErrTrailingData) {
 		return Preview{}, errors.New("image portable: invalid metadata")
+	} else if err != nil || meta.Ref == "" || meta.Digest == "" || meta.ProducerVersion == "" || meta.Plugins == nil {
+		return Preview{}, errors.New("image portable: incomplete metadata")
 	}
 	ref, err := image.ParseRef(meta.Ref)
 	if err != nil || image.IsReserved(ref) {

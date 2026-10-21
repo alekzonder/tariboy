@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/safefs"
 )
 
 var (
@@ -397,16 +398,16 @@ func (f *File) refs() []fileRef {
 	return out
 }
 
-// cleanSourcePath applies the path rule: the path starts with "./", is not
-// absolute, stays inside the source directory, and is not under the top-level
-// .git directory, which the build does not store. It returns the cleaned path
-// without the leading "./".
+// cleanSourcePath applies the path rule: the path starts with "./", its
+// cleaned form passes safefs.CleanRel (it stays inside the source directory),
+// and it is not under the top-level .git directory, which the build does not
+// store. It returns the cleaned path without the leading "./".
 func cleanSourcePath(p string) (string, bool) {
-	if !strings.HasPrefix(p, "./") || path.IsAbs(p) {
+	if !strings.HasPrefix(p, "./") {
 		return "", false
 	}
-	clean := path.Clean(p)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+	clean, err := safefs.CleanRel(path.Clean(p))
+	if err != nil {
 		return "", false
 	}
 	if clean == ".git" || strings.HasPrefix(clean, ".git/") {

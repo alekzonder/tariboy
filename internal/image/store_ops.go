@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/safefs"
 )
 
 // FileEntry describes one member of an image's tar.gz, enough to render a tree.
@@ -137,37 +139,18 @@ func (s *Store) ListFiles(ref Ref) ([]FileEntry, error) {
 }
 
 // ReadFile returns the raw content of a single member of the image's tar.gz.
-// The path is normalised and traversal ('..' / absolute) is rejected before the
-// lookup, so a caller can never escape the archive namespace.
+// The path must pass safefs.CleanRel (relative, canonical, no '..' segment)
+// before the lookup, so a caller can never escape the archive namespace.
 func (s *Store) ReadFile(ref Ref, name string) ([]byte, error) {
 	archivePath, err := s.archiveFor(ref)
 	if err != nil {
 		return nil, err
 	}
-	clean, err := cleanTarPath(name)
+	clean, err := safefs.CleanRel(name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid file path %q", name)
 	}
 	return readFileFromTar(archivePath, clean)
-}
-
-// cleanTarPath normalises a slash-separated in-archive path and rejects any
-// attempt to traverse out of the archive root (absolute paths or any '..'
-// segment), so a caller can never escape the archive namespace.
-func cleanTarPath(name string) (string, error) {
-	if path.IsAbs(name) {
-		return "", fmt.Errorf("invalid file path %q: must be relative", name)
-	}
-	for _, seg := range strings.Split(name, "/") {
-		if seg == ".." {
-			return "", fmt.Errorf("invalid file path %q: '..' not allowed", name)
-		}
-	}
-	clean := path.Clean(name)
-	if clean == "" || clean == "." {
-		return "", fmt.Errorf("invalid file path %q", name)
-	}
-	return clean, nil
 }
 
 // Remove drops one tag. The content it pointed at is deleted once no other tag
@@ -267,16 +250,16 @@ func unpackArchive(archivePath string, ref Ref, destDir string) error {
 		if err != nil {
 			return err
 		}
-		clean := filepath.Clean(h.Name)
-		if filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
+		clean, err := safefs.CleanRel(h.Name)
+		if err != nil {
 			return fmt.Errorf("unsafe path in archive: %s", h.Name)
 		}
-		target := filepath.Join(destDir, clean)
+		target := filepath.Join(destDir, filepath.FromSlash(clean))
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return err
 		}
 		mode := os.FileMode(0o600)
-		if strings.HasPrefix(filepath.ToSlash(clean), "skills/") && h.Mode == 0o700 {
+		if strings.HasPrefix(clean, "skills/") && h.Mode == 0o700 {
 			mode = 0o700
 		}
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
