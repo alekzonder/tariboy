@@ -9,9 +9,7 @@ package bus
 // stops a "processed" mark from passing itself off as an answer.
 var unansweredSQL = `
 	SELECT ` + messageColumns + `
-	FROM (SELECT m.id, m.channel, m.ts, m.source, m.type, m.subject, m.text, m.data,
-	             m.produced_by_agent, m.produced_in_iteration, m.produced_by_plugin,
-	             m.kind, m.correlation_id, m.in_reply_to, m.reply_to, m.deadline
+	FROM (SELECT ` + messageColumnsM + `
 	      FROM messages m
 	      JOIN chats c ON c.channel = m.channel
 	      JOIN chat_participants p ON p.chat_id = c.id AND p.principal = ?

@@ -157,9 +157,7 @@ func (b *Bus) Inbox(agent, status string, limit int, before string) ([]InboxItem
 		args = append(args, before)
 	}
 	args = append(args, limit)
-	q := `SELECT m.id, m.channel, m.ts, m.source, m.type, m.subject, m.text, m.data,
-		m.produced_by_agent, m.produced_in_iteration, m.produced_by_plugin,
-		m.kind, m.correlation_id, m.in_reply_to, m.reply_to, m.deadline,
+	q := `SELECT ` + messageColumnsM + `,
 		MAX(d.attempts), MAX(d.delivered_at), MAX(d.processed_at), MAX(d.result), MIN(d.dlq)
 		FROM deliveries d
 		JOIN subscriptions s ON s.id = d.subscription_id
@@ -186,23 +184,15 @@ func (b *Bus) Inbox(agent, status string, limit int, before string) ([]InboxItem
 
 func scanInboxItem(row scanner) (InboxItem, error) {
 	var it InboxItem
-	var m Message
-	var subject string
-	var text, data, pa, pi, pp sql.NullString
-	var kind string
-	var cid, irt, rt, dl sql.NullString
 	var da, at, res sql.NullString
 	var attempts, dlq int
-	if err := row.Scan(&m.ID, &m.Channel, &m.TS, &m.Source, &m.Type, &subject, &text, &data,
-		&pa, &pi, &pp, &kind, &cid, &irt, &rt, &dl,
-		&attempts, &da, &at, &res, &dlq); err != nil {
-		if err == sql.ErrNoRows {
-			return InboxItem{}, ErrNotFound
-		}
+	m, err := scanMessage(row, &attempts, &da, &at, &res, &dlq)
+	if err == sql.ErrNoRows {
+		return InboxItem{}, ErrNotFound
+	}
+	if err != nil {
 		return InboxItem{}, err
 	}
-	unmarshalMessage(&m, subject, text, data, pa, pi, pp)
-	m.Kind, m.CorrelationID, m.InReplyTo, m.ReplyTo, m.Deadline = kind, cid.String, irt.String, rt.String, dl.String
 	it.Message = m
 	it.Attempts = attempts
 	it.DeliveredAt = da.String
@@ -215,9 +205,7 @@ func scanInboxItem(row scanner) (InboxItem, error) {
 // getInboxItem fetches a single agent's message as an aggregated InboxItem,
 // regardless of status. ErrNotFound if the agent has no delivery of it.
 func (b *Bus) getInboxItem(agent, msgID string) (InboxItem, error) {
-	row := b.db.QueryRow(`SELECT m.id, m.channel, m.ts, m.source, m.type, m.subject, m.text, m.data,
-		m.produced_by_agent, m.produced_in_iteration, m.produced_by_plugin,
-		m.kind, m.correlation_id, m.in_reply_to, m.reply_to, m.deadline,
+	row := b.db.QueryRow(`SELECT `+messageColumnsM+`,
 		MAX(d.attempts), MAX(d.delivered_at), MAX(d.processed_at), MAX(d.result), MIN(d.dlq)
 		FROM deliveries d
 		JOIN subscriptions s ON s.id = d.subscription_id
@@ -281,9 +269,7 @@ func (b *Bus) Requeue(agent, msgID string) error {
 }
 
 func getMessageFrom(x dbtx, id string) (Message, error) {
-	rows, err := x.Query(`SELECT id, channel, ts, source, type, subject, text, data,
-		produced_by_agent, produced_in_iteration, produced_by_plugin,
-		kind, correlation_id, in_reply_to, reply_to, deadline FROM messages WHERE id=?`, id)
+	rows, err := x.Query(`SELECT `+messageColumns+` FROM messages WHERE id=?`, id)
 	if err != nil {
 		return Message{}, err
 	}
@@ -505,9 +491,7 @@ func markProcessed(x dbtx, agent, msgID, result string, now time.Time) (int64, e
 // messages whose correlation id has no kind=reply yet (§4.2). Derived, never
 // stored. Oldest-first (longest-waiting leads the "# Awaiting replies" list).
 func (b *Bus) PendingRequests(agent string) ([]Message, error) {
-	rows, err := b.db.Query(`SELECT id, channel, ts, source, type, subject, text, data,
-		produced_by_agent, produced_in_iteration, produced_by_plugin,
-		kind, correlation_id, in_reply_to, reply_to, deadline FROM messages req
+	rows, err := b.db.Query(`SELECT `+messageColumns+` FROM messages req
 		WHERE req.kind='request' AND req.produced_by_agent=?
 		  AND NOT EXISTS (SELECT 1 FROM messages r
 		    WHERE r.kind='reply' AND r.correlation_id = req.correlation_id)
@@ -637,7 +621,9 @@ func (b *Bus) WatchList(channel string) ([]WatchInfo, error) {
 			w = &WatchInfo{Watch: watch}
 			if params.Valid && params.String != "" {
 				w.Params = map[string]any{}
-				_ = json.Unmarshal([]byte(params.String), &w.Params)
+				if err := json.Unmarshal([]byte(params.String), &w.Params); err != nil {
+					return nil, fmt.Errorf("watch %s: decode params: %w", watch, err)
+				}
 			}
 			byWatch[watch] = w
 			order = append(order, watch)
