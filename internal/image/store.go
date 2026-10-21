@@ -267,7 +267,7 @@ func RetagArchiveBytes(source, target Ref, archive []byte) ([]byte, Manifest, er
 		if nextErr != nil {
 			return nil, Manifest{}, nextErr
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if header.Typeflag != tar.TypeReg {
 			return nil, Manifest{}, fmt.Errorf("invalid image archive member %q", header.Name)
 		}
 		body, readErr := io.ReadAll(tr)

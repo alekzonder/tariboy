@@ -40,7 +40,7 @@ documents that own the behavior in scope.
 | AI proxy, usage, budgets, policy, audit | `docs/docs/architecture/ai-proxy.mdx`, `docs/docs/security-controls.mdx` |
 | React UI and frontend behavior | `docs/docs/architecture/web-ui.mdx` |
 | Desktop native host, SSH, Keychain, tunnels, packaging | `docs/docs/remote-hosts.mdx`, `docs/docs/security-controls.mdx`, `docs/docs/development.mdx` |
-| Images and groups | `docs/docs/images.mdx`, `docs/docs/images-and-groups/index.mdx` |
+| Images and groups | `docs/docs/images/index.mdx`, `docs/docs/images-and-groups/index.mdx` |
 | Plugins and agent tools | `docs/docs/plugins/index.mdx`, `docs/docs/binaries/index.mdx` |
 | Release, support, diagnostics | `docs/docs/support.mdx`, `docs/docs/security-controls.mdx`, `docs/internal-alpha-release-runbook.md` |
 

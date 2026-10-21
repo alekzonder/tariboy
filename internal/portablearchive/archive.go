@@ -83,7 +83,7 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 			return Manifest{}, errors.New("portable archive: expanded size exceeded")
 		}
 		expanded += h.Size
-		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA && h.Typeflag != tar.TypeDir {
+		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir {
 			return Manifest{}, fmt.Errorf("portable archive: unsupported entry type for %s", name)
 		}
 		if name == "manifest.json" {
