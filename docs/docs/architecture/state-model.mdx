@@ -63,6 +63,20 @@ digits. Examples are the Usage request `ts` and the task usage
 `first_ts`/`last_ts`, which earlier had three digits or a variable number.
 These are valid RFC 3339 values.
 
+## Bus queue index and message ids
+
+The partial index `idx_deliveries_pending` holds only deliveries that are not
+acknowledged and not dead-lettered. The queue-depth gauge and the per-agent
+pending reads use it, so their cost follows the backlog, not the delivery
+history.
+
+A message id is `<channel>-<yyyymmddhhmmss>-<seq>`. The channel row stores the
+second of its last id in `id_second` and that id's sequence number in
+`id_seq`, so a publish reads one row by key. The stored ids are read only when
+`id_second` is NULL (an upgraded or recreated channel) or the clock stepped
+back before `id_second`. The `messages` primary key still rejects a duplicate
+id.
+
 ## Schema migrations
 
 The daemon database and the Store service database use one migration runner,
@@ -239,7 +253,8 @@ when retention is `0`:
   rows from retained transcripts; the next run deletes them again.
 - **Messages** — messages whose every delivery is acknowledged or
   dead-lettered, with those deliveries. Unacknowledged work, and messages that
-  queue-trigger ingress has not consumed yet, are never deleted.
+  queue-trigger ingress has not consumed yet, are never deleted. A message
+  with no ingress number yet counts as not consumed.
   The cutoff is the more recent of the retention period and
   `chat_retention_days` (any value `>= 0`; `0` leaves messages to the retention
   period), which covers the history of every chat and every agent at once.
