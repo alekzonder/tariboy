@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
@@ -143,6 +144,26 @@ func readRegular(path string, limit int64) ([]byte, fs.FileMode, error) {
 	return content, fi.Mode(), nil
 }
 
+// scanError keeps this package's texts for the entries and limits safefs
+// refuses while scanning a source.
+func scanError(err error) error {
+	var pathErr *safefs.PathError
+	if !errors.As(err, &pathErr) {
+		return err
+	}
+	switch {
+	case errors.Is(err, safefs.ErrUnsafeFile):
+		return invalidf("%q is not a regular file (symlinks and special files are not allowed)", pathErr.Rel)
+	case errors.Is(err, safefs.ErrTooManyFiles):
+		return invalidf("source has more than %d files", maxFiles)
+	case errors.Is(err, safefs.ErrFileTooLarge):
+		return invalidf("file %q is larger than %d bytes", pathErr.Rel, maxFileSize)
+	case errors.Is(err, safefs.ErrTotalTooLarge):
+		return invalidf("source is larger than %d bytes", maxTotalSize)
+	}
+	return err
+}
+
 // scan reads the whole source directory. It rejects anything but regular
 // files and directories, and enforces the source limits.
 func scan(root string) ([]sourceFile, error) {
@@ -151,50 +172,22 @@ func scan(root string) ([]sourceFile, error) {
 		return nil, invalidf("source directory: %v", err)
 	}
 	var files []sourceFile
-	var total int64
-	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		rel = filepath.ToSlash(rel)
+	opts := safefs.WalkOptions{Dirs: true, MaxFiles: maxFiles, MaxFileSize: maxFileSize, MaxTotal: maxTotalSize}
+	err = safefs.WalkRegular(root, opts, func(rel string, d fs.DirEntry, _ fs.FileInfo) error {
 		if d.IsDir() {
 			if rel == ".git" {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			return invalidf("%q is not a regular file (symlinks and special files are not allowed)", rel)
-		}
 		if rel == manifestName {
 			return invalidf("%q is reserved for the stored manifest", rel)
 		}
-		if len(files) >= maxFiles {
-			return invalidf("source has more than %d files", maxFiles)
-		}
-		if info.Size() > maxFileSize {
-			return invalidf("file %q is larger than %d bytes", rel, maxFileSize)
-		}
-		content, mode, err := readRegular(p, maxFileSize)
+		content, mode, err := readRegular(filepath.Join(root, filepath.FromSlash(rel)), maxFileSize)
 		if err != nil {
 			return invalidf("%q: %v", rel, err)
 		}
 		sum := sha256.Sum256(content)
-		total += int64(len(content))
-		if total > maxTotalSize {
-			return invalidf("source is larger than %d bytes", maxTotalSize)
-		}
 		files = append(files, sourceFile{
 			FileEntry: FileEntry{
 				Path:       rel,
@@ -206,6 +199,7 @@ func scan(root string) ([]sourceFile, error) {
 		})
 		return nil
 	})
+	err = scanError(err)
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			return nil, err

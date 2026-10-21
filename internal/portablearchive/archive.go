@@ -2,6 +2,7 @@ package portablearchive
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,19 +11,17 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
+
+	"github.com/alekzonder/tariboy/internal/safefs"
 )
 
-func cleanArchivePath(name string, maxBytes int) (string, error) {
-	if name == "" || len(name) > maxBytes || strings.IndexByte(name, 0) >= 0 || strings.Contains(name, `\`) || path.IsAbs(name) {
-		return "", fmt.Errorf("portable archive: invalid path %q", name)
-	}
-	clean := path.Clean(name)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean != name {
+// archivePath applies safefs.CleanRel plus this format's path length limit.
+func archivePath(name string, maxBytes int) (string, error) {
+	clean, err := safefs.CleanRel(name)
+	if err != nil || len(name) > maxBytes {
 		return "", fmt.Errorf("portable archive: invalid path %q", name)
 	}
 	return clean, nil
@@ -67,7 +66,7 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 		if err != nil {
 			return Manifest{}, fmt.Errorf("portable archive: tar: %w", err)
 		}
-		name, err := cleanArchivePath(h.Name, limits.MaxPathBytes)
+		name, err := archivePath(h.Name, limits.MaxPathBytes)
 		if err != nil {
 			return Manifest{}, err
 		}
@@ -94,9 +93,7 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 			if err != nil || int64(len(data)) != h.Size {
 				return Manifest{}, errors.New("portable archive: invalid manifest body")
 			}
-			dec := json.NewDecoder(strings.NewReader(string(data)))
-			dec.DisallowUnknownFields()
-			if err := dec.Decode(&manifest); err != nil {
+			if err := safefs.DecodeStrictJSON(bytes.NewReader(data), &manifest); err != nil {
 				return Manifest{}, fmt.Errorf("portable archive: manifest: %w", err)
 			}
 			if manifest.Format != "tariboy-portable" || manifest.Version != 1 || manifest.Kind == "" {
@@ -135,7 +132,7 @@ func Stage(r io.Reader, compressedSize int64, destination string, limits Limits)
 	}
 	want := map[string]File{}
 	for _, f := range manifest.Files {
-		clean, err := cleanArchivePath(f.Path, limits.MaxPathBytes)
+		clean, err := archivePath(f.Path, limits.MaxPathBytes)
 		if err != nil || clean == "manifest.json" || want[clean].Path != "" {
 			return Manifest{}, errors.New("portable archive: invalid manifest file list")
 		}
@@ -191,7 +188,7 @@ func Write(w io.Writer, root string, manifest Manifest, paths []string) error {
 		return closeWith(err)
 	}
 	for _, name := range files {
-		clean, err := cleanArchivePath(name, DefaultLimits().MaxPathBytes)
+		clean, err := archivePath(name, DefaultLimits().MaxPathBytes)
 		if err != nil {
 			return closeWith(err)
 		}

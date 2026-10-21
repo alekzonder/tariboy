@@ -3,7 +3,10 @@ package agentdir
 import (
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestMaterializeSkills(t *testing.T) {
@@ -49,7 +52,8 @@ func TestMaterializeSkillsNoSkillsDirIsNoop(t *testing.T) {
 }
 
 // TestMaterializeSkillsDoesNotDerefSourceSymlink proves the local copyTree
-// guard refuses a symlink in the SOURCE tree: its target content is NOT copied.
+// guard refuses a symlink in the SOURCE tree with an error: its target content
+// is NOT copied.
 // The M15 source is a semi-untrusted image, so confinement must be local and
 // not rely on Store.Unpack stripping symlinks.
 func TestMaterializeSkillsDoesNotDerefSourceSymlink(t *testing.T) {
@@ -76,12 +80,9 @@ func TestMaterializeSkillsDoesNotDerefSourceSymlink(t *testing.T) {
 	base := t.TempDir()
 	sub := filepath.Join(".claude", "skills")
 	dst := filepath.Join(base, sub)
-	if err := MaterializeSkills(img, base, sub); err != nil {
-		t.Fatalf("MaterializeSkills: %v", err)
-	}
-	// The real file is copied.
-	if _, err := os.Stat(filepath.Join(dst, "greeter", "SKILL.md")); err != nil {
-		t.Fatalf("legit skill file not materialized: %v", err)
+	// The symlink is refused, not silently skipped.
+	if err := MaterializeSkills(img, base, sub); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("MaterializeSkills error = %v, want a symlink refusal", err)
 	}
 	// The symlink target's content must NOT have been dereferenced/copied.
 	leaked := filepath.Join(dst, "greeter", "leak.md")
@@ -209,5 +210,33 @@ func TestMaterializeSkillsRefusesSymlinkedDestAncestor(t *testing.T) {
 				t.Fatal("write escaped through symlinked ancestor into outside/skills/greeter")
 			}
 		})
+	}
+}
+
+// TestMaterializeSkillsRejectsFIFO is the regression test for the skill copy
+// that read every non-symlink entry with os.ReadFile: a FIFO in the source tree
+// blocked forever. It must be refused before it is opened.
+func TestMaterializeSkillsRejectsFIFO(t *testing.T) {
+	t.Parallel()
+	img := t.TempDir()
+	skill := filepath.Join(img, "skills", "greeter")
+	if err := os.MkdirAll(skill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte("# Greeter"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(skill, "pipe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- MaterializeSkills(img, t.TempDir(), filepath.Join(".claude", "skills")) }()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "non-regular file") {
+			t.Fatalf("MaterializeSkills error = %v, want a non-regular file refusal", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("MaterializeSkills hung on a FIFO")
 	}
 }

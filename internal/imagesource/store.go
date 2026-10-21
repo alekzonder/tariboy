@@ -15,6 +15,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 	"gopkg.in/yaml.v3"
 )
@@ -235,35 +236,15 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 		return Source{}, err
 	}
 	defer os.RemoveAll(stage)
-	err = filepath.WalkDir(incoming, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == incoming {
-			return nil
-		}
-		rel, err := filepath.Rel(incoming, path)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == MetadataFilename {
+	err = safefs.WalkRegular(incoming, safefs.WalkOptions{Dirs: true, MaxFileSize: MaxFileSize}, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
+		if rel == MetadataFilename {
 			return fmt.Errorf("%w: %s", ErrInvalidPath, rel)
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%w: symlink %s", ErrUnsafeFile, rel)
-		}
-		destination := filepath.Join(stage, rel)
+		destination := filepath.Join(stage, filepath.FromSlash(rel))
 		if info.IsDir() {
 			return os.MkdirAll(destination, 0o700)
 		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("%w: non-regular file %s", ErrUnsafeFile, rel)
-		}
-		if info.Size() > MaxFileSize {
-			return fmt.Errorf("%w: %s", ErrFileTooLarge, rel)
-		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(filepath.Join(incoming, filepath.FromSlash(rel)))
 		if err != nil {
 			return err
 		}
@@ -276,7 +257,7 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 		return os.WriteFile(destination, data, 0o600)
 	})
 	if err != nil {
-		return Source{}, err
+		return Source{}, walkError(err)
 	}
 	parsed, err := imagefile.ParseV2(stage)
 	if err != nil {
@@ -294,30 +275,30 @@ func (s *Store) ImportTree(name, incoming string) (Source, error) {
 	return source, nil
 }
 
-func cleanSourcePath(path string) (string, error) {
-	if path == "" || filepath.IsAbs(path) || strings.Contains(path, `\`) {
-		return "", fmt.Errorf("%w: %q", ErrInvalidPath, path)
-	}
-	clean := filepath.Clean(filepath.FromSlash(path))
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) ||
-		clean != filepath.FromSlash(path) || clean == MetadataFilename ||
-		strings.HasPrefix(clean, MetadataFilename+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: %q", ErrInvalidPath, path)
-	}
-	return clean, nil
-}
-
-func confinedSourcePath(root, path string) (string, string, error) {
-	clean, err := cleanSourcePath(path)
-	if err != nil {
-		return "", "", err
-	}
-	target := filepath.Join(root, clean)
-	rel, err := filepath.Rel(root, target)
-	if err != nil || rel != clean {
+// sourceTarget applies safefs.CleanRel plus the reserved metadata file rule
+// and returns the OS-form relative path and its absolute target below root.
+func sourceTarget(root, path string) (string, string, error) {
+	clean, err := safefs.CleanRel(path)
+	if err != nil || clean == MetadataFilename || strings.HasPrefix(clean, MetadataFilename+"/") {
 		return "", "", fmt.Errorf("%w: %q", ErrInvalidPath, path)
 	}
-	return clean, target, nil
+	rel := filepath.FromSlash(clean)
+	return rel, filepath.Join(root, rel), nil
+}
+
+// walkError maps a safefs refusal onto this package's errors and texts.
+func walkError(err error) error {
+	var pathErr *safefs.PathError
+	if !errors.As(err, &pathErr) {
+		return err
+	}
+	switch {
+	case errors.Is(err, safefs.ErrUnsafeFile):
+		return fmt.Errorf("%w: %s", ErrUnsafeFile, pathErr.Error())
+	case errors.Is(err, safefs.ErrFileTooLarge):
+		return fmt.Errorf("%w: %s", ErrFileTooLarge, pathErr.Rel)
+	}
+	return err
 }
 
 func (s *Store) ListFiles(name string) ([]FileEntry, error) {
@@ -329,48 +310,20 @@ func (s *Store) ListFiles(name string) ([]FileEntry, error) {
 		return nil, err
 	}
 	var out []FileEntry
-	err = filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == dir {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		if rel == MetadataFilename {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%w: symlink %s", ErrUnsafeFile, rel)
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("%w: non-regular file %s", ErrUnsafeFile, rel)
-		}
-		if info.Size() > MaxFileSize {
-			return fmt.Errorf("%w: %s", ErrFileTooLarge, rel)
-		}
-		data, err := os.ReadFile(path)
+	skipMetadata := func(rel string) bool { return rel == MetadataFilename }
+	err = safefs.WalkRegular(dir, safefs.WalkOptions{Skip: skipMetadata, MaxFileSize: MaxFileSize}, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
+		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
 		if err != nil {
 			return err
 		}
 		if !utf8.Valid(data) {
 			return fmt.Errorf("%w: %s", ErrInvalidUTF8, rel)
 		}
-		out = append(out, FileEntry{Path: filepath.ToSlash(rel), Size: info.Size()})
+		out = append(out, FileEntry{Path: rel, Size: info.Size()})
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, walkError(err)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
@@ -384,7 +337,7 @@ func (s *Store) ReadFile(name, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	clean, target, err := confinedSourcePath(dir, path)
+	clean, target, err := sourceTarget(dir, path)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +368,7 @@ func (s *Store) WriteFile(name, path string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	clean, target, err := confinedSourcePath(dir, path)
+	clean, target, err := sourceTarget(dir, path)
 	if err != nil {
 		return err
 	}

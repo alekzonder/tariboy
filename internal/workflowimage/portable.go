@@ -1,15 +1,16 @@
 package workflowimage
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/portablearchive"
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 )
 
@@ -83,9 +84,7 @@ func (r *Registry) Import(archive io.Reader, size int64, stagingRoot string, now
 		return Manifest{}, false, fmt.Errorf("%w: archive kind is %q", ErrBadArchive, pm.Kind)
 	}
 	var meta archiveMetadata
-	dec := json.NewDecoder(strings.NewReader(string(pm.Metadata)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&meta); err != nil || !digestPattern.MatchString(meta.Digest) {
+	if err := safefs.DecodeStrictJSON(bytes.NewReader(pm.Metadata), &meta); err != nil || !digestPattern.MatchString(meta.Digest) {
 		return Manifest{}, false, fmt.Errorf("%w: invalid metadata", ErrBadArchive)
 	}
 	listed := make(map[string]bool, len(pm.Files))

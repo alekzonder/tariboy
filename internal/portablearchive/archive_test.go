@@ -116,3 +116,34 @@ func TestStageEnforcesExpandedAndFileCountLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestStageRejectsTrailingManifestData(t *testing.T) {
+	body := []byte("x")
+	manifest, err := json.Marshal(fileManifest("a.txt", body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for _, e := range []struct {
+		name string
+		body []byte
+	}{{"manifest.json", append(manifest, []byte(` {"format":"x"}`)...)}, {"a.txt", body}} {
+		if err := tw.WriteHeader(&tar.Header{Name: e.name, Typeflag: tar.TypeReg, Size: int64(len(e.body)), Mode: 0o600}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write(e.body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Stage(bytes.NewReader(buf.Bytes()), int64(buf.Len()), filepath.Join(t.TempDir(), "staged"), DefaultLimits()); err == nil {
+		t.Fatal("Stage accepted a manifest with trailing JSON")
+	}
+}

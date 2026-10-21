@@ -291,3 +291,22 @@ func TestPrepareImageBridgeConcurrentIdenticalPublishSucceeds(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestValidateBridgePlanRejectsBareDotDot is the regression test for the bridge
+// path cleaner that accepted a bare ".." as a skill destination or file path.
+func TestValidateBridgePlanRejectsBareDotDot(t *testing.T) {
+	t.Parallel()
+	for _, plan := range []BridgePlan{
+		{SkillDestination: ".."},
+		{SkillDestination: "skills", Files: []BridgeFile{{Path: "..", Body: []byte("x"), Mode: 0o600}}},
+		{SkillDestination: "skills", Files: []BridgeFile{{Path: "a/..", Body: []byte("x"), Mode: 0o600}}},
+		{SkillDestination: "skills", Files: []BridgeFile{{Path: "a\x00b", Body: []byte("x"), Mode: 0o600}}},
+	} {
+		if _, _, err := validateBridgePlan(plan); err == nil {
+			t.Fatalf("validateBridgePlan(%+v) accepted an escaping path", plan)
+		}
+	}
+	if _, _, err := validateBridgePlan(BridgePlan{SkillDestination: "skills", Files: []BridgeFile{{Path: "..config", Body: []byte("x"), Mode: 0o600}}}); err != nil {
+		t.Fatalf("a name starting with two dots must stay valid: %v", err)
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/imagesource"
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
@@ -114,42 +115,25 @@ func (s Store) Freeze(sourceDir string, skills ...imagefile.SkillEntry) (FrozenS
 		}
 		sourceSkills[skill.Dir] = rel
 	}
-	err = filepath.WalkDir(sourceDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == sourceDir {
-			return nil
-		}
-		rel, err := filepath.Rel(sourceDir, path)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return errors.New("image snapshot: path escapes source")
-		}
-		if filepath.ToSlash(rel) == imagesource.MetadataFilename {
-			return nil
-		}
+	opts := safefs.WalkOptions{
+		Dirs:        true,
+		Skip:        func(rel string) bool { return rel == imagesource.MetadataFilename },
+		MaxFileSize: imagesource.MaxFileSize,
+	}
+	err = safefs.WalkRegular(sourceDir, opts, func(rel string, _ fs.DirEntry, info fs.FileInfo) error {
 		if len(externalSkills) > 0 && rel == skillRoot {
 			return fmt.Errorf("image snapshot: source uses reserved directory %s", skillRoot)
 		}
-		entryInfo, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if entryInfo.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("image snapshot: symlink %s", rel)
-		}
-		if entryInfo.IsDir() {
+		if info.IsDir() {
 			return nil
 		}
-		if !entryInfo.Mode().IsRegular() {
-			return fmt.Errorf("image snapshot: non-regular file %s", rel)
-		}
-		if entryInfo.Size() > imagesource.MaxFileSize {
-			return fmt.Errorf("image snapshot: file too large %s", rel)
-		}
-		files = append(files, file{rel: filepath.ToSlash(rel), path: path, mode: entryInfo.Mode()})
+		files = append(files, file{rel: rel, path: filepath.Join(sourceDir, filepath.FromSlash(rel)), mode: info.Mode()})
 		return nil
 	})
+	var pathErr *safefs.PathError
+	if errors.As(err, &pathErr) {
+		return FrozenSource{}, fmt.Errorf("image snapshot: %s", pathErr.Error())
+	}
 	if err != nil {
 		return FrozenSource{}, err
 	}

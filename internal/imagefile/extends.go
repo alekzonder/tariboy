@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alekzonder/tariboy/internal/safefs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -161,27 +162,22 @@ func assembleLayer(k int, layer, build string, src *V2, install func(string) err
 	return nil
 }
 
+// copyTree copies the regular files and directories below from into to. A
+// symlink or special file stops the copy with safefs's "symlink <rel>" or
+// "non-regular file <rel>" error.
 func copyTree(from, to string) error {
-	return filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(from, path)
-		if err != nil {
-			return err
-		}
-		if rel == ExtendsPromptDir && entry.IsDir() {
+	if err := os.MkdirAll(to, 0o700); err != nil {
+		return err
+	}
+	return safefs.WalkRegular(from, safefs.WalkOptions{Dirs: true}, func(rel string, d fs.DirEntry, _ fs.FileInfo) error {
+		if rel == ExtendsPromptDir && d.IsDir() {
 			return fmt.Errorf("source uses reserved directory %s", ExtendsPromptDir)
 		}
-		switch {
-		case entry.Type()&fs.ModeSymlink != 0:
-			return fmt.Errorf("symlink %s", rel)
-		case entry.IsDir():
-			return os.MkdirAll(filepath.Join(to, rel), 0o700)
-		case !entry.Type().IsRegular():
-			return fmt.Errorf("non-regular file %s", rel)
+		target := filepath.Join(to, filepath.FromSlash(rel))
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o700)
 		}
-		return copyFile(path, filepath.Join(to, rel))
+		return copyFile(filepath.Join(from, filepath.FromSlash(rel)), target)
 	})
 }
 
