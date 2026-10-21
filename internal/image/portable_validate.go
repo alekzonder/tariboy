@@ -19,18 +19,41 @@ import (
 	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/imagecontract"
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/portablearchive"
 	"github.com/alekzonder/tariboy/internal/safefs"
 	"github.com/alekzonder/tariboy/internal/store"
 )
 
 var portablePluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
-const (
-	MaxPortableImageCompressed = int64(64 << 20)
-	maxPortableImageExpanded   = int64(256 << 20)
-	maxPortableImageFiles      = 4096
-	maxPortableImagePathBytes  = 512
-)
+const MaxPortableImageCompressed = int64(64 << 20)
+
+// portableImageLimits bounds the members of a runnable image archive. The
+// allowed member types and modes are portablearchive.MemberRules rows for
+// portablearchive.FormatImage.
+var portableImageLimits = portablearchive.MemberLimits{
+	MaxPathBytes: 512,
+	MaxMembers:   4096,
+	MaxExpanded:  256 << 20,
+}
+
+// portableMemberError keeps this package's texts for a member that
+// portablearchive.MemberChecker refuses.
+func portableMemberError(h *tar.Header, err error) error {
+	switch {
+	case errors.Is(err, portablearchive.ErrMemberCount):
+		return errors.New("image archive has too many files")
+	case errors.Is(err, portablearchive.ErrMemberType):
+		return fmt.Errorf("invalid image archive member %q: regular files only", h.Name)
+	case errors.Is(err, portablearchive.ErrMemberMode):
+		return fmt.Errorf("invalid image archive member %q mode %#o", h.Name, h.Mode&0o7777)
+	case errors.Is(err, portablearchive.ErrMemberPath):
+		return fmt.Errorf("invalid image archive member path %q", h.Name)
+	case errors.Is(err, portablearchive.ErrMemberSize):
+		return errors.New("image archive exceeds expanded size limit")
+	}
+	return err
+}
 
 type v2PortableManifest struct {
 	SchemaVersion        int                `json:"schema_version"`
@@ -71,8 +94,8 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 
 	members := make(map[string]portableImageMember)
 	tr := tar.NewReader(gz)
-	var expanded int64
-	for count := 0; ; count++ {
+	checker := portablearchive.MemberChecker{Format: portablearchive.FormatImage, Limits: portableImageLimits}
+	for {
 		h, nextErr := tr.Next()
 		if nextErr == io.EOF {
 			break
@@ -80,18 +103,8 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 		if nextErr != nil {
 			return Manifest{}, nextErr
 		}
-		if count >= maxPortableImageFiles {
-			return Manifest{}, errors.New("image archive has too many files")
-		}
-		if h.Typeflag != tar.TypeReg {
-			return Manifest{}, fmt.Errorf("invalid image archive member %q: regular files only", h.Name)
-		}
-		mode := h.Mode & 0o7777
-		if mode != 0o600 && mode != 0o700 {
-			return Manifest{}, fmt.Errorf("invalid image archive member %q mode %#o", h.Name, mode)
-		}
-		if len(h.Name) == 0 || len(h.Name) > maxPortableImagePathBytes {
-			return Manifest{}, fmt.Errorf("invalid image archive member path %q", h.Name)
+		if err := checker.Check(h); err != nil {
+			return Manifest{}, portableMemberError(h, err)
 		}
 		clean, cleanErr := safefs.CleanRel(h.Name)
 		if cleanErr != nil {
@@ -100,10 +113,6 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 		if _, duplicate := members[clean]; duplicate {
 			return Manifest{}, fmt.Errorf("duplicate image archive member %q", clean)
 		}
-		if h.Size < 0 || expanded > maxPortableImageExpanded-h.Size {
-			return Manifest{}, errors.New("image archive exceeds expanded size limit")
-		}
-		expanded += h.Size
 		body, readErr := io.ReadAll(io.LimitReader(tr, h.Size+1))
 		if readErr != nil {
 			return Manifest{}, readErr
@@ -111,7 +120,7 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 		if int64(len(body)) != h.Size {
 			return Manifest{}, fmt.Errorf("image archive member %q size mismatch", clean)
 		}
-		members[clean] = portableImageMember{body: body, mode: mode}
+		members[clean] = portableImageMember{body: body, mode: h.Mode & 0o7777}
 	}
 
 	manifestMember, ok := members["manifest.json"]

@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/alekzonder/tariboy/internal/portablearchive"
 )
 
 // Store is an on-disk image store rooted at Dir (paths.ImagesDir()).
@@ -267,7 +269,7 @@ func RetagArchiveBytes(source, target Ref, archive []byte) ([]byte, Manifest, er
 		if nextErr != nil {
 			return nil, Manifest{}, nextErr
 		}
-		if header.Typeflag != tar.TypeReg {
+		if err := portablearchive.CheckMemberType(portablearchive.FormatImage, header); err != nil {
 			return nil, Manifest{}, fmt.Errorf("invalid image archive member %q", header.Name)
 		}
 		body, readErr := io.ReadAll(tr)
