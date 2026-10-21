@@ -7,13 +7,13 @@
 package filebrowser
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"unicode/utf8"
+
+	"github.com/alekzonder/tariboy/internal/pathjail"
 )
 
 // MaxReadBytes caps how large a file Read will return inline; anything bigger is
@@ -22,15 +22,10 @@ const MaxReadBytes = 2 << 20 // 2 MiB
 
 // Error is a typed failure carrying a stable code the api layer maps to its JSON
 // error envelope (bad_path / not_found / exists / is_dir / ...).
-type Error struct {
-	Code string
-	Msg  string
-}
+type Error = pathjail.Error
 
-func (e *Error) Error() string { return e.Code + ": " + e.Msg }
-
-func badPath(msg string) *Error  { return &Error{Code: "bad_path", Msg: msg} }
-func notFound(msg string) *Error { return &Error{Code: "not_found", Msg: msg} }
+func badPath(msg string) *Error  { return pathjail.BadPath(msg) }
+func notFound(msg string) *Error { return pathjail.NotFound(msg) }
 
 // Entry is one item in a directory listing.
 type Entry struct {
@@ -69,11 +64,11 @@ func Resolve(root, rel string) (string, error) {
 	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
 		return "", badPath("path escapes the agent working directory")
 	}
-	realRoot, err := resolveExisting(root)
+	realRoot, err := pathjail.ResolveExisting(root)
 	if err != nil {
 		return "", badPath("cannot resolve agent working directory")
 	}
-	realTarget, err := resolveExisting(target)
+	realTarget, err := pathjail.ResolveExisting(target)
 	if err != nil {
 		return "", badPath("cannot resolve path")
 	}
@@ -81,33 +76,6 @@ func Resolve(root, rel string) (string, error) {
 		return "", badPath("path escapes the agent working directory (symlink)")
 	}
 	return target, nil
-}
-
-// resolveExisting evaluates symlinks on the deepest existing ancestor of p and
-// re-appends the trailing components that do not exist yet, so it also works for
-// a path about to be created. Any symlink along the existing portion (including p
-// itself) is followed to its real location.
-func resolveExisting(p string) (string, error) {
-	p = filepath.Clean(p)
-	rest := ""
-	for {
-		resolved, err := filepath.EvalSymlinks(p)
-		if err == nil {
-			if rest == "" {
-				return resolved, nil
-			}
-			return filepath.Join(resolved, rest), nil
-		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		parent := filepath.Dir(p)
-		if parent == p { // reached filesystem root without an existing ancestor
-			return "", err
-		}
-		rest = filepath.Join(filepath.Base(p), rest)
-		p = parent
-	}
 }
 
 // List returns the entries of the directory at rel (empty rel => root). Entries
@@ -122,8 +90,8 @@ func List(root, rel string) ([]Entry, error) {
 		if os.IsNotExist(err) {
 			return nil, notFound("directory not found")
 		}
-		if isNotDir(err) {
-			return nil, &Error{Code: "not_dir", Msg: "path is not a directory"}
+		if pathjail.IsNotDir(err) {
+			return nil, pathjail.NotDir("path is not a directory")
 		}
 		return nil, err
 	}
@@ -293,8 +261,4 @@ func containsNUL(b []byte) bool {
 		}
 	}
 	return false
-}
-
-func isNotDir(err error) bool {
-	return errors.Is(err, syscall.ENOTDIR)
 }

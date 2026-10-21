@@ -15,27 +15,25 @@
 package fsbrowser
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
+
+	"github.com/alekzonder/tariboy/internal/pathjail"
 )
 
 // Error is a typed failure carrying a stable code the command layer maps to the
 // api JSON error envelope and an HTTP status: bad_path (403), not_found (404),
 // not_dir (400).
-type Error struct {
-	Code string
-	Msg  string
-}
+type Error = pathjail.Error
 
-func (e *Error) Error() string { return e.Code + ": " + e.Msg }
+func badPath(msg string) *Error  { return pathjail.BadPath(msg) }
+func notFound(msg string) *Error { return pathjail.NotFound(msg) }
+func notDir(msg string) *Error   { return pathjail.NotDir(msg) }
 
-func badPath(msg string) *Error  { return &Error{Code: "bad_path", Msg: msg} }
-func notFound(msg string) *Error { return &Error{Code: "not_found", Msg: msg} }
-func notDir(msg string) *Error   { return &Error{Code: "not_dir", Msg: msg} }
+// within keeps the package-local name; the logic lives in pathjail.
+func within(root, target string) bool { return pathjail.Within(root, target) }
 
 // Entry is one directory in a listing. Only directories are ever listed, so Dir
 // is always true; it is emitted explicitly so the field is stable for the UI.
@@ -105,11 +103,11 @@ func resolve(root, path string) (string, error) {
 
 	// Symlink containment: follow symlinks on the deepest existing ancestor and
 	// re-check, so a symlink inside root pointing out is refused.
-	realRoot, err := resolveExisting(root)
+	realRoot, err := pathjail.ResolveExisting(root)
 	if err != nil {
 		return "", badPath("cannot resolve filesystem root")
 	}
-	realTarget, err := resolveExisting(target)
+	realTarget, err := pathjail.ResolveExisting(target)
 	if err != nil {
 		return "", badPath("cannot resolve path")
 	}
@@ -117,49 +115,6 @@ func resolve(root, path string) (string, error) {
 		return "", badPath("path escapes the filesystem root (symlink)")
 	}
 	return target, nil
-}
-
-// within reports whether target is root itself or a descendant of it. The
-// descendant test compares against root plus a single trailing separator; when
-// root is the filesystem root ("/") it already ends in a separator, so the
-// prefix stays "/" instead of becoming "//" (which would reject every child).
-func within(root, target string) bool {
-	if target == root {
-		return true
-	}
-	sep := string(os.PathSeparator)
-	prefix := root
-	if !strings.HasSuffix(prefix, sep) {
-		prefix += sep
-	}
-	return strings.HasPrefix(target, prefix)
-}
-
-// resolveExisting evaluates symlinks on the deepest existing ancestor of p and
-// re-appends the trailing components that do not exist yet, so it also works for
-// a path that does not exist. Any symlink along the existing portion (including p
-// itself) is followed to its real location.
-func resolveExisting(p string) (string, error) {
-	p = filepath.Clean(p)
-	rest := ""
-	for {
-		resolved, err := filepath.EvalSymlinks(p)
-		if err == nil {
-			if rest == "" {
-				return resolved, nil
-			}
-			return filepath.Join(resolved, rest), nil
-		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		parent := filepath.Dir(p)
-		if parent == p { // reached filesystem root without an existing ancestor
-			return "", err
-		}
-		rest = filepath.Join(filepath.Base(p), rest)
-		p = parent
-	}
 }
 
 // List returns the child directories of the directory addressed by path,
@@ -176,7 +131,7 @@ func List(root, path string) (Listing, error) {
 		if os.IsNotExist(err) {
 			return Listing{}, notFound("directory not found")
 		}
-		if isNotDir(err) {
+		if pathjail.IsNotDir(err) {
 			return Listing{}, notDir("path is not a directory")
 		}
 		return Listing{}, err
@@ -209,8 +164,4 @@ func List(root, path string) (Listing, error) {
 		parent = filepath.Dir(target)
 	}
 	return Listing{Path: target, Parent: parent, Entries: entries}, nil
-}
-
-func isNotDir(err error) bool {
-	return errors.Is(err, syscall.ENOTDIR)
 }
