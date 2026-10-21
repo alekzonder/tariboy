@@ -24,9 +24,6 @@ const MaxReadBytes = 2 << 20 // 2 MiB
 // error envelope (bad_path / not_found / exists / is_dir / ...).
 type Error = pathjail.Error
 
-func badPath(msg string) *Error  { return pathjail.BadPath(msg) }
-func notFound(msg string) *Error { return pathjail.NotFound(msg) }
-
 // Entry is one item in a directory listing.
 type Entry struct {
 	Name  string `json:"name"`
@@ -58,22 +55,22 @@ func Resolve(root, rel string) (string, error) {
 	// leading separator before the check; what remains must not climb above root.
 	clean := strings.TrimPrefix(filepath.Clean(rel), string(os.PathSeparator))
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
-		return "", badPath("path escapes the agent working directory")
+		return "", pathjail.BadPath("path escapes the agent working directory")
 	}
 	target := filepath.Join(root, filepath.Clean("/"+rel))
-	if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-		return "", badPath("path escapes the agent working directory")
+	if !pathjail.Within(root, target) {
+		return "", pathjail.BadPath("path escapes the agent working directory")
 	}
 	realRoot, err := pathjail.ResolveExisting(root)
 	if err != nil {
-		return "", badPath("cannot resolve agent working directory")
+		return "", pathjail.BadPath("cannot resolve agent working directory")
 	}
 	realTarget, err := pathjail.ResolveExisting(target)
 	if err != nil {
-		return "", badPath("cannot resolve path")
+		return "", pathjail.BadPath("cannot resolve path")
 	}
-	if realTarget != realRoot && !strings.HasPrefix(realTarget, realRoot+string(os.PathSeparator)) {
-		return "", badPath("path escapes the agent working directory (symlink)")
+	if !pathjail.Within(realRoot, realTarget) {
+		return "", pathjail.BadPath("path escapes the agent working directory (symlink)")
 	}
 	return target, nil
 }
@@ -88,7 +85,7 @@ func List(root, rel string) ([]Entry, error) {
 	des, err := os.ReadDir(target)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, notFound("directory not found")
+			return nil, pathjail.NotFound("directory not found")
 		}
 		if pathjail.IsNotDir(err) {
 			return nil, pathjail.NotDir("path is not a directory")
@@ -128,7 +125,7 @@ func Read(root, rel string) (Content, error) {
 	info, err := os.Stat(target)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Content{}, notFound("file not found")
+			return Content{}, pathjail.NotFound("file not found")
 		}
 		return Content{}, err
 	}
@@ -216,7 +213,7 @@ func Rename(root, from, to string) error {
 	}
 	if _, err := os.Lstat(src); err != nil {
 		if os.IsNotExist(err) {
-			return notFound("source not found")
+			return pathjail.NotFound("source not found")
 		}
 		return err
 	}
@@ -238,7 +235,7 @@ func Delete(root, rel string) error {
 	}
 	if _, err := os.Lstat(target); err != nil {
 		if os.IsNotExist(err) {
-			return notFound("path not found")
+			return pathjail.NotFound("path not found")
 		}
 		return err
 	}
@@ -249,7 +246,7 @@ func Delete(root, rel string) error {
 // write/create/rename/delete can never clobber the working directory as a whole.
 func notRoot(root, target string) error {
 	if filepath.Clean(target) == filepath.Clean(root) {
-		return badPath("operation not allowed on the root directory")
+		return pathjail.BadPath("operation not allowed on the root directory")
 	}
 	return nil
 }

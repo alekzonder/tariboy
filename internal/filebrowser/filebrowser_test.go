@@ -355,3 +355,18 @@ func mustWrite(t *testing.T, root, rel, content string) {
 		t.Fatal(err)
 	}
 }
+
+// With the filesystem root as jail root, children must still resolve: a naive
+// root+"/" prefix check would become "//" and reject everything.
+func TestResolveFilesystemRoot(t *testing.T) {
+	got, err := Resolve("/", "etc")
+	if err != nil {
+		t.Fatalf("Resolve(/, etc): %v", err)
+	}
+	if got != "/etc" {
+		t.Fatalf("got %q, want /etc", got)
+	}
+	if _, err := Resolve("/", "../etc"); err == nil {
+		t.Fatal("lexical traversal must still be rejected")
+	}
+}
