@@ -7,7 +7,7 @@ func cmd(path, method, route string) Command {
 		Path:    path,
 		Summary: "s",
 		HTTP:    &HTTPRoute{Method: method, Path: route},
-		Handler: func(c *Ctx, p Params) (any, error) { return nil, nil },
+		Handler: func(c *Ctx, p Request) (any, error) { return nil, nil },
 	}
 }
 
@@ -148,7 +148,7 @@ func TestTreeSkipsCLIHidden(t *testing.T) {
 	mustCmd(t, r, "daemon.up", "Start daemon")
 	if err := r.Register(Command{
 		Path: "daemon.status", Summary: "Daemon status", CLIHidden: true,
-		Handler: func(c *Ctx, p Params) (any, error) { return nil, nil },
+		Handler: func(c *Ctx, p Request) (any, error) { return nil, nil },
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func mustCmd(t *testing.T, r *Registry, path, summary string) {
 	t.Helper()
 	if err := r.Register(Command{
 		Path: path, Summary: summary,
-		Handler: func(c *Ctx, p Params) (any, error) { return nil, nil },
+		Handler: func(c *Ctx, p Request) (any, error) { return nil, nil },
 	}); err != nil {
 		t.Fatalf("Register(%s): %v", path, err)
 	}

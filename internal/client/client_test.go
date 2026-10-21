@@ -19,14 +19,14 @@ func startDaemon(t *testing.T) string {
 	reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "s",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			return map[string]any{"version": "t", "q": p["q"]}, nil
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			return map[string]any{"version": "t", "q": p.Params["q"]}, nil
 		},
 	})
 	reg.Register(registry.Command{
 		Path: "fail", Summary: "s",
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/fail"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			return nil, api.UserError{Code: "nope", Msg: "no way"}
 		},
 	})

@@ -61,7 +61,7 @@ func workflowInvalid(msg string, errs []workflowfile.ValidationError) error {
 // directory. When a Store selector is given, release must be called once the
 // build no longer reads the Store tree.
 func workflowSourcePath(c *registry.Ctx, p registry.Params) (path string, release func(), err error) {
-	selector, path := strings.TrimSpace(str(p, "source")), strings.TrimSpace(str(p, "path"))
+	selector, path := strings.TrimSpace(p.String("source")), strings.TrimSpace(p.String("path"))
 	switch {
 	case selector != "" && path != "":
 		return "", nil, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
@@ -96,8 +96,8 @@ func workflowValidate() registry.Command {
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Workflowfile.yaml or its directory"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/workflow-images/validate"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			path, release, err := workflowSourcePath(c, p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			path, release, err := workflowSourcePath(c, p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -140,8 +140,8 @@ func workflowBuild() registry.Command {
 			{Name: "path", Flag: "path", Type: registry.String, Help: "Workflowfile.yaml or its directory"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/workflow-images/build"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			path, release, err := workflowSourcePath(c, p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			path, release, err := workflowSourcePath(c, p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -172,7 +172,7 @@ func workflowLs() registry.Command {
 		Path:    "workflow.ls",
 		Summary: "List built workflow images",
 		HTTP:    &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/workflow-images"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			listed, err := workflowImageStore(c).List()
 			if err != nil {
 				return nil, workflowImageError(err)
@@ -195,12 +195,12 @@ func workflowInspect() registry.Command {
 			{Name: "tag", Type: registry.String, Default: "latest", Help: "tag or full digest"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/workflow-images/{name}/{tag}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			tag := str(p, "tag")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			tag := p.String("tag")
 			if tag == "" {
 				tag = "latest"
 			}
-			m, err := workflowImageStore(c).Inspect(str(p, "name"), tag)
+			m, err := workflowImageStore(c).Inspect(p.String("name"), tag)
 			if err != nil {
 				return nil, workflowImageError(err)
 			}
@@ -218,12 +218,12 @@ func workflowRm() registry.Command {
 			{Name: "tag", Type: registry.String, Required: true, Help: "tag to remove"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/workflow-images/{name}/{tag}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			reg, err := workflowImageRegistry(c)
 			if err != nil {
 				return nil, err
 			}
-			name, tag := str(p, "name"), str(p, "tag")
+			name, tag := p.String("name"), p.String("tag")
 			// Registry.Remove deletes the content and its row with the last tag.
 			_, contentRemoved, err := reg.Remove(name, tag)
 			if err != nil {

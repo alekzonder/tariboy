@@ -19,12 +19,12 @@ func scriptLs() registry.Command {
 	return registry.Command{Path: "script.ls", Summary: "List an agent's local scripts",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/scripts"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			sc, err := scriptControlForAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			sc, err := scriptControlForAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			definitions, err := sc.ListScripts(str(p, "name"))
+			definitions, err := sc.ListScripts(p.String("name"))
 			if err != nil {
 				return nil, scriptUserError(err)
 			}
@@ -40,13 +40,13 @@ func scriptLs() registry.Command {
 func scriptRunOnce() registry.Command {
 	return registry.Command{Path: "script.run", Summary: "Run a local command once",
 		Args: scriptCreateArgs(false), HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/scripts/run"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			sc, err := scriptControlForAgent(c, name)
 			if err != nil {
 				return nil, err
 			}
-			definition, run, err := sc.RunOnce(name, script.CreateOnce{Name: str(p, "script_name"), Description: str(p, "description"), Command: str(p, "command")})
+			definition, run, err := sc.RunOnce(name, script.CreateOnce{Name: p.String("script_name"), Description: p.String("description"), Command: p.String("command")})
 			if err != nil {
 				return nil, scriptUserError(err)
 			}
@@ -59,18 +59,18 @@ func scriptSchedule() registry.Command {
 	args := scriptCreateArgs(true)
 	return registry.Command{Path: "script.schedule", Summary: "Schedule a fixed-interval local command",
 		Args: args, HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/scripts/schedule"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			sc, err := scriptControlForAgent(c, name)
 			if err != nil {
 				return nil, err
 			}
 			var quietExit *int
-			if _, ok := p["quiet_exit"]; ok {
-				value := intOf(p, "quiet_exit", 0)
+			if p.Has("quiet_exit") {
+				value := p.IntOr("quiet_exit", 0)
 				quietExit = &value
 			}
-			definition, run, err := sc.ScheduleScript(name, script.CreateSchedule{Name: str(p, "script_name"), Description: str(p, "description"), Command: str(p, "command"), IntervalSeconds: intOf(p, "interval_seconds", 0), QuietExit: quietExit})
+			definition, run, err := sc.ScheduleScript(name, script.CreateSchedule{Name: p.String("script_name"), Description: p.String("description"), Command: p.String("command"), IntervalSeconds: p.IntOr("interval_seconds", 0), QuietExit: quietExit})
 			if err != nil {
 				return nil, scriptUserError(err)
 			}
@@ -155,12 +155,12 @@ func scriptRunAction(path, summary, method, route string, action func(registry.S
 	return registry.Command{Path: path, Summary: summary,
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}, {Name: "id", Type: registry.String, Required: true, Help: "script or run id"}},
 		HTTP: &registry.HTTPRoute{Method: method, Path: route},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			sc, err := scriptControlForAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			sc, err := scriptControlForAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			result, err := action(sc, str(p, "name"), str(p, "id"))
+			result, err := action(sc, p.String("name"), p.String("id"))
 			if err != nil {
 				return nil, scriptUserError(err)
 			}

@@ -80,20 +80,20 @@ func taskActivity() registry.Command {
 			{Name: "agent", Flag: "agent", Short: "a", Type: registry.String, Help: "only this agent's work"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/task-activity"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			if c.Tasks == nil {
 				return nil, api.UserError{Status: http.StatusServiceUnavailable,
 					Code: "tasks_unavailable", Msg: "native Tasks service is unavailable"}
 			}
-			since, err := activityBound(str(p, "since"))
+			since, err := activityBound(p.String("since"))
 			if err != nil {
 				return nil, err
 			}
-			until, err := activityBound(str(p, "until"))
+			until, err := activityBound(p.String("until"))
 			if err != nil {
 				return nil, err
 			}
-			agentName := str(p, "agent")
+			agentName := p.String("agent")
 
 			usage, err := aiproxy.NewStore(c.Store, nil).TaskUsage(aiproxy.UsageFilter{Agent: agentName, Since: since, Until: until})
 			if err != nil {
@@ -105,7 +105,7 @@ func taskActivity() registry.Command {
 					keys = append(keys, u.TaskKey)
 				}
 			}
-			activity, err := c.Tasks.TaskActivity(registry.RequestContext(p), tasks.CustomerActor(c.Tasks.CustomerLogin()),
+			activity, err := c.Tasks.TaskActivity(p.Ctx, tasks.CustomerActor(c.Tasks.CustomerLogin()),
 				tasks.ActivityFilter{Since: since, Until: until, Agent: agentName, Keys: keys})
 			if err != nil {
 				return nil, err

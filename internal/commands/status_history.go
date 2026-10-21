@@ -21,8 +21,8 @@ func agentStatusHistory() registry.Command {
 			{Name: "limit", Flag: "limit", Type: registry.String, Help: "max events (default all)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/status/history"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			if _, err := getAgent(c, name); err != nil {
 				return nil, err
 			}
@@ -40,7 +40,7 @@ func agentStatusHistory() registry.Command {
 				msg, _ := ev.Data["message"].(string)
 				out = append(out, map[string]any{"ts": ev.TS, "message": msg, "iteration_id": ev.IterationID})
 			}
-			if s := str(p, "limit"); s != "" {
+			if s := p.String("limit"); s != "" {
 				if n, err := strconv.Atoi(s); err == nil && n > 0 && len(out) > n {
 					out = out[:n]
 				}

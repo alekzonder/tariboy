@@ -19,7 +19,7 @@ func TestNonAPIPathsReturnJSON404(t *testing.T) {
 	_ = reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return map[string]any{"ok": 1}, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return map[string]any{"ok": 1}, nil },
 	})
 	srv := NewServer(reg, &registry.Ctx{Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	h := srv.Handler()

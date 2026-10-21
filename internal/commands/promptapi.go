@@ -20,8 +20,8 @@ func contextGet() registry.Command {
 		Summary: "Read the agent's CONTEXT.md",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/context"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -44,13 +44,13 @@ func contextSet() registry.Command {
 			{Name: "text", Type: registry.String, Help: "new CONTEXT.md contents"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/context"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
 			l := agentdir.New(agentsDir(c), a.Name)
-			if err := writeFileAtomic(l.ContextPath(), []byte(str(p, "text"))); err != nil {
+			if err := writeFileAtomic(l.ContextPath(), []byte(p.String("text"))); err != nil {
 				return nil, err
 			}
 			return map[string]any{"name": a.Name, "saved": true}, nil
@@ -92,8 +92,8 @@ func promptGet() registry.Command {
 		Summary: "Preview the agent's assembled next-iteration prompt",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/prompt"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -118,7 +118,7 @@ func promptGet() registry.Command {
 				if task, ok, err := taskgoal.NewStore(c.Store).Current(a.Name, time.Now().UTC()); err != nil {
 					return nil, err
 				} else if ok {
-					goal = loop.RuntimeGoal(registry.RequestContext(p), workflowGoals(c), task, a.Name, c.Log)
+					goal = loop.RuntimeGoal(p.Ctx, workflowGoals(c), task, a.Name, c.Log)
 				}
 			}
 			if a.ImageRef == image.BareRef.String() {

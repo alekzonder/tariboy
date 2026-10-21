@@ -55,19 +55,6 @@ type HTTPRoute struct {
 	MaxBodyBytes int64 `json:"-"`
 }
 
-type Params map[string]any
-
-const RequestContextParam = "__tariboy_request_context"
-
-// RequestContext returns the transport context injected by the HTTP router.
-// Local/CLI handlers receive Background when no transport context exists.
-func RequestContext(p Params) context.Context {
-	if ctx, ok := p[RequestContextParam].(context.Context); ok && ctx != nil {
-		return ctx
-	}
-	return context.Background()
-}
-
 type Ctx struct {
 	Store   *store.Store
 	Log     *slog.Logger
@@ -304,7 +291,7 @@ type GroupControl interface {
 	ChangeLead(name, lead string) error
 }
 
-type HandlerFunc func(c *Ctx, p Params) (any, error)
+type HandlerFunc func(c *Ctx, p Request) (any, error)
 
 // FollowFunc is a CLI-local streaming/polling composite. cli.Run invokes it —
 // with the daemon socket path — when a command's follow flag is set, instead of

@@ -20,13 +20,14 @@ func loopIntSetting(path, field string) registry.Command {
 			{Name: "value", Type: registry.Int, Help: "new value (omit to read)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/loop/" + field},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
 			key := fieldKey(field)
-			if v, ok := asInt(p["value"]); ok {
+			if p.Has("value") {
+				v := p.Int("value")
 				min := 0
 				if field == "ai-stall-timeout" {
 					min = 1
@@ -56,13 +57,13 @@ func loopStrSetting(path, field string, allowed []string) registry.Command {
 			{Name: "value", Type: registry.String, Help: "new value (omit to read)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/loop/" + field},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
 			key := fieldKey(field)
-			if v := str(p, "value"); v != "" {
+			if v := p.String("value"); v != "" {
 				if !contains(allowed, v) {
 					return nil, api.UserError{Code: "bad_value", Msg: field + " must be one of restart|stop"}
 				}
@@ -89,15 +90,15 @@ func loopSchedule() registry.Command {
 			{Name: "clear", Flag: "clear", Type: registry.Bool, Help: "remove the schedule"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/loop/schedule"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
 			rule, set := a.ScheduleRRule, false
-			if toBool(p["clear"]) {
+			if p.Bool("clear") {
 				rule, set = "", true
-			} else if v := str(p, "value"); v != "" {
+			} else if v := p.String("value"); v != "" {
 				rule, err = schedule.NormalizeRRule(v, time.Now(), time.Local)
 				if err != nil {
 					return nil, api.UserError{Code: "bad_schedule", Msg: err.Error()}
@@ -134,8 +135,8 @@ func userPromptGet() registry.Command {
 		Summary: "Read the agent's standing user-prompt",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/user-prompt"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -153,12 +154,12 @@ func userPromptSet() registry.Command {
 			{Name: "text", Type: registry.String, Required: true, Help: "prompt text"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/user-prompt"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			a.UserPrompt = str(p, "text")
+			a.UserPrompt = p.String("text")
 			if err := agentStore(c).Update(a); err != nil {
 				return nil, err
 			}
@@ -176,12 +177,12 @@ func agentExec() registry.Command {
 			{Name: "prompt", Type: registry.String, Help: "one-shot prompt (optional)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/exec"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			note, err := c.Control.Exec(str(p, "name"), str(p, "prompt"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			note, err := c.Control.Exec(p.String("name"), p.String("prompt"))
 			if err != nil {
 				return nil, api.UserError{Code: "exec_failed", Msg: err.Error()}
 			}
-			return map[string]any{"name": str(p, "name"), "status": note}, nil
+			return map[string]any{"name": p.String("name"), "status": note}, nil
 		},
 	}
 }
@@ -255,17 +256,6 @@ func getStrField(a agent.Agent, field string) string {
 		return a.OnError
 	}
 	return ""
-}
-
-func asInt(v any) (int, bool) {
-	switch t := v.(type) {
-	case int:
-		return t, true
-	case float64: // JSON numbers decode to float64 on the daemon side
-		return int(t), true
-	default:
-		return 0, false
-	}
 }
 
 func contains(list []string, s string) bool {

@@ -2,10 +2,8 @@ package commands
 
 import (
 	"fmt"
-	"math"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -81,14 +79,14 @@ func addErrorReason(v map[string]any, a agent.Agent, state string) {
 }
 
 func agentImageSet() registry.Command {
-	return registry.Command{Path: "agent.image.set", Summary: "Select an image for the agent's next iteration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "image", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+	return registry.Command{Path: "agent.image.set", Summary: "Select an image for the agent's next iteration", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "image", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
 		err := image.WithPublicationGate(func() error {
-			name := str(p, "name")
+			name := p.String("name")
 			if _, err := getAgent(c, name); err != nil {
 				return err
 			}
-			ref, err := image.ParseRef(str(p, "image"))
+			ref, err := image.ParseRef(p.String("image"))
 			if err != nil {
 				return api.UserError{Code: "bad_ref", Msg: err.Error(), Status: http.StatusBadRequest}
 			}
@@ -156,11 +154,11 @@ func agentImageStatusValue(c *registry.Ctx, name string) (map[string]any, error)
 }
 
 func agentImageStatus() registry.Command {
-	return registry.Command{Path: "agent.image.status", Summary: "Show current, pending, and next agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+	return registry.Command{Path: "agent.image.status", Summary: "Show current, pending, and next agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
 		err := image.WithPublicationGate(func() error {
 			var err error
-			result, err = agentImageStatusValue(c, str(p, "name"))
+			result, err = agentImageStatusValue(c, p.String("name"))
 			return err
 		})
 		return result, err
@@ -168,10 +166,10 @@ func agentImageStatus() registry.Command {
 }
 
 func agentImageCancel() registry.Command {
-	return registry.Command{Path: "agent.image.cancel", Summary: "Cancel a pending agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+	return registry.Command{Path: "agent.image.cancel", Summary: "Cancel a pending agent image", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/agents/{name}/image"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
 		err := image.WithPublicationGate(func() error {
-			name := str(p, "name")
+			name := p.String("name")
 			if err := agentStore(c).ClearPendingImage(name); err != nil {
 				return err
 			}
@@ -242,51 +240,32 @@ func parseAgentEnv(value any) (map[string]string, error) {
 }
 
 func parseAgentPlugins(value any) ([]string, error) {
-	if text, ok := value.(string); ok {
-		return parseList(text), nil
+	switch list := value.(type) {
+	case string:
+		return parseList(list), nil
+	case []string:
+		return list, nil
 	}
-	plugins, ok := stringSlice(value)
-	if !ok {
+	items, ok := value.([]any)
+	if value != nil && !ok {
 		return nil, fmt.Errorf("plugins must be a comma list or string array")
+	}
+	plugins := make([]string, 0, len(items))
+	for _, item := range items {
+		name, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("plugins must be a comma list or string array")
+		}
+		plugins = append(plugins, name)
 	}
 	return plugins, nil
 }
 
-func parseAgentIntParam(p registry.Params, key string) (int, bool, error) {
-	raw, present := p[key]
-	if !present {
-		return 0, false, nil
-	}
-	switch value := raw.(type) {
-	case int:
-		return value, true, nil
-	case float64:
-		if math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value {
-			return 0, true, fmt.Errorf("%s must be a whole number", key)
-		}
-		parsed, err := strconv.ParseInt(strconv.FormatFloat(value, 'f', -1, 64), 10, 0)
-		if err != nil {
-			return 0, true, fmt.Errorf("%s is outside the supported integer range", key)
-		}
-		return int(parsed), true, nil
-	case string:
-		parsed, err := strconv.Atoi(value)
-		if err != nil {
-			return 0, true, fmt.Errorf("%s must be a whole number", key)
-		}
-		return parsed, true, nil
-	default:
-		return 0, true, fmt.Errorf("%s must be a whole number", key)
-	}
-}
-
-func agentIntParam(p registry.Params, key, code string, minimum int) (int, error) {
-	value, present, err := parseAgentIntParam(p, key)
-	if err != nil || present && value < minimum {
-		if err == nil {
-			err = fmt.Errorf("%s must be at least %d", key, minimum)
-		}
-		return 0, api.UserError{Code: code, Msg: err.Error()}
+// intAtLeast reads a bound whole-number argument and enforces its minimum.
+func intAtLeast(p registry.Params, key, code string, minimum int) (int, error) {
+	value := p.Int(key)
+	if p.Has(key) && value < minimum {
+		return 0, api.UserError{Code: code, Msg: fmt.Sprintf("%s must be at least %d", key, minimum)}
 	}
 	return value, nil
 }
@@ -344,122 +323,114 @@ func agentRun() registry.Command {
 			{Name: "color", Type: registry.String, Help: "agent accent color as #rrggbb"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			interactive := true
-			if value, present := p["interactive"]; present {
-				var ok bool
-				interactive, ok = value.(bool)
-				if !ok {
-					return nil, api.UserError{Code: "bad_interactive", Msg: "interactive must be a boolean"}
-				}
+			if value, present := p.OptBool("interactive"); present {
+				interactive = value
 			}
 			goalEnabled := true
-			if value, present := p["goal_enabled"]; present {
-				var ok bool
-				goalEnabled, ok = value.(bool)
-				if !ok {
-					return nil, api.UserError{Code: "bad_goal_enabled", Msg: "goal_enabled must be a boolean"}
-				}
+			if value, present := p.OptBool("goal_enabled"); present {
+				goalEnabled = value
 			}
 			goalWaitCustomerTimeoutS := 300
-			if _, present := p["goal_wait_customer_timeout_s"]; present {
+			if p.Has("goal_wait_customer_timeout_s") {
 				var err error
-				goalWaitCustomerTimeoutS, err = agentIntParam(p, "goal_wait_customer_timeout_s", "bad_goal_wait_customer_timeout", 1)
+				goalWaitCustomerTimeoutS, err = intAtLeast(p.Params, "goal_wait_customer_timeout_s", "bad_goal_wait_customer_timeout", 1)
 				if err != nil {
 					return nil, err
 				}
 			}
 			goalDeliveryCooldownS := 60
-			if _, present := p["goal_delivery_cooldown_s"]; present {
+			if p.Has("goal_delivery_cooldown_s") {
 				var err error
-				goalDeliveryCooldownS, err = agentIntParam(p, "goal_delivery_cooldown_s", "bad_goal_delivery_cooldown", 1)
+				goalDeliveryCooldownS, err = intAtLeast(p.Params, "goal_delivery_cooldown_s", "bad_goal_delivery_cooldown", 1)
 				if err != nil {
 					return nil, err
 				}
 			}
-			if _, oldTimeout := p["timeout"]; oldTimeout {
-				if _, exactTimeout := p["timeout_s"]; exactTimeout {
+			if p.Has("timeout") {
+				if p.Has("timeout_s") {
 					return nil, api.UserError{Code: "ambiguous_timeout", Msg: "timeout and timeout_s cannot be supplied together"}
 				}
 			}
-			env, envErr := parseAgentEnv(p["env"])
+			env, envErr := parseAgentEnv(p.Params["env"])
 			if envErr != nil {
 				return nil, api.UserError{Code: "bad_env", Msg: envErr.Error()}
 			}
-			pluginList, pluginsErr := parseAgentPlugins(p["plugins"])
+			pluginList, pluginsErr := parseAgentPlugins(p.Params["plugins"])
 			if pluginsErr != nil {
 				return nil, api.UserError{Code: "bad_plugins", Msg: pluginsErr.Error()}
 			}
-			timeoutS, timeoutErr := parseAgentTimeout(str(p, "timeout"))
+			timeoutS, timeoutErr := parseAgentTimeout(p.String("timeout"))
 			if timeoutErr != nil {
 				return nil, api.UserError{Code: "bad_timeout", Msg: timeoutErr.Error()}
 			}
-			intervalS, err := agentIntParam(p, "interval_s", "bad_interval", 0)
+			intervalS, err := intAtLeast(p.Params, "interval_s", "bad_interval", 0)
 			if err != nil {
 				return nil, err
 			}
-			if _, present := p["timeout_s"]; present {
-				timeoutS, err = agentIntParam(p, "timeout_s", "bad_timeout", 0)
+			if p.Has("timeout_s") {
+				timeoutS, err = intAtLeast(p.Params, "timeout_s", "bad_timeout", 0)
 				if err != nil {
 					return nil, err
 				}
 			}
-			hardTimeoutS, err := agentIntParam(p, "hard_timeout_s", "bad_hard_timeout", 0)
+			hardTimeoutS, err := intAtLeast(p.Params, "hard_timeout_s", "bad_hard_timeout", 0)
 			if err != nil {
 				return nil, err
 			}
-			maxIdleIterations, err := agentIntParam(p, "max_idle_iterations", "bad_max_idle", 0)
+			maxIdleIterations, err := intAtLeast(p.Params, "max_idle_iterations", "bad_max_idle", 0)
 			if err != nil {
 				return nil, err
 			}
 			aiStallTimeoutS := 1800
-			if _, present := p["ai_stall_timeout_s"]; present {
-				aiStallTimeoutS, err = agentIntParam(p, "ai_stall_timeout_s", "bad_ai_stall_timeout", 1)
+			if p.Has("ai_stall_timeout_s") {
+				aiStallTimeoutS, err = intAtLeast(p.Params, "ai_stall_timeout_s", "bad_ai_stall_timeout", 1)
 				if err != nil {
 					return nil, err
 				}
 			}
-			messagesBatch, err := agentIntParam(p, "messages_batch", "bad_messages_batch", 1)
+			messagesBatch, err := intAtLeast(p.Params, "messages_batch", "bad_messages_batch", 1)
 			if err != nil {
 				return nil, err
 			}
-			messagesMaxQueue, err := agentIntParam(p, "messages_max_queue", "bad_messages_max_queue", 1)
+			messagesMaxQueue, err := intAtLeast(p.Params, "messages_max_queue", "bad_messages_max_queue", 1)
 			if err != nil {
 				return nil, err
 			}
-			if _, present := p["messages_batch"]; !present {
+			if !p.Has("messages_batch") {
 				messagesBatch = 10
 			}
-			if _, present := p["messages_max_queue"]; !present {
+			if !p.Has("messages_max_queue") {
 				messagesMaxQueue = 100
 			}
-			onTimeout := str(p, "on_timeout")
-			if _, present := p["on_timeout"]; present && onTimeout != "restart" && onTimeout != "stop" {
+			onTimeout := p.String("on_timeout")
+			if p.Has("on_timeout") && onTimeout != "restart" && onTimeout != "stop" {
 				return nil, api.UserError{Code: "bad_on_timeout", Msg: "on_timeout must be restart or stop"}
 			}
-			onError := str(p, "on_error")
-			if _, present := p["on_error"]; present && onError != "restart" && onError != "stop" {
+			onError := p.String("on_error")
+			if p.Has("on_error") && onError != "restart" && onError != "stop" {
 				return nil, api.UserError{Code: "bad_on_error", Msg: "on_error must be restart or stop"}
 			}
-			color := str(p, "color")
+			color := p.String("color")
 			if color != "" && !agentColorPattern.MatchString(color) {
 				return nil, api.UserError{Code: "bad_color", Msg: "color must be empty or a six-digit #rrggbb value"}
 			}
 			spec := registry.RunSpec{
-				ImageRef: str(p, "image"), Name: str(p, "name"), Cwd: str(p, "cwd"),
-				Harness: str(p, "harness"), Model: str(p, "model"), Effort: str(p, "effort"),
+				ImageRef: p.String("image"), Name: p.String("name"), Cwd: p.String("cwd"),
+				Harness: p.String("harness"), Model: p.String("model"), Effort: p.String("effort"),
 				Interactive: interactive, Env: env, Plugins: pluginList,
 				IntervalS: intervalS, TimeoutS: timeoutS, HardTimeoutS: hardTimeoutS,
 				OnTimeout: onTimeout, OnError: onError,
 				MaxIdleIterations:        maxIdleIterations,
 				AIStallTimeoutS:          aiStallTimeoutS,
-				UserPrompt:               str(p, "user_prompt"),
+				UserPrompt:               p.String("user_prompt"),
 				MessagesBatch:            messagesBatch,
 				MessagesMaxQueue:         messagesMaxQueue,
 				GoalEnabled:              &goalEnabled,
 				GoalWaitCustomerTimeoutS: goalWaitCustomerTimeoutS,
 				GoalDeliveryCooldownS:    goalDeliveryCooldownS,
-				Group:                    str(p, "group"), Alias: str(p, "alias"), Notes: str(p, "notes"),
+				Group:                    p.String("group"), Alias: p.String("alias"), Notes: p.String("notes"),
 				Color: strings.ToLower(color),
 			}
 			if spec.ImageRef == "" {
@@ -492,7 +463,7 @@ func agentPs() registry.Command {
 		Path:    "agent.ps",
 		Summary: "List agents",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			list, err := agentStore(c).List()
 			if err != nil {
 				return nil, err
@@ -546,16 +517,12 @@ func agentGoalEnabled() registry.Command {
 			{Name: "enabled", Flag: "enabled", Type: registry.Bool, Required: true, Help: "true or false"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-enabled"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			enabled, ok := p["enabled"].(bool)
-			if !ok {
-				return nil, api.UserError{Code: "bad_goal_enabled", Msg: "enabled must be a boolean"}
-			}
-			a.GoalEnabled = enabled
+			a.GoalEnabled = p.Bool("enabled")
 			if err := agentStore(c).Update(a); err != nil {
 				return nil, err
 			}
@@ -573,15 +540,12 @@ func agentGoalWaitCustomerTimeout() registry.Command {
 			{Name: "seconds", Flag: "seconds", Type: registry.Int, Required: true, Help: "positive whole seconds"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-wait-customer-timeout"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
-			if _, present := p["seconds"]; !present {
-				return nil, api.UserError{Code: "bad_goal_wait_customer_timeout", Msg: "seconds must be at least 1"}
-			}
-			seconds, err := agentIntParam(p, "seconds", "bad_goal_wait_customer_timeout", 1)
+			seconds, err := intAtLeast(p.Params, "seconds", "bad_goal_wait_customer_timeout", 1)
 			if err != nil {
 				return nil, err
 			}
@@ -596,12 +560,12 @@ func agentGoalWaitCustomerTimeout() registry.Command {
 }
 
 func agentGoalDeliveryCooldown() registry.Command {
-	return registry.Command{Path: "agent.goal-delivery-cooldown", Summary: "Set the Goal delivery cooldown", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "seconds", Type: registry.Int, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-delivery-cooldown"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		a, err := getAgent(c, str(p, "name"))
+	return registry.Command{Path: "agent.goal-delivery-cooldown", Summary: "Set the Goal delivery cooldown", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "seconds", Type: registry.Int, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/goal-delivery-cooldown"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+		a, err := getAgent(c, p.String("name"))
 		if err != nil {
 			return nil, err
 		}
-		seconds, err := agentIntParam(p, "seconds", "bad_goal_delivery_cooldown", 1)
+		seconds, err := intAtLeast(p.Params, "seconds", "bad_goal_delivery_cooldown", 1)
 		if err != nil {
 			return nil, err
 		}
@@ -620,8 +584,8 @@ func agentStatus() registry.Command {
 		Summary: "Show one agent's runtime status",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -701,8 +665,8 @@ func agentInspect() registry.Command {
 		Summary: "Show one agent's full config",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			a, err := getAgent(c, str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			a, err := getAgent(c, p.String("name"))
 			if err != nil {
 				return nil, err
 			}
@@ -722,8 +686,8 @@ func agentInspect() registry.Command {
 }
 
 func agentBudgetGet() registry.Command {
-	return registry.Command{Path: "agent.budget.get", Summary: "Show an agent's calendar USD budget", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		name := str(p, "name")
+	return registry.Command{Path: "agent.budget.get", Summary: "Show an agent's calendar USD budget", Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+		name := p.String("name")
 		if _, err := getAgent(c, name); err != nil {
 			return nil, err
 		}
@@ -736,12 +700,12 @@ func agentBudgetSet() registry.Command {
 		{Name: "name", Type: registry.String, Required: true},
 		{Name: "hour_usd", Type: registry.String, Required: true}, {Name: "day_usd", Type: registry.String, Required: true},
 		{Name: "week_usd", Type: registry.String, Required: true}, {Name: "month_usd", Type: registry.String, Required: true},
-	}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-		name := str(p, "name")
+	}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/budget"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+		name := p.String("name")
 		if _, err := getAgent(c, name); err != nil {
 			return nil, err
 		}
-		values := []string{str(p, "hour_usd"), str(p, "day_usd"), str(p, "week_usd"), str(p, "month_usd")}
+		values := []string{p.String("hour_usd"), p.String("day_usd"), p.String("week_usd"), p.String("month_usd")}
 		parsed := [4]float64{}
 		for i, value := range values {
 			var err error
@@ -763,8 +727,8 @@ func agentLifecycle(path, summary, verb string) registry.Command {
 		Summary: summary,
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "agent name"}},
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/" + verb},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			var err error
 			switch verb {
 			case "stop":
@@ -794,13 +758,13 @@ func agentRm() registry.Command {
 			{Name: "purge", Flag: "purge", Type: registry.Bool, Help: "also delete durable data (iterations, context, audit) and leaked rows; default preserves data"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/agents/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			force := toBool(p["force"])
-			purge := toBool(p["purge"])
-			if err := c.Control.Remove(str(p, "name"), force, purge); err != nil {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			force := p.Bool("force")
+			purge := p.Bool("purge")
+			if err := c.Control.Remove(p.String("name"), force, purge); err != nil {
 				return nil, api.UserError{Code: "rm_failed", Msg: err.Error()}
 			}
-			return map[string]any{"removed": str(p, "name"), "purged": purge}, nil
+			return map[string]any{"removed": p.String("name"), "purged": purge}, nil
 		},
 	}
 }
@@ -814,9 +778,9 @@ func agentReprovision() registry.Command {
 			{Name: "image", Flag: "image", Type: registry.String, Help: "image ref to (re)unpack; empty keeps the current image"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/reprovision"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
-			if err := c.Control.Reprovision(name, str(p, "image")); err != nil {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
+			if err := c.Control.Reprovision(name, p.String("image")); err != nil {
 				return nil, api.UserError{Code: "reprovision_failed", Msg: err.Error()}
 			}
 			state, _ := c.Control.LiveState(name)
@@ -831,21 +795,4 @@ func getAgent(c *registry.Ctx, name string) (agent.Agent, error) {
 		return agent.Agent{}, api.UserError{Code: "not_found", Msg: "agent " + name + " not found"}
 	}
 	return a, nil
-}
-
-func str(p registry.Params, key string) string {
-	s, _ := p[key].(string)
-	return s
-}
-
-// toBool accepts the CLI's typed bool and the daemon's query-string "true".
-func toBool(v any) bool {
-	switch t := v.(type) {
-	case bool:
-		return t
-	case string:
-		return t == "true" || t == "1"
-	default:
-		return false
-	}
 }

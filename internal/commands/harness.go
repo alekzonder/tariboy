@@ -23,9 +23,9 @@ func harnessModels() registry.Command {
 			{Name: "refresh", Flag: "refresh", Type: registry.Bool, Help: "ask the harness CLI again instead of the 5-minute cache"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/harnesses/{type}/models"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			refresh, _ := boolParam(p, "refresh")
-			catalog, err := harness.ListModels(context.Background(), str(p, "type"), refresh)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			refresh, _ := p.OptBool("refresh")
+			catalog, err := harness.ListModels(context.Background(), p.String("type"), refresh)
 			if err != nil {
 				return nil, api.UserError{Code: "bad_harness", Msg: err.Error()}
 			}
@@ -41,7 +41,7 @@ func harnessCodexApprovalGet() registry.Command {
 		Path:    "harness.codex-approval.get",
 		Summary: "Read the codex approval mode of this daemon (yolo|approve-for-me)",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/harnesses/codex/approval-mode"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			v, ok, err := c.Store.ConfigGet(harness.CodexApprovalConfigKey)
 			if err != nil {
 				return nil, err
@@ -64,8 +64,8 @@ func harnessCodexApprovalSet() registry.Command {
 			{Name: "mode", Type: registry.String, Required: true, Help: "yolo|approve-for-me"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/harnesses/codex/approval-mode"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			mode := str(p, "mode")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			mode := p.String("mode")
 			if !slices.Contains(harness.CodexApprovalModes, mode) {
 				return nil, api.UserError{Code: "bad_value", Msg: "mode must be one of " + strings.Join(harness.CodexApprovalModes, "|")}
 			}

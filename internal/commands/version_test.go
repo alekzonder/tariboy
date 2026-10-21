@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/registry"
@@ -19,7 +20,7 @@ func TestVersionCommandIsLocal(t *testing.T) {
 		t.Fatalf("version command has an HTTP route: %#v", cmd.HTTP)
 	}
 
-	got, err := cmd.Handler(&registry.Ctx{Version: "1.2.3"}, nil)
+	got, err := registry.Call(&registry.Ctx{Version: "1.2.3"}, context.Background(), cmd, nil)
 	if err != nil {
 		t.Fatalf("version handler: %v", err)
 	}

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -38,7 +39,7 @@ func TestReindexPreservesGroupSnapshotAndLeavesLegacyRowsUngrouped(t *testing.T)
 		t.Fatal(err)
 	}
 
-	if _, err := daemonReindex().Handler(&registry.Ctx{Store: st, BaseDir: base}, nil); err != nil {
+	if _, err := registry.Call(&registry.Ctx{Store: st, BaseDir: base}, context.Background(), daemonReindex(), nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,7 +82,7 @@ func TestReindexRestoresRecordedUsage(t *testing.T) {
 		t.Fatalf("ingested = %+v", ingested)
 	}
 
-	if _, err := daemonReindex().Handler(&registry.Ctx{Store: st, BaseDir: base}, nil); err != nil {
+	if _, err := registry.Call(&registry.Ctx{Store: st, BaseDir: base}, context.Background(), daemonReindex(), nil); err != nil {
 		t.Fatal(err)
 	}
 	var provider string

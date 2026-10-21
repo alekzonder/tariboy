@@ -3,7 +3,6 @@ package commands
 import (
 	"encoding/json"
 	"errors"
-	"strconv"
 
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/plugins"
@@ -35,12 +34,12 @@ func pluginInstall() registry.Command {
 			{Name: "path", Type: registry.String, Required: true, Help: "path to the plugin dir (daemon-accessible)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/plugins"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
 			}
-			path := str(p, "path")
+			path := p.String("path")
 			if path == "" {
 				return nil, api.UserError{Code: "missing_path", Msg: "path is required"}
 			}
@@ -58,7 +57,7 @@ func pluginLs() registry.Command {
 		Path:    "plugin.ls",
 		Summary: "List installed plugins (name/version/types/state/health)",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugins"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
@@ -81,7 +80,7 @@ func pluginContributions() registry.Command {
 		Path:    "plugin.contributions",
 		Summary: "List enabled plugin CLI and settings contributions",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugin-contributions"},
-		Handler: func(c *registry.Ctx, _ registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, _ registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
@@ -105,12 +104,12 @@ func pluginInspect() registry.Command {
 		Summary: "Show one plugin's manifest, state and socket",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "plugin name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugins/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkPluginName(name); err != nil {
 				return nil, err
 			}
@@ -135,18 +134,18 @@ func pluginRm() registry.Command {
 			{Name: "force", Flag: "force", Short: "f", Type: registry.Bool, Help: "stop and remove even if running"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/plugins/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkPluginName(name); err != nil {
 				return nil, err
 			}
 			// Without --force, refuse to remove a running plugin (mirrors
 			// `agent rm`): the operator must stop it or opt in explicitly.
-			if !toBool(p["force"]) {
+			if !p.Bool("force") {
 				if info, err := pc.Inspect(name); err == nil {
 					if state, _ := info["state"].(string); state == "running" {
 						return nil, api.UserError{Code: "running", Msg: "plugin " + name + " is running; use --force"}
@@ -167,12 +166,12 @@ func pluginRestart() registry.Command {
 		Summary: "Restart a single plugin in place (stop + start) without touching others",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "plugin name"}},
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/plugins/{name}/restart"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkPluginName(name); err != nil {
 				return nil, err
 			}
@@ -196,16 +195,16 @@ func pluginLogs() registry.Command {
 			{Name: "tail", Flag: "tail", Short: "t", Type: registry.Int, Help: "last N lines (default 200)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/plugins/{name}/logs"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkPluginName(name); err != nil {
 				return nil, err
 			}
-			lines, err := pc.Logs(name, intOf(p, "tail", 200))
+			lines, err := pc.Logs(name, p.IntOr("tail", 200))
 			if err != nil {
 				return nil, err
 			}
@@ -220,12 +219,12 @@ func pluginRoutes() registry.Command {
 		Summary: "Show a plugin's external channel routes",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "plugin name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/plugins/{name}/routes"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkPluginName(name); err != nil {
 				return nil, err
 			}
@@ -248,20 +247,20 @@ func pluginAction() registry.Command {
 			{Name: "data", Flag: "data", Type: registry.String, Help: "plugin-defined JSON object (default {})"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/plugins/{name}/action"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			pc, err := requirePlugins(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkPluginName(name); err != nil {
 				return nil, err
 			}
-			action := str(p, "action")
+			action := p.String("action")
 			if action == "" {
 				return nil, api.UserError{Code: "missing_action", Msg: "action is required"}
 			}
-			raw := str(p, "data")
+			raw := p.String("data")
 			if raw == "" {
 				raw = "{}"
 			}
@@ -315,20 +314,4 @@ func pluginActionErr(name string, err error) error {
 		return api.UserError{Code: code, Msg: "plugin action failed: " + code}
 	}
 	return api.UserError{Code: "action_failed", Msg: err.Error()}
-}
-
-// intOf reads an int arg tolerant of the CLI's typed int, JSON float64 and the
-// HTTP query string forms.
-func intOf(p registry.Params, key string, def int) int {
-	switch v := p[key].(type) {
-	case int:
-		return v
-	case float64:
-		return int(v)
-	case string:
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
 }

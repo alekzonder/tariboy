@@ -79,8 +79,8 @@ func TestWorkflowRouteTemplatesAppearInOpenAPIAndBindPathParameters(t *testing.T
 			Args:         []registry.Arg{{Name: "version", Type: registry.Int, Required: true, Help: "Version"}, {Name: "verbose", Type: registry.Bool, Help: "Verbose view"}},
 			ResultSchema: map[string]any{"type": "object", "required": []string{"name", "version"}},
 			HTTP:         &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/workflows/{name}/versions/{version}"},
-			Handler: func(_ *registry.Ctx, p registry.Params) (any, error) {
-				return map[string]any{"name": p["name"], "version": p["version"]}, nil
+			Handler: func(_ *registry.Ctx, p registry.Request) (any, error) {
+				return map[string]any{"name": p.Params["name"], "version": p.Params["version"]}, nil
 			},
 		},
 		{
@@ -88,8 +88,8 @@ func TestWorkflowRouteTemplatesAppearInOpenAPIAndBindPathParameters(t *testing.T
 			Args:         []registry.Arg{{Name: "key", Required: true, Help: "Task key"}, {Name: "revision", Type: registry.Int, Required: true, Help: "Expected revision"}},
 			ResultSchema: map[string]any{"type": "object", "required": []string{"key", "action"}},
 			HTTP:         &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/tasks/{key}/workflow-override"},
-			Handler: func(_ *registry.Ctx, p registry.Params) (any, error) {
-				return map[string]any{"key": p["key"], "action": p["action"]}, nil
+			Handler: func(_ *registry.Ctx, p registry.Request) (any, error) {
+				return map[string]any{"key": p.Params["key"], "action": p.Params["action"]}, nil
 			},
 		},
 	} {
@@ -150,7 +150,7 @@ func TestWorkflowRouteTemplatesAppearInOpenAPIAndBindPathParameters(t *testing.T
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		t.Fatal(err)
 	}
-	if envelope.Result["name"] != "dev" || envelope.Result["version"] != "7" {
+	if envelope.Result["name"] != "dev" || envelope.Result["version"] != float64(7) {
 		t.Fatalf("bound workflow path params = %#v", envelope.Result)
 	}
 }
@@ -163,8 +163,8 @@ func TestRegistryHTTPHandlerReceivesRequestCancellation(t *testing.T) {
 	if err := reg.Register(registry.Command{
 		Path: "test.request.context", Summary: "request context", CLIHidden: true,
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/test/request-context"},
-		Handler: func(_ *registry.Ctx, p registry.Params) (any, error) {
-			ctx := registry.RequestContext(p)
+		Handler: func(_ *registry.Ctx, p registry.Request) (any, error) {
+			ctx := p.Ctx
 			close(started)
 			<-ctx.Done()
 			close(cancelled)

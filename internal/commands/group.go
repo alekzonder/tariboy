@@ -33,16 +33,16 @@ func groupCreate() registry.Command {
 			{Name: "lead", Flag: "lead", Short: "l", Type: registry.String, Help: "lead member name"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/groups"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkGroupName(name); err != nil {
 				return nil, err
 			}
-			res, err := gc.Create(name, str(p, "lead"))
+			res, err := gc.Create(name, p.String("lead"))
 			if err != nil {
 				return nil, api.UserError{Code: "create_failed", Msg: err.Error()}
 			}
@@ -56,7 +56,7 @@ func groupLs() registry.Command {
 		Path:    "group.ls",
 		Summary: "List groups (name/lead/member count)",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/groups"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
@@ -76,12 +76,12 @@ func groupInspect() registry.Command {
 		Summary: "Show a group's lead, members, channels and shared dir",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "group name"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/groups/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkGroupName(name); err != nil {
 				return nil, err
 			}
@@ -103,19 +103,19 @@ func groupRm() registry.Command {
 			{Name: "volumes", Flag: "volumes", Short: "v", Type: registry.Bool, Help: "also delete the shared dir"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/groups/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkGroupName(name); err != nil {
 				return nil, err
 			}
-			if err := gc.Remove(name, toBool(p["volumes"])); err != nil {
+			if err := gc.Remove(name, p.Bool("volumes")); err != nil {
 				return nil, api.UserError{Code: "rm_failed", Msg: err.Error()}
 			}
-			return map[string]any{"removed": name, "volumes": toBool(p["volumes"])}, nil
+			return map[string]any{"removed": name, "volumes": p.Bool("volumes")}, nil
 		},
 	}
 }
@@ -129,19 +129,19 @@ func groupAssign() registry.Command {
 			{Name: "agent", Type: registry.String, Required: true, Help: "agent name"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/groups/{name}/assign"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
 			}
-			name := str(p, "name")
+			name := p.String("name")
 			if err := checkGroupName(name); err != nil {
 				return nil, err
 			}
-			if err := gc.Assign(str(p, "agent"), name); err != nil {
+			if err := gc.Assign(p.String("agent"), name); err != nil {
 				return nil, api.UserError{Code: "assign_failed", Msg: err.Error()}
 			}
-			return map[string]any{"agent": str(p, "agent"), "group": name}, nil
+			return map[string]any{"agent": p.String("agent"), "group": name}, nil
 		},
 	}
 }
@@ -151,12 +151,12 @@ func groupRename() registry.Command {
 		Path: "group.rename", Summary: "Rename a group without deleting its agents",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "new_name", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "PATCH", Path: "/api/groups/{name}/name"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
 			}
-			oldName, newName := str(p, "name"), str(p, "new_name")
+			oldName, newName := p.String("name"), p.String("new_name")
 			if err := checkGroupName(oldName); err != nil {
 				return nil, err
 			}
@@ -176,12 +176,12 @@ func groupLeadSet() registry.Command {
 		Path: "group.lead.set", Summary: "Set a group's lead to a current member",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "lead", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "PATCH", Path: "/api/groups/{name}/lead"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
 			}
-			name, lead := str(p, "name"), str(p, "lead")
+			name, lead := p.String("name"), p.String("lead")
 			if err := checkGroupName(name); err != nil {
 				return nil, err
 			}
@@ -201,12 +201,12 @@ func groupMemberRm() registry.Command {
 		Path: "group.member.rm", Summary: "Remove an agent from a group without deleting it",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "agent", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "DELETE", Path: "/api/groups/{name}/members/{agent}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			gc, err := requireGroups(c)
 			if err != nil {
 				return nil, err
 			}
-			name, agentName := str(p, "name"), str(p, "agent")
+			name, agentName := p.String("name"), p.String("agent")
 			if err := checkGroupName(name); err != nil {
 				return nil, err
 			}

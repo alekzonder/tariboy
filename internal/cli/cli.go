@@ -108,7 +108,7 @@ func Run(ctx context.Context, reg *registry.Registry, argv []string, call Caller
 			fmt.Fprintf(errOut, "command %s is not available here\n", strings.ReplaceAll(cmd.Path, ".", " "))
 			return 2
 		}
-		result, err := cmd.Handler(local, params)
+		result, err := registry.Call(local, ctx, cmd, params)
 		if err != nil {
 			return printCLIError(err, errOut)
 		}

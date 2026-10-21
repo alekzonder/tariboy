@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -97,13 +98,17 @@ func ctxWithStore(t *testing.T) (*registry.Ctx, *agent.Store, *fakeControl) {
 	return &registry.Ctx{Store: s, Bus: bus.New(s, time.Now), Control: fc, BaseDir: t.TempDir()}, as, fc
 }
 
-func h(t *testing.T, path string) registry.HandlerFunc {
+// h returns the command's handler behind registry.Call, so a test sees
+// the same argument binding as the daemon.
+func h(t *testing.T, path string) func(*registry.Ctx, registry.Params) (any, error) {
 	t.Helper()
 	cmd, ok := BuildRegistry().Get(path)
 	if !ok {
 		t.Fatalf("%s not registered", path)
 	}
-	return cmd.Handler
+	return func(c *registry.Ctx, p registry.Params) (any, error) {
+		return registry.Call(c, context.Background(), cmd, p)
+	}
 }
 
 func TestAgentRunAndPs(t *testing.T) {
@@ -227,8 +232,7 @@ func TestAgentRunInteractiveDefaultsTrue(t *testing.T) {
 		t.Fatal("explicit interactive=false was ignored")
 	}
 	_, err := h(t, "agent.run")(c, registry.Params{"image": "basic:latest", "name": "worker3", "interactive": "yes"})
-	var ue api.UserError
-	if !errors.As(err, &ue) || ue.Code != "bad_interactive" {
+	if !isCode(err, "invalid_param") {
 		t.Fatalf("non-boolean interactive err = %v", err)
 	}
 }
@@ -310,13 +314,13 @@ func TestAgentGoalSettingsUpdateClearsCurrentKeyAndSignals(t *testing.T) {
 		t.Fatalf("configuration refreshes = %v", fc.refreshed)
 	}
 
-	for _, params := range []registry.Params{
-		{"name": "worker", "seconds": float64(0)},
-		{"name": "worker"},
-	} {
-		if _, err := h(t, "agent.goal-wait-customer-timeout")(c, params); !isCode(err, "bad_goal_wait_customer_timeout") {
+	for params, code := range map[float64]string{0: "bad_goal_wait_customer_timeout", 1.5: "invalid_param"} {
+		if _, err := h(t, "agent.goal-wait-customer-timeout")(c, registry.Params{"name": "worker", "seconds": params}); !isCode(err, code) {
 			t.Fatalf("invalid timeout error = %v", err)
 		}
+	}
+	if _, err := h(t, "agent.goal-wait-customer-timeout")(c, registry.Params{"name": "worker"}); !isCode(err, "missing_param") {
+		t.Fatalf("missing timeout error = %v", err)
 	}
 	if len(fc.refreshed) != 3 {
 		t.Fatalf("rejected update signaled Goal: %v", fc.refreshed)
@@ -369,7 +373,7 @@ func TestAgentRunRejectsInvalidCompleteConfiguration(t *testing.T) {
 		code  string
 	}{
 		{name: "negative interval", key: "interval_s", value: float64(-1), code: "bad_interval"},
-		{name: "fractional interval", key: "interval_s", value: 1.5, code: "bad_interval"},
+		{name: "fractional interval", key: "interval_s", value: 1.5, code: "invalid_param"},
 		{name: "negative timeout", key: "timeout_s", value: float64(-1), code: "bad_timeout"},
 		{name: "negative hard timeout", key: "hard_timeout_s", value: float64(-1), code: "bad_hard_timeout"},
 		{name: "negative idle limit", key: "max_idle_iterations", value: float64(-1), code: "bad_max_idle"},
@@ -392,8 +396,7 @@ func TestAgentRunRejectsInvalidCompleteConfiguration(t *testing.T) {
 				params[key] = value
 			}
 			_, err := h(t, "agent.run")(c, params)
-			var userErr api.UserError
-			if !errors.As(err, &userErr) || userErr.Code != tc.code {
+			if !isCode(err, tc.code) {
 				t.Fatalf("error = %#v, want UserError code %q", err, tc.code)
 			}
 			if fc.ran.ImageRef != "" {

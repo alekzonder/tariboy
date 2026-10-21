@@ -63,7 +63,7 @@ func TestDispatchAppliesDefaultBodyLimit(t *testing.T) {
 	_ = reg.Register(registry.Command{
 		Path: "echo", Summary: "e",
 		HTTP:    &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/echo"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return p, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return p, nil },
 	})
 	srv := NewServer(reg, &registry.Ctx{Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	big := `{"text":"` + strings.Repeat("x", defaultMaxBodyBytes) + `"}`

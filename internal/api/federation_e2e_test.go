@@ -19,7 +19,7 @@ func startDaemon(t *testing.T, token, version string) string {
 	reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			return map[string]any{"version": c.Version}, nil
 		},
 	})

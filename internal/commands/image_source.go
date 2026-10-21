@@ -59,7 +59,7 @@ func imageSourceLs() registry.Command {
 		Path:    "image.source.ls",
 		Summary: "List editable image sources",
 		HTTP:    &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/image-sources"},
-		Handler: func(c *registry.Ctx, _ registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, _ registry.Request) (any, error) {
 			sources, err := imageSourceStore(c).List()
 			if err != nil {
 				return nil, imageSourceError(err)
@@ -78,10 +78,10 @@ func imageSourceCreate() registry.Command {
 			{Name: "prompt", Flag: "prompt", Type: registry.String, Help: "initial prompt"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/image-sources"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			source, err := imageSourceStore(c).Create(imagesource.CreateRequest{
-				Name:   str(p, "name"),
-				Prompt: str(p, "prompt"),
+				Name:   p.String("name"),
+				Prompt: p.String("prompt"),
 			})
 			if err != nil {
 				if userErr, ok := imageSourceUserError(err); ok {
@@ -100,8 +100,8 @@ func imageSourceInspect() registry.Command {
 		Summary: "Show editable image source metadata",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
 		HTTP:    &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/image-sources/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			source, err := imageSourceStore(c).Get(str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			source, err := imageSourceStore(c).Get(p.String("name"))
 			if err != nil {
 				return nil, imageSourceError(err)
 			}
@@ -116,8 +116,8 @@ func imageSourceRm() registry.Command {
 		Summary: "Remove an editable image source without removing built images",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
 		HTTP:    &registry.HTTPRoute{Method: http.MethodDelete, Path: "/api/image-sources/{name}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			if err := imageSourceStore(c).Delete(name); err != nil {
 				return nil, imageSourceError(err)
 			}
@@ -132,8 +132,8 @@ func imageSourceFiles() registry.Command {
 		Summary: "List editable files in an image source",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
 		HTTP:    &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/image-sources/{name}/files"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			files, err := imageSourceStore(c).ListFiles(str(p, "name"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			files, err := imageSourceStore(c).ListFiles(p.String("name"))
 			if err != nil {
 				return nil, imageSourceError(err)
 			}
@@ -151,9 +151,9 @@ func imageSourceFileGet() registry.Command {
 			{Name: "path", Type: registry.String, Required: true, Help: "source-relative file path"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/image-sources/{name}/files/{path...}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			path := str(p, "path")
-			content, err := imageSourceStore(c).ReadFile(str(p, "name"), path)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			path := p.String("path")
+			content, err := imageSourceStore(c).ReadFile(p.String("name"), path)
 			if err != nil {
 				return nil, imageSourceError(err)
 			}
@@ -173,9 +173,9 @@ func imageSourceFilePut() registry.Command {
 			{Name: "content", Type: registry.String, Required: true, Help: "UTF-8 file content"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPut, Path: "/api/image-sources/{name}/files/{path...}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			path := str(p, "path")
-			if err := imageSourceStore(c).WriteFile(str(p, "name"), path, []byte(str(p, "content"))); err != nil {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			path := p.String("path")
+			if err := imageSourceStore(c).WriteFile(p.String("name"), path, []byte(p.String("content"))); err != nil {
 				return nil, imageSourceError(err)
 			}
 			return map[string]any{"path": path, "saved": true}, nil
@@ -189,8 +189,8 @@ func imageSourceValidate() registry.Command {
 		Summary: "Validate an editable image source",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true, Help: "source name"}},
 		HTTP:    &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/image-sources/{name}/validate"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			store := imageSourceStore(c)
 			if _, err := store.Get(name); err != nil {
 				return nil, imageSourceError(err)
@@ -222,9 +222,9 @@ func imageSourceBuild() registry.Command {
 			{Name: "tag", Flag: "tag", Type: registry.String, Default: "latest", Help: "target image tag"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/image-sources/{name}/build"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
-			tag := str(p, "tag")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
+			tag := p.String("tag")
 			if tag == "" {
 				tag = "latest"
 			}

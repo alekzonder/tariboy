@@ -62,15 +62,15 @@ func MergePluginCommands(reg *registry.Registry, contributions []plugins.Contrib
 			pluginName, action := contribution.Name, command.Action
 			if err := reg.Register(registry.Command{
 				Path: pluginName + "." + command.Path, Summary: command.Summary, Args: args,
-				Handler: func(_ *registry.Ctx, params registry.Params) (any, error) {
+				Handler: func(_ *registry.Ctx, params registry.Request) (any, error) {
 					data := map[string]any{}
 					for _, arg := range declaredArgs {
-						value, present := params[arg.Name]
+						value, present := params.Params[arg.Name]
 						if !present {
 							continue
 						}
 						if arg.Type == "secret-file" {
-							secret, err := readSecretFile(value.(string), stdin)
+							secret, err := readSecretFile(params.String(arg.Name), stdin)
 							if err != nil {
 								return nil, err
 							}

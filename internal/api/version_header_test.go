@@ -19,12 +19,12 @@ func TestOperatorAPIStampsVersionHeader(t *testing.T) {
 	_ = reg.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return map[string]any{"ok": 1}, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return map[string]any{"ok": 1}, nil },
 	})
 	_ = reg.Register(registry.Command{
 		Path: "daemon.boom", Summary: "boom",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/boom"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return nil, UserError{Code: "nope", Msg: "no"} },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return nil, UserError{Code: "nope", Msg: "no"} },
 	})
 	srv := NewServer(reg, &registry.Ctx{Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	h := srv.Handler()

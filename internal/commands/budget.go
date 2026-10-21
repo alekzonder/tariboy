@@ -34,12 +34,12 @@ func budgetSet() registry.Command {
 			{Name: "mode", Flag: "mode", Short: "m", Type: registry.String, Help: "warn|block (default warn)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/budgets"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			scope := str(p, "scope")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			scope := p.String("scope")
 			if !validBudgetScope(scope) {
 				return nil, api.UserError{Code: "bad_scope", Msg: "scope must be global, agent:<name>, or group:<name>"}
 			}
-			limit, err := parseFloat(str(p, "limit-usd"))
+			limit, err := parseFloat(p.String("limit-usd"))
 			if err != nil {
 				return nil, api.UserError{Code: "bad_limit", Msg: "limit-usd must be a number"}
 			}
@@ -47,14 +47,14 @@ func budgetSet() registry.Command {
 				return nil, api.UserError{Code: "bad_limit", Msg: "limit-usd must be non-negative"}
 			}
 			periodS := 86400
-			if pr := str(p, "period"); pr != "" {
+			if pr := p.String("period"); pr != "" {
 				d, derr := time.ParseDuration(pr)
 				if derr != nil || d <= 0 {
 					return nil, api.UserError{Code: "bad_period", Msg: "period must be a duration like 24h"}
 				}
 				periodS = int(d.Seconds())
 			}
-			mode := str(p, "mode")
+			mode := p.String("mode")
 			if mode == "" {
 				mode = "warn"
 			}
@@ -75,7 +75,7 @@ func budgetLs() registry.Command {
 		Path:    "budget.ls",
 		Summary: "List configured budgets",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/budgets"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			list, err := aiproxy.NewStore(c.Store, nil).ListBudgets()
 			if err != nil {
 				return nil, err
@@ -95,7 +95,7 @@ func budgetStatus() registry.Command {
 		Path:    "budget.status",
 		Summary: "Show current spend vs limit for each budget",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/budgets/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			s := aiproxy.NewStore(c.Store, nil)
 			list, err := s.ListBudgets()
 			if err != nil {

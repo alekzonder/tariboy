@@ -17,8 +17,8 @@ func iterationExtendTimeout() registry.Command {
 		Path: "iteration.extend-timeout", Summary: "Extend a running iteration timeout",
 		Args: []registry.Arg{{Name: "name", Type: registry.String, Required: true}, {Name: "id", Type: registry.String, Required: true}},
 		HTTP: &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/iterations/{id}/extend-timeout"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name, id := str(p, "name"), str(p, "id")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name, id := p.String("name"), p.String("id")
 			if _, err := getAgent(c, name); err != nil {
 				return nil, err
 			}
@@ -55,12 +55,12 @@ func iterationLs() registry.Command {
 			{Name: "started-before", Flag: "started-before", Type: registry.String, Help: "keep iterations started at or before this RFC 3339 time or YYYY-MM-DD day"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			store := agentStore(c)
-			its, err := store.FindIterations(str(p, "name"), agent.IterationFilter{
-				Tags:          stringSliceParam(p, "tag"),
-				StartedAfter:  str(p, "started-after"),
-				StartedBefore: str(p, "started-before"),
+			its, err := store.FindIterations(p.String("name"), agent.IterationFilter{
+				Tags:          p.Strings("tag"),
+				StartedAfter:  p.String("started-after"),
+				StartedBefore: p.String("started-before"),
 			})
 			if err != nil {
 				return nil, iterationTagError(err)
@@ -112,16 +112,16 @@ func iterationTag(op agent.TagOp, summary string) registry.Command {
 			{Name: "tag", Flag: "tag", Type: registry.String, Repeatable: true, Help: "tag (repeat for several; empty with set clears every tag)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/agents/{name}/iterations/tags/" + string(op)},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name := str(p, "name")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name := p.String("name")
 			if _, err := getAgent(c, name); err != nil {
 				return nil, err
 			}
-			ids := stringSliceParam(p, "id")
+			ids := p.Strings("id")
 			if len(ids) == 0 {
 				return nil, api.UserError{Code: "missing_id", Msg: "at least one iteration id is required", Status: http.StatusBadRequest}
 			}
-			tags, err := agentStore(c).MutateIterationTags(name, op, ids, stringSliceParam(p, "tag"))
+			tags, err := agentStore(c).MutateIterationTags(name, op, ids, p.Strings("tag"))
 			if err != nil {
 				return nil, iterationTagError(err)
 			}
@@ -139,8 +139,8 @@ func iterationInspect() registry.Command {
 			{Name: "id", Type: registry.String, Required: true, Help: "iteration id"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations/{id}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			it, err := agentStore(c).GetIteration(str(p, "name"), str(p, "id"))
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			it, err := agentStore(c).GetIteration(p.String("name"), p.String("id"))
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "iteration not found"}
 			}
@@ -180,15 +180,15 @@ func iterationLogs() registry.Command {
 			{Name: "id", Type: registry.String, Required: true, Help: "iteration id"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations/{id}/logs"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			if _, err := getAgent(c, str(p, "name")); err != nil {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			if _, err := getAgent(c, p.String("name")); err != nil {
 				return nil, err // api.UserError not_found
 			}
-			id := str(p, "id")
-			if _, err := agentStore(c).GetIteration(str(p, "name"), id); err != nil {
+			id := p.String("id")
+			if _, err := agentStore(c).GetIteration(p.String("name"), id); err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: "iteration not found"}
 			}
-			l := agentdir.New(agentsDir(c), str(p, "name"))
+			l := agentdir.New(agentsDir(c), p.String("name"))
 			stdout, _ := os.ReadFile(l.HarnessStdout(id))
 			stderr, _ := os.ReadFile(l.HarnessStderr(id))
 			return map[string]any{"stdout": string(stdout), "stderr": string(stderr)}, nil

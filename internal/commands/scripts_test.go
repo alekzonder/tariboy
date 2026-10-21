@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -108,7 +109,7 @@ func TestScriptCommandsExposeDefinitionsAndRuns(t *testing.T) {
 		}
 	}
 	runCommand, _ := reg.Get("script.run")
-	result, err := runCommand.Handler(ctx, registry.Params{"name": "alice", "script_name": "check", "description": "check repo", "command": "make check"})
+	result, err := registry.Call(ctx, context.Background(), runCommand, registry.Params{"name": "alice", "script_name": "check", "description": "check repo", "command": "make check"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +118,7 @@ func TestScriptCommandsExposeDefinitionsAndRuns(t *testing.T) {
 		t.Fatalf("created=%#v", created)
 	}
 	runsCommand, _ := reg.Get("script.runs")
-	result, err = runsCommand.Handler(ctx, registry.Params{"name": "alice", "id": "scr-1"})
+	result, err = registry.Call(ctx, context.Background(), runsCommand, registry.Params{"name": "alice", "id": "scr-1"})
 	if err != nil || result.(map[string]any)["count"] != 1 {
 		t.Fatalf("runs=%#v err=%v", result, err)
 	}

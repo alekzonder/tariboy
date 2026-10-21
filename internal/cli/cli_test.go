@@ -45,7 +45,7 @@ func testReg(t *testing.T) *registry.Registry {
 	r.Register(registry.Command{
 		Path: "daemon.status", Summary: "status",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/daemon/status"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return nil, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return nil, nil },
 	})
 	r.Register(registry.Command{
 		Path: "daemon.config.set", Summary: "set config",
@@ -54,7 +54,7 @@ func testReg(t *testing.T) *registry.Registry {
 			{Name: "value", Type: registry.String, Required: true},
 		},
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/daemon/config"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return nil, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return nil, nil },
 	})
 	return r
 }
@@ -65,7 +65,7 @@ func testTreeReg(t *testing.T) *registry.Registry {
 	reg := func(path, summary string, args ...registry.Arg) {
 		if err := r.Register(registry.Command{
 			Path: path, Summary: summary, Args: args,
-			Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return nil, nil },
+			Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return nil, nil },
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -491,7 +491,7 @@ func TestRunCLIHiddenNotResolvable(t *testing.T) {
 			{Name: "value", Type: registry.String, Required: true},
 		},
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/agents/{name}/secrets"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { gotBody = p; return nil, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { gotBody = p; return nil, nil },
 	})
 	f := &fakeCaller{result: json.RawMessage(`{}`)}
 	var out, errOut bytes.Buffer
@@ -549,7 +549,7 @@ func TestRunSubstitutesPathValue(t *testing.T) {
 		Path: "agent.status", Summary: "s",
 		Args:    []registry.Arg{{Name: "name", Type: registry.String, Required: true}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/status"},
-		Handler: func(*registry.Ctx, registry.Params) (any, error) { return nil, nil },
+		Handler: func(*registry.Ctx, registry.Request) (any, error) { return nil, nil },
 	})
 	var out, errOut bytes.Buffer
 	Run(context.Background(), r, []string{"agent", "status", "smoke"}, fc, nil, &out, &errOut)
@@ -606,7 +606,7 @@ func TestParseArgsBoolSpaceValue(t *testing.T) {
 func cmdWith(args ...registry.Arg) registry.Command {
 	return registry.Command{
 		Path: "x", Summary: "s", Args: args,
-		Handler: func(*registry.Ctx, registry.Params) (any, error) { return nil, nil },
+		Handler: func(*registry.Ctx, registry.Request) (any, error) { return nil, nil },
 	}
 }
 
@@ -663,7 +663,7 @@ func TestRunLocalCommand(t *testing.T) {
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.ls", Summary: "list",
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			return map[string]any{"base": c.BaseDir}, nil
 		},
 	})
@@ -679,7 +679,7 @@ func TestRunLocalNoContext(t *testing.T) {
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.ls", Summary: "list",
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return nil, nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return nil, nil },
 	})
 	var out, errOut bytes.Buffer
 	if code := Run(context.Background(), r, []string{"img", "ls"}, &fakeCaller{}, nil, &out, &errOut); code != 2 {
@@ -692,7 +692,7 @@ func TestRunLocalUserError(t *testing.T) {
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.rm", Summary: "rm",
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			return nil, api.UserError{Code: "not_found", Msg: "no image"}
 		},
 	})
@@ -708,7 +708,7 @@ func TestRunLocalStringResult(t *testing.T) {
 	r := registry.New()
 	r.Register(registry.Command{
 		Path: "img.prompt", Summary: "prompt",
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) { return "line1\nline2", nil },
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) { return "line1\nline2", nil },
 	})
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), r, []string{"img", "prompt"}, &fakeCaller{}, &registry.Ctx{}, &out, &errOut)
@@ -746,7 +746,7 @@ func TestLocalHandlerMapsAPIError(t *testing.T) {
 	r.Register(registry.Command{
 		Path: "cp", Summary: "s",
 		Args: []registry.Arg{{Name: "src", Type: registry.String, Required: true}},
-		Handler: func(*registry.Ctx, registry.Params) (any, error) {
+		Handler: func(*registry.Ctx, registry.Request) (any, error) {
 			return nil, &client.APIError{Code: "not_found", Msg: "file not found"}
 		},
 	})

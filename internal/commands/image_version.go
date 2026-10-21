@@ -9,7 +9,7 @@ func imageVersionGet() registry.Command {
 	return registry.Command{
 		Path: "image.version.get", Summary: "Print image_version from a local Tariboyfile.yaml",
 		Args:    []registry.Arg{{Name: "path", Flag: "path", Type: registry.String, Default: ".", Help: "Tariboyfile.yaml or its directory"}},
-		Handler: func(_ *registry.Ctx, p registry.Params) (any, error) { return imagefile.GetVersion(str(p, "path")) },
+		Handler: func(_ *registry.Ctx, p registry.Request) (any, error) { return imagefile.GetVersion(p.String("path")) },
 	}
 }
 
@@ -20,8 +20,8 @@ func imageVersionUpdate() registry.Command {
 			{Name: "part", Type: registry.String, Required: true, Help: "SemVer component to increment: major, minor, or patch"},
 			{Name: "path", Flag: "path", Type: registry.String, Default: ".", Help: "Tariboyfile.yaml or its directory"},
 		},
-		Handler: func(_ *registry.Ctx, p registry.Params) (any, error) {
-			return imagefile.UpdateVersion(str(p, "path"), str(p, "part"))
+		Handler: func(_ *registry.Ctx, p registry.Request) (any, error) {
+			return imagefile.UpdateVersion(p.String("path"), p.String("part"))
 		},
 	}
 }

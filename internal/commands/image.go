@@ -51,9 +51,9 @@ func imageBuild() registry.Command {
 			{Name: "git-commit", Flag: "git-commit", Type: registry.String, Help: "source Git commit"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/build"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			requestCtx := registry.RequestContext(p)
-			params, err := parseImageBuildParams(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			requestCtx := p.Ctx
+			params, err := parseImageBuildParams(p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -103,11 +103,11 @@ type imageBuildParams struct {
 // reads no store and no file.
 func parseImageBuildParams(p registry.Params) (imageBuildParams, error) {
 	params := imageBuildParams{
-		selector:     strings.TrimSpace(str(p, "source")),
-		name:         str(p, "name"),
-		path:         str(p, "path"),
-		repositoryID: strings.TrimSpace(str(p, "repository-id")),
-		gitCommit:    strings.TrimSpace(str(p, "git-commit")),
+		selector:     strings.TrimSpace(p.String("source")),
+		name:         p.String("name"),
+		path:         p.String("path"),
+		repositoryID: strings.TrimSpace(p.String("repository-id")),
+		gitCommit:    strings.TrimSpace(p.String("git-commit")),
 	}
 	if params.selector != "" && strings.TrimSpace(params.path) != "" {
 		return imageBuildParams{}, api.UserError{Code: "bad_source", Msg: "source and path are mutually exclusive", Status: http.StatusBadRequest}
@@ -115,13 +115,7 @@ func parseImageBuildParams(p registry.Params) (imageBuildParams, error) {
 	if params.selector == "" && strings.TrimSpace(params.path) == "" {
 		return imageBuildParams{}, api.UserError{Code: "missing_path", Msg: "image source path is required", Status: http.StatusBadRequest}
 	}
-	if tag, ok := p["tag"].(string); ok {
-		params.tags = []string{tag}
-	} else if values, ok := stringSlice(p["tag"]); ok {
-		params.tags = values
-	} else {
-		return imageBuildParams{}, api.UserError{Code: "bad_ref", Msg: "image tag must be a string or string array"}
-	}
+	params.tags = p.Strings("tag")
 	if (params.repositoryID == "") != (params.gitCommit == "") || (params.gitCommit != "" && !gitCommitPattern.MatchString(params.gitCommit)) {
 		return imageBuildParams{}, api.UserError{Code: "bad_provenance", Msg: "repository-id and a 7-64 character hexadecimal git-commit must be provided together", Status: http.StatusBadRequest}
 	}
@@ -341,8 +335,8 @@ func imageValidate() registry.Command {
 			{Name: "path", Flag: "path", Type: registry.String, Required: true, Help: "Tariboyfile.yaml or its directory"},
 		},
 		HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/images/validate"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			name, tag := str(p, "name"), str(p, "tag")
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			name, tag := p.String("name"), p.String("tag")
 			if tag == "" {
 				tag = "latest"
 			}
@@ -359,7 +353,7 @@ func imageValidate() registry.Command {
 			if diagnostic != "" {
 				return map[string]any{"valid": false, "schema_version": 0, "plugins": []string{}, "skills": []image.ManifestSkill{}, "template": nil, "diagnostics": []map[string]string{{"path": "name/tag", "message": diagnostic}}, "warnings": []any{}}, nil
 			}
-			parsed, err := imagefile.ParseV2(str(p, "path"))
+			parsed, err := imagefile.ParseV2(p.String("path"))
 			if err == nil && len(parsed.Extends) > 0 {
 				var cleanup func()
 				var assembled string
@@ -461,8 +455,8 @@ func imageTemplate() registry.Command {
 		Path: "image.template", Summary: "Show an image prompt template",
 		Args: []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/images/{ref}/template"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -480,8 +474,8 @@ func imageProvenance() registry.Command {
 		Path: "image.provenance", Summary: "Show local image source provenance",
 		Args: []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP: &registry.HTTPRoute{Method: http.MethodGet, Path: "/api/images/{ref}/provenance"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -522,7 +516,7 @@ func imageLs() registry.Command {
 		Path:    "image.ls",
 		Summary: "List built agent images",
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/images"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			mans, err := imageStore(c).List()
 			if err != nil {
 				return nil, err
@@ -613,8 +607,8 @@ func imageInspect() registry.Command {
 		Summary: "Show an image manifest",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/images/{ref}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -633,8 +627,8 @@ func imagePrompt() registry.Command {
 		Summary: "Print an image's assembled prompt",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/images/{ref}/prompt"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -653,8 +647,8 @@ func imageFiles() registry.Command {
 		Summary: "List the files packed into an image",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP:    &registry.HTTPRoute{Method: "GET", Path: "/api/images/{ref}/files"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
@@ -676,12 +670,12 @@ func imageFileRead() registry.Command {
 			{Name: "path", Type: registry.String, Required: true, Help: "in-image file path"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/images/{ref}/files/{path...}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
-			ref, err := parseImageRef(p)
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
+			ref, err := parseImageRef(p.Params)
 			if err != nil {
 				return nil, err
 			}
-			name, _ := p["path"].(string)
+			name := p.String("path")
 			data, err := imageStore(c).ReadFile(ref, name)
 			if err != nil {
 				return nil, api.UserError{Code: "not_found", Msg: err.Error()}
@@ -697,10 +691,10 @@ func imageRm() registry.Command {
 		Summary: "Remove a built image",
 		Args:    []registry.Arg{{Name: "ref", Type: registry.String, Required: true, Help: "image ref name:tag"}},
 		HTTP:    &registry.HTTPRoute{Method: "DELETE", Path: "/api/images/{ref}"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			var result any
 			err := image.WithPublicationGate(func() error {
-				ref, err := parseImageRef(p)
+				ref, err := parseImageRef(p.Params)
 				if err != nil {
 					return err
 				}
@@ -733,7 +727,7 @@ func imageRm() registry.Command {
 }
 
 func parseImageRef(p registry.Params) (image.Ref, error) {
-	raw, _ := p["ref"].(string)
+	raw := p.String("ref")
 	ref, err := image.ParseRef(raw)
 	if err != nil {
 		return image.Ref{}, api.UserError{Code: "bad_ref", Msg: err.Error()}
@@ -746,11 +740,11 @@ func parseImageRef(p registry.Params) (image.Ref, error) {
 func imageReadCommand(command registry.Command) registry.Command {
 	command.Args = append(command.Args, registry.Arg{Name: "expected_digest", Flag: "expected-digest", Type: registry.String, Help: "reject a changed image digest"})
 	handler := command.Handler
-	command.Handler = func(c *registry.Ctx, p registry.Params) (any, error) {
+	command.Handler = func(c *registry.Ctx, p registry.Request) (any, error) {
 		var result any
 		err := image.WithPublicationGate(func() error {
-			if expected := str(p, "expected_digest"); expected != "" {
-				ref, err := parseImageRef(p)
+			if expected := p.String("expected_digest"); expected != "" {
+				ref, err := parseImageRef(p.Params)
 				if err != nil {
 					return err
 				}

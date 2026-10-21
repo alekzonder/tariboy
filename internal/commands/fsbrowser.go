@@ -40,12 +40,12 @@ func fsList() registry.Command {
 			{Name: "path", Type: registry.String, Help: "directory to list (empty/~/relative => root)"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/fs/list"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			root, err := fsbrowser.Root()
 			if err != nil {
 				return nil, fsErr(err)
 			}
-			listing, err := fsbrowser.List(root, str(p, "path"))
+			listing, err := fsbrowser.List(root, p.String("path"))
 			if err != nil {
 				return nil, fsErr(err)
 			}

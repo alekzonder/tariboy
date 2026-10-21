@@ -6,7 +6,7 @@ func versionCommand() registry.Command {
 	return registry.Command{
 		Path:    "version",
 		Summary: "Print the Tariboy version",
-		Handler: func(c *registry.Ctx, _ registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, _ registry.Request) (any, error) {
 			return c.Version, nil
 		},
 	}

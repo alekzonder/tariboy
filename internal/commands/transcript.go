@@ -20,10 +20,10 @@ func transcriptCommand() registry.Command {
 			{Name: "raw", Flag: "raw", Type: registry.Bool, Help: "return raw request/response bytes"},
 		},
 		HTTP: &registry.HTTPRoute{Method: "GET", Path: "/api/agents/{name}/iterations/{id}/transcript"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			agentsDir := paths.New(c.BaseDir).AgentsDir()
-			name := str(p, "name")
-			id := str(p, "id")
+			name := p.String("name")
+			id := p.String("id")
 			entries, err := session.ReadEntries(agentsDir, name, id)
 			if err != nil {
 				return nil, err
@@ -33,7 +33,7 @@ func transcriptCommand() registry.Command {
 			// daemon HTTP layer's stringified query param ("true"/"1"). Same
 			// pattern as force (agents.go, plugin.go), volumes (group.go), and
 			// disabled (rule.go).
-			if toBool(p["raw"]) {
+			if p.Bool("raw") {
 				calls := session.RawCalls(entries)
 				return map[string]any{"calls": calls, "count": len(calls)}, nil
 			}

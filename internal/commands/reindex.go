@@ -17,7 +17,7 @@ func daemonReindex() registry.Command {
 		Path:    "daemon.reindex",
 		Summary: "Rebuild ai_requests metadata from proxy-transcript.jsonl files",
 		HTTP:    &registry.HTTPRoute{Method: "POST", Path: "/api/daemon/reindex"},
-		Handler: func(c *registry.Ctx, p registry.Params) (any, error) {
+		Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
 			agentsDir := filepath.Join(c.BaseDir, "agents")
 			rows, err := scanTranscripts(agentsDir)
 			if err != nil {
