@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { ScriptRun, TransitionRequest, WorkflowView } from "@/lib/tasks"
 import { customerView, poolView } from "./workflowFixtures"
-import { explainProblem } from "./workflowProblem"
+import { explainProblem } from "./explainWorkflowProblem"
 
 const request = (state: TransitionRequest["state"], extra: Partial<TransitionRequest> = {}): TransitionRequest => ({
   id: 12, task_key: "REL-1", outcome: "drafted", actor: "agent:writer", state, created_at: "2026-10-01T10:05:00Z", ...extra,

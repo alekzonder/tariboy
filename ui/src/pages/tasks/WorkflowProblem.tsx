@@ -7,7 +7,7 @@ import { getTaskScriptRunLog, retryTransitionRequest, type WorkflowView } from "
 import { cn } from "@/lib/utils"
 import { DANGER_FILL, MONO, PRIMARY_FILL } from "./panelStyles"
 import RunRow from "./RunRow"
-import { explainProblem, type Problem } from "./workflowProblem"
+import { explainProblem, type Problem } from "./explainWorkflowProblem"
 import { useFollowRequest, type FollowResult } from "./workflowShared"
 
 const FILL: Partial<Record<Problem["tone"], string>> = { danger: DANGER_FILL, attention: PRIMARY_FILL }
