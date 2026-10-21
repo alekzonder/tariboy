@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/alekzonder/tariboy/internal/bus"
-	basestore "github.com/alekzonder/tariboy/internal/store"
 	"github.com/alekzonder/tariboy/internal/workflowfile"
 	"github.com/alekzonder/tariboy/internal/workflowimage"
 )
@@ -667,7 +666,7 @@ func commentOf(detail TaskDetail, id int64) Comment {
 // publishMessage publishes msg through the bus at the service clock.
 func publishMessage(t *testing.T, svc *Service, msg bus.Message) bus.Message {
 	t.Helper()
-	published, err := bus.New(&basestore.Store{DB: svc.db}, svc.clock).Publish(msg)
+	published, err := workflowBus(svc).Publish(msg)
 	if err != nil {
 		t.Fatal(err)
 	}

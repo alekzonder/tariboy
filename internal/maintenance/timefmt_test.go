@@ -26,6 +26,7 @@ func TestCleanupSplitsSameSecondRowsAtTheCutoff(t *testing.T) {
 	chatCutoff := now.AddDate(0, 0, -7)
 	exec(t, db, `INSERT INTO messages(id,channel,ts) VALUES ('old','c',?),('at','c',?)`,
 		store.FormatTime(chatCutoff.Add(-1)), store.FormatTime(chatCutoff))
+	ingestAllMessages(t, db)
 
 	res, err := svc.Run()
 	if err != nil || res.Error != "" {

@@ -54,17 +54,13 @@ func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	orphan := pub(t, b, ChatChannel("orphan"), "note", "pre-existing orphan", nil)
-	if _, err := b.db.Exec(`UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT MAX(sequence) FROM task_workflow_message_sequence)`); err != nil {
-		t.Fatal(err)
-	}
-	unreconciled := pub(t, b, aliceInbox, "note", "workflow ingress still needs this", nil)
 
 	got, err := b.ClearPending("alice")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.DeletedDeliveries != 4 || got.DeletedMessages != 1 {
-		t.Fatalf("clear result = %+v, want 4 deliveries and 1 message", got)
+	if got.DeletedDeliveries != 3 || got.DeletedMessages != 1 {
+		t.Fatalf("clear result = %+v, want 3 deliveries and 1 message", got)
 	}
 	for status, want := range map[string]string{"processed": processed.ID, "dlq": dead.ID} {
 		items, err := b.Inbox("alice", status, 10, "")
@@ -76,7 +72,7 @@ func TestClearPendingPreservesHistoryDLQAndSharedMessages(t *testing.T) {
 	if err != nil || len(bob) != 1 || bob[0].ID != shared.ID {
 		t.Fatalf("bob pending = %+v, err=%v", bob, err)
 	}
-	for _, id := range []string{unique.ID, shared.ID, processed.ID, dead.ID, orphan.ID, unreconciled.ID} {
+	for _, id := range []string{unique.ID, shared.ID, processed.ID, dead.ID, orphan.ID} {
 		var count int
 		if err := b.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE id=?`, id).Scan(&count); err != nil {
 			t.Fatal(err)
@@ -105,13 +101,6 @@ func TestClearPendingHandlesLargeQueue(t *testing.T) {
 		SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<18000
 	) INSERT INTO messages(id, channel, ts)
 	SELECT printf('bulk-%05d', i), ?, '2026-09-08T00:00:00Z' FROM n`, InboxChannel("alice")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.db.Exec(`INSERT INTO task_workflow_message_sequence(message_id)
-		SELECT id FROM messages WHERE id LIKE 'bulk-%' ORDER BY id`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.db.Exec(`UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT MAX(sequence) FROM task_workflow_message_sequence)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.db.Exec(`INSERT INTO deliveries(subscription_id, message_id)

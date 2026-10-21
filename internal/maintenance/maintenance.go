@@ -457,11 +457,9 @@ func (s *Service) removeTaskFiles(keys []string) error {
 // dead-lettered, with those deliveries. Unacknowledged work and messages
 // workflow ingress has not consumed yet are never deleted.
 func purgeMessages(tx *sql.Tx, cutoff string) (int64, error) {
-	victims := `(SELECT id FROM messages m WHERE m.ts < ? AND NOT EXISTS (
-		SELECT 1 FROM deliveries d WHERE d.message_id = m.id AND d.acked_at IS NULL AND d.dlq = 0)
-		AND NOT EXISTS (SELECT 1 FROM task_workflow_message_sequence q
-		  JOIN task_workflow_ingress_state i ON i.singleton = 1
-		  WHERE q.message_id = m.id AND q.sequence > i.last_message_sequence))`
+	victims := `(SELECT id FROM messages WHERE messages.ts < ? AND NOT EXISTS (
+		SELECT 1 FROM deliveries d WHERE d.message_id = messages.id AND d.acked_at IS NULL AND d.dlq = 0)
+		AND NOT (` + tasks.WorkflowMessageRetainedSQL + `))`
 	if _, err := tx.Exec(`DELETE FROM deliveries WHERE message_id IN `+victims, cutoff); err != nil {
 		return 0, err
 	}

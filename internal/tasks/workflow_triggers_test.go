@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/bus"
-	basestore "github.com/alekzonder/tariboy/internal/store"
 )
 
 func triggerFixture(t *testing.T) (*Service, Actor) {
@@ -57,7 +56,7 @@ func TestReconcileWorkflowObservationsRecoversCommittedBusMessage(t *testing.T) 
 func TestClearPendingPreservesUnreconciledTriggerMessage(t *testing.T) {
 	svc, operator := triggerFixture(t)
 	mustCreateTrigger(t, svc, operator, "metrics:api")
-	b := bus.New(&basestore.Store{DB: svc.db}, svc.clock)
+	b := workflowBus(svc)
 	if _, err := b.Subscribe("dev-a", "metrics:api", nil, nil); err != nil {
 		t.Fatal(err)
 	}

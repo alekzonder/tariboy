@@ -331,13 +331,13 @@ func TestCleanupAIRequestsMessagesAndEvents(t *testing.T) {
 	db := st.DB
 	exec(t, db, `INSERT INTO ai_requests(id,ts) VALUES ('old',?),('new',?)`, ts(100), ts(1))
 	exec(t, db, `INSERT INTO events(ts,kind) VALUES (?,'old'),(?,'new')`, ts(100), ts(1))
-	for _, m := range []struct{ id, ts string }{{"acked", ts(100)}, {"dlq", ts(100)}, {"pending", ts(100)}, {"fresh", ts(1)}, {"uningested", ts(100)}} {
+	for _, m := range []struct{ id, ts string }{{"acked", ts(100)}, {"dlq", ts(100)}, {"pending", ts(100)}, {"fresh", ts(1)}, {"uningested", ts(100)}, {"unsequenced", ts(100)}} {
 		exec(t, db, `INSERT INTO messages(id,channel,ts) VALUES (?,'c',?)`, m.id, m.ts)
 	}
 	exec(t, db, `INSERT INTO deliveries(subscription_id,message_id,acked_at,dlq) VALUES
 		('s','acked',?,0),('s','dlq',NULL,1),('s','pending',NULL,0),('s2','pending',?,0),('s','fresh',?,0)`, ts(99), ts(99), ts(1))
-	exec(t, db, `INSERT INTO task_workflow_message_sequence(sequence,message_id) VALUES (1,'acked'),(2,'uningested')`)
-	exec(t, db, `UPDATE task_workflow_ingress_state SET last_message_sequence=1`)
+	exec(t, db, `INSERT INTO task_workflow_message_sequence(sequence,message_id) VALUES (1,'acked'),(2,'dlq'),(3,'uningested')`)
+	exec(t, db, `UPDATE task_workflow_ingress_state SET last_message_sequence=2`)
 
 	res, err := svc.Run()
 	if err != nil || res.Error != "" {
@@ -360,8 +360,8 @@ func TestCleanupAIRequestsMessagesAndEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
-	if strings.Join(ids, ",") != "fresh,pending,uningested" {
-		t.Errorf("messages = %v, want fresh,pending,uningested", ids)
+	if strings.Join(ids, ",") != "fresh,pending,uningested,unsequenced" {
+		t.Errorf("messages = %v, want fresh,pending,uningested,unsequenced", ids)
 	}
 	if n := count(t, db, `SELECT COUNT(*) FROM deliveries`); n != 3 {
 		t.Errorf("deliveries = %d, want 3", n)
@@ -400,6 +400,15 @@ func addChatMessages(t *testing.T, db *sql.DB) {
 	exec(t, db, `INSERT INTO deliveries(subscription_id,message_id,acked_at,dlq) VALUES
 		('s','old',?,0),('s','recent',?,0),('s','pending',NULL,0)`, ts(8), ts(6))
 	exec(t, db, `INSERT INTO ai_requests(id,ts) VALUES ('usage',?)`, ts(8))
+	ingestAllMessages(t, db)
+}
+
+// ingestAllMessages marks every message as consumed by workflow ingress, so
+// only delivery state and age decide retention.
+func ingestAllMessages(t *testing.T, db *sql.DB) {
+	t.Helper()
+	exec(t, db, `INSERT OR IGNORE INTO task_workflow_message_sequence(message_id) SELECT id FROM messages ORDER BY rowid`)
+	exec(t, db, `UPDATE task_workflow_ingress_state SET last_message_sequence=(SELECT MAX(sequence) FROM task_workflow_message_sequence)`)
 }
 
 // Chat history has its own shorter period that applies even when general

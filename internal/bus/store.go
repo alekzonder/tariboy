@@ -46,6 +46,10 @@ type Bus struct {
 	read  *sql.DB // read-only pool for the polled chat list
 	clock func() time.Time
 	hook  func(Message, []string)
+	// txHook / retainedSQL are the transactional publish seam and the message
+	// retention condition (SetPublishTxHook, SetMessageRetention).
+	txHook      func(*sql.Tx, Message) error
+	retainedSQL string
 	// audit, if set, receives the per-agent audit events the lifecycle methods
 	// emit (message_processed, message_replied, message_requeued). The daemon
 	// wires it to its audit sink; nil in unit tests / before wiring.
@@ -87,6 +91,17 @@ func New(s *store.Store, clock func() time.Time) *Bus {
 }
 
 func (b *Bus) SetPublishHook(fn func(msg Message, deliveredTo []string)) { b.hook = fn }
+
+// SetPublishTxHook wires a write that must commit together with every new
+// message: fn runs inside the publish transaction after the message row is
+// inserted, and its error rolls the publish back. Native Tasks uses it to
+// number messages for workflow ingress. nil disables it.
+func (b *Bus) SetPublishTxHook(fn func(tx *sql.Tx, msg Message) error) { b.txHook = fn }
+
+// SetMessageRetention wires an SQL condition over messages.id that keeps a
+// message from being deleted while its owner still needs it, even after every
+// delivery is gone. "" retains nothing.
+func (b *Bus) SetMessageRetention(retainedSQL string) { b.retainedSQL = retainedSQL }
 
 // SetAuditHook wires the per-agent audit sink. The delivery/thread lifecycle
 // methods emit their audit event through it (mirrors SetPublishHook's seam).
@@ -341,8 +356,10 @@ func (b *Bus) publishTx(tx *sql.Tx, msg Message, now time.Time, guard func(*sql.
 	if _, err := tx.Exec(`UPDATE messages SET sender = `+fromSQL+` WHERE id = ?`, msg.ID); err != nil {
 		return Message{}, nil, false, err
 	}
-	if _, err := tx.Exec(`INSERT INTO task_workflow_message_sequence(message_id) VALUES (?)`, msg.ID); err != nil {
-		return Message{}, nil, false, err
+	if b.txHook != nil {
+		if err := b.txHook(tx, msg); err != nil {
+			return Message{}, nil, false, err
+		}
 	}
 
 	// Fan-out: create a delivery row for each matching subscription.
