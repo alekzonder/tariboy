@@ -3,7 +3,6 @@ package script
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -43,12 +42,12 @@ func (s *Store) CreateSchedule(agent string, in CreateSchedule) (Definition, Run
 		return Definition{}, Run{}, err
 	}
 	if in.IntervalSeconds <= 0 {
-		return Definition{}, Run{}, errors.New("recurring interval must be positive")
+		return Definition{}, Run{}, fmt.Errorf("%w: recurring interval must be positive", ErrInvalid)
 	}
 	command := in.Command
 	if in.QuietExit != nil {
 		if *in.QuietExit < 0 || *in.QuietExit > 255 {
-			return Definition{}, Run{}, errors.New("quiet exit must be between 0 and 255")
+			return Definition{}, Run{}, fmt.Errorf("%w: quiet exit must be between 0 and 255", ErrInvalid)
 		}
 		if *in.QuietExit != QuietExit {
 			command = LegacyQuietCommand(command, *in.QuietExit)
@@ -59,7 +58,7 @@ func (s *Store) CreateSchedule(agent string, in CreateSchedule) (Definition, Run
 
 func validateCommon(name, description, command string) error {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(description) == "" || strings.TrimSpace(command) == "" {
-		return errors.New("name, description, and command are required")
+		return fmt.Errorf("%w: name, description, and command are required", ErrInvalid)
 	}
 	return nil
 }

@@ -2,7 +2,9 @@ package taskgoal
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -43,6 +45,11 @@ LEFT JOIN tasks p ON p.id = t.parent_id` + tasks.TaskWorkflowJoin + `
 
 type Store struct{ db *sql.DB }
 
+// goalError is a Goal selection the agent must correct.
+func goalError(format string, args ...any) error {
+	return &tasks.Error{Status: http.StatusBadRequest, Code: "goal_failed", Msg: fmt.Sprintf(format, args...)}
+}
+
 func NewStore(s *basestore.Store) *Store { return &Store{db: s.DB} }
 
 // Set selects an active task assigned to agent as its sticky Goal.
@@ -60,9 +67,13 @@ func (s *Store) Set(agent, key string, now time.Time, activate func() (func(), e
 		return tasks.Task{}, err
 	}
 	if !enabled {
-		return tasks.Task{}, fmt.Errorf("goal is disabled")
+		return tasks.Task{}, goalError("goal is disabled")
 	}
 	task, waitAt, err := readGoalTask(tx, strings.TrimSpace(key), agent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tasks.Task{}, &tasks.Error{Status: http.StatusNotFound, Code: "not_found",
+			Msg: fmt.Sprintf("task %q not found", strings.TrimSpace(key))}
+	}
 	if err != nil {
 		return tasks.Task{}, err
 	}
@@ -71,10 +82,10 @@ func (s *Store) Set(agent, key string, now time.Time, activate func() (func(), e
 		return tasks.Task{}, err
 	}
 	if !valid {
-		return tasks.Task{}, fmt.Errorf("task %s is not an active goal", task.Key)
+		return tasks.Task{}, goalError("task %s is not an active goal", task.Key)
 	}
 	if current != "" && current != task.Key {
-		return tasks.Task{}, fmt.Errorf("goal is already set to %s", current)
+		return tasks.Task{}, goalError("goal is already set to %s", current)
 	}
 	changed := current == ""
 	if _, err := tx.Exec(`UPDATE agents SET current_goal_task_key=? WHERE name=?`, task.Key, agent); err != nil {

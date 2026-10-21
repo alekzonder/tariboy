@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentapi"
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/events"
@@ -1500,10 +1502,11 @@ func (m *Manager) callerGroup(caller string) (agent.Agent, string, string, error
 		return agent.Agent{}, "", "", err
 	}
 	if ag.Group == "" {
-		return agent.Agent{}, "", "", fmt.Errorf("agent %q is not assigned to a group", caller)
+		return agent.Agent{}, "", "", groupError("agent %q is not assigned to a group", caller)
 	}
 	if m.cfg.Groups == nil {
-		return agent.Agent{}, "", "", fmt.Errorf("group control is not configured")
+		return agent.Agent{}, "", "", api.UserError{Status: http.StatusServiceUnavailable, Code: "unavailable",
+			Msg: "group control is not configured"}
 	}
 	info, err := m.cfg.Groups.Inspect(ag.Group)
 	if err != nil {
@@ -1519,7 +1522,7 @@ func (m *Manager) groupMember(caller, member string) (agent.Agent, string, strin
 		return agent.Agent{}, "", "", err
 	}
 	if member == "" {
-		return agent.Agent{}, "", "", fmt.Errorf("member is required")
+		return agent.Agent{}, "", "", groupError("member is required")
 	}
 	members, err := m.cfg.Store.ListByGroup(group)
 	if err != nil {
@@ -1530,7 +1533,12 @@ func (m *Manager) groupMember(caller, member string) (agent.Agent, string, strin
 			return a, group, lead, nil
 		}
 	}
-	return agent.Agent{}, "", "", fmt.Errorf("agent %q is not in your group", member)
+	return agent.Agent{}, "", "", groupError("agent %q is not in your group", member)
+}
+
+// groupError is a group tools request the calling agent must correct.
+func groupError(format string, args ...any) error {
+	return api.UserError{Code: "group_failed", Msg: fmt.Sprintf(format, args...)}
 }
 
 func (m *Manager) groupToolsInfo(caller string) (map[string]any, error) {
@@ -1563,7 +1571,7 @@ func (m *Manager) groupToolsStatus(caller, member string) (map[string]any, error
 				return map[string]any{"member": m.groupStatusRow(a, lead)}, nil
 			}
 		}
-		return nil, fmt.Errorf("agent %q is not in your group", member)
+		return nil, groupError("agent %q is not in your group", member)
 	}
 	rows := make([]map[string]any, 0, len(members))
 	for _, a := range members {
@@ -1671,7 +1679,7 @@ func (m *Manager) toolsLoopControl(name, action string) (agent.Agent, error) {
 			return agent.Agent{}, err
 		}
 	default:
-		return agent.Agent{}, fmt.Errorf("unknown loop action %q", action)
+		return agent.Agent{}, api.UserError{Code: "bad_action", Msg: fmt.Sprintf("unknown loop action %q", action)}
 	}
 	return m.cfg.Store.Get(name)
 }

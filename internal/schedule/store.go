@@ -15,6 +15,9 @@ const seqWidth = 9
 
 var ErrNotFound = errors.New("not found")
 
+// ErrInvalid marks a schedule kind or spec the caller must correct.
+var ErrInvalid = errors.New("invalid schedule")
+
 // dbtx is the subset of *sql.DB and *sql.Tx used by nextScheduleID so it can
 // run either directly or inside a transaction.
 type dbtx interface {
@@ -78,7 +81,7 @@ func (s *Store) AddTx(tx *sql.Tx, sch Schedule) (Schedule, error) {
 func add(tx *sql.Tx, sch Schedule, now time.Time) (Schedule, error) {
 	next, err := computeNext(sch.Kind, sch.Spec, now)
 	if err != nil {
-		return Schedule{}, err
+		return Schedule{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if sch.MessageTemplate == "" {
 		sch.MessageTemplate = "{}"

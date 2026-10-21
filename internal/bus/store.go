@@ -33,6 +33,10 @@ var ErrChatExists = errors.New("chat already exists")
 // The full arming path lands with the schedule subsystem (EPIC R).
 var ErrDeadlineUnsupported = errors.New("deadline not supported yet")
 
+// ErrInvalid marks a request argument the caller must correct, such as a
+// malformed deadline or provider params a validator rejected.
+var ErrInvalid = errors.New("invalid request")
+
 // dbtx is the subset of *sql.DB and *sql.Tx used by the bus helpers so they can
 // run either directly or inside a transaction.
 type dbtx interface {

@@ -3,10 +3,12 @@ package loop
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentapi"
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/plugincaps"
 	"github.com/alekzonder/tariboy/internal/schedule"
@@ -79,10 +81,17 @@ type toolsFacade struct {
 
 func (f toolsFacade) deps(ag agent.Agent, l agentdir.Layout) agentapi.Deps {
 	d := agentapi.Deps{
+		Log:   f.cfg.Log,
 		Agent: ag.Name, Cwd: cwdOf(ag, l), ContextPath: l.ContextPath(), Plugins: ag.Plugins,
 		ProvidedChannels: f.cfg.ProvidedChannels,
 		BuildImage: func(name, tag, path string) (map[string]any, error) {
-			return buildImageForAgent(f.cfg.ImgStore, l.Workdir(), name, tag, path, f.pluginResolver())
+			res, err := buildImageForAgent(f.cfg.ImgStore, l.Workdir(), name, tag, path, f.pluginResolver())
+			if err != nil {
+				// A build failure reports the agent's own Tariboyfile and paths,
+				// exactly as the operator image build does.
+				return nil, api.UserError{Code: "build_failed", Msg: err.Error()}
+			}
+			return res, nil
 		},
 	}
 	f.lifecycleDeps(&d)
@@ -114,7 +123,8 @@ func (f toolsFacade) lifecycleDeps(d *agentapi.Deps) {
 	// current after the runner returns, long after the harness process exits.
 	d.SetDone = func(id string, productive bool) error {
 		if f.iterations.currentIterationID(f.agent) != id {
-			return fmt.Errorf("iteration %q is no longer running", id)
+			return api.UserError{Status: http.StatusConflict, Code: "no_iteration",
+				Msg: fmt.Sprintf("iteration %q is no longer running", id)}
 		}
 		return f.cfg.Store.SetIterationDone(id, productive)
 	}
@@ -123,7 +133,8 @@ func (f toolsFacade) lifecycleDeps(d *agentapi.Deps) {
 	d.SetGoal = f.setGoal
 	d.TaskAction = func(action string, body map[string]any) (any, error) {
 		if f.cfg.Tasks == nil {
-			return nil, fmt.Errorf("native Tasks service is unavailable")
+			return nil, api.UserError{Status: http.StatusServiceUnavailable, Code: "unavailable",
+				Msg: "native Tasks service is unavailable"}
 		}
 		body["iteration_id"] = f.iterations.currentIterationID(f.agent)
 		return f.cfg.Tasks.AgentAction(context.Background(), tasks.AgentActor(f.agent), action, body)
@@ -171,11 +182,12 @@ func (f toolsFacade) setStatus(message string) (map[string]any, error) {
 func (f toolsFacade) setGoal(key string) (map[string]any, error) {
 	iteration := f.iterations.currentIterationID(f.agent)
 	if iteration == "" {
-		return nil, fmt.Errorf("no iteration is currently running")
+		return nil, api.UserError{Status: http.StatusConflict, Code: "no_iteration",
+			Msg: "no iteration is currently running"}
 	}
 	proxy, ok := f.cfg.Proxy.(taskAttributionProxy)
 	if !ok {
-		return nil, fmt.Errorf("goal selection is unavailable")
+		return nil, errGoalUnavailable
 	}
 	result, err := setGoal(context.Background(), f.cfg.Tasks, f.cfg.SetGoal, proxy, iteration, f.agent, key)
 	if err == nil {

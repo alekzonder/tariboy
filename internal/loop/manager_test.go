@@ -3414,6 +3414,51 @@ func TestAgentScheduleWithoutChannelWakesTheServiceChat(t *testing.T) {
 	}
 }
 
+// The tools API keeps an agent-meaningful validation message and its 4xx code,
+// while the shared error mapper hides everything else.
+func TestToolsAPIKeepsAgentMeaningfulErrors(t *testing.T) {
+	t.Parallel()
+	m, as, agentsDir, st := newManager(t, &fakeRunner{})
+	m.cfg.Schedules = schedule.NewStore(st, time.Now)
+	name, err := m.Run(registry.RunSpec{ImageRef: "basic:latest", Name: "worker", Harness: "stub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag, err := as.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag.Plugins = append(ag.Plugins, "schedule", "image-creator")
+	if err := as.Update(ag); err != nil {
+		t.Fatal(err)
+	}
+	handler := m.newToolsAPIServer(ag, agentdir.New(agentsDir, name)).Handler()
+	cases := []struct {
+		method, path, body string
+		status             int
+		code, text         string
+	}{
+		{"POST", "/tools/schedule/add", `{"kind":"cron","spec":"not a cron"}`, 400, "invalid_schedule", "cron"},
+		{"GET", "/tools/group/info", "", 400, "group_failed", "is not assigned to a group"},
+		{"POST", "/tools/image/build", `{"name":"x","path":"missing/Tariboyfile"}`, 400, "build_failed", "no such file"},
+	}
+	for _, tc := range cases {
+		recorder := httptest.NewRecorder()
+		var body io.Reader
+		if tc.body != "" {
+			body = strings.NewReader(tc.body)
+		}
+		handler.ServeHTTP(recorder, httptest.NewRequest(tc.method, tc.path, body))
+		var env struct {
+			Error struct{ Code, Message string } `json:"error"`
+		}
+		_ = json.Unmarshal(recorder.Body.Bytes(), &env)
+		if recorder.Code != tc.status || env.Error.Code != tc.code || !strings.Contains(env.Error.Message, tc.text) {
+			t.Errorf("%s %s = %d %s", tc.method, tc.path, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
 func writeAgentShellScripts(t *testing.T, agentsDir, name, global, own string) {
 	t.Helper()
 	layout := agentdir.New(agentsDir, name)
