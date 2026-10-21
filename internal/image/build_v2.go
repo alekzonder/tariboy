@@ -197,6 +197,9 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 }
 
 func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, layers map[string][]byte, skills []agentskills.Prepared, archiveOut *[]byte) (string, error) {
+	if err := checkRef(ref); err != nil {
+		return "", err
+	}
 	stageDir := s.refs().NameDir(ref.Name)
 	if err := os.MkdirAll(stageDir, 0o700); err != nil {
 		return "", err

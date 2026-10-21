@@ -20,3 +20,16 @@ func TestParseRef(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRefRejectsDotPathComponents(t *testing.T) {
+	for _, bad := range []string{".", "..", "..:x", ".:x", "a:..", "a:."} {
+		if _, err := ParseRef(bad); err == nil {
+			t.Errorf("ParseRef(%q) accepted a name or tag that is a path component", bad)
+		}
+	}
+	for _, good := range []string{".a", "a..b:v1", "a:.x"} {
+		if _, err := ParseRef(good); err != nil {
+			t.Errorf("ParseRef(%q) = %v", good, err)
+		}
+	}
+}

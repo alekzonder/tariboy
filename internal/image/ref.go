@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/imagefile"
+	"github.com/alekzonder/tariboy/internal/refstore"
 )
 
 // ErrReserved marks the refs the daemon seeds itself; public authoring cannot
@@ -26,10 +27,11 @@ func ParseRef(s string) (Ref, error) {
 	if i := strings.LastIndex(s, ":"); i >= 0 {
 		name, tag = s[:i], s[i+1:]
 	}
-	if !refPart.MatchString(name) {
+	// "." and ".." match refPart but name a directory, not an image.
+	if !refPart.MatchString(name) || refstore.CheckName(name) != nil {
 		return Ref{}, fmt.Errorf("invalid image name %q (allowed: a-z 0-9 . _ -)", name)
 	}
-	if !refPart.MatchString(tag) && imagefile.ValidateImageVersion(tag) != nil {
+	if (!refPart.MatchString(tag) && imagefile.ValidateImageVersion(tag) != nil) || refstore.CheckName(tag) != nil {
 		return Ref{}, fmt.Errorf("invalid image tag %q (allowed: a-z 0-9 . _ -, or a SemVer version)", tag)
 	}
 	return Ref{Name: name, Tag: tag}, nil

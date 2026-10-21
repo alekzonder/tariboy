@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/safefs"
+
+	"github.com/alekzonder/tariboy/internal/refstore"
 )
 
 // FileEntry describes one member of an image's tar.gz, enough to render a tree.
@@ -168,7 +170,7 @@ func (s *Store) Remove(ref Ref) error {
 		}
 	}
 	s.refs().PruneEmpty(ref.Name)
-	return syncDirectory(s.Dir)
+	return refstore.SyncDir(s.Dir)
 }
 
 // tagReferences reports whether any tag of name still points at id.

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/refstore"
 )
 
 // legacyHistoryDirs are the pre-ref-model directories that retained previous
@@ -126,7 +128,7 @@ func (s *Store) adoptLegacyArchive(name, tag, path string) error {
 	} else if err := os.Remove(path); err != nil {
 		return err
 	}
-	if err := syncDirectory(contentDir); err != nil {
+	if err := refstore.SyncDir(contentDir); err != nil {
 		return err
 	}
 	if tag == "" {

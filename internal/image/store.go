@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sync"
 
 	"github.com/alekzonder/tariboy/internal/portablearchive"
@@ -30,8 +29,6 @@ import (
 // the requested tags onto it, so every ref can be rebuilt at any time and by
 // any caller. Agents and the operator CLI share this one mechanism.
 type Store struct{ Dir string }
-
-var refIDPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // ponytail: global lock, use per-ref locks if image publication becomes a bottleneck.
 var publicationGate sync.Mutex
@@ -60,6 +57,15 @@ func RefID(name, imageVersion string) string {
 // refs is the shared name and tag layer under Dir. The content kept at
 // refs/<id>.tar.gz is this package's own.
 func (s *Store) refs() refstore.Store { return refstore.Store{Dir: s.Dir} }
+
+// checkRef refuses a ref whose name or tag cannot be a path component, before
+// anything is staged or published under it.
+func checkRef(ref Ref) error {
+	if refstore.CheckName(ref.Name) != nil || refstore.CheckName(ref.Tag) != nil {
+		return fmt.Errorf("invalid image ref %q", ref.String())
+	}
+	return nil
+}
 
 func (s *Store) contentPath(name, id string) string {
 	return filepath.Join(s.refs().RefsDir(name), id+".tar.gz")
@@ -126,7 +132,7 @@ func (s *Store) ArchiveBytes(ref Ref) ([]byte, error) {
 // SetTag points one tag at content that is already stored. This is how a build
 // publishes several tags — a versioned tag and latest — without building twice.
 func (s *Store) SetTag(ref Ref, id string) error {
-	if !refIDPattern.MatchString(id) {
+	if !refstore.IsID(id) {
 		return fmt.Errorf("invalid image ref id %q", id)
 	}
 	if _, err := os.Stat(s.contentPath(ref.Name, id)); err != nil {
@@ -172,6 +178,9 @@ func (s *Store) RetagArchive(source, target Ref, archive []byte) (Manifest, erro
 }
 
 func (s *Store) stageBytes(ref Ref, kind string, archive []byte) (string, error) {
+	if err := checkRef(ref); err != nil {
+		return "", err
+	}
 	stageDir := s.refs().NameDir(ref.Name)
 	if err := os.MkdirAll(stageDir, 0o700); err != nil {
 		return "", err
@@ -205,7 +214,10 @@ func (s *Store) stageBytes(ref Ref, kind string, archive []byte) (string, error)
 
 // install moves staged content into place and advances ref onto it.
 func (s *Store) install(ref Ref, id, tmpName string) error {
-	if !refIDPattern.MatchString(id) {
+	if err := checkRef(ref); err != nil {
+		return err
+	}
+	if !refstore.IsID(id) {
 		return fmt.Errorf("invalid image ref id for %s", ref.String())
 	}
 	contentDir := s.refs().RefsDir(ref.Name)
@@ -215,7 +227,7 @@ func (s *Store) install(ref Ref, id, tmpName string) error {
 	if err := os.Rename(tmpName, s.contentPath(ref.Name, id)); err != nil {
 		return fmt.Errorf("publish image %s: %w", ref.String(), err)
 	}
-	if err := syncDirectory(contentDir); err != nil {
+	if err := refstore.SyncDir(contentDir); err != nil {
 		return err
 	}
 	return s.SetTag(ref, id)
@@ -312,7 +324,7 @@ func (s *Store) InspectPinned(ref Ref, id string) (Manifest, error) {
 }
 
 func (s *Store) inspectPinnedArchive(ref Ref, id string) (Manifest, string, error) {
-	if !refIDPattern.MatchString(id) {
+	if !refstore.IsID(id) {
 		return Manifest{}, "", errors.New("invalid pinned image id")
 	}
 	path := s.contentPath(ref.Name, id)
@@ -420,15 +432,6 @@ func (s *Store) publishArchive(ref Ref, tmpName string, archiveOut *[]byte) (str
 		*archiveOut = archive
 	}
 	return manifest.Digest, nil
-}
-
-func syncDirectory(path string) error {
-	dir, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
 }
 
 func writeTarFile(tw *tar.Writer, name string, data []byte) error {

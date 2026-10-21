@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -32,10 +31,8 @@ const (
 	tmpPrefix    = ".tmp-"
 )
 
-var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
-
 // IsDigest reports whether s has the form of an image digest.
-func IsDigest(s string) bool { return digestPattern.MatchString(s) }
+func IsDigest(s string) bool { return refstore.IsID(s) }
 
 // mu serializes publication and removal across every Store in the process.
 var mu sync.Mutex
@@ -83,7 +80,7 @@ func (s *Store) refs() refstore.Store { return refstore.Store{Dir: s.Dir} }
 // ContentDir returns the absolute path of the unpacked tree, or "" when name
 // or digest is not a valid path component.
 func (s *Store) ContentDir(name, digest string) string {
-	if checkName("name", name) != nil || !digestPattern.MatchString(digest) {
+	if checkName("name", name) != nil || !IsDigest(digest) {
 		return ""
 	}
 	p := filepath.Join(s.refs().RefsDir(name), digest)
@@ -383,7 +380,7 @@ func (s *Store) storedVersionDigest(name, version, digest string) (string, error
 		return "", err
 	}
 	for _, ref := range refs {
-		if !ref.IsDir() || !digestPattern.MatchString(ref.Name()) || ref.Name() == digest {
+		if !ref.IsDir() || !IsDigest(ref.Name()) || ref.Name() == digest {
 			continue
 		}
 		m, err := s.readManifest(name, ref.Name())
@@ -564,7 +561,7 @@ func (s *Store) Resolve(name, tag string) (string, error) {
 	if !errors.Is(err, ErrNotFound) {
 		return "", err
 	}
-	if digestPattern.MatchString(tag) {
+	if IsDigest(tag) {
 		if info, statErr := os.Stat(s.ContentDir(name, tag)); statErr == nil && info.IsDir() {
 			return tag, nil
 		}
