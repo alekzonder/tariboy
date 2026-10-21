@@ -146,14 +146,48 @@ func ensureChannel(x dbtx, name string, now time.Time) error {
 	return err
 }
 
+// channelSeqSQL reads the message-id counter by the channel primary key.
+const channelSeqSQL = `SELECT id_second, id_seq FROM channels WHERE name = ?`
+
 // nextMessageID derives a collision-safe, (ts, seq)-sortable id of the form
-// <channel>-<yyyymmddhhmmss>-<zero-padded seq>. The seq is MAX(existing seq for
-// this channel+second)+1, computed inside the caller's tx. Using MAX (not
+// <channel>-<yyyymmddhhmmss>-<zero-padded seq>, inside the caller's tx. The seq
+// comes from the counter on the channel row (migration 0070), so the cost does
+// not grow with the channel history. The stored ids are read only when the
+// counter cannot answer: it is not seeded yet (an upgraded or recreated
+// channel), or the clock stepped back before the counter's second.
+func nextMessageID(x dbtx, channel string, now time.Time) (string, error) {
+	second := now.UTC().Format("20060102150405")
+	var counted sql.NullString
+	var seq int64
+	if err := x.QueryRow(channelSeqSQL, channel).Scan(&counted, &seq); err != nil {
+		return "", err
+	}
+	switch {
+	case counted.Valid && counted.String == second:
+		seq++
+	case counted.Valid && counted.String < second:
+		seq = 1
+	default:
+		stored, err := maxStoredSeq(x, channel, second)
+		if err != nil {
+			return "", err
+		}
+		seq = stored + 1
+	}
+	if !counted.Valid || counted.String <= second {
+		if _, err := x.Exec(`UPDATE channels SET id_second = ?, id_seq = ? WHERE name = ?`, second, seq, channel); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("%s-%s-%0*d", channel, second, seqWidth, seq), nil
+}
+
+// maxStoredSeq is the highest stored seq for channel in second. Using MAX (not
 // COUNT) means pruning the oldest rows can never make a future seq collide with
 // a survivor, and matching the prefix with substr (not LIKE) means channel
 // names containing '_'/'%' cannot over-match.
-func nextMessageID(x dbtx, channel string, now time.Time) (string, error) {
-	prefix := channel + "-" + now.UTC().Format("20060102150405") + "-"
+func maxStoredSeq(x dbtx, channel, second string) (int64, error) {
+	prefix := channel + "-" + second + "-"
 	var maxSeq int64
 	// substr(id,1,len(prefix)) == prefix is an exact, metacharacter-free prefix
 	// test; substr(id,len(prefix)+1) is the numeric suffix. channel=? lets the
@@ -161,9 +195,9 @@ func nextMessageID(x dbtx, channel string, now time.Time) (string, error) {
 	if err := x.QueryRow(`SELECT COALESCE(MAX(CAST(substr(id, ?) AS INTEGER)), 0)
 		FROM messages WHERE channel = ? AND substr(id, 1, ?) = ?`,
 		len(prefix)+1, channel, len(prefix), prefix).Scan(&maxSeq); err != nil {
-		return "", err
+		return 0, err
 	}
-	return fmt.Sprintf("%s%0*d", prefix, seqWidth, maxSeq+1), nil
+	return maxSeq, nil
 }
 
 func (b *Bus) Publish(msg Message) (Message, error) {
@@ -688,10 +722,13 @@ func (b *Bus) Pending(agent string, limit int) ([]Message, error) {
 // subscribers — the channel queue-depth gauge for telemetry (spec §14).
 func (b *Bus) PendingTotal() (int, error) {
 	var n int
-	err := b.db.QueryRow(`SELECT COUNT(*) FROM deliveries
-		WHERE acked_at IS NULL AND dlq = 0`).Scan(&n)
+	err := b.db.QueryRow(pendingTotalSQL).Scan(&n)
 	return n, err
 }
+
+// pendingTotalSQL counts through idx_deliveries_pending, so its cost follows
+// the pending backlog rather than the delivery history.
+const pendingTotalSQL = `SELECT COUNT(*) FROM deliveries WHERE acked_at IS NULL AND dlq = 0`
 
 func (b *Bus) HasPending(agent string) (bool, error) {
 	var n int
