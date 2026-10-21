@@ -16,6 +16,7 @@ import (
 
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/image"
@@ -1068,7 +1069,7 @@ func TestImageValidateV2ReturnsSkillMetadataAndDuplicateWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := got.(map[string]any)
-	skills, ok := result["skills"].([]image.ManifestSkill)
+	skills, ok := result["skills"].([]agentskills.Metadata)
 	if !ok || len(skills) != 1 {
 		t.Fatalf("skills = %#v", result["skills"])
 	}

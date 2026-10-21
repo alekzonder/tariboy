@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
-	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 	"github.com/alekzonder/tariboy/internal/safefs"
 )
@@ -107,7 +106,7 @@ func bridgeIdentity(finalDir string) (digest, contractVersion, harness string, e
 	return digest, contractVersion, harness, nil
 }
 
-func expectedBridgeSkills(expected []image.ManifestSkill) []bridgeSkill {
+func expectedBridgeSkills(expected []agentskills.Metadata) []bridgeSkill {
 	out := make([]bridgeSkill, 0, len(expected))
 	for _, skill := range expected {
 		out = append(out, bridgeSkill{
@@ -147,7 +146,7 @@ func validateBridgePlan(plan BridgePlan) (string, map[string]BridgeFile, error) 
 	return destination, generated, nil
 }
 
-func compareSkillMetadata(prepared agentskills.Prepared, expected image.ManifestSkill) error {
+func compareSkillMetadata(prepared agentskills.Prepared, expected agentskills.Metadata) error {
 	meta := prepared.Metadata
 	if meta.Name != expected.Name || meta.Description != expected.Description || meta.ArchiveRoot != expected.ArchiveRoot || meta.FileCount != expected.FileCount || meta.Size != expected.Size || meta.TreeSHA256 != expected.TreeSHA256 {
 		return fmt.Errorf("skill %q does not match image manifest", expected.Name)
@@ -155,7 +154,7 @@ func compareSkillMetadata(prepared agentskills.Prepared, expected image.Manifest
 	return nil
 }
 
-func prepareSourceSkills(imageSkillsDir string, expected []image.ManifestSkill) ([]agentskills.Prepared, error) {
+func prepareSourceSkills(imageSkillsDir string, expected []agentskills.Metadata) ([]agentskills.Prepared, error) {
 	entries, err := os.ReadDir(imageSkillsDir)
 	if err != nil {
 		return nil, err
@@ -241,7 +240,7 @@ func syncBridgeTreeWith(root string, syncPath func(string) error) error {
 	})
 }
 
-func validatePublishedBridge(finalDir string, expected []image.ManifestSkill, plan BridgePlan) error {
+func validatePublishedBridge(finalDir string, expected []agentskills.Metadata, plan BridgePlan) error {
 	digest, contractVersion, harness, err := bridgeIdentity(finalDir)
 	if err != nil {
 		return err
@@ -353,7 +352,7 @@ func equalBridgeSkills(a, b []bridgeSkill) bool {
 	return true
 }
 
-func buildBridgeStage(stage, digest, contractVersion, harness string, expected []image.ManifestSkill, prepared []agentskills.Prepared, plan BridgePlan) error {
+func buildBridgeStage(stage, digest, contractVersion, harness string, expected []agentskills.Metadata, prepared []agentskills.Prepared, plan BridgePlan) error {
 	destination, generated, err := validateBridgePlan(plan)
 	if err != nil {
 		return err
@@ -399,7 +398,7 @@ func buildBridgeStage(stage, digest, contractVersion, harness string, expected [
 	return syncBridgeTree(stage)
 }
 
-func PrepareImageBridge(imageSkillsDir, finalDir string, expected []image.ManifestSkill, plan BridgePlan) error {
+func PrepareImageBridge(imageSkillsDir, finalDir string, expected []agentskills.Metadata, plan BridgePlan) error {
 	digest, contractVersion, harness, err := bridgeIdentity(finalDir)
 	if err != nil {
 		return err

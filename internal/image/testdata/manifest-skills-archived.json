@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "image_version": "1.2.3",
+  "id": "6d59e1d441dc5eb240288c34744db6b2b5b81e93d74873685db45f4ab4a03396",
+  "name": "reviewer",
+  "built_at": "2026-07-05T12:00:00.000000000Z",
+  "plugins": [],
+  "skills": [
+    {
+      "name": "code-review",
+      "description": "Use this skill for image tests.",
+      "source": "./skills/code-review",
+      "category": "source",
+      "archive_root": "skills/code-review",
+      "file_count": 2,
+      "size": 96,
+      "tree_sha256": "104c48d99ed126be11c0ed38d646d33e8cba0346dafcf5b3da46da7f85beeea3"
+    }
+  ],
+  "prompt_template_sha256": "7d5a11b709835ed635ec26632de4360b3d6f9d5de8498fc7fd79253c2b2220b4"
+}

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/alekzonder/tariboy/internal/agentskills"
-	"github.com/alekzonder/tariboy/internal/image"
 	"github.com/alekzonder/tariboy/internal/imagefile"
 )
 
@@ -44,7 +43,7 @@ func TestSyncBridgeTreeIgnoresUnsupportedDirectorySyncOnly(t *testing.T) {
 	}
 }
 
-func bridgeFixture(t *testing.T) (string, []image.ManifestSkill) {
+func bridgeFixture(t *testing.T) (string, []agentskills.Metadata) {
 	t.Helper()
 	root := t.TempDir()
 	dir := filepath.Join(root, "review")
@@ -62,7 +61,7 @@ func bridgeFixture(t *testing.T) (string, []image.ManifestSkill) {
 		t.Fatal(err)
 	}
 	meta := prepared.Metadata
-	return root, []image.ManifestSkill{{
+	return root, []agentskills.Metadata{{
 		Name: meta.Name, Description: meta.Description, Source: meta.Source, Category: meta.Category,
 		ArchiveRoot: meta.ArchiveRoot, FileCount: meta.FileCount, Size: meta.Size, TreeSHA256: meta.TreeSHA256,
 	}}

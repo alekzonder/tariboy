@@ -55,16 +55,19 @@ func portableMemberError(h *tar.Header, err error) error {
 	return err
 }
 
+// v2PortableManifest is the strict schema of manifest.json inside a v2
+// archive, decoded with unknown fields rejected. It is not a copy of
+// Manifest, which also carries runtime fields such as digest, harness and layers.
 type v2PortableManifest struct {
-	SchemaVersion        int                `json:"schema_version"`
-	ImageVersion         string             `json:"image_version,omitempty"`
-	ID                   string             `json:"id,omitempty"`
-	Name                 string             `json:"name"`
-	Tag                  string             `json:"tag,omitempty"`
-	BuiltAt              string             `json:"built_at"`
-	Plugins              []v2PortablePlugin `json:"plugins"`
-	Skills               []ManifestSkill    `json:"skills"`
-	PromptTemplateSHA256 string             `json:"prompt_template_sha256"`
+	SchemaVersion        int                    `json:"schema_version"`
+	ImageVersion         string                 `json:"image_version,omitempty"`
+	ID                   string                 `json:"id,omitempty"`
+	Name                 string                 `json:"name"`
+	Tag                  string                 `json:"tag,omitempty"`
+	BuiltAt              string                 `json:"built_at"`
+	Plugins              []v2PortablePlugin     `json:"plugins"`
+	Skills               []agentskills.Metadata `json:"skills"`
+	PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
 }
 
 type v2PortablePlugin struct {
@@ -267,11 +270,7 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 			want[name] = true
 		}
 		sort.Slice(files, func(i, j int) bool { return files[i].RelativePath < files[j].RelativePath })
-		prepared := agentskills.Prepared{Metadata: agentskills.Metadata{
-			Name: skill.Name, Description: skill.Description, Source: skill.Source, Category: skill.Category,
-			ClientVersion: skill.ClientVersion,
-			ArchiveRoot:   skill.ArchiveRoot, FileCount: skill.FileCount, Size: skill.Size, TreeSHA256: skill.TreeSHA256,
-		}, Files: files}
+		prepared := agentskills.Prepared{Metadata: skill, Files: files}
 		if err := agentskills.ValidatePrepared(prepared); err != nil {
 			return fmt.Errorf("invalid schema-v2 skill %q: %w", skill.Name, err)
 		}
@@ -290,12 +289,12 @@ func validateV2PortableMembers(manifestBody []byte, members map[string]portableI
 	for _, plugin := range strict.Plugins {
 		manifest.Plugins = append(manifest.Plugins, ManifestPlugin{Name: plugin.Name})
 	}
-	manifest.Skills = append([]ManifestSkill(nil), strict.Skills...)
+	manifest.Skills = append([]agentskills.Metadata(nil), strict.Skills...)
 	if manifest.Skills == nil {
-		manifest.Skills = []ManifestSkill{}
+		manifest.Skills = []agentskills.Metadata{}
 	}
 	if enforceContract {
-		return validateManifestContract(*manifest, template, func(skill ManifestSkill, launcher string) bool {
+		return validateManifestContract(*manifest, template, func(skill agentskills.Metadata, launcher string) bool {
 			member, ok := members[skill.ArchiveRoot+"/"+launcher]
 			return ok && member.mode&0o111 != 0
 		}, resolver)
@@ -320,13 +319,13 @@ func ValidateUnpackedContract(manifest Manifest, root string, resolver imagecont
 	if err := ValidatePromptTemplate(template); err != nil {
 		return err
 	}
-	return validateManifestContract(manifest, template, func(skill ManifestSkill, launcher string) bool {
+	return validateManifestContract(manifest, template, func(skill agentskills.Metadata, launcher string) bool {
 		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(skill.ArchiveRoot), filepath.FromSlash(launcher)))
 		return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
 	}, resolver)
 }
 
-func validateManifestContract(manifest Manifest, template PromptTemplate, executable func(ManifestSkill, string) bool, resolver imagecontract.ExternalResolver) error {
+func validateManifestContract(manifest Manifest, template PromptTemplate, executable func(agentskills.Metadata, string) bool, resolver imagecontract.ExternalResolver) error {
 	input := imagecontract.Input{
 		Plugins: make([]string, 0, len(manifest.Plugins)),
 		Skills:  make([]imagecontract.Skill, 0, len(manifest.Skills)),

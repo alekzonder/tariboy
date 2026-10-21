@@ -132,19 +132,14 @@ func prepareV2(src *imagefile.V2, roots imagefile.ResolveRoots, resolver pluginc
 }
 
 type ValidationV2 struct {
-	Template PromptTemplate  `json:"template"`
-	Skills   []ManifestSkill `json:"skills"`
+	Template PromptTemplate         `json:"template"`
+	Skills   []agentskills.Metadata `json:"skills"`
 }
 
-func manifestSkills(prepared []agentskills.Prepared) []ManifestSkill {
-	out := make([]ManifestSkill, 0, len(prepared))
+func manifestSkills(prepared []agentskills.Prepared) []agentskills.Metadata {
+	out := make([]agentskills.Metadata, 0, len(prepared))
 	for _, skill := range prepared {
-		meta := skill.Metadata
-		out = append(out, ManifestSkill{
-			Name: meta.Name, Description: meta.Description, Source: meta.Source, Category: meta.Category,
-			ClientVersion: meta.ClientVersion,
-			ArchiveRoot:   meta.ArchiveRoot, FileCount: meta.FileCount, Size: meta.Size, TreeSHA256: meta.TreeSHA256,
-		})
+		out = append(out, skill.Metadata)
 	}
 	return out
 }
@@ -191,7 +186,7 @@ func buildV2(src *imagefile.V2, roots imagefile.ResolveRoots, ref Ref, store *St
 		manifest.Plugins = []ManifestPlugin{}
 	}
 	if manifest.Skills == nil {
-		manifest.Skills = []ManifestSkill{}
+		manifest.Skills = []agentskills.Metadata{}
 	}
 	digest, err := store.writeV2Archive(ref, manifest, prepared.template, prepared.layers, prepared.skills, archiveOut)
 	if err != nil {
@@ -214,14 +209,14 @@ func (s *Store) writeV2Archive(ref Ref, man Manifest, template PromptTemplate, l
 	gz := gzip.NewWriter(tmp)
 	tw := tar.NewWriter(gz)
 	manifestJSON, err := json.MarshalIndent(struct {
-		SchemaVersion        int              `json:"schema_version"`
-		ImageVersion         string           `json:"image_version,omitempty"`
-		ID                   string           `json:"id,omitempty"`
-		Name                 string           `json:"name"`
-		BuiltAt              string           `json:"built_at"`
-		Plugins              []ManifestPlugin `json:"plugins"`
-		Skills               []ManifestSkill  `json:"skills"`
-		PromptTemplateSHA256 string           `json:"prompt_template_sha256"`
+		SchemaVersion        int                    `json:"schema_version"`
+		ImageVersion         string                 `json:"image_version,omitempty"`
+		ID                   string                 `json:"id,omitempty"`
+		Name                 string                 `json:"name"`
+		BuiltAt              string                 `json:"built_at"`
+		Plugins              []ManifestPlugin       `json:"plugins"`
+		Skills               []agentskills.Metadata `json:"skills"`
+		PromptTemplateSHA256 string                 `json:"prompt_template_sha256"`
 	}{man.SchemaVersion, man.ImageVersion, man.ID, man.Name, man.BuiltAt, man.Plugins, man.Skills, man.PromptTemplateSHA256}, "", "  ")
 	if err != nil {
 		tmp.Close()

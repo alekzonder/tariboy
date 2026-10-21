@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/alekzonder/tariboy/internal/agentskills"
 )
 
 func TestManifestRoundTrip(t *testing.T) {
@@ -15,7 +17,7 @@ func TestManifestRoundTrip(t *testing.T) {
 		BuiltAt:       "2026-07-05T00:00:00Z",
 		Parents:       []string{"base:latest"},
 		Plugins:       []ManifestPlugin{{Name: "whoami"}, {Name: "status", Version: ">=0.3"}},
-		Skills: []ManifestSkill{{
+		Skills: []agentskills.Metadata{{
 			Name: "code-review", Description: "Review changes safely.", Source: "./skills/code-review", Category: "source",
 			ArchiveRoot: "skills/code-review", FileCount: 3, Size: 2048, TreeSHA256: "abc123",
 		}},

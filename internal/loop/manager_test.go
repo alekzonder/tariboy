@@ -26,6 +26,7 @@ import (
 	"github.com/alekzonder/tariboy/internal/agent"
 	"github.com/alekzonder/tariboy/internal/agentapi"
 	"github.com/alekzonder/tariboy/internal/agentdir"
+	"github.com/alekzonder/tariboy/internal/agentskills"
 	"github.com/alekzonder/tariboy/internal/audit"
 	"github.com/alekzonder/tariboy/internal/bus"
 	"github.com/alekzonder/tariboy/internal/client"
@@ -3356,7 +3357,7 @@ func TestReprovisionBridgeFailurePreservesIdentityAndTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	buildBasic2(t, m.cfg.ImgStore)
-	m.cfg.PrepareImageBridge = func(string, string, []image.ManifestSkill, agentdir.BridgePlan) error {
+	m.cfg.PrepareImageBridge = func(string, string, []agentskills.Metadata, agentdir.BridgePlan) error {
 		return errors.New("bridge rejected")
 	}
 
