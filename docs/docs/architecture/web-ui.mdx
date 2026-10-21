@@ -476,7 +476,7 @@ select it renders `WorkflowPanel`, which loads the view with `getTaskWorkflow`
 the last socket hint about the task through `liveSequence`, and after each change; a request counter drops
 a response older than the newest) and composes, top down,
 `WorkflowPauseBanner` (`resumeTaskWorkflow`, `cancelWorkflowTask`),
-`WorkflowProblem` (the one problem `explainProblem` in `workflowProblem.ts`
+`WorkflowProblem` (the one problem `explainProblem` in `explainWorkflowProblem.ts`
 picks from the view, with `retryTransitionRequest` behind **Retry** and the
 run's log through `RunRow` with `autoLoad`), `WorkflowStepper` (the view's
 `statuses` as steps, marked by `stepMarks` in `workflowGraph.ts`), the header
