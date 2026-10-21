@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -11,26 +10,12 @@ import (
 	"github.com/alekzonder/tariboy/internal/api"
 	"github.com/alekzonder/tariboy/internal/compose"
 	"github.com/alekzonder/tariboy/internal/image"
-	"github.com/alekzonder/tariboy/internal/imagefile"
-	"github.com/alekzonder/tariboy/internal/imagesource"
-	"github.com/alekzonder/tariboy/internal/paths"
 	"github.com/alekzonder/tariboy/internal/registry"
 	"github.com/alekzonder/tariboy/internal/teamportable"
 	"gopkg.in/yaml.v3"
 )
 
 func nestedMap(value any) map[string]any { result, _ := value.(map[string]any); return result }
-
-func planTeamSource(imported map[string]string, planned teamportable.Image) (bool, error) {
-	if digest, ok := imported[planned.SourceName]; ok {
-		if digest != planned.SourceDigest {
-			return false, fmt.Errorf("source %s has conflicting digests", planned.SourceName)
-		}
-		return true, nil
-	}
-	imported[planned.SourceName] = planned.SourceDigest
-	return false, nil
-}
 
 func rewriteTeamComposeRefs(input []byte, refs map[string]string) ([]byte, error) {
 	file, err := compose.Parse(input)
@@ -176,69 +161,6 @@ func teamImportYAML() registry.Command {
 	}}
 }
 
-func applyTeamImage(c *registry.Ctx, preview teamportable.Preview, planned teamportable.Image, reuseSource bool, onSourceReady func()) error {
-	return image.WithPublicationGate(func() error {
-		return applyTeamImageLocked(c, preview, planned, reuseSource, onSourceReady)
-	})
-}
-
-func applyTeamImageLocked(c *registry.Ctx, preview teamportable.Preview, planned teamportable.Image, reuseSource bool, onSourceReady func()) error {
-	ref, err := image.ParseRef(planned.Ref)
-	if err != nil || image.IsReserved(ref) {
-		return api.UserError{Code: "bad_ref", Msg: "invalid image ref " + planned.Ref}
-	}
-	if imageStore(c).Exists(ref) {
-		current, err := imageStore(c).Inspect(ref)
-		if err != nil {
-			return err
-		}
-		snapshot, ok, err := imageSnapshotStore(c).Lookup(context.Background(), ref.String())
-		if err != nil {
-			return err
-		}
-		if !ok || snapshot.ImageDigest != current.Digest || snapshot.SourceDigest != planned.SourceDigest {
-			return api.UserError{Code: "image_conflict", Msg: "image " + ref.String() + " has different source; choose a new tag"}
-		}
-		return nil
-	}
-	sources := imageSourceStore(c)
-	_, sourceErr := sources.Get(planned.SourceName)
-	if !reuseSource && sourceErr == nil {
-		return api.UserError{Code: "source_conflict", Msg: "image source " + planned.SourceName + " already exists"}
-	}
-	if sourceErr != nil {
-		sourceDir := filepath.Join(preview.StagedDir, "images", planned.SourceName)
-		if _, err := sources.ImportTree(planned.SourceName, sourceDir); err != nil {
-			return registryError("source_import_failed", err)
-		}
-		onSourceReady()
-	}
-	managedSourceDir := filepath.Join(paths.Paths{Base: c.BaseDir}.ImageSourcesDir(), planned.SourceName)
-	parsed, err := imagefile.ParseV2(managedSourceDir)
-	if err != nil {
-		return err
-	}
-	layout := paths.Paths{Base: c.BaseDir}
-	manifest, err := image.BuildV2(parsed, imagefile.ResolveRoots{Plugins: layout.PluginsDir()}, ref, imageStore(c), time.Now, imagePluginResolver(c, layout.PluginsDir()))
-	if err != nil {
-		return registryError("image_build_failed", err)
-	}
-	snapshot, err := imageSnapshotStore(c).Capture(context.Background(), ref.String(), manifest.Digest, planned.SourceName, managedSourceDir)
-	if err != nil {
-		_ = imageStore(c).Remove(ref)
-		return err
-	}
-	if snapshot.SourceDigest != planned.SourceDigest {
-		_ = imageStore(c).Remove(ref)
-		_, _ = c.Store.DB.Exec(`DELETE FROM image_source_snapshots WHERE image_ref=?`, ref.String())
-		return api.UserError{Code: "source_digest_mismatch", Msg: "image source digest does not match archive metadata"}
-	}
-	_, _ = sources.RecordBuild(planned.SourceName, func(string) (imagesource.BuildRecord, error) {
-		return imagesource.BuildRecord{Ref: ref.String(), Digest: manifest.Digest, BuiltAt: manifest.BuiltAt}, nil
-	}, nil)
-	return nil
-}
-
 func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (any, error) {
 	file, err := compose.Parse(preview.ComposeYAML)
 	if err == nil {
@@ -247,35 +169,11 @@ func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (any, error) 
 	if err != nil {
 		return nil, registryError("bad_compose", err)
 	}
-	imagePlans := make([]map[string]any, 0, len(preview.Images))
-	for _, planned := range preview.Images {
-		action, conflict, message := "build", false, ""
-		ref, parseErr := image.ParseRef(planned.Ref)
-		if parseErr != nil || image.IsReserved(ref) {
-			action, conflict, message = "invalid", true, "invalid or reserved image ref"
-		} else if imageStore(c).Exists(ref) {
-			current, inspectErr := imageStore(c).Inspect(ref)
-			snapshot, ok, lookupErr := imageSnapshotStore(c).Lookup(context.Background(), ref.String())
-			if inspectErr != nil || lookupErr != nil || !ok || snapshot.ImageDigest != current.Digest || snapshot.SourceDigest != planned.SourceDigest {
-				action, conflict, message = "retag", true, "destination ref has different source"
-			} else {
-				action = "reuse"
-			}
-		}
-		imagePlans = append(imagePlans, map[string]any{"ref": planned.Ref, "source_name": planned.SourceName, "source_digest": planned.SourceDigest, "action": action, "conflict": conflict, "message": message})
-	}
 	agentPlans := make([]map[string]any, 0, len(file.Agents))
 	for name, spec := range file.Agents {
 		action, conflict, message := "create", false, ""
-		refPlanned := false
-		for _, planned := range preview.Images {
-			if planned.Ref == spec.Image {
-				refPlanned = true
-				break
-			}
-		}
 		parsedRef, refErr := image.ParseRef(spec.Image)
-		if !refPlanned && (refErr != nil || !imageStore(c).Exists(parsedRef)) {
+		if refErr != nil || !imageStore(c).Exists(parsedRef) {
 			action, conflict, message = "blocked", true, "required image is unavailable; import/build it or edit YAML"
 		} else if existing, getErr := agent.NewStore(c.Store).Get(name); getErr == nil {
 			if existing.Group == spec.Group && existing.ImageRef == spec.Image {
@@ -298,12 +196,12 @@ func planTeamImport(c *registry.Ctx, preview teamportable.Preview) (any, error) 
 		}
 		groupPlans = append(groupPlans, map[string]any{"name": name, "action": action, "conflict": conflict, "message": message})
 	}
-	return map[string]any{"import_id": preview.ImportID, "team": preview.Team, "yaml": string(preview.ComposeYAML), "images": imagePlans, "agents": agentPlans, "groups": groupPlans}, nil
+	return map[string]any{"import_id": preview.ImportID, "team": preview.Team, "yaml": string(preview.ComposeYAML), "images": []map[string]any{}, "agents": agentPlans, "groups": groupPlans}, nil
 }
 
 func teamImportArchivePlan() registry.Command {
 	return registry.Command{Path: "team.import.archive.plan", Summary: "Validate and plan a staged portable team import", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-		service := teamportable.Service{Snapshots: imageSnapshotStore(c), StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
+		service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
 		preview, err := service.Load(p.String("id"))
 		if err != nil {
 			return nil, registryError("import_not_found", err)
@@ -314,7 +212,7 @@ func teamImportArchivePlan() registry.Command {
 
 func teamImportArchiveApply() registry.Command {
 	return registry.Command{Path: "team.import.archive.apply", Summary: "Build images and create a staged portable team", Args: []registry.Arg{{Name: "id", Type: registry.String, Required: true}}, HTTP: &registry.HTTPRoute{Method: http.MethodPost, Path: "/api/team-imports/{id}/apply"}, Handler: func(c *registry.Ctx, p registry.Request) (any, error) {
-		service := teamportable.Service{Snapshots: imageSnapshotStore(c), StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
+		service := teamportable.Service{StagingRoot: filepath.Join(c.BaseDir, "team-imports")}
 		preview, err := service.Load(p.String("id"))
 		if err != nil {
 			return nil, registryError("import_not_found", err)
@@ -347,11 +245,6 @@ func teamImportArchiveApply() registry.Command {
 			}
 		}
 		if len(resolvedRefs) > 0 {
-			for index := range preview.Images {
-				if replacement := resolvedRefs[preview.Images[index].Ref]; replacement != "" {
-					preview.Images[index].Ref = replacement
-				}
-			}
 			preview.ComposeYAML, err = rewriteTeamComposeRefs(preview.ComposeYAML, resolvedRefs)
 			if err != nil {
 				return nil, registryError("bad_compose", err)
@@ -385,11 +278,6 @@ func teamImportArchiveApply() registry.Command {
 		operation.ResolvedRefs = resolvedRefs
 		operation.UpdateExisting = updateExisting
 		operation.Status, operation.Error = "running", ""
-		for index := range preview.Images {
-			if index < len(operation.Steps) {
-				operation.Steps[index].Name = preview.Images[index].Ref
-			}
-		}
 		_ = service.SaveOperation(operation)
 		if err := service.TouchLease(preview.ImportID); err != nil {
 			return nil, err
@@ -409,30 +297,6 @@ func teamImportArchiveApply() registry.Command {
 				}
 			}
 		}()
-		importedSources := map[string]string{}
-		for index, planned := range preview.Images {
-			reuseSource, planErr := planTeamSource(importedSources, planned)
-			if planErr != nil {
-				return nil, registryError("source_conflict", planErr)
-			}
-			if index < len(operation.Steps) && operation.Steps[index].Status == "complete" {
-				continue
-			}
-			operation.Steps[index].Status, operation.Steps[index].Error = "running", ""
-			_ = service.SaveOperation(operation)
-			reuseSource = reuseSource || operation.Steps[index].SourceReady
-			if applyErr := applyTeamImage(c, preview, planned, reuseSource, func() {
-				operation.Steps[index].SourceReady = true
-				_ = service.SaveOperation(operation)
-			}); applyErr != nil {
-				operation.Steps[index].Status, operation.Steps[index].Error = "failed", applyErr.Error()
-				operation.Status, operation.Error = "failed", applyErr.Error()
-				_ = service.SaveOperation(operation)
-				return nil, applyErr
-			}
-			operation.Steps[index].Status = "complete"
-			_ = service.SaveOperation(operation)
-		}
 		result, err := registry.Call(c, p.Ctx, teamApplyYAML(), map[string]any{"yaml": string(preview.ComposeYAML)})
 		if err != nil {
 			operation.Status, operation.Error = "failed", err.Error()
