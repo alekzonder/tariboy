@@ -1,14 +1,20 @@
 package taskcli
 
 import (
+	"errors"
+	"flag"
 	"fmt"
-	"slices"
-	"strconv"
+	"io"
 	"strings"
+
+	"github.com/alekzonder/tariboy/internal/tasks"
 )
 
 type request struct {
-	action  string
+	action string
+	spec   tasks.Spec
+	// input is the parsed request struct; payload is its tools-socket body.
+	input   any
 	payload map[string]any
 	// noWait makes advance return a pending request at once instead of waiting
 	// for its checks. It is a client option and never part of the payload.
@@ -21,436 +27,253 @@ type usageError struct{ message string }
 
 func (e usageError) Error() string { return e.message }
 
-var boolFlags = map[string]bool{"claim": true, "to-root": true, "complete-anyway": true, "no-wait": true}
-
-func taskCommandFlags() map[string]map[string]bool {
-	return map[string]map[string]bool{
-		"list": set(listFlags), "mine": set(listFlags), "ready": set("queue,limit,idempotency-key,claim"), "show": {},
-		"create": set("queue,parent,title,description,pull-request,assignee,group,priority,idempotency-key"),
-		"update": set("title,description,status,pull-request,assignee,manual-block-reason,priority,revision"), "assign": set("revision"),
-		"comment": set("body,idempotency-key"), "ask": set("idempotency-key"),
-		"move": set("parent,before,to-root,revision"), "block": set("by,revision,idempotency-key"), "relate": set("revision,idempotency-key"), "done": set("revision,complete-anyway"),
-		"advance": set("outcome,from,message,no-wait"), "artifact_set": set("file"), "artifact_ls": {}, "artifact_show": {},
-		"workflow_get": {}, "workflow_runs": {}, "workflow_run_log": set("max-bytes"),
-		"workflow_move": set("to,reason"), "workflow_resume": set("decision"), "workflow_retry": {}, "cancel": {},
-	}
-}
-
-const listFlags = "queue,status,category,priority,assignee,author,customer,group,parent,subtree,waiting-for,blocked,text,view,sort,limit,after"
-
-// commandWords maps a two-word command to its action name, which is also the
-// agent tools-socket action where one exists.
-var commandWords = map[string]map[string]string{
-	"artifacts": {"set": "artifact_set", "ls": "artifact_ls", "show": "artifact_show"},
-	"workflow":  {"get": "workflow_get", "runs": "workflow_runs", "log": "workflow_run_log", "move": "workflow_move", "resume": "workflow_resume", "retry": "workflow_retry"},
-}
-
-// operatorOnlyActions are served only by the host daemon as the customer.
-var operatorOnlyActions = map[string]bool{"workflow_move": true, "workflow_resume": true, "workflow_retry": true, "cancel": true}
-
 // maxArtifactInput is one byte more than the daemon accepts, so an oversize
 // value reaches the server and is refused there instead of being cut short.
 const maxArtifactInput = 64<<10 + 1
 
+// parse reads a task command from the tasks.Specs table: find its spec, parse
+// its flags and positional arguments, then check its cross-field rules.
 func parse(argv []string) (request, error) {
-	if len(argv) == 0 {
-		return request{}, usageError{"tasks: a command is required"}
-	}
-	action, rest := argv[0], argv[1:]
-	if words, grouped := commandWords[action]; grouped {
-		if len(rest) == 0 || strings.HasPrefix(rest[0], "--") {
-			return request{}, usageError{fmt.Sprintf("tasks %s: a command is required", action)}
-		}
-		sub, ok := words[rest[0]]
-		if !ok {
-			return request{}, usageError{fmt.Sprintf("tasks: unknown command %q", action+" "+rest[0])}
-		}
-		action, rest = sub, rest[1:]
-	}
-	allowed := taskCommandFlags()
-	valid, ok := allowed[action]
-	if !ok {
-		return request{}, usageError{fmt.Sprintf("tasks: unknown command %q", action)}
-	}
-	flags, pos, err := parseFlags(rest, valid)
+	spec, rest, err := findCommand(argv)
 	if err != nil {
 		return request{}, err
 	}
-	p := map[string]any{}
-	noWait := false
-	copyFlag := func(name string, present bool) {
-		if v, ok := flags[name]; ok && (present || v != "") {
-			p[strings.ReplaceAll(name, "-", "_")] = v
-		}
-	}
-	require := func(index int, label string) (string, error) {
-		if len(pos) <= index || strings.TrimSpace(pos[index]) == "" {
-			return "", usageError{fmt.Sprintf("tasks %s: %s is required", commandName(action), label)}
-		}
-		return pos[index], nil
-	}
-	switch action {
-	case "list", "mine":
-		for name := range valid {
-			copyFlag(name, false)
-		}
-		if err := checkListFlags(action, p); err != nil {
-			return request{}, err
-		}
-	case "ready":
-		for _, name := range []string{"queue", "limit", "idempotency-key"} {
-			copyFlag(name, false)
-		}
-		if flags["claim"] == "true" {
-			p["claim"] = true
-		}
-	case "show":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-	case "create":
-		for name := range valid {
-			copyFlag(name, false)
-		}
-		if v, ok := p["parent"].(string); ok {
-			delete(p, "parent")
-			p["parent_key"] = v
-		}
-		if _, ok := p["title"]; !ok {
-			return request{}, usageError{"tasks create: --title is required"}
-		}
-		if _, q := p["queue"]; !q {
-			if _, parent := p["parent_key"]; !parent {
-				return request{}, usageError{"tasks create: --queue or --parent is required"}
-			}
-		}
-	case "update":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-		for name := range valid {
-			copyFlag(name, name == "manual-block-reason" || name == "pull-request")
-		}
-	case "assign":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		a, e := require(1, "assignee")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"], p["assignee"] = v, a
-		copyFlag("revision", false)
-	case "comment":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		body := strings.TrimSpace(flags["body"])
-		if _, set := flags["body"]; set && len(pos) > 1 {
-			return request{}, usageError{fmt.Sprintf("tasks comment: unexpected argument: %s", pos[1])}
-		}
-		if body == "" {
-			body = strings.TrimSpace(strings.Join(pos[1:], " "))
-		}
-		if body == "" {
-			return request{}, usageError{"tasks comment: comment text is required"}
-		}
-		p["key"], p["body"] = v, body
-		copyFlag("idempotency-key", false)
-	case "ask":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		principal, e := require(1, "principal")
-		if e != nil {
-			return request{}, e
-		}
-		if len(pos) < 3 {
-			return request{}, usageError{"tasks ask: principal and question are required"}
-		}
-		p["key"], p["principal"], p["body"] = v, principal, strings.Join(pos[2:], " ")
-		copyFlag("idempotency-key", false)
-	case "move":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-		if v, ok := flags["parent"]; ok && v != "" {
-			p["parent_key"] = v
-		}
-		if v, ok := flags["before"]; ok && v != "" {
-			p["before_key"] = v
-		}
-		copyFlag("revision", false)
-		if flags["to-root"] == "true" {
-			if _, parent := p["parent_key"]; parent {
-				return request{}, usageError{"tasks move: --to-root cannot be combined with --parent or --before"}
-			}
-			if _, before := p["before_key"]; before {
-				return request{}, usageError{"tasks move: --to-root cannot be combined with --parent or --before"}
-			}
-			p["parent_key"] = ""
-		} else {
-			if _, parent := p["parent_key"]; !parent {
-				if _, before := p["before_key"]; !before {
-					return request{}, usageError{"tasks move: pass --parent, --before, or --to-root to detach"}
-				}
-			}
-		}
-	case "block":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		by := flags["by"]
-		if by == "" {
-			return request{}, usageError{"tasks block: --by is required"}
-		}
-		p["key"], p["blocker_key"] = v, by
-		copyFlag("revision", false)
-		copyFlag("idempotency-key", false)
-	case "relate":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		target, e := require(1, "related task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"], p["target_key"] = v, target
-		copyFlag("revision", false)
-		copyFlag("idempotency-key", false)
-	case "done":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-		copyFlag("revision", false)
-		if flags["complete-anyway"] == "true" {
-			p["complete_anyway"] = true
-		}
-	case "advance":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-		if strings.TrimSpace(flags["outcome"]) == "" {
-			return request{}, usageError{"tasks advance: --outcome is required"}
-		}
-		p["outcome"] = strings.TrimSpace(flags["outcome"])
-		if from := strings.TrimSpace(flags["from"]); from != "" {
-			p["from"] = from
-		}
-		copyFlag("message", true)
-		noWait = flags["no-wait"] == "true"
-	case "artifact_set":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		name, e := require(1, "artifact name")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"], p["name"] = v, name
-		if len(pos) > 2 {
-			if _, file := flags["file"]; file {
-				return request{}, usageError{"tasks artifacts set: pass VALUE or --file, not both"}
-			}
-			p["value"] = pos[2]
-		}
-		copyFlag("file", false)
-	case "artifact_ls", "workflow_get", "workflow_runs", "cancel":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-	case "workflow_run_log":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		run, e := require(1, "run id")
-		if e != nil {
-			return request{}, e
-		}
-		id, convErr := strconv.ParseInt(strings.TrimSpace(run), 10, 64)
-		if convErr != nil || id <= 0 {
-			return request{}, usageError{fmt.Sprintf("tasks workflow log: run id must be a positive number, got %q", run)}
-		}
-		p["key"], p["id"] = v, id
-		if text, ok := flags["max-bytes"]; ok {
-			n, convErr := strconv.Atoi(strings.TrimSpace(text))
-			if convErr != nil || n <= 0 {
-				return request{}, usageError{fmt.Sprintf("tasks workflow log: --max-bytes must be a positive number, got %q", text)}
-			}
-			p["max_bytes"] = n
-		}
-	case "artifact_show":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		name, e := require(1, "artifact name")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"], p["name"] = v, name
-	case "workflow_move":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-		for _, name := range []string{"to", "reason"} {
-			if strings.TrimSpace(flags[name]) == "" {
-				return request{}, usageError{fmt.Sprintf("tasks workflow move: --%s is required", name)}
-			}
-			p[name] = strings.TrimSpace(flags[name])
-		}
-	case "workflow_resume":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		decision := strings.TrimSpace(flags["decision"])
-		if decision != "continue" && decision != "release" {
-			return request{}, usageError{"tasks workflow resume: --decision must be continue or release"}
-		}
-		p["key"], p["decision"] = v, decision
-	case "workflow_retry":
-		v, e := require(0, "task key")
-		if e != nil {
-			return request{}, e
-		}
-		p["key"] = v
-		if len(pos) > 1 {
-			id, convErr := strconv.ParseInt(strings.TrimSpace(pos[1]), 10, 64)
-			if convErr != nil || id <= 0 {
-				return request{}, usageError{fmt.Sprintf("tasks workflow retry: request id must be a positive number, got %q", pos[1])}
-			}
-			p["id"] = id
-		}
-	}
-	if err := noExtra(action, pos); err != nil {
+	input, err := parseArgs(spec, rest)
+	if err != nil {
 		return request{}, err
 	}
-	return request{action: action, payload: p, noWait: noWait, args: rest}, nil
+	parsed := request{action: spec.Action, spec: spec, input: input, payload: tasks.Payload(input), args: rest}
+	if advance, ok := input.(*tasks.AdvanceRequest); ok {
+		parsed.noWait = advance.NoWait
+	}
+	return parsed, nil
 }
 
-func set(csv string) map[string]bool {
-	out := map[string]bool{}
-	for _, name := range strings.Split(csv, ",") {
-		if name != "" {
-			out[name] = true
+// cliSpec returns the command a ttasks word or word pair names.
+func cliSpec(words ...string) (tasks.Spec, bool) {
+	for _, spec := range tasks.Specs() {
+		if len(spec.Words) > 0 && strings.Join(spec.Words, " ") == strings.Join(words, " ") {
+			return spec, true
 		}
 	}
-	return out
+	return tasks.Spec{}, false
 }
-func csv(value string) []string {
-	out := []string{}
-	for _, item := range strings.Split(value, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			out = append(out, item)
+
+func findCommand(argv []string) (tasks.Spec, []string, error) {
+	if len(argv) == 0 {
+		return tasks.Spec{}, nil, usageError{"tasks: a command is required"}
+	}
+	if spec, ok := cliSpec(argv[0]); ok {
+		return spec, argv[1:], nil
+	}
+	if !helpGroupHasCommands(argv[0]) {
+		return tasks.Spec{}, nil, usageError{fmt.Sprintf("tasks: unknown command %q", argv[0])}
+	}
+	if len(argv) == 1 || strings.HasPrefix(argv[1], "--") {
+		return tasks.Spec{}, nil, usageError{fmt.Sprintf("tasks %s: a command is required", argv[0])}
+	}
+	spec, ok := cliSpec(argv[0], argv[1])
+	if !ok {
+		return tasks.Spec{}, nil, usageError{fmt.Sprintf("tasks: unknown command %q", argv[0]+" "+argv[1])}
+	}
+	return spec, argv[2:], nil
+}
+
+// helpGroupHasCommands reports whether word starts a two-word command.
+func helpGroupHasCommands(word string) bool {
+	for _, spec := range tasks.Specs() {
+		if len(spec.Words) == 2 && spec.Words[0] == word {
+			return true
 		}
 	}
-	return out
+	return false
 }
-func parseFlags(args []string, allowed map[string]bool) (map[string]string, []string, error) {
-	flags := map[string]string{}
-	pos := []string{}
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if !strings.HasPrefix(arg, "--") {
-			pos = append(pos, arg)
+
+// parseArgs fills a new request of spec from args. Positional arguments are
+// checked first, then flags in field order, then the request's Validate, then
+// arguments left over.
+func parseArgs(spec tasks.Spec, args []string) (any, error) {
+	command := strings.Join(spec.Words, " ")
+	fail := func(err error) error { return usageError{fmt.Sprintf("tasks %s: %v", command, err)} }
+	input := spec.New()
+	fields := tasks.Fields(input)
+	texts, pos, err := scanFlags(command, fields, input, args)
+	if err != nil {
+		return nil, err
+	}
+	extra := 0
+	for _, f := range fields {
+		if f.Pos < 0 {
 			continue
 		}
-		name, value, has := strings.Cut(arg[2:], "=")
-		if !allowed[name] {
-			return nil, nil, usageError{fmt.Sprintf("unknown flag --%s", name)}
+		if err := setPositional(f, input, pos); err != nil {
+			return nil, fail(err)
 		}
-		if !has {
-			if boolFlags[name] {
-				value = "true"
-			} else {
-				if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
-					return nil, nil, usageError{fmt.Sprintf("flag --%s needs a value", name)}
-				}
-				i++
-				value = args[i]
-			}
-		} else if boolFlags[name] && value != "true" && value != "false" {
-			return nil, nil, usageError{fmt.Sprintf("flag --%s must be true or false", name)}
+		extra = max(extra, f.Pos+1)
+		if f.Rest {
+			extra = len(pos)
 		}
-		flags[name] = value
 	}
-	return flags, pos, nil
+	for i, f := range fields {
+		if text, given := texts[i]; given {
+			if err := f.Set(input, text, "--"+f.Flag); err != nil {
+				return nil, fail(err)
+			}
+		}
+		if f.Flag != "" && f.CLIRequired && f.IsZero(input) {
+			return nil, fail(fmt.Errorf("--%s is required", f.Flag))
+		}
+	}
+	if v, ok := input.(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return nil, fail(err)
+		}
+	}
+	if len(pos) > extra {
+		return nil, fail(fmt.Errorf("unexpected argument: %s", pos[extra]))
+	}
+	return input, nil
+}
+
+func setPositional(f tasks.Field, input any, pos []string) error {
+	if f.Rest {
+		if len(pos) > f.Pos {
+			f.SetWords(input, pos[f.Pos:])
+		}
+		return nil
+	}
+	if len(pos) <= f.Pos || (f.CLIRequired && strings.TrimSpace(pos[f.Pos]) == "") {
+		if f.CLIRequired {
+			return fmt.Errorf("%s is required", f.Label)
+		}
+		return nil
+	}
+	return f.Set(input, pos[f.Pos], f.Label)
+}
+
+// scanFlags parses args with a flag.FlagSet, taking a positional argument
+// wherever the flags stop and parsing the rest again; after "--" every
+// argument is positional. A boolean flag is set at once; the text of any other
+// flag is returned by field index, so it is checked after the positionals.
+func scanFlags(command string, fields []tasks.Field, input any, args []string) (map[int]string, []string, error) {
+	fs := flag.NewFlagSet(command, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	texts := map[int]string{}
+	valueFlags := map[string]bool{}
+	badBool := ""
+	for i, f := range fields {
+		switch {
+		case f.Flag == "":
+		case f.Kind == tasks.KindBool:
+			fs.Var(boolFlag{field: f, input: input, failed: &badBool}, f.Flag, "")
+		default:
+			fs.Var(textFlag{texts: texts, index: i}, f.Flag, "")
+			valueFlags[f.Flag] = true
+		}
+	}
+	if err := checkFlagValues(fs, valueFlags, args); err != nil {
+		return nil, nil, err
+	}
+	var pos []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, nil, flagError(err, badBool)
+		}
+		rest := fs.Args()
+		if len(rest) == 0 {
+			return texts, pos, nil
+		}
+		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
+			return texts, append(pos, rest...), nil
+		}
+		pos, args = append(pos, rest[0]), rest[1:]
+	}
+}
+
+// checkFlagValues refuses a value flag followed by nothing or by another
+// --flag, which flag.FlagSet would take as its value. It stops at the first
+// flag the command does not have, which FlagSet reports.
+func checkFlagValues(fs *flag.FlagSet, valueFlags map[string]bool, args []string) error {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return nil
+		}
+		name := strings.TrimLeft(arg, "-")
+		if !strings.HasPrefix(arg, "-") || name == "" || strings.Contains(name, "=") {
+			continue
+		}
+		if fs.Lookup(name) == nil {
+			return nil
+		}
+		if valueFlags[name] {
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+				return usageError{fmt.Sprintf("flag --%s needs a value", name)}
+			}
+			i++
+		}
+	}
+	return nil
+}
+
+// flagError restates a flag.FlagSet error in the client's words.
+func flagError(err error, badBool string) error {
+	text := err.Error()
+	switch {
+	case badBool != "":
+		return usageError{fmt.Sprintf("flag --%s must be true or false", badBool)}
+	case errors.Is(err, flag.ErrHelp):
+		return usageError{"unknown flag --help"}
+	case strings.HasPrefix(text, "flag provided but not defined: "):
+		return usageError{"unknown flag --" + strings.TrimLeft(strings.TrimPrefix(text, "flag provided but not defined: "), "-")}
+	case strings.HasPrefix(text, "flag needs an argument: "):
+		return usageError{fmt.Sprintf("flag --%s needs a value", strings.TrimLeft(strings.TrimPrefix(text, "flag needs an argument: "), "-"))}
+	}
+	return usageError{text}
+}
+
+// textFlag keeps the text of a value flag for parseArgs.
+type textFlag struct {
+	texts map[int]string
+	index int
+}
+
+func (f textFlag) String() string { return "" }
+func (f textFlag) Set(text string) error {
+	f.texts[f.index] = text
+	return nil
+}
+
+// boolFlag is a switch: --claim, or --claim=true or --claim=false.
+type boolFlag struct {
+	field  tasks.Field
+	input  any
+	failed *string
+}
+
+func (f boolFlag) String() string   { return "" }
+func (f boolFlag) IsBoolFlag() bool { return true }
+func (f boolFlag) Set(text string) error {
+	if err := f.field.Set(f.input, text, f.field.Flag); err != nil {
+		*f.failed = f.field.Flag
+		return err
+	}
+	return nil
+}
+
+// commandFlags maps each flag of a command to whether it is a switch.
+func commandFlags(spec tasks.Spec) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range tasks.Fields(spec.Request) {
+		if f.Flag != "" {
+			out[f.Flag] = f.Kind == tasks.KindBool
+		}
+	}
+	return out
 }
 
 // commandName is the command as the user types it: "artifacts set" for the
 // action artifact_set.
 func commandName(action string) string {
 	return strings.Join(sharedHelpPath(action), " ")
-}
-
-func noExtra(action string, pos []string) error {
-	limits := map[string]int{"list": 0, "mine": 0, "ready": 0, "show": 1, "create": 0, "update": 1, "assign": 2, "comment": -1, "ask": -1, "move": 1, "block": 1, "relate": 2, "done": 1,
-		"advance": 1, "artifact_set": 3, "artifact_ls": 1, "artifact_show": 2, "workflow_get": 1, "workflow_runs": 1, "workflow_run_log": 2, "workflow_move": 1, "workflow_resume": 1, "workflow_retry": 2, "cancel": 1}
-	if limit, ok := limits[action]; ok && limit >= 0 && len(pos) > limit {
-		return usageError{fmt.Sprintf("tasks %s: unexpected argument: %s", commandName(action), pos[limit])}
-	}
-	return nil
-}
-
-// checkListFlags validates list values before any call and moves --view to
-// the status_view the daemon reads. Without --limit a page holds 50 tasks.
-func checkListFlags(action string, p map[string]any) error {
-	fail := func(format string, args ...any) error {
-		return usageError{fmt.Sprintf("tasks %s: "+format, append([]any{action}, args...)...)}
-	}
-	value := func(name string) string { v, _ := p[name].(string); return v }
-	if value("parent") != "" && value("subtree") != "" {
-		return fail("--parent cannot be combined with --subtree")
-	}
-	if sort := value("sort"); sort != "" && !slices.Contains([]string{"tree", "updated", "created", "priority"}, sort) {
-		return fail("--sort must be tree, updated, created, or priority, got %q", sort)
-	}
-	if view := value("view"); view != "" {
-		if !slices.Contains([]string{"active", "closed", "all"}, view) {
-			return fail("--view must be active, closed, or all, got %q", view)
-		}
-		delete(p, "view")
-		p["status_view"] = view
-	}
-	if blocked := value("blocked"); blocked != "" && blocked != "true" && blocked != "false" {
-		return fail("--blocked must be true or false, got %q", blocked)
-	}
-	for _, priority := range csv(value("priority")) {
-		if !slices.Contains([]string{"P0", "P1", "P2", "P3"}, priority) {
-			return fail("--priority must be P0, P1, P2, or P3, got %q", priority)
-		}
-	}
-	for _, category := range csv(value("category")) {
-		if !slices.Contains([]string{"open", "in_progress", "wait_customer", "done", "cancelled"}, category) {
-			return fail("--category must be open, in_progress, wait_customer, done, or cancelled, got %q", category)
-		}
-	}
-	if limit := value("limit"); limit == "" {
-		p["limit"] = "50"
-	} else if n, err := strconv.Atoi(limit); err != nil || n < 1 || n > 500 {
-		return fail("--limit must be a number from 1 to 500, got %q", limit)
-	}
-	return nil
 }
