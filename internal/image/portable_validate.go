@@ -83,7 +83,7 @@ func validatePortableArchiveContract(archive []byte, ref Ref, resolver imagecont
 		if count >= maxPortableImageFiles {
 			return Manifest{}, errors.New("image archive has too many files")
 		}
-		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA {
+		if h.Typeflag != tar.TypeReg {
 			return Manifest{}, fmt.Errorf("invalid image archive member %q: regular files only", h.Name)
 		}
 		mode := h.Mode & 0o7777
