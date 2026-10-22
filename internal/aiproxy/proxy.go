@@ -25,7 +25,7 @@ import (
 type Exchange struct {
 	R              *http.Request
 	W              http.ResponseWriter
-	Provider       string // anthropic | openai | cursor
+	Provider       string // a Provider value
 	Path           string
 	EscapedPath    string
 	EscapedPathOK  bool
@@ -156,7 +156,7 @@ func (p *Proxy) budget(next Handler) Handler {
 			if len(d.Exhausted) > 0 {
 				message += ": " + strings.Join(d.Exhausted, ", ")
 			}
-			if ex.Provider == "cursor" {
+			if Provider(ex.Provider).spec().connectErrors {
 				// The cursor agent CLI is a Connect client: 429 maps to
 				// resource_exhausted in the Connect error JSON.
 				writeJSONError(ex.W, http.StatusTooManyRequests,
@@ -277,7 +277,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.resolvePathToken(ex)
 	p.recordActivity(ex)
 	ex.Provider = providerFor(r.URL.Path)
-	if ex.Provider != "cursor" {
+	if !Provider(ex.Provider).spec().passthrough {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
 		tidy.Close(nil, r.Body)
 		if err != nil {
@@ -359,9 +359,10 @@ func tokenPathSuffix(escapedPath, token, decodedSuffix string) (string, bool) {
 	return suffix, err == nil && decoded == decodedSuffix
 }
 
+// providerFor returns the Provider name for a request path.
 func providerFor(path string) string {
 	if !isSafeRoutePath(path) {
-		return "anthropic"
+		return string(ProviderAnthropic)
 	}
 	switch {
 	case pathAtOrBelow(path, "/models"),
@@ -369,11 +370,11 @@ func providerFor(path string) string {
 		pathAtOrBelow(path, "/v1/models"),
 		pathAtOrBelow(path, "/v1/responses"),
 		pathAtOrBelow(path, "/v1/chat/completions"):
-		return "openai"
+		return string(ProviderOpenAI)
 	case isCursorRoute(path):
-		return "cursor"
+		return string(ProviderCursor)
 	default:
-		return "anthropic"
+		return string(ProviderAnthropic)
 	}
 }
 
@@ -620,7 +621,7 @@ func (p *Proxy) BaseURL() string { return "http://" + p.Addr() }
 // doForward proxies to the resolved upstream and parses usage/model/cost.
 // Provider credentials are forwarded as the harness sent them.
 func (p *Proxy) doForward(ex *Exchange) error {
-	if ex.Provider == "openai" && ex.R.Header.Get("Authorization") == "" {
+	if Provider(ex.Provider).spec().requireAuthorization && ex.R.Header.Get("Authorization") == "" {
 		ex.Status = "auth_error"
 		ex.W.Header().Set("Content-Type", "application/json")
 		ex.W.WriteHeader(http.StatusUnauthorized)
@@ -638,7 +639,7 @@ func (p *Proxy) doForward(ex *Exchange) error {
 	target.RawQuery = ex.R.URL.RawQuery
 
 	reqBody := io.Reader(bytes.NewReader(ex.ReqBody))
-	if ex.Provider == "cursor" {
+	if Provider(ex.Provider).spec().passthrough {
 		reqBody = ex.R.Body
 	}
 	outReq, err := http.NewRequestWithContext(ex.R.Context(), ex.R.Method, target.String(), reqBody)
@@ -649,7 +650,7 @@ func (p *Proxy) doForward(ex *Exchange) error {
 	}
 	copyHeaders(outReq.Header, ex.R.Header)
 	outReq.Host = target.Host
-	if ex.Provider == "cursor" && ex.R.ContentLength > 0 {
+	if Provider(ex.Provider).spec().passthrough && ex.R.ContentLength > 0 {
 		outReq.ContentLength = ex.R.ContentLength
 	}
 	// Drop the client's Accept-Encoding so Go's transport negotiates gzip and
@@ -686,7 +687,7 @@ func (p *Proxy) doForward(ex *Exchange) error {
 	copyHeaders(ex.W.Header(), resp.Header)
 	ex.W.WriteHeader(resp.StatusCode)
 
-	if ex.Provider == "cursor" {
+	if Provider(ex.Provider).spec().passthrough {
 		ex.Streamed = true
 		if err := copyFlush(ex.W, resp.Body); err != nil {
 			ex.Status = "upstream_error"
@@ -725,14 +726,14 @@ func isChatGPTRequest(h http.Header) bool {
 }
 
 func (p *Proxy) upstreamFor(ex *Exchange) Upstream {
-	provider := ex.Provider
-	if provider == "openai" && isChatGPTRequest(ex.R.Header) {
-		return p.cfg.Router.ResolveDefault("chatgpt")
+	provider := Provider(ex.Provider)
+	if provider == ProviderOpenAI && isChatGPTRequest(ex.R.Header) {
+		return p.cfg.Router.ResolveDefault(providerChatGPT)
 	}
-	if provider == "cursor" {
-		return p.cfg.Router.ResolveDefault("cursor")
+	if provider.spec().passthrough {
+		return p.cfg.Router.ResolveDefault(string(provider))
 	}
-	return p.cfg.Router.Resolve(provider, modelFromBody(ex.ReqBody))
+	return p.cfg.Router.Resolve(string(provider), modelFromBody(ex.ReqBody))
 }
 
 var errCrossOriginRedirect = errors.New("cross-origin redirect blocked")
@@ -845,19 +846,11 @@ func copyFlush(dst http.ResponseWriter, src io.Reader) error {
 }
 
 func (p *Proxy) parseUsage(ex *Exchange, body []byte) {
-	if ex.Provider == "cursor" {
+	parse := Provider(ex.Provider).spec().parseUsage
+	if parse == nil {
 		return
 	}
-	var (
-		u     Usage
-		model string
-		ok    bool
-	)
-	if ex.Provider == "openai" {
-		u, model, ok = ParseOpenAIUsage(body)
-	} else {
-		u, model, ok = ParseAnthropicUsage(body)
-	}
+	u, model, ok := parse(body)
 	if !ok {
 		u, model, ok = ParseSSEUsage(body)
 	}
