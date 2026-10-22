@@ -232,7 +232,9 @@ func TestProcessIsNeverSignalledAfterItExited(t *testing.T) {
 
 func TestExecuteOnStartPanicKillsTheRun(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.pid"; sleep 30`+"\n")
+	// The rename publishes child.pid only once it holds the PID: OnStart
+	// waits for the file to exist, and the panic kills the shell right after.
+	f := newFixture(t, `sleep 30 & echo $! > "$FIXTURE_DIR/child.tmp"; mv "$FIXTURE_DIR/child.tmp" "$FIXTURE_DIR/child.pid"; sleep 30`+"\n")
 	spec := f.spec(KindCheck)
 	childFile := filepath.Join(f.dir, "child.pid")
 	spec.OnStart = func(int) {
