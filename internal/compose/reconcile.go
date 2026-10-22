@@ -37,9 +37,11 @@ func (r *Runner) logf(format string, a ...any) {
 // Up reconciles desired (the file) toward actual (the daemon): it builds the
 // declared images, plans the actions from one read of the live state, applies
 // them, and prints the per-resource report (spec §5.2). A failed action does
-// not stop the others; Up returns the joined errors of the failed actions, so
-// a later Up converges the rest. Idempotent: a converged file plans no
-// mutating action.
+// not stop the others, so a later Up converges the rest. The report already
+// shows each failure, so Up then returns only a count of the failed resources
+// (which unwraps to the action errors). Idempotent: a converged file plans no
+// mutating action other than subscription requests the daemon reports
+// unchanged.
 func (r *Runner) Up(f File) error {
 	if err := f.Validate(); err != nil {
 		return err
@@ -53,7 +55,7 @@ func (r *Runner) Up(f File) error {
 	}
 	rep := r.Apply(plan)
 	r.printReport(rep)
-	return rep.Err()
+	return rep.summaryErr()
 }
 
 // desiredPeriodSeconds mirrors the daemon's budget.set default: an empty period

@@ -170,6 +170,10 @@ tariboy agent unsubscribe worker chat:ops
 tariboy agent subscriptions worker
 ```
 
+The operator subscribe is idempotent: a repeated subscribe with the same
+channel, type filter, matcher, and params returns the existing row. Its
+response includes `changed`, which is `false` when the subscription was
+already active and `true` otherwise.
 The operator path lists subscriptions by distinct channel, not by raw
 subscription id. Protected subscriptions cannot be removed through the operator
 unsubscribe command:

@@ -33,6 +33,39 @@ type Report struct {
 // Err joins the errors of every failed action; nil when none failed.
 func (rep Report) Err() error { return errors.Join(rep.errs...) }
 
+// failedError is what Up returns after it printed the report: a short count
+// of the failed resources, since the report already shows each error. It
+// unwraps to the errors of the failed actions.
+type failedError struct {
+	failed int
+	err    error
+}
+
+func (e failedError) Error() string {
+	if e.failed == 1 {
+		return "1 resource failed"
+	}
+	return fmt.Sprintf("%d resources failed", e.failed)
+}
+
+func (e failedError) Unwrap() error { return e.err }
+
+// summaryErr returns a failedError for a report that has failures; nil when
+// none failed.
+func (rep Report) summaryErr() error {
+	err := rep.Err()
+	if err == nil {
+		return nil
+	}
+	n := 0
+	for _, e := range rep.Entries {
+		if e.Outcome == OutcomeFailed {
+			n++
+		}
+	}
+	return failedError{failed: n, err: err}
+}
+
 // Apply runs the plan's actions in order. A failed action does not stop the
 // rest: the actions that depend on it are skipped, and independent actions
 // still run.
@@ -49,12 +82,17 @@ func (r *Runner) Apply(p Plan) Report {
 		if a.run != nil {
 			changed, err = a.run(results)
 		} else {
-			if a.Note != "" {
+			if a.Note != "" && a.changedBy == nil {
 				r.logf("%s", a.Note)
 			}
 			results[i], err = r.call.Call(a.Call.Method, a.Call.Route, a.Call.Body)
-			if err != nil {
+			switch {
+			case err != nil:
 				err = fmt.Errorf("%s: %w", a.Fail, err)
+			case a.changedBy != nil:
+				if changed = a.changedBy(results[i]); changed && a.Note != "" {
+					r.logf("%s", a.Note)
+				}
 			}
 		}
 		switch {

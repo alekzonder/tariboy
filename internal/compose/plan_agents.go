@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -12,10 +13,13 @@ type change struct {
 	note  string
 	fail  string
 	call  Call
+	// changedBy reads from the response whether the call changed anything;
+	// nil means it always did.
+	changedBy func(json.RawMessage) bool
 }
 
 func (p *planner) addChange(resource string, c change, deps ...int) int {
-	return p.add(Action{Resource: resource, Kind: c.kind, Note: c.note, Fail: c.fail, Call: c.call}, deps...)
+	return p.add(Action{Resource: resource, Kind: c.kind, Note: c.note, Fail: c.fail, Call: c.call, changedBy: c.changedBy}, deps...)
 }
 
 func (p *planner) planAgents(f File, live map[string]liveAgent) error {
@@ -71,8 +75,10 @@ func (p *planner) planNewAgent(name string, a AgentSpec) error {
 // would, and every later setting depends on the re-provision.
 //
 // A harness change is stored first and applied by a restart (stop, start) of
-// an enabled agent; a re-provision starts the agent with it anyway, and a file
-// that disables the loop leaves the next start to apply it. An image change
+// an enabled agent. The restart runs after the agent's other changes and
+// depends on them, so the restarted iteration starts with every new setting.
+// A re-provision starts the agent with the harness anyway, and a file that
+// disables the loop leaves the next start to apply it. An image change
 // is set as the pending image, which the agent adopts on its next iteration
 // without a restart.
 func (p *planner) planExistingAgent(name string, a AgentSpec, cur liveAgent) error {
@@ -93,26 +99,29 @@ func (p *planner) planExistingAgent(name string, a AgentSpec, cur liveAgent) err
 		cur.Harness = a.Harness.Type
 	}
 	base := -1
-	switch {
-	case stopped:
+	restart := harness != nil && cur.Enabled && !loopDisabled(a)
+	if stopped {
 		base = p.add(Action{Resource: id, Kind: "reprovision", Note: fmt.Sprintf("reprovisioning stopped agent %s (image %s)", name, a.Image),
 			Fail: "reprovision agent " + name, Call: Call{"POST", "/api/agents/" + name + "/reprovision", map[string]any{"image": a.Image}}})
 		cur.Image, cur.Enabled, cur.State = normalizeImageRef(a.Image), true, "running"
-	case harness != nil && cur.Enabled && !loopDisabled(a):
-		stop := p.add(Action{Resource: id, Kind: "stop", Note: fmt.Sprintf("restarting agent %s to apply harness %s", name, a.Harness.Type),
-			Fail: "stop agent " + name, Call: Call{"POST", "/api/agents/" + name + "/stop", nil}}, set)
-		p.add(Action{Resource: id, Kind: "start", Fail: "start agent " + name,
-			Call: Call{"POST", "/api/agents/" + name + "/start", nil}}, stop)
+		restart = false
 	}
 	changes, err := p.r.agentChanges(name, a, cur)
 	if err != nil {
 		return err
 	}
+	restartDeps := []int{set}
 	for _, c := range changes {
 		if c.kind == "image" && pending == normalizeImageRef(a.Image) {
 			continue // already pending; adopted on the next iteration
 		}
-		p.addChange(id, c, base)
+		restartDeps = append(restartDeps, p.addChange(id, c, base))
+	}
+	if restart {
+		stop := p.add(Action{Resource: id, Kind: "stop", Note: fmt.Sprintf("restarting agent %s to apply harness %s", name, a.Harness.Type),
+			Fail: "stop agent " + name, Call: Call{"POST", "/api/agents/" + name + "/stop", nil}}, restartDeps...)
+		p.add(Action{Resource: id, Kind: "start", Fail: "start agent " + name,
+			Call: Call{"POST", "/api/agents/" + name + "/start", nil}}, stop)
 	}
 	return nil
 }
@@ -289,7 +298,10 @@ func goalChanges(name string, a AgentSpec, cur liveAgent) ([]change, error) {
 // matcher/params, so there is nothing lossless to diff against. The daemon is
 // idempotent on (agent, channel, matcher), with a parameterized entry's watch
 // fingerprint folded into the matcher key, so a re-applied file creates no
-// duplicate. Params are validated against the channel's provider schema at
+// duplicate, and its response says whether the call added or resumed a
+// subscription (changed): an entry that already exists counts as unchanged,
+// so a converged file reports ok. A response without the field counts as a
+// change. Params are validated against the channel's provider schema at
 // apply time, so bad params fail the POST loudly. Subscriptions are additive:
 // an entry removed from the file is not torn down.
 func subscribeChanges(name string, a AgentSpec) []change {
@@ -305,11 +317,24 @@ func subscribeChanges(name string, a AgentSpec) []change {
 		if len(sub.Params) > 0 {
 			body["params"] = sub.Params
 		}
-		out = append(out, change{kind: "subscribe", note: fmt.Sprintf("subscribing %s -> %s", name, sub.Channel),
-			fail: fmt.Sprintf("subscribe agent %s to %s", name, sub.Channel),
-			call: Call{"POST", "/api/agents/" + name + "/subscriptions", body}})
+		out = append(out, change{kind: "subscribe", note: fmt.Sprintf("subscribed %s -> %s", name, sub.Channel),
+			fail:      fmt.Sprintf("subscribe agent %s to %s", name, sub.Channel),
+			call:      Call{"POST", "/api/agents/" + name + "/subscriptions", body},
+			changedBy: subscribeChanged})
 	}
 	return out
+}
+
+// subscribeChanged reads the changed flag of a subscribe response. A missing
+// or unreadable flag counts as a change.
+func subscribeChanged(result json.RawMessage) bool {
+	var res struct {
+		Changed *bool `json:"changed"`
+	}
+	if err := json.Unmarshal(result, &res); err != nil || res.Changed == nil {
+		return true
+	}
+	return *res.Changed
 }
 
 // createBody is the POST /api/agents body for a new agent.
